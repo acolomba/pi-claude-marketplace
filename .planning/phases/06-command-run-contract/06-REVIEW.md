@@ -1,6 +1,6 @@
 ---
 phase: 06-command-run-contract
-reviewed: 2026-10-09T21:32:00Z
+reviewed: 2026-10-09T22:37:58Z
 depth: standard
 files_reviewed: 65
 files_reviewed_list:
@@ -70,147 +70,191 @@ files_reviewed_list:
   - tests/shared/notification-run.test.ts
   - tests/shared/notification-wire.test.ts
 findings:
-  critical: 1
+  critical: 0
   warning: 0
   info: 0
-  total: 1
-status: issues_found
+  total: 0
+status: clean
 ---
 
 # Phase 6: Code Review Report
 
-**Reviewed:** 2026-10-09T21:32:00Z
+**Reviewed:** 2026-10-09T22:37:58Z
 **Depth:** standard
 **Files Reviewed:** 65
-**Status:** issues_found
+**Status:** clean
+**Source HEAD:** `045f53cd5060082c5df6371853338f6765cd1c2d`
+**Re-review:** iteration 4, after the third and final automatic fix
 
 ## Summary
 
-One BLOCKER: the new internal-error path discloses absolute local paths with
-spaces or non-ASCII directory names. The leak was reproduced through the
-production command boundary in both JSON and RPC. Schema validation accepts
-the resulting payloads.
+No current findings. CR-01 is independently resolved for the reviewed
+contract and reproduced cases. The missing Windows root form now reaches
+the existing conservative path handling. All eight exact payload cases
+from the previous finding pass with independently expected safe causes.
+No new regression was established.
 
-The explicit 65-file workflow list is the scope, including the shipped JSON
-schema and every listed test. Review covered phase changes, their current
-source context, notification callers, and test assertions. CodeGraph preceded
-source inspection. The supplied scope resolution is degraded to
-`phase-range(no-task-commit-rows)`; it is not an empty or clean verdict.
-The configured base is `2efeb8bc2f71b5dba650bbeae228bed3a20953ff`.
-The execution base is `e7802fef27f79cf4f3de8369787542e345f8fdab`; their
-extensions/tests/schema trees have no difference. No archived phase 06 was
-included.
+The complete persisted 65-file scope from
+`/tmp/json-output-review-files.json` is retained above. This iteration
+reuses the authorized assessment of the 60 unchanged files and inspects
+the entire five-file diff from `6680ff1b`: the machine error resolver,
+resolver tests, command boundary tests, converter tests, and architecture
+tests. The production change is one prefix-recognition line.
 
-The review read AGENTS.md, the configured TypeScript review/comment/test
-skills, local-verification, the active CONTEXT, all four PLAN/SUMMARY pairs,
-VALIDATION, and SECURITY. The security record's closure of T-06-04 and T-06-14
-needs reassessment in light of CR-01.
+Scope resolution remains `phase-range(no-task-commit-rows)`, with base
+`2efeb8bc2f71b5dba650bbeae228bed3a20953ff`. The prior comparison established
+the same extensions/tests/schema baseline as execution base
+`e7802fef27f79cf4f3de8369787542e345f8fdab`.
+
+Context includes AGENTS.md, the configured TypeScript comments, style,
+unit-testing review and local-verification skills, all four phase
+PLAN/SUMMARY pairs, CONTEXT, prior review records, and the updated
+`06-REVIEW-FIX.md`. The parent preserved the preceding report as
+`06-REVIEW.iter4.md`. CodeGraph preceded current source inspection;
+the existing caller trace through command execution, notification dispatch,
+resolution, conversion, and lifecycle roots remains applicable.
 
 ## Structural Findings (fallow)
 
-Source: `/tmp/json-output-review-fallow.json`, Fallow 3.30.0, schema 11.
-The prepass completed with a findings exit status of 1. Its stderr reports
-cache reuse and generated-cache entrypoint advisories, not execution failure.
+The supplied `/tmp/json-output-review-fallow.json` prepass uses Fallow
+3.30.0, schema 11, pre-fix head `9c0bf37a`, merge-base
+`000be227d8bb606ba9c7958eb263e527d0d5b77c`, and 430 changed files.
 
-| Normalized prepass category | Repository result | Scope relevance and disposition |
+| Normalized category | Repository observation | Phase disposition |
 | --- | --- | --- |
-| Dead code, unused exports, unresolved imports, cycles | 0 issues | No structural defect to promote. |
-| Complexity | 557 findings; maximum cyclomatic complexity 20 | 176 observations are in the 65-file list. They include unchanged functions and test fixtures. Changed selectors and the exhaustive outcome switch were inspected in context; a threshold alone does not establish a phase defect. |
-| Duplication | 17 groups | One group touches the scope: `dup:c77b3abb6f87acd9-r11`, registry.ts:360-371 and dispatch-exec.ts:410-422. It is inherited; this phase changes registry.ts:442, outside the duplicate. No phase finding. |
+| Dead code | 0 issues | No finding. |
+| Complexity | 557 findings; maximum cyclomatic complexity 20 | Pre-existing repository observations; no independently established phase defect. |
+| Duplication | 17 groups | Scoped group `dup:c77b3abb6f87acd9-r11`, registry.ts:360-371 and dispatch-exec.ts:410-422, is inherited and outside the changed registry line. |
 
-The prepass compares against repository merge-base
-`000be227d8bb606ba9c7958eb263e527d0d5b77c`, covering 430 changed files,
-rather than the active phase execution base. Its introduced/inherited labels
-therefore do not establish phase attribution. Its complexity coverage is
-`estimated` with tier `none`; that is not evidence that the directly paired
-functions lack tests. For example, `wireScope` and `wireVersion` are marked
-introduced against that older base but are unchanged in this phase.
-These observations remain separate from the one proven narrative defect and
-are not added to the phase finding counts.
+These observations do not establish phase attribution and contribute no
+review findings. The current parent full-gate log separately shows Fallow
+passing. The fixer also reports a clean five-file audit against `6680ff1b`.
 
 ## Narrative Findings (AI reviewer)
 
-### CR-01: BLOCKER — Internal errors disclose paths with spaces or Unicode
+None. Counts: 0 critical, 0 warning, 0 informational.
 
-**Classification:** BLOCKER
-**Severity:** Critical — information disclosure
-**File:** `/home/acolomba/src/pi-claude-marketplace-json/extensions/pi-claude-marketplace/shared/notification-command-error.ts:36-39`
-**Related files:**
-`/home/acolomba/src/pi-claude-marketplace-json/extensions/pi-claude-marketplace/shared/redact-absolute-paths.ts:18-23`;
-`/home/acolomba/src/pi-claude-marketplace-json/tests/shared/notification-command-error.test.ts:6-27`;
-`/home/acolomba/src/pi-claude-marketplace-json/tests/shared/notification-json.test.ts:42-48`;
-`/home/acolomba/src/pi-claude-marketplace-json/tests/architecture/no-credential-leak.test.ts:1049-1053`.
+### CR-01 disposition: independently resolved
 
-**Issue:** The new resolver special-cases file URLs and UNC paths, then relies
-on the existing text redactor for POSIX and drive-letter paths. That redactor
-uses ASCII `\w` character classes, excludes spaces, and requires a matching
-internal separator. Valid absolute paths can therefore pass through unchanged.
-An ordinary filesystem exception naming a directory with spaces, or a
-non-ASCII directory, reaches the command's machine error with its full local
-path. This violates the new surface's no-local-path disclosure contract
-(D-10, T-06-04, T-06-14).
+At `extensions/pi-claude-marketplace/shared/notification-command-error.ts:48`,
+the matcher now recognizes either slash or backslash. A single-backslash
+Windows current-drive-rooted path therefore enters `redactPathTail`,
+rather than reaching the unchanged-message return. Drive-letter, UNC,
+extended UNC, extended drive, and slash roots continue to use the same
+handling.
 
-The behavior was reproduced with Node v26.11.0 by invoking `runCommand`
-with the production `openNotificationRun`, a recording entry sink, and a
-handler throwing `new Error('ENOENT: open "' + path + '"')`. All six
-combinations below fulfilled and appended a schema-valid internal-error
-containing the complete original path:
+The conservative policy at lines 60-85 is unchanged: ambiguous quote
+boundaries, controls, angle brackets, or arbitrary suffixes suppress the
+affected cause; otherwise the local tail is replaced with `[path]`.
+The fix introduces no new delimiter heuristic. A successful ordinary
+redaction preserves only the explicitly allowed display suffix.
 
-| Input path | JSON causeChain[0] | RPC result |
-| --- | --- | --- |
-| `/Private Data/client/secret.json` | `ENOENT: open "/Private Data/client/secret.json"` | Same unchanged path |
-| `/用户/秘密/config.json` | `ENOENT: open "/用户/秘密/config.json"` | Same unchanged path |
-| `C:\Private Data\client\secret.json` | `ENOENT: open "C:\Private Data\client\secret.json"` | Same unchanged path |
+The new tests independently specify complete presentations and payloads.
+Both disclosure helpers compare each cause chain with an independently
+supplied expected chain. Expectations are literal fixture outcomes, not
+values derived from the production resolver. Existing marker checks remain
+supplemental. Independent controls with a fresh `FreshCanary` name
+confirm both helpers reject untouched paths and partially redacted tails
+without adding that name to their marker lists.
 
-A separate resolver probe also retains
-`failed at:/private/work/config.json`, because the shared redactor excludes
-matches immediately after a colon.
+## Independent Verification
 
-The existing resolver examples use ASCII paths without spaces. The new
-converter disclosure predicate repeats the restrictive character classes,
-and the architecture predicate also misses non-ASCII path roots. Thus the
-passing disclosure controls do not cover these inputs. This is one defect
-with a related regression-test gap, not separate findings for each test.
+Read-only, in-memory probes at the current HEAD passed:
 
-**Fix:** Add a command-error-specific path sanitizer that recognizes complete
-quoted filesystem paths, spaces and Unicode in POSIX/Windows components,
-and colon-prefixed diagnostic paths. Replace the complete sensitive span
-with `[path]` or a safe basename. Preserve the existing file-URL/UNC masking,
-credential redaction, cause-depth limit, and hostile-accessor fallback.
-Keep the change local to this machine-only surface so the shared text
-redactor and frozen text corpus do not change incidentally.
+- **Eight exact previous failures:** All four single-backslash paths from
+  the preceding review, in JSON and RPC, now match complete expected
+  payloads and pass schema validation. Ordinary paths are masked;
+  embedded apostrophes and line feeds yield
+  `Command failure details omitted.`.
+- **126 additional complete boundary payloads:** Nine root forms across
+  six components in both transports (108), four real POSIX ENOENT cases
+  in both transports (8), and five URL/suffix/prefix diagnostics in both
+  transports (10). Roots include current-drive, drive-letter with either
+  separator, UNC, extended UNC, extended drive, Windows device namespace,
+  slash, and double-slash roots. Components include spaces, Unicode,
+  apostrophes, line feeds, and angle brackets.
+- **168 additional full resolver presentations:** Three root forms,
+  fourteen component variants, and four quoting choices. These include
+  the newly recognized root, device and extended UNC forms, quotes,
+  backticks, C0/C1 controls, and Unicode line/paragraph separators.
+  Nested cause order, reload facts, and truncation facts matched
+  independent expected presentations.
+- **Six fresh planted negative controls:** Both actual disclosure helpers
+  were extracted with the TypeScript parser and executed unchanged in
+  memory. Each accepted a safe expected chain and rejected an untouched
+  private path, a partially masked private suffix, and an unexpected
+  private cause string.
+- **Reused prior matrix:** The preceding 1,680-case assessment remains
+  applicable to unchanged conservative tail handling. It covered seven
+  recognized roots, fifteen components, four quoting choices, and four
+  suffix forms, including second paths and HTTP-like text within local
+  paths. The previous 30 complete-payload checks of original diagnostics
+  and real ENOENT delimiter cases remain part of the review evidence.
+  The eight exact regressions and fresh probes above independently cover
+  the changed prefix behavior.
 
-Add independent expected-output cases for the three paths above and
-colon-prefixed diagnostics in the resolver pair, plus JSON/RPC command-boundary
-regressions. Assert the entire expected safe payload and the absence of each
-original path; do not rely solely on a copy of the production matching regex.
-Include planted unredacted versions that the disclosure checks must reject.
+HTTP credential masking and URL preservation passed fresh probes, as did
+a local backslash path after a remote URL, the colon-prefixed slash path,
+the permitted quoted display suffix, and fallback for an arbitrary suffix.
 
-## Evidence and Boundaries
+Windows diagnostics were synthetic inputs to the actual production command
+boundary on Linux. `path.win32.isAbsolute()` confirmed the tested root
+forms; native Windows filesystem execution was not performed. Real POSIX
+ENOENT probes used failed reads of missing paths without filesystem writes.
+These checks establish the reviewed behavior, not a proof for every possible
+arbitrary error string.
 
-The inspected source head was
-`9c0bf37a2861dc5ce5a7c3607813793eca914e8c`. The executable diff from the
-parent's clean verified commit
-`f8e2a3889501d13634e1ff2d0ccd368df6f5d274` was empty, and there were no
-untracked executable inputs. The parent supplied `npm run check`, exit 0,
-Node v26.11.0, 266 direct-coverage pairs. Its strict corpus evidence is 3149
-baseline entries and zero extras; the catalog baseline remains `26cb0056`.
-No broad checks, corpus regeneration, dependency installation, implementation
-edit, test edit, or commit was performed for this review. Narrow in-memory
-probes established CR-01; they did not modify source or tests.
+## Supplied Verification and Gate Status
 
-D-08 was assessed as one direct recovery attempt per ordinary append fault:
-success reopens delivery, failed recovery closes delivery, and neither retries
-nor rolls back business work. Host-mode invalidation and failure of the trusted
-recovery allocator remain explicit contract boundaries, not additional findings.
+- `/tmp/cr01-iter3-focused.log` records 1,198 passes, zero failures,
+  zero skips.
+- `/tmp/cr01-iter3-corpus.log` records 10,089 passes, zero failures,
+  one inherited skip, and exactly 3,149 baseline entries with zero extras.
+  The text corpus was not recaptured.
+- The fix report records a passing normal commit hook. Its test additions
+  comprise 432 full resolver presentations, 80 boundary payloads,
+  56 architecture payloads, and 120 planted negative checks; the actual
+  five-file diff was inspected for independent expectations.
+- **Fresh full gate passed:** The parent reports `npm run check` exit 0
+  at `045f53cd5060082c5df6371853338f6765cd1c2d`, Node `v26.11.0`.
+  Inspection of `/tmp/json-output-cr01-iter3-check.log` confirms all six
+  static checks pass and the final
+  `Merged LCOV: coverage/direct.lcov (266 records)`.
+  Exit status is parent-captured evidence. No executable inputs changed;
+  the result is reused under local-verification.
 
-Both descriptor-less prohibitions remain **flagged-unverified** for the final
-verifier: correlation must not become persistent tracking/telemetry, and
-internal errors or delivery failures must not imply rollback of completed
-changes. This review does not mark either verified.
+No broad checks were duplicated. Both the independent review and current
+combined-tree gate pass; remaining verification limits are recorded below.
+
+## Contract and Security Limits
+
+The unchanged-file assessment preserves the text exception and timing
+contract, synchronous trusted-mode preflight limits, bounded cause
+serialization, and pure field-projecting converter. The repair remains
+machine-only; the shared text redactor is unchanged. Unsupported or
+inaccessible live mode and failure of the trusted recovery allocator remain
+host-contract limits. The fixed corpus evidence supports text preservation.
+
+D-08 remains locked: one direct recovery per failed ordinary append;
+successful recovery reopens delivery and permits later output; failed
+recovery closes delivery. Recovery is nonrecursive and never retries
+business work. The accepted failed-sink delivery limit remains explicit.
+
+The fix report still says **requires human verification**. Independent
+code-review closure of CR-01 does not claim that a human performed that
+verification or close the parent's security/validation records. T-06-04
+and T-06-14 now have positive independent redaction evidence; final security
+and goal verification remain parent-owned.
+
+Both descriptor-less prohibitions remain **flagged-unverified** for the
+final verifier: no persistent user/cross-command tracking or telemetry, and
+no implication that an internal error or delivery fault rolls back completed
+changes. Neither is marked as an automated pass.
+
+Only `06-REVIEW.md` was modified. No executable inputs, tests, other
+planning files, or parent backups were changed. No commit was made.
 
 ---
 
-_Reviewed: 2026-10-09T21:32:00Z_
 _Reviewer: the agent (gsd-code-reviewer)_
 _Depth: standard_

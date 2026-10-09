@@ -2,7 +2,7 @@
 phase: "06"
 slug: command-run-contract
 status: validated
-nyquist_compliant: false
+nyquist_compliant: true
 wave_0_complete: true
 created: "2026-10-09"
 ---
@@ -12,7 +12,8 @@ created: "2026-10-09"
 The user resolved the 06-01 scope blocker on 2026-10-09 by selecting option 1
 and approving a scope-only size exception for its 61-file atomic metadata
 migration. All four combined-wave gates passed. Independent automated-coverage
-audit found no gaps; security, code review, and final goal verification follow.
+audit found no gaps. Code review later exposed CR-01, now resolved by three
+fixes and independent re-review. Security passed. Final goal verification follows.
 This document refers only to the active command-run-contract phase. No archived
 phase with number 06 is a dependency.
 
@@ -415,7 +416,7 @@ production module or export is permitted.
 - [x] New source-test pairs reach 100% direct coverage in the final combined gate.
 - [x] Strict text corpus and catalog checks pass for the isolated 06-04 tree; combined-tree confirmation remains parent-owned.
 - [x] All combined-wave gates pass; final unchanged phase inputs share the fourth-wave result.
-- [ ] CR-01 reopened path-disclosure coverage and T-06-04/T-06-14; remediation pending.
+- [x] CR-01 regression coverage passes. Independent review and T-06-04/T-06-14 reassessment passed.
 - [x] Descriptor-less prohibition flags are surfaced to parent/verifier; both remain flagged-unverified.
 - [x] Independent validation audit found all nine tasks covered; nyquist_compliant is true.
 
@@ -568,4 +569,45 @@ Neither descriptor-less prohibition is promoted by this coverage audit.
 
 CR-01 exposed untested absolute paths with spaces/Unicode and colon-prefixed
 diagnostics. Earlier coverage and gate results remain historical evidence;
-nyquist_compliant is false until new independent regression assertions pass.
+The gap is now resolved. Independent expected-payload regressions pass,
+and the final reviewer confirmed CR-01 closure.
+
+## Final remediation and regression evidence
+
+CR-01 was one coverage gap, resolved without an accepted risk. Direct tests
+now cover nine path roots, twelve directory variants, and four quoting
+choices. Complete expected payloads cover JSON and RPC command delivery.
+Both disclosure helpers compare complete independently expected cause
+chains. Fresh planted partial disclosures fail those checks.
+
+The five focused owner suites passed 1198 tests, with zero failures or skips.
+Log: `/tmp/cr01-iter3-focused.log`. These extend tasks 06-02-01/02 and
+06-04-02 under JOUT-04 and T-06-04/T-06-14. The other task coverage remains
+unchanged. All nine tasks remain COVERED. No validation gap remains.
+
+The parent ran `npm run check` on clean executable inputs at
+`045f53cd5060082c5df6371853338f6765cd1c2d`, Node `v26.11.0`: exit 0.
+Log: `/tmp/json-output-cr01-iter3-check.log`. All 266 direct pairs passed.
+This result supersedes earlier gates for the changed error resolver.
+The regression inventory contains 130 test paths from phases 1 through 5.
+The full gate includes those owners, architecture suites, and integration
+suites. Its configured and normalized command is `npm run check`.
+No executable input changed after this result.
+
+The strict corpus at the same source commit passed: 3149 entries, zero
+extras, 10089 passing tests, zero failures, and one inherited skip.
+Log: `/tmp/cr01-iter3-corpus.log`. The catalog and frozen corpus remain
+unchanged from `26cb0056`. No baseline was recaptured.
+
+Independent code review is clean. Independent security reassessment closes
+all fifteen declared threats. The fix workflow still requires developer
+confirmation of the redaction logic before goal verification. The two
+prohibition flags remain unresolved for the final verifier.
+
+## Validation Audit 2026-10-09
+
+| Metric | Count |
+|---|---|
+| Gaps found | 1 |
+| Resolved | 1 |
+| Escalated | 0 |

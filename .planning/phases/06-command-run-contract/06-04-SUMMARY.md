@@ -200,3 +200,23 @@ ancestors of HEAD. The persisted ledger and recorded boundaries measure two
 task commits. Protected-file and executable-input comparisons passed. No
 temporary RED mutation remains. The only pre-existing untracked item is the
 runtime `.codex/gsd-core` symlink; it was not staged or changed.
+
+## Parent remediation closeout
+
+Code review found CR-01 after the initial combined-wave gate. Three fixes
+closed it: `e7a8182f`, `6680ff1b`, and `045f53cd`. The machine error resolver
+now masks recognized local paths and suppresses ambiguous cause messages.
+The shared text redactor remains unchanged. Independent re-review is clean,
+and security reassessment closes all fifteen declared threats.
+
+The parent ran `npm run check` at
+`045f53cd5060082c5df6371853338f6765cd1c2d`, Node `v26.11.0`: exit 0.
+Log: `/tmp/json-output-cr01-iter3-check.log`. Integration tests and all
+266 direct source/test pairs passed. The strict corpus at this commit
+retains 3149 entries with zero extras. Log: `/tmp/cr01-iter3-corpus.log`.
+Only planning Markdown changed after these results. Validation now records
+`nyquist_compliant: true` for the automated coverage.
+
+Developer confirmation of the redaction logic remains required before
+final goal verification. Both descriptor-less prohibition flags remain
+unresolved. These checks do not mark Phase 6 complete.
