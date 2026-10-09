@@ -37,7 +37,7 @@ const MCP_STATUS_SNAPSHOT_VALIDATOR = Compile(
   }),
 );
 
-/** The seven server statuses pi-mcp-adapter 5.1.0 reports, verbatim. */
+/** The seven server statuses pi-mcp-adapter 5.2.0 reports, verbatim. */
 export type McpServerRuntimeStatus =
   "connected" | "cached" | "failed" | "needs-auth" | "not-connected" | "blocked" | "disabled";
 

@@ -331,7 +331,7 @@ test("AFILE-06: a /mcp-adapter enable made while the plugin is installed survive
       hooksRouting,
       completionCache,
     )({ ...makeCtx().session, ...request });
-    // pi-mcp-adapter 5.1.0's `/mcp-adapter enable plugin_hello_srv_` removes
+    // pi-mcp-adapter 5.2.0's `/mcp-adapter enable plugin_hello_srv_` removes
     // `disabled` from the entry and keeps every other member, the marker included.
     const installed = JSON.parse(await readFile(locations.mcpAdapterJsonPath, "utf8")) as {
       mcpServers: { plugin_hello_srv_: Record<string, unknown> };
@@ -464,7 +464,7 @@ test("ANAME-07: a project install over a stub keeps the user's timeout for write
       completionCache,
     )({ ...installed.session, ...request });
     const installedText = await readFile(locations.mcpAdapterJsonPath, "utf8");
-    // pi-mcp-adapter 5.1.0's `/mcp-adapter enable plugin_hello_srv_` removes
+    // pi-mcp-adapter 5.2.0's `/mcp-adapter enable plugin_hello_srv_` removes
     // `disabled` from the entry and keeps every other member, the marker included.
     const installedDoc = JSON.parse(installedText) as {
       mcpServers: { plugin_hello_srv_: Record<string, unknown> };

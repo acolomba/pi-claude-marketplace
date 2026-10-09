@@ -5,8 +5,9 @@ usage() {
   cat <<'USAGE'
 Usage: scripts/pi.sh [--clear] [--home PATH] [--cd PATH] [--] [pi args...]
 
-Runs Pi with only this project, pi-mcp-adapter, pi-subagents, and
-@quintinshaw/pi-dynamic-workflows loaded as extensions.
+Runs Pi with only this project, pi-mcp-adapter, pi-subagents,
+@quintinshaw/pi-dynamic-workflows and Pi's built-in tool search loaded as
+extensions.
 
 Pi is the version package-lock.json pins, run from node_modules -- run
 `npm install` first. This never launches a `pi` found on PATH.
@@ -108,7 +109,7 @@ try {
 # (WPTH-04). --home sets the variable, so an engine before 3.14.0 does not
 # find the workflows the bridge installs.
 pi_cm_pins=(
-  "pi-mcp-adapter@5.1.0"
+  "pi-mcp-adapter@5.2.0"
   "pi-subagents@0.74.0"
   "@quintinshaw/pi-dynamic-workflows@3.14.0"
 )
@@ -218,6 +219,10 @@ if [[ -n "$pi_home" ]]; then
   mkdir -p "$PI_CODING_AGENT_DIR" "$PI_CODING_AGENT_SESSION_DIR"
 fi
 
+# On Pi 1.0.0, --no-extensions also drops Pi's built-in tool-search
+# extension. -e builtin:tool-search keeps tool_search available for a
+# "defaultTools": ["+tool_search"] setting. Pi's builtin:mcp stays off,
+# because pi-mcp-adapter replaces it.
 exec node "$pi_cli" \
   --no-extensions \
   --no-skills \
@@ -226,4 +231,5 @@ exec node "$pi_cli" \
   -e "$mcp_adapter_extension" \
   -e "$subagents_extension" \
   -e "$workflows_extension" \
+  -e builtin:tool-search \
   "${pi_args[@]}"
