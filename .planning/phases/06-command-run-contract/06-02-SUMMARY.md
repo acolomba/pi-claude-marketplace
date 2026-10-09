@@ -214,6 +214,15 @@ Ready for 06-03 after the parent merges this worktree and passes the combined-wa
 
 STATE.md, state.json, ROADMAP.md, config.json, REQUIREMENTS.md, and the parent checkout were not modified.
 
+## Combined-wave verification
+
+The parent merged this plan as `7dfa8f08` and ran `npm run check` on the
+clean combined tree with Node `v26.11.0`. It passed with exit 0, including
+integration tests and direct coverage for all 266 source/test pairs.
+The daemon restart interrupted the execution transport after task verification;
+artifact reconciliation confirmed both task commits and summary `fe58974b`.
+No implementation work was repeated during recovery.
+
 ## Self-Check: PASSED
 
 The summary, all four new source/test files, and the generated schema exist. Both exact task commits are ancestors of HEAD. The final verified source/test/schema inputs and protected planning files remain unchanged. The persisted ledger measures two task commits before the summary commit.
