@@ -17,7 +17,64 @@ import { openNotificationRun } from "../../extensions/pi-claude-marketplace/shar
 import { createJsonCapture } from "./json-capture.ts";
 
 import type { NotificationContext } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
-import type { NotificationRun } from "../../extensions/pi-claude-marketplace/shared/notification-run.ts";
+import type {
+  CommandRunState,
+  NotificationRun,
+} from "../../extensions/pi-claude-marketplace/shared/notification-run.ts";
+
+for (const mode of ["json", "rpc"]) {
+  test(`construction failure shares terminal delivery and settlement state in ${mode}`, async () => {
+    // arrange
+    const attempts: object[] = [];
+    let state: CommandRunState | undefined;
+    const pi = {
+      getAllTools: (): never => {
+        throw new Error("Inventory failed.");
+      },
+      appendEntry(customType: string, payload: unknown): never {
+        assert.strictEqual(this, pi);
+        attempts.push({ customType, payload });
+        throw new Error("Append failed.");
+      },
+    };
+    const ctx = {
+      mode,
+      get ui(): never {
+        throw new Error("Unexpected UI");
+      },
+    };
+
+    // act
+    await runCommand(
+      pi,
+      ctx,
+      "plugin update",
+      () => {
+        throw new Error("Unexpected handler");
+      },
+      {
+        ...createIds(),
+        openRun: (inventory, _origin, commandState) => {
+          state = commandState;
+          inventory.getAllTools();
+          throw new Error("Unexpected inventory success");
+        },
+      },
+    );
+
+    // assert
+    assert.deepStrictEqual(attempts, [
+      expectedError("Inventory failed."),
+      expectedError("Append failed."),
+    ]);
+    assert.deepStrictEqual(state, {
+      hasOutcome: false,
+      needsReload: false,
+      settled: true,
+      delivery: "closed",
+    });
+  });
+}
 
 test("retains committed local state and earlier output after a command throws", async (t) => {
   // arrange
