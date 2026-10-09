@@ -251,6 +251,7 @@ for (const scenario of [
               customType: "claude-plugin",
               payload: {
                 schemaVersion: 1,
+                origin: { kind: "hook" },
                 kind: "async-rewake-summary",
                 severity: "info",
                 needsReload: false,

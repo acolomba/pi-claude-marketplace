@@ -78,6 +78,7 @@ for (const mode of ["json", "rpc"]) {
         customType: "claude-plugin",
         payload: {
           schemaVersion: 1,
+          origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
           kind: "usage-error",
           severity: "error",
           needsReload: false,
@@ -89,6 +90,7 @@ for (const mode of ["json", "rpc"]) {
         customType: "claude-plugin",
         payload: {
           schemaVersion: 1,
+          origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
           kind: "usage-info",
           severity: "info",
           needsReload: false,
@@ -116,7 +118,11 @@ test("keeps mixed entries and duplicates ordered while reading live mode on the 
     },
     appendEntry: capture.entrySink.appendEntry,
   };
-  const run = openNotificationRun(pi);
+  const run = openNotificationRun(pi, {
+    kind: "command",
+    commandId: "plugin",
+    invocationId: "test-run",
+  });
   const reads: string[] = [];
   const ctx = {
     get mode() {
@@ -143,6 +149,7 @@ test("keeps mixed entries and duplicates ordered while reading live mode on the 
     customType: "claude-plugin",
     payload: {
       schemaVersion: 1,
+      origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
       kind: "usage-error",
       severity: "error",
       needsReload: false,
@@ -156,6 +163,7 @@ test("keeps mixed entries and duplicates ordered while reading live mode on the 
       customType: "claude-plugin",
       payload: {
         schemaVersion: 1,
+        origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
         kind: "cascade",
         severity: "info",
         needsReload: false,
@@ -224,6 +232,7 @@ for (const index of [0, 1, 2]) {
     const capture = createJsonCapture();
     const valid = {
       schemaVersion: 1,
+      origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
       kind: "usage-info",
       severity: "info",
       needsReload: false,
@@ -259,6 +268,7 @@ for (const { name, payload } of [
     name: "undefined",
     payload: {
       schemaVersion: 1,
+      origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
       kind: "cascade",
       severity: "info",
       needsReload: false,
@@ -340,7 +350,11 @@ test("notify renders single installed plugin with empty deps under added marketp
       capture.entrySink.appendEntry(customType, payload);
     },
   };
-  const run = openNotificationRun(pi);
+  const run = openNotificationRun(pi, {
+    kind: "command",
+    commandId: "plugin",
+    invocationId: "test-run",
+  });
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -376,6 +390,7 @@ test("notify renders single installed plugin with empty deps under added marketp
       customType: "claude-plugin",
       payload: {
         schemaVersion: 1,
+        origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
         kind: "cascade",
         severity: "info",
         needsReload: true,
@@ -6033,6 +6048,7 @@ for (const mode of ["json", "rpc"]) {
         customType: "claude-plugin",
         payload: {
           schemaVersion: 1,
+          origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
           kind: "diagnostic",
           severity: "warning",
           needsReload: false,
@@ -6056,6 +6072,7 @@ for (const mode of ["json", "rpc"]) {
           customType: "claude-plugin",
           payload: {
             schemaVersion: 1,
+            origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
             kind: "diagnostic",
             severity: "warning",
             needsReload: false,
@@ -6073,6 +6090,7 @@ for (const mode of ["json", "rpc"]) {
           customType: "claude-plugin",
           payload: {
             schemaVersion: 1,
+            origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
             kind: "diagnostic",
             severity: "warning",
             needsReload: false,
@@ -6090,6 +6108,7 @@ for (const mode of ["json", "rpc"]) {
           customType: "claude-plugin",
           payload: {
             schemaVersion: 1,
+            origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
             kind: "diagnostic",
             severity: "warning",
             needsReload: false,
@@ -6199,6 +6218,7 @@ for (const mode of ["json", "rpc"]) {
       customType: "claude-plugin",
       payload: {
         schemaVersion: 1,
+        origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
         kind: "async-rewake-summary",
         severity: "info",
         needsReload: false,
@@ -6266,6 +6286,7 @@ for (const mode of ["json", "rpc"]) {
         customType: "claude-plugin",
         payload: {
           schemaVersion: 1,
+          origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
           kind: "stop-override-cap",
           severity: "warning",
           needsReload: false,
@@ -6328,6 +6349,7 @@ for (const mode of ["json", "rpc"]) {
         customType: "claude-plugin",
         payload: {
           schemaVersion: 1,
+          origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
           kind: "reconcile-aborted",
           severity: "error",
           needsReload: false,
@@ -6338,6 +6360,7 @@ for (const mode of ["json", "rpc"]) {
         customType: "claude-plugin",
         payload: {
           schemaVersion: 1,
+          origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
           kind: "plugin-path-skipped",
           severity: "warning",
           needsReload: false,
@@ -6402,6 +6425,7 @@ test("retains a caught invalid device prompt append for final validation", () =>
       customType: "claude-plugin",
       payload: {
         schemaVersion: 1,
+        origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
         kind: "device-flow-prompt",
         severity: "info",
         needsReload: false,

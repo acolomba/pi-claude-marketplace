@@ -140,7 +140,11 @@ describe("buildAuthForHost", () => {
       getAllTools: () => inventory.getAllTools(),
       appendEntry: capture.entrySink.appendEntry,
     };
-    const run = openNotificationRun(pi);
+    const run = openNotificationRun(pi, {
+      kind: "command",
+      commandId: "plugin",
+      invocationId: "test-run",
+    });
     const snapshot = run.softDeps;
     const credentials = createCredentialOpsFake({ boundary: "memory" });
     const deviceCode = {
@@ -184,6 +188,7 @@ describe("buildAuthForHost", () => {
         customType: "claude-plugin",
         payload: {
           schemaVersion: 1,
+          origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
           kind: "device-flow-prompt",
           severity: "info",
           needsReload: false,
@@ -266,6 +271,7 @@ describe("buildAuthForHost", () => {
           customType: "claude-plugin",
           payload: {
             schemaVersion: 1,
+            origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
             kind: "device-flow-prompt",
             severity: "info",
             needsReload: false,

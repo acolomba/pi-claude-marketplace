@@ -439,7 +439,7 @@ function finalizeChild(
   // status surface, not a success-only signal.
   if (entry.rewakeSummary !== undefined) {
     try {
-      const run = openNotificationRun(pi);
+      const run = openNotificationRun(pi, { kind: "hook" });
       notifyAsyncRewakeSummary(ctx, run, entry.rewakeSummary);
     } catch (err) {
       hookDebugLog(`async-rewake: notify failed (${entry.pluginId}): ${errorMessage(err)}`);

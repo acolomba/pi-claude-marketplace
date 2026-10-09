@@ -96,6 +96,7 @@ for (const mode of ["json", "rpc"] as const) {
           customType: "claude-plugin",
           payload: {
             schemaVersion: 1,
+            origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
             kind: "usage-info",
             severity: "info",
             needsReload: false,
@@ -122,6 +123,7 @@ for (const mode of ["json", "rpc"] as const) {
         customType: "claude-plugin",
         payload: {
           schemaVersion: 1,
+          origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
           kind: "usage-error",
           severity: "error",
           needsReload: false,

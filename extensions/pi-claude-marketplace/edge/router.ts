@@ -156,118 +156,144 @@ function peelToken(args: string): [string, string] {
   return [trimmed.slice(0, match.index), trimmed.slice(match.index + match[0].length)];
 }
 
+/** One canonical identity and the executable route selected from command text. */
+export type SelectedCommandRoute =
+  | { readonly commandId: string; readonly handler: SubcommandHandler; readonly args: string }
+  | { readonly commandId: string; readonly message: string; readonly usage: string };
+
+/** Executes a selected route, or selects command text for callers with a run. */
 export async function routeClaudePlugin(
-  args: string,
+  args: string | SelectedCommandRoute,
   handlers: SubcommandHandlers,
   ctx: ExtensionCommandContext,
   run: NotificationRun,
 ): Promise<void> {
+  const route = typeof args === "string" ? selectClaudePluginRoute(args, handlers) : args;
+  if ("handler" in route) {
+    return route.handler(route.args, ctx, run);
+  }
+
+  notifyUsageError(ctx, run, { message: route.message, usage: route.usage });
+}
+
+/** Selects canonical identity and dispatch together, preserving handler arguments. */
+export function selectClaudePluginRoute(
+  args: string,
+  handlers: SubcommandHandlers,
+): SelectedCommandRoute {
   const [head, rest] = peelToken(args);
 
   if (head === "") {
     // Bare `/claude:plugin` opens the interactive browser (TUI) or falls
     // back to the inventory list (non-TUI), matching Claude Code's
     // `/plugin` UX. `rest` is "" here (peelToken of empty input).
-    return handlers.browse(rest, ctx, run);
+    return { commandId: "plugin browse", handler: handlers.browse, args: rest };
   }
 
   switch (head) {
     case "bootstrap":
-      return handlers.bootstrap(rest, ctx, run);
+      return { commandId: "plugin bootstrap", handler: handlers.bootstrap, args: rest };
     case "install":
-      return handlers.install(rest, ctx, run);
+      return { commandId: "plugin install", handler: handlers.install, args: rest };
     case "uninstall":
-      return handlers.uninstall(rest, ctx, run);
+      return { commandId: "plugin uninstall", handler: handlers.uninstall, args: rest };
     case "prune":
-      return handlers.prune(rest, ctx, run);
+      return { commandId: "plugin prune", handler: handlers.prune, args: rest };
     case "update":
-      return handlers.update(rest, ctx, run);
+      return { commandId: "plugin update", handler: handlers.update, args: rest };
     case "fetch":
-      return handlers.fetch(rest, ctx, run);
+      return { commandId: "plugin fetch", handler: handlers.fetch, args: rest };
     case "reinstall":
-      return handlers.reinstall(rest, ctx, run);
+      return { commandId: "plugin reinstall", handler: handlers.reinstall, args: rest };
     case "list":
     case "ls":
-      return handlers.list(rest, ctx, run);
+      return { commandId: "plugin list", handler: handlers.list, args: rest };
     case "info":
-      return handlers.pluginInfo(rest, ctx, run);
+      return { commandId: "plugin info", handler: handlers.pluginInfo, args: rest };
     case "pending":
-      return handlers.pending(rest, ctx, run);
+      return { commandId: "plugin pending", handler: handlers.pending, args: rest };
     case "enable":
-      return handlers.enable(rest, ctx, run);
+      return { commandId: "plugin enable", handler: handlers.enable, args: rest };
     case "disable":
-      return handlers.disable(rest, ctx, run);
+      return { commandId: "plugin disable", handler: handlers.disable, args: rest };
     case "import":
-      return handlers.import(rest, ctx, run);
+      return { commandId: "plugin import", handler: handlers.import, args: rest };
     case "marketplace":
-      return routeMarketplace(rest, handlers, ctx, run);
+      return selectMarketplaceRoute(rest, handlers);
     case "browse":
-      return handlers.browse(rest, ctx, run);
+      return { commandId: "plugin browse", handler: handlers.browse, args: rest };
     case "help":
-      return handlers.help(rest, ctx, run);
+      return {
+        commandId: rest.trim() === "marketplace" ? "marketplace help" : "plugin help",
+        handler: handlers.help,
+        args: rest,
+      };
     default:
-      notifyUsageError(ctx, run, {
+      return {
+        commandId: "plugin",
         message: `Unknown subcommand: "${head}".`,
         usage: TOP_LEVEL_USAGE,
-      });
-      return;
+      };
   }
 }
 
 const MARKETPLACE_HELP_USAGE = "Usage: /claude:plugin marketplace help";
 
-async function routeMarketplace(
-  args: string,
-  handlers: SubcommandHandlers,
-  ctx: ExtensionCommandContext,
-  run: NotificationRun,
-): Promise<void> {
+function selectMarketplaceRoute(args: string, handlers: SubcommandHandlers): SelectedCommandRoute {
   const [head, rest] = peelToken(args);
 
   if (head === "") {
-    notifyUsageError(ctx, run, {
+    return {
+      commandId: "marketplace",
       message: "marketplace requires a subcommand.",
       usage: MARKETPLACE_USAGE,
-    });
-    return;
+    };
   }
 
   switch (head) {
     case "add":
-      return handlers.marketplaceAdd(rest, ctx, run);
+      return { commandId: "marketplace add", handler: handlers.marketplaceAdd, args: rest };
     case "remove":
     case "rm":
-      return handlers.marketplaceRemove(rest, ctx, run);
+      return { commandId: "marketplace remove", handler: handlers.marketplaceRemove, args: rest };
     case "list":
     case "ls":
-      return handlers.marketplaceList(rest, ctx, run);
+      return { commandId: "marketplace list", handler: handlers.marketplaceList, args: rest };
     case "info":
-      return handlers.marketplaceInfo(rest, ctx, run);
+      return { commandId: "marketplace info", handler: handlers.marketplaceInfo, args: rest };
     case "update":
-      return handlers.marketplaceUpdate(rest, ctx, run);
+      return { commandId: "marketplace update", handler: handlers.marketplaceUpdate, args: rest };
     case "autoupdate":
-      return handlers.marketplaceAutoupdate(rest, ctx, run);
+      return {
+        commandId: "marketplace autoupdate",
+        handler: handlers.marketplaceAutoupdate,
+        args: rest,
+      };
     case "noautoupdate":
-      return handlers.marketplaceNoautoupdate(rest, ctx, run);
+      return {
+        commandId: "marketplace noautoupdate",
+        handler: handlers.marketplaceNoautoupdate,
+        args: rest,
+      };
     case "help":
       // The topic is fixed by the spelling, so there is nothing left to
       // consume. Every sibling verb rejects what it cannot use; silently
       // discarding `rest` here would make this the one spelling where a
       // mistyped argument reads as success.
       if (rest.trim() !== "") {
-        notifyUsageError(ctx, run, {
+        return {
+          commandId: "marketplace help",
           message: "marketplace help takes no arguments.",
           usage: MARKETPLACE_HELP_USAGE,
-        });
-        return;
+        };
       }
 
-      return handlers.help("marketplace", ctx, run);
+      return { commandId: "marketplace help", handler: handlers.help, args: "marketplace" };
     default:
-      notifyUsageError(ctx, run, {
+      return {
+        commandId: "marketplace",
         message: `Unknown marketplace subcommand: "${head}".`,
         usage: MARKETPLACE_USAGE,
-      });
-      return;
+      };
   }
 }

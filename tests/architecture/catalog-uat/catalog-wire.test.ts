@@ -153,7 +153,11 @@ function presentExample(example: CatalogExample, fixtures: FixtureMap): Presente
     throw new Error(`Catalog example has no fixture: ${tupleKey(example.section, example.state)}`);
   }
 
-  const run = openNotificationRun(fixture.pi);
+  const run = openNotificationRun(fixture.pi, {
+    kind: "command",
+    commandId: "plugin",
+    invocationId: "test-run",
+  });
   const source =
     fixture.present?.(run) ?? presentNotification(run, catalogMessage(example.section, fixture));
   verifyPi(fixture.pi);
@@ -242,7 +246,11 @@ function realPayloads(): {
 }[] {
   return PRESENTED.map(({ section, state, source }) => ({
     key: tupleKey(section, state),
-    payload: toWirePayload(source),
+    payload: toWirePayload(source, {
+      kind: "command",
+      commandId: "plugin",
+      invocationId: "test-run",
+    }),
   }));
 }
 
@@ -330,7 +338,10 @@ function walkAll(presented: readonly PresentedSource[]): WalkReport {
   for (const { section, state, text, source } of presented) {
     const key = tupleKey(section, state);
     findings.push(
-      ...walkPayload(toWirePayload(source), text).map((finding) => `${key} ${finding}`),
+      ...walkPayload(
+        toWirePayload(source, { kind: "command", commandId: "plugin", invocationId: "test-run" }),
+        text,
+      ).map((finding) => `${key} ${finding}`),
     );
     visited += 1;
   }
@@ -392,7 +403,14 @@ for (const mode of ["json", "rpc"] as const) {
       // arrange
       const capture = createJsonCapture();
       const pi = piWithAllLoaded();
-      const run: NotificationRun = { ...openNotificationRun(pi), entrySink: capture.entrySink };
+      const run: NotificationRun = {
+        ...openNotificationRun(pi, {
+          kind: "command",
+          commandId: "plugin",
+          invocationId: "test-run",
+        }),
+        entrySink: capture.entrySink,
+      };
       const ctx: NotificationContext = {
         mode,
         get ui() {
@@ -423,7 +441,9 @@ test("JOUT-02: every catalog example and raw kind converts to a schema-valid pay
   const expectedCount = EXAMPLES.length + Object.keys(RAW_SAMPLES).length;
 
   // act
-  const report = convertAndValidate(PRESENTED, toWirePayload);
+  const report = convertAndValidate(PRESENTED, (source) =>
+    toWirePayload(source, { kind: "command", commandId: "plugin", invocationId: "test-run" }),
+  );
 
   // assert
   assert.deepStrictEqual(report.failures, []);
@@ -484,7 +504,9 @@ test("JOUT-02 control: a planted fixture with an off-vocabulary reason fails by 
   );
 
   // act
-  const report = convertAndValidate([planted], toWirePayload);
+  const report = convertAndValidate([planted], (source) =>
+    toWirePayload(source, { kind: "command", commandId: "plugin", invocationId: "test-run" }),
+  );
 
   // assert
   assert.deepStrictEqual(tupleKeys(report.failures), ["planted section::off-vocabulary reason"]);
@@ -501,7 +523,7 @@ test("JOUT-02 control: a cascade payload carrying a raw-only member fails", () =
   const cascade = CATALOG_PRESENTED.find(({ source }) => source.kind === "cascade");
   assert.ok(cascade, "the catalog presents no cascade");
   const foreignMember: Converter = (source) => ({
-    ...toWirePayload(source),
+    ...toWirePayload(source, { kind: "command", commandId: "plugin", invocationId: "test-run" }),
     causeMessage: "state unreadable",
   });
 
@@ -587,7 +609,11 @@ function committedWarning(): {
   readonly text: string;
 } {
   const presented = presentedAt(PRUNE_WARNING_KEY);
-  const payload = toWirePayload(presented.source);
+  const payload = toWirePayload(presented.source, {
+    kind: "command",
+    commandId: "plugin",
+    invocationId: "test-run",
+  });
   if (payload.kind !== "prune-committed-warning" || payload.cause === undefined) {
     throw new Error(`Expected a committed prune warning with a cause, got ${payload.kind}`);
   }
@@ -631,7 +657,11 @@ test("WIRE-08: no real payload carries a hidden path, a live Error, or an absent
 test("WIRE-08 control: the path-source marketplace info absPath is detected and accepted", () => {
   // arrange
   const presented = presentedAt(PATH_SOURCE_INFO_KEY);
-  const payload = toWirePayload(presented.source);
+  const payload = toWirePayload(presented.source, {
+    kind: "command",
+    commandId: "plugin",
+    invocationId: "test-run",
+  });
 
   // act
   const hidden = walkPayload(payload, "");

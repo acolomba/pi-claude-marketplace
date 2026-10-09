@@ -39,6 +39,7 @@ import { mock, verify, when } from "strong-mock";
 import {
   MARKETPLACE_SUBCOMMANDS,
   routeClaudePlugin,
+  selectClaudePluginRoute,
   TOP_LEVEL_SUBCOMMANDS,
   type SubcommandHandlers,
 } from "../../extensions/pi-claude-marketplace/edge/router.ts";
@@ -50,6 +51,44 @@ import { createNotificationBoundary } from "./notification-boundary.ts";
 import { createMachineNotificationBoundary } from "./notification-boundary.ts";
 
 import type { ExtensionCommandContext } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+
+test("executes a selected list route without selecting its handler again", async () => {
+  // arrange
+  const { ctx, run, capture, verifyBoundary } = createMachineNotificationBoundary("json");
+  const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "handlers" });
+  when(() => handlers.list)
+    .thenReturn((args, handlerCtx, handlerRun) => {
+      assert.strictEqual(args, "--scope project");
+      assert.strictEqual(handlerCtx, ctx);
+      assert.strictEqual(handlerRun, run);
+      notify(handlerCtx, handlerRun, { marketplaces: [] });
+      return Promise.resolve();
+    })
+    .times(1);
+  const route = selectClaudePluginRoute("ls --scope project", handlers);
+
+  // act
+  await routeClaudePlugin(route, handlers, ctx, run);
+
+  // assert
+  assert.strictEqual(route.commandId, "plugin list");
+  assert.deepStrictEqual(capture.entries, [
+    {
+      customType: "claude-plugin",
+      payload: {
+        schemaVersion: 1,
+        kind: "cascade",
+        severity: "info",
+        needsReload: false,
+        origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+        marketplaces: [],
+      },
+    },
+  ]);
+  capture.assertValid();
+  verifyBoundary();
+  verify(handlers);
+});
 
 test("preserves ordered duplicate rejections around a handler emission on the same run", async () => {
   // arrange
@@ -82,6 +121,7 @@ test("preserves ordered duplicate rejections around a handler emission on the sa
     customType: "claude-plugin",
     payload: {
       schemaVersion: 1,
+      origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
       kind: "usage-error",
       severity: "error",
       needsReload: false,
@@ -95,6 +135,7 @@ test("preserves ordered duplicate rejections around a handler emission on the sa
       customType: "claude-plugin",
       payload: {
         schemaVersion: 1,
+        origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
         kind: "cascade",
         severity: "info",
         needsReload: false,
@@ -128,6 +169,7 @@ test("appends a complete unknown-command usage error in json", async () => {
       customType: "claude-plugin",
       payload: {
         schemaVersion: 1,
+        origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
         kind: "usage-error",
         severity: "error",
         needsReload: false,
@@ -142,6 +184,26 @@ test("appends a complete unknown-command usage error in json", async () => {
 });
 
 type HandlerName = keyof SubcommandHandlers;
+
+test("selects marketplace help when the complete trimmed help topic matches", () => {
+  // arrange
+  const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "handlers" });
+  const help = (): Promise<void> => Promise.resolve();
+  when(() => handlers.help)
+    .thenReturn(help)
+    .times(1);
+
+  // act
+  const route = selectClaudePluginRoute("help  marketplace  ", handlers);
+
+  // assert
+  assert.deepStrictEqual(route, {
+    commandId: "marketplace help",
+    handler: help,
+    args: "marketplace  ",
+  });
+  verify(handlers);
+});
 
 interface DispatchRow {
   readonly subcommand: string;
@@ -624,6 +686,7 @@ for (const mode of ["json", "rpc"] as const) {
           customType: "claude-plugin",
           payload: {
             schemaVersion: 1,
+            origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
             kind: "usage-error",
             severity: "error",
             needsReload: false,

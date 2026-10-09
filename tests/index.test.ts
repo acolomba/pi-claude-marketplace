@@ -1012,6 +1012,7 @@ for (const mode of ["json", "rpc"]) {
           customType: "claude-plugin",
           payload: {
             schemaVersion: 1,
+            origin: { kind: "load" },
             kind: "reconcile-aborted",
             severity: "error",
             needsReload: false,
@@ -1022,6 +1023,7 @@ for (const mode of ["json", "rpc"]) {
           customType: "claude-plugin",
           payload: {
             schemaVersion: 1,
+            origin: { kind: "load" },
             kind: "plugin-path-skipped",
             severity: "warning",
             needsReload: false,
@@ -1033,6 +1035,7 @@ for (const mode of ["json", "rpc"]) {
           customType: "claude-plugin",
           payload: {
             schemaVersion: 1,
+            origin: { kind: "load" },
             kind: "plugin-path-skipped",
             severity: "warning",
             needsReload: false,

@@ -153,7 +153,7 @@ export function settleHandlerFor(
 
     switch (last.stopReason) {
       case "stop": {
-        const run = openNotificationRun(pi);
+        const run = openNotificationRun(pi, { kind: "hook" });
         await runStopBucket(runtime, last, capturedGeneration, ctx, pi, run, executor);
         return;
       }

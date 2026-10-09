@@ -27,6 +27,7 @@ function failedRow(): Record<string, unknown> {
 function cascadePayloadWith(row: Record<string, unknown>): Record<string, unknown> {
   return {
     schemaVersion: 1,
+    origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
     kind: "cascade",
     severity: "error",
     summary: "A plugin operation has failed.",
@@ -169,6 +170,7 @@ for (const { title, mutate, expectedErrors } of [
 function reconcileAppliedPayload(): Record<string, unknown> {
   return {
     schemaVersion: 1,
+    origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
     kind: "reconcile-applied-cascade",
     severity: "warning",
     summary: "Heads up.",
@@ -209,9 +211,86 @@ test("rejects noOp on a reconcile-applied payload", () => {
 const DEVICE_FLOW_PROMPT_MEMBER = NOTIFICATION_PAYLOAD_SCHEMA.anyOf[13];
 const ASYNC_REWAKE_SUMMARY_MEMBER = NOTIFICATION_PAYLOAD_SCHEMA.anyOf[14];
 
+for (const origin of [
+  { kind: "command", commandId: "plugin list", invocationId: "run-a" },
+  { kind: "load" },
+  { kind: "hook" },
+]) {
+  test(`accepts exact ${origin.kind} origin on raw and structured payloads`, () => {
+    // arrange
+    const validator = Compile(NOTIFICATION_PAYLOAD_SCHEMA);
+
+    // act
+    const accepted = [
+      validator.Check({ ...cascadePayloadWith(failedRow()), origin }),
+      validator.Check({ ...deviceFlowPromptPayload(), origin }),
+    ];
+
+    // assert
+    assert.deepStrictEqual(accepted, [true, true]);
+  });
+}
+
+for (const { title, origin } of [
+  { title: "null origin", origin: null },
+  { title: "absent command ID", origin: { kind: "command", invocationId: "run-a" } },
+  { title: "absent invocation ID", origin: { kind: "command", commandId: "plugin list" } },
+  { title: "empty command ID", origin: { kind: "command", commandId: "", invocationId: "run-a" } },
+  {
+    title: "empty invocation ID",
+    origin: { kind: "command", commandId: "plugin list", invocationId: "" },
+  },
+  { title: "null command ID", origin: { kind: "command", commandId: null, invocationId: "run-a" } },
+  {
+    title: "null invocation ID",
+    origin: { kind: "command", commandId: "plugin list", invocationId: null },
+  },
+  {
+    title: "alias",
+    origin: { kind: "command", commandId: "plugin list", invocationId: "run-a", alias: "ls" },
+  },
+  {
+    title: "load command fields",
+    origin: { kind: "load", commandId: "plugin list", invocationId: "run-a" },
+  },
+  {
+    title: "hook command fields",
+    origin: { kind: "hook", commandId: "plugin list", invocationId: "run-a" },
+  },
+  { title: "unknown root", origin: { kind: "tool" } },
+]) {
+  test(`rejects ${title} on raw and structured payloads`, () => {
+    // arrange
+    const validator = Compile(NOTIFICATION_PAYLOAD_SCHEMA);
+
+    // act
+    const accepted = [
+      validator.Check({ ...cascadePayloadWith(failedRow()), origin }),
+      validator.Check({ ...deviceFlowPromptPayload(), origin }),
+    ];
+
+    // assert
+    assert.deepStrictEqual(accepted, [false, false]);
+  });
+}
+
+test("rejects missing origin on raw and structured payloads", () => {
+  // arrange
+  const validator = Compile(NOTIFICATION_PAYLOAD_SCHEMA);
+  const { origin: _cascadeOrigin, ...cascade } = cascadePayloadWith(failedRow());
+  const { origin: _rawOrigin, ...raw } = deviceFlowPromptPayload();
+
+  // act
+  const accepted = [validator.Check(cascade), validator.Check(raw)];
+
+  // assert
+  assert.deepStrictEqual(accepted, [false, false]);
+});
+
 function deviceFlowPromptPayload(): Record<string, unknown> {
   return {
     schemaVersion: 1,
+    origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
     kind: "device-flow-prompt",
     severity: "info",
     needsReload: false,
@@ -249,6 +328,7 @@ test("rejects an async-rewake-summary payload that carries summary", () => {
   // arrange
   const payload = {
     schemaVersion: 1,
+    origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
     kind: "async-rewake-summary",
     severity: "info",
     needsReload: false,

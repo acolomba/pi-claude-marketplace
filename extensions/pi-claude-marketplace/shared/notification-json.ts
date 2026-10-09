@@ -11,6 +11,7 @@ import type {
   ResolvedRow,
   ResolvedTally,
 } from "./notification-resolve.ts";
+import type { NotificationOrigin } from "./notification-run.ts";
 import type {
   MarketplaceDetails,
   MarketplaceInfoMessage,
@@ -45,64 +46,68 @@ import type Type from "typebox";
  */
 export function toWirePayload(
   presentation: CascadePresentation,
+  origin: NotificationOrigin,
 ): Type.Static<typeof CASCADE_PAYLOAD_SCHEMA>;
 export function toWirePayload(
   source: NotificationPresentation | ResolvedRawSurface,
+  origin: NotificationOrigin,
 ): Type.Static<typeof NOTIFICATION_PAYLOAD_SCHEMA>;
 export function toWirePayload(
   source: NotificationPresentation | ResolvedRawSurface,
+  origin: NotificationOrigin,
 ): Type.Static<typeof NOTIFICATION_PAYLOAD_SCHEMA> {
-  return "envelope" in source ? wirePresentation(source) : wireRawSurface(source);
+  return "envelope" in source ? wirePresentation(source, origin) : wireRawSurface(source, origin);
 }
 
 /** JOUT-02: the payload of one structured presentation, one arm per kind. */
 function wirePresentation(
   presentation: NotificationPresentation,
+  origin: NotificationOrigin,
 ): Type.Static<typeof NOTIFICATION_PAYLOAD_SCHEMA> {
   switch (presentation.kind) {
     case "cascade":
-      return wireCascade(presentation);
+      return wireCascade(presentation, origin);
     case "reconcile-applied-cascade":
       return {
         schemaVersion: 1,
         kind: "reconcile-applied-cascade",
-        ...wireEnvelope(presentation.envelope),
+        ...wireEnvelope(presentation.envelope, origin),
         ...wireTallyField(presentation.envelope),
-        marketplaces: presentation.marketplaces.map((mp) => wireBlock(mp)),
+        marketplaces: toWireMarketplaces(presentation.marketplaces),
       };
     case "marketplace-info":
       return {
         schemaVersion: 1,
         kind: "marketplace-info",
-        ...wireEnvelope(presentation.envelope),
+        ...wireEnvelope(presentation.envelope, origin),
         ...wireMarketplaceInfo(presentation.message),
       };
     case "plugin-info":
       return {
         schemaVersion: 1,
         kind: "plugin-info",
-        ...wireEnvelope(presentation.envelope),
+        ...wireEnvelope(presentation.envelope, origin),
         ...wirePluginInfo(presentation.message),
       };
     case "marketplace-info-cascade":
       return {
         schemaVersion: 1,
         kind: "marketplace-info-cascade",
-        ...wireEnvelope(presentation.envelope),
+        ...wireEnvelope(presentation.envelope, origin),
         blocks: presentation.message.blocks.map((block) => wireMarketplaceInfo(block)),
       };
     case "plugin-info-cascade":
       return {
         schemaVersion: 1,
         kind: "plugin-info-cascade",
-        ...wireEnvelope(presentation.envelope),
+        ...wireEnvelope(presentation.envelope, origin),
         blocks: presentation.message.blocks.map((block) => wirePluginInfo(block)),
       };
     case "marketplace-not-added":
       return {
         schemaVersion: 1,
         kind: "marketplace-not-added",
-        ...wireEnvelope(presentation.envelope),
+        ...wireEnvelope(presentation.envelope, origin),
         name: presentation.message.name,
         ...(presentation.message.scope === undefined ? {} : { scope: presentation.message.scope }),
         reasons: [presentation.reason],
@@ -111,21 +116,21 @@ function wirePresentation(
       return {
         schemaVersion: 1,
         kind: "reconcile-pending-empty",
-        ...wireEnvelope(presentation.envelope),
+        ...wireEnvelope(presentation.envelope, origin),
         ...wireAdvisories(presentation.message),
       };
     case "prune-empty":
       return {
         schemaVersion: 1,
         kind: "prune-empty",
-        ...wireEnvelope(presentation.envelope),
+        ...wireEnvelope(presentation.envelope, origin),
         scope: presentation.message.scope,
       };
     case "prune-committed-warning":
       return {
         schemaVersion: 1,
         kind: "prune-committed-warning",
-        ...wireEnvelope(presentation.envelope),
+        ...wireEnvelope(presentation.envelope, origin),
         scope: presentation.scope,
         ...(presentation.cause === undefined ? {} : { cause: wireCause(presentation.cause) }),
       };
@@ -140,9 +145,11 @@ function wirePresentation(
  */
 function wireRawSurface(
   surface: ResolvedRawSurface,
+  origin: NotificationOrigin,
 ): Type.Static<typeof NOTIFICATION_PAYLOAD_SCHEMA> {
   const envelope = {
     schemaVersion: 1,
+    origin: wireOrigin(origin),
     severity: RAW_SURFACE_SEVERITY[surface.kind],
     needsReload: false,
   } as const;
@@ -175,14 +182,15 @@ function wireRawSurface(
 /** D-04: the cascade payload, with its advisory lines and retained workflows. */
 function wireCascade(
   presentation: CascadePresentation,
+  origin: NotificationOrigin,
 ): Type.Static<typeof CASCADE_PAYLOAD_SCHEMA> {
   return {
     schemaVersion: 1,
     kind: "cascade",
-    ...wireEnvelope(presentation.envelope),
+    ...wireEnvelope(presentation.envelope, origin),
     ...wireTallyField(presentation.envelope),
     ...noOpField(presentation.envelope.noOp),
-    marketplaces: presentation.marketplaces.map((mp) => wireBlock(mp)),
+    marketplaces: toWireMarketplaces(presentation.marketplaces),
     ...wireAdvisories(presentation),
   };
 }
@@ -191,12 +199,29 @@ function wireCascade(
  * WIRE-05: `summary` rides warning and error envelopes only. It is the
  * envelope's resolved sentence, copied verbatim.
  */
-function wireEnvelope(envelope: ResolvedEnvelope) {
+function wireEnvelope(envelope: ResolvedEnvelope, origin: NotificationOrigin) {
   return {
+    origin: wireOrigin(origin),
     severity: envelope.severity,
     needsReload: envelope.needsReload,
     ...(envelope.severity === "info" ? {} : { summary: envelope.summary }),
   };
+}
+
+/** Projects only the fields declared by the root's wire branch. */
+function wireOrigin(origin: NotificationOrigin): NotificationOrigin {
+  if (origin.kind === "command") {
+    return { kind: origin.kind, commandId: origin.commandId, invocationId: origin.invocationId };
+  }
+
+  return { kind: origin.kind };
+}
+
+/** Projects resolved marketplace blocks for notification and tool payloads. */
+export function toWireMarketplaces(
+  marketplaces: readonly ResolvedMarketplace[],
+): Type.Static<typeof CASCADE_PAYLOAD_SCHEMA>["marketplaces"] {
+  return marketplaces.map((mp) => wireBlock(mp));
 }
 
 /** OUT-03: the tally of a cascade-family envelope, when it carries one. */

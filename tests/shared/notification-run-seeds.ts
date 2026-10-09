@@ -4,6 +4,7 @@ import type { NotificationRun } from "../../extensions/pi-claude-marketplace/sha
 /** Returns a fresh notification run whose snapshot is `softDeps`. */
 export function runWithSoftDeps(softDeps: SoftDepStatus): NotificationRun {
   return {
+    origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
     softDeps: { ...softDeps },
     entrySink: {
       appendEntry(): never {

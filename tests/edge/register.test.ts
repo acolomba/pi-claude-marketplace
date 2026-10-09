@@ -169,6 +169,7 @@ interface CommandUnderTest {
 interface CommandProbes {
   readonly runs: number;
   readonly capture?: ReturnType<typeof createJsonCapture>;
+  readonly createInvocationId?: () => string;
 }
 
 interface WrapperUnderTest {
@@ -384,8 +385,14 @@ function registerCommandWithCache(
     .times(1);
   const toolReads = probes.runs * 3;
   if (probes.capture !== undefined) {
+    const capture = probes.capture;
+    function appendEntry(this: PiRegistrar, customType: string, payload: unknown): void {
+      assert.strictEqual(this, pi);
+      capture.entrySink.appendEntry(customType, payload);
+    }
+
     when(() => pi.appendEntry)
-      .thenReturn(probes.capture.entrySink.appendEntry)
+      .thenReturn(appendEntry)
       .times(1);
   }
 
@@ -400,6 +407,7 @@ function registerCommandWithCache(
     createEdgeDeps(completionCache, importClaudeSettings, gitOps),
     hooksRouting,
     createPluginUpdateOperations(hooksRouting, completionCache).updatePlugins,
+    { createInvocationId: probes.createInvocationId ?? (() => "run-list-1") },
   );
 
   const registration = commandOptions.value;
@@ -430,7 +438,18 @@ for (const mode of ["json", "rpc"]) {
     await mkdir(path.dirname(manifestPath), { recursive: true });
     await writeFile(manifestPath, JSON.stringify({ name: "demo", plugins: [] }));
     const capture = createJsonCapture();
-    const { registration, verifyRegistrar } = registerCommandUnderTest({ runs: 1, capture });
+    const ids = mock<{ createInvocationId(): string }>({
+      exactParams: true,
+      name: "invocation IDs",
+    });
+    when(() => ids.createInvocationId())
+      .thenReturn("run-list-1")
+      .times(1);
+    const { registration, verifyRegistrar } = registerCommandUnderTest({
+      runs: 1,
+      capture,
+      createInvocationId: () => ids.createInvocationId(),
+    });
     const ctx = {
       mode,
       cwd,
@@ -453,6 +472,7 @@ for (const mode of ["json", "rpc"]) {
         payload: {
           schemaVersion: 1,
           kind: "cascade",
+          origin: { kind: "command", commandId: "plugin list", invocationId: "run-list-1" },
           severity: "info",
           needsReload: false,
           tally: { label: "Plugin list", success: { count: 0 }, failures: 0, warnings: 0 },
@@ -462,6 +482,7 @@ for (const mode of ["json", "rpc"]) {
     ]);
     capture.assertValid();
     verifyRegistrar();
+    verify(ids);
   });
 }
 

@@ -239,6 +239,7 @@ for (const scenario of [
               customType: "claude-plugin",
               payload: {
                 schemaVersion: 1,
+                origin: { kind: "hook" },
                 kind: "stop-override-cap",
                 severity: "warning",
                 needsReload: false,

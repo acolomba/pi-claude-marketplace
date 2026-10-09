@@ -15,7 +15,7 @@ import type {
   ResolvedMarketplace,
   RowPolicyMap,
 } from "./notification-resolve.ts";
-import type { NotificationRun } from "./notification-run.ts";
+import type { NotificationRun, NotificationSnapshot } from "./notification-run.ts";
 import type {
   CascadeNotificationMessage,
   MarketplaceInfoCascadeMessage,
@@ -243,7 +243,7 @@ function redactLines(lines: readonly string[]): readonly string[] {
  * severity of a row with no policy, and the envelope reads that severity.
  */
 export function presentCascade(
-  run: NotificationRun,
+  run: NotificationSnapshot,
   message: CascadeNotificationMessage,
   rowPolicies: RowPolicyMap,
 ): CascadePresentation {

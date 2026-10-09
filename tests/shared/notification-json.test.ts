@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { toWirePayload } from "../../extensions/pi-claude-marketplace/shared/notification-json.ts";
+import {
+  toWireMarketplaces,
+  toWirePayload,
+} from "../../extensions/pi-claude-marketplace/shared/notification-json.ts";
 import {
   presentCascade,
   presentUpdateNoOp,
@@ -30,6 +33,60 @@ import type {
   Reason,
 } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 import type { Scope } from "../../extensions/pi-claude-marketplace/shared/types.ts";
+
+for (const kind of ["load", "hook"] as const) {
+  test(`projects only ${kind} origin fields`, () => {
+    // arrange
+    const origin = { kind, commandId: "plugin list", invocationId: "do-not-copy", alias: "ls" };
+
+    // act
+    const payload = toWirePayload({ kind: "usage-info", usage: "Usage" }, origin);
+
+    // assert
+    assert.deepStrictEqual(payload, {
+      schemaVersion: 1,
+      kind: "usage-info",
+      severity: "info",
+      needsReload: false,
+      origin: { kind },
+      usage: "Usage",
+    });
+  });
+}
+
+test("projects only command identity fields", () => {
+  // arrange
+  const origin = {
+    kind: "command",
+    commandId: "plugin list",
+    invocationId: "run-a",
+    alias: "ls",
+  } as const;
+
+  // act
+  const payload = toWirePayload({ kind: "usage-info", usage: "Usage" }, origin);
+
+  // assert
+  assert.deepStrictEqual(payload, {
+    schemaVersion: 1,
+    kind: "usage-info",
+    severity: "info",
+    needsReload: false,
+    origin: { kind: "command", commandId: "plugin list", invocationId: "run-a" },
+    usage: "Usage",
+  });
+});
+
+test("projects marketplace blocks for tools without an envelope", () => {
+  // arrange
+  const marketplaces: ResolvedMarketplace[] = [{ name: "demo", scope: "project", plugins: [] }];
+
+  // act
+  const blocks = toWireMarketplaces(marketplaces);
+
+  // assert
+  assert.deepStrictEqual(blocks, [{ name: "demo", scope: "project", plugins: [] }]);
+});
 
 interface ExpectedCause {
   readonly causeChain: readonly string[];
@@ -72,7 +129,14 @@ function presentationOf(
 }
 
 function expectedInfoPayload(marketplaces: readonly ExpectedBlock[]): Record<string, unknown> {
-  return { schemaVersion: 1, kind: "cascade", severity: "info", needsReload: false, marketplaces };
+  return {
+    schemaVersion: 1,
+    origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+    kind: "cascade",
+    severity: "info",
+    needsReload: false,
+    marketplaces,
+  };
 }
 
 /** One row of the status table: a resolved row of that status and its wire row. */
@@ -393,7 +457,11 @@ for (const [status, { row, expected }] of Object.entries(STATUS_CASES)) {
     const presentation = presentationOf([{ name: "mp", scope: "user", plugins: [row] }]);
 
     // act
-    const payload = toWirePayload(presentation);
+    const payload = toWirePayload(presentation, {
+      kind: "command",
+      commandId: "plugin",
+      invocationId: "test-run",
+    });
 
     // assert
     assert.deepStrictEqual(
@@ -486,11 +554,16 @@ for (const { title, envelope, expectedEnvelope } of [
     const presentation = presentationOf([], envelope);
 
     // act
-    const payload = toWirePayload(presentation);
+    const payload = toWirePayload(presentation, {
+      kind: "command",
+      commandId: "plugin",
+      invocationId: "test-run",
+    });
 
     // assert
     assert.deepStrictEqual(payload, {
       schemaVersion: 1,
+      origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
       kind: "cascade",
       ...expectedEnvelope,
       marketplaces: [],
@@ -557,7 +630,11 @@ for (const { title, block, expectedBlock } of [
     const presentation = presentationOf([block]);
 
     // act
-    const payload = toWirePayload(presentation);
+    const payload = toWirePayload(presentation, {
+      kind: "command",
+      commandId: "plugin",
+      invocationId: "test-run",
+    });
 
     // assert
     assert.deepStrictEqual(payload, expectedInfoPayload([expectedBlock]));
@@ -573,7 +650,11 @@ test("copies advisories and retained workflows, with and without an envelope cou
   };
 
   // act
-  const payload = toWirePayload(presentation);
+  const payload = toWirePayload(presentation, {
+    kind: "command",
+    commandId: "plugin",
+    invocationId: "test-run",
+  });
 
   // assert
   assert.deepStrictEqual(payload, {
@@ -592,7 +673,11 @@ test("keeps empty advisory and retained-workflow lists as empty arrays", () => {
   };
 
   // act
-  const payload = toWirePayload(presentation);
+  const payload = toWirePayload(presentation, {
+    kind: "command",
+    commandId: "plugin",
+    invocationId: "test-run",
+  });
 
   // assert
   assert.deepStrictEqual(payload, {
@@ -616,7 +701,11 @@ test("gives each of two adjacent rows its own explicit scope", () => {
   ]);
 
   // act
-  const payload = toWirePayload(presentation);
+  const payload = toWirePayload(presentation, {
+    kind: "command",
+    commandId: "plugin",
+    invocationId: "test-run",
+  });
 
   // assert
   assert.deepStrictEqual(
@@ -649,7 +738,11 @@ test("keeps blocks and rows in model order when it is not alphabetical", () => {
   ]);
 
   // act
-  const payload = toWirePayload(presentation);
+  const payload = toWirePayload(presentation, {
+    kind: "command",
+    commandId: "plugin",
+    invocationId: "test-run",
+  });
 
   // assert
   assert.deepStrictEqual(
@@ -679,7 +772,11 @@ test("joins an scp-style marketplace name into the id verbatim", () => {
   ]);
 
   // act
-  const payload = toWirePayload(presentation);
+  const payload = toWirePayload(presentation, {
+    kind: "command",
+    commandId: "plugin",
+    invocationId: "test-run",
+  });
 
   // assert
   assert.deepStrictEqual(
@@ -720,7 +817,11 @@ test("keeps content reasons before markers, one multi-word token per element", (
   ]);
 
   // act
-  const payload = toWirePayload(presentation);
+  const payload = toWirePayload(presentation, {
+    kind: "command",
+    commandId: "plugin",
+    invocationId: "test-run",
+  });
 
   // assert
   assert.deepStrictEqual(
@@ -777,7 +878,11 @@ test("produces a payload that survives a JSON round trip with no undefined or nu
   };
 
   // act
-  const payload = toWirePayload(presentation);
+  const payload = toWirePayload(presentation, {
+    kind: "command",
+    commandId: "plugin",
+    invocationId: "test-run",
+  });
 
   // assert
   assert.deepStrictEqual(JSON.parse(JSON.stringify(payload)), payload);
@@ -789,7 +894,11 @@ test("emits kind cascade for a presentation built from a message without a kind"
   const presentation = presentCascade(runWithNothingLoaded(), { marketplaces: [] }, {});
 
   // act
-  const payload = toWirePayload(presentation);
+  const payload = toWirePayload(presentation, {
+    kind: "command",
+    commandId: "plugin",
+    invocationId: "test-run",
+  });
 
   // assert
   assert.deepStrictEqual(payload, expectedInfoPayload([]));
@@ -827,11 +936,16 @@ test("emits a reconcile-applied payload with its tally and no noOp", () => {
   };
 
   // act
-  const payload = toWirePayload(presentation);
+  const payload = toWirePayload(presentation, {
+    kind: "command",
+    commandId: "plugin",
+    invocationId: "test-run",
+  });
 
   // assert
   assert.deepStrictEqual(payload, {
     schemaVersion: 1,
+    origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
     kind: "reconcile-applied-cascade",
     severity: "info",
     needsReload: false,
@@ -849,11 +963,16 @@ test("emits a reconcile-applied payload without a tally and with its summary", (
   };
 
   // act
-  const payload = toWirePayload(presentation);
+  const payload = toWirePayload(presentation, {
+    kind: "command",
+    commandId: "plugin",
+    invocationId: "test-run",
+  });
 
   // assert
   assert.deepStrictEqual(payload, {
     schemaVersion: 1,
+    origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
     kind: "reconcile-applied-cascade",
     severity: "warning",
     summary: "Heads up.",
@@ -890,11 +1009,16 @@ test("emits noOp true with no tally and no reload for an update no-op presentati
   );
 
   // act
-  const payload = toWirePayload(presentation);
+  const payload = toWirePayload(presentation, {
+    kind: "command",
+    commandId: "plugin",
+    invocationId: "test-run",
+  });
 
   // assert
   assert.deepStrictEqual(payload, {
     schemaVersion: 1,
+    origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
     kind: "cascade",
     severity: "info",
     needsReload: false,
@@ -916,6 +1040,7 @@ function warningPresentation(): CascadePresentation {
 function expectedWarningPayload(): Record<string, unknown> {
   return {
     schemaVersion: 1,
+    origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
     kind: "cascade",
     severity: "warning",
     summary: "Verbatim summary.",
@@ -928,6 +1053,7 @@ function expectedWarningPayload(): Record<string, unknown> {
 function expectedReconcilePayload(): Record<string, unknown> {
   return {
     schemaVersion: 1,
+    origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
     kind: "reconcile-applied-cascade",
     severity: "info",
     needsReload: false,
@@ -948,8 +1074,16 @@ test("converts one presentation twice into equal payloads that share no object",
   const presentation = warningPresentation();
 
   // act
-  const first = toWirePayload(presentation);
-  const second = toWirePayload(presentation);
+  const first = toWirePayload(presentation, {
+    kind: "command",
+    commandId: "plugin",
+    invocationId: "test-run",
+  });
+  const second = toWirePayload(presentation, {
+    kind: "command",
+    commandId: "plugin",
+    invocationId: "test-run",
+  });
 
   // assert
   assert.deepStrictEqual([first, second], [expectedWarningPayload(), expectedWarningPayload()]);
@@ -976,7 +1110,11 @@ test("converts a deep-frozen presentation and leaves it unchanged", () => {
   const before = structuredClone(presentation);
 
   // act
-  const payload = toWirePayload(presentation);
+  const payload = toWirePayload(presentation, {
+    kind: "command",
+    commandId: "plugin",
+    invocationId: "test-run",
+  });
 
   // assert
   assert.deepStrictEqual(payload, expectedWarningPayload());
@@ -990,7 +1128,7 @@ test("interleaved conversions of two presentations match each converted alone", 
 
   // act
   const payloads = [warning, reconcile, warning, reconcile].map((presentation) =>
-    toWirePayload(presentation),
+    toWirePayload(presentation, { kind: "command", commandId: "plugin", invocationId: "test-run" }),
   );
 
   // assert
@@ -1066,11 +1204,16 @@ for (const { title, source, expectedSource } of [
     } satisfies NotificationPresentation;
 
     // act
-    const payload = toWirePayload(presentation);
+    const payload = toWirePayload(presentation, {
+      kind: "command",
+      commandId: "plugin",
+      invocationId: "test-run",
+    });
 
     // assert
     assert.deepStrictEqual(payload, {
       schemaVersion: 1,
+      origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
       kind: "marketplace-info",
       severity: "info",
       needsReload: false,
@@ -1098,11 +1241,16 @@ test("converts a marketplace-info presentation with every optional field", () =>
   } satisfies NotificationPresentation;
 
   // act
-  const payload = toWirePayload(presentation);
+  const payload = toWirePayload(presentation, {
+    kind: "command",
+    commandId: "plugin",
+    invocationId: "test-run",
+  });
 
   // assert
   assert.deepStrictEqual(payload, {
     schemaVersion: 1,
+    origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
     kind: "marketplace-info",
     severity: "info",
     needsReload: false,
@@ -1124,11 +1272,16 @@ test("converts an unresolved catalogue plugin-info row with no scope and empty r
   } satisfies NotificationPresentation;
 
   // act
-  const payload = toWirePayload(presentation);
+  const payload = toWirePayload(presentation, {
+    kind: "command",
+    commandId: "plugin",
+    invocationId: "test-run",
+  });
 
   // assert
   assert.deepStrictEqual(payload, {
     schemaVersion: 1,
+    origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
     kind: "plugin-info",
     severity: "info",
     needsReload: false,
@@ -1163,11 +1316,16 @@ test("converts a remote plugin-info row with its dependencies and version", () =
   } satisfies NotificationPresentation;
 
   // act
-  const payload = toWirePayload(presentation);
+  const payload = toWirePayload(presentation, {
+    kind: "command",
+    commandId: "plugin",
+    invocationId: "test-run",
+  });
 
   // assert
   assert.deepStrictEqual(payload, {
     schemaVersion: 1,
+    origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
     kind: "plugin-info",
     severity: "info",
     needsReload: false,
@@ -1222,11 +1380,16 @@ test("converts a resolved installed plugin-info row with every component and opt
   } satisfies NotificationPresentation;
 
   // act
-  const payload = toWirePayload(presentation);
+  const payload = toWirePayload(presentation, {
+    kind: "command",
+    commandId: "plugin",
+    invocationId: "test-run",
+  });
 
   // assert
   assert.deepStrictEqual(payload, {
     schemaVersion: 1,
+    origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
     kind: "plugin-info",
     severity: "info",
     needsReload: false,
@@ -1279,11 +1442,16 @@ test("gives an installed plugin-info row with no scope of its own the marketplac
   } satisfies NotificationPresentation;
 
   // act
-  const payload = toWirePayload(presentation);
+  const payload = toWirePayload(presentation, {
+    kind: "command",
+    commandId: "plugin",
+    invocationId: "test-run",
+  });
 
   // assert
   assert.deepStrictEqual(payload, {
     schemaVersion: 1,
+    origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
     kind: "plugin-info",
     severity: "error",
     summary: "A plugin operation has failed.",
@@ -1317,12 +1485,16 @@ test("converts both info fan-outs into blocks with no envelope fields of their o
   } satisfies NotificationPresentation;
 
   // act
-  const payloads = [toWirePayload(marketplaces), toWirePayload(plugins)];
+  const payloads = [
+    toWirePayload(marketplaces, { kind: "command", commandId: "plugin", invocationId: "test-run" }),
+    toWirePayload(plugins, { kind: "command", commandId: "plugin", invocationId: "test-run" }),
+  ];
 
   // assert
   assert.deepStrictEqual(payloads, [
     {
       schemaVersion: 1,
+      origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
       kind: "marketplace-info-cascade",
       severity: "info",
       needsReload: false,
@@ -1337,6 +1509,7 @@ test("converts both info fan-outs into blocks with no envelope fields of their o
     },
     {
       schemaVersion: 1,
+      origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
       kind: "plugin-info-cascade",
       severity: "info",
       needsReload: false,
@@ -1377,11 +1550,16 @@ for (const { title, scope, expectedScope } of [
     } satisfies NotificationPresentation;
 
     // act
-    const payload = toWirePayload(presentation);
+    const payload = toWirePayload(presentation, {
+      kind: "command",
+      commandId: "plugin",
+      invocationId: "test-run",
+    });
 
     // assert
     assert.deepStrictEqual(payload, {
       schemaVersion: 1,
+      origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
       kind: "marketplace-not-added",
       severity: "error",
       summary: "A marketplace operation has failed.",
@@ -1406,11 +1584,16 @@ test("converts a pending-empty presentation with its advisories and retained wor
   } satisfies NotificationPresentation;
 
   // act
-  const payload = toWirePayload(presentation);
+  const payload = toWirePayload(presentation, {
+    kind: "command",
+    commandId: "plugin",
+    invocationId: "test-run",
+  });
 
   // assert
   assert.deepStrictEqual(payload, {
     schemaVersion: 1,
+    origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
     kind: "reconcile-pending-empty",
     severity: "info",
     needsReload: false,
@@ -1428,11 +1611,16 @@ test("converts a pending-empty presentation with no advisories to the bare envel
   } satisfies NotificationPresentation;
 
   // act
-  const payload = toWirePayload(presentation);
+  const payload = toWirePayload(presentation, {
+    kind: "command",
+    commandId: "plugin",
+    invocationId: "test-run",
+  });
 
   // assert
   assert.deepStrictEqual(payload, {
     schemaVersion: 1,
+    origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
     kind: "reconcile-pending-empty",
     severity: "info",
     needsReload: false,
@@ -1448,11 +1636,16 @@ test("converts a prune-empty presentation with its scope", () => {
   } satisfies NotificationPresentation;
 
   // act
-  const payload = toWirePayload(presentation);
+  const payload = toWirePayload(presentation, {
+    kind: "command",
+    commandId: "plugin",
+    invocationId: "test-run",
+  });
 
   // assert
   assert.deepStrictEqual(payload, {
     schemaVersion: 1,
+    origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
     kind: "prune-empty",
     severity: "info",
     needsReload: false,
@@ -1487,11 +1680,16 @@ for (const { title, cause, expectedCause } of [
     } satisfies NotificationPresentation;
 
     // act
-    const payload = toWirePayload(presentation);
+    const payload = toWirePayload(presentation, {
+      kind: "command",
+      commandId: "plugin",
+      invocationId: "test-run",
+    });
 
     // assert
     assert.deepStrictEqual(payload, {
       schemaVersion: 1,
+      origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
       kind: "prune-committed-warning",
       severity: "warning",
       summary: "Prune committed; finalization needs attention.",
@@ -1513,6 +1711,7 @@ const RAW_CASES: {
     surface: { kind: "usage-error", message: "unknown flag", usage: "usage: install" },
     expected: {
       schemaVersion: 1,
+      origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
       kind: "usage-error",
       severity: "error",
       needsReload: false,
@@ -1524,6 +1723,7 @@ const RAW_CASES: {
     surface: { kind: "usage-info", usage: "usage: install" },
     expected: {
       schemaVersion: 1,
+      origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
       kind: "usage-info",
       severity: "info",
       needsReload: false,
@@ -1534,6 +1734,7 @@ const RAW_CASES: {
     surface: { kind: "diagnostic", header: "2 warnings", lines: ["one", "two"] },
     expected: {
       schemaVersion: 1,
+      origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
       kind: "diagnostic",
       severity: "warning",
       needsReload: false,
@@ -1549,6 +1750,7 @@ const RAW_CASES: {
     },
     expected: {
       schemaVersion: 1,
+      origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
       kind: "device-flow-prompt",
       severity: "info",
       needsReload: false,
@@ -1560,6 +1762,7 @@ const RAW_CASES: {
     surface: { kind: "async-rewake-summary", summary: "rewoke" },
     expected: {
       schemaVersion: 1,
+      origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
       kind: "async-rewake-summary",
       severity: "info",
       needsReload: false,
@@ -1570,6 +1773,7 @@ const RAW_CASES: {
     surface: { kind: "stop-override-cap", pluginId: "alpha@mp", cap: 8 },
     expected: {
       schemaVersion: 1,
+      origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
       kind: "stop-override-cap",
       severity: "warning",
       needsReload: false,
@@ -1581,6 +1785,7 @@ const RAW_CASES: {
     surface: { kind: "reconcile-aborted", causeMessage: "state unreadable" },
     expected: {
       schemaVersion: 1,
+      origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
       kind: "reconcile-aborted",
       severity: "error",
       needsReload: false,
@@ -1591,6 +1796,7 @@ const RAW_CASES: {
     surface: { kind: "plugin-path-skipped", scope: "project", reason: "EACCES" },
     expected: {
       schemaVersion: 1,
+      origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
       kind: "plugin-path-skipped",
       severity: "warning",
       needsReload: false,
@@ -1606,7 +1812,11 @@ for (const [kind, { surface, expected }] of Object.entries(RAW_CASES)) {
     const expectedPayload = expected;
 
     // act
-    const payload = toWirePayload(surface);
+    const payload = toWirePayload(surface, {
+      kind: "command",
+      commandId: "plugin",
+      invocationId: "test-run",
+    });
 
     // assert
     assert.deepStrictEqual(payload, expectedPayload);
@@ -1622,11 +1832,16 @@ test("converts a diagnostic with no lines to an empty line list", () => {
   } satisfies ResolvedRawSurface;
 
   // act
-  const payload = toWirePayload(surface);
+  const payload = toWirePayload(surface, {
+    kind: "command",
+    commandId: "plugin",
+    invocationId: "test-run",
+  });
 
   // assert
   assert.deepStrictEqual(payload, {
     schemaVersion: 1,
+    origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
     kind: "diagnostic",
     severity: "warning",
     needsReload: false,
@@ -1640,11 +1855,16 @@ test("converts an empty rewake summary to empty text", () => {
   const surface = { kind: "async-rewake-summary", summary: "" } satisfies ResolvedRawSurface;
 
   // act
-  const payload = toWirePayload(surface);
+  const payload = toWirePayload(surface, {
+    kind: "command",
+    commandId: "plugin",
+    invocationId: "test-run",
+  });
 
   // assert
   assert.deepStrictEqual(payload, {
     schemaVersion: 1,
+    origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
     kind: "async-rewake-summary",
     severity: "info",
     needsReload: false,
@@ -1661,7 +1881,11 @@ test("copies the diagnostic lines so the payload shares no array with the surfac
   } satisfies ResolvedRawSurface;
 
   // act
-  const payload = toWirePayload(surface);
+  const payload = toWirePayload(surface, {
+    kind: "command",
+    commandId: "plugin",
+    invocationId: "test-run",
+  });
 
   // assert
   assert.ok("lines" in payload);
@@ -1681,12 +1905,20 @@ function expectedAdjacentPayloads(): Record<string, unknown>[] {
   return [
     {
       schemaVersion: 1,
+      origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
       kind: "usage-info",
       severity: "info",
       needsReload: false,
       usage: "usage: list",
     },
-    { schemaVersion: 1, kind: "cascade", severity: "info", needsReload: true, marketplaces: [] },
+    {
+      schemaVersion: 1,
+      origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+      kind: "cascade",
+      severity: "info",
+      needsReload: true,
+      marketplaces: [],
+    },
   ];
 }
 
@@ -1695,8 +1927,16 @@ test("a raw surface converted before a cascade stays independent of it", () => {
   const surface = { kind: "usage-info", usage: "usage: list" } satisfies ResolvedRawSurface;
 
   // act
-  const raw = toWirePayload(surface);
-  const cascade = toWirePayload(adjacentCascade());
+  const raw = toWirePayload(surface, {
+    kind: "command",
+    commandId: "plugin",
+    invocationId: "test-run",
+  });
+  const cascade = toWirePayload(adjacentCascade(), {
+    kind: "command",
+    commandId: "plugin",
+    invocationId: "test-run",
+  });
 
   // assert
   assert.deepStrictEqual([raw, cascade], expectedAdjacentPayloads());
@@ -1707,8 +1947,16 @@ test("a cascade converted before a raw surface stays independent of it", () => {
   const surface = { kind: "usage-info", usage: "usage: list" } satisfies ResolvedRawSurface;
 
   // act
-  const cascade = toWirePayload(adjacentCascade());
-  const raw = toWirePayload(surface);
+  const cascade = toWirePayload(adjacentCascade(), {
+    kind: "command",
+    commandId: "plugin",
+    invocationId: "test-run",
+  });
+  const raw = toWirePayload(surface, {
+    kind: "command",
+    commandId: "plugin",
+    invocationId: "test-run",
+  });
 
   // assert
   assert.deepStrictEqual([raw, cascade], expectedAdjacentPayloads());
