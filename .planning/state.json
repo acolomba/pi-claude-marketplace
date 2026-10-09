@@ -36,13 +36,13 @@
     {
       "number": "7",
       "name": "Docs and live proof",
-      "status": "pending"
+      "status": "complete"
     }
   ],
   "next": {
-    "command": "/gsd:progress --next",
-    "label": "Advance to the next step",
-    "reason": "Phase 07 of 7 · 86% · executing"
+    "command": "/gsd:new-milestone",
+    "label": "Start a new milestone",
+    "reason": "All phases complete — start a new milestone"
   },
-  "updated_at": "2026-10-09T21:48:23.195Z"
+  "updated_at": "2026-10-09T23:29:17.482Z"
 }

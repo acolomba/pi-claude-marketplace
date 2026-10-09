@@ -30,7 +30,7 @@ Decimal phases (2.1, 3.1) are urgent insertions only, marked INSERTED.
 - [x] **Phase 4: Variable expansion at Claude Code parity** - plugin and project path variables and `${VAR:-default}` expand at install time by Claude's rules, plain `${VAR}` is left for the adapter at runtime, the adapter's second expansion is escaped or warned about, and Claude's credential deny-list holds for `url` and `headers`. Needs a threat model. (completed 2026-10-07)
 - [x] **Phase 5: Automatic migration on /reload** - `/reload` moves each installed plugin's marked entries from `mcp.json` into `mcp-adapter.json` in their final shape, adding before removing, idempotently, with one notice that lists the renames and what they cost the user. (completed 2026-10-09)
 - [x] **Phase 6: Live MCP status in info** - `/claude:plugin info` shows each plugin MCP server's state from the adapter's status events, and an explicit unknown state when there is nothing to show. (completed 2026-10-09)
-- [ ] **Phase 7: Docs and live proof** - README and docs describe the new delivery and its divergences, a live UAT against a real adapter 5 proves the whole path, and the CHANGELOG records the milestone.
+- [x] **Phase 7: Docs and live proof** - README and docs describe the new delivery and its divergences, a live UAT against a real adapter 5 proves the whole path, and the CHANGELOG records the milestone. (completed 2026-10-09)
 
 **Release rule.** Phases 2 to 5 go out in one release. Every change to the entry shape (name,
 `directTools`, escaping) invalidates the adapter's per-server state: OAuth sign-ins, project
@@ -341,7 +341,7 @@ requirement (Phases 3 and 4), and no release may sit between the first write to
 2. A live UAT in a sandboxed agent directory shows adapter 5 loading our entries, migrating a seeded legacy entry with the reloads counted, finding plugin tools through tool search, and `info` showing their status, including `status unknown` in a deferred session until the first MCP use and a live state after it (D-06-06a). (ADOC-02)
 3. CHANGELOG records the milestone, and a version bump is offered before the PR. (ADOC-03)
 
-**Plans**: 5/5 plans executed in 4 waves
+**Plans**: 5/5 plans complete in 4 waves
 
 **Wave 1**
 - [x] 07-01-PLAN.md — the optional pi-mcp-adapter peer becomes `>=5.2.0 <6` (advisory GHSA-6qxp-vccf-f47h) in the manifest, lock, gates, CI pin, comments and records after a byte-level re-check; `scripts/pi.sh` keeps Pi's `tool_search` (ADOC-02, ADOC-01)
@@ -382,7 +382,7 @@ plan these phases with the UI gate skipped.
 | 4. Variable expansion at Claude Code parity | mcp-4 | 9/9 | Complete    | 2026-10-07 |
 | 5. Automatic migration on /reload | mcp-4 | 5/5 | Complete    | 2026-10-09 |
 | 6. Live MCP status in info | mcp-4 | 3/3 | Complete    | 2026-10-09 |
-| 7. Docs and live proof | mcp-4 | 5/5 | In Progress | - |
+| 7. Docs and live proof | mcp-4 | 5/5 | Complete    | 2026-10-09 |
 
 ## Carried Forward
 
