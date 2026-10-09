@@ -1,3 +1,4 @@
+import { hookDebugLog } from "./debug-log.ts";
 import { resolveCommandError } from "./notification-command-error.ts";
 import {
   composePluginLines,
@@ -22,9 +23,10 @@ import {
   presentUpdateNoOp,
 } from "./notification-present.ts";
 import { resolveRawSurface } from "./notification-resolve.ts";
-import { requireNotificationMode } from "./notification-run.ts";
+import { COMMAND_DELIVERY, requireNotificationMode } from "./notification-run.ts";
 import { composeRetainedWorkflowsAdvisories } from "./notification-summary.ts";
 
+import type { CommandErrorPresentation } from "./notification-command-error.ts";
 import type { NotifyArguments } from "./notification-grammar.ts";
 import type { CascadePresentation, NotificationPresentation } from "./notification-present.ts";
 import type {
@@ -37,6 +39,7 @@ import type {
   NotificationEntrySink,
   NotificationOrigin,
   NotificationRun,
+  CommandRunState,
 } from "./notification-run.ts";
 import type {
   CascadeNotificationMessage,
@@ -50,6 +53,44 @@ import type {
 } from "./notification-types.ts";
 import type { Scope } from "./types.ts";
 import type { NotificationContext } from "../platform/pi-api.ts";
+
+function isCommandOutcome(
+  presentation: NotificationPresentation | ResolvedRawSurface | CommandErrorPresentation,
+): boolean {
+  switch (presentation.kind) {
+    case "cascade":
+    case "marketplace-info":
+    case "plugin-info":
+    case "marketplace-info-cascade":
+    case "plugin-info-cascade":
+    case "marketplace-not-added":
+    case "reconcile-pending-empty":
+    case "prune-empty":
+    case "prune-committed-warning":
+    case "usage-error":
+    case "usage-info":
+    case "internal-error":
+      return true;
+    case "diagnostic":
+    case "device-flow-prompt":
+    case "reconcile-applied-cascade":
+    case "reconcile-aborted":
+    case "plugin-path-skipped":
+    case "async-rewake-summary":
+    case "stop-override-cap":
+      return false;
+  }
+}
+
+function commandStateFor(run: NotificationRun): CommandRunState | undefined {
+  switch (run.origin.kind) {
+    case "command":
+      return run.commandState;
+    case "load":
+    case "hook":
+      return undefined;
+  }
+}
 
 /**
  * shared/notification-dispatch.ts -- the sole site that calls the Pi notify
@@ -94,9 +135,13 @@ export function notifyCommandError(
   ctx: NotificationContext,
   entrySink: NotificationEntrySink,
   origin: Extract<NotificationOrigin, { kind: "command" }>,
-  needsReload: boolean,
+  state: CommandRunState,
   cause: unknown,
 ): void {
+  if (state.settled || state.delivery !== COMMAND_DELIVERY.open) {
+    return;
+  }
+
   switch (requireNotificationMode(ctx.mode)) {
     case "tui":
     case "print":
@@ -104,11 +149,48 @@ export function notifyCommandError(
       throw cause;
     case "json":
     case "rpc": {
-      const presentation = resolveCommandError(cause, needsReload);
-      entrySink.appendEntry("claude-plugin", toWirePayload(presentation, origin));
+      const presentation = resolveCommandError(cause, state.needsReload);
+      const isOutcome = isCommandOutcome(presentation);
+      appendCommand(entrySink, origin, state, toWirePayload(presentation, origin), isOutcome);
       return;
     }
   }
+}
+
+function appendEntry(sink: NotificationEntrySink, payload: ReturnType<typeof toWirePayload>): void {
+  sink.appendEntry("claude-plugin", payload);
+}
+
+function appendCommand(
+  sink: NotificationEntrySink,
+  origin: Extract<NotificationOrigin, { kind: "command" }>,
+  state: CommandRunState,
+  payload: ReturnType<typeof toWirePayload>,
+  isOutcome: boolean,
+): void {
+  try {
+    appendEntry(sink, payload);
+  } catch (cause: unknown) {
+    // D-08: transport failures must not enter business recovery or rollback.
+    state.delivery = COMMAND_DELIVERY.recovering;
+    const recovery = resolveCommandError(cause, state.needsReload);
+    try {
+      appendEntry(sink, toWirePayload(recovery, origin));
+      state.hasOutcome = true;
+      state.delivery = COMMAND_DELIVERY.open;
+    } catch {
+      state.delivery = COMMAND_DELIVERY.closed;
+      try {
+        hookDebugLog(recovery.summary);
+      } catch {
+        // Debug output cannot restart delivery or reject the command.
+      }
+    }
+
+    return;
+  }
+
+  state.hasOutcome ||= isOutcome;
 }
 
 function emitWithSummary(ctx: NotificationContext, envelope: ResolvedEnvelope, body: string): void {
@@ -412,6 +494,15 @@ function emitPresentation(
   run: NotificationRun,
   presentation: NotificationPresentation | ResolvedRawSurface,
 ): void {
+  const state = commandStateFor(run);
+  if (state?.settled || (state !== undefined && state.delivery !== COMMAND_DELIVERY.open)) {
+    return;
+  }
+
+  if (state !== undefined && "envelope" in presentation) {
+    state.needsReload ||= presentation.envelope.needsReload;
+  }
+
   switch (requireNotificationMode(ctx.mode)) {
     case "tui":
     case "print":
@@ -426,9 +517,25 @@ function emitPresentation(
 
       return;
     case "json":
-    case "rpc":
-      run.entrySink.appendEntry("claude-plugin", toWirePayload(presentation, run.origin));
+    case "rpc": {
+      const isOutcome = isCommandOutcome(presentation);
+      const payload = toWirePayload(presentation, run.origin);
+      switch (run.origin.kind) {
+        case "command":
+          if (state !== undefined) {
+            appendCommand(run.entrySink, run.origin, state, payload, isOutcome);
+            return;
+          }
+
+          break;
+        case "load":
+        case "hook":
+          break;
+      }
+
+      appendEntry(run.entrySink, payload);
       return;
+    }
   }
 }
 

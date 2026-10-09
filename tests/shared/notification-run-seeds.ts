@@ -5,6 +5,7 @@ import type { NotificationRun } from "../../extensions/pi-claude-marketplace/sha
 export function runWithSoftDeps(softDeps: SoftDepStatus): NotificationRun {
   return {
     origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+    commandState: { hasOutcome: false, needsReload: false, settled: false, delivery: "open" },
     softDeps: { ...softDeps },
     entrySink: {
       appendEntry(): never {

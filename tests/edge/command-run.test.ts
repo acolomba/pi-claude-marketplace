@@ -6,10 +6,75 @@ import test from "node:test";
 
 import { runCommand } from "../../extensions/pi-claude-marketplace/edge/command-run.ts";
 import { UnsupportedModeError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
-import { notifyUsageInfo } from "../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
+import {
+  notify,
+  notifyUsageInfo,
+  notifyDiagnostic,
+  notifyDeviceFlowPrompt,
+} from "../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
 import { openNotificationRun } from "../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 
 import { createJsonCapture } from "./json-capture.ts";
+
+import type { NotificationContext } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type {
+  CommandRunState,
+  NotificationRun,
+} from "../../extensions/pi-claude-marketplace/shared/notification-run.ts";
+
+for (const mode of ["json", "rpc"]) {
+  test(`construction failure shares terminal delivery and settlement state in ${mode}`, async () => {
+    // arrange
+    const attempts: object[] = [];
+    let state: CommandRunState | undefined;
+    const pi = {
+      getAllTools: (): never => {
+        throw new Error("Inventory failed.");
+      },
+      appendEntry(customType: string, payload: unknown): never {
+        assert.strictEqual(this, pi);
+        attempts.push({ customType, payload });
+        throw new Error("Append failed.");
+      },
+    };
+    const ctx = {
+      mode,
+      get ui(): never {
+        throw new Error("Unexpected UI");
+      },
+    };
+
+    // act
+    await runCommand(
+      pi,
+      ctx,
+      "plugin update",
+      () => {
+        throw new Error("Unexpected handler");
+      },
+      {
+        ...createIds(),
+        openRun: (inventory, _origin, commandState) => {
+          state = commandState;
+          inventory.getAllTools();
+          throw new Error("Unexpected inventory success");
+        },
+      },
+    );
+
+    // assert
+    assert.deepStrictEqual(attempts, [
+      expectedError("Inventory failed."),
+      expectedError("Append failed."),
+    ]);
+    assert.deepStrictEqual(state, {
+      hasOutcome: false,
+      needsReload: false,
+      settled: true,
+      delivery: "closed",
+    });
+  });
+}
 
 test("retains committed local state and earlier output after a command throws", async (t) => {
   // arrange
@@ -136,6 +201,29 @@ function createIds() {
   };
 }
 
+for (const mode of ["json", "rpc"]) {
+  test(`reports a silent command before settlement in ${mode}`, async () => {
+    // arrange
+    const capture = createJsonCapture();
+    const pi = { ...capture.entrySink, getAllTools: () => [] };
+    const ctx = {
+      mode,
+      get ui() {
+        return capture.ui;
+      },
+    };
+
+    // act
+    await runCommand(pi, ctx, "plugin update", async () => {}, createIds());
+
+    // assert
+    assert.deepStrictEqual(capture.entries, [
+      expectedError("Command returned without an outcome."),
+    ]);
+    capture.assertValid();
+  });
+}
+
 for (const { title, cause, message } of [
   { title: "null", cause: null, message: "Unknown thrown value." },
   { title: "undefined", cause: undefined, message: "Unknown thrown value." },
@@ -198,7 +286,7 @@ for (const { title, cause, message } of [
   }
 }
 
-function expectedError(message: string, invocationId = "run-a") {
+function expectedError(message: string, invocationId = "run-a", needsReload = false) {
   return {
     customType: "claude-plugin",
     payload: {
@@ -206,12 +294,392 @@ function expectedError(message: string, invocationId = "run-a") {
       kind: "internal-error",
       origin: { kind: "command", commandId: "plugin update", invocationId },
       severity: "error",
-      needsReload: false,
+      needsReload,
       summary: "Command failed unexpectedly.",
       cause: { causeChain: [message], truncated: false },
     },
   };
 }
+
+for (const { failsTwice, expected } of [
+  {
+    failsTwice: false,
+    expected: [
+      {
+        customType: "claude-plugin",
+        payload: {
+          schemaVersion: 1,
+          origin: { kind: "command", commandId: "plugin update", invocationId: "run-a" },
+          kind: "usage-info",
+          severity: "info",
+          needsReload: false,
+          usage: "First.",
+        },
+      },
+      expectedError("Append failed."),
+      {
+        customType: "claude-plugin",
+        payload: {
+          schemaVersion: 1,
+          origin: { kind: "command", commandId: "plugin update", invocationId: "run-a" },
+          kind: "prune-committed-warning",
+          severity: "warning",
+          needsReload: true,
+          scope: "user",
+          summary: "Prune committed; finalization needs attention.",
+          cause: { causeChain: ["Saved."], truncated: false },
+        },
+      },
+      expectedError("Later failure.", "run-a", true),
+    ],
+  },
+  {
+    failsTwice: true,
+    expected: [
+      {
+        customType: "claude-plugin",
+        payload: {
+          schemaVersion: 1,
+          origin: { kind: "command", commandId: "plugin update", invocationId: "run-a" },
+          kind: "usage-info",
+          severity: "info",
+          needsReload: false,
+          usage: "First.",
+        },
+      },
+      expectedError("Append failed."),
+    ],
+  },
+]) {
+  test(`settles after append recovery with terminal failure ${failsTwice}`, async (t) => {
+    // arrange
+    const attempts: Array<{ customType: string; payload: unknown }> = [];
+    const pi = {
+      getAllTools: () => [],
+      appendEntry(customType: string, payload: unknown) {
+        assert.strictEqual(this, pi);
+        attempts.push({ customType, payload });
+        if (attempts.length === 1 || (failsTwice && attempts.length === 2)) {
+          throw new Error("Append failed.");
+        }
+      },
+    };
+    const previous = process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+    t.after(() => {
+      if (previous === undefined) {
+        delete process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+      } else {
+        process.env.PI_CLAUDE_MARKETPLACE_DEBUG = previous;
+      }
+    });
+    process.env.PI_CLAUDE_MARKETPLACE_DEBUG = "1";
+    t.mock.method(console, "error", () => {
+      throw new Error("Logger failed.");
+    });
+    const ctx = {
+      mode: "json",
+      get ui(): never {
+        throw new Error("Unexpected UI access");
+      },
+    };
+    let late: () => void = () => {
+      throw new Error("Missing callback");
+    };
+
+    // act
+    await runCommand(
+      pi,
+      ctx,
+      "plugin update",
+      (run) => {
+        late = () => {
+          notifyUsageInfo(ctx, run, "Late.");
+        };
+
+        notifyUsageInfo(ctx, run, "First.");
+        ctx.mode = "rpc";
+        notify(ctx, run, {
+          kind: "prune-committed-warning",
+          scope: "user",
+          cause: new Error("Saved."),
+        });
+        throw new Error("Later failure.");
+      },
+      createIds(),
+    );
+    const atSettlement = [...attempts];
+    ctx.mode = "unusable";
+    late();
+
+    // assert
+    assert.deepStrictEqual(atSettlement, expected);
+    assert.deepStrictEqual(attempts, expected);
+  });
+}
+
+test("does not retry or roll back committed work when its notification fails", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "command-transport-"));
+  t.after(async () => {
+    await rm(directory, { recursive: true, force: true });
+  });
+  const store = path.join(directory, "state.json");
+  const events: string[] = [];
+  const attempts: Array<{ customType: string; payload: unknown }> = [];
+  const pi = {
+    getAllTools: () => [],
+    appendEntry(customType: string, payload: unknown) {
+      attempts.push({ customType, payload });
+      if (attempts.length === 1) {
+        throw new Error("Append failed.");
+      }
+    },
+  };
+  const ctx = {
+    mode: "json",
+    get ui(): never {
+      throw new Error("Unexpected UI access");
+    },
+  };
+
+  // act
+  await runCommand(
+    pi,
+    ctx,
+    "plugin update",
+    async (run) => {
+      events.push("execute");
+      try {
+        await writeFile(store, '{"installed":true}');
+        events.push("committed");
+        notifyUsageInfo(ctx, run, "Committed.");
+      } catch {
+        events.push("rollback");
+        await writeFile(store, '{"installed":false}');
+      }
+    },
+    createIds(),
+  );
+
+  // assert
+  assert.strictEqual(await readFile(store, "utf8"), '{"installed":true}');
+  assert.deepStrictEqual(events, ["execute", "committed"]);
+  assert.deepStrictEqual(attempts, [
+    {
+      customType: "claude-plugin",
+      payload: {
+        schemaVersion: 1,
+        origin: { kind: "command", commandId: "plugin update", invocationId: "run-a" },
+        kind: "usage-info",
+        severity: "info",
+        needsReload: false,
+        usage: "Committed.",
+      },
+    },
+    expectedError("Append failed."),
+  ]);
+});
+
+for (const { name, emit, earlier } of [
+  {
+    name: "diagnostic",
+    emit: (ctx, run) => {
+      notifyDiagnostic(ctx, run, "Warning.", ["Detail."]);
+    },
+    earlier: [{ kind: "diagnostic", severity: "warning", header: "Warning.", lines: ["Detail."] }],
+  },
+  {
+    name: "prompt",
+    emit: (ctx, run) => {
+      notifyDeviceFlowPrompt(ctx, run, {
+        verificationUri: "https://example.test",
+        userCode: "ABCD",
+      });
+    },
+    earlier: [
+      {
+        kind: "device-flow-prompt",
+        severity: "info",
+        verificationUri: "https://example.test",
+        userCode: "ABCD",
+      },
+    ],
+  },
+  {
+    name: "empty diagnostic",
+    emit: (ctx, run) => {
+      notifyDiagnostic(ctx, run, "Warning.", []);
+    },
+    earlier: [],
+  },
+] satisfies Array<{
+  name: string;
+  emit: (ctx: NotificationContext, run: NotificationRun) => void;
+  earlier: object[];
+}>) {
+  test(`does not accept ${name} as completion and suppresses retained output`, async () => {
+    // arrange
+    const capture = createJsonCapture();
+    const pi = { ...capture.entrySink, getAllTools: () => [] };
+    const ctx = {
+      mode: "json",
+      get ui() {
+        return capture.ui;
+      },
+    };
+    let late: () => void = () => {
+      throw new Error("Callback not captured");
+    };
+
+    // act
+    await runCommand(
+      pi,
+      ctx,
+      "plugin update",
+      (run) => {
+        emit(ctx, run);
+        late = () => {
+          notifyUsageInfo(ctx, run, "Late.");
+        };
+
+        return Promise.resolve();
+      },
+      createIds(),
+    );
+    ctx.mode = "unusable";
+    late();
+
+    // assert
+    assert.deepStrictEqual(capture.entries, [
+      ...earlier.map((payload) => ({
+        customType: "claude-plugin",
+        payload: {
+          schemaVersion: 1,
+          origin: { kind: "command", commandId: "plugin update", invocationId: "run-a" },
+          needsReload: false,
+          ...payload,
+        },
+      })),
+      expectedError("Command returned without an outcome."),
+    ]);
+    capture.assertValid();
+  });
+}
+
+test("retains reload knowledge after a later false outcome and an escaped throw", async () => {
+  // arrange
+  const capture = createJsonCapture();
+  const pi = { ...capture.entrySink, getAllTools: () => [] };
+  const ctx = {
+    mode: "json",
+    get ui() {
+      return capture.ui;
+    },
+  };
+  const origin = { kind: "command", commandId: "plugin update", invocationId: "run-a" };
+
+  // act
+  await runCommand(
+    pi,
+    ctx,
+    "plugin update",
+    (run) => {
+      notify(ctx, run, {
+        kind: "prune-committed-warning",
+        scope: "user",
+        cause: new Error("Saved."),
+      });
+      notify(ctx, run, { marketplaces: [] });
+      throw new Error("Later failure.");
+    },
+    createIds(),
+  );
+
+  // assert
+  assert.deepStrictEqual(capture.entries, [
+    {
+      customType: "claude-plugin",
+      payload: {
+        schemaVersion: 1,
+        origin,
+        kind: "prune-committed-warning",
+        severity: "warning",
+        needsReload: true,
+        summary: "Prune committed; finalization needs attention.",
+        scope: "user",
+        cause: { causeChain: ["Saved."], truncated: false },
+      },
+    },
+    {
+      customType: "claude-plugin",
+      payload: {
+        schemaVersion: 1,
+        origin,
+        kind: "cascade",
+        severity: "info",
+        needsReload: false,
+        marketplaces: [],
+      },
+    },
+    {
+      ...expectedError("Later failure."),
+      payload: { ...expectedError("Later failure.").payload, needsReload: true },
+    },
+  ]);
+  capture.assertValid();
+});
+
+for (const mode of ["tui", "print"]) {
+  test(`allows silent text completion in ${mode}`, async () => {
+    // arrange
+    const capture = createJsonCapture();
+    const pi = { ...capture.entrySink, getAllTools: () => [] };
+    const ctx = {
+      mode,
+      get ui() {
+        return capture.ui;
+      },
+    };
+
+    // act
+    await runCommand(pi, ctx, "plugin update", async () => {}, createIds());
+
+    // assert
+    assert.deepStrictEqual(capture.entries, []);
+    capture.assertValid();
+  });
+}
+
+test("does not finalize delivery that was already closed", async () => {
+  // arrange
+  const capture = createJsonCapture();
+  const pi = { ...capture.entrySink, getAllTools: () => [] };
+  const ctx = {
+    get mode(): string {
+      throw new Error("Unexpected mode access");
+    },
+    get ui() {
+      return capture.ui;
+    },
+  };
+
+  // act
+  await runCommand(
+    pi,
+    ctx,
+    "plugin update",
+    (run) => {
+      assert.ok(run.commandState);
+      run.commandState.delivery = "closed";
+      return Promise.resolve();
+    },
+    createIds(),
+  );
+
+  // assert
+  assert.deepStrictEqual(capture.entries, []);
+  capture.assertValid();
+});
 
 for (const mode of ["json", "rpc"]) {
   test(`delivers a handler failure through the original sink in ${mode}`, async () => {

@@ -69,7 +69,12 @@ import {
 } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { UnsupportedModeError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
-import { notifyUsageInfo } from "../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
+import {
+  notify,
+  notifyUsageInfo,
+  notifyDiagnostic,
+  notifyDeviceFlowPrompt,
+} from "../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
 import { openNotificationRun } from "../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import { retryTree } from "../orchestrators/plugin/scope-tree-inventory.ts";
 import { createGitOpsFake } from "../platform/git-ops-fake.ts";
@@ -91,7 +96,9 @@ import type {
   ExtensionContext,
   SessionStartEvent,
 } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { NotificationContext } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { CompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import type { NotificationRun } from "../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import type { Scope } from "../../extensions/pi-claude-marketplace/shared/types.ts";
 import type {
   AutocompleteItem,
@@ -171,7 +178,7 @@ interface CommandUnderTest {
  */
 interface CommandProbes {
   readonly runs: number;
-  readonly capture?: ReturnType<typeof createJsonCapture>;
+  readonly capture?: Pick<ReturnType<typeof createJsonCapture>, "entrySink">;
   readonly createInvocationId?: () => string;
   readonly createRecoveryId?: () => string;
   readonly appendAttempts?: number;
@@ -441,7 +448,541 @@ function registerCommandUnderTest(probes: CommandProbes): CommandUnderTest {
   return registerCommandWithCache(createCompletionCache(), undefined, undefined, probes);
 }
 
+function commandErrorEntry(
+  commandId: string,
+  invocationId: string,
+  message: string,
+  needsReload = false,
+): object {
+  return {
+    customType: "claude-plugin",
+    payload: {
+      schemaVersion: 1,
+      kind: "internal-error",
+      origin: { kind: "command", commandId, invocationId },
+      severity: "error",
+      needsReload,
+      summary: "Command failed unexpectedly.",
+      cause: { causeChain: [message], truncated: false },
+    },
+  };
+}
+
 for (const mode of ["json", "rpc"]) {
+  for (const projectSucceeds of [true, false]) {
+    test(`registered marketplace info preserves ${projectSucceeds ? "partial" : "total"} scope failures in ${mode}`, async (t) => {
+      // arrange
+      const { cwd } = await createHermeticScope(t, "info-failures");
+      const records: MarketplaceRecord[] = [];
+      for (const scope of ["project", "user"] as const) {
+        const locations = locationsFor(scope, cwd);
+        const record = { ...marketplaceRecordIn(locations.extensionRoot, "demo"), scope };
+        records.push(record);
+
+        await mkdir(path.dirname(record.manifestPath), { recursive: true });
+
+        await writeFile(
+          record.manifestPath,
+          scope === "project" && projectSucceeds
+            ? JSON.stringify({ name: "demo", plugins: [] })
+            : "{",
+        );
+
+        await saveState(locations.extensionRoot, {
+          schemaVersion: 2,
+          marketplaces: { demo: record },
+        });
+      }
+
+      const capture = createJsonCapture();
+      const { registration, verifyRegistrar } = registerCommandUnderTest({
+        runs: 1,
+        capture,
+        appendAttempts: 2,
+      });
+      const ctx = {
+        mode,
+        cwd,
+        get ui() {
+          return capture.ui;
+        },
+      };
+      const origin = { kind: "command", commandId: "marketplace info", invocationId: "run-list-1" };
+      const expected = [
+        ...(projectSucceeds
+          ? [
+              {
+                customType: "claude-plugin",
+                payload: {
+                  schemaVersion: 1,
+                  origin,
+                  kind: "marketplace-info",
+                  severity: "info",
+                  needsReload: false,
+                  name: "demo",
+                  scope: "project",
+                  details: { autoupdate: false },
+                  source: { sourceKind: "path", absPath: records[0]!.marketplaceRoot },
+                },
+              },
+            ]
+          : []),
+        ...(projectSucceeds ? ["user"] : ["project", "user"]).map((scope) => ({
+          customType: "claude-plugin",
+          payload: {
+            schemaVersion: 1,
+            origin,
+            kind: "plugin-info",
+            severity: "error",
+            needsReload: false,
+            summary: "A plugin operation has failed.",
+            marketplaceName: "demo",
+            marketplaceScope: scope,
+            marketplaceDetails: { autoupdate: false },
+            plugin: {
+              status: "failed",
+              name: "demo",
+              id: "demo@demo",
+              scope,
+              reasons: ["unparseable"],
+              componentsResolved: false,
+            },
+          },
+        })),
+      ];
+
+      // act
+      await Reflect.apply(registration.handler, undefined, ["marketplace info demo", ctx]);
+
+      // assert
+      assert.deepStrictEqual(capture.entries, expected);
+      capture.assertValid();
+      verifyRegistrar();
+    });
+  }
+
+  test(`settles overlapping silent imports independently of lifecycle output in ${mode}`, async (t) => {
+    // arrange
+    const { cwd } = await createHermeticScope(t, "silent-imports");
+    const capture = createJsonCapture();
+    let finishFirst!: () => void;
+    let finishSecond!: () => void;
+    const first = new Promise<void>((resolve) => {
+      finishFirst = resolve;
+    });
+    const second = new Promise<void>((resolve) => {
+      finishSecond = resolve;
+    });
+    const completions = [first, second];
+    const ids = ["run-a", "run-b"];
+    const late: Array<() => void> = [];
+    const importClaudeSettings: ImportDelegate = async ({ ctx, run }) => {
+      late.push(() => {
+        notifyUsageInfo(ctx, run, "Too late.");
+      });
+      await completions.shift();
+      return {
+        addedMarketplaces: [],
+        changedResources: false,
+        diagnostics: [],
+        installedPlugins: [],
+        marketplaceFailures: [],
+        skippedExistingMarketplaces: [],
+        skippedExistingPlugins: [],
+        sourceMismatches: [],
+        unexpectedPluginFailures: [],
+        warnings: [],
+      };
+    };
+
+    const { registration, verifyRegistrar } = registerCommandWithCache(
+      createCompletionCache(),
+      undefined,
+      importClaudeSettings,
+      { runs: 2, capture, appendAttempts: 2, createInvocationId: () => ids.shift()! },
+    );
+    const ctx = {
+      mode,
+      cwd,
+      get ui() {
+        return capture.ui;
+      },
+    };
+    const independent = { ...capture.entrySink, getAllTools: () => [] };
+
+    // act
+    const firstCommand: unknown = Reflect.apply(registration.handler, undefined, ["import", ctx]);
+    notifyUsageInfo(ctx, openNotificationRun(independent, { kind: "hook" }), "Independent.");
+    const secondCommand: unknown = Reflect.apply(registration.handler, undefined, ["import", ctx]);
+    notifyUsageInfo(ctx, openNotificationRun(independent, { kind: "load" }), "Independent.");
+    finishSecond();
+    await secondCommand;
+    finishFirst();
+    await firstCommand;
+
+    // assert
+    const expected = [
+      ...["hook", "load"].map((kind) => ({
+        customType: "claude-plugin",
+        payload: {
+          schemaVersion: 1,
+          origin: { kind },
+          kind: "usage-info",
+          severity: "info",
+          needsReload: false,
+          usage: "Independent.",
+        },
+      })),
+      commandErrorEntry("plugin import", "run-b", "Command returned without an outcome."),
+      commandErrorEntry("plugin import", "run-a", "Command returned without an outcome."),
+    ];
+    assert.deepStrictEqual(capture.entries, expected);
+    assert.strictEqual(late.length, 2);
+    ctx.mode = "stale";
+    for (const callback of late) {
+      callback();
+    }
+
+    assert.deepStrictEqual(capture.entries, expected);
+    assert.deepStrictEqual(ids, []);
+    capture.assertValid();
+    verifyRegistrar();
+  });
+
+  for (const recoveryFails of [false, true]) {
+    test(`registered sink recovery ${recoveryFails ? "closes" : "reopens"} delivery in ${mode}`, async (t) => {
+      // arrange
+      const { cwd } = await createHermeticScope(t, "root-recovery");
+      const attempts: object[] = [];
+      const entrySink = {
+        appendEntry(customType: string, payload: unknown): void {
+          attempts.push({ customType, payload });
+          if (attempts.length === 1 || (recoveryFails && attempts.length === 2)) {
+            throw new Error("Append failed.");
+          }
+        },
+      };
+      let late: () => void = () => {
+        throw new Error("Callback not captured");
+      };
+
+      const { registration, verifyRegistrar } = registerCommandUnderTest({
+        runs: 1,
+        capture: { entrySink },
+        appendAttempts: recoveryFails ? 2 : 4,
+        updatePlugins: ({ ctx, run }) => {
+          late = () => {
+            notifyUsageInfo(ctx, run, "Too late.");
+          };
+
+          notifyUsageInfo(ctx, run, "Before.");
+          notify(ctx, run, {
+            kind: "prune-committed-warning",
+            scope: "user",
+            cause: new Error("Saved."),
+          });
+          return Promise.reject(new Error("Later failure."));
+        },
+      });
+      const ctx = {
+        mode,
+        cwd,
+        get ui(): never {
+          throw new Error("Unexpected UI");
+        },
+      };
+      const origin = { kind: "command", commandId: "plugin update", invocationId: "run-list-1" };
+      const expected = [
+        {
+          customType: "claude-plugin",
+          payload: {
+            schemaVersion: 1,
+            origin,
+            kind: "usage-info",
+            severity: "info",
+            needsReload: false,
+            usage: "Before.",
+          },
+        },
+        commandErrorEntry("plugin update", "run-list-1", "Append failed."),
+        ...(recoveryFails
+          ? []
+          : [
+              {
+                customType: "claude-plugin",
+                payload: {
+                  schemaVersion: 1,
+                  origin,
+                  kind: "prune-committed-warning",
+                  severity: "warning",
+                  needsReload: true,
+                  summary: "Prune committed; finalization needs attention.",
+                  scope: "user",
+                  cause: { causeChain: ["Saved."], truncated: false },
+                },
+              },
+              commandErrorEntry("plugin update", "run-list-1", "Later failure.", true),
+            ]),
+      ];
+
+      // act
+      await Reflect.apply(registration.handler, undefined, ["update", ctx]);
+
+      // assert
+      assert.deepStrictEqual(attempts, expected);
+      ctx.mode = "stale";
+      late();
+      assert.deepStrictEqual(attempts, expected);
+      verifyRegistrar();
+    });
+  }
+
+  for (const startup of [false, true]) {
+    test(`registered ${startup ? "allocator" : "missing-outcome"} error cannot restart failed recovery in ${mode}`, async (t) => {
+      // arrange
+      const { cwd } = await createHermeticScope(t, "terminal-recovery");
+      const attempts: object[] = [];
+      const entrySink = {
+        appendEntry(customType: string, payload: unknown): never {
+          attempts.push({ customType, payload });
+          throw new Error("Append failed.");
+        },
+      };
+      const { registration, verifyRegistrar } = registerCommandUnderTest({
+        runs: startup ? 0 : 1,
+        capture: { entrySink },
+        appendAttempts: 2,
+        createInvocationId: () => {
+          if (startup) {
+            throw new Error("ID failed.");
+          }
+
+          return "run-list-1";
+        },
+        createRecoveryId: () => "recovery-a",
+        updatePlugins: () => {
+          assert.strictEqual(startup, false);
+          return Promise.resolve();
+        },
+      });
+      const ctx = {
+        mode,
+        cwd,
+        get ui(): never {
+          throw new Error("Unexpected UI");
+        },
+      };
+
+      // act
+      await Reflect.apply(registration.handler, undefined, ["update", ctx]);
+
+      // assert
+      const invocationId = startup ? "recovery-a" : "run-list-1";
+      assert.deepStrictEqual(attempts, [
+        commandErrorEntry(
+          "plugin update",
+          invocationId,
+          startup ? "ID failed." : "Command returned without an outcome.",
+        ),
+        commandErrorEntry("plugin update", invocationId, "Append failed."),
+      ]);
+      verifyRegistrar();
+    });
+  }
+
+  for (const stale of [false, true]) {
+    test(`registered completion preserves a live ${stale ? "throwing" : "invalid"} mode failure in ${mode}`, async (t) => {
+      // arrange
+      const { cwd } = await createHermeticScope(t, "live-mode");
+      const capture = createJsonCapture();
+      let finished = false;
+      const failure = new Error("Mode getter expired.");
+      const { registration, verifyRegistrar } = registerCommandUnderTest({
+        runs: 1,
+        updatePlugins: () => {
+          finished = true;
+          return Promise.resolve();
+        },
+      });
+      const ctx = {
+        cwd,
+        get mode() {
+          if (!finished) {
+            return mode;
+          }
+
+          if (stale) {
+            throw failure;
+          }
+
+          return "invalid-mode";
+        },
+        get ui() {
+          return capture.ui;
+        },
+      };
+
+      // act & assert
+      await assert.rejects(
+        async () => {
+          await Reflect.apply(registration.handler, undefined, ["update", ctx]);
+        },
+        (error: unknown) => (stale ? error === failure : error instanceof UnsupportedModeError),
+      );
+      assert.deepStrictEqual(capture.entries, []);
+      capture.assertValid();
+      verifyRegistrar();
+    });
+  }
+
+  for (const { name, emit, earlier } of [
+    { name: "silent", emit: () => undefined, earlier: [] },
+    {
+      name: "diagnostic-only",
+      emit: (ctx, run) => {
+        notifyDiagnostic(ctx, run, "Warning.", ["Detail."]);
+      },
+      earlier: [
+        { kind: "diagnostic", severity: "warning", header: "Warning.", lines: ["Detail."] },
+      ],
+    },
+    {
+      name: "prompt-only",
+      emit: (ctx, run) => {
+        notifyDeviceFlowPrompt(ctx, run, {
+          verificationUri: "https://example.test",
+          userCode: "ABCD",
+        });
+      },
+      earlier: [
+        {
+          kind: "device-flow-prompt",
+          severity: "info",
+          verificationUri: "https://example.test",
+          userCode: "ABCD",
+        },
+      ],
+    },
+  ] satisfies Array<{
+    name: string;
+    emit: (ctx: NotificationContext, run: NotificationRun) => void;
+    earlier: object[];
+  }>) {
+    test(`registered ${name} update completes with an error in ${mode}`, async (t) => {
+      // arrange
+      const { cwd } = await createHermeticScope(t, "missing-outcome");
+      const capture = createJsonCapture();
+      let late: () => void = () => {
+        throw new Error("Callback not captured");
+      };
+
+      const { registration, verifyRegistrar } = registerCommandUnderTest({
+        runs: 1,
+        capture,
+        appendAttempts: earlier.length + 1,
+        updatePlugins: ({ ctx, run }) => {
+          emit(ctx, run);
+          late = () => {
+            notifyUsageInfo(ctx, run, "Too late.");
+          };
+
+          return Promise.resolve();
+        },
+      });
+      const ctx = {
+        mode,
+        cwd,
+        get ui() {
+          return capture.ui;
+        },
+      };
+      const expected = [
+        ...earlier.map((payload) => ({
+          customType: "claude-plugin",
+          payload: {
+            schemaVersion: 1,
+            origin: { kind: "command", commandId: "plugin update", invocationId: "run-list-1" },
+            needsReload: false,
+            ...payload,
+          },
+        })),
+        commandErrorEntry("plugin update", "run-list-1", "Command returned without an outcome."),
+      ];
+
+      // act
+      await Reflect.apply(registration.handler, undefined, ["update", ctx]);
+
+      // assert
+      assert.deepStrictEqual(capture.entries, expected);
+      ctx.mode = "stale";
+      late();
+      assert.deepStrictEqual(capture.entries, expected);
+      capture.assertValid();
+      verifyRegistrar();
+    });
+  }
+
+  for (const { args, commandId, payload } of [
+    {
+      args: "list --scope project",
+      commandId: "plugin list",
+      payload: { kind: "cascade", marketplaces: [] },
+    },
+    {
+      args: "update --scope project",
+      commandId: "plugin update",
+      payload: { kind: "cascade", marketplaces: [], noOp: true },
+    },
+    {
+      args: "pending --scope project",
+      commandId: "plugin pending",
+      payload: { kind: "reconcile-pending-empty" },
+    },
+    {
+      args: "prune --scope project",
+      commandId: "plugin prune",
+      payload: { kind: "prune-empty", scope: "project" },
+    },
+    {
+      args: "help",
+      commandId: "plugin help",
+      payload: { kind: "usage-info", usage: EXPECTED_TOP_LEVEL_USAGE },
+    },
+  ]) {
+    test(`registered ${args} accepts its empty or help outcome in ${mode}`, async (t) => {
+      // arrange
+      const { cwd } = await createHermeticScope(t, "valid-empty");
+      const capture = createJsonCapture();
+      const { registration, verifyRegistrar } = registerCommandUnderTest({ runs: 1, capture });
+      const ctx = {
+        mode,
+        cwd,
+        get ui() {
+          return capture.ui;
+        },
+      };
+
+      // act
+      await Reflect.apply(registration.handler, undefined, [args, ctx]);
+
+      // assert
+      assert.deepStrictEqual(capture.entries, [
+        {
+          customType: "claude-plugin",
+          payload: {
+            schemaVersion: 1,
+            origin: { kind: "command", commandId, invocationId: "run-list-1" },
+            severity: "info",
+            needsReload: false,
+            ...payload,
+          },
+        },
+      ]);
+      capture.assertValid();
+      verifyRegistrar();
+    });
+  }
+
   test(`registered update reports a failed ID allocator before inventory in ${mode}`, async (t) => {
     // arrange
     const { cwd } = await createHermeticScope(t, "update-id-failure");
@@ -896,7 +1437,12 @@ for (const mode of ["", "JSON", " json", "rpc ", "ｊｓｏｎ", "jsоn", "unkno
   test(`registered command rejects ${JSON.stringify(mode)} before routing or probing`, async (t) => {
     // arrange
     const { cwd } = await createHermeticScope(t, "unsupported-mode");
-    const { registration, verifyRegistrar } = registerCommandUnderTest({ runs: 0 });
+    const { registration, verifyRegistrar } = registerCommandUnderTest({
+      runs: 0,
+      createInvocationId: () => {
+        throw new Error("Unexpected ID allocation");
+      },
+    });
     const work: string[] = [];
     const ctx = {
       mode,
@@ -926,7 +1472,12 @@ for (const mode of ["", "JSON", " json", "rpc ", "ｊｓｏｎ", "jsоn", "unkno
 test("a stale command mode getter prevents routing and inventory reads", async (t) => {
   // arrange
   const { cwd } = await createHermeticScope(t, "stale-mode");
-  const { registration, verifyRegistrar } = registerCommandUnderTest({ runs: 0 });
+  const { registration, verifyRegistrar } = registerCommandUnderTest({
+    runs: 0,
+    createInvocationId: () => {
+      throw new Error("Unexpected ID allocation");
+    },
+  });
   const stale = new Error("context is stale");
   const work: string[] = [];
   const ctx = {
@@ -1019,7 +1570,7 @@ describe("registerClaudePluginCommand", () => {
   test("hands the argument text and the command context to the subcommand router (D-04)", async (t) => {
     // arrange
     await createHermeticScope(t, "command-handler");
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, undefined, 2);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, undefined, 3);
     // One run per invocation, usage errors included; the usage error probes nothing.
     const { registration, verifyRegistrar } = registerCommandUnderTest({ runs: 1 });
     const expectedNotifications: readonly Notification[] = [
@@ -1058,7 +1609,7 @@ describe("registerClaudePluginCommand", () => {
           value: cwd,
           reads: 1,
         },
-        2,
+        3,
       );
       // The one run is the only probe: the prune notification renders from it.
       const { registration, verifyRegistrar } = registerCommandWithCache(
@@ -1116,7 +1667,7 @@ describe("registerClaudePluginCommand", () => {
       const userTree = await retryTree(user.scopeRoot);
       const projectTree = await retryTree(project.scopeRoot);
       const lockSpy = t.mock.method(lockfile, "lock");
-      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, undefined, 2);
+      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, undefined, 3);
       // One run per invocation, usage errors included; the usage error probes nothing.
       const { registration, verifyRegistrar } = registerCommandUnderTest({ runs: 1 });
 
@@ -1149,7 +1700,7 @@ describe("registerClaudePluginCommand", () => {
         value: cwd,
         reads: 1,
       },
-      1,
+      2,
     );
     const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
     let forwardedHooksRouting: unknown;
@@ -1306,7 +1857,7 @@ describe("registerClaudePluginCommand", () => {
       .times(1);
     when(() => ctx.mode)
       .thenReturn("tui")
-      .times(3);
+      .times(4);
     when(() => ctx.ui)
       .thenReturn(ui)
       .times(2);
@@ -1437,7 +1988,7 @@ test("rebuilds completion rows through the cache that owns a successful register
     .times(1);
   when(() => ctx.mode)
     .thenReturn("tui")
-    .times(2);
+    .times(3);
   when(() => ctx.ui)
     .thenReturn(ui)
     .times(1);
@@ -1531,7 +2082,7 @@ test("rebuilds completion rows through the cache that owns a successful register
     .times(1);
   when(() => ctx.mode)
     .thenReturn("tui")
-    .times(2);
+    .times(3);
   when(() => ctx.ui)
     .thenReturn(ui)
     .times(1);
@@ -1643,7 +2194,7 @@ test("rebuilds completion rows through the cache that owns a successful register
     .times(1);
   when(() => ctx.mode)
     .thenReturn("tui")
-    .times(2);
+    .times(3);
   when(() => ctx.ui)
     .thenReturn(ui)
     .times(1);
@@ -1752,7 +2303,7 @@ test("rebuilds completion rows through the cache that owns a successful register
     .times(1);
   when(() => ctx.mode)
     .thenReturn("tui")
-    .times(2);
+    .times(3);
   when(() => ctx.ui)
     .thenReturn(ui)
     .times(1);
@@ -1880,7 +2431,7 @@ test("one soft-dep snapshot drives both the severity stamp and the markers of a 
     .times(1);
   when(() => ctx.mode)
     .thenReturn("tui")
-    .times(2);
+    .times(3);
   when(() => ctx.ui)
     .thenReturn(ui)
     .times(1);
@@ -1974,7 +2525,7 @@ test("rebuilds completion rows through the cache that owns a successful register
     .times(1);
   when(() => ctx.mode)
     .thenReturn("tui")
-    .times(2);
+    .times(3);
   when(() => ctx.ui)
     .thenReturn(ui)
     .times(1);
@@ -2082,7 +2633,7 @@ test("rebuilds completion rows through the cache that owns a successful register
     .times(1);
   when(() => ctx.mode)
     .thenReturn("tui")
-    .times(2);
+    .times(3);
   when(() => ctx.ui)
     .thenReturn(ui)
     .times(1);
@@ -2599,7 +3150,7 @@ for (const { verb, aliases = [], operand, usage, surplus, unknown } of COMMAND_A
       test(`registered ${spelling} rejects ${kind} before reading runtime context`, async (t) => {
         // arrange
         const { cwd } = await createHermeticScope(t, "reject-arguments");
-        const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, undefined, 2);
+        const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, undefined, 3);
         // One run per invocation, usage errors included; the usage error probes nothing.
         const { registration, verifyRegistrar } = registerCommandUnderTest({ runs: 1 });
 
@@ -2629,7 +3180,7 @@ for (const { verb, aliases = [], operand, usage } of COMMAND_ARGUMENT_CASES.filt
       test(`registered ${spelling} rejects the empty scope ${emptyValue} before a valid-looking token`, async (t) => {
         // arrange
         const { cwd } = await createHermeticScope(t, "reject-empty-scope");
-        const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, undefined, 2);
+        const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, undefined, 3);
         // One run per invocation, usage errors included; the usage error probes nothing.
         const { registration, verifyRegistrar } = registerCommandUnderTest({ runs: 1 });
 

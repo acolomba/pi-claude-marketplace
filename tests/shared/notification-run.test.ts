@@ -8,6 +8,7 @@ import {
   openNotificationRun,
   openNotificationSnapshot,
   requireNotificationMode,
+  createCommandRunState,
 } from "../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 
 import { runWithNothingLoaded } from "./notification-run-seeds.ts";
@@ -97,9 +98,63 @@ test("D-05: opening a run reads the tool inventory exactly three times", () => {
     origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
     softDeps: { piSubagentsLoaded: true, piMcpAdapterLoaded: true, workflowEngineLoaded: false },
     entrySink: pi,
+    commandState: { hasOutcome: false, needsReload: false, settled: false, delivery: "open" },
   });
   verify(pi);
 });
+
+test("allocates independent command state and preserves supplied state before inventory reads", () => {
+  // arrange
+  const state = createCommandRunState();
+  const origin = { kind: "command", commandId: "plugin list", invocationId: "run-a" } as const;
+  const pi = {
+    getAllTools: () => {
+      state.needsReload = true;
+      return [];
+    },
+    appendEntry: () => {},
+  };
+
+  // act
+  const run = openNotificationRun(pi, origin, state);
+  const fresh = createCommandRunState();
+
+  // assert
+  assert.strictEqual(run.commandState, state);
+  assert.deepStrictEqual(state, {
+    hasOutcome: false,
+    needsReload: true,
+    settled: false,
+    delivery: "open",
+  });
+  assert.deepStrictEqual(fresh, {
+    hasOutcome: false,
+    needsReload: false,
+    settled: false,
+    delivery: "open",
+  });
+});
+
+for (const kind of ["load", "hook"] as const) {
+  test(`opens ${kind} without command completion state`, () => {
+    // arrange
+    const pi = { getAllTools: () => [], appendEntry: () => {} };
+
+    // act
+    const run = openNotificationRun(pi, { kind });
+
+    // assert
+    assert.deepStrictEqual(run, {
+      origin: { kind },
+      entrySink: pi,
+      softDeps: {
+        piSubagentsLoaded: false,
+        piMcpAdapterLoaded: false,
+        workflowEngineLoaded: false,
+      },
+    });
+  });
+}
 
 test("D-05: a run keeps its snapshot when the inventory later answers differently", () => {
   // arrange

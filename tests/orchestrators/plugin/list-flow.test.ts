@@ -61,6 +61,60 @@ import type {
 import type { NotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 
 type ListPluginsWithoutConnections = Omit<ListPluginsOptions, "ctx" | "run">;
+
+test("does not turn a list append fault into a business-failure cascade", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "list-append-fault-");
+  const ctx = mock<ExtensionContext>({ exactParams: true, name: "list context" });
+  when(() => ctx.mode)
+    .thenReturn("json")
+    .once();
+  const attempts: Array<{ customType: string; payload: unknown }> = [];
+  const run = {
+    ...runWithNothingLoaded(),
+    entrySink: {
+      appendEntry(customType: string, payload: unknown): void {
+        attempts.push({ customType, payload });
+        if (attempts.length === 1) {
+          throw new Error("Append failed.");
+        }
+      },
+    },
+  };
+  const origin = { kind: "command", commandId: "plugin", invocationId: "test-run" };
+
+  // act
+  await listPlugins({ ctx, run, cwd, scope: "project" });
+
+  // assert
+  assert.deepStrictEqual(attempts, [
+    {
+      customType: "claude-plugin",
+      payload: {
+        schemaVersion: 1,
+        origin,
+        kind: "cascade",
+        severity: "info",
+        needsReload: false,
+        marketplaces: [],
+      },
+    },
+    {
+      customType: "claude-plugin",
+      payload: {
+        schemaVersion: 1,
+        origin,
+        kind: "internal-error",
+        severity: "error",
+        needsReload: false,
+        summary: "Command failed unexpectedly.",
+        cause: { causeChain: ["Append failed."], truncated: false },
+      },
+    },
+  ]);
+  verify(ctx);
+});
+
 void ({ cwd: "/workspace", scope: "user" } satisfies ListPluginsWithoutConnections);
 // @ts-expect-error list is filesystem/state-only and exposes no Git transport option
 void ({ cwd: "/workspace", gitOps: {} } satisfies ListPluginsWithoutConnections);

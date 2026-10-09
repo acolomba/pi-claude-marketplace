@@ -1326,7 +1326,7 @@ test("keeps hook routing and command completion state inside each extension-load
   process.chdir(ownerCwd);
   // Three tool reads: the command's notification run is the only probe, and the
   // add notification renders from its snapshot (D-05).
-  const owner = await loadExtension(1, 3, { value: ownerCwd, reads: 1 }, 2);
+  const owner = await loadExtension(1, 3, { value: ownerCwd, reads: 1 }, 3);
   const ownerHookContext = hookContext(ownerCwd, "owner-graph-session");
   await owner.bridgeSessionStart({ type: "session_start", reason: "startup" }, ownerHookContext);
   const toolEvent: ToolCallEvent = {
