@@ -1,8 +1,9 @@
 ---
 phase: 05-automatic-migration-on-reload
-reviewed: 2026-10-08T00:00:00Z
+reviewed: 2026-10-09T16:10:20Z
 depth: standard
-files_reviewed: 39
+iteration: 3
+files_reviewed: 41
 files_reviewed_list:
   - docs/mcp-compatibility.md
   - docs/output-catalog.md
@@ -22,6 +23,7 @@ files_reviewed_list:
   - extensions/pi-claude-marketplace/orchestrators/reconcile/mcp-migration.ts
   - extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts
   - extensions/pi-claude-marketplace/shared/notification-dispatch.ts
+  - extensions/pi-claude-marketplace/transaction/with-state-guard.ts
   - tests/architecture/mcp-config-notices.test.ts
   - tests/architecture/mcp-migration-notice.test.ts
   - tests/bridges/mcp/index.test.ts
@@ -43,105 +45,136 @@ files_reviewed_list:
   - tests/orchestrators/reconcile/mcp-migration.test.ts
   - tests/orchestrators/reconcile/types.test.ts
   - tests/shared/notification-dispatch.test.ts
+  - tests/transaction/with-state-guard.test.ts
 findings:
   critical: 0
-  warning: 4
-  info: 5
-  total: 9
-status: issues_found
+  warning: 0
+  info: 8
+  total: 8
+status: clean
 ---
 
-# Phase 5: Code Review Report
+# Phase 5: Code Review Report (iteration 3)
 
-**Reviewed:** 2026-10-08
+**Reviewed:** 2026-10-09
 **Depth:** standard
-**Files Reviewed:** 39
-**Status:** issues_found
+**Files Reviewed:** 41
+**Status:** clean (no blocker, no warning; eight advisory Info items)
 
 ## Summary
 
-The review covered the reload migration step (`mcp-migration.ts`), the legacy
-`mcp.json` helpers (`legacy.ts`), the stage and replace changes in `stage.ts`
-(leftover removal, the project-file rewrite, the multi-file byte rollback), the
-D-05-08 legacy sweep in install, reinstall and update, the D-05-05 change to
-tool permission rules, and the migration notice in `notification-dispatch.ts`.
-The diff base was `67195e9d`.
+This pass re-reviewed the phase scope (diff base `67195e9d`). It focused on the
+iteration-2 fix commits `7a7d9783..c65b16f8`: c26007be, 822f4809 and c65b16f8.
+`npm run typecheck` is clean. These suites pass under a temporary `HOME` and
+`PI_CODING_AGENT_DIR`: mcp-migration, stage, legacy, notification-dispatch,
+with-state-guard, and the two architecture notice locks (534 tests). The three
+MCP integration suites also pass (18 tests). Nothing touched the real
+`~/.pi/agent`.
 
-The core write order holds: `mcp-adapter.json`, then `state.json`, then
-`mcp.json`. The trigger stays until the last write. The rerun converges. A
-per-owner failure stays inside its own row. NFR-2 isolation in `apply.ts` is
-correct. The offline probe never clones. No blocker was found.
+The operator-accepted decisions are not findings: the lockless project stub
+write, the remedy-per-cause split that replaces D-05-02's blanket reinstall
+remedy, and the D-05-08/D-05-10 narrowing of project stubs to the reload
+move's user pass. The prior IN-07 (the CONTEXT record for the narrowing) is
+dropped for that reason.
 
-The four warnings are about edge behavior. A remedy line suggests a command
-that cannot work. Two migration notices are sent at `info` severity even when
-they carry warning-class facts. A user-scope stage writes the project file
-without the project lock. The project disable-stub removal can delete a stub
-that still applies to a live server.
+Status of the prior warnings:
 
-The test suite is broad. It covers write order, fault injection for each of
-the three writes, the half-done state, collisions per source, and the byte
-locks for all five catalog blocks. No test-reliability defect was found.
+- **WR-01 (reinstall remedy for causes a reinstall cannot clear): resolved.**
+  `offlineCloneRead` (`mcp-migration.ts:259-281`) marks the clone unread only
+  when the presence probe returns `not-cached` or throws. `resolveOffline`
+  (`:293-322`) keeps `source-unreadable` (the reinstall row) for that case.
+  It sends every other failure to the new `marketplace-unreadable` row:
+  a manifest that throws on load, a resolve that throws, or an `unavailable`
+  resolve that is not a clone miss. That row suggests a marketplace update or
+  an uninstall (`notification-dispatch.ts:772`). A missing or unparseable
+  manifest now gets the marketplace-update remedy. The catalog sentence is
+  corrected and the byte lock includes the row. A git record without
+  `resolvedSha` still gets the reinstall row. Git sources and `resolvedSha`
+  both arrived in 0.9.0 (051914b3), so no such record exists in practice.
+  Two narrow residuals on this seam are listed as IN-07 and IN-08.
+- **WR-02 (panel copies kept by the live-server filter): resolved.**
+  `prepareStageMcpServers` (`stage.ts:461-473`) now filters only the override
+  stubs (`panelCopies: false`) through `namesWithNoLiveServer`. Panel copies
+  always fall through to `leftovers`, so the two-scope project-first path and
+  the cwd-dependent path both remove the copy. The filter expression
+  `!stubs.includes(name) || deadStubs.includes(name)` is correct: a stub
+  survives only when it is live, and a non-stub leftover always goes. The
+  WR-04 stub regression test still passes, and the new panel-copy test pins
+  the fix.
+- **WR-03 (project-stub step took a full project state transaction):
+  resolved.** `withExistingScopeLock` (`with-state-guard.ts:124-170`) is the
+  lock lifecycle with no `mkdir` and no state I/O. `withScopeLock` is now
+  `mkdir` plus that function, so the existing callers behave as before.
+  `clearProjectStubs` (`mcp-migration.ts:633-650`) takes the lock only when
+  `<cwd>/.pi/pi-claude-marketplace/` exists. Otherwise it writes the file
+  without the lock, which the operator accepted. A corrupt project
+  `state.json` no longer blocks the step, and the new test pins that. The
+  `unfinished` row carries `file`, and the stub failure renders
+  `project-scope mcp-adapter.json`. `sentenceBody`
+  (`notification-dispatch.ts:756`) strips one final period, so the
+  `StateLockHeldError` detail no longer renders `completes..`. No new defect
+  was found on the lock seam. The lock order (user, then project) is
+  unchanged, both locks are taken with `retries: 0`, and the release-error
+  chaining is preserved.
 
-## Warnings
-
-### WR-01: "Source not available offline" row suggests a reinstall that cannot succeed when the manifest no longer lists the plugin
-
-**File:** `extensions/pi-claude-marketplace/orchestrators/reconcile/mcp-migration.ts:249-251` (with `:297-300`), `extensions/pi-claude-marketplace/shared/notification-dispatch.ts:730-731`, `docs/output-catalog.md` (mcp-migration-left-in-place prose)
-**Issue:** `resolveOffline` returns `undefined` in two cases. One is when `lookupDeclaredPlugin` reports `absent`, meaning the marketplace manifest no longer lists the plugin. The other is when `PLUGIN_ENTRY_VALIDATOR.Check` rejects the entry. `ownerAction` turns both into a `source-unreadable` row, and that row tells the user to `Run /claude:plugin reinstall <plugin>@<marketplace> to move it.` The catalog says the same thing ("a plugin the manifest no longer lists. A reinstall fetches the source and moves the entries"). That is false. Reinstall resolves from the same manifest, so it fails for an absent or invalid entry. Nothing is damped (COMPAT-01), so the user gets this warning on every reload, and the only remedy it offers cannot clear it. This breaks the project rule that a remedy must match the failure axis.
-**Fix:** Split the result. Return a discriminant from `resolveOffline` (`"not-listed" | "unreadable"`). For `not-listed`, and for an invalid entry, push a separate row kind whose remedy is `/claude:plugin uninstall <plugin>@<marketplace>` or "remove it from mcp.json". Keep the reinstall remedy only for a cold clone cache or an unreadable checkout. Amend the catalog block and its byte lock to match.
-
-### WR-02: The migration notice is `info` while its body carries warning-class lines (tool rules not enforced, credentials withheld, variables missing)
-
-**File:** `extensions/pi-claude-marketplace/shared/notification-dispatch.ts:777-784` (`mcpMigrationSeverity`)
-**Issue:** Severity escalates only for a left row, an unsupported or malformed removal, or a `leftover-removed` notice. `tool-rules-unenforced`, `credentials-blanked` and `variables-missing` lines are folded into the body (`mcpMigrationLines`), but the notification still goes out at `info`. On every other staging path, `notifyMcpConfigNotices` sends these same facts as `warning`. D-05-05 says a server with permission rules is "installed with a warning" and that this applies to "the migration alike, so a fresh install and a migrated one match". With the current code, a fresh install says `Warning:` and a migrated install of the same plugin says nothing at warning level. A `credentials-blanked` server will usually fail to authenticate, and the user hears about it only at `info`.
-**Fix:** In `mcpMigrationSeverity`, also escalate when `notices` holds a `tool-rules-unenforced`, `credentials-blanked` or `variables-missing` notice. A simpler rule is any notice kind that `notifyMcpConfigNotices` renders at `warning`, except `comments-dropped`, if the operator wants that one to stay quiet. Update the `mcp-migration-moved` severity prose, because its example carries a `variables-missing` line.
-
-### WR-03: A user-scope stage rewrites the project `mcp-adapter.json` without holding the project scope lock
-
-**File:** `extensions/pi-claude-marketplace/bridges/mcp/stage.ts:257-280` (`projectLeftovers`) and `:625-633` (`writeStagedDocs`)
-**Issue:** For a user-scope stage with legacy names, `projectLeftovers` reads the project `mcp-adapter.json`, and `writeStagedDocs` / `replacePreparedMcp` write it back. The only lock held is the user-scope `withLockedStateTransaction` (migration, install, reinstall, enable), or none at all on the update path. A project-scope install, update or uninstall in another Pi process holds only the project lock while it does its own read-modify-write of that same file. The two writers can interleave, and then one update is lost: either the project plugin's new entries or the stub removal is silently undone. The rollback in `restoreFiles` makes this worse. It restores the project file to bytes captured before the replace, so a rollback can overwrite a concurrent project-scope write. Before this phase, no user-scope operation wrote a project-scope file, so the per-scope lock model was enough.
-**Fix:** Pick one of three options. (a) Take the project scope lock around the project-file read and write, acquiring user then project in a fixed order to avoid deadlock. (b) Re-read the project file right before writing, and skip the write if its bytes changed since the prepare. (c) Defer project-file stub cleanup to the project-scope migration pass, which already holds the project lock. With (c), the project pass would need the user scope's moved names. If none of these is adopted, document the race next to D-05-10.
-
-### WR-04: The project disable stub is removed even when the old name still names a live server in the project scope
-
-**File:** `extensions/pi-claude-marketplace/bridges/mcp/stage.ts:257-280`, `extensions/pi-claude-marketplace/bridges/mcp/legacy.ts:156-168`
-**Issue:** `projectLeftovers` drops every marker-less override stub in the project `mcp-adapter.json` whose name equals one of the user-scope plugin's legacy names (`newKeys: []`). Take a user-scope legacy entry `github` while the project scope also serves a `github`, for example a project-scope legacy entry of another plugin, a project `.mcp.json` server, or a project `mcp.json` user server. A `{ "disabled": true }` stub under `github` in the project file then applies just as much to that project server. Moving the user-scope plugin deletes the stub, and the server the user turned off starts running again on the next reload. The notice line claims the stub "no longer applies", which is false in this case. D-05-10 calls the matching rule "the only guard", and here the guard does not check that the old name has actually gone away.
-**Fix:** Before treating a project stub as a leftover, check whether any other source still defines the old name in full after the move. Use the same nine-source walk (`walkMcpSources`), excluding the plugin's own legacy entry. If one does, keep the stub. Add a test with a project `.mcp.json` `github` beside a user-scope legacy `github`.
+No new blocker or warning was found. The Info items below are advisory.
 
 ## Info
 
-### IN-01: Toggle buckets refreshed after dependency installs can strand a skipped owner for one reload with no row
+### IN-01: Toggle buckets refreshed after dependency installs can strand a skipped owner for one reload with no row (carried forward)
 
-**File:** `extensions/pi-claude-marketplace/orchestrators/reconcile/mcp-migration.ts:166-194`, `extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts:1249-1251`
-**Issue:** The migration reads the round-1 plan. If an enabled owner is in `pluginsToDependencyDisable`, the migration skips it silently. Then `refreshTogglePlan` may drop that owner after `applyDependencyInstalls` satisfies its dependency, so the disable never runs. The owner's legacy entries stay, and no migration row explains why. The next reload moves them, so the system converges, but the notice says nothing in between. The reverse case also exists: a disabled owner can be removed with cause `disabled` and then enabled in the same reload.
-**Fix:** Either document this one-reload lag next to the AMIG-04 note, or skip only for the uninstall, remove and enable buckets and let a dependency-disabled owner move, because the disable unstages from `mcp-adapter.json` anyway.
+**File:** `extensions/pi-claude-marketplace/orchestrators/reconcile/mcp-migration.ts:184-192`, `extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts:825` (`refreshTogglePlan`), `:1250`
+**Issue:** Unchanged. `plannedRemoval` skips an owner that is in round 1's `pluginsToDependencyDisable`. `refreshTogglePlan` can then drop that owner, and its legacy entries stay for one reload with no row.
+**Fix:** Document the one-reload lag next to the AMIG-04 note, or skip only the uninstall, remove and enable buckets.
 
-### IN-02: A notice list with no rows is dropped silently
+### IN-02: A notice list with no rows is dropped silently (carried forward)
 
-**File:** `extensions/pi-claude-marketplace/shared/notification-dispatch.ts:809-812`
-**Issue:** `notifyMcpMigration` returns when `rows` is empty, even if `notices` is not. This can happen when a stage committed and wrote `mcp-adapter.json` (leftover removal, or a `comments-dropped` notice) but the later removal found nothing, for example after an unlocked hand edit of `mcp.json` between the reads. In that case a file the step rewrote goes unreported.
-**Fix:** Return only when both `rows` and `notices` are empty, or send `notices` through `notifyMcpConfigNotices` when there are no rows.
+**File:** `extensions/pi-claude-marketplace/shared/notification-dispatch.ts:868-870`
+**Issue:** Unchanged. `notifyMcpMigration` returns when `rows.length === 0`, even when `notices` holds a notice for a file the step rewrote. In the current flows every notice-producing write is followed by a row, so this is latent.
+**Fix:** Return only when both lists are empty, or send `notices` through `notifyMcpConfigNotices`.
 
-### IN-03: The re-read inside the lock reports an unparseable `mcp.json` as a stopped row, not a `file-unreadable` row
+### IN-03: The re-read inside the lock reports an unparseable `mcp.json` as a stopped row (carried forward)
 
-**File:** `extensions/pi-claude-marketplace/orchestrators/reconcile/mcp-migration.ts:596`
-**Issue:** `migrateLocked` calls `readLegacyMcpOwners` directly. If the file became invalid after the pre-lock `readOwnersOrReport`, the `McpConfigFileError` escapes to `migrateScopeIsolated` and becomes a generic `stopped` row, where the D-05-19 `file-unreadable` row was expected.
-**Fix:** Reuse `readOwnersOrReport(input, locations)` inside `migrateLocked` and return when it gives `undefined`.
+**File:** `extensions/pi-claude-marketplace/orchestrators/reconcile/mcp-migration.ts:722`
+**Issue:** Unchanged. `migrateLocked` calls `readLegacyMcpOwners` directly. So an `McpConfigFileError` there, from a file changed between the unlocked read and the lock, becomes a generic scope `stopped` row instead of the D-05-19 `file-unreadable` row.
+**Fix:** Reuse `readOwnersOrReport(input, locations)` inside the lock.
 
-### IN-04: `commitPreparedMcp` does not undo the scope-file write when the project-file write fails
+### IN-04: `commitPreparedMcp` passes a throwaway `written` array (carried forward, latent)
 
-**File:** `extensions/pi-claude-marketplace/bridges/mcp/stage.ts:642-649`
-**Issue:** The migration uses `commitPreparedMcp`, which passes a throwaway `written` array. If the scope `mcp-adapter.json` write succeeds and the project write then throws, the scope file keeps the new entries and the legacy ones stay in `mcp.json`. Both run for the session. The resulting `stopped` row says only "the next /reload tries again", not that both files hold the servers, which is what the `unfinished` row says for the same state. `replacePreparedMcp` restores in this case.
-**Fix:** Restore through `restoreFiles(written)` on failure, as `replacePreparedMcp` does, or report an `unfinished`-style row when the stage threw after a write.
+**File:** `extensions/pi-claude-marketplace/bridges/mcp/stage.ts:601-609`
+**Issue:** Unchanged. The function writes one file, so it cannot leave a partial state today. If a second write is ever added, the `[]` passed to `writeStagedDoc` means nothing restores the first write.
+**Fix:** None needed now. Keep the function single-write, or route it through `restoreFiles` if that changes.
 
-### IN-05: `printable` leaves Unicode line and bidi controls unescaped
+### IN-05: `printable` leaves Unicode line and bidi controls unescaped (carried forward)
 
-**File:** `extensions/pi-claude-marketplace/shared/notification-dispatch.ts:612-621`
-**Issue:** The doc comment says a file-derived name "cannot move the cursor or end a line", but only C0, DEL and C1 are escaped. U+2028 and U+2029 (line and paragraph separators) and the bidi overrides U+202A-U+202E and U+2066-U+2069 pass through. The bidi overrides can reorder how a server or plugin name from a hand-edited `mcp.json` is shown (Trojan Source style spoofing).
-**Fix:** Also escape U+2028, U+2029, U+200E, U+200F, U+202A-U+202E and U+2066-U+2069, or narrow the doc comment to say what is actually escaped.
+**File:** `extensions/pi-claude-marketplace/shared/notification-dispatch.ts:639-653`
+**Issue:** Unchanged. `isControlCodeUnit` covers only C0, DEL and C1. U+2028/U+2029 and the bidi overrides U+202A-U+202E and U+2066-U+2069 pass through. The doc comment says a file-derived name "cannot move the cursor or end a line".
+**Fix:** Escape these code points too, or narrow the comment to C0/C1.
+
+### IN-06: A failed stub probe stops the whole scope after the adapter and state writes (carried forward)
+
+**File:** `extensions/pi-claude-marketplace/orchestrators/reconcile/mcp-migration.ts:622-627`
+**Issue:** Unchanged by c65b16f8. `projectDisableStubNames` still runs before the `try` in `clearProjectStubs`. A non-`McpConfigFileError` read error from the project adapter file or from any `walkMcpSources` source (EACCES, EISDIR) escapes `migrateLocked` after `mcp-adapter.json` and `state.json` were written. `migrateScopeIsolated` then turns it into one scope-level `stopped` row instead of per-owner `unfinished` rows. The rerun still converges.
+**Fix:** Move the probe inside the `try`, so a probe failure reaches `pushRemovalFailureRow` with `file: "project-scope mcp-adapter.json"`. Or document that a probe failure stops the whole scope.
+
+### IN-07: Two causes routed to `marketplace-unreadable` are not cleared by its first remedy
+
+**File:** `extensions/pi-claude-marketplace/orchestrators/reconcile/mcp-migration.ts:312-321`, `extensions/pi-claude-marketplace/orchestrators/plugin/git-source-probe.ts:99-114, 203-213`, `extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts:241-252`
+**Issue:** The new row says `The <mp> marketplace copy cannot give the source of <p>. Run /claude:plugin marketplace update <mp>, or /claude:plugin uninstall <p>@<mp> to remove it.` The uninstall alternative clears every cause. The marketplace update does not clear these two:
+1. **A git-subdir plugin whose path moved in the manifest after the install.** The record holds sha A. A marketplace update now lists sha B and a new `path`. The probe keys on the recorded sha A (`probeShaClone`), finds the warm clone, and `anchorSubdir` returns `missing-subdir` for the new path. The resolve is `unavailable` and `cloneUnread()` is false, so the row is `marketplace-unreadable`. The marketplace copy is already current, so `marketplace update` changes nothing. A reinstall also uses sha A with the new path, so it fails the same way. `/claude:plugin update <p>@<mp>` would clear it: it moves to sha B, writes `mcp-adapter.json`, and the D-05-08 sweep removes the legacy entries. The row does not name that command.
+2. **A git marketplace whose checkout directory is missing.** `loadMarketplaceManifest` throws, so the row is `marketplace-unreadable`. `marketplace update` calls `refreshGitHubClone`, which runs `gitOps.fetch` in the missing directory and fails.
+
+Neither is a regression: before 822f4809, both got the reinstall row, which also could not clear them. Both need an uncommon precondition, and the uninstall alternative works. So this is advisory.
+**Fix:** For case 1, when the probe returned `missing-subdir` or `escapes` from a warm recorded-sha clone, either name `/claude:plugin update <p>@<mp>` or narrow the catalog sentence. For case 2, accept the uninstall alternative as the remedy, or note in the catalog that a missing checkout needs the marketplace removed and added again.
+
+### IN-08: A mirror whose HEAD cannot be read keeps the reinstall row, and reinstall fails on the same read
+
+**File:** `extensions/pi-claude-marketplace/orchestrators/reconcile/mcp-migration.ts:272-278`, `extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-clone-probe.ts:51-60`, `tests/orchestrators/reconcile/mcp-migration.test.ts:1218-1221`
+**Issue:** An unpinned git source has a mirror directory with an unreadable `.git/HEAD`. `readMirrorHeadSha` throws inside the presence probe, `unread` stays true, and the row is `source-unreadable` with `Run /claude:plugin reinstall <p>@<mp> to move it.` Reinstall's `probeReinstallClone` takes the same mirror-first branch (`pathExists(mirrorRoot)`, then `readMirrorHeadSha`) and throws on the same read. So the remedy cannot clear the row, which repeats on every reload. The fix report already flagged this case as unverified. The test at `:1218-1221` pins the current row. A corrupt mirror is rare, so this is advisory.
+**Fix:** Treat a probe throw as `marketplace-unreadable`, with uninstall as the working remedy. Or give it a remedy that removes or refreshes the mirror. Then update the pinned test case.
 
 ---
 
-_Reviewed: 2026-10-08_
+_Reviewed: 2026-10-09T16:10:20Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
