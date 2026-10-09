@@ -9,59 +9,409 @@ created: "2026-10-09"
 
 # Phase 6 - Validation Strategy
 
-## Test Infrastructure
+The user resolved the 06-01 scope blocker on 2026-10-09 by selecting option 1
+and approving a scope-only size exception for its 61-file atomic metadata
+migration. Independent checker review and execution evidence remain pending.
+This document refers only to the active command-run-contract phase. No archived
+phase with number 06 is a dependency.
+
+## Test infrastructure and execution contract
 
 | Property | Value |
 | --- | --- |
-| Framework | Node `node:test` and `node:assert/strict` |
-| Configuration | `package.json`, `tsconfig.json` |
-| Quick run command | `node --test tests/shared/notification-run.test.ts tests/edge/router.test.ts tests/edge/register.test.ts` |
-| Full suite command | `npm run check` |
-| Estimated runtime | Not measured in this session |
+| Framework | Existing Node node:test, node:assert/strict, and strong-mock |
+| Configuration | package.json and tsconfig.json |
+| Quick feedback | Each task's exact owner command below |
+| Combined wave and phase gate | `npm run check` |
+| Full gate timeout | 2400 seconds; a timeout is a failure to verify |
+| Measured task latency | Pending execution; no duration claimed at planning time |
+| Security | ASVS level 1; high and critical findings block |
+| New packages or services | None |
+| Discovery | Level 0: existing internal router/run/dispatch/schema patterns; live source checked after CodeGraph |
+| Graphify | Disabled; no configuration change made |
 
-## Sampling Rate
+Before source edits, read applicable project TypeScript/comment/test skills.
+Every new production TypeScript module needs its mirrored direct pair.
+Observe failing behavior tests locally; do not commit failing RED tests.
+Task feedback uses the listed owner suites. If one command exceeds 60 seconds,
+split feedback into its existing individual owner files, preserving all
+assertions and the required full combined-tree gate.
 
-- During each task, run the changed owner's tests for feedback.
-- Before each commit, run fixers and linters with `SKIP=npm-check pre-commit`.
-  The commit hook runs checks for staged build inputs.
-- After each combined wave and at the phase gate, run `npm run check`.
-- Before final handoff, require a passing full check for the same inputs.
-- Record measured feedback time during execution. Do not claim a latency
-  bound until it has been measured.
+Before commits, run `fallow audit --base HEAD` and
+`SKIP=npm-check pre-commit run --files <changed files>`. Restage and repeat
+fixers until clean. Run git commit in the foreground; the staged-input hook
+runs check:commit and is not a GSD gate. Do not rebase, amend, rewrite history,
+skip hooks, or put phase/milestone names in commit subjects. A failed hook
+means no commit occurred.
 
-## Per-Task Verification Map
+After each combined wave, at phase completion, and at final handoff, require
+`npm run check` for the combined checkout. Reuse only same-session evidence
+for unchanged inputs under skills/local-verification/SKILL.md. Record command,
+exit status, commit, Node version, and exact dirty inputs if applicable.
+Parent owns planning commits, STATE and ROADMAP updates.
 
-Planning must replace the provisional plan/task assignments below with the
-actual task IDs and threat references. The behavior and command coverage are
-required even if the planner uses different task boundaries.
+## Dependency and ownership map
 
-| Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Pending assignment | Pending | Pending | WIRE-02 | Pending | Correct command/load/hook origin and canonical names | Unit | `node --test tests/edge/router.test.ts tests/shared/notification-wire.test.ts tests/shared/notification-json.test.ts` | Yes | Pending |
-| Pending assignment | Pending | Pending | WIRE-07 | Pending | Runs cannot borrow another run's identity | Unit | `node --test tests/shared/notification-run.test.ts tests/edge/register.test.ts` | Yes | Pending |
-| Pending assignment | Pending | Pending | JOUT-03 | Pending | Awaited handler sees complete output with no late command emissions | Unit | `node --test tests/edge/register.test.ts tests/shared/notification-dispatch.test.ts` | Yes | Pending |
-| Pending assignment | Pending | Pending | JOUT-04 | Pending | Redacted causes, bounded delivery recovery, preserved reload need | Unit | `node --test tests/edge/register.test.ts tests/shared/notification-dispatch.test.ts tests/shared/notification-resolve.test.ts` | Yes | Pending |
+| Plan | Needs | Produces | Wave | Checkpoint |
+| --- | --- | --- | --- | --- |
+| 06-01 | Completed Phase 5 live sink and schema | Required origin, canonical route, injected ID, explicit lifecycle roots, snapshot-only tools | 1 | None; D-01..D-10 already approved |
+| 06-02 | 06-01 identity and formatter contract | Paired command boundary, paired safe error resolver, internal-error schema, direct disclosure checks | 2 | None |
+| 06-03 | 06-02 error delivery and registration wiring | Outcome/reload accounting, recovery that reopens on success, terminal closure only on failed recovery | 3 | None |
+| 06-04 | 06-03 complete lifetime | Delayed carrier, AUTH-09 internal-error enrollment, and full inventory evidence | 4 | None |
 
-## Wave 0 Requirements
+Shared run, dispatcher, register, and their owner tests force sequential waves.
+There is no safe same-wave file or mutable-state parallelism in this plan set.
+Calibration returned factor 1, sample_count 0, confidence low; plan estimates
+use those values, not subjective confidence.
 
-Existing infrastructure covers the framework requirements. Extend existing
-run fixtures and JSON capture helpers with deterministic invocation IDs in the
-same task that introduces their production reader. No new framework is needed.
+**06-01 blocker disposition:** Resolved by user approval of option 1 on 2026-10-09.
+06-01 has a scope-only exception to the mandatory fewer-than-15-file property
+for its atomic metadata migration; its manifest retains all 61 required files.
+06-02 now lists 14 files, 06-03 lists 9, and 06-04 lists 8. No path was hidden
+or removed from the phase's required work. The additional AUTH-09 architecture
+enrollment moved from 06-02-02 to its existing owner 06-04-02; direct resolver
+and converter disclosure checks remain in 06-02. Production registration is
+fully wired in 06-02-01, so 06-03 adds lifetime behavior through that existing
+command boundary and needs only registration tests, not another register.ts
+edit. The four-wave dependency chain is unchanged.
 
-## Manual-Only Verifications
+The approved 06-01 size exception preserves the atomic dependency constraint.
+CodeGraph was consulted before targeted source lookup. The current openNotificationRun
+factory has no origin argument (shared/notification-run.ts:37); toWirePayload
+returns the wire union directly (shared/notification-json.ts:49-55). Both
+strict envelopes lack origin (shared/notification-wire.ts:264 and :479).
+Changing the required run/formatter/schema contract therefore reaches every
+root, the original sink, direct pairs, and the generated schema together.
 
-All functional behaviors have automated verification. Any intent-based
-prohibitions from the planning probe remain separately identified in plans.
+There are 23 files under tests/edge/handlers with complete
+assert.deepStrictEqual(capture.entries, ...) assertions, independently of
+the remaining factory, formatter, and lifecycle owners. Concrete examples
+are plugin/help.test.ts:94, plugin/info.test.ts:433, and
+marketplace/info.test.ts:342: their full expected payloads have no origin.
+tests/edge/notification-boundary.ts:112-131 exposes the original capture;
+tests/edge/json-capture.ts validates original attempts against the strict
+union and retains failures. Adding origin to actual output without migrating
+those expected payloads fails equality; adding it to expectations early also
+fails. Weakening validation, stripping actual fields, or hiding those files
+would violate the locked preservation and complete-assertion constraints.
 
-## Validation Sign-Off
+Alternatives assessed: extracting the currently live tool projection or
+routing responsibilities can reduce peripheral work, but leaves the strict
+metadata cutover and its 23 exact-capture owners above the usual file limit. Optional
+metadata, dual schemas, or origin inference would contradict required
+explicit root metadata and the chosen strict contract. Preparatory shared
+expectation builders would require a separately grounded redesign across
+these tests while preserving independent complete assertions, and still
+would not prove the root/schema cutover fits 14 files. No such speculative
+redesign, unused scaffolding, broken intermediate commit, or corpus recapture
+is authorized or planned. User approval resolves only the file-count conflict.
+All tests and review gates remain required; no independent checker or test
+pass is claimed. The two new modules in 06-02 still land with their first
+production readers and direct pairs.
 
-- [ ] All tasks have automated verification or explicit Wave 0 dependencies.
-- [ ] Task IDs and threat references match the final plans.
-- [ ] No three consecutive tasks lack automated feedback.
-- [ ] No watch-mode flags are used.
-- [ ] Feedback latency is measured and recorded.
+### Iteration 2: 06-02 scope warning disposition
+
+The independent checker reports zero blockers and one WARNING,
+scope_sanity/06-02: "Plans without size exception stay below10-file warning
+threshold". Its 14-file count remains unchanged and the threshold is not
+claimed satisfied. The warning is acceptable under revision-loop.md's
+"For each WARNING: address or explain why it's acceptable" rule. The
+user-approved size exception remains exclusive to 06-01.
+
+06-02-01 joins six production/direct-test pairs: command-run, register,
+notification-command-error, notification-dispatch, notification-json, and
+notification-wire. The other two files are the generated schema and its
+architecture test. CodeGraph confirms the current root preflight/run creation
+in register.ts:140-143, dispatcher-owned append in notification-dispatch.ts:383-405,
+and strict wire-union return in notification-json.ts:49-55. The architecture
+test compares source and committed schema bytes and the exact kind inventory
+at wire-schema.test.ts:51-117; :120-129 retains the missing-kind negative control.
+
+The new resolver and boundary need their first production callers and direct
+pairs in the same change. A shared-only error-delivery slice still needs ten
+files (four pairs plus generated schema and architecture assertion), before
+adding the registered root. Schema-first work leaves an unproducible member;
+caller-first work lacks its supported payload. Deferring generated output or
+the exact-kind assertion breaks the intermediate schema gate. A preliminary
+pass-through extraction adds preparatory work; an unconsumed resolver violates
+the no-unused-code constraint. Splitting by fault class, or moving task
+06-02-02's tests, leaves the first complete path at 14 files. Moving work into
+06-01 would misuse its metadata-only exception. No compliant smaller split
+was identified within the reviewed mechanism.
+
+The retained scope is one error path across six production modules, one new
+payload kind, two tasks, and the existing 45000-token estimate. The complete
+manifest, four-wave chain, direct pairs and 100% coverage, disclosure controls,
+schema negatives, text exception timing, strict 3149/zero-extra corpus,
+unchanged catalog, and combined-tree gates remain intact. This records the
+warning rationale only; checker acceptance of this disposition and execution
+evidence remain pending, with no new approval gate introduced.
+
+## Per-task verification map
+
+All rows are planned behavioral verification, not claimed passing results.
+Every task has an automated command and a sibling fails_when in its PLAN.
+
+| Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Automated Command | File Exists | Status |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 06-01-01 | 01 | 1 | WIRE-02, WIRE-07 | T-06-01, T-06-02, T-06-03 | Required metadata, explicit roots, canonical identity, tool compatibility | `node --test tests/shared/notification-run.test.ts tests/shared/notification-wire.test.ts tests/shared/notification-json.test.ts tests/shared/notification-present.test.ts tests/shared/notification-dispatch.test.ts tests/edge/router.test.ts tests/edge/register.test.ts tests/edge/handlers/tools.test.ts tests/architecture/wire-schema.test.ts` | Existing | Pending |
+| 06-01-02 | 01 | 1 | WIRE-02, WIRE-07 | T-06-01, T-06-02 | Aliases, invalid parents, delegation, overlapping roots | `node --test tests/edge/router.test.ts tests/edge/register.test.ts tests/index.test.ts tests/bridges/hooks/settle.test.ts tests/bridges/hooks/async-rewake/registry.test.ts` | Existing | Pending |
+| 06-02-01 | 02 | 2 | JOUT-04, WIRE-02, WIRE-07 | T-06-04, T-06-05, T-06-06 | Typed command errors and correlated startup faults | `node --test tests/edge/command-run.test.ts tests/edge/register.test.ts tests/shared/notification-command-error.test.ts tests/shared/notification-dispatch.test.ts tests/shared/notification-json.test.ts tests/shared/notification-wire.test.ts tests/architecture/wire-schema.test.ts` | Two direct pairs created in task | Pending |
+| 06-02-02 | 02 | 2 | JOUT-04 | T-06-04, T-06-05 | Direct bounded-cause and whole-payload disclosure checks, retained partial work | `node --test tests/shared/notification-command-error.test.ts tests/edge/command-run.test.ts tests/shared/notification-json.test.ts` | Existing plus 06-02-01 pairs | Pending |
+| 06-03-01 | 03 | 3 | JOUT-03, JOUT-04, WIRE-07 | T-06-07, T-06-08, T-06-11 | Semantic outcomes, monotonic reload, closure | `node --test tests/shared/notification-run.test.ts tests/shared/notification-dispatch.test.ts tests/edge/command-run.test.ts` | Existing plus 06-02-01 pair | Pending |
+| 06-03-02 | 03 | 3 | JOUT-04, JOUT-03 | T-06-08, T-06-09, T-06-10 | One recovery per append fault, successful recovery preserves later output/reload, failed recovery closes delivery, no retry/rollback | `node --test tests/shared/notification-dispatch.test.ts tests/edge/command-run.test.ts tests/orchestrators/plugin/list-flow.test.ts` | Existing plus 06-02-01 pair | Pending |
+| 06-03-03 | 03 | 3 | JOUT-03, JOUT-04, WIRE-07 | T-06-06, T-06-07, T-06-09, T-06-11 | Existing root integration, valid empty outcomes, later output/reload after successful recovery | `node --test tests/edge/register.test.ts tests/edge/command-run.test.ts tests/shared/notification-dispatch.test.ts` | Existing plus 06-02-01 pair | Pending |
+| 06-04-01 | 04 | 4 | WIRE-02, WIRE-07, JOUT-03, JOUT-04 | T-06-12 | Deferred auth/cascade/delegation settlement and identity | `node --test tests/edge/register.test.ts tests/orchestrators/auth-host.test.ts tests/orchestrators/marketplace/update.test.ts tests/orchestrators/plugin/enable-disable.test.ts` | Existing | Pending |
+| 06-04-02 | 04 | 4 | WIRE-02, WIRE-07, JOUT-03, JOUT-04 | T-06-13, T-06-14 | Full fixture inventory, strict preservation, AUTH-09 internal-error enrollment and planted disclosure controls | `node --test tests/architecture/catalog-uat/catalog-wire.test.ts tests/architecture/no-credential-leak.test.ts tests/architecture/wire-schema.test.ts` | Existing | Pending |
+
+T-06-SC is the permitted phase-wide repeated supply-chain threat ID. No task
+installs packages; any scope change introducing an install must first supply
+the package-legitimacy audit and its required gate.
+
+## Exact metadata and canonical routing contract
+
+Keep schemaVersion 1 during this unreleased milestone. Required top-level
+fields remain severity, needsReload, and origin. origin is a strict object:
+
+| Root | Exact origin fields |
+| --- | --- |
+| Command | kind: command; commandId: nonempty canonical string; invocationId: nonempty string |
+| Load | kind: load |
+| Hook | kind: hook |
+
+Identity fields live inside origin, not in duplicate top-level properties.
+The TypeBox origin union rejects extras, absent fields, null, and command
+fields on load/hook branches. The new internal-error kind accepts command
+origin only. All existing raw/structured kinds retain their fields and
+ordering. Both envelope definitions gain origin.
+
+| Input family | Canonical commandId |
+| --- | --- |
+| bootstrap, install, uninstall, prune, update, fetch, reinstall, list, info, pending, enable, disable, import, browse | plugin followed by that canonical verb |
+| ls | plugin list |
+| Empty or whitespace-only input | plugin browse |
+| Unknown top-level verb | plugin |
+| marketplace with no verb or unknown verb | marketplace |
+| marketplace add/remove/list/info/update/autoupdate/noautoupdate | marketplace followed by that verb |
+| marketplace rm; marketplace ls | marketplace remove; marketplace list |
+| help; help help; invalid help topic | plugin help |
+| help marketplace; marketplace help | marketplace help |
+| marketplace help with surplus arguments | marketplace help, with the existing usage-error |
+
+help marketplace applies when the full trimmed topic is marketplace; an
+unknown complete topic remains plugin help. Recognized command syntax errors
+retain the recognized command identity. Nested work retains the outer
+identity, including enable to install and browse to list.
+
+## Outcome and delivery contract
+
+Outcomes on command runs: cascade; marketplace-info; plugin-info;
+marketplace-info-cascade; plugin-info-cascade; marketplace-not-added;
+reconcile-pending-empty; prune-empty; prune-committed-warning; usage-error;
+usage-info; internal-error.
+
+Non-outcomes: diagnostic; device-flow-prompt; reconcile-applied-cascade;
+reconcile-aborted; plugin-path-skipped; async-rewake-summary; stop-override-cap.
+Independent load/hook runs never affect the command verdict. Empty cascades
+and named empty results remain valid; empty diagnostic lines and empty rewake
+summaries remain no-ops. Info fan-out keeps its nonempty schema constraint.
+
+Known reload is ORed before an attempted emission; successful machine append
+marks an explicit outcome. A silent or non-outcome-only normal machine return
+emits internal-error with the fixed missing-result cause. Unexpected throws
+append errors after prior entries. Closure follows awaited work and final
+delivery; a settled/closed command cannot touch another sink, mode, or UI.
+
+After an ordinary append failure, recovery gets one direct internal-error
+attempt using the same ID and known reload. On success that error counts as
+an outcome and delivery returns to open. Every later result before settlement
+is still delivered using live mode and contributes outcome/reload state. A
+separate later append fault gets its own one direct recovery attempt; the
+recovery append itself never recurses. Only failure of the recovery append
+closes delivery under D-08. Contain that failure and any opt-in logger failure,
+then suppress later sink attempts and the root missing-outcome report.
+Dispatch swallows transport faults before broad business catches can see
+them. Business operations continue their current flow; reporting adds neither
+retries nor rollback. The D-10 settled guard independently stops late callbacks.
+
+Required recovery witnesses in 06-03-02/03: failed original append, successful
+recovery error, delivered later outcome with needsReload true, then a later
+throw's delivered internal-error retaining true, all with one invocation ID
+before settlement. Also cover two separate append faults each recovered
+successfully and a subsequent delivered outcome. The terminal counterexample
+fails the original and recovery append and permits no further attempt, even
+when the logger throws. More than two total attempts is valid after successful
+recovery; a recursive recovery or any attempt after failed recovery is invalid.
+
+## Resolved research seams and remaining assumptions
+
+| Item | Source evidence and planning resolution | Tasks |
+| --- | --- | --- |
+| A1 broad catches | listPlugins wraps its success notification and emits another cascade in catch. Contain append exceptions inside dispatch; never send transport sentinels through business catches. | 06-03-02 |
+| A2 reload on failed append | A resolved result may describe completed changes even when append fails. OR needsReload before attempt; preserve earlier true values and retain state. | 06-03-01/02 |
+| A3 asynchronous work | Edge handlers await/return operations; browse awaits custom UI and delegates; list-flow then projections are joined by Promise.all; auth-host awaits initiateDeviceFlow, which returns runPollLoop after synchronous onDeviceCode. No detached producer was found in these seams. Add controlled delay/late-callback evidence. | 06-04-01 |
+| A4 feedback timings | Suggested owner suites exist; new pair commands run after their creation. Runtime remains unmeasured until execution. | All tasks |
+| A5 ASVS | Use locally configured level 1/high blocking; no claim about external ASVS edition/control numbers. | Threat registers |
+| A6 runtime state | Change only in-memory runs and generated schema; no persisted-data rewrite, migration, service, or OS configuration. | 06-01-01 |
+| ID generator throws | Try primary allocator once; a trusted total recovery allocator mints the error invocation ID. No route/probe follows generator failure. Recovery allocation is separately injectable for deterministic tests. | 06-02-01, 06-03-03 |
+| Inventory throws | Allocate identity and command state first; error delivery accepts the original sink and identity without fabricating soft-dependency data. Do not probe again. | 06-02-01, 06-03-03 |
+| Tool callers | Both tools only need snapshot presentation and marketplace-block projection. They receive neither a fourth wire origin nor command completion rules. | 06-01-01 |
+| Original sink | Preserve receiver semantics; do not detach appendEntry or forward through a new sink. | 06-01-01, 06-03-02 |
+| Invalidated mode | Initial unsupported/stale access keeps synchronous preflight failure. If the getter becomes unusable later, there is no supported live mode to select; report the mode-contract failure, never use cached mode or claim delivered output. | 06-02-01, 06-03-03 |
+| Total recovery allocator | Nonempty unique ID output and a functioning total recovery allocator are explicit trusted-port assumptions. If the latter fails, surface an invariant failure rather than call it successful delivery. | 06-02-01 |
+
+**Requirement reconciliation:** the roadmap's unconditional delivery wording
+is narrowed only by the approved D-08 sink-failure limit for supported
+machine-mode commands. Existing unsupported/stale-mode preflight failures
+remain outside the supported command contract under D-10. Mid-command loss of
+a readable supported mode and failure of the trusted recovery allocator are
+flagged contract assumptions, not additional accepted successful-delivery
+exceptions. If the independent checker interprets JOUT-04 as requiring output
+even with these unusable host/identity ports, return that exact conflict to
+the parent; do not silently use a cached mode or claim a payload was sent.
+
+## Spec-less edge coverage
+
+No SPEC exists. All 12 supplied unresolved probe rows have explicit planned
+acceptance criteria from locked context and source evidence; none is dismissed
+or silently dropped. “Resolved” here means the edge's expected behavior is
+specified; implementation verification remains pending. All rows are authored
+as plain must_haves.truths in the named plan.
+
+| Requirement | Category | Status / verification | Acceptance criterion | Plan truth / task |
+| --- | --- | --- | --- | --- |
+| WIRE-02 | adjacency | resolved / explicit | Equal adjacent emissions remain distinct with correct root attribution. | 06-01 / 06-01-02 |
+| WIRE-02 | empty | resolved / explicit | Bare input is plugin browse; valid empty collections persist; missing/null origin is rejected. | 06-01 / 06-01-01 |
+| WIRE-02 | ordering | resolved / explicit | Metadata preserves emitted and model-array order without sorting or merging. | 06-01 / 06-01-02 |
+| WIRE-07 | adjacency | resolved / explicit | Same command in two invocations has different IDs; repeated entries in one have one ID. | 06-01 / 06-01-02 |
+| WIRE-07 | empty | resolved / explicit | Bare/invalid commands allocate nonempty IDs; load/hook has no command ID. | 06-01 / 06-01-01 |
+| WIRE-07 | ordering | resolved / explicit | Interleaving preserves each run's identity and append order. | 06-01 / 06-01-02 |
+| JOUT-03 | adjacency | resolved / explicit | Back-to-back/interleaved roots settle after their own final append attempt. | 06-03 / 06-03-03 |
+| JOUT-03 | empty | resolved / explicit | Empty results complete; silent/empty-diagnostic/prompt-only runs emit missing-result error. | 06-03 / 06-03-01 |
+| JOUT-03 | ordering | resolved / explicit | Awaited work precedes finalization; late retained callbacks append nothing. | 06-03 / 06-03-01; 06-04-01 |
+| JOUT-04 | adjacency | resolved / explicit | Equal earlier outcomes are retained; a later throw appends one correlated error. | 06-02 / 06-02-01 |
+| JOUT-04 | empty | resolved / explicit | Null/undefined throws have a fixed nonempty safe cause. | 06-02 / 06-02-02 |
+| JOUT-04 | ordering | resolved / explicit | Partial output precedes error; failure delivery completes before settlement, bounded by D-08. | 06-02 / 06-02-01; 06-03-02 |
+
+Edge equality: 12 surfaced = 12 authored truths + 0 unresolved edge assumptions.
+No backstop marker is needed; the expected behavior is explicit.
+
+## Spec-less prohibition recall
+
+Recall considered correlation turning into tracking, hidden identity reuse,
+alias disclosure, root confusion, retries, rollback claims, fake success,
+discarded partial results, hidden delivery loss, extra output channels,
+credential disclosure, late callbacks, dropped tests, and ordering changes.
+Precision drops routine implementation correctness into the edge tests and
+security threats. Credential/path disclosure is canon security: covered by
+the threat register, AUTH-09, and gsd-secure-phase; no duplicate prohibition
+is minted for it.
+
+Two bespoke intent constraints survive. Both were passed through the runtime
+projectProhibitions serializer and copied as descriptor-less unresolved
+must_haves.prohibitions entries:
+
+| Source | Statement | Carrier | Disposition |
+| --- | --- | --- | --- |
+| WIRE-07 / privacy | MUST NOT turn invocation correlation into persistent user or cross-command tracking or telemetry. | 06-01 must_haves.prohibitions | flagged-unverified |
+| JOUT-04 / transparency | MUST NOT present an internal error or delivery failure as proof that completed changes were rolled back. | 06-02 must_haves.prohibitions | flagged-unverified |
+
+Prohibition equality: 2 kept = 2 authored + 0 silent drops. No check descriptor
+was invented. A behavioral test can support review but cannot silently turn
+these descriptor-less items into a verified prohibition. Parent/verifier must
+surface both flags at handoff.
+
+## Multi-source coverage audit
+
+COVERED means assigned to an executable task, not implemented or verified.
+
+| Source | ID | Feature or constraint | Plan / task | Status |
+| --- | --- | --- | --- | --- |
+| GOAL | SC-1 | Consumer identifies every payload root and outer command | 06-01-01/02 | COVERED |
+| GOAL | SC-2 | One injectable identity per invocation; distinct runs | 06-01-01/02 | COVERED |
+| GOAL | SC-3 | Complete ordered output before settlement | 06-03-01/03, 06-04-01 | COVERED |
+| GOAL | SC-4 | Typed redacted throw output; unchanged text; D-08 limit | 06-02, 06-03-02, 06-04-02 | COVERED |
+| REQ | WIRE-02 | Required severity, needsReload, origin, command ID | 06-01, 06-04-02 | COVERED |
+| REQ | WIRE-07 | Injected per-command invocation correlation | 06-01, 06-02-01, 06-04-01 | COVERED |
+| REQ | JOUT-03 | Command output complete before promise settles | 06-03, 06-04-01 | COVERED |
+| REQ | JOUT-04 | Redacted internal-error in json/rpc; text unchanged | 06-02, 06-03, 06-04-02 | COVERED |
+| CONTEXT | D-01 | Canonical aliases only | 06-01-01/02 | COVERED |
+| CONTEXT | D-02 | Invalid commands retain recognized parent | 06-01-01/02 | COVERED |
+| CONTEXT | D-03 | Outer identity through delegation; bare browse | 06-01-01/02, 06-04-01 | COVERED |
+| CONTEXT | D-04 | Both marketplace-help spellings | 06-01-01/02 | COVERED |
+| CONTEXT | D-05 | Typed empty outcomes; missing-result error | 06-03-01/03 | COVERED |
+| CONTEXT | D-06 | Prompts/diagnostics excluded; help/usage valid | 06-03-01/03 | COVERED |
+| CONTEXT | D-07 | Partial entries retained; same ID and reload | 06-02-01/02, 06-03-01/02 | COVERED |
+| CONTEXT | D-08 | One recovery per append fault; success preserves later output/reload; only failed recovery suppresses; safe log; no retry/rollback | 06-03-02/03 | COVERED |
+| CONTEXT | D-09 | All roots, required metadata, injectable IDs | 06-01, 06-02-01 | COVERED |
+| CONTEXT | D-10 | Awaited completion, resolved errors, text/mode containment | 06-01..06-04 | COVERED |
+| RESEARCH | Roles | Edge selects routes/owns lifetime; shared resolves/delivers | 06-01-01, 06-02-01, 06-03-01 | COVERED |
+| RESEARCH | Preflight | Synchronous unsupported/stale-mode refusal before work | 06-01-02, 06-03-03 | COVERED |
+| RESEARCH | Root ownership | Original sink and one snapshot; load/hooks separate | 06-01-01/02 | COVERED |
+| RESEARCH | Factory compatibility | Tool callers project blocks without command lifetime | 06-01-01 | COVERED |
+| RESEARCH | Schema | Both envelopes strict; generated document and controls | 06-01-01, 06-02-01, 06-04-02 | COVERED |
+| RESEARCH | Outcome inventory | All existing kinds classified; empty fan-out constraints | 06-03-01/03 | COVERED |
+| RESEARCH | A1 / A2 | Catch-safe delivery, monotonic reload before attempts | 06-03-01/02 | COVERED |
+| RESEARCH | A3 | Returned/awaited operations plus late-use guard and evidence | 06-03-01, 06-04-01 | COVERED |
+| RESEARCH | Setup faults | Generator/inventory errors correlated without rerun | 06-02-01, 06-03-03 | COVERED |
+| RESEARCH | Cause handling | Existing depth/redaction, nullish/hostile safe causes, architecture disclosure enrollment | 06-02-01/02, 06-04-02 | COVERED |
+| RESEARCH | Capture discipline | Exact payloads, retained invalid attempts, UI trap | 06-01-01, 06-04-02 | COVERED |
+| RESEARCH | Preservation | 3149/0 corpus, catalog base 26cb0056, live mode | All plans; 06-04-02 | COVERED |
+| RESEARCH | Quality | Direct pairs, full combined-tree gates, no new dependency | All plans | COVERED |
+| RESEARCH | A4 / A5 / A6 | Measured timings pending, local security rigor, no migration | All plans and this validation contract | COVERED |
+
+Excluded correctly: Phase 7 browse/device-flow mode refusals, real-Pi e2e,
+public schema/limitation documentation, policy wording and catalog prose
+closeout. No deferred context idea is implemented.
+
+## Preservation and combined-tree commands
+
+Use these inherited root-relative commands, without recapture:
+
+```bash
+npm run check
+set -o pipefail; node scripts/notify-corpus.mjs check 2>&1 | node --input-type=module -e 'import assert from "node:assert/strict"; import fs from "node:fs"; const lines = fs.readFileSync(0, "utf8").split(String.fromCharCode(10)); assert.deepStrictEqual(lines.filter((line) => line.startsWith("missing in ") || line.startsWith("extra in ")), []); assert.ok(lines.includes("Notify corpus check passed: 3149 baseline entries present, 0 extra.")); console.log("Corpus: 3149 present, 0 extra");'
+git diff --exit-code 26cb0056 -- docs/output-catalog.md
+```
+
+A bare corpus-tool pass is insufficient because it can retain extra entries.
+Existing tests cannot silently lose corpus occurrences. Added tests should
+use JSON/RPC or pure, noncapturing assertion/formatter seams. Do not change
+existing text tests' mode or capture participation merely to balance counts.
+
+## Wave 0 and artifacts
+
+No new test framework or external setup is required. 06-01-01 extends seeds
+with deterministic origin and preserves capture validation. 06-02-01 creates
+the new direct pairs before verifying their new production modules:
+
+- extensions/pi-claude-marketplace/edge/command-run.ts and tests/edge/command-run.test.ts
+- extensions/pi-claude-marketplace/shared/notification-command-error.ts and tests/shared/notification-command-error.test.ts
+
+Other produced artifacts: regenerated schema/claude-plugin.schema.json,
+updated existing source/owner tests, completed 06-VALIDATION.md, and
+06-01-SUMMARY.md through 06-04-SUMMARY.md. Every SUMMARY must include
+`## Threat Flags`, even when the answer is None. No unused intermediate
+production module or export is permitted.
+
+## Validation sign-off
+
+- [x] All nine tasks have explicit automated verification and fails_when.
+- [x] Task IDs and phase-unique threat references are assigned.
+- [x] All four requirement IDs appear in plan requirements.
+- [x] All ten locked decisions appear in plan must_haves.
+- [x] All 12 edge probes and both kept prohibitions are carried.
+- [x] No watch flags, new packages, or external setup are planned.
+- [x] User approved the scope-only 61-file size exception for 06-01 (option 1, 2026-10-09).
+- [ ] Independent checker reviews the plan with the approved size exception and accepts contract assumptions.
+- [ ] Every owner command passes and its latency is recorded.
+- [ ] New source-test pairs reach 100% direct coverage.
 - [ ] Strict text corpus and catalog checks pass.
-- [ ] Combined-tree `npm run check` passes.
-- [ ] Validation audit sets `nyquist_compliant: true` only after evidence exists.
+- [ ] Combined-wave and phase npm run check passes.
+- [ ] High/critical threats have verified mitigations.
+- [ ] Descriptor-less prohibition flags are surfaced to parent/verifier.
+- [ ] Validation audit sets nyquist_compliant true only after execution evidence.
 
-**Approval:** Pending execution and validation audit.
+**Approval:** User decisions and the scope-only 06-01 size exception approved
+(option 1, 2026-10-09); independent checker review, implementation, and
+validation evidence remain pending. All tests and review gates are retained.
