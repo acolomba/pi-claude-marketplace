@@ -250,3 +250,100 @@ test("ASTAT-02: a payload whose getter throws stays inside the handler and reads
   // assert
   assert.strictEqual(tracker.lookup("plugin_alpha_api_"), "no-snapshot");
 });
+
+/** A value that converts to "connected" first and to "constructor" afterwards. */
+function shiftingKey(): object {
+  let conversions = 0;
+  return {
+    toString: () => {
+      conversions += 1;
+      return conversions === 1 ? "connected" : "constructor";
+    },
+  };
+}
+
+/** An accessor that answers `first` on its first read and `later()` afterwards. */
+function swappingField(first: string, later: () => unknown): () => unknown {
+  let reads = 0;
+  return () => {
+    reads += 1;
+    return reads === 1 ? first : later();
+  };
+}
+
+for (const { label, server } of [
+  {
+    label: "a status that turns into an object after the check",
+    server: () => {
+      const status = swappingField("connected", shiftingKey);
+      return {
+        name: "plugin_alpha_api_",
+        get status() {
+          return status();
+        },
+      };
+    },
+  },
+  {
+    label: "a name that turns into an object after the check",
+    server: () => {
+      const name = swappingField("plugin_alpha_api_", shiftingKey);
+      return {
+        get name() {
+          return name();
+        },
+        status: "connected",
+      };
+    },
+  },
+  {
+    label: "a status whose second read throws",
+    server: () => {
+      const status = swappingField("connected", () => {
+        throw new Error("hostile getter");
+      });
+      return {
+        name: "plugin_alpha_api_",
+        get status() {
+          return status();
+        },
+      };
+    },
+  },
+]) {
+  test(`ASTAT-02: ${label} reads as no usable snapshot`, () => {
+    // arrange
+    const { events, publish } = capturingSource();
+    const tracker = createMcpStatusTracker(events);
+    publish({ version: 1, servers: [{ name: "plugin_alpha_api_", status: "connected" }] });
+
+    // act
+    publish({ version: 1, servers: [server()] });
+
+    // assert
+    assert.strictEqual(tracker.lookup("plugin_alpha_api_"), "no-snapshot");
+  });
+}
+
+test("ASTAT-02: a status that turns into an unknown string after the check answers unrecognized", () => {
+  // arrange
+  const { events, publish } = capturingSource();
+  const tracker = createMcpStatusTracker(events);
+  const status = swappingField("connected", () => "constructor");
+
+  // act
+  publish({
+    version: 1,
+    servers: [
+      {
+        name: "plugin_alpha_api_",
+        get status() {
+          return status();
+        },
+      },
+    ],
+  });
+
+  // assert
+  assert.strictEqual(tracker.lookup("plugin_alpha_api_"), "unrecognized");
+});

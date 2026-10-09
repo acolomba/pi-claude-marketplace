@@ -71,12 +71,28 @@ export interface McpStatusReader {
 // An empty `servers` list is the adapter's session-start and shutdown
 // snapshot, so it reads as no usable snapshot. A later entry for a repeated
 // name wins, as it does in a `Map` built in array order.
+//
+// ASTAT-02: Pi's bus hands every subscriber the emitter's own object, so an
+// accessor can answer the validator with a string and later answer with
+// something else. Each field is read once after the check, and only a copy
+// that is still a string is stored; any other copy voids the snapshot.
 function readSnapshot(payload: unknown): ReadonlyMap<string, string> | undefined {
-  if (!MCP_STATUS_SNAPSHOT_VALIDATOR.Check(payload) || payload.servers.length === 0) {
+  if (!MCP_STATUS_SNAPSHOT_VALIDATOR.Check(payload)) {
     return undefined;
   }
 
-  return new Map(payload.servers.map((server) => [server.name, server.status]));
+  const statuses = new Map<string, string>();
+  for (const server of payload.servers) {
+    const name: unknown = server.name;
+    const status: unknown = server.status;
+    if (typeof name !== "string" || typeof status !== "string") {
+      return undefined;
+    }
+
+    statuses.set(name, status);
+  }
+
+  return statuses.size === 0 ? undefined : statuses;
 }
 
 /**
