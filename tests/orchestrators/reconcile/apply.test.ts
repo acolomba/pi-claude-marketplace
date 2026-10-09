@@ -2540,7 +2540,11 @@ describe("applyReconcile", () => {
         getAllTools: () => inventory.getAllTools(),
         appendEntry: capture.entrySink.appendEntry,
       };
-      const run = openNotificationRun(pi);
+      const run = openNotificationRun(pi, {
+        kind: "command",
+        commandId: "plugin",
+        invocationId: "test-run",
+      });
       const { gitOps, clonedUrls } = createOfflineGitOps();
 
       // act
@@ -2556,6 +2560,7 @@ describe("applyReconcile", () => {
           customType: "claude-plugin",
           payload: {
             schemaVersion: 1,
+            origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
             kind: "reconcile-applied-cascade",
             severity: "info",
             needsReload: false,
@@ -2581,6 +2586,7 @@ describe("applyReconcile", () => {
           customType: "claude-plugin",
           payload: {
             schemaVersion: 1,
+            origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
             kind: "diagnostic",
             severity: "warning",
             needsReload: false,
@@ -2660,6 +2666,7 @@ describe("applyReconcile", () => {
         customType: "claude-plugin",
         payload: {
           schemaVersion: 1,
+          origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
           kind: "reconcile-applied-cascade",
           severity: "info",
           needsReload: false,

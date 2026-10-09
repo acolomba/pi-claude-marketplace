@@ -675,7 +675,13 @@ function probePresentation(message: NotificationMessage): LeakProbe {
   assert.strictEqual(delivered.length, 1, "AUTH-09 / PMOD-04: notify delivers one text");
   return {
     presentation: JSON.stringify(presentation),
-    payload: JSON.stringify(toWirePayload(presentation)),
+    payload: JSON.stringify(
+      toWirePayload(presentation, {
+        kind: "command",
+        commandId: "plugin",
+        invocationId: "test-run",
+      }),
+    ),
     text: delivered.join("\n"),
   };
 }
@@ -684,7 +690,9 @@ function probeRawSurface(surface: RawSurface): LeakProbe {
   const resolved = resolveRawSurface(surface);
   return {
     presentation: JSON.stringify(resolved),
-    payload: JSON.stringify(toWirePayload(resolved)),
+    payload: JSON.stringify(
+      toWirePayload(resolved, { kind: "command", commandId: "plugin", invocationId: "test-run" }),
+    ),
     text: formatRawSurface(resolved)?.[0] ?? "",
   };
 }
@@ -692,7 +700,13 @@ function probeRawSurface(surface: RawSurface): LeakProbe {
 function probeComposedText(presentation: NotificationPresentation, body: string): LeakProbe {
   return {
     presentation: JSON.stringify(presentation),
-    payload: JSON.stringify(toWirePayload(presentation)),
+    payload: JSON.stringify(
+      toWirePayload(presentation, {
+        kind: "command",
+        commandId: "plugin",
+        invocationId: "test-run",
+      }),
+    ),
     text: formatEnvelopeArguments(presentation.envelope, body)[0],
   };
 }

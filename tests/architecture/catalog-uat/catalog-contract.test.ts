@@ -171,7 +171,11 @@ function renderFailure(example: CatalogExample, fixtures: FixtureMap): ContractF
   }
 
   const boundary = makeCtx();
-  const run = openNotificationRun(fixture.pi);
+  const run = openNotificationRun(fixture.pi, {
+    kind: "command",
+    commandId: "plugin",
+    invocationId: "test-run",
+  });
   if (fixture.emit !== undefined) {
     fixture.emit(boundary.ctx, run);
   } else {

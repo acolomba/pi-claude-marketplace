@@ -5146,6 +5146,7 @@ for (const mode of ["json", "rpc"]) {
             customType: "claude-plugin",
             payload: {
               schemaVersion: 1,
+              origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
               kind: "cascade",
               severity: "info",
               needsReload: true,
@@ -5171,6 +5172,7 @@ for (const mode of ["json", "rpc"]) {
             customType: "claude-plugin",
             payload: {
               schemaVersion: 1,
+              origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
               kind: "diagnostic",
               severity: "warning",
               needsReload: false,

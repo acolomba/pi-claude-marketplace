@@ -42,9 +42,9 @@ import { loadVisibleMarketplaces } from "../../orchestrators/marketplace/shared.
 import { loadPluginListPayload } from "../../orchestrators/plugin/list-flow.ts";
 import { LIST_CONTEXT as PLUGIN_LIST_CONTEXT } from "../../orchestrators/plugin/list.messaging.ts";
 import { errorMessage } from "../../shared/errors.ts";
-import { toWirePayload } from "../../shared/notification-json.ts";
+import { toWireMarketplaces } from "../../shared/notification-json.ts";
 import { presentCascade } from "../../shared/notification-present.ts";
-import { openNotificationRun } from "../../shared/notification-run.ts";
+import { openNotificationSnapshot } from "../../shared/notification-run.ts";
 import { pluginVersion } from "../../shared/notification-types.ts";
 
 import type { ParsedSource } from "../../domain/source.ts";
@@ -117,17 +117,19 @@ export function registerListMarketplacesTool(pi: ExtensionAPI): void {
 
       // LLMT-01 / D-09: the details are the wire blocks of the blocks
       // `/claude:plugin marketplace list` emits, under its row policies.
-      const run = openNotificationRun(pi);
+      const run = openNotificationSnapshot(pi);
       const listMessage: CascadeNotificationMessage = {
         marketplaces: entries.map((entry) => entry.block),
         label: MARKETPLACE_LIST_CONTEXT.Messaging.label,
         cardinality: "plural",
       };
       const { rowPolicies } = MARKETPLACE_LIST_CONTEXT;
-      const payloadDetails = toWirePayload(presentCascade(run, listMessage, rowPolicies));
+      const payloadDetails = toWireMarketplaces(
+        presentCascade(run, listMessage, rowPolicies).marketplaces,
+      );
       return {
         content: [{ type: "text", text: lines.join("\n") }],
-        details: { marketplaces: payloadDetails.marketplaces },
+        details: { marketplaces: payloadDetails },
       };
     },
   });
@@ -484,17 +486,19 @@ export function registerListPluginsTool(pi: ExtensionAPI): void {
       // LLMT-01 / D-09: the details are the wire blocks of the kept rows,
       // resolved under the list command's row policies and this invocation's
       // soft-dependency snapshot, so each row keeps its verbatim status.
-      const run = openNotificationRun(pi);
+      const run = openNotificationSnapshot(pi);
       const listMessage: CascadeNotificationMessage = {
         marketplaces,
         label: PLUGIN_LIST_CONTEXT.Messaging.label,
         cardinality: "plural",
       };
       const { rowPolicies } = PLUGIN_LIST_CONTEXT;
-      const payloadDetails = toWirePayload(presentCascade(run, listMessage, rowPolicies));
+      const payloadDetails = toWireMarketplaces(
+        presentCascade(run, listMessage, rowPolicies).marketplaces,
+      );
       return {
         content: [{ type: "text", text: lines.join("\n") }],
-        details: { marketplaces: payloadDetails.marketplaces },
+        details: { marketplaces: payloadDetails },
       };
     },
   });

@@ -86,7 +86,7 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
     ctx: ExtensionContext,
   ): Promise<void> {
     requireNotificationMode(ctx.mode);
-    const run = openNotificationRun(pi);
+    const run = openNotificationRun(pi, { kind: "load" });
     try {
       await hooksHydration.hydrateProjectScopeForCwd(event.cwd);
     } catch (err) {

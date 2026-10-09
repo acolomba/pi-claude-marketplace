@@ -261,8 +261,22 @@ const RETAINED_WORKFLOW = Type.Object(
  * D-01 / WIRE-05: the envelope fields every payload kind carries. `summary` is
  * present on warning and error payloads only, and it may be empty.
  */
+const ORIGIN = Type.Union([
+  Type.Object(
+    {
+      kind: Type.Literal("command"),
+      commandId: Type.String({ minLength: 1 }),
+      invocationId: Type.String({ minLength: 1 }),
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object({ kind: Type.Literal("load") }, { additionalProperties: false }),
+  Type.Object({ kind: Type.Literal("hook") }, { additionalProperties: false }),
+]);
+
 const ENVELOPE_FIELDS = {
   schemaVersion: Type.Literal(1),
+  origin: ORIGIN,
   severity: SEVERITY,
   needsReload: Type.Boolean(),
   summary: Type.Optional(Type.String()),
@@ -478,6 +492,7 @@ const PRUNE_COMMITTED_WARNING_PAYLOAD = Type.Object(
  */
 const RAW_ENVELOPE_FIELDS = {
   schemaVersion: Type.Literal(1),
+  origin: ORIGIN,
   severity: SEVERITY,
   needsReload: Type.Boolean(),
 };

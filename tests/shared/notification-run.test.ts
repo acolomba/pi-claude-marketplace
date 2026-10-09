@@ -6,6 +6,7 @@ import { mock, verify, when } from "strong-mock";
 import { UnsupportedModeError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 import {
   openNotificationRun,
+  openNotificationSnapshot,
   requireNotificationMode,
 } from "../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 
@@ -15,7 +16,64 @@ import type {
   ToolInventory,
   ToolInventoryItem,
 } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
-import type { NotificationEntrySink } from "../../extensions/pi-claude-marketplace/shared/notification-run.ts";
+import type {
+  NotificationEntrySink,
+  NotificationOrigin,
+} from "../../extensions/pi-claude-marketplace/shared/notification-run.ts";
+
+void ({
+  kind: "command",
+  commandId: "plugin list",
+  invocationId: "run-a",
+} satisfies NotificationOrigin);
+void ({ kind: "load" } satisfies NotificationOrigin);
+void ({ kind: "hook" } satisfies NotificationOrigin);
+// @ts-expect-error command origins require invocation correlation
+void ({ kind: "command", commandId: "plugin list" } satisfies NotificationOrigin);
+// @ts-expect-error command origins require a canonical command ID
+void ({ kind: "command", invocationId: "run-a" } satisfies NotificationOrigin);
+// @ts-expect-error load origins carry no command fields
+void ({ kind: "load", commandId: "plugin list" } satisfies NotificationOrigin);
+// @ts-expect-error hook origins carry no invocation fields
+void ({ kind: "hook", invocationId: "run-a" } satisfies NotificationOrigin);
+// @ts-expect-error null is not an origin
+void (null satisfies NotificationOrigin);
+
+test("takes a snapshot without an entry sink or command identity", () => {
+  // arrange
+  const inventory = mock<ToolInventory>({ exactParams: true, name: "tool inventory" });
+  when(() => inventory.getAllTools())
+    .thenReturn([])
+    .times(3);
+
+  // act
+  const snapshot = openNotificationSnapshot(inventory);
+
+  // assert
+  assert.deepStrictEqual(snapshot, {
+    softDeps: { piSubagentsLoaded: false, piMcpAdapterLoaded: false, workflowEngineLoaded: false },
+  });
+  verify(inventory);
+});
+
+test("keeps the root identity when the supplied origin later changes", () => {
+  // arrange
+  const origin = { kind: "command", commandId: "plugin list", invocationId: "run-a" } as const;
+  const supplied = { ...origin };
+  const pi = { getAllTools: () => [], appendEntry: () => {} };
+  const run = openNotificationRun(pi, supplied);
+
+  // act
+  Object.assign(supplied, { invocationId: "run-b" });
+
+  // assert
+  assert.deepStrictEqual(run.origin, {
+    kind: "command",
+    commandId: "plugin list",
+    invocationId: "run-a",
+  });
+  assert.strictEqual(run.entrySink, pi);
+});
 
 test("D-05: opening a run reads the tool inventory exactly three times", () => {
   // arrange
@@ -28,10 +86,15 @@ test("D-05: opening a run reads the tool inventory exactly three times", () => {
     .times(3);
 
   // act
-  const run = openNotificationRun(pi);
+  const run = openNotificationRun(pi, {
+    kind: "command",
+    commandId: "plugin",
+    invocationId: "test-run",
+  });
 
   // assert
   assert.deepStrictEqual(run, {
+    origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
     softDeps: { piSubagentsLoaded: true, piMcpAdapterLoaded: true, workflowEngineLoaded: false },
     entrySink: pi,
   });
@@ -47,7 +110,11 @@ test("D-05: a run keeps its snapshot when the inventory later answers differentl
       runWithNothingLoaded().entrySink.appendEntry(customType, payload);
     },
   } satisfies ToolInventory & NotificationEntrySink;
-  const run = openNotificationRun(pi);
+  const run = openNotificationRun(pi, {
+    kind: "command",
+    commandId: "plugin",
+    invocationId: "test-run",
+  });
 
   // act
   tools = [{ name: "subagent" }, { name: "mcp" }, { name: "workflow_control" }];

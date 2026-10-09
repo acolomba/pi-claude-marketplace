@@ -400,7 +400,7 @@ function emitPresentation(
       return;
     case "json":
     case "rpc":
-      run.entrySink.appendEntry("claude-plugin", toWirePayload(presentation));
+      run.entrySink.appendEntry("claude-plugin", toWirePayload(presentation, run.origin));
       return;
   }
 }

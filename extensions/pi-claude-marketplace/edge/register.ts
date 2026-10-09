@@ -34,6 +34,8 @@
 // notifyUsageError; the session_start wrapper installs an autocomplete
 // provider but does NOT emit user-visible messages.
 
+import { randomUUID } from "node:crypto";
+
 import { makeLocationsResolver } from "../orchestrators/edge-deps.ts";
 import { createNodeReinstallPlugins } from "../orchestrators/plugin/reinstall-flow.ts";
 import { hookDebugLog } from "../shared/debug-log.ts";
@@ -66,7 +68,7 @@ import { makeReinstallHandler } from "./handlers/plugin/reinstall.ts";
 import { makeUninstallHandler } from "./handlers/plugin/uninstall.ts";
 import { makeUpdateHandler } from "./handlers/plugin/update.ts";
 import { registerListMarketplacesTool, registerListPluginsTool } from "./handlers/tools.ts";
-import { routeClaudePlugin } from "./router.ts";
+import { routeClaudePlugin, selectClaudePluginRoute } from "./router.ts";
 
 import type { SubcommandHandlers } from "./router.ts";
 import type { EdgeDeps } from "./types.ts";
@@ -92,7 +94,9 @@ export function registerClaudePluginCommand(
   deps: EdgeDeps,
   hooksRouting: InstallHooksRouting,
   updatePlugins: UpdatePluginsFn,
+  options: { readonly createInvocationId?: () => string } = {},
 ): void {
+  const createInvocationId = options.createInvocationId ?? randomUUID;
   const reinstallPlugins = createNodeReinstallPlugins(hooksRouting, deps.completionCache);
   const install = makeInstallHandler(hooksRouting, deps.completionCache);
   const uninstall = makeUninstallHandler(hooksRouting, deps.completionCache);
@@ -139,7 +143,13 @@ export function registerClaudePluginCommand(
     // A usage error opens its run too.
     handler: (args, ctx) => {
       requireNotificationMode(ctx.mode);
-      return routeClaudePlugin(args, handlers, ctx, openNotificationRun(pi));
+      const route = selectClaudePluginRoute(args, handlers);
+      const run = openNotificationRun(pi, {
+        kind: "command",
+        commandId: route.commandId,
+        invocationId: createInvocationId(),
+      });
+      return routeClaudePlugin(route, handlers, ctx, run);
     },
     // This `process.cwd()` is the single sanctioned site.
     // The arrow body runs per completion lookup and reads

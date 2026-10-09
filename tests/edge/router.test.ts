@@ -39,6 +39,7 @@ import { mock, verify, when } from "strong-mock";
 import {
   MARKETPLACE_SUBCOMMANDS,
   routeClaudePlugin,
+  selectClaudePluginRoute,
   TOP_LEVEL_SUBCOMMANDS,
   type SubcommandHandlers,
 } from "../../extensions/pi-claude-marketplace/edge/router.ts";
@@ -50,6 +51,44 @@ import { createNotificationBoundary } from "./notification-boundary.ts";
 import { createMachineNotificationBoundary } from "./notification-boundary.ts";
 
 import type { ExtensionCommandContext } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+
+test("executes a selected list route without selecting its handler again", async () => {
+  // arrange
+  const { ctx, run, capture, verifyBoundary } = createMachineNotificationBoundary("json");
+  const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "handlers" });
+  when(() => handlers.list)
+    .thenReturn((args, handlerCtx, handlerRun) => {
+      assert.strictEqual(args, "--scope project");
+      assert.strictEqual(handlerCtx, ctx);
+      assert.strictEqual(handlerRun, run);
+      notify(handlerCtx, handlerRun, { marketplaces: [] });
+      return Promise.resolve();
+    })
+    .times(1);
+  const route = selectClaudePluginRoute("ls --scope project", handlers);
+
+  // act
+  await routeClaudePlugin(route, handlers, ctx, run);
+
+  // assert
+  assert.strictEqual(route.commandId, "plugin list");
+  assert.deepStrictEqual(capture.entries, [
+    {
+      customType: "claude-plugin",
+      payload: {
+        schemaVersion: 1,
+        kind: "cascade",
+        severity: "info",
+        needsReload: false,
+        origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+        marketplaces: [],
+      },
+    },
+  ]);
+  capture.assertValid();
+  verifyBoundary();
+  verify(handlers);
+});
 
 test("preserves ordered duplicate rejections around a handler emission on the same run", async () => {
   // arrange
@@ -82,6 +121,7 @@ test("preserves ordered duplicate rejections around a handler emission on the sa
     customType: "claude-plugin",
     payload: {
       schemaVersion: 1,
+      origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
       kind: "usage-error",
       severity: "error",
       needsReload: false,
@@ -95,6 +135,7 @@ test("preserves ordered duplicate rejections around a handler emission on the sa
       customType: "claude-plugin",
       payload: {
         schemaVersion: 1,
+        origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
         kind: "cascade",
         severity: "info",
         needsReload: false,
@@ -128,6 +169,7 @@ test("appends a complete unknown-command usage error in json", async () => {
       customType: "claude-plugin",
       payload: {
         schemaVersion: 1,
+        origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
         kind: "usage-error",
         severity: "error",
         needsReload: false,
@@ -143,9 +185,30 @@ test("appends a complete unknown-command usage error in json", async () => {
 
 type HandlerName = keyof SubcommandHandlers;
 
+test("selects marketplace help when the complete trimmed help topic matches", () => {
+  // arrange
+  const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "handlers" });
+  const help = (): Promise<void> => Promise.resolve();
+  when(() => handlers.help)
+    .thenReturn(help)
+    .times(1);
+
+  // act
+  const route = selectClaudePluginRoute("help  marketplace  ", handlers);
+
+  // assert
+  assert.deepStrictEqual(route, {
+    commandId: "marketplace help",
+    handler: help,
+    args: "marketplace  ",
+  });
+  verify(handlers);
+});
+
 interface DispatchRow {
   readonly subcommand: string;
   readonly handler: HandlerName;
+  readonly commandId: string;
   readonly expectedArgs?: string;
   /** Operand text this row is driven with, for a verb the shared one is invalid for. */
   readonly operand?: string;
@@ -155,37 +218,51 @@ interface DispatchRow {
 // dispatch instead of reaching a handler. Each target member is written out by
 // hand; none is read back off the router.
 const TOP_LEVEL_DISPATCH: readonly DispatchRow[] = [
-  { subcommand: "bootstrap", handler: "bootstrap" },
-  { subcommand: "install", handler: "install" },
-  { subcommand: "uninstall", handler: "uninstall" },
-  { subcommand: "prune", handler: "prune" },
-  { subcommand: "update", handler: "update" },
-  { subcommand: "fetch", handler: "fetch" },
-  { subcommand: "reinstall", handler: "reinstall" },
-  { subcommand: "list", handler: "list" },
-  { subcommand: "ls", handler: "list" },
-  { subcommand: "info", handler: "pluginInfo" },
-  { subcommand: "pending", handler: "pending" },
-  { subcommand: "enable", handler: "enable" },
-  { subcommand: "disable", handler: "disable" },
-  { subcommand: "import", handler: "import" },
-  { subcommand: "browse", handler: "browse" },
-  { subcommand: "help", handler: "help" },
+  { subcommand: "bootstrap", handler: "bootstrap", commandId: "plugin bootstrap" },
+  { subcommand: "install", handler: "install", commandId: "plugin install" },
+  { subcommand: "uninstall", handler: "uninstall", commandId: "plugin uninstall" },
+  { subcommand: "prune", handler: "prune", commandId: "plugin prune" },
+  { subcommand: "update", handler: "update", commandId: "plugin update" },
+  { subcommand: "fetch", handler: "fetch", commandId: "plugin fetch" },
+  { subcommand: "reinstall", handler: "reinstall", commandId: "plugin reinstall" },
+  { subcommand: "list", handler: "list", commandId: "plugin list" },
+  { subcommand: "ls", handler: "list", commandId: "plugin list" },
+  { subcommand: "info", handler: "pluginInfo", commandId: "plugin info" },
+  { subcommand: "pending", handler: "pending", commandId: "plugin pending" },
+  { subcommand: "enable", handler: "enable", commandId: "plugin enable" },
+  { subcommand: "disable", handler: "disable", commandId: "plugin disable" },
+  { subcommand: "import", handler: "import", commandId: "plugin import" },
+  { subcommand: "browse", handler: "browse", commandId: "plugin browse" },
+  { subcommand: "help", handler: "help", commandId: "plugin help" },
 ];
 
 const MARKETPLACE_DISPATCH: readonly DispatchRow[] = [
-  { subcommand: "add", handler: "marketplaceAdd" },
-  { subcommand: "remove", handler: "marketplaceRemove" },
-  { subcommand: "rm", handler: "marketplaceRemove" },
-  { subcommand: "list", handler: "marketplaceList" },
-  { subcommand: "ls", handler: "marketplaceList" },
-  { subcommand: "info", handler: "marketplaceInfo" },
-  { subcommand: "update", handler: "marketplaceUpdate" },
-  { subcommand: "autoupdate", handler: "marketplaceAutoupdate" },
-  { subcommand: "noautoupdate", handler: "marketplaceNoautoupdate" },
+  { subcommand: "add", handler: "marketplaceAdd", commandId: "marketplace add" },
+  { subcommand: "remove", handler: "marketplaceRemove", commandId: "marketplace remove" },
+  { subcommand: "rm", handler: "marketplaceRemove", commandId: "marketplace remove" },
+  { subcommand: "list", handler: "marketplaceList", commandId: "marketplace list" },
+  { subcommand: "ls", handler: "marketplaceList", commandId: "marketplace list" },
+  { subcommand: "info", handler: "marketplaceInfo", commandId: "marketplace info" },
+  { subcommand: "update", handler: "marketplaceUpdate", commandId: "marketplace update" },
+  {
+    subcommand: "autoupdate",
+    handler: "marketplaceAutoupdate",
+    commandId: "marketplace autoupdate",
+  },
+  {
+    subcommand: "noautoupdate",
+    handler: "marketplaceNoautoupdate",
+    commandId: "marketplace noautoupdate",
+  },
   // The spelling fixes the topic, so this row carries no operand of its own --
   // and the router rejects one rather than discarding it.
-  { subcommand: "help", handler: "help", expectedArgs: "marketplace", operand: "" },
+  {
+    subcommand: "help",
+    handler: "help",
+    commandId: "marketplace help",
+    expectedArgs: "marketplace",
+    operand: "",
+  },
 ];
 
 const EXPECTED_TOP_LEVEL_USAGE =
@@ -216,6 +293,75 @@ const EXPECTED_MARKETPLACE_USAGE =
   "  update [<name>] [--scope user|project]\n" +
   "  autoupdate [<name>] [--scope user|project]\n" +
   "  noautoupdate [<name>] [--scope user|project]";
+
+for (const mode of ["json", "rpc"] as const) {
+  const spellings: readonly DispatchRow[] = [
+    ...TOP_LEVEL_DISPATCH,
+    ...MARKETPLACE_DISPATCH.map((row) => ({ ...row, subcommand: `marketplace ${row.subcommand}` })),
+    { subcommand: "", handler: "browse", commandId: "plugin browse" },
+    { subcommand: " \t ", handler: "browse", commandId: "plugin browse" },
+    {
+      subcommand: "help marketplace",
+      handler: "help",
+      commandId: "marketplace help",
+      expectedArgs: "marketplace",
+    },
+    {
+      subcommand: "help marketplace extra",
+      handler: "help",
+      commandId: "plugin help",
+      expectedArgs: "marketplace extra",
+    },
+    {
+      subcommand: "help invalid",
+      handler: "help",
+      commandId: "plugin help",
+      expectedArgs: "invalid",
+    },
+  ];
+  for (const { subcommand, handler, commandId, expectedArgs } of spellings) {
+    test(`attributes ${JSON.stringify(subcommand)} to ${commandId} in ${mode}`, async () => {
+      // arrange
+      const { ctx, run: seed, capture, verifyBoundary } = createMachineNotificationBoundary(mode);
+      const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "handlers" });
+      when(() => handlers[handler]).thenReturn((args, handlerCtx, handlerRun) => {
+        assert.strictEqual(args, expectedArgs ?? "");
+        notify(handlerCtx, handlerRun, { marketplaces: [] });
+        return Promise.resolve();
+      });
+      const selected = selectClaudePluginRoute(subcommand, handlers);
+      const run = {
+        ...seed,
+        origin: {
+          kind: "command",
+          commandId: selected.commandId,
+          invocationId: "route-run",
+        } as const,
+      };
+
+      // act
+      await routeClaudePlugin(selected, handlers, ctx, run);
+
+      // assert
+      assert.deepStrictEqual(capture.entries, [
+        {
+          customType: "claude-plugin",
+          payload: {
+            schemaVersion: 1,
+            kind: "cascade",
+            severity: "info",
+            needsReload: false,
+            origin: { kind: "command", commandId, invocationId: "route-run" },
+            marketplaces: [],
+          },
+        },
+      ]);
+      capture.assertValid();
+      verifyBoundary();
+      verify(handlers);
+    });
+  }
+}
 
 for (const { subcommand, handler } of TOP_LEVEL_DISPATCH) {
   test(`dispatches ${subcommand} to the ${handler} handler with the remaining argument text (AP-3)`, async () => {
@@ -592,31 +738,48 @@ test("names an unrecognized marketplace token back to the operator with the mark
 });
 
 for (const mode of ["json", "rpc"] as const) {
-  for (const { args, message, usage } of [
-    { args: "unknown", message: 'Unknown subcommand: "unknown".', usage: EXPECTED_TOP_LEVEL_USAGE },
+  for (const { args, message, usage, commandId } of [
+    {
+      args: "unknown",
+      commandId: "plugin",
+      message: 'Unknown subcommand: "unknown".',
+      usage: EXPECTED_TOP_LEVEL_USAGE,
+    },
     {
       args: "marketplace",
+      commandId: "marketplace",
       message: "marketplace requires a subcommand.",
       usage: EXPECTED_MARKETPLACE_USAGE,
     },
     {
       args: "marketplace unknown",
+      commandId: "marketplace",
       message: 'Unknown marketplace subcommand: "unknown".',
       usage: EXPECTED_MARKETPLACE_USAGE,
     },
     {
       args: "marketplace help extra",
+      commandId: "marketplace help",
       message: "marketplace help takes no arguments.",
       usage: "Usage: /claude:plugin marketplace help",
     },
   ]) {
     test(`appends router rejection for ${args} in ${mode}`, async () => {
       // arrange
-      const { ctx, run, capture, verifyBoundary } = createMachineNotificationBoundary(mode);
+      const { ctx, run: seed, capture, verifyBoundary } = createMachineNotificationBoundary(mode);
       const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "handlers" });
+      const selected = selectClaudePluginRoute(args, handlers);
+      const run = {
+        ...seed,
+        origin: {
+          kind: "command",
+          commandId: selected.commandId,
+          invocationId: "rejected-run",
+        } as const,
+      };
 
       // act
-      await routeClaudePlugin(args, handlers, ctx, run);
+      await routeClaudePlugin(selected, handlers, ctx, run);
 
       // assert
       assert.deepStrictEqual(capture.entries, [
@@ -624,6 +787,7 @@ for (const mode of ["json", "rpc"] as const) {
           customType: "claude-plugin",
           payload: {
             schemaVersion: 1,
+            origin: { kind: "command", commandId, invocationId: "rejected-run" },
             kind: "usage-error",
             severity: "error",
             needsReload: false,

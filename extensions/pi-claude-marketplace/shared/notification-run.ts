@@ -19,14 +19,33 @@ export function requireNotificationMode(mode: string): ExtensionMode {
 }
 
 /**
- * D-06: the per-invocation notification run. One command invocation or one
- * load pass opens exactly one run, and every notification it emits reads the
- * run's snapshot and original host entry sink. Mode stays on the live context.
+ * D-05: the per-invocation presentation snapshot, shared by every emission
+ * or tool projection in that invocation. Mode stays on the live context.
  */
-export interface NotificationRun {
+export interface NotificationSnapshot {
   /** D-05: the one soft-dependency snapshot every emission of the run reads. */
   readonly softDeps: SoftDepStatus;
+}
+
+/** Identifies the independent root that owns an emission. */
+export type NotificationOrigin =
+  | {
+      readonly kind: "command";
+      readonly commandId: string;
+      readonly invocationId: string;
+    }
+  | { readonly kind: "load" }
+  | { readonly kind: "hook" };
+
+/** Carries a root's immutable identity, snapshot, and original host sink. */
+export interface NotificationRun extends NotificationSnapshot {
+  readonly origin: NotificationOrigin;
   readonly entrySink: NotificationEntrySink;
+}
+
+/** Takes the presentation snapshot used by commands and read-only tools. */
+export function openNotificationSnapshot(pi: ToolInventory): NotificationSnapshot {
+  return { softDeps: softDepStatus(pi) };
 }
 
 /**
@@ -34,6 +53,9 @@ export interface NotificationRun {
  * soft-dependency probe per run; the snapshot does not follow later changes
  * to the inventory.
  */
-export function openNotificationRun(pi: ToolInventory & NotificationEntrySink): NotificationRun {
-  return { softDeps: softDepStatus(pi), entrySink: pi };
+export function openNotificationRun(
+  pi: ToolInventory & NotificationEntrySink,
+  origin: NotificationOrigin,
+): NotificationRun {
+  return { ...openNotificationSnapshot(pi), origin: { ...origin }, entrySink: pi };
 }
