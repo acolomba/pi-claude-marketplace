@@ -3,17 +3,17 @@ gsd_state_version: "1.0"
 milestone: json-output
 current_phase: 6
 current_phase_name: Command-Run Contract
-status: executing
-stopped_at: Phase 6 context gathered
-last_updated: "2026-10-09T18:43:46.286Z"
+status: awaiting_human_verification
+stopped_at: Phase 6 redaction confirmation required before goal verification
+last_updated: "2026-10-09T22:42:57.003Z"
 last_activity: 2026-10-09
-last_activity_desc: Phase 6 execution started
-state_head: c1facc94d037e1e7c1f92033ff11635490cf5dce
+last_activity_desc: Phase 6 implementation and remediation checks passed
+state_head: 29f58775a264f146ceb0f7d137f0840e98949751
 progress:
   total_phases: 7
   completed_phases: 5
   total_plans: 39
-  completed_plans: 35
+  completed_plans: 39
 milestone_name: Mode-Keyed Presentation Strategies
 ---
 
@@ -30,12 +30,12 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: 6 (Command-Run Contract) — EXECUTING
-Plan: 1 of 4
-Status: Executing Phase 6
-Last activity: 2026-10-09 — Phase 6 execution started
+Phase: 6 (Command-Run Contract) — AWAITING DEVELOPER CONFIRMATION
+Plan: 4 of 4 complete
+Status: awaiting_human_verification
+Last activity: 2026-10-09 — Full gate, clean review, and security reassessment passed
 
-Progress: [███████░░░] 71% (5 of 7 phases fully verified; 35 of 35 plans complete)
+Progress: [███████░░░] 71% (5 of 7 phases fully verified; 39 of 39 plans complete)
 
 Phase 1's first plan captures the text wire-corpus baseline (every emitted
 `(message, severity)` pair and its argument count) before any renderer change;
@@ -345,3 +345,23 @@ archived milestone artifacts.
 - [Phase 04]: PMOD-04: an out-of-band plugin row without a name keeps that shape; resolveRows redacts a row name only when the row carries one
 
 - [Phase 04]: On 2026-10-06 the user accepted both conservative masking rules: split row names ending in scheme://host:port and hyphenated text after Bearer. Resume the review loop, re-verification, and autonomous continuation.
+
+## Current Verification Checkpoint
+
+Phase 6 implements all four plans. CR-01 is fixed by `e7a8182f`, `6680ff1b`,
+and `045f53cd`. The independent review is clean and all fifteen declared
+security threats are closed. `npm run check` passed at `045f53cd`, Node
+`v26.11.0`, with all 266 direct pairs. The strict corpus retains 3149 entries
+and zero extras. Only planning Markdown changed after these checks.
+
+The code-fixer workflow requires developer confirmation of redaction logic
+before goal verification. Recognized local paths become `[path]`.
+Ambiguous affected causes become `Command failure details omitted.`.
+Text output remains unchanged. No confirmation is recorded yet.
+
+After confirmation, run the final phase-goal verifier and record its input
+fingerprint. Keep the tracking/telemetry and rollback-transparency
+prohibitions visible for its explicit disposition. Then complete Phase 6
+and continue the original `gsd-autonomous --from 6 --interactive` run into
+Phase 7. No Phase 6 VERIFICATION.md exists yet. No phase or milestone
+completion is claimed by this checkpoint.
