@@ -31,7 +31,7 @@
     {
       "number": "6",
       "name": "Live MCP status in info",
-      "status": "pending"
+      "status": "in_progress"
     },
     {
       "number": "7",
@@ -44,5 +44,5 @@
     "label": "Advance to the next step",
     "reason": "Phase 06 of 7 · 71% · executing"
   },
-  "updated_at": "2026-10-09T18:30:35.028Z"
+  "updated_at": "2026-10-09T18:44:47.836Z"
 }

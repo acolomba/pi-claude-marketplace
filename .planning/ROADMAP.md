@@ -314,13 +314,13 @@ requirement (Phases 3 and 4), and no release may sit between the first write to
 3. Before the first status snapshot, after the adapter's empty shutdown snapshot, and when the adapter is absent, info shows an explicit unknown state instead of a guess. (ASTAT-02)
 4. Every new status token is a closed-catalog amendment in `docs/output-catalog.md`, and the catalog gates pass with the code. (ASTAT-02)
 
-**Plans**: 1/3 plans executed in 3 waves
+**Plans**: 2/3 plans executed in 3 waves
 
 **Wave 1**
 - [x] 06-01-PLAN.md — a factory-owned tracker of the adapter's status channel reaches `info` through `EdgeDeps`; each written server shows its state first in its parentheses, `status unknown` / `not loaded` otherwise; nine catalog tokens byte-locked (ASTAT-01, ASTAT-02)
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 06-02-PLAN.md — the same plugin in both scopes: the project row shows the state, the user row `overridden by project scope` (D-06-09; ASTAT-01, ASTAT-02)
+- [x] 06-02-PLAN.md — the same plugin in both scopes: the project row shows the state, the user row `overridden by project scope` (D-06-09; ASTAT-01, ASTAT-02)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 06-03-PLAN.md — conformance with pi-mcp-adapter 5.1.0: its own channel and version, the keys a real install writes in both scopes, the shutdown snapshot, a drift guard on its status union (ASTAT-01, ASTAT-02)
@@ -368,7 +368,7 @@ plan these phases with the UI gate skipped.
 | 3. Claude Code tool names and tool search | mcp-4 | 9/9 | Complete    | 2026-10-06 |
 | 4. Variable expansion at Claude Code parity | mcp-4 | 9/9 | Complete    | 2026-10-07 |
 | 5. Automatic migration on /reload | mcp-4 | 5/5 | Complete    | 2026-10-09 |
-| 6. Live MCP status in info | mcp-4 | 1/3 | In Progress | - |
+| 6. Live MCP status in info | mcp-4 | 2/3 | In Progress | - |
 | 7. Docs and live proof | mcp-4 | 0/TBD | Not started | - |
 
 ## Carried Forward
