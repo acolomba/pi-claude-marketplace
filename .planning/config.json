@@ -31,7 +31,8 @@
     "auto_advance": false,
     "compact_content": false,
     "skip_discuss": false,
-    "test_gate_timeout": 2400
+    "test_gate_timeout": 2400,
+    "_auto_chain_active": false
   },
   "effort": {
     "agent_overrides": {
@@ -47,8 +48,12 @@
     }
   },
   "agent_skills": {
-    "gsd-discuss-phase": ["skills/claude-code-compat-research"],
-    "gsd-advisor-researcher": ["skills/claude-code-compat-research"],
+    "gsd-discuss-phase": [
+      "skills/claude-code-compat-research"
+    ],
+    "gsd-advisor-researcher": [
+      "skills/claude-code-compat-research"
+    ],
     "gsd-executor": [
       "skills/typescript-comments",
       "skills/typescript-unit-testing",
@@ -77,8 +82,13 @@
       "skills/typescript-google-style-review",
       "skills/typescript-unit-testing-review"
     ],
-    "gsd-verifier": ["skills/typescript-unit-testing-review", "skills/local-verification"],
-    "gsd-planner": ["skills/local-verification"]
+    "gsd-verifier": [
+      "skills/typescript-unit-testing-review",
+      "skills/local-verification"
+    ],
+    "gsd-planner": [
+      "skills/local-verification"
+    ]
   },
   "mode": "yolo",
   "claude_md_assembly": {
