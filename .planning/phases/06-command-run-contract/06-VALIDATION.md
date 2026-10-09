@@ -2,7 +2,7 @@
 phase: "06"
 slug: command-run-contract
 status: validated
-nyquist_compliant: true
+nyquist_compliant: false
 wave_0_complete: true
 created: "2026-10-09"
 ---
@@ -415,7 +415,7 @@ production module or export is permitted.
 - [x] New source-test pairs reach 100% direct coverage in the final combined gate.
 - [x] Strict text corpus and catalog checks pass for the isolated 06-04 tree; combined-tree confirmation remains parent-owned.
 - [x] All combined-wave gates pass; final unchanged phase inputs share the fourth-wave result.
-- [x] Independent security audit verified all 15 declared mitigations; threats_open is 0.
+- [ ] CR-01 reopened path-disclosure coverage and T-06-04/T-06-14; remediation pending.
 - [x] Descriptor-less prohibition flags are surfaced to parent/verifier; both remain flagged-unverified.
 - [x] Independent validation audit found all nine tasks covered; nyquist_compliant is true.
 
@@ -563,3 +563,9 @@ Neither descriptor-less prohibition is promoted by this coverage audit.
 | Gaps found | 0 |
 | Resolved | 0 |
 | Escalated | 0 |
+
+## Review-discovered coverage gap
+
+CR-01 exposed untested absolute paths with spaces/Unicode and colon-prefixed
+diagnostics. Earlier coverage and gate results remain historical evidence;
+nyquist_compliant is false until new independent regression assertions pass.
