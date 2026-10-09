@@ -41,6 +41,27 @@ export type NotificationOrigin =
 export interface NotificationRun extends NotificationSnapshot {
   readonly origin: NotificationOrigin;
   readonly entrySink: NotificationEntrySink;
+  readonly commandState?: CommandRunState;
+}
+
+/** States of the command's original output transport. */
+export const COMMAND_DELIVERY = {
+  open: "open",
+  recovering: "recovering",
+  closed: "closed",
+} as const;
+
+/** Completion and delivery facts owned by one command invocation. */
+export interface CommandRunState {
+  hasOutcome: boolean;
+  needsReload: boolean;
+  settled: boolean;
+  delivery: "open" | "recovering" | "closed";
+}
+
+/** Allocates command state before identity or inventory work can fail. */
+export function createCommandRunState(): CommandRunState {
+  return { hasOutcome: false, needsReload: false, settled: false, delivery: "open" };
 }
 
 /** Takes the presentation snapshot used by commands and read-only tools. */
@@ -56,6 +77,13 @@ export function openNotificationSnapshot(pi: ToolInventory): NotificationSnapsho
 export function openNotificationRun(
   pi: ToolInventory & NotificationEntrySink,
   origin: NotificationOrigin,
+  commandState?: CommandRunState,
 ): NotificationRun {
-  return { ...openNotificationSnapshot(pi), origin: { ...origin }, entrySink: pi };
+  const state = origin.kind === "command" ? (commandState ?? createCommandRunState()) : undefined;
+  return {
+    ...openNotificationSnapshot(pi),
+    origin: { ...origin },
+    entrySink: pi,
+    ...(state === undefined ? {} : { commandState: state }),
+  };
 }

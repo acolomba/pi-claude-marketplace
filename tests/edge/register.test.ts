@@ -1019,7 +1019,7 @@ describe("registerClaudePluginCommand", () => {
   test("hands the argument text and the command context to the subcommand router (D-04)", async (t) => {
     // arrange
     await createHermeticScope(t, "command-handler");
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, undefined, 2);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, undefined, 3);
     // One run per invocation, usage errors included; the usage error probes nothing.
     const { registration, verifyRegistrar } = registerCommandUnderTest({ runs: 1 });
     const expectedNotifications: readonly Notification[] = [
@@ -1058,7 +1058,7 @@ describe("registerClaudePluginCommand", () => {
           value: cwd,
           reads: 1,
         },
-        2,
+        3,
       );
       // The one run is the only probe: the prune notification renders from it.
       const { registration, verifyRegistrar } = registerCommandWithCache(
@@ -1116,7 +1116,7 @@ describe("registerClaudePluginCommand", () => {
       const userTree = await retryTree(user.scopeRoot);
       const projectTree = await retryTree(project.scopeRoot);
       const lockSpy = t.mock.method(lockfile, "lock");
-      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, undefined, 2);
+      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, undefined, 3);
       // One run per invocation, usage errors included; the usage error probes nothing.
       const { registration, verifyRegistrar } = registerCommandUnderTest({ runs: 1 });
 
@@ -1149,7 +1149,7 @@ describe("registerClaudePluginCommand", () => {
         value: cwd,
         reads: 1,
       },
-      1,
+      2,
     );
     const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
     let forwardedHooksRouting: unknown;
@@ -1306,7 +1306,7 @@ describe("registerClaudePluginCommand", () => {
       .times(1);
     when(() => ctx.mode)
       .thenReturn("tui")
-      .times(3);
+      .times(4);
     when(() => ctx.ui)
       .thenReturn(ui)
       .times(2);
@@ -1437,7 +1437,7 @@ test("rebuilds completion rows through the cache that owns a successful register
     .times(1);
   when(() => ctx.mode)
     .thenReturn("tui")
-    .times(2);
+    .times(3);
   when(() => ctx.ui)
     .thenReturn(ui)
     .times(1);
@@ -1531,7 +1531,7 @@ test("rebuilds completion rows through the cache that owns a successful register
     .times(1);
   when(() => ctx.mode)
     .thenReturn("tui")
-    .times(2);
+    .times(3);
   when(() => ctx.ui)
     .thenReturn(ui)
     .times(1);
@@ -1643,7 +1643,7 @@ test("rebuilds completion rows through the cache that owns a successful register
     .times(1);
   when(() => ctx.mode)
     .thenReturn("tui")
-    .times(2);
+    .times(3);
   when(() => ctx.ui)
     .thenReturn(ui)
     .times(1);
@@ -1752,7 +1752,7 @@ test("rebuilds completion rows through the cache that owns a successful register
     .times(1);
   when(() => ctx.mode)
     .thenReturn("tui")
-    .times(2);
+    .times(3);
   when(() => ctx.ui)
     .thenReturn(ui)
     .times(1);
@@ -1880,7 +1880,7 @@ test("one soft-dep snapshot drives both the severity stamp and the markers of a 
     .times(1);
   when(() => ctx.mode)
     .thenReturn("tui")
-    .times(2);
+    .times(3);
   when(() => ctx.ui)
     .thenReturn(ui)
     .times(1);
@@ -1974,7 +1974,7 @@ test("rebuilds completion rows through the cache that owns a successful register
     .times(1);
   when(() => ctx.mode)
     .thenReturn("tui")
-    .times(2);
+    .times(3);
   when(() => ctx.ui)
     .thenReturn(ui)
     .times(1);
@@ -2082,7 +2082,7 @@ test("rebuilds completion rows through the cache that owns a successful register
     .times(1);
   when(() => ctx.mode)
     .thenReturn("tui")
-    .times(2);
+    .times(3);
   when(() => ctx.ui)
     .thenReturn(ui)
     .times(1);
@@ -2599,7 +2599,7 @@ for (const { verb, aliases = [], operand, usage, surplus, unknown } of COMMAND_A
       test(`registered ${spelling} rejects ${kind} before reading runtime context`, async (t) => {
         // arrange
         const { cwd } = await createHermeticScope(t, "reject-arguments");
-        const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, undefined, 2);
+        const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, undefined, 3);
         // One run per invocation, usage errors included; the usage error probes nothing.
         const { registration, verifyRegistrar } = registerCommandUnderTest({ runs: 1 });
 
@@ -2629,7 +2629,7 @@ for (const { verb, aliases = [], operand, usage } of COMMAND_ARGUMENT_CASES.filt
       test(`registered ${spelling} rejects the empty scope ${emptyValue} before a valid-looking token`, async (t) => {
         // arrange
         const { cwd } = await createHermeticScope(t, "reject-empty-scope");
-        const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, undefined, 2);
+        const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, undefined, 3);
         // One run per invocation, usage errors included; the usage error probes nothing.
         const { registration, verifyRegistrar } = registerCommandUnderTest({ runs: 1 });
 

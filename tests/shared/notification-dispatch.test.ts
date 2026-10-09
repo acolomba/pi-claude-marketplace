@@ -23,7 +23,10 @@ import {
   notifyUsageInfo,
 } from "../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
 import { CENTRAL_ROW_POLICY } from "../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
-import { openNotificationRun } from "../../extensions/pi-claude-marketplace/shared/notification-run.ts";
+import {
+  createCommandRunState,
+  openNotificationRun,
+} from "../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import { createJsonCapture } from "../edge/json-capture.ts";
 
 import {
@@ -33,9 +36,11 @@ import {
 } from "./notification-run-seeds.ts";
 
 import type {
+  NotificationContext as HostNotificationContext,
   ToolInventory,
   ToolInventoryItem,
 } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { NotificationRun } from "../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import type {
   CascadeNotificationMessage,
   NotificationMessage,
@@ -57,6 +62,282 @@ function createContext(t: TestContext): NotificationContext {
   };
 }
 
+for (const { message, outcome, reload } of [
+  { message: { kind: "cascade", marketplaces: [] }, outcome: true, reload: false },
+  {
+    message: {
+      kind: "marketplace-info",
+      name: "demo",
+      scope: "user",
+      details: { autoupdate: false },
+      source: { sourceKind: "path", absPath: "/demo" },
+    },
+    outcome: true,
+    reload: false,
+  },
+  {
+    message: {
+      kind: "plugin-info",
+      marketplaceName: "demo",
+      marketplaceScope: "user",
+      marketplaceDetails: { autoupdate: false },
+      plugin: { name: "one", status: "available", componentsResolved: false },
+    },
+    outcome: true,
+    reload: false,
+  },
+  {
+    message: {
+      kind: "marketplace-info-cascade",
+      blocks: [
+        {
+          kind: "marketplace-info",
+          name: "demo",
+          scope: "user",
+          details: { autoupdate: false },
+          source: { sourceKind: "path", absPath: "/demo" },
+        },
+      ],
+    },
+    outcome: true,
+    reload: false,
+  },
+  {
+    message: {
+      kind: "plugin-info-cascade",
+      blocks: [
+        {
+          kind: "plugin-info",
+          marketplaceName: "demo",
+          marketplaceScope: "user",
+          marketplaceDetails: { autoupdate: false },
+          plugin: { name: "one", status: "available", componentsResolved: false },
+        },
+      ],
+    },
+    outcome: true,
+    reload: false,
+  },
+  { message: { kind: "marketplace-not-added", name: "demo" }, outcome: true, reload: false },
+  { message: { kind: "reconcile-pending-empty" }, outcome: true, reload: false },
+  { message: { kind: "prune-empty", scope: "project" }, outcome: true, reload: false },
+  {
+    message: { kind: "prune-committed-warning", scope: "project", cause: new Error("Saved.") },
+    outcome: true,
+    reload: true,
+  },
+  {
+    message: { kind: "reconcile-applied-cascade", marketplaces: [] },
+    outcome: false,
+    reload: false,
+  },
+] satisfies Array<{ message: NotificationMessage; outcome: boolean; reload: boolean }>) {
+  test(`classifies ${message.kind} as command outcome ${outcome}`, () => {
+    // arrange
+    const capture = createJsonCapture();
+    const ctx = {
+      mode: "json",
+      get ui() {
+        return capture.ui;
+      },
+    };
+    const run = { ...runWithNothingLoaded(), entrySink: capture.entrySink };
+
+    // act
+    notify(ctx, run, message);
+
+    // assert
+    assert.deepStrictEqual(run.commandState, {
+      hasOutcome: outcome,
+      needsReload: reload,
+      settled: false,
+      delivery: "open",
+    });
+    assert.deepStrictEqual(
+      capture.entries.map((entry) => {
+        assert.ok(
+          entry.payload !== null && typeof entry.payload === "object" && "kind" in entry.payload,
+        );
+        return entry.payload.kind;
+      }),
+      [message.kind],
+    );
+    capture.assertValid();
+  });
+}
+
+for (const { kind, outcome, emit } of [
+  {
+    kind: "usage-error",
+    outcome: true,
+    emit: (ctx, run) => {
+      notifyUsageError(ctx, run, { message: "Invalid.", usage: "Help." });
+    },
+  },
+  {
+    kind: "usage-info",
+    outcome: true,
+    emit: (ctx, run) => {
+      notifyUsageInfo(ctx, run, "Help.");
+    },
+  },
+  {
+    kind: "internal-error",
+    outcome: true,
+    emit: (ctx, run) => {
+      assert.ok(run.origin.kind === "command" && run.commandState !== undefined);
+      notifyCommandError(ctx, run.entrySink, run.origin, run.commandState, new Error("Failed."));
+    },
+  },
+  {
+    kind: "diagnostic",
+    outcome: false,
+    emit: (ctx, run) => {
+      notifyDiagnostic(ctx, run, "Warning.", ["Detail."]);
+    },
+  },
+  {
+    kind: "device-flow-prompt",
+    outcome: false,
+    emit: (ctx, run) => {
+      notifyDeviceFlowPrompt(ctx, run, {
+        verificationUri: "https://example.test",
+        userCode: "ABCD",
+      });
+    },
+  },
+  {
+    kind: "reconcile-aborted",
+    outcome: false,
+    emit: (ctx, run) => {
+      notifyReconcileAborted(ctx, run, new Error("Failed."));
+    },
+  },
+  {
+    kind: "plugin-path-skipped",
+    outcome: false,
+    emit: (ctx, run) => {
+      notifyPluginPathSkipped(ctx, run, "user", "Unreadable.");
+    },
+  },
+  {
+    kind: "async-rewake-summary",
+    outcome: false,
+    emit: (ctx, run) => {
+      notifyAsyncRewakeSummary(ctx, run, "Done.");
+    },
+  },
+  {
+    kind: "stop-override-cap",
+    outcome: false,
+    emit: (ctx, run) => {
+      notifyStopHookOverrideCap(ctx, run, "one@demo", 3);
+    },
+  },
+] satisfies Array<{
+  kind: string;
+  outcome: boolean;
+  emit: (ctx: HostNotificationContext, run: NotificationRun) => void;
+}>) {
+  test(`classifies ${kind} as command outcome ${outcome}`, () => {
+    // arrange
+    const capture = createJsonCapture();
+    const ctx = {
+      mode: "json",
+      get ui() {
+        return capture.ui;
+      },
+    };
+    const run = { ...runWithNothingLoaded(), entrySink: capture.entrySink };
+
+    // act
+    emit(ctx, run);
+
+    // assert
+    assert.deepStrictEqual(run.commandState, {
+      hasOutcome: outcome,
+      needsReload: false,
+      settled: false,
+      delivery: "open",
+    });
+    assert.deepStrictEqual(
+      capture.entries.map((entry) => {
+        assert.ok(
+          entry.payload !== null && typeof entry.payload === "object" && "kind" in entry.payload,
+        );
+        return entry.payload.kind;
+      }),
+      [kind],
+    );
+    capture.assertValid();
+  });
+}
+
+for (const state of [
+  { hasOutcome: true, needsReload: false, settled: true, delivery: "open" },
+  { hasOutcome: false, needsReload: true, settled: false, delivery: "closed" },
+] as const) {
+  test(`suppresses notifications and errors for ${JSON.stringify(state)}`, () => {
+    // arrange
+    const run = { ...runWithNothingLoaded(), commandState: { ...state } };
+    const ctx = {
+      get mode(): string {
+        throw new Error("Unexpected mode access");
+      },
+      get ui(): never {
+        throw new Error("Unexpected UI access");
+      },
+    };
+    assert.ok(run.origin.kind === "command");
+
+    // act
+    notifyUsageInfo(ctx, run, "Late.");
+    notifyCommandError(ctx, run.entrySink, run.origin, run.commandState, new Error("Late."));
+
+    // assert
+    assert.deepStrictEqual(run.commandState, state);
+  });
+}
+
+for (const kind of ["load", "hook"] as const) {
+  test(`does not account ${kind} output as a command result`, () => {
+    // arrange
+    const capture = createJsonCapture();
+    const run = { ...runWithNothingLoaded(), origin: { kind }, entrySink: capture.entrySink };
+    const ctx = {
+      mode: "json",
+      get ui() {
+        return capture.ui;
+      },
+    };
+
+    // act
+    notifyUsageInfo(ctx, run, "Lifecycle.");
+
+    // assert
+    assert.deepStrictEqual(run.commandState, {
+      hasOutcome: false,
+      needsReload: false,
+      settled: false,
+      delivery: "open",
+    });
+    assert.deepStrictEqual(capture.entries, [
+      {
+        customType: "claude-plugin",
+        payload: {
+          schemaVersion: 1,
+          origin: { kind },
+          kind: "usage-info",
+          severity: "info",
+          needsReload: false,
+          usage: "Lifecycle.",
+        },
+      },
+    ]);
+    capture.assertValid();
+  });
+}
+
 for (const mode of ["json", "rpc"]) {
   test(`delivers a resolved command error without inventory in ${mode}`, () => {
     // arrange
@@ -76,7 +357,13 @@ for (const mode of ["json", "rpc"]) {
     };
 
     // act
-    notifyCommandError(ctx, sink, origin, true, new Error("Failed at /private/work/config.json"));
+    notifyCommandError(
+      ctx,
+      sink,
+      origin,
+      { ...createCommandRunState(), needsReload: true },
+      new Error("Failed at /private/work/config.json"),
+    );
 
     // assert
     assert.deepStrictEqual(capture.entries, [
@@ -113,7 +400,7 @@ for (const mode of ["tui", "print"]) {
     // act & assert
     assert.throws(
       () => {
-        notifyCommandError(ctx, capture.entrySink, origin, false, cause);
+        notifyCommandError(ctx, capture.entrySink, origin, createCommandRunState(), cause);
       },
       (error: unknown) => error === cause,
     );
@@ -121,6 +408,51 @@ for (const mode of ["tui", "print"]) {
     capture.assertValid();
   });
 }
+
+test("delivers an unexpected error after an earlier explicit outcome", () => {
+  // arrange
+  const capture = createJsonCapture();
+  const ctx = {
+    mode: "json",
+    get ui() {
+      return capture.ui;
+    },
+  };
+  const run = { ...runWithNothingLoaded(), entrySink: capture.entrySink };
+  assert.ok(run.origin.kind === "command" && run.commandState !== undefined);
+
+  // act
+  notifyUsageInfo(ctx, run, "Done.");
+  notifyCommandError(ctx, run.entrySink, run.origin, run.commandState, new Error("Later failure."));
+
+  // assert
+  assert.deepStrictEqual(capture.entries, [
+    {
+      customType: "claude-plugin",
+      payload: {
+        schemaVersion: 1,
+        origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+        kind: "usage-info",
+        severity: "info",
+        needsReload: false,
+        usage: "Done.",
+      },
+    },
+    {
+      customType: "claude-plugin",
+      payload: {
+        schemaVersion: 1,
+        origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+        kind: "internal-error",
+        severity: "error",
+        needsReload: false,
+        summary: "Command failed unexpectedly.",
+        cause: { causeChain: ["Later failure."], truncated: false },
+      },
+    },
+  ]);
+  capture.assertValid();
+});
 
 for (const mode of ["json", "rpc"]) {
   test(`appends complete usage payloads in ${mode} without UI access`, () => {

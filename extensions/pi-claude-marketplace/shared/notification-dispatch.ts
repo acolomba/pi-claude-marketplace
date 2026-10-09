@@ -22,9 +22,10 @@ import {
   presentUpdateNoOp,
 } from "./notification-present.ts";
 import { resolveRawSurface } from "./notification-resolve.ts";
-import { requireNotificationMode } from "./notification-run.ts";
+import { COMMAND_DELIVERY, requireNotificationMode } from "./notification-run.ts";
 import { composeRetainedWorkflowsAdvisories } from "./notification-summary.ts";
 
+import type { CommandErrorPresentation } from "./notification-command-error.ts";
 import type { NotifyArguments } from "./notification-grammar.ts";
 import type { CascadePresentation, NotificationPresentation } from "./notification-present.ts";
 import type {
@@ -37,6 +38,7 @@ import type {
   NotificationEntrySink,
   NotificationOrigin,
   NotificationRun,
+  CommandRunState,
 } from "./notification-run.ts";
 import type {
   CascadeNotificationMessage,
@@ -50,6 +52,44 @@ import type {
 } from "./notification-types.ts";
 import type { Scope } from "./types.ts";
 import type { NotificationContext } from "../platform/pi-api.ts";
+
+function isCommandOutcome(
+  presentation: NotificationPresentation | ResolvedRawSurface | CommandErrorPresentation,
+): boolean {
+  switch (presentation.kind) {
+    case "cascade":
+    case "marketplace-info":
+    case "plugin-info":
+    case "marketplace-info-cascade":
+    case "plugin-info-cascade":
+    case "marketplace-not-added":
+    case "reconcile-pending-empty":
+    case "prune-empty":
+    case "prune-committed-warning":
+    case "usage-error":
+    case "usage-info":
+    case "internal-error":
+      return true;
+    case "diagnostic":
+    case "device-flow-prompt":
+    case "reconcile-applied-cascade":
+    case "reconcile-aborted":
+    case "plugin-path-skipped":
+    case "async-rewake-summary":
+    case "stop-override-cap":
+      return false;
+  }
+}
+
+function commandStateFor(run: NotificationRun): CommandRunState | undefined {
+  switch (run.origin.kind) {
+    case "command":
+      return run.commandState;
+    case "load":
+    case "hook":
+      return undefined;
+  }
+}
 
 /**
  * shared/notification-dispatch.ts -- the sole site that calls the Pi notify
@@ -94,9 +134,13 @@ export function notifyCommandError(
   ctx: NotificationContext,
   entrySink: NotificationEntrySink,
   origin: Extract<NotificationOrigin, { kind: "command" }>,
-  needsReload: boolean,
+  state: CommandRunState,
   cause: unknown,
 ): void {
+  if (state.settled || state.delivery !== COMMAND_DELIVERY.open) {
+    return;
+  }
+
   switch (requireNotificationMode(ctx.mode)) {
     case "tui":
     case "print":
@@ -104,11 +148,17 @@ export function notifyCommandError(
       throw cause;
     case "json":
     case "rpc": {
-      const presentation = resolveCommandError(cause, needsReload);
-      entrySink.appendEntry("claude-plugin", toWirePayload(presentation, origin));
+      const presentation = resolveCommandError(cause, state.needsReload);
+      const isOutcome = isCommandOutcome(presentation);
+      appendEntry(entrySink, toWirePayload(presentation, origin));
+      state.hasOutcome ||= isOutcome;
       return;
     }
   }
+}
+
+function appendEntry(sink: NotificationEntrySink, payload: ReturnType<typeof toWirePayload>): void {
+  sink.appendEntry("claude-plugin", payload);
 }
 
 function emitWithSummary(ctx: NotificationContext, envelope: ResolvedEnvelope, body: string): void {
@@ -412,6 +462,15 @@ function emitPresentation(
   run: NotificationRun,
   presentation: NotificationPresentation | ResolvedRawSurface,
 ): void {
+  const state = commandStateFor(run);
+  if (state?.settled || (state !== undefined && state.delivery !== COMMAND_DELIVERY.open)) {
+    return;
+  }
+
+  if (state !== undefined && "envelope" in presentation) {
+    state.needsReload ||= presentation.envelope.needsReload;
+  }
+
   switch (requireNotificationMode(ctx.mode)) {
     case "tui":
     case "print":
@@ -426,9 +485,15 @@ function emitPresentation(
 
       return;
     case "json":
-    case "rpc":
-      run.entrySink.appendEntry("claude-plugin", toWirePayload(presentation, run.origin));
+    case "rpc": {
+      const isOutcome = isCommandOutcome(presentation);
+      appendEntry(run.entrySink, toWirePayload(presentation, run.origin));
+      if (state !== undefined) {
+        state.hasOutcome ||= isOutcome;
+      }
+
       return;
+    }
   }
 }
 

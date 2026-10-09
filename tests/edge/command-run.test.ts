@@ -6,10 +6,18 @@ import test from "node:test";
 
 import { runCommand } from "../../extensions/pi-claude-marketplace/edge/command-run.ts";
 import { UnsupportedModeError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
-import { notifyUsageInfo } from "../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
+import {
+  notify,
+  notifyUsageInfo,
+  notifyDiagnostic,
+  notifyDeviceFlowPrompt,
+} from "../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
 import { openNotificationRun } from "../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 
 import { createJsonCapture } from "./json-capture.ts";
+
+import type { NotificationContext } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { NotificationRun } from "../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 
 test("retains committed local state and earlier output after a command throws", async (t) => {
   // arrange
@@ -136,6 +144,29 @@ function createIds() {
   };
 }
 
+for (const mode of ["json", "rpc"]) {
+  test(`reports a silent command before settlement in ${mode}`, async () => {
+    // arrange
+    const capture = createJsonCapture();
+    const pi = { ...capture.entrySink, getAllTools: () => [] };
+    const ctx = {
+      mode,
+      get ui() {
+        return capture.ui;
+      },
+    };
+
+    // act
+    await runCommand(pi, ctx, "plugin update", async () => {}, createIds());
+
+    // assert
+    assert.deepStrictEqual(capture.entries, [
+      expectedError("Command returned without an outcome."),
+    ]);
+    capture.assertValid();
+  });
+}
+
 for (const { title, cause, message } of [
   { title: "null", cause: null, message: "Unknown thrown value." },
   { title: "undefined", cause: undefined, message: "Unknown thrown value." },
@@ -212,6 +243,207 @@ function expectedError(message: string, invocationId = "run-a") {
     },
   };
 }
+
+for (const { name, emit, earlier } of [
+  {
+    name: "diagnostic",
+    emit: (ctx, run) => {
+      notifyDiagnostic(ctx, run, "Warning.", ["Detail."]);
+    },
+    earlier: [{ kind: "diagnostic", severity: "warning", header: "Warning.", lines: ["Detail."] }],
+  },
+  {
+    name: "prompt",
+    emit: (ctx, run) => {
+      notifyDeviceFlowPrompt(ctx, run, {
+        verificationUri: "https://example.test",
+        userCode: "ABCD",
+      });
+    },
+    earlier: [
+      {
+        kind: "device-flow-prompt",
+        severity: "info",
+        verificationUri: "https://example.test",
+        userCode: "ABCD",
+      },
+    ],
+  },
+  {
+    name: "empty diagnostic",
+    emit: (ctx, run) => {
+      notifyDiagnostic(ctx, run, "Warning.", []);
+    },
+    earlier: [],
+  },
+] satisfies Array<{
+  name: string;
+  emit: (ctx: NotificationContext, run: NotificationRun) => void;
+  earlier: object[];
+}>) {
+  test(`does not accept ${name} as completion and suppresses retained output`, async () => {
+    // arrange
+    const capture = createJsonCapture();
+    const pi = { ...capture.entrySink, getAllTools: () => [] };
+    const ctx = {
+      mode: "json",
+      get ui() {
+        return capture.ui;
+      },
+    };
+    let late: () => void = () => {
+      throw new Error("Callback not captured");
+    };
+
+    // act
+    await runCommand(
+      pi,
+      ctx,
+      "plugin update",
+      (run) => {
+        emit(ctx, run);
+        late = () => {
+          notifyUsageInfo(ctx, run, "Late.");
+        };
+
+        return Promise.resolve();
+      },
+      createIds(),
+    );
+    ctx.mode = "unusable";
+    late();
+
+    // assert
+    assert.deepStrictEqual(capture.entries, [
+      ...earlier.map((payload) => ({
+        customType: "claude-plugin",
+        payload: {
+          schemaVersion: 1,
+          origin: { kind: "command", commandId: "plugin update", invocationId: "run-a" },
+          needsReload: false,
+          ...payload,
+        },
+      })),
+      expectedError("Command returned without an outcome."),
+    ]);
+    capture.assertValid();
+  });
+}
+
+test("retains reload knowledge after a later false outcome and an escaped throw", async () => {
+  // arrange
+  const capture = createJsonCapture();
+  const pi = { ...capture.entrySink, getAllTools: () => [] };
+  const ctx = {
+    mode: "json",
+    get ui() {
+      return capture.ui;
+    },
+  };
+  const origin = { kind: "command", commandId: "plugin update", invocationId: "run-a" };
+
+  // act
+  await runCommand(
+    pi,
+    ctx,
+    "plugin update",
+    (run) => {
+      notify(ctx, run, {
+        kind: "prune-committed-warning",
+        scope: "user",
+        cause: new Error("Saved."),
+      });
+      notify(ctx, run, { marketplaces: [] });
+      throw new Error("Later failure.");
+    },
+    createIds(),
+  );
+
+  // assert
+  assert.deepStrictEqual(capture.entries, [
+    {
+      customType: "claude-plugin",
+      payload: {
+        schemaVersion: 1,
+        origin,
+        kind: "prune-committed-warning",
+        severity: "warning",
+        needsReload: true,
+        summary: "Prune committed; finalization needs attention.",
+        scope: "user",
+        cause: { causeChain: ["Saved."], truncated: false },
+      },
+    },
+    {
+      customType: "claude-plugin",
+      payload: {
+        schemaVersion: 1,
+        origin,
+        kind: "cascade",
+        severity: "info",
+        needsReload: false,
+        marketplaces: [],
+      },
+    },
+    {
+      ...expectedError("Later failure."),
+      payload: { ...expectedError("Later failure.").payload, needsReload: true },
+    },
+  ]);
+  capture.assertValid();
+});
+
+for (const mode of ["tui", "print"]) {
+  test(`allows silent text completion in ${mode}`, async () => {
+    // arrange
+    const capture = createJsonCapture();
+    const pi = { ...capture.entrySink, getAllTools: () => [] };
+    const ctx = {
+      mode,
+      get ui() {
+        return capture.ui;
+      },
+    };
+
+    // act
+    await runCommand(pi, ctx, "plugin update", async () => {}, createIds());
+
+    // assert
+    assert.deepStrictEqual(capture.entries, []);
+    capture.assertValid();
+  });
+}
+
+test("does not finalize delivery that was already closed", async () => {
+  // arrange
+  const capture = createJsonCapture();
+  const pi = { ...capture.entrySink, getAllTools: () => [] };
+  const ctx = {
+    get mode(): string {
+      throw new Error("Unexpected mode access");
+    },
+    get ui() {
+      return capture.ui;
+    },
+  };
+
+  // act
+  await runCommand(
+    pi,
+    ctx,
+    "plugin update",
+    (run) => {
+      assert.ok(run.commandState);
+      run.commandState.delivery = "closed";
+      return Promise.resolve();
+    },
+    createIds(),
+  );
+
+  // assert
+  assert.deepStrictEqual(capture.entries, []);
+  capture.assertValid();
+});
 
 for (const mode of ["json", "rpc"]) {
   test(`delivers a handler failure through the original sink in ${mode}`, async () => {
