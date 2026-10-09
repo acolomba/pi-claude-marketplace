@@ -32,7 +32,7 @@ last_mapped_at: 2026-10-05
 - `@earendil-works/pi-coding-agent` (peer dep `>=1.0.0`, dev dep `^1.0.0`) - the Pi extension host API (`ctx.ui.notify`, `resources_discover`, `session_start`, tool registration)
 - `@earendil-works/pi-tui` (peer dep `*`, dev dep `^1.0.0`) - Pi terminal UI primitives
 - `pi-subagents` (optional peer dep `>=0.74.0`) - soft-dependency companion extension for agent artifact rendering; degrades gracefully when absent
-- `pi-mcp-adapter` (optional peer dep `>=5.1.0`) - soft-dependency companion extension that serves MCP servers; never installed into this repository
+- `pi-mcp-adapter` (optional peer dep `>=5.2.0 <6`) - soft-dependency companion extension that serves MCP servers; never installed into this repository
 
 **Testing:**
 - `node:test` (Node's built-in test runner) - suites under `tests/{architecture,bridges,domain,edge,orchestrators,persistence,platform,shared,transaction}/**/*.test.ts` plus `tests/index.test.ts` (`npm test`; `npm run test:modules` is the same minus `architecture`; `npm run test:unpaired` runs `tests/architecture/**` plus `tests/{domain,platform}/**/*-fake.test.ts`, the tests with no source pair), plus a separate `tests/integration/**/*.test.ts` suite (`npm run test:integration`) and `tests/e2e/**/*.test.ts` (`npm run test:e2e`, pinned ref; `npm run test:e2e:nightly` runs against floating `main`)
