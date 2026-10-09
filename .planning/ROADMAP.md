@@ -341,10 +341,10 @@ requirement (Phases 3 and 4), and no release may sit between the first write to
 2. A live UAT in a sandboxed agent directory shows adapter 5 loading our entries, migrating a seeded legacy entry with the reloads counted, finding plugin tools through tool search, and `info` showing their status, including `status unknown` in a deferred session until the first MCP use and a live state after it (D-06-06a). (ADOC-02)
 3. CHANGELOG records the milestone, and a version bump is offered before the PR. (ADOC-03)
 
-**Plans**: 5 plans in 4 waves
+**Plans**: 1/5 plans executed in 4 waves
 
 **Wave 1**
-- [ ] 07-01-PLAN.md — the optional pi-mcp-adapter peer becomes `>=5.2.0 <6` (advisory GHSA-6qxp-vccf-f47h) in the manifest, lock, gates, CI pin, comments and records after a byte-level re-check; `scripts/pi.sh` keeps Pi's `tool_search` (ADOC-02, ADOC-01)
+- [x] 07-01-PLAN.md — the optional pi-mcp-adapter peer becomes `>=5.2.0 <6` (advisory GHSA-6qxp-vccf-f47h) in the manifest, lock, gates, CI pin, comments and records after a byte-level re-check; `scripts/pi.sh` keeps Pi's `tool_search` (ADOC-02, ADOC-01)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 07-02-PLAN.md — the operator-run canary captures the legacy entry from 0.19.2 on Pi 1.0, proves the migration with one reload, a fresh install and the `mcp({ search })` route on a real pi-mcp-adapter 5.2.0 (ADOC-02)
@@ -382,7 +382,7 @@ plan these phases with the UI gate skipped.
 | 4. Variable expansion at Claude Code parity | mcp-4 | 9/9 | Complete    | 2026-10-07 |
 | 5. Automatic migration on /reload | mcp-4 | 5/5 | Complete    | 2026-10-09 |
 | 6. Live MCP status in info | mcp-4 | 3/3 | Complete    | 2026-10-09 |
-| 7. Docs and live proof | mcp-4 | 0/5 | Not started | - |
+| 7. Docs and live proof | mcp-4 | 1/5 | In Progress | - |
 
 ## Carried Forward
 

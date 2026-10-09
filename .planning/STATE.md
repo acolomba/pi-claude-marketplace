@@ -5,16 +5,16 @@ milestone_name: MCP 4
 current_phase: 07
 current_phase_name: Docs and live proof
 status: executing
-stopped_at: Phase 7 context gathered
-last_updated: "2026-10-09T21:48:23.130Z"
+stopped_at: Completed 07-01-PLAN.md
+last_updated: "2026-10-09T21:57:56.239Z"
 last_activity: 2026-10-09
 last_activity_desc: Phase 07 execution started
-state_head: c31cf7914630e73573a27af8ef5fa0c946e39f82
+state_head: 27fdb1527a1d588d0eef599f64fa40383649cb75
 progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 52
-  completed_plans: 47
+  completed_plans: 48
   percent: 86
 ---
 
@@ -35,8 +35,8 @@ sign-ins and approvals.
 ## Current Position
 
 Phase: 07 (Docs and live proof) — EXECUTING
-Plan: 1 of 5
-Status: Executing Phase 07
+Plan: 2 of 5
+Status: Ready to execute
 Last activity: 2026-10-09 — Phase 07 execution started
 
 Progress: [█████████░] 86%
@@ -293,6 +293,7 @@ still open with a comment explaining what landed.
 | Phase 06 P01 | 27min | 3 tasks | 33 files |
 | Phase 06 P02 | 25min | 2 tasks | 10 files |
 | Phase 06 P03 | 6min | 2 tasks | 3 files |
+| Phase 07 P01 | 7 min | 3 tasks | 14 files |
 
 ## Accumulated Context
 
@@ -699,6 +700,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 06]: 06-01: hand-built Pi harnesses that run the real factory carry an events bus, because the factory subscribes to pi-mcp-adapter/status/v1
 - [Phase 06]: Info decides the user-row MCP override from the project scope's installation record; under --scope user it reads it with persistMigration false and treats a failed read as not overriding
 - [Phase 06]: The MCP status conformance test builds the snapshot by hand in pi-mcp-adapter's shape, keyed by the names a real install wrote, because the adapter ships its snapshot builder only as TypeScript source
+- [Phase 07]: [mcp-4 Phase 7] The pi-mcp-adapter optional peer is >=5.2.0 <6 (MCP SDK 2.3.1 fixes GHSA-6qxp-vccf-f47h); cited adapter files are byte-identical to 5.1.0, so citations keep their line references and PI_MCP_ADAPTER_ROOT must now name a 5.2.0 install (D-07-07).
+- [Phase 07]: [mcp-4 Phase 7] scripts/pi.sh passes -e builtin:tool-search after --no-extensions so tool_search stays available; builtin:mcp stays off (D-07-05).
 
 ### Pending Todos
 
@@ -832,11 +835,11 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Phase 7 context gathered
+**Stopped at:** Completed 07-01-PLAN.md
 
-**Resume file:** .planning/phases/07-docs-and-live-proof/07-CONTEXT.md
+**Resume file:** None
 
-Last session: 2026-10-09T20:14:32.876Z
+Last session: 2026-10-09T21:57:55.882Z
 Phase 6 closed in the same `/gsd-autonomous --from 5 --interactive` run.
 Gates: discuss (4 areas + 3 post-research rulings), research, 3 plans in 3
 waves executed sequentially; Nyquist compliant; security 12/12 closed;
