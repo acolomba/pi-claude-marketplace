@@ -29,7 +29,14 @@
 //     first MCP use, `mcp({ search })` returns
 //     `mcp__plugin_echo_echo__echo_canary`, which the first model request did
 //     not declare and a later one did, the call returns `echo-canary:hi`, and
-//     info then shows `connected` (ANAME-01, ANAME-04, ASTAT-01, ASTAT-02).
+//     info then shows `connected` (ANAME-01, ANAME-04, ASTAT-01, ASTAT-02);
+//   - route B, in another fresh Pi process with `+tool_search` in the
+//     settings: Pi's `tool_search` loads the same tool, which the first model
+//     request did not declare and a later one did, the call returns
+//     `echo-canary:via-tool-search`, and info goes from `status unknown` to
+//     `connected` (ANAME-01, ANAME-04, ASTAT-01, ASTAT-02). It needs its own
+//     process because `tool_search` searches only tools that are not active,
+//     and route A's search already activated the tool in its session.
 //
 // The model side is `openai-stub-server.mjs`, started as a child process with
 // `STUB_PORT=0` and a `STUB_SCRIPT` that replays the route's tool calls. No
@@ -111,6 +118,7 @@ const ECHO_KEY = "plugin_echo_echo_";
 const PING_KEY = "plugin_ping_ping_";
 const ECHO_TOOL = "mcp__plugin_echo_echo__echo_canary";
 const ROUTE_A_PROMPT = "route-a: find the echo canary tool and call it with the text hi";
+const ROUTE_B_PROMPT = "route-b: load the echo canary tool with tool search and call it";
 const STUB_SCRIPTS = {
   "route-a": [
     { tool: "mcp", arguments: { search: "echo canary" } },
@@ -1182,78 +1190,117 @@ function assertSearchMatch(turn) {
   }
 }
 
-/** A2, second half: the first model request did not declare the tool and a later one did. */
-function assertDeclaredAfterSearch(requests) {
+/** B2, first half: Pi's `tool_search` loaded the plugin tool. */
+function assertToolSearchLoaded(turn) {
+  const search = turn.tools.find((event) => event.toolName === "tool_search");
+  const loaded = search?.result?.details?.loaded;
+  if (!Array.isArray(loaded) || !loaded.includes(ECHO_TOOL)) {
+    const seen = search ?? turn.tools.map((event) => event.toolName);
+    regression("B2", `tool_search did not load ${ECHO_TOOL}.`, JSON.stringify(seen));
+  }
+}
+
+/** The two search routes. Each runs in its own fresh Pi process. */
+function searchRoutes(invert) {
+  return [
+    {
+      name: "A",
+      session: "session 2",
+      prompt: ROUTE_A_PROMPT,
+      searchTool: "mcp",
+      found: "mcp({ search }) returned",
+      assertFound: assertSearchMatch,
+      expected: invert ? "echo-canary:inverted" : "echo-canary:hi",
+    },
+    {
+      name: "B",
+      session: "session 3",
+      prompt: ROUTE_B_PROMPT,
+      searchTool: "tool_search",
+      found: "tool_search loaded",
+      assertFound: assertToolSearchLoaded,
+      expected: "echo-canary:via-tool-search",
+    },
+  ];
+}
+
+/** Second half of A2 and B2: the first model request did not declare the tool and a later one did. */
+function assertDeclaredAfterSearch(requests, route) {
+  const id = `${route.name}2`;
   if (requests.length === 0) {
-    humanNeeded("The route A turn sent no request to the stub.");
+    humanNeeded(`The route ${route.name} turn sent no request to the stub.`);
   }
 
   const [first, ...later] = requests;
   const firstTools = Array.isArray(first.tools) ? first.tools : [];
-  observed(`route A first model request tools: ${JSON.stringify(firstTools)}`);
-  if (!firstTools.includes("mcp") || firstTools.includes(ECHO_TOOL)) {
-    regression("A2", `The first model request declares ${JSON.stringify(firstTools)}.`);
+  observed(`route ${route.name} first model request tools: ${JSON.stringify(firstTools)}`);
+  if (!firstTools.includes(route.searchTool) || firstTools.includes(ECHO_TOOL)) {
+    regression(id, `The first model request declares ${JSON.stringify(firstTools)}.`);
   }
 
   if (!later.some((request) => request.tools?.includes(ECHO_TOOL))) {
-    regression("A2", `No model request after the search declares ${ECHO_TOOL}.`);
+    regression(id, `No model request after the search declares ${ECHO_TOOL}.`);
   }
 }
 
-/** A3 (ADOC-02): the call returns the server's text; `--invert` expects other text. */
-function assertToolResult(turn, invert) {
-  const expected = invert ? "echo-canary:inverted" : "echo-canary:hi";
+/** A3 and B3 (ADOC-02): the call returns the server's text; `--invert` changes A3's expectation. */
+function assertToolResult(turn, id, expected) {
   const call = turn.tools.find((event) => event.toolName === ECHO_TOOL);
   const text = call?.result?.content?.[0]?.text;
   if (call?.isError !== false || text !== expected) {
     regression(
-      "A3",
+      id,
       `${ECHO_TOOL} returned ${JSON.stringify(text)} (isError ${call?.isError}); expected "${expected}".`,
     );
   }
 
-  pass("A3", `ADOC-02: ${ECHO_TOOL} returned "${text}"`);
+  pass(id, `ADOC-02: ${ECHO_TOOL} returned "${text}"`);
 }
 
-/** A4 (ASTAT-01): after the first MCP use the adapter and info both report connected. */
-async function assertConnected(session) {
+/** A4 and B4 (ASTAT-01): after the first MCP use the adapter and info both report connected. */
+async function assertConnected(session, id) {
   const tap = await pollStatus(session, (pairs) => statusOf(pairs, ECHO_KEY) === "connected", 20);
   if (!tap.ok) {
-    regression("A4", `After the call the adapter lists ${JSON.stringify(tap.pairs)}.`);
+    regression(id, `After the call the adapter lists ${JSON.stringify(tap.pairs)}.`);
   }
 
-  await expectInfoMatches(session, "echo", "connected", "A4");
+  await expectInfoMatches(session, "echo", "connected", id);
   pass(
-    "A4",
+    id,
     `ASTAT-01: after the first MCP use the adapter reports ${ECHO_KEY} connected and info shows (connected)`,
   );
 }
 
-/** Session 2, a fresh Pi process: route A finds and calls the plugin tool. */
-async function proveRouteA(pi, ext, sandbox, stub, invert) {
-  const session = openSession(pi, sandbox, [EXTENSION_ENTRY, ext.entry, sandbox.helper]);
-  await checkPacing(session);
+/** A1 and B1 (ASTAT-02): before any MCP use in a fresh session, info shows status unknown. */
+async function assertStatusUnknown(session, id) {
   await run(session, "/canary-wait 3000");
   const before = await infoToken(session, "echo");
   if (before !== "status unknown") {
     regression(
-      "A1",
+      id,
       `In a fresh session info shows (${before}) before any MCP use; expected (status unknown).`,
     );
   }
 
-  pass("A1", "ASTAT-02: in a fresh deferred session info shows (status unknown)");
+  pass(id, "ASTAT-02: in a fresh deferred session info shows (status unknown)");
+}
+
+/** Sessions 2 and 3, each a fresh Pi process: the route finds and calls the plugin tool. */
+async function proveRoute(pi, ext, sandbox, stub, route) {
+  const session = openSession(pi, sandbox, [EXTENSION_ENTRY, ext.entry, sandbox.helper]);
+  await checkPacing(session);
+  await assertStatusUnknown(session, `${route.name}1`);
   const logStart = (await stubRequests(stub)).length;
-  const turn = await run(session, ROUTE_A_PROMPT, true);
-  assertSearchMatch(turn);
-  assertDeclaredAfterSearch((await stubRequests(stub)).slice(logStart));
+  const turn = await run(session, route.prompt, true);
+  route.assertFound(turn);
+  assertDeclaredAfterSearch((await stubRequests(stub)).slice(logStart), route);
   pass(
-    "A2",
-    `ANAME-01, ANAME-04: mcp({ search }) returned ${ECHO_TOOL}, declared only after the search`,
+    `${route.name}2`,
+    `ANAME-01, ANAME-04: ${route.found} ${ECHO_TOOL}, declared only after the search`,
   );
-  assertToolResult(turn, invert);
-  await assertConnected(session);
-  await closeChecked(session, "session 2");
+  assertToolResult(turn, `${route.name}3`, route.expected);
+  await assertConnected(session, `${route.name}4`);
+  await closeChecked(session, route.session);
 }
 
 async function teardown(root) {
@@ -1275,7 +1322,10 @@ async function main(cli) {
 
     const stub = await startStub(sandbox);
     await proveMigration(pi, ext, sandbox);
-    await proveRouteA(pi, ext, sandbox, stub, cli.invert);
+    for (const route of searchRoutes(cli.invert)) {
+      await proveRoute(pi, ext, sandbox, stub, route);
+    }
+
     printOut(`[${TAG}] all assertions proven; exit 0`);
   } finally {
     await teardown(root);
