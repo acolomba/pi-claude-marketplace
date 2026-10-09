@@ -132,7 +132,7 @@ Research: `.planning/research/SUMMARY.md` (and STACK, FEATURES, ARCHITECTURE, PI
 - [ ] **ADOC-01**: README, `docs/env-vars.md` (ENVDOC-01), `docs/hooks-compatibility.md` and the
   PRD/NFR-10 text describe adapter-file delivery, naming, tool search, variable rules and the
   documented divergences.
-- [ ] **ADOC-02**: A live UAT in a sandboxed agent directory proves adapter 5 loads our entries,
+- [x] **ADOC-02**: A live UAT in a sandboxed agent directory proves adapter 5 loads our entries,
   migrates a seeded legacy entry (counting reloads), finds plugin tools through tool search, and
   shows status in info.
 - [x] **ADOC-03**: CHANGELOG records the milestone, and a version bump is offered before the PR.
@@ -197,7 +197,7 @@ Research: `.planning/research/SUMMARY.md` (and STACK, FEATURES, ARCHITECTURE, PI
 | ASTAT-01 | Phase 6 | Complete |
 | ASTAT-02 | Phase 6 | Complete |
 | ADOC-01 | Phase 7 | Pending |
-| ADOC-02 | Phase 7 | Pending |
+| ADOC-02 | Phase 7 | Complete |
 | ADOC-03 | Phase 7 | Complete |
 
 **Coverage:**
