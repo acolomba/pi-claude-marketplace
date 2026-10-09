@@ -70,6 +70,7 @@ import { createCompletionCache } from "../../extensions/pi-claude-marketplace/sh
 import { retryTree } from "../orchestrators/plugin/scope-tree-inventory.ts";
 import { createGitOpsFake } from "../platform/git-ops-fake.ts";
 import { createHermeticEnvironment } from "../platform/hermetic-environment.ts";
+import { noStatusSnapshot } from "../platform/mcp-status-seed.ts";
 
 import { buildInstalledPluginRecord } from "./handlers/marketplace-seed.ts";
 import { createNotificationBoundary, expectSoftDepProbes } from "./notification-boundary.ts";
@@ -314,6 +315,7 @@ function createEdgeDeps(
   const selectedGitOps = gitOps ?? createGitOpsFake({ boundary: "memory" }).gitOps;
   return {
     completionCache,
+    mcpStatus: noStatusSnapshot(),
     gitOps: selectedGitOps,
     beginPluginUpdateRun: () => (): Promise<PluginUpdateOutcome> => {
       throw new Error("the registration glue must not run a plugin update");

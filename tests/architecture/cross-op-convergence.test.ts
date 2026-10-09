@@ -60,6 +60,7 @@ import { createPluginUpdateOperations } from "../../extensions/pi-claude-marketp
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { createGitOpsFake } from "../platform/git-ops-fake.ts";
 import { withHermeticEnvironment } from "../platform/hermetic-environment.ts";
+import { noStatusSnapshot } from "../platform/mcp-status-seed.ts";
 import { emptyPiInventory } from "../platform/pi-inventory-seed.ts";
 
 import type {
@@ -149,6 +150,7 @@ const INVOKERS: Record<string, Invoker> = {
     await getPluginInfo({
       ctx,
       pi,
+      mcpStatus: noStatusSnapshot(),
       marketplace: NAME,
       plugin: "ghost",
       cwd,

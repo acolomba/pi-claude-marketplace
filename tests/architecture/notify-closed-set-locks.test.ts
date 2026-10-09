@@ -2,8 +2,8 @@
  * tests/architecture/notify-closed-set-locks.test.ts -- closed-set length
  * tripwires for the notification vocabulary (OUT-08 / SNM-02).
  *
- * `Reason`, `StatusToken`, `PluginStatus`, and `MarketplaceStatus` are the
- * closed sets the renderer, the catalog, and the per-command
+ * `Reason`, `StatusToken`, `PluginStatus`, `MarketplaceStatus`, and
+ * `McpServerStatus` are the closed sets the renderer, the catalog, and the per-command
  * `satisfies CommandContext` checks are written against. The compile-time proofs
  * (`notify-reasons.ts`'s partition gate, the renderer's exhaustive switches) catch
  * a member that is REMOVED or RENAMED, but an ADDITIVE drift -- a new literal
@@ -31,6 +31,7 @@ import test from "node:test";
 import type {
   ContentReason,
   MarketplaceStatus,
+  McpServerStatus,
   NotificationMessage,
   PluginStatus,
   PluginWillUninstallMessage,
@@ -166,6 +167,18 @@ const MARKETPLACE_STATUS_ENROLLMENT: Record<MarketplaceStatus, true> = {
   skipped: true,
 };
 
+const MCP_SERVER_STATUS_ENROLLMENT: Record<McpServerStatus, true> = {
+  connected: true,
+  "cached, connects on first use": true,
+  "needs authentication": true,
+  "pending approval": true,
+  disabled: true,
+  "not connected": true,
+  failed: true,
+  "status unknown": true,
+  "not loaded": true,
+};
+
 // Standalone notifications have their own discriminator set. Scoped prune
 // results and committed warnings are members; the cascade's absent kind remains optional.
 const NOTIFICATION_KIND_ENROLLMENT: Record<
@@ -222,6 +235,10 @@ test("SNM-02: MarketplaceStatus is the closed 7-entry marketplace-status set", (
   assert.strictEqual(Object.keys(MARKETPLACE_STATUS_ENROLLMENT).length, 7);
 });
 
+test("ASTAT-02: McpServerStatus is the closed 9-entry MCP server status set", () => {
+  assert.strictEqual(Object.keys(MCP_SERVER_STATUS_ENROLLMENT).length, 9);
+});
+
 test("standalone notification kinds include scoped prune outcomes exactly", () => {
   assert.strictEqual(Object.keys(NOTIFICATION_KIND_ENROLLMENT).length, 10);
 });
@@ -242,6 +259,7 @@ void (true satisfies IsExact<keyof typeof REASON_ENROLLMENT, Reason>);
 void (true satisfies IsExact<keyof typeof STATUS_TOKEN_ENROLLMENT, StatusToken>);
 void (true satisfies IsExact<keyof typeof PLUGIN_STATUS_ENROLLMENT, PluginStatus>);
 void (true satisfies IsExact<keyof typeof MARKETPLACE_STATUS_ENROLLMENT, MarketplaceStatus>);
+void (true satisfies IsExact<keyof typeof MCP_SERVER_STATUS_ENROLLMENT, McpServerStatus>);
 void (true satisfies IsExact<
   keyof typeof NOTIFICATION_KIND_ENROLLMENT,
   Exclude<NotificationMessage["kind"], undefined>

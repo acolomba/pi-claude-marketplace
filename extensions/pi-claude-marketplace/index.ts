@@ -15,6 +15,7 @@ import { recomputePluginPath } from "./orchestrators/plugin-path.ts";
 import { createApplyReconcile } from "./orchestrators/reconcile/apply.ts";
 import { locationsFor } from "./persistence/locations.ts";
 import { loadState } from "./persistence/state-io.ts";
+import { createMcpStatusTracker } from "./platform/mcp-status.ts";
 import { createCompletionCache } from "./shared/completion-cache.ts";
 import { hookDebugLog } from "./shared/debug-log.ts";
 import { errorMessage } from "./shared/errors.ts";
@@ -71,6 +72,9 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
   const hooksRuntime = createHooksRuntime();
   const hooksRouting = createHooksRouting(hooksRuntime, { readHooksJson });
   const completionCache = createCompletionCache();
+  // ASTAT-01: one status tracker per extension load. Pi drops its subscription
+  // when it invalidates this runtime, and the next load starts empty.
+  const mcpStatus = createMcpStatusTracker(pi.events);
   const pluginUpdateOperations = createPluginUpdateOperations(hooksRouting, completionCache);
   const hooksHydration = createHooksHydration(hooksRuntime, { loadState, readHooksJson });
   // RECON-01..05: one reconcile operation per extension load, bound to the
@@ -234,6 +238,7 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
     pi,
     {
       completionCache,
+      mcpStatus,
       gitOps: DEFAULT_GIT_OPS,
       beginPluginUpdateRun: pluginUpdateOperations.beginPluginUpdateRun,
     },

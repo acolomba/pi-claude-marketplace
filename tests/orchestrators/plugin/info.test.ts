@@ -51,6 +51,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts";
 import {
   createGetPluginInfo,
+  type GetPluginInfoOptions,
   type InfoCloneCacheSeam,
   type PluginInfoReader,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts";
@@ -67,6 +68,7 @@ import { expectSoftDepProbes } from "../../edge/notification-boundary.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+import { noStatusSnapshot, statusSnapshot } from "../../platform/mcp-status-seed.ts";
 import {
   adapterCommand,
   builtinMcpCommand,
@@ -75,6 +77,7 @@ import {
 
 import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type * as InfoOrchestrator from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts";
+import type { McpStatusReader } from "../../../extensions/pi-claude-marketplace/platform/mcp-status.ts";
 import type {
   CommandInventoryItem,
   ToolInventoryItem,
@@ -102,12 +105,27 @@ const NODE_READER: PluginInfoReader = {
   listDirectory: (directoryPath) => readdir(directoryPath, { withFileTypes: true }),
 };
 
+/** The info command's options with the MCP status tracker left optional. */
+type InfoCommandOptions = Omit<GetPluginInfoOptions, "mcpStatus"> & {
+  readonly mcpStatus?: McpStatusReader;
+};
+
+/**
+ * ASTAT-01: every case that names no MCP status tracker runs against one that
+ * has received no snapshot.
+ */
+function withDefaultMcpStatus(
+  info: (opts: GetPluginInfoOptions) => Promise<void>,
+): (opts: InfoCommandOptions) => Promise<void> {
+  return (opts) => info({ ...opts, mcpStatus: opts.mcpStatus ?? noStatusSnapshot() });
+}
+
 /**
  * The composition every case below drives: this module's own factory bound to
  * the real read capability, stated at one site so each case reads as the
  * command rather than as its assembly.
  */
-const getPluginInfo = createGetPluginInfo(NODE_READER);
+const getPluginInfo = withDefaultMcpStatus(createGetPluginInfo(NODE_READER));
 
 test("constructs the info command without using its reader capability or starting asynchronous work", (t) => {
   // arrange
@@ -142,7 +160,7 @@ async function withFsPromiseFault<T>(
   method: FaultableFsPromiseMethod,
   targetPath: string,
   error: NodeJS.ErrnoException,
-  action: (getPluginInfoWithFault: ReturnType<typeof createGetPluginInfo>) => Promise<T>,
+  action: (getPluginInfoWithFault: (opts: InfoCommandOptions) => Promise<void>) => Promise<T>,
 ): Promise<T> {
   let faultRaised = false;
   const reader: PluginInfoReader = {
@@ -172,7 +190,7 @@ async function withFsPromiseFault<T>(
     },
   };
 
-  const result = await action(createGetPluginInfo(reader));
+  const result = await action(withDefaultMcpStatus(createGetPluginInfo(reader)));
   assert.equal(faultRaised, true, `expected ${method} fault for ${targetPath}`);
   return result;
 }
@@ -1653,7 +1671,7 @@ test("OPIC-F27: required reader preserves an available-row directory failure and
     const before = await readdir(mpRoot, { recursive: true });
     const { ctx, pi, notifications } = makeCtx();
 
-    await createGetPluginInfo(reader)({
+    await withDefaultMcpStatus(createGetPluginInfo(reader))({
       ctx,
       pi,
       marketplace: "mp",
@@ -2100,7 +2118,7 @@ test("ANAME-01: the installation-record arm shows plugin MCP servers by their Cl
         message: [
           "● mp [user] <no autoupdate>",
           "  ● alpha v1.0.0 (installed) {not in manifest}",
-          "    mcp: plugin:alpha:db, plugin:alpha:my.api",
+          "    mcp: plugin:alpha:db (status unknown), plugin:alpha:my.api (status unknown)",
           "    requires: pi-mcp-adapter (missing)",
         ].join("\n"),
       },
@@ -2145,7 +2163,7 @@ test("plugin info manifest absent: INFO-11: the four name-list kinds render from
         "  ● alpha v1.0.0 (installed) {not in manifest}",
         "    agents: pi-claude-marketplace-alpha-review",
         "    commands: alpha:build",
-        "    mcp: plugin:alpha:alpha-srv, plugin:alpha:zeta-srv",
+        "    mcp: plugin:alpha:alpha-srv (status unknown), plugin:alpha:zeta-srv (status unknown)",
         "    skills: Alpha-other, alpha-skill",
         "    requires: pi-mcp-adapter (missing), pi-subagents (missing)",
       ].join("\n"),
@@ -2643,7 +2661,7 @@ test("plugin info manifest absent: NFR-10: a traversal hooks slug is refused bef
         "  ● alpha v1.0.0 (installed) {not in manifest, unreadable}",
         "    agents: pi-claude-marketplace-alpha-review",
         "    commands: alpha:build",
-        "    mcp: plugin:alpha:alpha-srv",
+        "    mcp: plugin:alpha:alpha-srv (status unknown)",
         "    skills: alpha-skill",
         "    requires: pi-mcp-adapter (missing), pi-subagents (missing)",
       ].join("\n"),
@@ -2796,7 +2814,7 @@ test("OPIC-F27: required reader preserves a state-only file failure and reason o
     const before = await readdir(mpRoot, { recursive: true });
     const { ctx, pi, notifications } = makeCtx();
 
-    await createGetPluginInfo(reader)({
+    await withDefaultMcpStatus(createGetPluginInfo(reader))({
       ctx,
       pi,
       marketplace: "mp",
@@ -5007,7 +5025,7 @@ test("PHOOK-05: a hooks.json that mutates between resolve and the strict re-read
 
     const { ctx, pi, notifications } = makeCtx();
     // act
-    await createGetPluginInfo(reader)({
+    await withDefaultMcpStatus(createGetPluginInfo(reader))({
       ctx,
       pi,
       marketplace: "mp",
@@ -7021,10 +7039,12 @@ test("AVAR-04: info lists an MCP server's unset variables and withheld credentia
         },
       },
     });
-    const getPluginInfoInEnv = createGetPluginInfo(NODE_READER, {
-      ANALYTICS_REGION: "eu",
-      ANTHROPIC_API_KEY: "avar-sentinel-04-07",
-    });
+    const getPluginInfoInEnv = withDefaultMcpStatus(
+      createGetPluginInfo(NODE_READER, {
+        ANALYTICS_REGION: "eu",
+        ANTHROPIC_API_KEY: "avar-sentinel-04-07",
+      }),
+    );
     const { ctx, pi, notifications } = makeCtx();
 
     // act
@@ -7085,7 +7105,7 @@ for (const { label, mcpServers, env, pluginLine, mcpLine } of [
     await withHermeticHome(async ({ home, cwd }) => {
       // arrange
       await seedAnalyticsWithMcpServers(home, cwd, mcpServers);
-      const getPluginInfoInEnv = createGetPluginInfo(NODE_READER, env);
+      const getPluginInfoInEnv = withDefaultMcpStatus(createGetPluginInfo(NODE_READER, env));
       const { ctx, pi, notifications } = makeCtx();
 
       // act
@@ -7135,7 +7155,7 @@ test("AVAR-04: the installation-record arm shows no variable lists", async () =>
       }),
       "utf8",
     );
-    const getPluginInfoInEnv = createGetPluginInfo(NODE_READER, {});
+    const getPluginInfoInEnv = withDefaultMcpStatus(createGetPluginInfo(NODE_READER, {}));
     const { ctx, pi, notifications } = makeCtx();
 
     // act
@@ -7154,7 +7174,166 @@ test("AVAR-04: the installation-record arm shows no variable lists", async () =>
         message: [
           "● mp [user] <no autoupdate>",
           "  ● analytics v1.0.0 (installed) {not in manifest}",
-          "    mcp: plugin:analytics:api",
+          "    mcp: plugin:analytics:api (status unknown)",
+          "    requires: pi-mcp-adapter (missing)",
+        ].join("\n"),
+      },
+    ]);
+  });
+});
+
+test("ASTAT-01: an installed plugin's written servers show the adapter's state first, before the unset list, at info severity", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const mpRoot = await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [{ name: "analytics", source: "./analytics", version: "1.0.0" }],
+      },
+      installablePluginDirs: ["analytics"],
+      installed: {
+        analytics: { version: "1.0.0", resources: { skills: [], mcpServers: ["api", "db"] } },
+      },
+    });
+    await mkdir(path.join(mpRoot, "analytics", ".claude-plugin"), { recursive: true });
+    await writeFile(
+      path.join(mpRoot, "analytics", ".claude-plugin", "plugin.json"),
+      JSON.stringify({
+        name: "analytics",
+        mcpServers: {
+          api: {
+            type: "http",
+            url: "https://api.example.test/mcp",
+            headers: { Authorization: "Bearer ${ANALYTICS_TOKEN}" },
+          },
+          db: { command: "db-server" },
+        },
+      }),
+      "utf8",
+    );
+    const getPluginInfoInEnv = withDefaultMcpStatus(createGetPluginInfo(NODE_READER, {}));
+    const mcpStatus = statusSnapshot([
+      { name: "plugin_analytics_api_", status: "needs-auth" },
+      { name: "plugin_analytics_db_", status: "failed" },
+    ]);
+    const { ctx, pi, notifications } = makeCtx();
+
+    // act
+    await getPluginInfoInEnv({
+      ctx,
+      pi,
+      mcpStatus,
+      marketplace: "mp",
+      plugin: "analytics",
+      scope: "user",
+      cwd,
+    });
+
+    // assert
+    assert.deepEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ● analytics v1.0.0 (installed)",
+          "    mcp: plugin:analytics:api (needs authentication; unset ANALYTICS_TOKEN), plugin:analytics:db (failed)",
+          "    requires: pi-mcp-adapter (missing)",
+        ].join("\n"),
+      },
+    ]);
+  });
+});
+
+test("ASTAT-01: in a both-scopes fan-out each row's servers are stamped from its own scope's record", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    await seedPathMarketplace({
+      scope: "project",
+      scopeRoot: path.join(cwd, ".pi"),
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [] },
+      installed: {
+        alpha: { version: "1.0.0", resources: { skills: [], mcpServers: ["alpha-srv"] } },
+      },
+    });
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [] },
+      installed: {
+        alpha: { version: "1.0.0", resources: { skills: [], mcpServers: ["zeta-srv"] } },
+      },
+    });
+    const mcpStatus = statusSnapshot([
+      { name: "plugin_alpha_alpha-srv_", status: "connected" },
+      { name: "plugin_alpha_zeta-srv_", status: "failed" },
+    ]);
+    const { ctx, pi, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, pi, mcpStatus, marketplace: "mp", plugin: "alpha", cwd });
+
+    // assert
+    assert.deepEqual(notifications, [
+      {
+        message: [
+          "● mp [project] <no autoupdate>",
+          "  ● alpha v1.0.0 (installed) {not in manifest}",
+          "    mcp: plugin:alpha:alpha-srv (connected)",
+          "    requires: pi-mcp-adapter (missing)",
+          "",
+          "● mp [user] <no autoupdate>",
+          "  ● alpha v1.0.0 (installed) {not in manifest}",
+          "    mcp: plugin:alpha:zeta-srv (failed)",
+          "    requires: pi-mcp-adapter (missing)",
+        ].join("\n"),
+      },
+    ]);
+  });
+});
+
+test("ASTAT-02: a snapshot status holding an escape sequence reads status unknown and its text never reaches the message", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [] },
+      installed: {
+        analytics: { version: "1.0.0", resources: { skills: [], mcpServers: ["api"] } },
+      },
+    });
+    const mcpStatus = statusSnapshot([
+      { name: "plugin_analytics_api_", status: "\u001b[31mconnected\u001b[0m" },
+    ]);
+    const { ctx, pi, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({
+      ctx,
+      pi,
+      mcpStatus,
+      marketplace: "mp",
+      plugin: "analytics",
+      scope: "user",
+      cwd,
+    });
+
+    // assert
+    assert.deepEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ● analytics v1.0.0 (installed) {not in manifest}",
+          "    mcp: plugin:analytics:api (status unknown)",
           "    requires: pi-mcp-adapter (missing)",
         ].join("\n"),
       },

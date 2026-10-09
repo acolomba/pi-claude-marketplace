@@ -100,7 +100,7 @@ export const PLUGIN_INFO_FIXTURES: FixtureMap = {
           componentsResolved: true,
           components: {
             agents: ["review-bot"],
-            mcp: [{ name: "plugin:commit-commands:github" }],
+            mcp: [{ name: "plugin:commit-commands:github", status: "status unknown" }],
           },
           requires: [
             { companion: "pi-mcp-adapter", missing: true },
@@ -127,7 +127,7 @@ export const PLUGIN_INFO_FIXTURES: FixtureMap = {
           componentsResolved: true,
           components: {
             agents: ["review-bot"],
-            mcp: [{ name: "plugin:commit-commands:github" }],
+            mcp: [{ name: "plugin:commit-commands:github", status: "connected" }],
             workflows: ["commit-commands:changelog"],
           },
           requires: [
@@ -576,8 +576,83 @@ export const PLUGIN_INFO_FIXTURES: FixtureMap = {
                 name: "plugin:analytics:api",
                 unsetVariables: ["ANALYTICS_TOKEN"],
                 withheldVariables: ["ANTHROPIC_API_KEY"],
+                status: "needs authentication",
               },
             ],
+          },
+          requires: [{ companion: "pi-mcp-adapter", missing: false }],
+        },
+      },
+    },
+
+    // ASTAT-01: each written server shows the adapter's state; the left-out
+    // server keeps only its unsupported feature.
+    "partially-installed-with-mcp-status": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "community-mp",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: false },
+        plugin: {
+          status: "partially-installed",
+          name: "ops-tools",
+          version: "1.0.0",
+          description: "Operations tools for everyday use.",
+          reasons: ["unsupported mcp"],
+          componentsResolved: true,
+          components: {
+            mcp: [
+              { name: "plugin:ops-tools:alerts", status: "cached, connects on first use" },
+              { name: "plugin:ops-tools:builds", status: "failed" },
+              { name: "plugin:ops-tools:live", unsupportedFeature: "ws" },
+              { name: "plugin:ops-tools:logs", status: "not connected" },
+              { name: "plugin:ops-tools:metrics", status: "disabled" },
+            ],
+          },
+          requires: [{ companion: "pi-mcp-adapter", missing: false }],
+        },
+      },
+    },
+
+    // ASTAT-01: a blocked project server reads `pending approval`.
+    "installed-with-mcp-pending-approval": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "community-mp",
+        marketplaceScope: "project",
+        marketplaceDetails: { autoupdate: false },
+        plugin: {
+          status: "installed",
+          name: "deploy-tools",
+          version: "1.0.0",
+          description: "Deployment tools for this project.",
+          componentsResolved: true,
+          components: {
+            mcp: [{ name: "plugin:deploy-tools:deploys", status: "pending approval" }],
+          },
+          requires: [{ companion: "pi-mcp-adapter", missing: false }],
+        },
+      },
+    },
+
+    // ASTAT-02: a usable snapshot that does not list the server reads `not loaded`.
+    "installed-with-mcp-not-loaded": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "community-mp",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: false },
+        plugin: {
+          status: "installed",
+          name: "ticket-tools",
+          version: "1.0.0",
+          description: "Ticket tools for everyday use.",
+          componentsResolved: true,
+          components: {
+            mcp: [{ name: "plugin:ticket-tools:tickets", status: "not loaded" }],
           },
           requires: [{ companion: "pi-mcp-adapter", missing: false }],
         },

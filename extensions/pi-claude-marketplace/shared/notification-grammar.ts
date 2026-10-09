@@ -1378,11 +1378,12 @@ function appendResolvedComponentLines(
 }
 
 /**
- * ANAME-07 / AVAR-04 / AVAR-05: appends the optional `    mcp: <list>` line.
- * Each entry is the server's Claude name. A left-out server adds
- * ` (unsupported <feature>)`. A written server adds its unset and withheld
- * variable names as ` (unset A, B; withheld C)`, each part only when its list
- * is non-empty. The entries arrive stamped and sorted.
+ * ANAME-07 / AVAR-04 / AVAR-05 / ASTAT-01: appends the optional
+ * `    mcp: <list>` line. Each entry is the server's Claude name. A left-out
+ * server adds ` (unsupported <feature>)` and never a state. A written server
+ * adds its state first, then its unset and withheld variable names, as
+ * ` (state; unset A, B; withheld C)`, each part only when present or
+ * non-empty. The entries arrive stamped and sorted.
  */
 function appendMcpLine(
   lines: string[],
@@ -1399,6 +1400,7 @@ function mcpEntryText(entry: McpServerSummaryEntry): string {
   }
 
   const parts = [
+    ...(entry.status === undefined ? [] : [entry.status]),
     ...variablePart("unset", entry.unsetVariables),
     ...variablePart("withheld", entry.withheldVariables),
   ];

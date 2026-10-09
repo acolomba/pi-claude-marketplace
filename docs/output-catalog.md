@@ -2585,9 +2585,25 @@ ______________________________________________________________________
 
 Read-only detail surface. Renders the install-cascade always-marketplace-header form (mirrors `install`'s shape per INFO-02) with a per-plugin row at 2-space indent, optional description block hard-wrapped at col 4 / 66-col text width, then either per-kind component lists (sorted: `agents`, `commands`, `mcp`, `skills`, `workflows`) followed by an optional `requires:` line (ADET-01) and an optional `dependencies:` line LAST, OR the `components: not resolved` marker (INFO-05), itself followed by the same optional `dependencies:` line on the cold git-source row (D-01-32). INFO-02 + INFO-05 + INFO-07 lock the full state set below.
 
-Severity routing: every success state (installed / available / unavailable / installed-both-scopes / state-only-installed-both-scopes / components-not-resolved / state-only-installed / state-only-partially-installed / state-only-disabled-with-components / installed-with-missing-companion / installed-with-every-companion) is `info` severity (no second arg to `ctx.ui.notify`); the `state-only-fetch-skipped` and `disabled-fetch-skipped` notes are the two `warning` states on this surface (the user asked for a fetch and the command did not do it); the three `(failed)` states (`{marketplace not added}` missing-marketplace, `{marketplace not added}` --scope mismatch, `{not in manifest}` missing-plugin with NO installation record) route to `error`. No reload-hint fires on any state (info surfaces are read-only per SNM-33).
+Severity routing: every success state (installed / available / unavailable / installed-both-scopes / state-only-installed-both-scopes / components-not-resolved / state-only-installed / state-only-partially-installed / state-only-disabled-with-components / installed-with-missing-companion / installed-with-every-companion / partially-installed-with-mcp-status / installed-with-mcp-pending-approval / installed-with-mcp-not-loaded) is `info` severity (no second arg to `ctx.ui.notify`); the `state-only-fetch-skipped` and `disabled-fetch-skipped` notes are the two `warning` states on this surface (the user asked for a fetch and the command did not do it); the three `(failed)` states (`{marketplace not added}` missing-marketplace, `{marketplace not added}` --scope mismatch, `{not in manifest}` missing-plugin with NO installation record) route to `error`. No reload-hint fires on any state (info surfaces are read-only per SNM-33).
 
 Companion line (ADET-01, closed-catalog amendment): a resolved row whose components need a companion extension shows a `requires: <list>` line at 4-space indent. Agents need `pi-subagents`, MCP servers need `pi-mcp-adapter`, and workflows need `pi-dynamic-workflows`. These names are the same names that the `{requires <name>}` markers on `install` and `list` use. The line sits after the per-kind component lines and before the `dependencies:` line, so `dependencies:` stays the last data line and every `note:` line still follows it. The companions are sorted by package name, and each one shows at most once. A companion that the soft-dependency probe does not find loaded carries a `(missing)` tag after its name. The line does not show when no component needs a companion, and it never shows on a `components: not resolved` row. It still shows on a `(disabled)` row, because a disabled record keeps its component inventory (ENBL-18): the line states what the plugin needs, and not whether its runtime is running. The plugin row carries no `{requires ...}` brace, and the `(missing)` tag does not change the severity of any state. The info command takes the probe and stamps the entries on the row; the renderer only formats them.
+
+MCP server status (ASTAT-01, ASTAT-02, closed-catalog amendment): on an `(installed)` or `(partially-installed)` row, each MCP server that the installation record lists as written shows the state that pi-mcp-adapter last reported for it. The state is the first item inside the server's parentheses. The `unset` and `withheld` lists follow it after a semicolon (D-06-03). Info reads the last snapshot that pi-mcp-adapter published on its `pi-mcp-adapter/status/v1` event channel. It never imports the adapter, never asks it for a snapshot and never connects a server. The state uses Claude Code's words (D-06-01):
+
+| pi-mcp-adapter status                                      | Shown text                      |
+| ---------------------------------------------------------- | ------------------------------- |
+| `connected`                                                | `connected`                     |
+| `cached`                                                   | `cached, connects on first use` |
+| `needs-auth`                                               | `needs authentication`          |
+| `blocked`                                                  | `pending approval`              |
+| `disabled`                                                 | `disabled`                      |
+| `not-connected`                                            | `not connected`                 |
+| `failed`                                                   | `failed`                        |
+| no usable snapshot, or a status this release does not know | `status unknown`                |
+| a usable snapshot that does not list the server            | `not loaded`                    |
+
+`cached, connects on first use` and `not connected` are the resting states of a lazy server that has not connected yet. They are not failures. `failed` shows only while the adapter holds the server in its failure backoff. Claude Code's status text says `not connected` for a failed server. Here `failed` takes the word from Claude Code's `/mcp` panel, because the adapter keeps a failure apart from a server it never discovered (D-06-01). The cached state uses a comma, because a second pair of parentheses inside the server's parentheses would read badly (D-06-02). `pending approval` covers all three project-trust block reasons: the project is not trusted, approval is required, or approval was denied. The adapter's own panel shows which one (D-06-04). `status unknown` means that pi-mcp-adapter is absent, has not published in this session, last sent its empty session-start or shutdown snapshot, or sent a malformed snapshot or one of a newer version. pi-mcp-adapter 5.1.0 sends an empty snapshot at every session start. In a session where every server is lazy, no server comes from a project file and every tool list is cached, it sends nothing more until the first MCP use (a tool call, `/mcp` or `/mcp-adapter`). So `status unknown` is the normal reading in such a session until the first MCP use (D-06-06, D-06-06a). `not loaded` shows for a plugin installed in this session that the adapter has not read yet (a `/reload` loads it). It also shows for an old `mcp.json` entry that the reload move left in place, which the adapter still serves under its old name. `(disabled)` rows (ENBL-08), not-installed rows, left-out servers, servers that the installation record does not list, and `components: not resolved` rows show no state (D-06-08). The state never changes the severity, and info adds no remedy, tool count, failure age or block reason (D-06-04, D-06-05, D-06-10). The info command stamps the state on each server; the renderer only formats it.
 
 ### Success -- installed single scope
 
@@ -2690,7 +2706,7 @@ Same as above, but each dependency carries the constraint its manifest declared,
 
 ### Success -- a companion the plugin needs is missing (ADET-01)
 
-The plugin has agents and MCP servers, so it needs two companion extensions: pi-subagents runs its agents, and pi-mcp-adapter runs its MCP servers. The `requires:` line names both, sorted by package name. The probe finds pi-subagents loaded but does not find pi-mcp-adapter, so only pi-mcp-adapter carries the `(missing)` tag. Pi's built-in MCP client does not count as pi-mcp-adapter. The tag does not change the severity. Severity `info`; no reload-hint (read-only surface).
+The plugin has agents and MCP servers, so it needs two companion extensions: pi-subagents runs its agents, and pi-mcp-adapter runs its MCP servers. The `requires:` line names both, sorted by package name. The probe finds pi-subagents loaded but does not find pi-mcp-adapter, so only pi-mcp-adapter carries the `(missing)` tag. Pi's built-in MCP client does not count as pi-mcp-adapter. The tag does not change the severity. With pi-mcp-adapter absent, the `github` server's state is `status unknown`. Severity `info`; no reload-hint (read-only surface).
 
 <!-- catalog-state: installed-with-missing-companion -->
 
@@ -2699,13 +2715,13 @@ The plugin has agents and MCP servers, so it needs two companion extensions: pi-
   ● commit-commands v1.2.0 (installed)
     Helpful git commit commands for everyday use.
     agents: review-bot
-    mcp: plugin:commit-commands:github
+    mcp: plugin:commit-commands:github (status unknown)
     requires: pi-mcp-adapter (missing), pi-subagents
 ```
 
 ### Success -- every companion, one of them missing (ADET-01)
 
-The plugin has agents, MCP servers and workflow scripts, so it needs all three companion extensions. The `requires:` line lists them in package-name order: pi-dynamic-workflows, pi-mcp-adapter, pi-subagents. The probe finds pi-subagents and pi-mcp-adapter loaded but does not find the host workflow engine, so only pi-dynamic-workflows carries the `(missing)` tag. Severity `info`; no reload-hint (read-only surface).
+The plugin has agents, MCP servers and workflow scripts, so it needs all three companion extensions. The `requires:` line lists them in package-name order: pi-dynamic-workflows, pi-mcp-adapter, pi-subagents. The probe finds pi-subagents and pi-mcp-adapter loaded but does not find the host workflow engine, so only pi-dynamic-workflows carries the `(missing)` tag. The adapter's last snapshot lists the `github` server as connected. Severity `info`; no reload-hint (read-only surface).
 
 <!-- catalog-state: installed-with-every-companion -->
 
@@ -2714,7 +2730,7 @@ The plugin has agents, MCP servers and workflow scripts, so it needs all three c
   ● commit-commands v1.2.0 (installed)
     Helpful git commit commands for everyday use.
     agents: review-bot
-    mcp: plugin:commit-commands:github
+    mcp: plugin:commit-commands:github (connected)
     workflows: commit-commands:changelog
     requires: pi-dynamic-workflows (missing), pi-mcp-adapter, pi-subagents
 ```
@@ -2959,7 +2975,7 @@ The plugin declares two MCP servers. The `live` server uses the `ws` transport, 
 
 ### Installed -- an MCP server's variables (AVAR-04, AVAR-05)
 
-The plugin's `api` server reads variables in its `url` and `headers`. Info computes two lists of variable names from the current environment. It only reads, and it uses no network. `unset` names each variable that the server reads, that is not set, and that has no `:-` default. Claude Code's `/plugin` errors list reports the same variables. `withheld` names each deny-listed variable that the server never receives. That is every deny-listed variable in `url` or `headers`, set or not, and every deny-listed variable in `command`, `args` or `env` that is set now. Here `ANALYTICS_TOKEN` is not set, and `ANTHROPIC_API_KEY` is a deny-listed credential in a header. The line shows names only, never values. Each list shows only when it has a name, and the two lists share one pair of parentheses, separated by a semicolon. A server that a partial install leaves out shows only its unsupported feature. An installation record without the plugin's configs shows no lists. Severity `info`; no reload-hint (read-only surface).
+The plugin's `api` server reads variables in its `url` and `headers`. Info computes two lists of variable names from the current environment. It only reads, and it uses no network. `unset` names each variable that the server reads, that is not set, and that has no `:-` default. Claude Code's `/plugin` errors list reports the same variables. `withheld` names each deny-listed variable that the server never receives. That is every deny-listed variable in `url` or `headers`, set or not, and every deny-listed variable in `command`, `args` or `env` that is set now. Here `ANALYTICS_TOKEN` is not set, and `ANTHROPIC_API_KEY` is a deny-listed credential in a header. The line shows names only, never values. Each list shows only when it has a name, and the two lists share one pair of parentheses, separated by a semicolon. A server that a partial install leaves out shows only its unsupported feature. An installation record without the plugin's configs shows no lists. The adapter's last snapshot says that the server needs authentication. The state comes first, and the two lists follow after a semicolon. Severity `info`; no reload-hint (read-only surface).
 
 <!-- catalog-state: installed-with-mcp-variables -->
 
@@ -2967,7 +2983,49 @@ The plugin's `api` server reads variables in its `url` and `headers`. Info compu
 ● community-mp [user] <no autoupdate>
   ● analytics v1.0.0 (installed)
     Product analytics tools.
-    mcp: plugin:analytics:api (unset ANALYTICS_TOKEN; withheld ANTHROPIC_API_KEY)
+    mcp: plugin:analytics:api (needs authentication; unset ANALYTICS_TOKEN; withheld ANTHROPIC_API_KEY)
+    requires: pi-mcp-adapter
+```
+
+### Partially installed -- each MCP server's state (ASTAT-01)
+
+The plugin was installed with `--partial`, so its `live` server, which uses the `ws` transport, was left out. The adapter's last snapshot lists the four written servers. `alerts` has cached tools and has not connected yet. `builds` is in its failure backoff. `logs` was never discovered. `metrics` is disabled in the adapter configuration. The left-out `live` server keeps only its `(unsupported ws)` detail and gets no state. Severity `info`; no reload-hint (read-only surface).
+
+<!-- catalog-state: partially-installed-with-mcp-status -->
+
+```text
+● community-mp [user] <no autoupdate>
+  ◉ ops-tools v1.0.0 (partially-installed) {unsupported mcp}
+    Operations tools for everyday use.
+    mcp: plugin:ops-tools:alerts (cached, connects on first use), plugin:ops-tools:builds (failed), plugin:ops-tools:live (unsupported ws), plugin:ops-tools:logs (not connected), plugin:ops-tools:metrics (disabled)
+    requires: pi-mcp-adapter
+```
+
+### Installed -- an MCP server waits for project approval (ASTAT-01)
+
+The plugin is installed in the project scope. pi-mcp-adapter blocks a project server until the user trusts the project and approves the server. Its last snapshot reports the `deploys` server as blocked, so info shows `pending approval`. Info names no block reason; the adapter's own panel shows it. Severity `info`; no reload-hint (read-only surface).
+
+<!-- catalog-state: installed-with-mcp-pending-approval -->
+
+```text
+● community-mp [project] <no autoupdate>
+  ● deploy-tools v1.0.0 (installed)
+    Deployment tools for this project.
+    mcp: plugin:deploy-tools:deploys (pending approval)
+    requires: pi-mcp-adapter
+```
+
+### Installed -- the adapter has not loaded an MCP server (ASTAT-02)
+
+The plugin was installed in this session. The adapter's last snapshot is usable, but it does not list the `tickets` server, because the adapter has not read its configuration since the install. A `/reload` loads it. Severity `info`; no reload-hint (read-only surface).
+
+<!-- catalog-state: installed-with-mcp-not-loaded -->
+
+```text
+● community-mp [user] <no autoupdate>
+  ● ticket-tools v1.0.0 (installed)
+    Ticket tools for everyday use.
+    mcp: plugin:ticket-tools:tickets (not loaded)
     requires: pi-mcp-adapter
 ```
 

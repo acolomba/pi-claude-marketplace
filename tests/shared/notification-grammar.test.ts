@@ -36,6 +36,7 @@ import { shouldEmitReloadHint } from "../../extensions/pi-claude-marketplace/sha
 
 import type {
   MarketplaceNotificationMessage,
+  McpServerSummaryEntry,
   PluginInfoMessage,
   PluginNotificationMessage,
   Reason,
@@ -739,6 +740,25 @@ for (const { requirement, label, mcp, mcpLines } of [
     label: "renders the bare name for two empty variable lists",
     mcp: [{ name: "plugin:a:p", unsetVariables: [], withheldVariables: [] }],
     mcpLines: ["    mcp: plugin:a:p"],
+  },
+  {
+    requirement: "ASTAT-01",
+    label: "renders a server's state alone inside its parentheses",
+    mcp: [{ name: "plugin:a:p", status: "connected" } satisfies McpServerSummaryEntry],
+    mcpLines: ["    mcp: plugin:a:p (connected)"],
+  },
+  {
+    requirement: "ASTAT-01",
+    label: "renders a server's state first, then its unset and withheld lists",
+    mcp: [
+      {
+        name: "plugin:a:p",
+        status: "needs authentication",
+        unsetVariables: ["A"],
+        withheldVariables: ["C"],
+      } satisfies McpServerSummaryEntry,
+    ],
+    mcpLines: ["    mcp: plugin:a:p (needs authentication; unset A; withheld C)"],
   },
 ]) {
   test(`${requirement}: ${label}`, () => {

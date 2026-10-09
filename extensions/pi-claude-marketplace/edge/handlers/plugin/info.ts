@@ -14,6 +14,7 @@ import { parseFlagNames } from "../../flag-catalog.ts";
 
 import { splitPluginMarketplaceRef, withParsedArgs } from "./shared.ts";
 
+import type { McpStatusReader } from "../../../platform/mcp-status.ts";
 import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
 
 const USAGE = "Usage: /claude:plugin info <plugin>@<marketplace> [--fetch] [--scope user|project]";
@@ -23,11 +24,14 @@ const ACCEPTED_FLAGS = parseFlagNames("info");
 
 /**
  * Factory: returns the async handler closed over `pi` (required by
- * `notify()` for the soft-dep probe). `register.ts` wires this into
- * the `SubcommandHandlers` map under the `pluginInfo` key.
+ * `notify()` for the soft-dep probe) and the extension load's MCP status
+ * tracker (ASTAT-01), whose last snapshot info stamps on each written MCP
+ * server. `register.ts` wires this into the `SubcommandHandlers` map under the
+ * `pluginInfo` key.
  */
 export function makePluginInfoHandler(
   pi: ExtensionAPI,
+  mcpStatus: McpStatusReader,
 ): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
   return withParsedArgs(parseArgs, USAGE, async (parsed, ctx): Promise<void> => {
     // FTCH-03: `info` accepts the single boolean `--fetch` flag (the catalog-owned
@@ -69,6 +73,7 @@ export function makePluginInfoHandler(
     await getPluginInfo({
       ctx,
       pi,
+      mcpStatus,
       marketplace: ref.marketplace,
       plugin: ref.plugin,
       cwd: ctx.cwd,

@@ -865,6 +865,28 @@ export interface PluginInfoRowBase {
 }
 
 /**
+ * ASTAT-01 / ASTAT-02: the states info shows for a plugin MCP server. The
+ * first seven are Claude Code's words for pi-mcp-adapter's seven statuses.
+ * `failed` stays apart from `not connected` because the adapter separates a
+ * failure backoff from a server it never discovered. The cached state uses a
+ * comma because it sits inside the server's parentheses. `status unknown`
+ * means there is no usable snapshot, or the snapshot holds a status this
+ * release does not know. `not loaded` means a usable snapshot does not list
+ * the server. A bare literal union like the other closed sets, not a
+ * `StatusToken`.
+ */
+export type McpServerStatus =
+  | "connected"
+  | "cached, connects on first use"
+  | "needs authentication"
+  | "pending approval"
+  | "disabled"
+  | "not connected"
+  | "failed"
+  | "status unknown"
+  | "not loaded";
+
+/**
  * ANAME-01 / ANAME-07: one plugin MCP server on the info surface, stamped by
  * the info command. `name` is the name Claude Code gives the server,
  * `plugin:<plugin>:<server>`. `unsupportedFeature` is present only on a server
@@ -874,12 +896,17 @@ export interface PluginInfoRowBase {
  * on a server the plugin writes, and only when non-empty. The info command
  * computes them from the current environment. They hold variable names, never
  * values.
+ *
+ * ASTAT-01: `status` is present only on a server an installed or partially
+ * installed record lists as written. The info command stamps it from
+ * pi-mcp-adapter's last snapshot.
  */
 export interface McpServerSummaryEntry {
   readonly name: string;
   readonly unsupportedFeature?: string;
   readonly unsetVariables?: readonly string[];
   readonly withheldVariables?: readonly string[];
+  readonly status?: McpServerStatus;
 }
 
 /**

@@ -163,6 +163,14 @@ export interface PiInventory {
 }
 
 /**
+ * ASTAT-01: consumer-owned view of Pi's shared extension event bus
+ * (`pi.events`), used only to subscribe to another extension's channel.
+ */
+export interface PiEventSource {
+  on(channel: string, handler: (data: unknown) => void): () => void;
+}
+
+/**
  * RH-3: pi-subagents loaded iff `pi.getAllTools()` contains a tool named
  * "subagent". Probe failures degrade to unloaded.
  */

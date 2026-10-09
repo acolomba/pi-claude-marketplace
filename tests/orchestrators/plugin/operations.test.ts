@@ -34,6 +34,7 @@ import { createCompletionCache } from "../../../extensions/pi-claude-marketplace
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { expectSoftDepProbes } from "../../edge/notification-boundary.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+import { noStatusSnapshot } from "../../platform/mcp-status-seed.ts";
 import { emptyPiInventory } from "../../platform/pi-inventory-seed.ts";
 
 import type { EnableDisableHooksRouting } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts";
@@ -945,7 +946,15 @@ test("getPluginInfo reports the installed plugin through the bound reader capabi
   const { ctx, pi, notifications } = makeCtx();
 
   // act
-  await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "p1", scope: "project", cwd });
+  await getPluginInfo({
+    ctx,
+    pi,
+    mcpStatus: noStatusSnapshot(),
+    marketplace: "mp",
+    plugin: "p1",
+    scope: "project",
+    cwd,
+  });
 
   // assert
   assert.deepStrictEqual(notifications, [

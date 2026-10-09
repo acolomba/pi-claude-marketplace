@@ -75,6 +75,7 @@ import { test, type TestContext } from "node:test";
 import { parseFlagNames } from "../../../../extensions/pi-claude-marketplace/edge/flag-catalog.ts";
 import { makePluginInfoHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/info.ts";
 import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
+import { noStatusSnapshot } from "../../../platform/mcp-status-seed.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
 import { mergeMarketplaceIntoState } from "../marketplace-seed.ts";
 
@@ -199,7 +200,7 @@ for (const { args, expectedMessage, label, summary } of [
       value: workspace.cwd,
       reads: 1,
     });
-    const infoHandler = makePluginInfoHandler(pi);
+    const infoHandler = makePluginInfoHandler(pi, noStatusSnapshot());
 
     // act
     await infoHandler(args, ctx);
@@ -218,7 +219,7 @@ test("reads a git-source plugin from disk alone while the fetch flag is absent, 
     value: workspace.cwd,
     reads: 1,
   });
-  const infoHandler = makePluginInfoHandler(pi);
+  const infoHandler = makePluginInfoHandler(pi, noStatusSnapshot());
 
   // act
   await infoHandler("gitp@mp", ctx);
@@ -246,7 +247,7 @@ for (const { args, label, position } of [
       value: workspace.cwd,
       reads: 1,
     });
-    const infoHandler = makePluginInfoHandler(pi);
+    const infoHandler = makePluginInfoHandler(pi, noStatusSnapshot());
 
     // act
     await infoHandler(args, ctx);
@@ -277,7 +278,7 @@ for (const { args, label, summary } of [
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
     const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-    const infoHandler = makePluginInfoHandler(pi);
+    const infoHandler = makePluginInfoHandler(pi, noStatusSnapshot());
 
     // act
     await infoHandler(args, ctx);
@@ -329,7 +330,7 @@ for (const { args, expectedMessage, label, summary } of [
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
     const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-    const infoHandler = makePluginInfoHandler(pi);
+    const infoHandler = makePluginInfoHandler(pi, noStatusSnapshot());
 
     // act
     await infoHandler(args, ctx);
@@ -368,7 +369,7 @@ for (const { args, expectedMessage, label, summary } of [
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
     const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-    const infoHandler = makePluginInfoHandler(pi);
+    const infoHandler = makePluginInfoHandler(pi, noStatusSnapshot());
 
     // act
     await infoHandler(args, ctx);
@@ -384,7 +385,7 @@ test("carries the tokenizer's own sentence for an unrecognised scope value and n
   const workspace = await createHermeticWorkspace(t, "scope-value");
   await seedBothScopes(workspace);
   const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-  const infoHandler = makePluginInfoHandler(pi);
+  const infoHandler = makePluginInfoHandler(pi, noStatusSnapshot());
 
   // act
   await infoHandler("alpha@mp --scope bogus", ctx);

@@ -35,6 +35,7 @@ import {
 } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { withHermeticEnvironment } from "../platform/hermetic-environment.ts";
+import { noStatusSnapshot } from "../platform/mcp-status-seed.ts";
 
 import { makeCtx, seedLegacyMcpInstall, seedMcpPlugin } from "./mcp-plugin-seed.ts";
 
@@ -526,6 +527,7 @@ test("AMIG-01: /reload removes an undeclared server, drops an unsupported one an
     const info = makeCtx();
     await getPluginInfo({
       ...info.session,
+      mcpStatus: noStatusSnapshot(),
       marketplace: "mp",
       plugin: "hello",
       scope: "project",

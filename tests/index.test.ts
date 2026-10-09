@@ -45,13 +45,17 @@ import path from "node:path";
 import test, { type TestContext } from "node:test";
 
 import { SessionManager } from "@earendil-works/pi-coding-agent";
-import { It, when } from "strong-mock";
+import { It, mock, verify, when } from "strong-mock";
 
 import claudeMarketplaceExtension from "../extensions/pi-claude-marketplace/index.ts";
 import * as entryModule from "../extensions/pi-claude-marketplace/index.ts";
 import { loadState } from "../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { EXTENSION_VERSION } from "../extensions/pi-claude-marketplace/shared/extension-version.ts";
 
+import {
+  buildInstalledPluginRecord,
+  mergeMarketplaceIntoState,
+} from "./edge/handlers/marketplace-seed.ts";
 import { createNotificationBoundary } from "./edge/notification-boundary.ts";
 import { createHermeticEnvironment } from "./platform/hermetic-environment.ts";
 
@@ -122,6 +126,7 @@ interface LoadedExtension {
   readonly tools: readonly (ToolRegistration | undefined)[];
   readonly ctx: ExtensionCommandContext;
   readonly notifications: readonly Notification[];
+  readonly publishStatus: (data: unknown) => void;
   readonly verifyBoundary: () => void;
 }
 
@@ -267,6 +272,16 @@ async function loadExtension(
     probes,
     cwd,
   );
+  // ASTAT-01: the bus mock states the one subscription the factory makes, so
+  // any other bus call -- a publish included -- fails where it happens.
+  const events = mock<ExtensionAPI["events"]>({ exactParams: true, name: "event bus" });
+  const statusListener = It.willCapture<(data: unknown) => void>("mcp status listener");
+  when(() => events.on("pi-mcp-adapter/status/v1", statusListener))
+    .thenReturn(() => undefined)
+    .times(1);
+  when(() => pi.events)
+    .thenReturn(events)
+    .times(1);
   const bridgeSessionStartListener =
     It.willCapture<BridgeSessionStartListener>("bridge session start");
   when(() => {
@@ -390,7 +405,9 @@ async function loadExtension(
   const sessionEnv = sessionEnvListener.value;
   const toolCall = toolCallListener.value;
   const command = commandRegistration.value;
+  const publishStatus = statusListener.value;
   if (
+    publishStatus === undefined ||
     bridgeSessionStart === undefined ||
     discover === undefined ||
     sessionEnv === undefined ||
@@ -409,7 +426,11 @@ async function loadExtension(
     tools: [firstTool.value, secondTool.value],
     ctx,
     notifications,
-    verifyBoundary,
+    publishStatus,
+    verifyBoundary: (): void => {
+      verifyBoundary();
+      verify(events);
+    },
   };
 }
 
@@ -999,6 +1020,79 @@ test("MISS-01 / D-09-13: a reload event installs a missing dependency that a sta
   assert.equal(afterReload.marketplaces["mp"]?.plugins["helper"]?.enabled, true);
   assert.equal(afterReload.marketplaces["mp"]?.plugins["plug"]?.enabled, true);
   reload.verifyBoundary();
+});
+
+/**
+ * ASTAT-01: record an enabled project-scope plugin "hello" whose installation
+ * wrote the MCP server "srv". The marketplace declares no plugin, so info
+ * renders the record's own inventory under `{not in manifest}`.
+ */
+async function seedRecordedMcpPlugin(cwd: string): Promise<void> {
+  const extensionRoot = path.join(cwd, ".pi", "pi-claude-marketplace");
+  const marketplaceRoot = path.join(cwd, "mp-src");
+  const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
+  await mkdir(extensionRoot, { recursive: true });
+  await mkdir(path.dirname(manifestPath), { recursive: true });
+  await writeFile(manifestPath, JSON.stringify({ name: "mp", plugins: [] }), "utf8");
+  const hello = buildInstalledPluginRecord(
+    { version: "1.0.0" },
+    { skills: [], prompts: [], agents: [], mcpServers: ["srv"], hooks: [], workflows: [] },
+  );
+  await mergeMarketplaceIntoState(extensionRoot, "mp", {
+    name: "mp",
+    scope: "project",
+    source: { kind: "path", raw: "./mp-src", logical: "./mp-src" },
+    addedFromCwd: cwd,
+    manifestPath,
+    marketplaceRoot,
+    plugins: { hello },
+  });
+}
+
+test("ASTAT-01: /claude:plugin info shows the status pi-mcp-adapter last published, and a fresh extension load starts with none", async (t) => {
+  // arrange
+  const scope = await createHermeticScope(t, "mcp-status");
+  await seedRecordedMcpPlugin(scope.cwd);
+  const first = await loadExtension(2, 4, { value: scope.cwd, reads: 2 });
+
+  // act
+  await first.command.handler("info hello@mp --scope project", first.ctx);
+  first.publishStatus({
+    version: 1,
+    servers: [{ name: "plugin_hello_srv_", status: "connected" }],
+  });
+  await first.command.handler("info hello@mp --scope project", first.ctx);
+  const reloaded = await loadExtension(1, 2, { value: scope.cwd, reads: 1 });
+  await reloaded.command.handler("info hello@mp --scope project", reloaded.ctx);
+
+  // assert
+  assert.deepStrictEqual(first.notifications, [
+    {
+      message:
+        "● mp [project] <no autoupdate>\n" +
+        "  ● hello v1.0.0 (installed) {not in manifest}\n" +
+        "    mcp: plugin:hello:srv (status unknown)\n" +
+        "    requires: pi-mcp-adapter (missing)",
+    },
+    {
+      message:
+        "● mp [project] <no autoupdate>\n" +
+        "  ● hello v1.0.0 (installed) {not in manifest}\n" +
+        "    mcp: plugin:hello:srv (connected)\n" +
+        "    requires: pi-mcp-adapter (missing)",
+    },
+  ]);
+  assert.deepStrictEqual(reloaded.notifications, [
+    {
+      message:
+        "● mp [project] <no autoupdate>\n" +
+        "  ● hello v1.0.0 (installed) {not in manifest}\n" +
+        "    mcp: plugin:hello:srv (status unknown)\n" +
+        "    requires: pi-mcp-adapter (missing)",
+    },
+  ]);
+  first.verifyBoundary();
+  reloaded.verifyBoundary();
 });
 
 test("keeps hook routing and command completion state inside each extension-load owner graph", async (t) => {

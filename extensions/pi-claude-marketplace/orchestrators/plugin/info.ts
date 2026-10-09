@@ -61,7 +61,11 @@ import {
 } from "../../domain/source.ts";
 import { rowClaimsInstallDisabled } from "../../domain/unsupported-components.ts";
 import { locationsFor, type ScopedLocations } from "../../persistence/locations.ts";
-import { isRecordedButDisabled, type ExtensionState } from "../../persistence/state-io.ts";
+import {
+  isRecordedButDisabled,
+  type ExtensionState,
+  type PluginInstallRecord,
+} from "../../persistence/state-io.ts";
 import { softDepStatus } from "../../platform/pi-api.ts";
 import { companionRequirements } from "../../shared/concerns/soft-dep.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
@@ -101,6 +105,7 @@ import {
   resolvePluginPin,
 } from "./clone-cache.ts";
 import { makePresenceProbe } from "./git-source-probe.ts";
+import { withMcpServerStatus } from "./info-mcp-status.ts";
 import { PLUGIN_INFO_CONTEXT, type PluginInfoCascadeMsg } from "./info.messaging.ts";
 
 import type {
@@ -109,6 +114,7 @@ import type {
   ResolvedPluginUnavailable,
   ResolvedPluginPartiallyAvailable,
 } from "../../domain/resolver-types.ts";
+import type { McpStatusReader } from "../../platform/mcp-status.ts";
 import type { NotificationContext, PiInventory, SoftDepStatus } from "../../platform/pi-api.ts";
 import type { HookSummaryEntry } from "../../shared/concerns/hooks.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -128,6 +134,13 @@ export interface GetPluginInfoOptions {
    * own snapshot, which emits no soft-dep marker on the info surfaces.
    */
   readonly pi: PiInventory;
+  /**
+   * ASTAT-01 / ASTAT-02: the extension load's status tracker. Info reads
+   * pi-mcp-adapter's last snapshot from it and stamps each written server's
+   * state. It never connects a server and never asks the adapter for a
+   * snapshot.
+   */
+  readonly mcpStatus: McpStatusReader;
   readonly marketplace: string;
   readonly plugin: string;
   /** When omitted, fan-out across BOTH scopes (project-first per INFO-03). */
@@ -2972,6 +2985,18 @@ function withCompanionRequirements(built: InfoBlock, probe: SoftDepStatus): Info
   };
 }
 
+/**
+ * ASTAT-01: stamps the block's written MCP servers with the state
+ * pi-mcp-adapter last reported, read against the block's own scope record.
+ */
+function withServerStatus(
+  built: InfoBlock,
+  record: PluginInstallRecord | undefined,
+  mcpStatus: McpStatusReader,
+): InfoBlock {
+  return { ...built, block: withMcpServerStatus(built.block, record, mcpStatus) };
+}
+
 async function getPluginInfoWithReader(
   reader: PluginInfoReader,
   env: ClaudeEnv,
@@ -3054,7 +3079,11 @@ async function getPluginInfoWithReader(
       cwd: opts.cwd,
       ...(fetchCtx !== undefined && { fetchCtx }),
     });
-    const built = withCompanionRequirements(soleBlock, probe);
+    const built = withServerStatus(
+      withCompanionRequirements(soleBlock, probe),
+      sole.record.plugins[opts.plugin],
+      opts.mcpStatus,
+    );
     notify(opts.ctx, opts.pi, built.block);
     emitFetchSkip(opts, scopes, [built]);
     return;
@@ -3075,9 +3104,9 @@ async function getPluginInfoWithReader(
   // rule on the partial-failure path so a failure in one scope cannot hide
   // behind a healthy other-scope render; callers wanting strict IL-2 must pass
   // `--scope`. Block order follows the project-first scope iteration (MSG-GR-3).
-  const scopeBlocks = await Promise.all(
-    found.map((f) =>
-      buildBlock({
+  const built = await Promise.all(
+    found.map(async (f) => {
+      const scopeBlock = await buildBlock({
         reader,
         env,
         marketplace: opts.marketplace,
@@ -3088,10 +3117,14 @@ async function getPluginInfoWithReader(
         declaredEnabled: f.declaredEnabled,
         cwd: opts.cwd,
         ...(fetchCtx !== undefined && { fetchCtx }),
-      }),
-    ),
+      });
+      return withServerStatus(
+        withCompanionRequirements(scopeBlock, probe),
+        f.record.plugins[opts.plugin],
+        opts.mcpStatus,
+      );
+    }),
   );
-  const built = scopeBlocks.map((b) => withCompanionRequirements(b, probe));
   const blocks = built.map((b) => b.block);
   const infoBlocks = blocks.filter((b) => b.plugin.status !== "failed");
   const failedBlocks = blocks.filter((b) => b.plugin.status === "failed");

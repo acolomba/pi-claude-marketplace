@@ -313,6 +313,8 @@ async function buildMarketplace(root) {
 async function loadExtension() {
   const commands = new Map();
   const pi = {
+    // ASTAT-01: the factory subscribes to pi-mcp-adapter's status channel.
+    events: { on: () => () => {} },
     registerCommand: (name, command) => commands.set(name, command),
     registerTool: () => {},
     on: () => {},

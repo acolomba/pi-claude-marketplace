@@ -82,7 +82,8 @@ const COMMAND_DESCRIPTION =
  * (`index.ts` is the single call site).
  *
  * `deps.gitOps` and `deps.beginPluginUpdateRun` are threaded into the marketplace
- * add/update/remove handlers per D-04 EdgeDeps.
+ * add/update/remove handlers per D-04 EdgeDeps. `deps.mcpStatus` is threaded
+ * into the plugin info handler (ASTAT-01).
  */
 export function registerClaudePluginCommand(
   pi: ExtensionAPI,
@@ -94,7 +95,7 @@ export function registerClaudePluginCommand(
   const install = makeInstallHandler(pi, hooksRouting, deps.completionCache);
   const uninstall = makeUninstallHandler(pi, hooksRouting, deps.completionCache);
   const prune = makePruneHandler(pi, hooksRouting, deps.completionCache);
-  const pluginInfo = makePluginInfoHandler(pi);
+  const pluginInfo = makePluginInfoHandler(pi, deps.mcpStatus);
   const enable = makeEnableDisableHandler(pi, true, hooksRouting);
   const disable = makeEnableDisableHandler(pi, false, hooksRouting);
   const list = makeListHandler(pi);
