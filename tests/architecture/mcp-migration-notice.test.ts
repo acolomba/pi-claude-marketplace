@@ -99,7 +99,7 @@ const CATALOG_REPORT_ROWS: readonly CatalogReportRow[] = [
           marketplace: "official",
           servers: ["db"],
           key: "plugin_dbtools_db_",
-          source: "user-scope mcp-adapter.json",
+          source: "the user-scope mcp-adapter.json",
         },
         {
           kind: "marketplace-unreadable",

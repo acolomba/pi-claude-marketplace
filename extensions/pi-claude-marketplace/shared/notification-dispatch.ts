@@ -547,7 +547,9 @@ export interface McpMigrationMarketplaceUnreadableRow {
 /**
  * AMIG-01: an installed plugin whose new key another config source already
  * defines in full, so none of its servers moved. `key` is that source's key
- * and `source` a scope-and-file label, never an absolute path.
+ * and `source` names it as the row reads it: a scope file with its article
+ * (`the user-scope mcp-adapter.json`) or a home-relative path
+ * (`~/.config/mcp/mcp.json`), never an absolute path.
  */
 export interface McpMigrationCollisionRow {
   readonly kind: "collision";
@@ -772,7 +774,7 @@ function leftRowLine(row: McpMigrationLeftRow): string {
     case "marketplace-unreadable":
       return `${ownerRowPrefix(row)} The ${printable(row.marketplace)} marketplace copy cannot give the source of ${printable(row.plugin)}. Run /claude:plugin marketplace update ${printable(row.marketplace)}, or /claude:plugin uninstall ${printable(row.plugin)}@${printable(row.marketplace)} to remove it.`;
     case "collision":
-      return `${ownerRowPrefix(row)} ${printable(row.key)} is already defined in the ${printable(row.source)}, so no server of ${printable(row.plugin)} moved. Remove or rename that server, then run /reload.`;
+      return `${ownerRowPrefix(row)} ${printable(row.key)} is already defined in ${printable(row.source)}, so no server of ${printable(row.plugin)} moved. Remove or rename that server, then run /reload.`;
     case "unfinished":
       return `${ownerRowPrefix(row)} The new entries are written, but ${row.file} could not be updated: ${sentenceBody(row.detail)}. The next /reload finishes the move.`;
   }

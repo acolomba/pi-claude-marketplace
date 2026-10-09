@@ -13,7 +13,7 @@
 // hand: no git process and no network module runs (NFR-5).
 
 import assert from "node:assert/strict";
-import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, test } from "node:test";
 
@@ -1243,7 +1243,7 @@ describe("migrateLegacyMcpEntries", () => {
     {
       source: "the user mcp-adapter.json",
       key: "plugin_hello_srv_",
-      label: "user-scope mcp-adapter.json",
+      label: "the user-scope mcp-adapter.json",
       write: async ({ cwd }: Scope): Promise<void> => {
         await writeConfigFile(locationsFor("user", cwd).mcpAdapterJsonPath, {
           plugin_hello_srv_: { command: "theirs" },
@@ -1253,7 +1253,7 @@ describe("migrateLegacyMcpEntries", () => {
     {
       source: "~/.config/mcp/mcp.json",
       key: "plugin_hello_srv_",
-      label: "mcp.json",
+      label: "~/.config/mcp/mcp.json",
       write: async ({ home }: Scope): Promise<void> => {
         await writeConfigFile(path.join(home, ".config", "mcp", "mcp.json"), {
           plugin_hello_srv_: { command: "theirs" },
@@ -1261,9 +1261,30 @@ describe("migrateLegacyMcpEntries", () => {
       },
     },
     {
+      source: "an ancestor .mcp.json under a symlinked home",
+      key: "plugin_hello_srv_",
+      label: "~/.mcp.json",
+      write: async ({ home }: Scope): Promise<void> => {
+        // HOME links to the case root, which holds the project; the hermetic
+        // environment restores HOME after the case.
+        const root = path.dirname(home);
+        const linkedHome = path.join(root, "linked-home");
+        await symlink(root, linkedHome);
+        process.env.HOME = linkedHome;
+        await mkdir(path.join(linkedHome, ".config", "mcp"), { recursive: true });
+        await writeFile(
+          path.join(linkedHome, ".config", "mcp", "mcp.json"),
+          JSON.stringify({ settings: { ancestorConfigRoots: ["~/"] } }),
+        );
+        await writeConfigFile(path.join(root, ".mcp.json"), {
+          plugin_hello_srv_: { command: "theirs" },
+        });
+      },
+    },
+    {
       source: "the project .mcp.json under a key that folds equal",
       key: "plugin-hello-srv-",
-      label: "project .mcp.json",
+      label: "the project .mcp.json",
       write: async ({ cwd }: Scope): Promise<void> => {
         await writeConfigFile(path.join(cwd, ".mcp.json"), {
           "plugin-hello-srv-": { url: "https://example.test/mcp" },

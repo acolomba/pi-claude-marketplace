@@ -7100,7 +7100,7 @@ describe("notifyMcpMigration", () => {
           marketplace: "official",
           servers: ["db"],
           key: "plugin_dbtools_db_",
-          source: "user-scope mcp-adapter.json",
+          source: "the user-scope mcp-adapter.json",
         },
         {
           kind: "source-unreadable",
@@ -7178,9 +7178,9 @@ describe("notifyMcpMigration", () => {
         marketplace: "m",
         servers: ["s"],
         key: "plugin_p_s_",
-        source: "mcp.json",
+        source: "~/.config/mcp/mcp.json",
       },
-      line: "  s (p) [user] plugin_p_s_ is already defined in the mcp.json, so no server of p moved. Remove or rename that server, then run /reload.",
+      line: "  s (p) [user] plugin_p_s_ is already defined in ~/.config/mcp/mcp.json, so no server of p moved. Remove or rename that server, then run /reload.",
     },
     {
       row: { kind: "file-unreadable", scope: "user", file: "mcp.json" },
@@ -7288,7 +7288,7 @@ describe("notifyMcpMigration", () => {
           marketplace: "m\u0007",
           servers: ["s\nx", "t"],
           key: "k\u009b",
-          source: "f\r.json",
+          source: "the f\r.json",
         },
         {
           kind: "unowned",

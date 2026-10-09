@@ -52,6 +52,8 @@
 // the warm clone of the record's sha through the fs-only presence probe; a
 // cold cache leaves the entries in place.
 
+import { realpath } from "node:fs/promises";
+import { homedir } from "node:os";
 import path from "node:path";
 
 import {
@@ -362,20 +364,34 @@ async function ownerAction(
 }
 
 /**
- * The colliding source as a scope-and-file label, so no absolute path
- * reaches the notice: one of the four scope files, the project `.mcp.json`,
- * or the file's basename.
+ * A source path as `~/<relative>`. Every source the scope labels leave out is
+ * in the home directory: a global source under `homedir()`, and an ancestor
+ * file under its real path (AFILE-05), which differs when the home directory
+ * is a symlink.
  */
-function sourceLabel(owningPath: string, cwd: string): string {
+async function homeRelativePath(sourcePath: string): Promise<string> {
+  const home = homedir();
+  const lexical = path.relative(home, sourcePath).split(path.sep);
+  const segments =
+    lexical[0] === ".." ? path.relative(await realpath(home), sourcePath).split(path.sep) : lexical;
+  return `~/${segments.join("/")}`;
+}
+
+/**
+ * The colliding source as the phrase the collision row reads, so no absolute
+ * path reaches the notice: one of the four scope files or the project
+ * `.mcp.json` with its article, or any other source by its home-relative path.
+ */
+async function sourceLabel(owningPath: string, cwd: string): Promise<string> {
   const labels = new Map<string, string>();
   for (const scope of SCOPES) {
     const scoped = locationsFor(scope, cwd);
-    labels.set(scoped.mcpAdapterJsonPath, `${scope}-scope mcp-adapter.json`);
-    labels.set(scoped.mcpJsonPath, `${scope}-scope mcp.json`);
+    labels.set(scoped.mcpAdapterJsonPath, `the ${scope}-scope mcp-adapter.json`);
+    labels.set(scoped.mcpJsonPath, `the ${scope}-scope mcp.json`);
   }
 
-  labels.set(path.join(cwd, ".mcp.json"), "project .mcp.json");
-  return labels.get(owningPath) ?? path.basename(owningPath);
+  labels.set(path.join(cwd, ".mcp.json"), "the project .mcp.json");
+  return labels.get(owningPath) ?? (await homeRelativePath(owningPath));
 }
 
 function pushStoppedRow(input: McpMigrationInput, owner: LegacyMcpOwner, err: unknown): void {
@@ -440,7 +456,7 @@ async function stageOwner(
         kind: "collision",
         ...ownerRowFields(input, owner),
         key: err.definedAs ?? err.serverName,
-        source: sourceLabel(err.owningPath, input.cwd),
+        source: await sourceLabel(err.owningPath, input.cwd),
       });
     } else {
       pushStoppedRow(input, owner, err);
