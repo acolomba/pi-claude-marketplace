@@ -3,12 +3,12 @@ gsd_state_version: "1.0"
 milestone: json-output
 current_phase: 6
 current_phase_name: Command-Run Contract
-status: verifying
-stopped_at: Phase 6 final goal verification
-last_updated: "2026-10-09T23:18:47.274Z"
+status: awaiting_human_verification
+stopped_at: Phase 6 UAT has two intent judgments awaiting acceptance
+last_updated: "2026-10-09T23:32:55.694Z"
 last_activity: 2026-10-09
 last_activity_desc: Phase 6 implementation and remediation checks passed
-state_head: 109d1147891451e33d971f7fb2c02d6eae2502f8
+state_head: 4aedaabfdb482614e655f80528def70d089bc171
 progress:
   total_phases: 7
   completed_phases: 5
@@ -30,9 +30,9 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: 6 (Command-Run Contract) — VERIFYING
+Phase: 6 (Command-Run Contract) — AWAITING HUMAN VERIFICATION
 Plan: 4 of 4 complete
-Status: verifying
+Status: awaiting_human_verification
 Last activity: 2026-10-09 — Full gate, clean review, and security reassessment passed
 
 Progress: [███████░░░] 71% (5 of 7 phases fully verified; 39 of 39 plans complete)
@@ -360,9 +360,13 @@ Ambiguous affected causes become `Command failure details omitted.`.
 Text output remains unchanged. The user accepted this behavior with option 1
 on 2026-10-09. The redaction confirmation is resolved.
 
-Run the final phase-goal verifier and record its input
-fingerprint. Keep the tracking/telemetry and rollback-transparency
-prohibitions visible for its explicit disposition. Then complete Phase 6
-and continue the original `gsd-autonomous --from 6 --interactive` run into
-Phase 7. No Phase 6 VERIFICATION.md exists yet. No phase or milestone
-completion is claimed by this checkpoint.
+The final verifier confirmed all 15 positive truths with no implementation
+gaps. Its fingerprint is current. 06-VERIFICATION.md has status human_needed
+for two descriptor-less prohibitions: correlation must not become tracking
+or telemetry, and failure output must not imply rollback. Both concrete
+judgments are saved in 06-UAT.md and are pending user acceptance.
+
+After acceptance, record both UAT results and finish the verification
+transition. Then continue the original
+`gsd-autonomous --from 6 --interactive` run into Phase 7. No phase or
+milestone completion is claimed at this checkpoint.
