@@ -854,8 +854,13 @@ Phase 7 closed: 5/5 plans; Nyquist validated; security verified (0 open);
 review 8/8 fixed; verifier 3/3, re-running the live canary against
 pi-mcp-adapter 5.2.0. `/gsd-autonomous --from 7` ran the transition, then
 the milestone lifecycle. Phases 1-6 read `stale` (later phases edited
-covered source files), so each gets a scoped re-verification before the
-audit.
+covered source files); scoped re-verification at 51ebbc07 passed all six
+(1b1e39a3). The audit (488bec50) reads `tech_debt`: 36/36 requirements,
+integration 6/6, flows 6/6. The operator stopped the lifecycle to address
+the debt first; complete-milestone, UAT and cleanup have not run. PR
+blocker: `npx fallow audit` against the main merge-base reads `warn`
+(14 clone groups). Resume: clear the debt, then
+`/gsd-complete-milestone mcp-4`.
 
 Previous session: 2026-10-09T22:57:15.140Z
 Phase 6 closed in the same `/gsd-autonomous --from 5 --interactive` run.
