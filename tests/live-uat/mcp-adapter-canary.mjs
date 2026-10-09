@@ -1409,7 +1409,10 @@ async function main(cli) {
     printOut(`[${TAG}] all assertions proven; exit 0`);
   } finally {
     if (interruption === undefined) {
-      await teardown(root);
+      // A teardown failure must not replace the verdict.
+      await teardown(root).catch((error) =>
+        printErr(`[${TAG}] teardown: ${error?.message ?? error}`),
+      );
     }
   }
 }
