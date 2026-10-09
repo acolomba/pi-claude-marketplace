@@ -196,6 +196,16 @@ None.
 
 Ready for 06-02 after the parent merges this worktree and passes the combined-wave gate. Command error delivery, outcome accounting, and lifetime closure remain assigned to later plans. STATE.md, state.json, ROADMAP.md, config.json, and shared requirement records were not modified.
 
+## Combined-wave verification
+
+The parent merged this plan as `9b1abc7a` and ran `npm run check` on the
+clean combined tree with Node `v26.11.0`. It passed with exit 0, including
+integration tests and direct coverage for all 264 source/test pairs.
+The first sandboxed attempt failed because the FIFO harness could not spawn
+`mkfifo` (`EPERM`); the permitted full rerun passed without code changes.
+The schema-drift gate passed. The codebase-map drift gate reported a
+non-blocking stale-map advisory; later work must use live source.
+
 ## Self-Check: PASSED
 
 Both exact task commits exist on this branch and are ancestors of HEAD. The key implementation files and generated schema exist. The final task tree is committed, task verification passes, and the protected planning files and catalog are unchanged.

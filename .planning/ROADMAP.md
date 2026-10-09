@@ -245,11 +245,11 @@ Plans:
 3. Every command emits all of its payloads before its handler's promise settles. A test that awaits the handler sees the complete set, and nothing is emitted after it.
 4. In `json` and `rpc`, an unexpected throw from any command handler becomes a typed `internal-error` payload with a redacted cause chain, so every command yields at least one payload. In `tui` and `print`, the behavior does not change.
 
-**Plans:** 4 plans, sequential (waves 1-4)
+**Plans:** 1/4 plans executed, sequential (waves 1-4)
 
 Plans:
 **Wave 1**
-- [ ] 06-01-PLAN.md — Required origin metadata, canonical commands, and invocation correlation
+- [x] 06-01-PLAN.md — Required origin metadata, canonical commands, and invocation correlation
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 06-02-PLAN.md — Typed internal errors and safe cause resolution
@@ -286,7 +286,7 @@ Plans:
 | 3. Typed Raw Surfaces | 4/4 | Complete    | 2026-10-03 |
 | 4. Wire Schema and JSON Strategy | 6/6 | Complete    | 2026-10-06 |
 | 5. Mode-Selected JSON Sink | 7/7 | Complete    | 2026-10-07 |
-| 6. Command-Run Contract | 0/TBD | Not started | - |
+| 6. Command-Run Contract | 1/4 | In Progress | - |
 | 7. Mode Refusals, Real-Pi Verification, and Docs | 0/TBD | Not started | - |
 
 ## Carried Forward
