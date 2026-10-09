@@ -5,16 +5,16 @@ milestone_name: MCP 4
 current_phase: 07
 current_phase_name: Docs and live proof
 status: executing
-stopped_at: Completed 07-01-PLAN.md
-last_updated: "2026-10-09T21:57:56.239Z"
+stopped_at: Completed 07-02-PLAN.md
+last_updated: "2026-10-09T22:17:29.321Z"
 last_activity: 2026-10-09
 last_activity_desc: Phase 07 execution started
-state_head: 27fdb1527a1d588d0eef599f64fa40383649cb75
+state_head: "0b4eb3715714b64396bc800c4797ae7550de9011"
 progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 52
-  completed_plans: 48
+  completed_plans: 49
   percent: 86
 ---
 
@@ -35,7 +35,7 @@ sign-ins and approvals.
 ## Current Position
 
 Phase: 07 (Docs and live proof) — EXECUTING
-Plan: 2 of 5
+Plan: 3 of 5
 Status: Ready to execute
 Last activity: 2026-10-09 — Phase 07 execution started
 
@@ -294,6 +294,7 @@ still open with a comment explaining what landed.
 | Phase 06 P02 | 25min | 2 tasks | 10 files |
 | Phase 06 P03 | 6min | 2 tasks | 3 files |
 | Phase 07 P01 | 7 min | 3 tasks | 14 files |
+| Phase 07 P02 | 14 min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -702,6 +703,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 06]: The MCP status conformance test builds the snapshot by hand in pi-mcp-adapter's shape, keyed by the names a real install wrote, because the adapter ships its snapshot builder only as TypeScript source
 - [Phase 07]: [mcp-4 Phase 7] The pi-mcp-adapter optional peer is >=5.2.0 <6 (MCP SDK 2.3.1 fixes GHSA-6qxp-vccf-f47h); cited adapter files are byte-identical to 5.1.0, so citations keep their line references and PI_MCP_ADAPTER_ROOT must now name a 5.2.0 install (D-07-07).
 - [Phase 07]: [mcp-4 Phase 7] scripts/pi.sh passes -e builtin:tool-search after --no-extensions so tool_search stays available; builtin:mcp stays off (D-07-05).
+- [Phase 07]: [mcp-4 Phase 7] Live canary routing: a contradicting observation (missing migration notice, missing fresh-install row, A1 token other than status unknown) exits 2; an unobservable drive exits 1
+- [Phase 07]: [mcp-4 Phase 7] The move from mcp.json to mcp-adapter.json takes exactly 1 reload on Pi 1.0.0 with pi-mcp-adapter 5.2.0, measured live by the mcp-adapter canary
 
 ### Pending Todos
 
@@ -835,11 +838,11 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Completed 07-01-PLAN.md
+**Stopped at:** Completed 07-02-PLAN.md
 
 **Resume file:** None
 
-Last session: 2026-10-09T21:57:55.882Z
+Last session: 2026-10-09T22:17:28.927Z
 Phase 6 closed in the same `/gsd-autonomous --from 5 --interactive` run.
 Gates: discuss (4 areas + 3 post-research rulings), research, 3 plans in 3
 waves executed sequentially; Nyquist compliant; security 12/12 closed;
