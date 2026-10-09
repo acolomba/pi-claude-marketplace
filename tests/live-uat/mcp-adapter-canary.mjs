@@ -21,7 +21,19 @@
 //   - before any reload the adapter still lists the old name and info shows
 //     `not loaded`; the canary counts the reloads until the adapter lists the
 //     new key and no longer the old name, and fails unless the count is 1
-//     (AMIG-03, ASTAT-01, ASTAT-02).
+//     (AMIG-03, ASTAT-01, ASTAT-02);
+//   - a plugin installed fresh in the same session is written as
+//     `plugin_ping_ping_` and is live in the adapter after that reload
+//     (AFILE-01);
+//   - route A, in a fresh Pi process: info shows `status unknown` before the
+//     first MCP use, `mcp({ search })` returns
+//     `mcp__plugin_echo_echo__echo_canary`, which the first model request did
+//     not declare and a later one did, the call returns `echo-canary:hi`, and
+//     info then shows `connected` (ANAME-01, ANAME-04, ASTAT-01, ASTAT-02).
+//
+// The model side is `openai-stub-server.mjs`, started as a child process with
+// `STUB_PORT=0` and a `STUB_SCRIPT` that replays the route's tool calls. No
+// real model and no key are used.
 //
 // Every run seeds the agent directory from the committed fixture
 // `tests/live-uat/fixtures/mcp-adapter-canary/legacy-v0.19.2.json`, so it is
@@ -34,7 +46,10 @@
 //     --ignore-scripts --omit=peer --no-audit --no-fund
 //   PI_MCP_ADAPTER_ROOT=/var/tmp/mcp-adapter-520/node_modules/pi-mcp-adapter \
 //   TMPDIR=/var/tmp/mcp-adapter-canary \
-//     node tests/live-uat/mcp-adapter-canary.mjs
+//     node tests/live-uat/mcp-adapter-canary.mjs [--invert]
+//
+// `--invert` is the negative control: it flips the expected route A result
+// text and nothing else, so that run must exit 2 at A3.
 //
 // `--capture-legacy <prefix>` regenerates the fixture instead. It drives the
 // pi-claude-marketplace 0.19.2 installed under `<prefix>` alone, adds the
@@ -93,6 +108,20 @@ const LEGACY_FILES = ["mcp.json", "pi-claude-marketplace/state.json", "claude-pl
 const MOVED_SUMMARY = "Plugin MCP servers moved from mcp.json to mcp-adapter.json.";
 const MIGRATED_ROW = "echo -> plugin_echo_echo_ (echo) [user]";
 const ECHO_KEY = "plugin_echo_echo_";
+const PING_KEY = "plugin_ping_ping_";
+const ECHO_TOOL = "mcp__plugin_echo_echo__echo_canary";
+const ROUTE_A_PROMPT = "route-a: find the echo canary tool and call it with the text hi";
+const STUB_SCRIPTS = {
+  "route-a": [
+    { tool: "mcp", arguments: { search: "echo canary" } },
+    { tool: ECHO_TOOL, arguments: { text: "hi" } },
+  ],
+  "route-b": [
+    { tool: "tool_search", arguments: { query: "echo canary" } },
+    { tool: ECHO_TOOL, arguments: { text: "via-tool-search" } },
+  ],
+};
+const STUB_START_MS = 5_000;
 const STATUS_TOKENS = { cached: "cached, connects on first use", connected: "connected" };
 
 const PLUGINS = [
@@ -125,6 +154,9 @@ let maskedRoot;
 
 /** Sessions still running, so the teardown can stop them on any exit. */
 const liveSessions = new Set();
+
+/** The stub child process, so the teardown can stop it on any exit. */
+let liveStub;
 
 function mask(text) {
   return maskedRoot === undefined ? String(text) : String(text).replaceAll(maskedRoot, "<sandbox>");
@@ -176,9 +208,10 @@ function observed(message) {
 }
 
 function parseCli(argv) {
+  const invert = argv.includes("--invert");
   const at = argv.indexOf("--capture-legacy");
   if (at === -1) {
-    return { capturePrefix: undefined };
+    return { invert, capturePrefix: undefined };
   }
 
   const prefix = argv[at + 1];
@@ -186,7 +219,7 @@ function parseCli(argv) {
     humanNeeded("--capture-legacy needs the npm prefix of a pi-claude-marketplace 0.19.2 install.");
   }
 
-  return { capturePrefix: path.resolve(prefix) };
+  return { invert, capturePrefix: path.resolve(prefix) };
 }
 
 async function readJson(file) {
@@ -1012,11 +1045,11 @@ async function reloadsUntilLive(session, liveKeys) {
   return undefined;
 }
 
-/** M4 (AMIG-03, ASTAT-01): one reload makes the new key live and drops the old name. */
+/** M4 (AMIG-03, ASTAT-01): one reload makes both keys live and drops the old name. */
 async function assertReloadCount(session) {
-  const live = await reloadsUntilLive(session, [ECHO_KEY]);
+  const live = await reloadsUntilLive(session, [ECHO_KEY, PING_KEY]);
   if (live === undefined) {
-    regression("M4", `${ECHO_KEY} is not live after 3 reloads.`);
+    regression("M4", `${ECHO_KEY} and ${PING_KEY} are not both live after 3 reloads.`);
   }
 
   if (statusOf(live.pairs, "echo") !== undefined) {
@@ -1031,14 +1064,36 @@ async function assertReloadCount(session) {
     regression("M4", `The move took ${live.reload} reloads; the notice promises 1.`);
   }
 
-  const token = await expectInfoMatches(session, "echo", statusOf(live.pairs, ECHO_KEY), "M4");
+  const echo = await expectInfoMatches(session, "echo", statusOf(live.pairs, ECHO_KEY), "M4");
+  const ping = await expectInfoMatches(session, "ping", statusOf(live.pairs, PING_KEY), "M4");
   pass(
     "M4",
-    `AMIG-03, ASTAT-01: after 1 reload the adapter lists ${JSON.stringify(live.pairs)} and info shows (${token})`,
+    `AMIG-03, ASTAT-01, AFILE-01: after 1 reload the adapter lists ${JSON.stringify(live.pairs)}; ` +
+      `info shows echo (${echo}) and ping (${ping})`,
   );
 }
 
-/** Session 1: the seeded legacy entry migrates and one reload makes it live. */
+/** I1 (AFILE-01): a plugin installed fresh in the session is written for the adapter. */
+async function assertFreshInstall(session, sandbox) {
+  const outcome = await run(session, `/claude:plugin install ping@${MARKETPLACE} --scope user`);
+  if (!outcome.notifies.some((notify) => notify.message.includes("● ping v1.0.0 (installed)"))) {
+    regression(
+      "I1",
+      "The install shows no `● ping v1.0.0 (installed)` row.",
+      notifyText(outcome.notifies),
+    );
+  }
+
+  const adapter = await readJsonIfPresent(path.join(sandbox.agentDir, "mcp-adapter.json"));
+  const problems = entryProblems(adapter?.mcpServers?.[PING_KEY], "ping");
+  if (problems.length > 0) {
+    regression("I1", `mcp-adapter.json ${PING_KEY}: ${problems.join("; ")}.`);
+  }
+
+  pass("I1", `AFILE-01: ping installed fresh is written to mcp-adapter.json as ${PING_KEY}`);
+}
+
+/** Session 1: the seeded legacy entry migrates, a fresh install joins it, one reload makes both live. */
 async function proveMigration(pi, ext, sandbox) {
   await seedLegacy(sandbox);
   const session = openSession(pi, sandbox, [EXTENSION_ENTRY, ext.entry, sandbox.helper]);
@@ -1046,12 +1101,164 @@ async function proveMigration(pi, ext, sandbox) {
   await assertMigrationNotice(session);
   await assertBeforeReload(session);
   await assertMigratedFiles(sandbox);
+  await assertFreshInstall(session, sandbox);
   await assertReloadCount(session);
   await closeChecked(session, "session 1");
 }
 
+/** Reads the first stdout line of the stub within the start bound and returns its port. */
+function stubPort(child) {
+  return new Promise((resolve) => {
+    const lines = createInterface({ input: child.stdout });
+    const timer = setTimeout(() => resolve(undefined), STUB_START_MS);
+    lines.once("line", (line) => {
+      clearTimeout(timer);
+      resolve(/:(\d+)\/v1/.exec(line)?.[1]);
+    });
+  });
+}
+
+/** Starts the keyless stub on a free port with the route scripts and points Pi at it. */
+async function startStub(sandbox) {
+  const scriptFile = path.join(sandbox.root, "stub-script.json");
+  const log = path.join(sandbox.root, "stub-http.log");
+  await writeJson(scriptFile, STUB_SCRIPTS);
+  await writeFile(log, "");
+  liveStub = spawn(process.execPath, [path.join(HERE, "openai-stub-server.mjs")], {
+    env: {
+      PATH: process.env.PATH ?? "",
+      STUB_PORT: "0",
+      STUB_HTTP_LOG: log,
+      STUB_SCRIPT: scriptFile,
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const port = await stubPort(liveStub);
+  if (port === undefined) {
+    humanNeeded(`openai-stub-server.mjs printed no port within ${STUB_START_MS} ms.`);
+  }
+
+  await writeJson(path.join(sandbox.agentDir, "models.json"), {
+    providers: {
+      stubllm: {
+        baseUrl: `http://127.0.0.1:${port}/v1`,
+        api: "openai-completions",
+        apiKey: "stub",
+        models: [{ id: "stub" }],
+      },
+    },
+  });
+  await writeJson(path.join(sandbox.agentDir, "settings.json"), {
+    defaultProvider: "stubllm",
+    defaultModel: "stub",
+    defaultTools: ["+tool_search"],
+    extensions: ["-builtin:mcp"],
+  });
+  return { log };
+}
+
+async function stubRequests(stub) {
+  const text = await readFile(stub.log, "utf8");
+  return text
+    .split("\n")
+    .filter((line) => line.trim() !== "")
+    .map((line) => JSON.parse(line));
+}
+
+/** A2, first half: `mcp({ search })` returned the plugin tool on its server key. */
+function assertSearchMatch(turn) {
+  const search = turn.tools.find((event) => event.toolName === "mcp");
+  const matches = search?.result?.details?.matches;
+  const found =
+    Array.isArray(matches) &&
+    matches.some((match) => match?.tool === ECHO_TOOL && match?.server === ECHO_KEY);
+  if (!found) {
+    const seen = search ?? turn.tools.map((event) => event.toolName);
+    regression(
+      "A2",
+      `mcp({ search }) did not return ${ECHO_TOOL} on ${ECHO_KEY}.`,
+      JSON.stringify(seen),
+    );
+  }
+}
+
+/** A2, second half: the first model request did not declare the tool and a later one did. */
+function assertDeclaredAfterSearch(requests) {
+  if (requests.length === 0) {
+    humanNeeded("The route A turn sent no request to the stub.");
+  }
+
+  const [first, ...later] = requests;
+  const firstTools = Array.isArray(first.tools) ? first.tools : [];
+  observed(`route A first model request tools: ${JSON.stringify(firstTools)}`);
+  if (!firstTools.includes("mcp") || firstTools.includes(ECHO_TOOL)) {
+    regression("A2", `The first model request declares ${JSON.stringify(firstTools)}.`);
+  }
+
+  if (!later.some((request) => request.tools?.includes(ECHO_TOOL))) {
+    regression("A2", `No model request after the search declares ${ECHO_TOOL}.`);
+  }
+}
+
+/** A3 (ADOC-02): the call returns the server's text; `--invert` expects other text. */
+function assertToolResult(turn, invert) {
+  const expected = invert ? "echo-canary:inverted" : "echo-canary:hi";
+  const call = turn.tools.find((event) => event.toolName === ECHO_TOOL);
+  const text = call?.result?.content?.[0]?.text;
+  if (call?.isError !== false || text !== expected) {
+    regression(
+      "A3",
+      `${ECHO_TOOL} returned ${JSON.stringify(text)} (isError ${call?.isError}); expected "${expected}".`,
+    );
+  }
+
+  pass("A3", `ADOC-02: ${ECHO_TOOL} returned "${text}"`);
+}
+
+/** A4 (ASTAT-01): after the first MCP use the adapter and info both report connected. */
+async function assertConnected(session) {
+  const tap = await pollStatus(session, (pairs) => statusOf(pairs, ECHO_KEY) === "connected", 20);
+  if (!tap.ok) {
+    regression("A4", `After the call the adapter lists ${JSON.stringify(tap.pairs)}.`);
+  }
+
+  await expectInfoMatches(session, "echo", "connected", "A4");
+  pass(
+    "A4",
+    `ASTAT-01: after the first MCP use the adapter reports ${ECHO_KEY} connected and info shows (connected)`,
+  );
+}
+
+/** Session 2, a fresh Pi process: route A finds and calls the plugin tool. */
+async function proveRouteA(pi, ext, sandbox, stub, invert) {
+  const session = openSession(pi, sandbox, [EXTENSION_ENTRY, ext.entry, sandbox.helper]);
+  await checkPacing(session);
+  await run(session, "/canary-wait 3000");
+  const before = await infoToken(session, "echo");
+  if (before !== "status unknown") {
+    regression(
+      "A1",
+      `In a fresh session info shows (${before}) before any MCP use; expected (status unknown).`,
+    );
+  }
+
+  pass("A1", "ASTAT-02: in a fresh deferred session info shows (status unknown)");
+  const logStart = (await stubRequests(stub)).length;
+  const turn = await run(session, ROUTE_A_PROMPT, true);
+  assertSearchMatch(turn);
+  assertDeclaredAfterSearch((await stubRequests(stub)).slice(logStart));
+  pass(
+    "A2",
+    `ANAME-01, ANAME-04: mcp({ search }) returned ${ECHO_TOOL}, declared only after the search`,
+  );
+  assertToolResult(turn, invert);
+  await assertConnected(session);
+  await closeChecked(session, "session 2");
+}
+
 async function teardown(root) {
   await Promise.all([...liveSessions].map((session) => closeSession(session)));
+  liveStub?.kill("SIGKILL");
   await rm(root, { recursive: true, force: true });
 }
 
@@ -1066,7 +1273,9 @@ async function main(cli) {
       return;
     }
 
+    const stub = await startStub(sandbox);
     await proveMigration(pi, ext, sandbox);
+    await proveRouteA(pi, ext, sandbox, stub, cli.invert);
     printOut(`[${TAG}] all assertions proven; exit 0`);
   } finally {
     await teardown(root);
