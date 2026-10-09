@@ -58,6 +58,14 @@ Source comments cite requirement IDs (AMIG-0N), never `D-05-NN`.
   in `mcp.json` and keep working under their old names. A warning names the
   plugin and suggests `reinstall` (which may fetch the clone). The next
   `/reload` retries. No verbatim move, no in-place translation.
+  **Amended 2026-10-09 (operator, after review WR-01):** the remedy follows
+  the cause. Only a git source whose recorded-sha clone is missing from the
+  clone cache (or whose probe throws) keeps the `reinstall` remedy, because a
+  reinstall re-clones on a miss. A missing or unparseable marketplace
+  manifest, a resolve that throws, or any other `unavailable` result gets the
+  `marketplace-unreadable` row, which suggests `marketplace update <mp>` or
+  `uninstall <p>@<mp>`. A plugin the manifest no longer lists gets the
+  `not-listed` row with the same two remedies.
 - **D-05-03:** The move is MCP-only. Skills, agents, hooks and workflows are
   untouched and no `reinstalled` row is emitted. Per plugin: stage into
   `mcp-adapter.json`, then remove the plugin's marked entries from `mcp.json`.
@@ -113,6 +121,12 @@ Source comments cite requirement IDs (AMIG-0N), never `D-05-NN`.
   unowned entry's plugin is installed by reconcile; the AMIG-04 warning then
   fires only for plugins that really are not installed in that scope.
   Extends D-02-12.
+  **Narrowed 2026-10-09 (operator, after review WR-03):** the staging paths
+  remove the same-scope D-05-10 leftovers only. The project-file disable
+  stubs are removed only by the reload move's user-scope pass. Once a staging
+  path has removed a plugin's legacy entries, the move no longer runs for it,
+  so a project stub left at that point stays; it is inert until a server
+  under that name appears.
 
 ### Old entries are cleanup, not input (operator, 2026-10-08)
 - **D-05-09 (revised):** Nothing is carried over from a legacy entry. The
@@ -138,6 +152,14 @@ Source comments cite requirement IDs (AMIG-0N), never `D-05-NN`.
   disable stubs also the project file). A marker-less full definition without
   `directTools` is the user's own server and is never removed. No kept-stub
   absorption, no write-back on uninstall.
+  **Amended 2026-10-09 (operator, after review WR-02..04):** an override stub
+  is kept while its old name still names a live server in another source,
+  because the stub still applies to that server. A panel copy is a full
+  server, so it is always removed. The project-file stub removal takes only
+  the project scope lock, with no state read. When
+  `<cwd>/.pi/pi-claude-marketplace/` does not exist, it writes the project
+  `mcp-adapter.json` atomically without a lock and creates no directory; the
+  operator accepted the narrow race this leaves.
   — **Reversibility:** costly — it deletes marker-less content the user's
   adapter wrote; the matching rule is the only guard.
 - **D-05-11:** A full server already defined at the new key in any of the
