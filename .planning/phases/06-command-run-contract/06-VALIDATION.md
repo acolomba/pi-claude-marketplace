@@ -1,9 +1,9 @@
 ---
 phase: "06"
 slug: command-run-contract
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: validated
+nyquist_compliant: true
+wave_0_complete: true
 created: "2026-10-09"
 ---
 
@@ -11,8 +11,8 @@ created: "2026-10-09"
 
 The user resolved the 06-01 scope blocker on 2026-10-09 by selecting option 1
 and approving a scope-only size exception for its 61-file atomic metadata
-migration. Plan 06-04 execution evidence is recorded below; final independent
-phase verification and the combined-wave gate remain parent-owned and pending.
+migration. All four combined-wave gates passed. Independent automated-coverage
+audit found no gaps; security, code review, and final goal verification follow.
 This document refers only to the active command-run-contract phase. No archived
 phase with number 06 is a dependency.
 
@@ -154,23 +154,22 @@ evidence remain pending, with no new approval gate introduced.
 
 ## Per-task verification map
 
-The first seven rows retain their planned commands; their prior execution
-evidence is in the corresponding committed summaries. Their Pending status
-means this executor has not rerun those complete owner commands on the final
-combined tree. The last two rows record this executor's checks below.
+All nine task commands have passing execution evidence in their summaries.
+The final combined-tree gate covers every owner through the unpaired suites
+and direct coverage. Independent audit confirmed the actual assertions below.
 Every task has an automated command and a sibling fails_when in its PLAN.
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Automated Command | File Exists | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 06-01-01 | 01 | 1 | WIRE-02, WIRE-07 | T-06-01, T-06-02, T-06-03 | Required metadata, explicit roots, canonical identity, tool compatibility | `node --test tests/shared/notification-run.test.ts tests/shared/notification-wire.test.ts tests/shared/notification-json.test.ts tests/shared/notification-present.test.ts tests/shared/notification-dispatch.test.ts tests/edge/router.test.ts tests/edge/register.test.ts tests/edge/handlers/tools.test.ts tests/architecture/wire-schema.test.ts` | Existing | Pending |
-| 06-01-02 | 01 | 1 | WIRE-02, WIRE-07 | T-06-01, T-06-02 | Aliases, invalid parents, delegation, overlapping roots | `node --test tests/edge/router.test.ts tests/edge/register.test.ts tests/index.test.ts tests/bridges/hooks/settle.test.ts tests/bridges/hooks/async-rewake/registry.test.ts` | Existing | Pending |
-| 06-02-01 | 02 | 2 | JOUT-04, WIRE-02, WIRE-07 | T-06-04, T-06-05, T-06-06 | Typed command errors and correlated startup faults | `node --test tests/edge/command-run.test.ts tests/edge/register.test.ts tests/shared/notification-command-error.test.ts tests/shared/notification-dispatch.test.ts tests/shared/notification-json.test.ts tests/shared/notification-wire.test.ts tests/architecture/wire-schema.test.ts` | Two direct pairs created in task | Pending |
-| 06-02-02 | 02 | 2 | JOUT-04 | T-06-04, T-06-05 | Direct bounded-cause and whole-payload disclosure checks, retained partial work | `node --test tests/shared/notification-command-error.test.ts tests/edge/command-run.test.ts tests/shared/notification-json.test.ts` | Existing plus 06-02-01 pairs | Pending |
-| 06-03-01 | 03 | 3 | JOUT-03, JOUT-04, WIRE-07 | T-06-07, T-06-08, T-06-11 | Semantic outcomes, monotonic reload, closure | `node --test tests/shared/notification-run.test.ts tests/shared/notification-dispatch.test.ts tests/edge/command-run.test.ts` | Existing plus 06-02-01 pair | Pending |
-| 06-03-02 | 03 | 3 | JOUT-04, JOUT-03 | T-06-08, T-06-09, T-06-10 | One recovery per append fault, successful recovery preserves later output/reload, failed recovery closes delivery, no retry/rollback | `node --test tests/shared/notification-dispatch.test.ts tests/edge/command-run.test.ts tests/orchestrators/plugin/list-flow.test.ts` | Existing plus 06-02-01 pair | Pending |
-| 06-03-03 | 03 | 3 | JOUT-03, JOUT-04, WIRE-07 | T-06-06, T-06-07, T-06-09, T-06-11 | Existing root integration, valid empty outcomes, later output/reload after successful recovery | `node --test tests/edge/register.test.ts tests/edge/command-run.test.ts tests/shared/notification-dispatch.test.ts` | Existing plus 06-02-01 pair | Pending |
+| 06-01-01 | 01 | 1 | WIRE-02, WIRE-07 | T-06-01, T-06-02, T-06-03 | Required metadata, explicit roots, canonical identity, tool compatibility | `node --test tests/shared/notification-run.test.ts tests/shared/notification-wire.test.ts tests/shared/notification-json.test.ts tests/shared/notification-present.test.ts tests/shared/notification-dispatch.test.ts tests/edge/router.test.ts tests/edge/register.test.ts tests/edge/handlers/tools.test.ts tests/architecture/wire-schema.test.ts` | Existing | PASS; summary evidence and final combined gate |
+| 06-01-02 | 01 | 1 | WIRE-02, WIRE-07 | T-06-01, T-06-02 | Aliases, invalid parents, delegation, overlapping roots | `node --test tests/edge/router.test.ts tests/edge/register.test.ts tests/index.test.ts tests/bridges/hooks/settle.test.ts tests/bridges/hooks/async-rewake/registry.test.ts` | Existing | PASS; summary evidence and final combined gate |
+| 06-02-01 | 02 | 2 | JOUT-04, WIRE-02, WIRE-07 | T-06-04, T-06-05, T-06-06 | Typed command errors and correlated startup faults | `node --test tests/edge/command-run.test.ts tests/edge/register.test.ts tests/shared/notification-command-error.test.ts tests/shared/notification-dispatch.test.ts tests/shared/notification-json.test.ts tests/shared/notification-wire.test.ts tests/architecture/wire-schema.test.ts` | Two direct pairs created in task | PASS; summary evidence and final combined gate |
+| 06-02-02 | 02 | 2 | JOUT-04 | T-06-04, T-06-05 | Direct bounded-cause and whole-payload disclosure checks, retained partial work | `node --test tests/shared/notification-command-error.test.ts tests/edge/command-run.test.ts tests/shared/notification-json.test.ts` | Existing plus 06-02-01 pairs | PASS; summary evidence and final combined gate |
+| 06-03-01 | 03 | 3 | JOUT-03, JOUT-04, WIRE-07 | T-06-07, T-06-08, T-06-11 | Semantic outcomes, monotonic reload, closure | `node --test tests/shared/notification-run.test.ts tests/shared/notification-dispatch.test.ts tests/edge/command-run.test.ts` | Existing plus 06-02-01 pair | PASS; summary evidence and final combined gate |
+| 06-03-02 | 03 | 3 | JOUT-04, JOUT-03 | T-06-08, T-06-09, T-06-10 | One recovery per append fault, successful recovery preserves later output/reload, failed recovery closes delivery, no retry/rollback | `node --test tests/shared/notification-dispatch.test.ts tests/edge/command-run.test.ts tests/orchestrators/plugin/list-flow.test.ts` | Existing plus 06-02-01 pair | PASS; summary evidence and final combined gate |
+| 06-03-03 | 03 | 3 | JOUT-03, JOUT-04, WIRE-07 | T-06-06, T-06-07, T-06-09, T-06-11 | Existing root integration, valid empty outcomes, later output/reload after successful recovery | `node --test tests/edge/register.test.ts tests/edge/command-run.test.ts tests/shared/notification-dispatch.test.ts` | Existing plus 06-02-01 pair | PASS; summary evidence and final combined gate |
 | 06-04-01 | 04 | 4 | WIRE-02, WIRE-07, JOUT-03, JOUT-04 | T-06-12 | Deferred auth/cascade/delegation settlement and identity | `node --test tests/edge/register.test.ts tests/orchestrators/auth-host.test.ts tests/orchestrators/marketplace/update.test.ts tests/orchestrators/plugin/enable-disable.test.ts` | Existing | PASS, exit 0; 5.99 s post-commit tracer |
-| 06-04-02 | 04 | 4 | WIRE-02, WIRE-07, JOUT-03, JOUT-04 | T-06-13, T-06-14 | Full fixture inventory, strict preservation, AUTH-09 internal-error enrollment and planted disclosure controls | `node --test tests/architecture/catalog-uat/catalog-wire.test.ts tests/architecture/no-credential-leak.test.ts tests/architecture/wire-schema.test.ts` | Existing | PASS, exit 0; 95 tests, 4.70 s at task commit; combined gate pending |
+| 06-04-02 | 04 | 4 | WIRE-02, WIRE-07, JOUT-03, JOUT-04 | T-06-13, T-06-14 | Full fixture inventory, strict preservation, AUTH-09 internal-error enrollment and planted disclosure controls | `node --test tests/architecture/catalog-uat/catalog-wire.test.ts tests/architecture/no-credential-leak.test.ts tests/architecture/wire-schema.test.ts` | Existing | PASS, exit 0; 95 tests, 4.70 s at task commit; combined gate passed |
 
 T-06-SC is the permitted phase-wide repeated supply-chain threat ID. No task
 installs packages; any scope change introducing an install must first supply
@@ -411,19 +410,19 @@ production module or export is permitted.
 - [x] All 12 edge probes and both kept prohibitions are carried.
 - [x] No watch flags, new packages, or external setup are planned.
 - [x] User approved the scope-only 61-file size exception for 06-01 (option 1, 2026-10-09).
-- [ ] Independent checker reviews the plan with the approved size exception and accepts contract assumptions.
-- [ ] Every owner command passes and its latency is recorded.
-- [ ] New source-test pairs reach 100% direct coverage.
+- [x] Independent checker accepted the reviewed plans and documented scope dispositions.
+- [x] Owner commands pass with timings in the committed summaries.
+- [x] New source-test pairs reach 100% direct coverage in the final combined gate.
 - [x] Strict text corpus and catalog checks pass for the isolated 06-04 tree; combined-tree confirmation remains parent-owned.
-- [ ] Combined-wave and phase npm run check passes.
+- [x] All combined-wave gates pass; final unchanged phase inputs share the fourth-wave result.
 - [ ] High/critical threats have verified mitigations.
 - [x] Descriptor-less prohibition flags are surfaced to parent/verifier; both remain flagged-unverified.
-- [ ] Validation audit sets nyquist_compliant true only after execution evidence.
+- [x] Independent validation audit found all nine tasks covered; nyquist_compliant is true.
 
 **Approval:** User decisions and the scope-only 06-01 size exception approved
-(option 1, 2026-10-09); final independent checker review and combined-tree
-validation remain pending. Local execution evidence follows. All review gates
-are retained; nyquist_compliant remains false.
+(option 1, 2026-10-09); independent checker review and combined-tree validation passed. Local execution
+evidence follows. Security, code review, and goal verification remain separate
+gates; the two descriptor-less prohibitions remain flagged-unverified.
 
 ## Plan 06-04 execution evidence
 
@@ -530,3 +529,37 @@ empty; subsequent validation and summary edits are planning Markdown only.
 Combined-wave `npm run check`, final phase verification, and full threat review
 remain pending for the parent. This document does not promote those gates or
 nyquist_compliant from the local task and hook results.
+
+## Independent validation findings
+
+On 2026-10-09, the Nyquist auditor inspected the live implementation and tests
+and found all nine tasks COVERED with zero PARTIAL or MISSING cases. No test
+was generated or rerun for this audit. WIRE-02 maps to 06-01 and 06-04-02;
+WIRE-07 to 06-01 and 06-04-01; JOUT-03 to 06-03 and 06-04-01; JOUT-04 to
+06-02, 06-03 and 06-04-02. Concrete assertions include register.test.ts:454,
+812, 997, 1199, 1312 and 1430; router.test.ts:307; command-run.test.ts:79,
+483 and 744; notification-dispatch.test.ts:222 and 431;
+notification-command-error.test.ts:6; catalog-wire.test.ts:419;
+no-credential-leak.test.ts:1064; and auth-host.test.ts:126.
+
+The parent ran `npm run check` on clean merged commit
+`f8e2a3889501d13634e1ff2d0ccd368df6f5d274` with Node `v26.11.0`: exit 0,
+including integration tests and 100% direct coverage for all 266 pairs.
+Log: `/tmp/json-output-wave06-04-check.log`. The executable diff from that
+commit is empty and no untracked executable inputs exist. The final corpus
+evidence above remains applicable because only planning Markdown changed.
+
+Construction-failure tests inject an escaping constructor failure; production
+inventory probes retain their caught-error degradation. Unusable live mode
+and a broken trusted recovery allocator remain host-contract failures. D-08
+allows one recovery per independent ordinary append fault; successful recovery
+reopens delivery. Failed recovery closes delivery without guaranteeing output.
+Neither descriptor-less prohibition is promoted by this coverage audit.
+
+## Validation Audit 2026-10-09
+
+| Metric | Count |
+|---|---|
+| Gaps found | 0 |
+| Resolved | 0 |
+| Escalated | 0 |
