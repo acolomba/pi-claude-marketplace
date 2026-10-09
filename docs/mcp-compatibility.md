@@ -67,7 +67,7 @@ A long plugin name and a long server name can make a tool name that a provider r
 
 Claude Code connects to the MCP servers of plugins in the background when a session starts. It keeps the connections for the whole session.
 
-This extension never writes `lifecycle` on an entry, so pi-mcp-adapter uses its default, `lazy` (ANAME-05). In this mode, the adapter starts each server when Pi starts, reads the list of its tools, and then stops it. The adapter starts the server again when the model uses one of its tools, and stops it again after a period with no use.
+This extension never writes `lifecycle` on an entry, so pi-mcp-adapter uses its default, `lazy` (ANAME-05). In this mode, when Pi starts, the adapter starts only a server for which it holds no valid cached list of tools. It reads the list, saves it, and stops the server. The adapter starts the server again when the model uses one of its tools, and stops it again after a period with no use. A server with a valid cached list does not start until the model first uses one of its tools. Until that first use, `/claude:plugin info` can show `status unknown`. See [Server status in info](#server-status-in-info).
 
 Thus the first call to a tool of a stopped server waits while the server starts. A server that keeps data in memory loses that data when the adapter stops it. You can change the mode of one server: set `lifecycle` on its entry yourself. This extension keeps that field when it updates or reinstalls the plugin.
 
@@ -269,6 +269,29 @@ The move removes an old entry and writes no new one in these cases:
 - The plugin is disabled.
 
 The notice lists each removed entry with its reason. See [Plugin MCP servers removed from mcp.json](output-catalog.md#plugin-mcp-servers-removed-from-mcpjson-amig-01-amig-03).
+
+## Server status in info
+
+On an installed plugin, `/claude:plugin info` shows the state of each server that this extension wrote. The state is the one that pi-mcp-adapter last reported on its status channel, the `pi-mcp-adapter/status/v1` event. Info does not connect a server to get it (ASTAT-01). The state comes first inside the parentheses after the server name, for example `plugin:deploy-tools:deploys (pending approval)`.
+
+| Shown text                      | Meaning                                                                                                                                                                                                                                                                                                       |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `connected`                     | The server is connected.                                                                                                                                                                                                                                                                                      |
+| `cached, connects on first use` | pi-mcp-adapter holds a cached list of the tools of the server. It starts the server when the model first uses one of them. This is the normal state of a lazy server, not a failure.                                                                                                                          |
+| `needs authentication`          | The server needs a sign-in.                                                                                                                                                                                                                                                                                   |
+| `pending approval`              | pi-mcp-adapter blocks this project server. The project is not trusted, the server needs approval, or you denied the approval. The panel of pi-mcp-adapter shows which.                                                                                                                                        |
+| `disabled`                      | The server is turned off in the pi-mcp-adapter configuration, for example with `/mcp-adapter disable`.                                                                                                                                                                                                        |
+| `not connected`                 | The server is not connected yet. This is also a normal state of a lazy server, not a failure.                                                                                                                                                                                                                 |
+| `failed`                        | The server failed, and pi-mcp-adapter holds it in its failure backoff. The state shows only during the backoff.                                                                                                                                                                                               |
+| `status unknown`                | pi-mcp-adapter is absent, sent no report in this session, last sent its empty report of a session start or a shutdown, or sent a report that this release cannot read.                                                                                                                                        |
+| `not loaded`                    | The last report of pi-mcp-adapter does not list the server. The plugin was installed in this session, or the move from `mcp.json` wrote the server in this session. Run `/reload`. An old `mcp.json` entry that the move left in place also shows this state, because the adapter runs it under its old name. |
+| `overridden by project scope`   | The plugin is installed in both scopes, and pi-mcp-adapter runs the project-scope entry in place of this user-scope entry.                                                                                                                                                                                    |
+
+In some sessions, pi-mcp-adapter sends no report until the first MCP use. This happens when every server is lazy, no server comes from a project file, and the adapter holds a valid cached list of tools for each server. The adapter then sends only its empty report at the session start. So `status unknown` is the normal reading in such a session until the first tool call, `/mcp` or `/mcp-adapter` (ASTAT-02).
+
+No state shows on a `(disabled)` row, on a row that is not installed, for a server that a partial install left out, or on a `components: not resolved` row. The state never changes the severity of the notice.
+
+For the exact output, see [Partially installed -- each MCP server's state](output-catalog.md#partially-installed----each-mcp-servers-state-astat-01), [Installed -- an MCP server waits for project approval](output-catalog.md#installed----an-mcp-server-waits-for-project-approval-astat-01), and [Installed -- the adapter has not loaded an MCP server](output-catalog.md#installed----the-adapter-has-not-loaded-an-mcp-server-astat-02).
 
 ## Divergences and documented absences
 
