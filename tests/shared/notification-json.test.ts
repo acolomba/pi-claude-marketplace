@@ -42,10 +42,10 @@ import type { Scope } from "../../extensions/pi-claude-marketplace/shared/types.
 function assertSafeCommandPayload(payload: unknown): void {
   if (typeof payload === "string") {
     assert.doesNotMatch(payload, /secret123|user:private|ghp_abcdefghijklmnop/);
-    assert.doesNotMatch(
-      payload,
-      /file:\/+|\\\\|(?<![\w:/\\])(?:[A-Za-z]:[\\/]|\/)[\w.\\/~-]+[\\/][\w.\\/~-]+/i,
-    );
+    for (const disclosure of ["private", "Private Data", "用户", "秘密", "server", "file:/"]) {
+      assert.strictEqual(payload.includes(disclosure), false, `Disclosed ${disclosure}`);
+    }
+
     return;
   }
 
@@ -72,6 +72,11 @@ test("converts hostile command causes to schema-valid disclosure-safe plain JSON
   const cause = new Error("https://user:private@host/repo Bearer secret123 ghp_abcdefghijklmnop", {
     cause: new Error(
       "/private/work/config.json C:\\private\\work\\config.json \\\\server file:///private/work/config.json file:/private/work/config.json",
+      {
+        cause: new Error(
+          'open "/Private Data/client/secret.json" and "/用户/秘密/config.json" and "C:\\Private Data\\client\\secret.json"; failed at:/private/work/config.json',
+        ),
+      },
     ),
   });
   const presentation = resolveCommandError(cause, true);
@@ -92,7 +97,8 @@ test("converts hostile command causes to schema-valid disclosure-safe plain JSON
     cause: {
       causeChain: [
         "https://***@host/repo Bearer *** ***",
-        "config.json config.json [path] [path] [path]",
+        "[path]",
+        'open "[path]" and "[path]" and "[path]"; failed at:[path]',
       ],
       truncated: false,
     },
@@ -108,6 +114,23 @@ for (const { title, cause } of [
   { title: "Windows path", cause: { causeChain: ["C:\\private\\config.json"], truncated: false } },
   { title: "bare UNC root", cause: { causeChain: ["\\\\server"], truncated: false } },
   { title: "file URL", cause: { causeChain: ["file:/private/config.json"], truncated: false } },
+  {
+    title: "spaced POSIX path",
+    cause: { causeChain: ["/Private Data/client/secret.json"], truncated: false },
+  },
+  { title: "Unicode path", cause: { causeChain: ["/用户/秘密/config.json"], truncated: false } },
+  {
+    title: "spaced Windows path",
+    cause: { causeChain: ["C:\\Private Data\\client\\secret.json"], truncated: false },
+  },
+  {
+    title: "colon-prefixed path",
+    cause: { causeChain: ["failed at:/private/work/config.json"], truncated: false },
+  },
+  {
+    title: "partially masked path",
+    cause: { causeChain: ["[path] Data/秘密/config.json"], truncated: false },
+  },
   { title: "live Error", cause: new Error("failed") },
   { title: "stack", cause: { causeChain: ["failed"], truncated: false, stack: "private" } },
   { title: "null member", cause: null },

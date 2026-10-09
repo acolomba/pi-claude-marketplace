@@ -714,7 +714,7 @@ for (const mode of ["json", "rpc"]) {
           severity: "error",
           needsReload: true,
           summary: "Command failed unexpectedly.",
-          cause: { causeChain: ["Failed at config.json"], truncated: false },
+          cause: { causeChain: ["Failed at [path]"], truncated: false },
         },
       },
     ]);

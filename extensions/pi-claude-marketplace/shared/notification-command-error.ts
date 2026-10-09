@@ -1,5 +1,4 @@
 import { serializeCauseChain } from "./errors.ts";
-import { redactAbsolutePaths } from "./redact-absolute-paths.ts";
 
 import type { SerializedCauseChain } from "./errors.ts";
 
@@ -34,13 +33,30 @@ function resolveCause(cause: unknown): SerializedCauseChain {
     }
 
     return {
-      causeChain: serialized.causeChain.map((message) =>
-        redactAbsolutePaths(message.replace(/file:\/+[^\s"'<>]+|\\\\[^\s"'<>]+/gi, "[path]")),
-      ),
+      causeChain: serialized.causeChain.map((message) => redactCommandPaths(message)),
       truncated: serialized.truncated,
     };
   } catch {
     // Thrown values can expose hostile message, cause, or string-tag accessors.
     return { causeChain: ["Unable to read command failure."], truncated: false };
   }
+}
+
+function redactCommandPaths(message: string): string {
+  let quoted = message;
+  for (const quote of ['"', "'", "`"]) {
+    const quotedPath = new RegExp(
+      `${quote}(?:file:/|[a-z]:[\\\\/]|\\\\\\\\|/)[^${quote}\\r\\n]*${quote}`,
+      "gi",
+    );
+    quoted = quoted.replace(quotedPath, `${quote}[path]${quote}`);
+  }
+
+  // Unquoted paths can contain spaces. Mask through the next delimiter rather
+  // than retain a suffix that could still name a private directory or file.
+  // HTTP(S) URLs stay readable. Other prefixes cannot exempt a local path.
+  return quoted.replace(
+    /(https?:\/\/[^\s"'`<>]+)|(?:file:\/|\b[a-z]:[\\/]|\\\\|\/)[^\r\n"'`<>]*/gi,
+    (_match, remoteUrl: string | undefined) => remoteUrl ?? "[path]",
+  );
 }

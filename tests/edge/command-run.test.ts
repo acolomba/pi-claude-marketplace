@@ -201,6 +201,59 @@ function createIds() {
   };
 }
 
+for (const { message, safeMessage, disclosure } of [
+  {
+    message: 'ENOENT: open "/Private Data/client/secret.json"',
+    safeMessage: 'ENOENT: open "[path]"',
+    disclosure: "Private Data",
+  },
+  {
+    message: 'ENOENT: open "/用户/秘密/config.json"',
+    safeMessage: 'ENOENT: open "[path]"',
+    disclosure: "秘密",
+  },
+  {
+    message: 'ENOENT: open "C:\\Private Data\\client\\secret.json"',
+    safeMessage: 'ENOENT: open "[path]"',
+    disclosure: "Private Data",
+  },
+  {
+    message: "failed at:/private/work/config.json",
+    safeMessage: "failed at:[path]",
+    disclosure: "private/work",
+  },
+]) {
+  for (const mode of ["json", "rpc"]) {
+    test(`hides ${message} at the ${mode} command boundary`, async () => {
+      // arrange
+      const capture = createJsonCapture();
+      const pi = { ...capture.entrySink, getAllTools: () => [] };
+      const ctx = {
+        mode,
+        get ui() {
+          return capture.ui;
+        },
+      };
+
+      // act
+      await runCommand(
+        pi,
+        ctx,
+        "plugin update",
+        () => {
+          throw new Error(message);
+        },
+        createIds(),
+      );
+
+      // assert
+      assert.deepStrictEqual(capture.entries, [expectedError(safeMessage)]);
+      assert.strictEqual(JSON.stringify(capture.entries).includes(disclosure), false);
+      capture.assertValid();
+    });
+  }
+}
+
 for (const mode of ["json", "rpc"]) {
   test(`reports a silent command before settlement in ${mode}`, async () => {
     // arrange

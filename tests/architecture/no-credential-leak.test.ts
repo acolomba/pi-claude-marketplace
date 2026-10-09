@@ -1048,7 +1048,9 @@ test("AUTH-09 / PMOD-04: the planted-credential assertion reports an unredacted 
 function assertSafeCommandPayload(payload: unknown): void {
   if (typeof payload === "string") {
     assert.doesNotMatch(payload, /gh[pousr]_[A-Za-z0-9]+|alice:s3cret|s3cret|Bearer secret123/);
-    assert.doesNotMatch(payload, /file:\/|(?<![\w:/\\])(?:[A-Za-z]:[\\/]|\\\\|\/)[\w.-]/i);
+    for (const disclosure of ["private", "Private Data", "用户", "秘密", "server", "file:/"]) {
+      assert.strictEqual(payload.includes(disclosure), false, `Disclosed ${disclosure}`);
+    }
 
     return;
   }
@@ -1072,6 +1074,11 @@ for (const mode of ["json", "rpc"] as const) {
     const cause = new Error(`${USERINFO_URL} Bearer secret123 ${GITHUB_TOKEN}`, {
       cause: new Error(
         "/private/work/config.json C:\\private\\work\\config.json \\\\server file:///private/work/config.json file:/private/work/config.json",
+        {
+          cause: new Error(
+            'open "/Private Data/client/secret.json" and "/用户/秘密/config.json" and "C:\\Private Data\\client\\secret.json"; failed at:/private/work/config.json',
+          ),
+        },
       ),
     });
     const ctx: NotificationContext = {
@@ -1090,7 +1097,8 @@ for (const mode of ["json", "rpc"] as const) {
       cause: {
         causeChain: [
           "https://***@github.com/o/r.git Bearer *** ***",
-          "config.json config.json [path] [path] [path]",
+          "[path]",
+          'open "[path]" and "[path]" and "[path]"; failed at:[path]',
         ],
         truncated: false,
       },
@@ -1118,6 +1126,11 @@ for (const [name, disclosure] of [
   ["bare UNC root", "\\\\server"],
   ["file URL", "file:///private/work/config.json"],
   ["single-slash file URL", "file:/private/work/config.json"],
+  ["spaced POSIX path", "/Private Data/client/secret.json"],
+  ["Unicode path", "/用户/秘密/config.json"],
+  ["spaced Windows path", "C:\\Private Data\\client\\secret.json"],
+  ["colon-prefixed path", "failed at:/private/work/config.json"],
+  ["partially masked path", "[path] Data/秘密/config.json"],
 ] as const) {
   test(`AUTH-09 control: the whole command payload check rejects a planted ${name}`, () => {
     // arrange

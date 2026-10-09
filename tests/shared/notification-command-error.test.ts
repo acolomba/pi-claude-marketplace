@@ -3,6 +3,47 @@ import test from "node:test";
 
 import { resolveCommandError } from "../../extensions/pi-claude-marketplace/shared/notification-command-error.ts";
 
+for (const localPath of [
+  "/Private Data/client/secret.json",
+  "/用户/秘密/config.json",
+  "C:\\Private Data\\client\\secret.json",
+  "C:\\用户\\秘密\\config.json",
+  "C://Private Data/秘密/config.json",
+  "//server/Private Data/秘密.json",
+  "/private/work/config.json",
+  "/secret.json",
+  "file:///Private Data/秘密/config.json",
+  "\\\\server\\Private Data\\秘密.json",
+]) {
+  for (const { message, safeMessage } of [
+    { message: `ENOENT: open "${localPath}"`, safeMessage: 'ENOENT: open "[path]"' },
+    { message: `open '${localPath}' failed`, safeMessage: "open '[path]' failed" },
+    { message: `failed at:${localPath}`, safeMessage: "failed at:[path]" },
+    { message: `failed at ${localPath}`, safeMessage: "failed at [path]" },
+  ]) {
+    test(`hides the complete local path in ${message}`, () => {
+      // arrange
+      const cause = new Error(message, { cause: new Error(message) });
+
+      // act
+      const presentation = resolveCommandError(cause, true);
+
+      // assert
+      assert.deepStrictEqual(presentation, {
+        kind: "internal-error",
+        severity: "error",
+        needsReload: true,
+        summary: "Command failed unexpectedly.",
+        cause: { causeChain: [safeMessage, safeMessage], truncated: false },
+      });
+      assert.strictEqual(
+        JSON.stringify(presentation).includes(JSON.stringify(localPath).slice(1, -1)),
+        false,
+      );
+    });
+  }
+}
+
 for (const { title, cause, causeChain } of [
   {
     title: "nested credentials",
@@ -11,8 +52,8 @@ for (const { title, cause, causeChain } of [
     }),
     causeChain: ["https://***@host/repo", "Bearer *** *** x-access-token:***"],
   },
-  { title: "POSIX path", cause: "/private/work/config.json", causeChain: ["config.json"] },
-  { title: "Windows path", cause: "C:\\private\\work\\config.json", causeChain: ["config.json"] },
+  { title: "POSIX path", cause: "/private/work/config.json", causeChain: ["[path]"] },
+  { title: "Windows path", cause: "C:\\private\\work\\config.json", causeChain: ["[path]"] },
   { title: "bare UNC root", cause: "\\\\server", causeChain: ["[path]"] },
   { title: "UNC share", cause: "\\\\server\\share\\config.json", causeChain: ["[path]"] },
   { title: "file URL", cause: "file:///private/work/config.json", causeChain: ["[path]"] },
@@ -169,7 +210,7 @@ for (const needsReload of [false, true]) {
       severity: "error",
       needsReload,
       summary: "Command failed unexpectedly.",
-      cause: { causeChain: ["Failed at config.json", "nested"], truncated: false },
+      cause: { causeChain: ["Failed at [path]", "nested"], truncated: false },
     });
   });
 }
