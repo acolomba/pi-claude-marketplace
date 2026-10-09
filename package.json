@@ -58,7 +58,7 @@
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": ">=1.0.0",
     "@earendil-works/pi-tui": "*",
-    "pi-mcp-adapter": ">=5.1.0 <6",
+    "pi-mcp-adapter": ">=5.2.0 <6",
     "pi-subagents": ">=0.74.0",
     "typebox": "*"
   },

@@ -118,7 +118,7 @@ jobs:
       # PIFL-03 keeps the optional peer out of the lockfile, so the install
       # pins the exact version and runs no install scripts instead.
       - name: Install the pinned pi-mcp-adapter peer
-        run: npm install --prefix "$RUNNER_TEMP/pi-mcp-adapter" pi-mcp-adapter@5.1.0 --ignore-scripts --omit=peer --no-audit --no-fund # zizmor: ignore[adhoc-packages]
+        run: npm install --prefix "$RUNNER_TEMP/pi-mcp-adapter" pi-mcp-adapter@5.2.0 --ignore-scripts --omit=peer --no-audit --no-fund # zizmor: ignore[adhoc-packages]
 
       - name: Run the integration tests
         env:
