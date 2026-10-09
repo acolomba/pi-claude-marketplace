@@ -5,16 +5,16 @@ milestone_name: MCP 4
 current_phase: 06
 current_phase_name: Live MCP status in info
 status: executing
-stopped_at: Phase 6 context gathered
-last_updated: "2026-10-09T18:02:46.490Z"
+stopped_at: Completed 06-01-PLAN.md
+last_updated: "2026-10-09T18:30:43.449Z"
 last_activity: 2026-10-09
 last_activity_desc: Phase 06 execution started
-state_head: df8b3f3895ccfb3b1421288ec879509475bca0a4
+state_head: 720003ab7352166ae770d781dc009195fee98a78
 progress:
   total_phases: 7
   completed_phases: 5
   total_plans: 47
-  completed_plans: 44
+  completed_plans: 45
   percent: 71
 ---
 
@@ -35,8 +35,8 @@ sign-ins and approvals.
 ## Current Position
 
 Phase: 06 (Live MCP status in info) — EXECUTING
-Plan: 1 of 3
-Status: Executing Phase 06
+Plan: 2 of 3
+Status: Ready to execute
 Last activity: 2026-10-09 — Phase 06 execution started
 
 Progress: [███████░░░] 71%
@@ -290,6 +290,7 @@ still open with a comment explaining what landed.
 | Phase 05 P03 | 25 min | 3 tasks | 18 files |
 | Phase 05 P04 | 27min | 3 tasks | 13 files |
 | Phase 05 P05 | 75min | 3 tasks | 7 files |
+| Phase 06 P01 | 27min | 3 tasks | 33 files |
 
 ## Accumulated Context
 
@@ -688,6 +689,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 05]: Left-in-place rows sort by scope, plugin key, first old name; a file-unreadable row leads its scope
 - [Phase 05]: The migration unsupported removal cause is "unsupported-feature"; the partial-vocabulary guard forbids the bare literal
 - [Phase 05]: A failed mcp.json removal is an unfinished row only for a moving owner; disabled and malformed owners keep a stopped row
+- [Phase 06]: 06-01: the MCP status lookup keeps unrecognized apart from no-snapshot (both render status unknown) so the shadow token can tell whether a usable snapshot exists
+- [Phase 06]: 06-01: hand-built Pi harnesses that run the real factory carry an events bus, because the factory subscribes to pi-mcp-adapter/status/v1
 
 ### Pending Todos
 
@@ -821,11 +824,11 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Phase 6 context gathered
+**Stopped at:** Completed 06-01-PLAN.md
 
-**Resume file:** .planning/phases/06-live-mcp-status-in-info/06-CONTEXT.md
+**Resume file:** None
 
-Last session: 2026-10-09T16:53:11.419Z
+Last session: 2026-10-09T18:30:43.096Z
 Phase 5 closed in `/gsd-autonomous --from 5 --interactive`, sequential on this
 checkout. Gates: 5/5 plans; Nyquist validated; security 20/20 closed; the
 review-fix loop converged clean at iteration 3 (WR-01..04 fixed, 8 info open,

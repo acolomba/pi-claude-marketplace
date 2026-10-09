@@ -119,10 +119,10 @@ Research: `.planning/research/SUMMARY.md` (and STACK, FEATURES, ARCHITECTURE, PI
 
 ### Live status (ASTAT)
 
-- [ ] **ASTAT-01**: `/claude:plugin info` shows each plugin MCP server's adapter state (for example
+- [x] **ASTAT-01**: `/claude:plugin info` shows each plugin MCP server's adapter state (for example
   connected, cached, needs-auth, failed) from the adapter's `pi-mcp-adapter/status/v1` events,
   without importing the adapter and without connecting servers.
-- [ ] **ASTAT-02**: Before the first status snapshot, or when the adapter is absent, info shows an
+- [x] **ASTAT-02**: Before the first status snapshot, or when the adapter is absent, info shows an
   explicit unknown state instead of guessing; new status tokens are closed-catalog amendments in
   `docs/output-catalog.md`.
 
@@ -193,8 +193,8 @@ Research: `.planning/research/SUMMARY.md` (and STACK, FEATURES, ARCHITECTURE, PI
 | AMIG-02 | Phase 5 | Complete |
 | AMIG-03 | Phase 5 | Complete |
 | AMIG-04 | Phase 5 | Complete |
-| ASTAT-01 | Phase 6 | Pending |
-| ASTAT-02 | Phase 6 | Pending |
+| ASTAT-01 | Phase 6 | Complete |
+| ASTAT-02 | Phase 6 | Complete |
 | ADOC-01 | Phase 7 | Pending |
 | ADOC-02 | Phase 7 | Pending |
 | ADOC-03 | Phase 7 | Pending |
