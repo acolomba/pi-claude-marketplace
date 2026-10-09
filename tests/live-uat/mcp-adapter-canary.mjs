@@ -81,12 +81,15 @@
 //   - 1: `LIVE RUNTIME REQUIRED`: an unmet precondition or an inconclusive
 //     drive. The verifier routes `human_needed`.
 //   - 2: `ADOC-02 REGRESSION`: an observation contradicts an assertion.
+//   - 130 or 143: SIGINT or SIGTERM stopped the run. The canary first kills
+//     the Pi process groups and the stub and removes the sandbox.
 //
 // Containment: each Pi child gets an environment built from scratch, with HOME
 // and PI_CODING_AGENT_DIR inside a fresh `mkdtemp` sandbox under the realpath
 // of the OS temp directory. The canary refuses a temp directory inside the
 // repository, where Pi asks for project trust. No inherited variable reaches
-// Pi, so no provider key does either. The sandbox is removed on every exit.
+// Pi, so no provider key does either. The sandbox is removed on every exit,
+// also after SIGINT or SIGTERM.
 //
 // It is not part of `npm run check` or CI.
 
@@ -111,6 +114,8 @@ const ADAPTER_VERSION = "5.2.0";
 const LEGACY_VERSION = "0.19.2";
 const EXIT_HUMAN_NEEDED = 1;
 const EXIT_REGRESSION = 2;
+/** 128 plus the signal number, the shell convention for a signal exit. */
+const SIGNAL_EXIT_CODES = { SIGINT: 130, SIGTERM: 143 };
 
 const COMMAND_STEP_MS = 60_000;
 const MODEL_STEP_MS = 120_000;
@@ -180,6 +185,12 @@ const liveSessions = new Set();
 
 /** The stub child process, so the teardown can stop it on any exit. */
 let liveStub;
+
+/** The sandbox root, once it exists, so a signal teardown can remove it. */
+let sandboxRoot;
+
+/** Set when a signal stops the run; it exits with the signal code. */
+let interruption;
 
 function mask(text) {
   return maskedRoot === undefined ? String(text) : String(text).replaceAll(maskedRoot, "<sandbox>");
@@ -1346,10 +1357,38 @@ async function teardown(root) {
   await rm(root, { recursive: true, force: true });
 }
 
+/**
+ * Each Pi child is detached, so a terminal Ctrl-C does not reach it. Kills
+ * every group at once instead of waiting for each session to close.
+ */
+async function signalTeardown() {
+  for (const session of liveSessions) {
+    killGroup(session.state.child);
+  }
+
+  liveSessions.clear();
+  liveStub?.kill("SIGKILL");
+  if (sandboxRoot !== undefined) {
+    await rm(sandboxRoot, { recursive: true, force: true });
+  }
+}
+
+function onSignal(signal) {
+  printErr(`\n[${TAG}] stopped by ${signal}; not proven; removing the sandbox`);
+  interruption = signalTeardown()
+    .catch((error) => printErr(`[${TAG}] teardown: ${error?.message ?? error}`))
+    .finally(() => process.exit(SIGNAL_EXIT_CODES[signal]));
+}
+
+for (const signal of Object.keys(SIGNAL_EXIT_CODES)) {
+  process.once(signal, onSignal);
+}
+
 async function main(cli) {
   const { pi, ext } = await checkPreconditions(cli);
   const root = await realpath(await mkdtemp(path.join(tmpdir(), "mcp-adapter-canary-")));
   maskedRoot = root;
+  sandboxRoot = root;
   try {
     const sandbox = await prepareSandbox(root);
     if (cli.capturePrefix !== undefined) {
@@ -1369,7 +1408,9 @@ async function main(cli) {
 
     printOut(`[${TAG}] all assertions proven; exit 0`);
   } finally {
-    await teardown(root);
+    if (interruption === undefined) {
+      await teardown(root);
+    }
   }
 }
 
@@ -1390,4 +1431,6 @@ try {
   exitCode = exitCodeOf(error);
 }
 
+// A signal teardown in flight ends the process with the signal code.
+await interruption;
 process.exit(exitCode);

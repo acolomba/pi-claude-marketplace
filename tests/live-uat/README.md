@@ -492,7 +492,7 @@ Proves that a real pi-mcp-adapter loads the MCP server entries that this extensi
 | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | The repository's Pi, 1.0.0 or later       | `npm ci` installs it from the `@earendil-works/pi-coding-agent` devDependency. The canary finds it through `tests/pi-runtime.ts`.                                                                                                                                                                                                                                   |
 | A scratch install of pi-mcp-adapter 5.2.0 | Run `npm install --prefix /var/tmp/mcp-adapter-520 pi-mcp-adapter@5.2.0 --ignore-scripts --omit=peer --no-audit --no-fund`, then set `PI_MCP_ADAPTER_ROOT=/var/tmp/mcp-adapter-520/node_modules/pi-mcp-adapter`. Keep the prefix outside this repository. The adapter must never enter `package.json` or `package-lock.json`. The canary refuses any other version. |
-| `TMPDIR` outside the repository           | Use a directory on a real filesystem, such as `/var/tmp/mcp-adapter-canary`. The canary makes its sandbox there and removes it on every exit. It refuses a temp directory inside the repository, because Pi asks for project trust there.                                                                                                                           |
+| `TMPDIR` outside the repository           | Use a directory on a real filesystem, such as `/var/tmp/mcp-adapter-canary`. The canary makes its sandbox there and removes it on every exit, also after Ctrl-C or `SIGTERM`. It refuses a temp directory inside the repository, because Pi asks for project trust there.                                                                                           |
 | No provider key                           | The canary starts the stub on `127.0.0.1` itself. Each Pi child gets an environment that the canary builds from scratch, so no inherited variable reaches Pi.                                                                                                                                                                                                       |
 
 ### Run
@@ -546,6 +546,8 @@ The canary prints these facts on `observed:` lines. They do not change the exit 
 - Exit 2 prints `ADOC-02 REGRESSION`. An observation contradicts an assertion. This includes an expected notice or state that never arrived while Pi kept answering.
 
 The canary keeps the two exit codes apart, so a script can tell a broken assertion from an unproven run.
+
+Exit 130 or 143 means that `SIGINT` (Ctrl-C) or `SIGTERM` stopped the run, which proves nothing. Before it exits, the canary kills the Pi process groups and the stub and removes the sandbox.
 
 ### The negative control
 
