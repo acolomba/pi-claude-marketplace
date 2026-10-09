@@ -4,17 +4,17 @@ milestone: mcp-4
 milestone_name: MCP 4
 current_phase: 06
 current_phase_name: Live MCP status in info
-status: executing
-stopped_at: Completed 06-02-PLAN.md
-last_updated: "2026-10-09T18:44:50.906Z"
+status: verifying
+stopped_at: Completed 06-03-PLAN.md
+last_updated: "2026-10-09T18:51:57.832Z"
 last_activity: 2026-10-09
 last_activity_desc: Phase 06 execution started
-state_head: 51f87c138107b94ab6a7f7efd501a040d5eb3271
+state_head: cff9ad24adbffe08495096dfd0b31c2d65de3649
 progress:
   total_phases: 7
   completed_phases: 5
   total_plans: 47
-  completed_plans: 46
+  completed_plans: 47
   percent: 71
 ---
 
@@ -36,7 +36,7 @@ sign-ins and approvals.
 
 Phase: 06 (Live MCP status in info) — EXECUTING
 Plan: 3 of 3
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-10-09 — Phase 06 execution started
 
 Progress: [███████░░░] 71%
@@ -292,6 +292,7 @@ still open with a comment explaining what landed.
 | Phase 05 P05 | 75min | 3 tasks | 7 files |
 | Phase 06 P01 | 27min | 3 tasks | 33 files |
 | Phase 06 P02 | 25min | 2 tasks | 10 files |
+| Phase 06 P03 | 6min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -693,6 +694,7 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 06]: 06-01: the MCP status lookup keeps unrecognized apart from no-snapshot (both render status unknown) so the shadow token can tell whether a usable snapshot exists
 - [Phase 06]: 06-01: hand-built Pi harnesses that run the real factory carry an events bus, because the factory subscribes to pi-mcp-adapter/status/v1
 - [Phase 06]: Info decides the user-row MCP override from the project scope's installation record; under --scope user it reads it with persistMigration false and treats a failed read as not overriding
+- [Phase 06]: The MCP status conformance test builds the snapshot by hand in pi-mcp-adapter's shape, keyed by the names a real install wrote, because the adapter ships its snapshot builder only as TypeScript source
 
 ### Pending Todos
 
@@ -826,11 +828,11 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Completed 06-02-PLAN.md
+**Stopped at:** Completed 06-03-PLAN.md
 
 **Resume file:** None
 
-Last session: 2026-10-09T18:44:50.558Z
+Last session: 2026-10-09T18:51:57.472Z
 Phase 5 closed in `/gsd-autonomous --from 5 --interactive`, sequential on this
 checkout. Gates: 5/5 plans; Nyquist validated; security 20/20 closed; the
 review-fix loop converged clean at iteration 3 (WR-01..04 fixed, 8 info open,
