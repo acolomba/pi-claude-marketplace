@@ -40,7 +40,7 @@ created: "2026-10-09"
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 6-01-01 | 01 | 1 | REQ-{XX} | T-6-01 / — | {expected secure behavior or "N/A"} | unit | `{command}` | ✅ / ❌ W0 | ⬜ pending |
+| (filled by the planner and validate-phase) | | | ASTAT-01, ASTAT-02 | | | | see 06-RESEARCH.md Validation Architecture | | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -75,4 +75,4 @@ created: "2026-10-09"
 - [ ] Feedback latency < 6s
 - [ ] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** {pending / approved YYYY-MM-DD}
+**Approval:** pending
