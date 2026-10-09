@@ -135,7 +135,7 @@ Research: `.planning/research/SUMMARY.md` (and STACK, FEATURES, ARCHITECTURE, PI
 - [ ] **ADOC-02**: A live UAT in a sandboxed agent directory proves adapter 5 loads our entries,
   migrates a seeded legacy entry (counting reloads), finds plugin tools through tool search, and
   shows status in info.
-- [ ] **ADOC-03**: CHANGELOG records the milestone, and a version bump is offered before the PR.
+- [x] **ADOC-03**: CHANGELOG records the milestone, and a version bump is offered before the PR.
 
 ## Future Requirements
 
@@ -198,7 +198,7 @@ Research: `.planning/research/SUMMARY.md` (and STACK, FEATURES, ARCHITECTURE, PI
 | ASTAT-02 | Phase 6 | Complete |
 | ADOC-01 | Phase 7 | Pending |
 | ADOC-02 | Phase 7 | Pending |
-| ADOC-03 | Phase 7 | Pending |
+| ADOC-03 | Phase 7 | Complete |
 
 **Coverage:**
 

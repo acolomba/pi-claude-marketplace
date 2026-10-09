@@ -5,16 +5,16 @@ milestone_name: MCP 4
 current_phase: 07
 current_phase_name: Docs and live proof
 status: executing
-stopped_at: Completed 07-02-PLAN.md
-last_updated: "2026-10-09T22:17:29.321Z"
+stopped_at: Completed 07-03-PLAN.md
+last_updated: "2026-10-09T22:28:37.552Z"
 last_activity: 2026-10-09
 last_activity_desc: Phase 07 execution started
-state_head: "0b4eb3715714b64396bc800c4797ae7550de9011"
+state_head: ac3f4aff83cd6e71ce7820e529da012b29ed96b0
 progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 52
-  completed_plans: 49
+  completed_plans: 50
   percent: 86
 ---
 
@@ -35,7 +35,7 @@ sign-ins and approvals.
 ## Current Position
 
 Phase: 07 (Docs and live proof) — EXECUTING
-Plan: 3 of 5
+Plan: 4 of 5
 Status: Ready to execute
 Last activity: 2026-10-09 — Phase 07 execution started
 
@@ -295,6 +295,7 @@ still open with a comment explaining what landed.
 | Phase 06 P03 | 6min | 2 tasks | 3 files |
 | Phase 07 P01 | 7 min | 3 tasks | 14 files |
 | Phase 07 P02 | 14 min | 2 tasks | 3 files |
+| Phase 07 P03 | 8 min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -705,6 +706,9 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 07]: [mcp-4 Phase 7] scripts/pi.sh passes -e builtin:tool-search after --no-extensions so tool_search stays available; builtin:mcp stays off (D-07-05).
 - [Phase 07]: [mcp-4 Phase 7] Live canary routing: a contradicting observation (missing migration notice, missing fresh-install row, A1 token other than status unknown) exits 2; an unobservable drive exits 1
 - [Phase 07]: [mcp-4 Phase 7] The move from mcp.json to mcp-adapter.json takes exactly 1 reload on Pi 1.0.0 with pi-mcp-adapter 5.2.0, measured live by the mcp-adapter canary
+- [Phase 07]: [mcp-4 Phase 7] CHANGELOG [Unreleased] uses D-07-10 grouped bullets with no PR numbers and no version bump; the 0.20.0 offer is recorded for the PR (D-07-11)
+- [Phase 07]: [mcp-4 Phase 7] env-vars.md gives AI_AGENT its own footnote: Pi sets it at process start, so it has no spawn-order caveat
+- [Phase 07]: [mcp-4 Phase 7] PRD PI-11 (pi-subagents only) stays stale; D-07-14 scopes the PRD update to MCP mentions
 
 ### Pending Todos
 
@@ -838,11 +842,11 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Completed 07-02-PLAN.md
+**Stopped at:** Completed 07-03-PLAN.md
 
 **Resume file:** None
 
-Last session: 2026-10-09T22:17:28.927Z
+Last session: 2026-10-09T22:28:37.154Z
 Phase 6 closed in the same `/gsd-autonomous --from 5 --interactive` run.
 Gates: discuss (4 areas + 3 post-research rulings), research, 3 plans in 3
 waves executed sequentially; Nyquist compliant; security 12/12 closed;
