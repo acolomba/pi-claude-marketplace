@@ -21,6 +21,10 @@ import { captureDebugLog } from "../platform/debug-log-capture.ts";
 import { createGitOpsFake } from "../platform/git-ops-fake.ts";
 import { runWithNothingLoaded } from "../shared/notification-run-seeds.ts";
 
+import type {
+  DeviceCodeResponse,
+  PollResult,
+} from "../../extensions/pi-claude-marketplace/domain/github-auth.ts";
 import type { GitAuthBundle } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { AuthAttemptResult } from "../../extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts";
 import type { CredentialSpawn } from "../../extensions/pi-claude-marketplace/platform/git-credential.ts";
@@ -118,6 +122,135 @@ describe("NO_STORED_CREDENTIAL_CAUSE", () => {
 });
 
 describe("buildAuthForHost", () => {
+  for (const mode of ["json", "rpc"]) {
+    test(`joins the delayed prompt and token poll before auth settlement in ${mode}`, async (t) => {
+      // arrange
+      t.mock.timers.enable({ apis: ["setTimeout"] });
+      const capture = createJsonCapture();
+      const events: unknown[] = [];
+      let liveMode = "invalid-mode";
+      const reads: string[] = [];
+      const ctx = {
+        get mode() {
+          reads.push(liveMode);
+          return liveMode;
+        },
+        get ui() {
+          return capture.ui;
+        },
+      };
+      let releaseCode!: (code: DeviceCodeResponse) => void;
+      const code = new Promise<DeviceCodeResponse>((resolve) => {
+        releaseCode = resolve;
+      });
+      let releaseToken!: (token: PollResult) => void;
+      const token = new Promise<PollResult>((resolve) => {
+        releaseToken = resolve;
+      });
+      let prompted!: () => void;
+      const promptReady = new Promise<void>((resolve) => {
+        prompted = resolve;
+      });
+      let polling!: () => void;
+      const pollReady = new Promise<void>((resolve) => {
+        polling = resolve;
+      });
+      const origin = {
+        kind: "command",
+        commandId: "marketplace add",
+        invocationId: "auth-run",
+      } as const;
+      const run = openNotificationRun(
+        {
+          getAllTools: () => [],
+          appendEntry(customType, payload) {
+            capture.entrySink.appendEntry(customType, payload);
+            events.push({ customType, payload });
+            prompted();
+          },
+        },
+        origin,
+      );
+      const credentials = createCredentialOpsFake({ boundary: "memory" });
+      const authMemo = new Map<string, AuthAttemptResult>();
+      const auth = expectDeviceFlow(
+        buildAuthForHost({
+          host: "github.com",
+          ctx,
+          run,
+          authMemo,
+          credentialOps: credentials.credentialOps,
+          deviceFlowHttp: {
+            requestCode: () => code,
+            pollToken: () => {
+              polling();
+              return token;
+            },
+          },
+        }),
+      );
+      const prompt = {
+        customType: "claude-plugin",
+        payload: {
+          schemaVersion: 1,
+          origin,
+          kind: "device-flow-prompt",
+          severity: "info",
+          needsReload: false,
+          verificationUri: "https://github.com/login/device",
+          userCode: "WAIT-1234",
+        },
+      };
+
+      // act
+      const authentication = auth.onAuthRequired().then((authenticated) => {
+        events.push("settled");
+        return authenticated;
+      });
+      const beforeCode = [...events];
+      liveMode = mode;
+      releaseCode({
+        device_code: "device-secret",
+        user_code: "WAIT-1234",
+        verification_uri: "https://github.com/login/device",
+        expires_in: 900,
+        interval: 1,
+      });
+      await promptReady;
+      t.mock.timers.tick(1000);
+      await pollReady;
+      const beforeToken = [...events];
+      const memoBeforeToken = new Map(authMemo);
+      releaseToken({
+        kind: "success",
+        accessToken: "auth-secret",
+        tokenType: "bearer",
+        scope: "repo",
+      });
+      const authenticated = await authentication;
+      const repeated = await auth.onAuthRequired();
+
+      // assert
+      assert.deepStrictEqual(beforeCode, []);
+      assert.deepStrictEqual(beforeToken, [prompt]);
+      assert.deepStrictEqual(memoBeforeToken, new Map());
+      assert.deepStrictEqual(events, [prompt, "settled"]);
+      assert.deepStrictEqual(capture.entries, [prompt]);
+      assert.deepStrictEqual(authenticated, {
+        ok: true,
+        cred: { username: "x-access-token", password: "auth-secret" },
+      });
+      assert.strictEqual(repeated, authenticated);
+      assert.deepStrictEqual(authMemo, new Map([["github.com", authenticated]]));
+      assert.deepStrictEqual(reads, [mode]);
+      assert.deepStrictEqual(credentials.storedCredential("github.com"), {
+        username: "x-access-token",
+        password: "auth-secret",
+      });
+      capture.assertValid();
+    });
+  }
+
   test("selects the live mode for a delayed prompt and memoizes only the authentication", async () => {
     // arrange
     const capture = createJsonCapture();

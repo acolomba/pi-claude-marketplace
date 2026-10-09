@@ -43,7 +43,9 @@ import { loadState } from "../../../extensions/pi-claude-marketplace/persistence
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { MarketplaceNotFoundError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { notify } from "../../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
+import { openNotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import { withLockedStateTransaction } from "../../../extensions/pi-claude-marketplace/transaction/with-state-guard.ts";
+import { createJsonCapture } from "../../edge/json-capture.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { runWithNothingLoaded, runWithSoftDeps } from "../../shared/notification-run-seeds.ts";
 
@@ -4926,6 +4928,127 @@ test("EDEP-01 / EDEP-03: enabling a plugin turns on its one disabled dependency 
     assert.deepEqual(Object.keys(cfg.plugins ?? {}), ["helper@official"]);
   });
 });
+
+for (const mode of ["json", "rpc"]) {
+  test(`joins delegated installation under the enable invocation in ${mode}`, async () => {
+    await withHermeticHome(async ({ cwd, home }) => {
+      // arrange
+      const { statePath } = await seedEnableCascadeFixture(home, {
+        declareDependency: true,
+        dependencyEnabled: false,
+      });
+      const capture = createJsonCapture();
+      const events: unknown[] = [];
+      const origin = {
+        kind: "command",
+        commandId: "plugin enable",
+        invocationId: "enable-run",
+      } as const;
+      const ctx = {
+        mode,
+        get ui() {
+          return capture.ui;
+        },
+      };
+      const run = openNotificationRun(
+        {
+          getAllTools: () => [],
+          appendEntry(customType, payload) {
+            capture.entrySink.appendEntry(customType, payload);
+            events.push({ customType, payload });
+          },
+        },
+        origin,
+      );
+      let started!: () => void;
+      const installStarted = new Promise<void>((resolve) => {
+        started = resolve;
+      });
+      let release!: () => void;
+      const pending = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const transaction: EnableDisableTransaction = {
+        ...REAL_ENABLE_DISABLE_TRANSACTION,
+        async runInstallLedger(state, locations, options, failureCapture) {
+          events.push(options.plugin);
+          started();
+          await pending;
+          return REAL_ENABLE_DISABLE_TRANSACTION.runInstallLedger(
+            state,
+            locations,
+            options,
+            failureCapture,
+          );
+        },
+      };
+      const enable = createSetPluginEnabled(
+        transaction,
+        createHooksRouting(createHooksRuntime(), { readHooksJson }),
+      );
+      const entry = {
+        customType: "claude-plugin",
+        payload: {
+          schemaVersion: 1,
+          origin,
+          kind: "cascade",
+          severity: "info",
+          needsReload: true,
+          marketplaces: [
+            {
+              name: "official",
+              scope: "user",
+              plugins: [
+                {
+                  name: "formatter@tools",
+                  id: "formatter@tools@official",
+                  scope: "user",
+                  status: "installed",
+                  version: "2.1.0",
+                  reasons: ["dependency enabled"],
+                },
+                {
+                  name: "helper",
+                  id: "helper@official",
+                  scope: "user",
+                  status: "installed",
+                  version: "1.0.0",
+                  reasons: [],
+                },
+              ],
+            },
+          ],
+        },
+      };
+
+      // act
+      const enabling = enable({
+        ctx,
+        run,
+        cwd,
+        marketplace: "official",
+        plugin: "helper",
+        enable: true,
+        scope: "user",
+      }).then(() => {
+        events.push("settled");
+      });
+      await installStarted;
+      const beforeRelease = [...events];
+      release();
+      await enabling;
+
+      // assert
+      assert.deepStrictEqual(beforeRelease, ["formatter"]);
+      assert.deepStrictEqual(events, ["formatter", "helper", entry, "settled"]);
+      assert.deepStrictEqual(capture.entries, [entry]);
+      const state = JSON.parse(await readFile(statePath, "utf8")) as EdepStateShape;
+      assert.strictEqual(state.marketplaces.official!.plugins.helper!.enabled, true);
+      assert.strictEqual(state.marketplaces.tools!.plugins.formatter!.enabled, true);
+      capture.assertValid();
+    });
+  });
+}
 
 test("EDEP-03: an already-enabled dependency renders (skipped) {already enabled} and its record is untouched", async () => {
   await withHermeticHome(async ({ cwd, home }) => {

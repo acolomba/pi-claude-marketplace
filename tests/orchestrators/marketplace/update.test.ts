@@ -33,8 +33,10 @@ import {
   PluginShapeError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
+import { openNotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import { type Severity } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
+import { createJsonCapture } from "../../edge/json-capture.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
@@ -315,6 +317,130 @@ function makePluginRecord(): ExtensionState["marketplaces"][string]["plugins"][s
     installedAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
   };
+}
+
+for (const mode of ["json", "rpc"]) {
+  test(`joins cascade children under the marketplace invocation in ${mode}`, async () => {
+    await withHermeticHome(async ({ cwd }) => {
+      // arrange
+      await seedGithubMarketplace({
+        cwd,
+        name: "auto-mp",
+        ref: "main",
+        autoupdate: true,
+        plugins: { hello: makePluginRecord(), second: makePluginRecord() },
+      });
+      const capture = createJsonCapture();
+      const events: unknown[] = [];
+      const origin = {
+        kind: "command",
+        commandId: "marketplace update",
+        invocationId: "cascade-run",
+      } as const;
+      const ctx = {
+        mode,
+        get ui() {
+          return capture.ui;
+        },
+      };
+      const run = openNotificationRun(
+        {
+          getAllTools: () => [],
+          appendEntry(customType, payload) {
+            capture.entrySink.appendEntry(customType, payload);
+            events.push({ customType, payload });
+          },
+        },
+        origin,
+      );
+      let started!: () => void;
+      const childStarted = new Promise<void>((resolve) => {
+        started = resolve;
+      });
+      let release!: () => void;
+      const pending = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const { gitOps } = createGitOps({
+        remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000004" },
+      });
+      const pluginUpdate: PluginUpdateFn = async (plugin, marketplace, scope) => {
+        events.push({ plugin, marketplace, scope });
+        started();
+        await pending;
+        return {
+          partition: "updated",
+          name: plugin,
+          fromVersion: "0.0.1",
+          toVersion: "0.0.2",
+          stagedAgentNames: [],
+          stagedMcpServerNames: [],
+          declaresAgents: false,
+          declaresMcp: false,
+          declaresWorkflows: false,
+          constraint: undefined,
+        };
+      };
+
+      const entry = {
+        customType: "claude-plugin",
+        payload: {
+          schemaVersion: 1,
+          origin,
+          kind: "cascade",
+          severity: "info",
+          needsReload: true,
+          marketplaces: [
+            {
+              name: "auto-mp",
+              scope: "project",
+              status: "updated",
+              plugins: ["hello", "second"].map((name) => ({
+                name,
+                id: `${name}@auto-mp`,
+                scope: "project",
+                status: "updated",
+                from: "0.0.1",
+                to: "0.0.2",
+                reasons: [],
+              })),
+            },
+          ],
+        },
+      };
+
+      // act
+      const update = updateMarketplace({
+        completionCache: createCompletionCache(),
+        ctx,
+        run,
+        name: "auto-mp",
+        scope: "project",
+        cwd,
+        gitOps,
+        pluginUpdate,
+      }).then(() => {
+        events.push("settled");
+      });
+      await childStarted;
+      const beforeRelease = [...events];
+      release();
+      await update;
+
+      // assert
+      assert.deepStrictEqual(beforeRelease, [
+        { plugin: "hello", marketplace: "auto-mp", scope: "project" },
+      ]);
+      assert.deepStrictEqual(events, [
+        { plugin: "hello", marketplace: "auto-mp", scope: "project" },
+        { plugin: "second", marketplace: "auto-mp", scope: "project" },
+        entry,
+        "settled",
+      ]);
+      assert.deepStrictEqual(capture.entries, [entry]);
+      capture.assertValid();
+    });
+  });
 }
 
 /**

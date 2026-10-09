@@ -72,6 +72,7 @@ import { UnsupportedModeError } from "../../extensions/pi-claude-marketplace/sha
 import {
   notify,
   notifyUsageInfo,
+  notifyUsageError,
   notifyDiagnostic,
   notifyDeviceFlowPrompt,
 } from "../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
@@ -448,6 +449,136 @@ function registerCommandUnderTest(probes: CommandProbes): CommandUnderTest {
   return registerCommandWithCache(createCompletionCache(), undefined, undefined, probes);
 }
 
+for (const mode of ["json", "rpc"]) {
+  for (const ending of ["success", "typed-failure", "missing", "throw"] as const) {
+    test(`awaits delayed ${ending} output before registered settlement in ${mode}`, async (t) => {
+      // arrange
+      const { cwd } = await createHermeticScope(t, "delayed-update");
+      const capture = createJsonCapture();
+      const events: unknown[] = [];
+      let release!: () => void;
+      const pending = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      let late!: () => void;
+      const origin = { kind: "command", commandId: "plugin update", invocationId: "run-list-1" };
+      const prompt = {
+        customType: "claude-plugin",
+        payload: {
+          schemaVersion: 1,
+          origin,
+          kind: "device-flow-prompt",
+          severity: "info",
+          needsReload: false,
+          verificationUri: "https://example.test/device",
+          userCode: "WAIT-1234",
+        },
+      };
+      const warning = {
+        customType: "claude-plugin",
+        payload: {
+          schemaVersion: 1,
+          origin,
+          kind: "prune-committed-warning",
+          severity: "warning",
+          needsReload: true,
+          summary: "Prune committed; finalization needs attention.",
+          scope: "project",
+          cause: { causeChain: ["Saved."], truncated: false },
+        },
+      };
+      const completion =
+        ending === "missing"
+          ? commandErrorEntry("plugin update", "run-list-1", "Command returned without an outcome.")
+          : ending === "throw"
+            ? commandErrorEntry("plugin update", "run-list-1", "Delayed failure.", true)
+            : {
+                customType: "claude-plugin",
+                payload: {
+                  schemaVersion: 1,
+                  origin,
+                  kind: "usage-error",
+                  severity: "error",
+                  needsReload: false,
+                  message: "Update refused.",
+                  usage: "Usage: update",
+                },
+              };
+      const expected =
+        ending === "success"
+          ? [prompt, warning]
+          : ending === "throw"
+            ? [prompt, warning, completion]
+            : [prompt, completion];
+      const { registration, verifyRegistrar } = registerCommandUnderTest({
+        runs: 1,
+        appendAttempts: expected.length,
+        capture: {
+          entrySink: {
+            appendEntry(customType, payload) {
+              capture.entrySink.appendEntry(customType, payload);
+              events.push({ customType, payload });
+            },
+          },
+        },
+        updatePlugins: async ({ ctx, run }) => {
+          late = () => {
+            notifyDiagnostic(ctx, run, "Late.", ["Ignored."]);
+          };
+
+          notifyDeviceFlowPrompt(ctx, run, {
+            verificationUri: "https://example.test/device",
+            userCode: "WAIT-1234",
+          });
+          await pending;
+          if (ending === "success" || ending === "throw") {
+            notify(ctx, run, {
+              kind: "prune-committed-warning",
+              scope: "project",
+              cause: new Error("Saved."),
+            });
+          }
+
+          if (ending === "typed-failure") {
+            notifyUsageError(ctx, run, { message: "Update refused.", usage: "Usage: update" });
+          }
+
+          if (ending === "throw") {
+            throw new Error("Delayed failure.");
+          }
+        },
+      });
+      const ctx = {
+        mode,
+        cwd,
+        get ui() {
+          return capture.ui;
+        },
+      };
+
+      // act
+      const command = Promise.resolve(
+        Reflect.apply(registration.handler, undefined, ["update", ctx]),
+      ).then(() => {
+        events.push("settled");
+      });
+      await Promise.resolve();
+      const beforeRelease = [...events];
+      release();
+      await command;
+      ctx.mode = "invalid-mode";
+      late();
+
+      // assert
+      assert.deepStrictEqual(beforeRelease, [prompt]);
+      assert.deepStrictEqual(events, [...expected, "settled"]);
+      assert.deepStrictEqual(capture.entries, expected);
+      capture.assertValid();
+      verifyRegistrar();
+    });
+  }
+}
+
 function commandErrorEntry(
   commandId: string,
   invocationId: string,
@@ -565,6 +696,13 @@ for (const mode of ["json", "rpc"]) {
     // arrange
     const { cwd } = await createHermeticScope(t, "silent-imports");
     const capture = createJsonCapture();
+    const events: unknown[] = [];
+    const entrySink = {
+      appendEntry(customType: string, payload: unknown): void {
+        capture.entrySink.appendEntry(customType, payload);
+        events.push({ customType, payload });
+      },
+    };
     let finishFirst!: () => void;
     let finishSecond!: () => void;
     const first = new Promise<void>((resolve) => {
@@ -599,7 +737,12 @@ for (const mode of ["json", "rpc"]) {
       createCompletionCache(),
       undefined,
       importClaudeSettings,
-      { runs: 2, capture, appendAttempts: 2, createInvocationId: () => ids.shift()! },
+      {
+        runs: 2,
+        capture: { entrySink },
+        appendAttempts: 2,
+        createInvocationId: () => ids.shift()!,
+      },
     );
     const ctx = {
       mode,
@@ -608,12 +751,20 @@ for (const mode of ["json", "rpc"]) {
         return capture.ui;
       },
     };
-    const independent = { ...capture.entrySink, getAllTools: () => [] };
+    const independent = { ...entrySink, getAllTools: () => [] };
 
     // act
-    const firstCommand: unknown = Reflect.apply(registration.handler, undefined, ["import", ctx]);
+    const firstCommand = Promise.resolve(
+      Reflect.apply(registration.handler, undefined, ["import", ctx]),
+    ).then(() => {
+      events.push("settled-a");
+    });
     notifyUsageInfo(ctx, openNotificationRun(independent, { kind: "hook" }), "Independent.");
-    const secondCommand: unknown = Reflect.apply(registration.handler, undefined, ["import", ctx]);
+    const secondCommand = Promise.resolve(
+      Reflect.apply(registration.handler, undefined, ["import", ctx]),
+    ).then(() => {
+      events.push("settled-b");
+    });
     notifyUsageInfo(ctx, openNotificationRun(independent, { kind: "load" }), "Independent.");
     finishSecond();
     await secondCommand;
@@ -637,6 +788,14 @@ for (const mode of ["json", "rpc"]) {
       commandErrorEntry("plugin import", "run-a", "Command returned without an outcome."),
     ];
     assert.deepStrictEqual(capture.entries, expected);
+    assert.deepStrictEqual(events, [
+      expected[0],
+      expected[1],
+      expected[2],
+      "settled-b",
+      expected[3],
+      "settled-a",
+    ]);
     assert.strictEqual(late.length, 2);
     ctx.mode = "stale";
     for (const callback of late) {
