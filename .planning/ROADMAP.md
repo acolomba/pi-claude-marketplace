@@ -28,7 +28,7 @@ Decimal phases (2.1, 3.1) are urgent insertions only, marked INSERTED.
 - [x] **Phase 2: Adapter-file delivery** - install, update, reinstall and uninstall keep plugin MCP servers as marked entries in `<scopeRoot>/mcp-adapter.json`: read as JSONC the way the adapter reads it, refused rather than replaced when unparseable, written under the legacy `mcp-servers` key when the user's file uses it, checked for collisions in adapter 5's nine-source order, and carrying user overrides through updates. Entry content keeps today's shape in this phase. (completed 2026-10-06)
 - [x] **Phase 3: Claude Code tool names and tool search** - plugin MCP tools reach the model as `mcp__plugin_<plugin>_<server>__<tool>` through the key `plugin_<plugin>_<server>_` and a pinned `toolPrefix: "mcp"`, load on demand through Pi's tool search, and carry the manifest description and translated transport options. Starts with a measurement of the tool-name length Pi 1.0 accepts. (completed 2026-10-06)
 - [x] **Phase 4: Variable expansion at Claude Code parity** - plugin and project path variables and `${VAR:-default}` expand at install time by Claude's rules, plain `${VAR}` is left for the adapter at runtime, the adapter's second expansion is escaped or warned about, and Claude's credential deny-list holds for `url` and `headers`. Needs a threat model. (completed 2026-10-07)
-- [ ] **Phase 5: Automatic migration on /reload** - `/reload` moves each installed plugin's marked entries from `mcp.json` into `mcp-adapter.json` in their final shape, adding before removing, idempotently, with one notice that lists the renames and what they cost the user.
+- [x] **Phase 5: Automatic migration on /reload** - `/reload` moves each installed plugin's marked entries from `mcp.json` into `mcp-adapter.json` in their final shape, adding before removing, idempotently, with one notice that lists the renames and what they cost the user. (completed 2026-10-09)
 - [ ] **Phase 6: Live MCP status in info** - `/claude:plugin info` shows each plugin MCP server's state from the adapter's status events, and an explicit unknown state when there is nothing to show.
 - [ ] **Phase 7: Docs and live proof** - README and docs describe the new delivery and its divergences, a live UAT against a real adapter 5 proves the whole path, and the CHANGELOG records the milestone.
 
@@ -278,7 +278,7 @@ requirement (Phases 3 and 4), and no release may sit between the first write to
 3. The user sees one migration notice that lists each `old -> new` server name, says that the rename requires signing in again and re-approving project servers, and carries the reload hint, because the adapter picks up the move one `/reload` later. (AMIG-03)
 4. A marked legacy entry with no owning install record stays in `mcp.json`, and the user is warned about it. (AMIG-04)
 
-**Plans**: 5/5 plans executed in 5 waves
+**Plans**: 5/5 plans complete in 5 waves
 
 **Wave 1**
 - [x] 05-01-PLAN.md — `/reload` moves an installed path-source plugin's `mcp.json` entries into `mcp-adapter.json` in the fresh-install shape, in the order adapter, state, legacy, with one notice (AMIG-01, AMIG-03)
@@ -358,7 +358,7 @@ plan these phases with the UI gate skipped.
 | 2. Adapter-file delivery | mcp-4 | 12/12 | Complete    | 2026-10-06 |
 | 3. Claude Code tool names and tool search | mcp-4 | 9/9 | Complete    | 2026-10-06 |
 | 4. Variable expansion at Claude Code parity | mcp-4 | 9/9 | Complete    | 2026-10-07 |
-| 5. Automatic migration on /reload | mcp-4 | 5/5 | In Progress | - |
+| 5. Automatic migration on /reload | mcp-4 | 5/5 | Complete    | 2026-10-09 |
 | 6. Live MCP status in info | mcp-4 | 0/TBD | Not started | - |
 | 7. Docs and live proof | mcp-4 | 0/TBD | Not started | - |
 

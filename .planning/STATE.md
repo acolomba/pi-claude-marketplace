@@ -2,44 +2,44 @@
 gsd_state_version: "1.0"
 milestone: mcp-4
 milestone_name: MCP 4
-current_phase: 05
-current_phase_name: Automatic migration on /reload
-status: verifying
-stopped_at: context exhaustion at 75% (2026-10-08)
-last_updated: "2026-10-08T16:32:36.175Z"
-last_activity: 2026-10-08
-last_activity_desc: Phase 05 execution started
-state_head: 7a7d97833b8c98bb91a33da488c5fe9d6a1c3332
+current_phase: 6
+current_phase_name: Live MCP status in info
+status: planning
+stopped_at: Phase 5 complete, ready to plan Phase 6
+last_updated: "2026-10-09T16:25:44.570Z"
+last_activity: 2026-10-09
+last_activity_desc: Phase 5 complete, transitioned to Phase 6
+state_head: 6f4d2d7cd7411c2bf6438536438546654a8d52c8
 progress:
   total_phases: 7
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 44
   completed_plans: 44
-  percent: 57
+  percent: 71
 ---
 
 # Project State
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-10-07 after mcp-4 Phase 4)
+See: `.planning/PROJECT.md` (updated 2026-10-09 after mcp-4 Phase 5)
 
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 05 — Automatic migration on /reload
+**Current focus:** Phase 6 — Live MCP status in info
 The roadmap has 7 phases and maps all 36 requirements. Phases 2 to 5
 go out in one release, because every entry-shape change costs users new
 sign-ins and approvals.
 
 ## Current Position
 
-Phase: 05 (Automatic migration on /reload) — EXECUTING
-Plan: 5 of 5
-Status: Phase complete — ready for verification
-Last activity: 2026-10-08 — Phase 05 execution started
+Phase: 6 — Live MCP status in info
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-10-09 — Phase 5 complete, transitioned to Phase 6
 
-Progress: [██████░░░░] 57%
+Progress: [███████░░░] 71%
 
 ### workflows-replay closeout (merged from main)
 
@@ -72,7 +72,7 @@ still open with a comment explaining what landed.
 
 **Velocity:**
 
-- Total plans completed: 226
+- Total plans completed: 228
 - Average recorded duration: 11.9 min
 - Total recorded execution time: 30 hr 1 min
 
@@ -90,7 +90,7 @@ still open with a comment explaining what landed.
 | 2 | 12 | - | - |
 | 03 | 9 | - | - |
 | 04 | 9 | - | - |
-| 5 | 3 | - | - |
+| 5 | 5 | - | - |
 | 06 | 4 | - | - |
 | 07 | 3 | - | - |
 | 8 | 3 | - | - |
@@ -308,6 +308,17 @@ still open with a comment explaining what landed.
 
 Decisions are logged in the PROJECT.md Key Decisions table.
 
+- [mcp-4 Phase 5] `/reload` moves plugin MCP entries out of `mcp.json`;
+  old entries are cleanup, not input, and the marked entries are the only
+  trigger (D-05-09, D-05-16, COMPAT-01).
+- [mcp-4 Phase 5] Operator 2026-10-09: a left-in-place row names a remedy
+  per cause (reinstall only for a cold git clone); project-file disable
+  stubs go only in the reload move's user pass, written lockless when the
+  project has no extension directory; a collision source outside the scope
+  files is named by its home-relative path (D-05-02, D-05-08, D-05-10).
+- [mcp-4 Phase 5] UAT 2026-10-09: the operator accepted the migration notice
+  wording and the leftover reading as built. 8 info findings stay `open` in
+  `05-REVIEW-DISPOSITION.md`.
 - [mcp-4 Phase 3] Plugin MCP servers use Claude Code's key
   `plugin_<plugin>_<server>_` with `toolPrefix: "mcp"` and
   `directTools: "search"`; a closed 2.1.291 field table translates entries
@@ -810,11 +821,24 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** context exhaustion at 75% (2026-10-08)
+**Stopped at:** Phase 5 complete, ready to plan Phase 6
 
 **Resume file:** None
 
-Last session: 2026-10-08T16:32:35.854Z
+Last session: 2026-10-09
+Phase 5 closed in `/gsd-autonomous --from 5 --interactive`, sequential on this
+checkout. Gates: 5/5 plans; Nyquist validated; security 20/20 closed; the
+review-fix loop converged clean at iteration 3 (WR-01..04 fixed, 8 info open,
+see 05-REVIEW-DISPOSITION.md); `npm run check` green on 163921cd; verifier
+4/4, human item accepted by the operator, with one change (home-relative
+collision source, 79e71b25); `npm run check` re-run on 6f4d2d7c. Nothing
+skipped. Open operator items carried from the pause handoff (non-blocking):
+recreate the user-scope plugin record (`~/.pi/agent/pi-claude-marketplace/
+state.json` was moved aside to `state.json.broken-20261008`; run `/reload` or
+reinstall plugin-dev@claude-plugins-official in Pi), and decide whether
+`openUi` joins the D-02-06 carried-field set.
+
+Previous session: 2026-10-08T16:32:35.854Z
 Phase 4 closed in `/gsd-autonomous --from 4 --interactive`, run sequentially on
 this checkout (`~/src/pi-claude-marketplace-mcp-4`, branch `features/mcp-4`).
 Gates: 9/9 plans; `npm run check` green on 63ad2116 and again on 1629bac1

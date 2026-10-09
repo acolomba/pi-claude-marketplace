@@ -605,6 +605,15 @@ v1.20 requirements are in [the archive](milestones/v1.20-REQUIREMENTS.md).
   name unset and withheld variables; a leading `~` in stdio command/args is
   `{unsupported mcp}`; peer range `>=5.1.0 <6` (AVAR-01..05) — mcp-4 Phase 4,
   verified 2026-10-07.
+- ✓ `/reload` moves every installed plugin's MCP servers from `mcp.json`
+  into `mcp-adapter.json` in the fresh-install shape, with no flag stored:
+  the marked legacy entries are the trigger and go last, so any crash
+  converges on the next reload. Old entries are cleanup, not input; old-name
+  adapter stubs and panel copies are removed; unsupported or undeclared
+  servers are dropped with the record made partial; tool permission rules
+  install with a warning; one notice lists each rename, its sign-in and
+  re-approval cost, and every entry left behind with a remedy that clears
+  its cause (AMIG-01..04) — mcp-4 Phase 5, verified 2026-10-09.
 - ✓ Bare and wrapped plugin manifests follow consistent precedence, malformed
   manifests keep their failure behavior, and missing manifests remain valid —
   v1.20 Phase 1, verified 2026-09-14.
@@ -1064,6 +1073,12 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
+
+_Last updated: 2026-10-09 after mcp-4 Phase 5 (automatic migration on /reload)
+verified 4/4; the review-fix loop converged clean at iteration 3 (WR-01..04
+fixed, 8 info open) and the operator accepted the notice wording and asked
+for home-relative collision source names. Phase 6 (live MCP status in info)
+is next. Prior updates follow._
 
 _Last updated: 2026-10-07 after mcp-4 Phase 4 (variable expansion at Claude Code
 parity) verified 5/5; the review-fix loop closed WR-01..07 and the operator
