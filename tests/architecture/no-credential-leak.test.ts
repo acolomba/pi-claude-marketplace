@@ -4,7 +4,11 @@ import path from "node:path";
 import test from "node:test";
 
 import { ManualRecoveryError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
-import { notify } from "../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
+import { resolveCommandError } from "../../extensions/pi-claude-marketplace/shared/notification-command-error.ts";
+import {
+  notify,
+  notifyCommandError,
+} from "../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
 import {
   composeReconcileAppliedBody,
   formatEnvelopeArguments,
@@ -14,6 +18,8 @@ import {
 import { toWirePayload } from "../../extensions/pi-claude-marketplace/shared/notification-json.ts";
 import { presentNotification } from "../../extensions/pi-claude-marketplace/shared/notification-present.ts";
 import { resolveRawSurface } from "../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
+import { createCommandRunState } from "../../extensions/pi-claude-marketplace/shared/notification-run.ts";
+import { createJsonCapture } from "../edge/json-capture.ts";
 import { runWithAllLoaded } from "../shared/notification-run-seeds.ts";
 
 import {
@@ -1037,3 +1043,98 @@ test("AUTH-09 / PMOD-04: the planted-credential assertion reports an unredacted 
     },
   );
 });
+
+/** Checks every string of the machine-only error without inventing a text renderer. */
+function assertSafeCommandPayload(payload: unknown): void {
+  if (typeof payload === "string") {
+    assert.doesNotMatch(payload, /gh[pousr]_[A-Za-z0-9]+|alice:s3cret|s3cret|Bearer secret123/);
+    assert.doesNotMatch(payload, /file:\/|(?<![\w:/\\])(?:[A-Za-z]:[\\/]|\\\\|\/)[\w.-]/i);
+
+    return;
+  }
+
+  if (payload !== null && typeof payload === "object") {
+    for (const member of Object.values(payload)) {
+      assertSafeCommandPayload(member);
+    }
+  }
+}
+
+for (const mode of ["json", "rpc"] as const) {
+  test(`AUTH-09: internal-error resolution and ${mode} delivery hide credentials and local paths`, () => {
+    // arrange
+    const capture = createJsonCapture();
+    const origin = {
+      kind: "command",
+      commandId: "plugin update",
+      invocationId: "safe-error",
+    } as const;
+    const cause = new Error(`${USERINFO_URL} Bearer secret123 ${GITHUB_TOKEN}`, {
+      cause: new Error(
+        "/private/work/config.json C:\\private\\work\\config.json \\\\server file:///private/work/config.json file:/private/work/config.json",
+      ),
+    });
+    const ctx: NotificationContext = {
+      mode,
+      get ui() {
+        return capture.ui;
+      },
+    };
+    const expected = {
+      schemaVersion: 1,
+      kind: "internal-error",
+      origin,
+      severity: "error",
+      needsReload: false,
+      summary: "Command failed unexpectedly.",
+      cause: {
+        causeChain: [
+          "https://***@github.com/o/r.git Bearer *** ***",
+          "config.json config.json [path] [path] [path]",
+        ],
+        truncated: false,
+      },
+    };
+
+    // act
+    const converted = toWirePayload(resolveCommandError(cause, false), origin);
+    notifyCommandError(ctx, capture.entrySink, origin, createCommandRunState(), cause);
+
+    // assert
+    assert.deepStrictEqual(converted, expected);
+    assert.deepStrictEqual(capture.entries, [{ customType: "claude-plugin", payload: expected }]);
+    assertSafeCommandPayload(converted);
+    assertSafeCommandPayload(capture.entries);
+    capture.assertValid();
+  });
+}
+
+for (const [name, disclosure] of [
+  ["credential", GITHUB_TOKEN],
+  ["userinfo", USERINFO_URL],
+  ["bearer token", "Bearer secret123"],
+  ["POSIX path", "/private/work/config.json"],
+  ["Windows path", "C:\\private\\work\\config.json"],
+  ["bare UNC root", "\\\\server"],
+  ["file URL", "file:///private/work/config.json"],
+  ["single-slash file URL", "file:/private/work/config.json"],
+] as const) {
+  test(`AUTH-09 control: the whole command payload check rejects a planted ${name}`, () => {
+    // arrange
+    const origin = {
+      kind: "command",
+      commandId: "plugin update",
+      invocationId: "planted-error",
+    } as const;
+    const payload = toWirePayload(
+      resolveCommandError(new Error("operation failed"), false),
+      origin,
+    );
+    const planted = { ...payload, cause: { causeChain: [disclosure], truncated: false } };
+
+    // act & assert
+    assert.throws(() => {
+      assertSafeCommandPayload(planted);
+    }, assert.AssertionError);
+  });
+}

@@ -11,7 +11,8 @@ created: "2026-10-09"
 
 The user resolved the 06-01 scope blocker on 2026-10-09 by selecting option 1
 and approving a scope-only size exception for its 61-file atomic metadata
-migration. Independent checker review and execution evidence remain pending.
+migration. Plan 06-04 execution evidence is recorded below; final independent
+phase verification and the combined-wave gate remain parent-owned and pending.
 This document refers only to the active command-run-contract phase. No archived
 phase with number 06 is a dependency.
 
@@ -24,7 +25,7 @@ phase with number 06 is a dependency.
 | Quick feedback | Each task's exact owner command below |
 | Combined wave and phase gate | `npm run check` |
 | Full gate timeout | 2400 seconds; a timeout is a failure to verify |
-| Measured task latency | Pending execution; no duration claimed at planning time |
+| Measured task latency | 06-04-01 tracer: 5.99 s; 06-04-02 committed owners: 4.70 s; evidence below |
 | Security | ASVS level 1; high and critical findings block |
 | New packages or services | None |
 | Discovery | Level 0: existing internal router/run/dispatch/schema patterns; live source checked after CodeGraph |
@@ -74,6 +75,10 @@ and converter disclosure checks remain in 06-02. Production registration is
 fully wired in 06-02-01, so 06-03 adds lifetime behavior through that existing
 command boundary and needs only registration tests, not another register.ts
 edit. The four-wave dependency chain is unchanged.
+
+The following source observations describe the pre-execution planning baseline;
+they are not descriptions of the current implementation. Live implementation
+was rechecked for 06-04 as recorded in the execution evidence below.
 
 The approved 06-01 size exception preserves the atomic dependency constraint.
 CodeGraph was consulted before targeted source lookup. The current openNotificationRun
@@ -149,7 +154,10 @@ evidence remain pending, with no new approval gate introduced.
 
 ## Per-task verification map
 
-All rows are planned behavioral verification, not claimed passing results.
+The first seven rows retain their planned commands; their prior execution
+evidence is in the corresponding committed summaries. Their Pending status
+means this executor has not rerun those complete owner commands on the final
+combined tree. The last two rows record this executor's checks below.
 Every task has an automated command and a sibling fails_when in its PLAN.
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Automated Command | File Exists | Status |
@@ -161,8 +169,8 @@ Every task has an automated command and a sibling fails_when in its PLAN.
 | 06-03-01 | 03 | 3 | JOUT-03, JOUT-04, WIRE-07 | T-06-07, T-06-08, T-06-11 | Semantic outcomes, monotonic reload, closure | `node --test tests/shared/notification-run.test.ts tests/shared/notification-dispatch.test.ts tests/edge/command-run.test.ts` | Existing plus 06-02-01 pair | Pending |
 | 06-03-02 | 03 | 3 | JOUT-04, JOUT-03 | T-06-08, T-06-09, T-06-10 | One recovery per append fault, successful recovery preserves later output/reload, failed recovery closes delivery, no retry/rollback | `node --test tests/shared/notification-dispatch.test.ts tests/edge/command-run.test.ts tests/orchestrators/plugin/list-flow.test.ts` | Existing plus 06-02-01 pair | Pending |
 | 06-03-03 | 03 | 3 | JOUT-03, JOUT-04, WIRE-07 | T-06-06, T-06-07, T-06-09, T-06-11 | Existing root integration, valid empty outcomes, later output/reload after successful recovery | `node --test tests/edge/register.test.ts tests/edge/command-run.test.ts tests/shared/notification-dispatch.test.ts` | Existing plus 06-02-01 pair | Pending |
-| 06-04-01 | 04 | 4 | WIRE-02, WIRE-07, JOUT-03, JOUT-04 | T-06-12 | Deferred auth/cascade/delegation settlement and identity | `node --test tests/edge/register.test.ts tests/orchestrators/auth-host.test.ts tests/orchestrators/marketplace/update.test.ts tests/orchestrators/plugin/enable-disable.test.ts` | Existing | Pending |
-| 06-04-02 | 04 | 4 | WIRE-02, WIRE-07, JOUT-03, JOUT-04 | T-06-13, T-06-14 | Full fixture inventory, strict preservation, AUTH-09 internal-error enrollment and planted disclosure controls | `node --test tests/architecture/catalog-uat/catalog-wire.test.ts tests/architecture/no-credential-leak.test.ts tests/architecture/wire-schema.test.ts` | Existing | Pending |
+| 06-04-01 | 04 | 4 | WIRE-02, WIRE-07, JOUT-03, JOUT-04 | T-06-12 | Deferred auth/cascade/delegation settlement and identity | `node --test tests/edge/register.test.ts tests/orchestrators/auth-host.test.ts tests/orchestrators/marketplace/update.test.ts tests/orchestrators/plugin/enable-disable.test.ts` | Existing | PASS, exit 0; 5.99 s post-commit tracer |
+| 06-04-02 | 04 | 4 | WIRE-02, WIRE-07, JOUT-03, JOUT-04 | T-06-13, T-06-14 | Full fixture inventory, strict preservation, AUTH-09 internal-error enrollment and planted disclosure controls | `node --test tests/architecture/catalog-uat/catalog-wire.test.ts tests/architecture/no-credential-leak.test.ts tests/architecture/wire-schema.test.ts` | Existing | PASS, exit 0; 95 tests, 4.70 s at task commit; combined gate pending |
 
 T-06-SC is the permitted phase-wide repeated supply-chain threat ID. No task
 installs packages; any scope change introducing an install must first supply
@@ -406,12 +414,119 @@ production module or export is permitted.
 - [ ] Independent checker reviews the plan with the approved size exception and accepts contract assumptions.
 - [ ] Every owner command passes and its latency is recorded.
 - [ ] New source-test pairs reach 100% direct coverage.
-- [ ] Strict text corpus and catalog checks pass.
+- [x] Strict text corpus and catalog checks pass for the isolated 06-04 tree; combined-tree confirmation remains parent-owned.
 - [ ] Combined-wave and phase npm run check passes.
 - [ ] High/critical threats have verified mitigations.
-- [ ] Descriptor-less prohibition flags are surfaced to parent/verifier.
+- [x] Descriptor-less prohibition flags are surfaced to parent/verifier; both remain flagged-unverified.
 - [ ] Validation audit sets nyquist_compliant true only after execution evidence.
 
 **Approval:** User decisions and the scope-only 06-01 size exception approved
-(option 1, 2026-10-09); independent checker review, implementation, and
-validation evidence remain pending. All tests and review gates are retained.
+(option 1, 2026-10-09); final independent checker review and combined-tree
+validation remain pending. Local execution evidence follows. All review gates
+are retained; nyquist_compliant remains false.
+
+## Plan 06-04 execution evidence
+
+All checks here ran in the isolated `agent-p06-04-1791578940` worktree with
+Node `v26.11.0`. No dependency, source, schema, catalog, or corpus file changed.
+The only executable changes are the seven declared test files. The parent
+owns STATE, state.json, ROADMAP, config, final phase verification, and the
+combined-tree `npm run check`; no local hook is substituted for that gate.
+
+### Live prerequisite and carrier inspection
+
+Read 06-01, 06-02, and 06-03 summaries before implementation and checked their
+live source after CodeGraph lookup. Prior task heads are
+`885418551e9607150e2f575d5ea8a339d30c1468`,
+`bdad631968ddf629a6cc8bec122a3655581ff427`, and
+`0a26ee89acb4f577471d1b70bf2a33400ba61dd4`. Their recorded owner checks and
+parent merge checks are historical evidence, not reused checks for this tree.
+
+The router supplies canonical command IDs; registration performs synchronous
+mode preflight before opening the command boundary. The boundary awaits its
+handler and settles in finally. Update/import/browse handlers await or return
+delegated promises. Auth-host awaits initiateDeviceFlow, whose synchronous
+device-code callback precedes its returned polling promise. Marketplace update
+awaits each child and emits the aggregate through the supplied outer run.
+Enable awaits the install ledger before emitting its aggregate. No queue,
+timer, task registry, or production lifecycle mechanism was added.
+
+Dispatcher inspection confirms D-08: a successful recovery returns delivery
+to open; only a failed recovery closes it. Existing recovery and original
+text-exception tests remain unchanged.
+
+### Current task evidence and exact inputs
+
+- 06-04-01: the exact owner command in the table passed after commit
+  `f3e5d1df03ed49515b3d7dc6ed532d1c5b9c2c2e`, exit 0, 5.991 seconds,
+  four owner files, no failures or skips. Log: `/tmp/0604-tracer.log`.
+  Normal hooks passed static checks, unpaired tests, and direct coverage for
+  the four staged pairs. The first hook attempt found eight import/spacing
+  lint errors; they were fixed before the successful commit.
+- 06-04-02: the exact owner command in the table passed, exit 0, 95 tests,
+  zero skips, 4.798 seconds. Log: `/tmp/0604-task2-formatted.log`.
+  Inputs were the task-one commit plus the exact retained diff
+  `/tmp/0604-task2-verified.diff`, SHA-256
+  `df3ea92e9aedae6a0193ed8e71e54656e0f8755eac92cb3848ad3f0c34fc9839`.
+  The diff contains the three architecture test files; no untracked executable
+  input was added. Final task commit SHA and hook results are in 06-04-SUMMARY.md.
+- Final clean reference: task 06-04-02 committed as
+  `8a0d27805faf8382502790e0941b4655a6865643`. Its normal check:commit hook
+  passed, after a clean Fallow audit and fixer pass. The exact owner command
+  passed again on that commit, exit 0, 95 tests, zero skips, 4.704 seconds.
+  Log: `/tmp/0604-task2-final.log`. Only planning Markdown changed afterward.
+- Local RED controls were observed against the existing implementation by
+  temporarily disabling missing-outcome finalization and removing the
+  internal-error origin. Both named targets failed the intended complete
+  payload assertion, and both real TAP records passed RED_EVIDENCE_OK.
+  Records: `tmp/06-04-01-red.json` and `tmp/06-04-02-red.json`.
+  Both mutations were restored; only passing tests are committed.
+
+### Requirement, decision, edge, and threat evidence
+
+| Contract | Concrete evidence added or retained |
+| --- | --- |
+| WIRE-02 / D-09 | All 260 catalog tuples and eight raw samples retain traversal and controls, with explicit producing roots in conversion and JSON/RPC dispatch; the separate internal error completes all 19 kinds. Removing origin, severity, or needsReload fails every retained fixture. |
+| WIRE-07 / D-03, D-09 | Delayed enable/install and marketplace cascade retain outer identity; overlapping identical imports settle independently from load/hook emissions. Missing commandId/invocationId negatives fail every command fixture. Shared diagnostics exercise both command and load roots. |
+| JOUT-03 / D-05, D-06, D-10 | Exact prompt/outcome/settlement logs cover delayed success, typed error, missing outcome, and throw. Deferred device-code/token polling blocks authentication completion. Retained callbacks emit nothing after root settlement. |
+| JOUT-04 / D-07, D-08 | Earlier reload-bearing output survives a delayed throw. Recovery-caught malformed attempts remain visible to capture.assertValid. AUTH-09 checks resolved, converted, and delivered errors across all payload strings, with credential, POSIX, Windows, bare UNC, and both file-URL controls. |
+| D-01, D-02, D-04 | Prior canonical alias, invalid-parent, bare browse, and marketplace-help witnesses remain in the live router/register suites; no routing source changed. |
+| All 12 spec-less edges | Prior tests and authored truths above remain; new ordered/deferred/late-callback tests extend the ordering and empty-result evidence. None was removed or silently resolved by a command declaration. |
+| T-06-12 | Controlled promises and full ordered logs prove real carrier completion and late callback suppression. Every test-owned promise is released and awaited. |
+| T-06-13 | Original inventory and negative controls are retained; strict preservation evidence is recorded below. No fixture or corpus recapture. |
+| T-06-14 | Full payload capture validation, retained malformed attempts, required metadata negatives, and actual internal-error disclosure controls pass. |
+| T-06-SC | No package installation or dependency change. |
+
+Both descriptor-less prohibitions above remain **flagged-unverified**:
+correlation must not become persistent tracking/telemetry, and an internal
+error must not imply rollback. Parent/verifier judgment is still required.
+
+### Preservation and parent-owned gates
+
+The strict corpus producer runs sequentially with large hooks, with
+`TEST_CONCURRENCY=4`. Its unchanged output is saved to a file and checked for
+both the exact 3149/zero-extra completion line and absence of missing/extra
+lines. This uses the inherited assertions with file-backed input, as in the
+prior plans, rather than weakening the strict check or recapturing data.
+The producer passed with exit 0 in 142.66 seconds: 9385 tests, zero failures,
+one inherited skip, and `Notify corpus check passed: 3149 baseline entries
+present, 0 extra.` The separate strict assertions passed with exit 0 and no
+missing/extra lines. Log: `/tmp/0604-corpus.log`; timing:
+`/tmp/0604-corpus-time.log`. Inputs were the same task-one commit and retained
+three-file diff above; an exact diff comparison confirmed the tests had not
+changed. No skipped test was introduced.
+
+`git diff --exit-code 26cb0056 -- docs/output-catalog.md` passed with exit 0
+and an empty diff. No catalog or corpus baseline was changed or recaptured.
+
+The final producer rerun on clean task commit
+`8a0d27805faf8382502790e0941b4655a6865643` also passed: exit 0, 142.62 seconds,
+9385 tests, 9384 passing, one inherited skip, zero failures. The strict
+3149/zero-extra and no-missing/no-extra assertions passed again, as did the
+catalog comparison. Final logs: `/tmp/0604-corpus-final.log` and
+`/tmp/0604-corpus-final-time.log`. The executable diff from that commit remains
+empty; subsequent validation and summary edits are planning Markdown only.
+
+Combined-wave `npm run check`, final phase verification, and full threat review
+remain pending for the parent. This document does not promote those gates or
+nyquist_compliant from the local task and hook results.

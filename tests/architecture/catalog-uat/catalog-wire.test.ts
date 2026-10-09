@@ -28,9 +28,11 @@ import { fileURLToPath } from "node:url";
 
 import { Compile } from "typebox/compile";
 
+import { resolveCommandError } from "../../../extensions/pi-claude-marketplace/shared/notification-command-error.ts";
 import {
   notify,
   notifyAsyncRewakeSummary,
+  notifyCommandError,
   notifyDeviceFlowPrompt,
   notifyDiagnostic,
   notifyPluginPathSkipped,
@@ -43,7 +45,10 @@ import { formatRawSurface } from "../../../extensions/pi-claude-marketplace/shar
 import { toWirePayload } from "../../../extensions/pi-claude-marketplace/shared/notification-json.ts";
 import { presentNotification } from "../../../extensions/pi-claude-marketplace/shared/notification-present.ts";
 import { resolveRawSurface } from "../../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
-import { openNotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
+import {
+  createCommandRunState,
+  openNotificationRun,
+} from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import { NOTIFICATION_PAYLOAD_SCHEMA } from "../../../extensions/pi-claude-marketplace/shared/notification-wire.ts";
 import { createJsonCapture } from "../../edge/json-capture.ts";
 
@@ -55,14 +60,17 @@ import type { CatalogFixture, FixtureMap } from "./fixture-types.ts";
 import type { NotificationContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { NotificationPresentation } from "../../../extensions/pi-claude-marketplace/shared/notification-present.ts";
 import type { ResolvedRawSurface } from "../../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
-import type { NotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
+import type {
+  NotificationOrigin,
+  NotificationRun,
+} from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import type {
   NotificationMessage,
   RawSurface,
 } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
 type PayloadSource = NotificationPresentation | ResolvedRawSurface;
-type Converter = (source: PayloadSource) => unknown;
+type Converter = (source: PayloadSource, origin: NotificationOrigin) => unknown;
 
 /** One presented catalog example or raw sample, ready to convert. */
 interface PresentedSource {
@@ -70,6 +78,7 @@ interface PresentedSource {
   readonly state: string;
   readonly text: string;
   readonly source: PayloadSource;
+  readonly origin: NotificationOrigin;
 }
 
 interface PresentedCatalog extends PresentedSource {
@@ -101,6 +110,60 @@ const RAW_SECTION = "raw surface";
 const PAYLOAD_VALIDATOR = Compile(NOTIFICATION_PAYLOAD_SCHEMA);
 const PRUNE_WARNING_KEY = "/claude:plugin prune::committed-warning";
 const PATH_SOURCE_INFO_KEY = "/claude:plugin marketplace info <name>::path-single-scope";
+
+const CATALOG_COMMANDS = new Map([
+  ["/claude:plugin list", "plugin list"],
+  ["/claude:plugin install <plugin>@<marketplace>", "plugin install"],
+  ["/claude:plugin uninstall <plugin>@<marketplace>", "plugin uninstall"],
+  ["/claude:plugin prune", "plugin prune"],
+  ["/claude:plugin reinstall", "plugin reinstall"],
+  ["/claude:plugin update", "plugin update"],
+  ["/claude:plugin fetch", "plugin fetch"],
+  ["/claude:plugin import", "plugin import"],
+  ["/claude:plugin bootstrap", "plugin bootstrap"],
+  ["/claude:plugin marketplace list", "marketplace list"],
+  ["/claude:plugin marketplace add <source>", "marketplace add"],
+  ["/claude:plugin marketplace info <name>", "marketplace info"],
+  ["/claude:plugin info <plugin>@<marketplace>", "plugin info"],
+  ["/claude:plugin pending", "plugin pending"],
+  ["/claude:plugin marketplace remove <name>", "marketplace remove"],
+  ["/claude:plugin marketplace update [<name>]", "marketplace update"],
+  ["/claude:plugin enable <plugin>@<marketplace>", "plugin enable"],
+  ["/claude:plugin disable <plugin>@<marketplace>", "plugin disable"],
+  ["manual-recovery-anchors", "plugin disable"],
+  ["planted section", "plugin"],
+]);
+
+function catalogOrigin(example: CatalogExample): NotificationOrigin {
+  if (example.section === "reconcile-applied-cascade") {
+    return { kind: "load" };
+  }
+
+  const commandId =
+    example.section === "/claude:plugin marketplace autoupdate|noautoupdate [<name>]"
+      ? example.state.startsWith("disable-")
+        ? "marketplace noautoupdate"
+        : "marketplace autoupdate"
+      : CATALOG_COMMANDS.get(example.section);
+  assert.ok(commandId, `Unassigned catalog origin: ${example.section}`);
+
+  return { kind: "command", commandId, invocationId: tupleKey(example.section, example.state) };
+}
+
+const RAW_ORIGINS: Readonly<Record<RawSurface["kind"], NotificationOrigin>> = {
+  "usage-error": { kind: "command", commandId: "plugin install", invocationId: "raw-usage-error" },
+  "usage-info": { kind: "command", commandId: "plugin list", invocationId: "raw-usage-info" },
+  diagnostic: { kind: "command", commandId: "plugin import", invocationId: "raw-diagnostic" },
+  "device-flow-prompt": {
+    kind: "command",
+    commandId: "marketplace add",
+    invocationId: "raw-device-flow",
+  },
+  "async-rewake-summary": { kind: "hook" },
+  "stop-override-cap": { kind: "hook" },
+  "reconcile-aborted": { kind: "load" },
+  "plugin-path-skipped": { kind: "load" },
+};
 
 /**
  * WIRE-08 / NFR-9: an absolute path in the shape `redactAbsolutePaths` matches,
@@ -153,11 +216,8 @@ function presentExample(example: CatalogExample, fixtures: FixtureMap): Presente
     throw new Error(`Catalog example has no fixture: ${tupleKey(example.section, example.state)}`);
   }
 
-  const run = openNotificationRun(fixture.pi, {
-    kind: "command",
-    commandId: "plugin",
-    invocationId: "test-run",
-  });
+  const origin = catalogOrigin(example);
+  const run = openNotificationRun(fixture.pi, origin);
   const source =
     fixture.present?.(run) ?? presentNotification(run, catalogMessage(example.section, fixture));
   verifyPi(fixture.pi);
@@ -166,6 +226,7 @@ function presentExample(example: CatalogExample, fixtures: FixtureMap): Presente
     state: example.state,
     text: example.expected,
     source,
+    origin,
     fixture,
     run,
   };
@@ -179,6 +240,7 @@ function presentRawSamples(): PresentedSource[] {
       state: surface.kind,
       text: formatRawSurface(source)?.[0] ?? "",
       source,
+      origin: RAW_ORIGINS[surface.kind],
     };
   });
 }
@@ -220,8 +282,8 @@ function convertAndValidate(
 ): HarnessReport {
   const failures: ValidationFailure[] = [];
   const converted: ConvertedPayload[] = [];
-  for (const { section, state, source } of presented) {
-    const payload = convert(source);
+  for (const { section, state, source, origin } of presented) {
+    const payload = convert(source, origin);
     const received: unknown = JSON.parse(JSON.stringify(payload));
     if (!PAYLOAD_VALIDATOR.Check(received)) {
       const errors = [...PAYLOAD_VALIDATOR.Errors(received)].map(
@@ -244,13 +306,9 @@ function realPayloads(): {
   readonly key: string;
   readonly payload: ReturnType<typeof toWirePayload>;
 }[] {
-  return PRESENTED.map(({ section, state, source }) => ({
+  return PRESENTED.map(({ section, state, source, origin }) => ({
     key: tupleKey(section, state),
-    payload: toWirePayload(source, {
-      kind: "command",
-      commandId: "plugin",
-      invocationId: "test-run",
-    }),
+    payload: toWirePayload(source, origin),
   }));
 }
 
@@ -335,13 +393,10 @@ function hiddenPaths(value: string, at: string, text: string): string[] {
 function walkAll(presented: readonly PresentedSource[]): WalkReport {
   const findings: string[] = [];
   let visited = 0;
-  for (const { section, state, text, source } of presented) {
+  for (const { section, state, text, source, origin } of presented) {
     const key = tupleKey(section, state);
     findings.push(
-      ...walkPayload(
-        toWirePayload(source, { kind: "command", commandId: "plugin", invocationId: "test-run" }),
-        text,
-      ).map((finding) => `${key} ${finding}`),
+      ...walkPayload(toWirePayload(source, origin), text).map((finding) => `${key} ${finding}`),
     );
     visited += 1;
   }
@@ -361,7 +416,209 @@ const CATALOG_PRESENTED = EXAMPLES.map((example) => presentExample(example, FIXT
 const RAW_PRESENTED = presentRawSamples();
 const PRESENTED: readonly PresentedSource[] = [...CATALOG_PRESENTED, ...RAW_PRESENTED];
 
+test("WIRE-02: the retained inventory and separate command error cover all 19 kinds", () => {
+  // arrange
+  const error = resolveCommandError(new Error("operation failed"), false);
+  const origin = {
+    kind: "command",
+    commandId: "plugin update",
+    invocationId: "error-run",
+  } as const;
+
+  // act
+  const payloads = [...realPayloads().map(({ payload }) => payload), toWirePayload(error, origin)];
+
+  // assert
+  assert.deepStrictEqual([...new Set(payloads.map(({ kind }) => kind))].sort(), [
+    "async-rewake-summary",
+    "cascade",
+    "device-flow-prompt",
+    "diagnostic",
+    "internal-error",
+    "marketplace-info",
+    "marketplace-info-cascade",
+    "marketplace-not-added",
+    "plugin-info",
+    "plugin-info-cascade",
+    "plugin-path-skipped",
+    "prune-committed-warning",
+    "prune-empty",
+    "reconcile-aborted",
+    "reconcile-applied-cascade",
+    "reconcile-pending-empty",
+    "stop-override-cap",
+    "usage-error",
+    "usage-info",
+  ]);
+  assert.strictEqual(PRESENTED.length, 268);
+
+  for (const payload of payloads) {
+    assert.ok(PAYLOAD_VALIDATOR.Check(payload));
+  }
+});
+
+for (const field of ["origin", "severity", "needsReload"] as const) {
+  test(`WIRE-02 control: removing ${field} fails every retained fixture`, () => {
+    // arrange
+    const withoutMetadata: Converter = (source, origin) =>
+      Object.fromEntries(
+        Object.entries(toWirePayload(source, origin)).filter(([key]) => key !== field),
+      );
+
+    // act
+    const report = convertAndValidate(PRESENTED, withoutMetadata);
+
+    // assert
+    assert.deepStrictEqual(tupleKeys(report.failures), tupleKeys(PRESENTED));
+  });
+}
+
+for (const field of ["commandId", "invocationId"] as const) {
+  test(`WIRE-07 control: removing ${field} fails every command fixture`, () => {
+    // arrange
+    const commands = PRESENTED.filter(({ origin }) => origin.kind === "command");
+    const withoutIdentity: Converter = (source, origin) => ({
+      ...toWirePayload(source, origin),
+      origin: Object.fromEntries(Object.entries(origin).filter(([key]) => key !== field)),
+    });
+
+    // act
+    const report = convertAndValidate(commands, withoutIdentity);
+
+    // assert
+    assert.ok(commands.length > 0);
+    assert.deepStrictEqual(tupleKeys(report.failures), tupleKeys(commands));
+  });
+}
+
+for (const origin of [{ kind: "load" }, { kind: "hook" }] as const) {
+  test(`JOUT-04 control: internal errors reject ${origin.kind} origin`, () => {
+    // arrange
+    const error = resolveCommandError(new Error("operation failed"), false);
+
+    // act & assert
+    assert.throws(() => {
+      // @ts-expect-error -- deliberately cross the command-only conversion boundary.
+      toWirePayload(error, origin);
+    }, TypeError);
+  });
+}
+
 for (const mode of ["json", "rpc"] as const) {
+  test(`JOUT-04: the separate internal error reaches ${mode} without a text fixture`, () => {
+    // arrange
+    const capture = createJsonCapture();
+    const origin = {
+      kind: "command",
+      commandId: "plugin update",
+      invocationId: "error-run",
+    } as const;
+    const cause = new Error("operation failed");
+    const expected = {
+      schemaVersion: 1,
+      kind: "internal-error",
+      origin,
+      severity: "error",
+      needsReload: false,
+      summary: "Command failed unexpectedly.",
+      cause: { causeChain: ["operation failed"], truncated: false },
+    };
+    const ctx: NotificationContext = {
+      mode,
+      get ui() {
+        return capture.ui;
+      },
+    };
+
+    // act
+    const converted = toWirePayload(resolveCommandError(cause, false), origin);
+    notifyCommandError(ctx, capture.entrySink, origin, createCommandRunState(), cause);
+
+    // assert
+    assert.deepStrictEqual(converted, expected);
+    assert.deepStrictEqual(capture.entries, [{ customType: "claude-plugin", payload: expected }]);
+    capture.assertValid();
+  });
+
+  for (const origin of [
+    { kind: "command", commandId: "plugin import", invocationId: "diagnostic-run" },
+    { kind: "load" },
+  ] as const) {
+    test(`WIRE-02: shared diagnostic keeps its ${origin.kind} root in ${mode}`, () => {
+      // arrange
+      const capture = createJsonCapture();
+      const pi = piWithAllLoaded();
+      const run = { ...openNotificationRun(pi, origin), entrySink: capture.entrySink };
+      const ctx: NotificationContext = {
+        mode,
+        get ui() {
+          return capture.ui;
+        },
+      };
+
+      // act
+      notifyDiagnostic(ctx, run, "One warning", ["settings skipped"]);
+
+      // assert
+      assert.deepStrictEqual(capture.entries, [
+        {
+          customType: "claude-plugin",
+          payload: {
+            schemaVersion: 1,
+            kind: "diagnostic",
+            origin,
+            severity: "warning",
+            needsReload: false,
+            header: "One warning",
+            lines: ["settings skipped"],
+          },
+        },
+      ]);
+      capture.assertValid();
+      verifyPi(pi);
+    });
+  }
+
+  test(`JOUT-04 control: recovered malformed ${mode} attempts remain in the capture ledger`, () => {
+    // arrange
+    const capture = createJsonCapture();
+    const pi = piWithAllLoaded();
+    const origin = {
+      kind: "command",
+      commandId: "plugin import",
+      invocationId: "malformed-run",
+    } as const;
+    const run = {
+      ...openNotificationRun(pi, origin),
+      entrySink: {
+        appendEntry(customType: string, payload: unknown): void {
+          capture.entrySink.appendEntry(customType, capture.entries.length === 0 ? {} : payload);
+        },
+      },
+    };
+    const ctx: NotificationContext = {
+      mode,
+      get ui() {
+        return capture.ui;
+      },
+    };
+
+    // act
+    notifyDiagnostic(ctx, run, "One warning", ["settings skipped"]);
+
+    // assert
+    assert.strictEqual(capture.entries.length, 2);
+    assert.deepStrictEqual(capture.entries[0], { customType: "claude-plugin", payload: {} });
+    const recovery = capture.entries[1]?.payload;
+    assert.ok(PAYLOAD_VALIDATOR.Check(recovery));
+    assert.strictEqual(recovery.kind, "internal-error");
+    assert.deepStrictEqual(recovery.origin, origin);
+    assert.throws(() => {
+      capture.assertValid();
+    }, assert.AssertionError);
+    verifyPi(pi);
+  });
+
   test(`JOUT-01: every catalog tuple reaches ${mode} transport exactly once`, () => {
     // arrange
     const capture = createJsonCapture();
@@ -384,6 +641,13 @@ for (const mode of ["json", "rpc"] as const) {
       }
 
       capture.assertValid();
+      assert.deepStrictEqual(
+        capture.entries.slice(start).map(({ payload }) => {
+          assert.ok(PAYLOAD_VALIDATOR.Check(payload));
+          return payload.origin;
+        }),
+        [presented.origin],
+      );
       emittedKeys.push(
         ...capture.entries.slice(start).map(() => tupleKey(presented.section, presented.state)),
       );
@@ -404,11 +668,7 @@ for (const mode of ["json", "rpc"] as const) {
       const capture = createJsonCapture();
       const pi = piWithAllLoaded();
       const run: NotificationRun = {
-        ...openNotificationRun(pi, {
-          kind: "command",
-          commandId: "plugin",
-          invocationId: "test-run",
-        }),
+        ...openNotificationRun(pi, RAW_ORIGINS[surface.kind]),
         entrySink: capture.entrySink,
       };
       const ctx: NotificationContext = {
@@ -426,9 +686,9 @@ for (const mode of ["json", "rpc"] as const) {
       assert.deepStrictEqual(
         capture.entries.map(({ customType, payload }) => {
           assert.ok(PAYLOAD_VALIDATOR.Check(payload));
-          return { customType, kind: payload.kind };
+          return { customType, kind: payload.kind, origin: payload.origin };
         }),
-        [{ customType: "claude-plugin", kind: surface.kind }],
+        [{ customType: "claude-plugin", kind: surface.kind, origin: RAW_ORIGINS[surface.kind] }],
       );
       verifyPi(pi);
     });
@@ -441,9 +701,7 @@ test("JOUT-02: every catalog example and raw kind converts to a schema-valid pay
   const expectedCount = EXAMPLES.length + Object.keys(RAW_SAMPLES).length;
 
   // act
-  const report = convertAndValidate(PRESENTED, (source) =>
-    toWirePayload(source, { kind: "command", commandId: "plugin", invocationId: "test-run" }),
-  );
+  const report = convertAndValidate(PRESENTED, toWirePayload);
 
   // assert
   assert.deepStrictEqual(report.failures, []);
@@ -504,9 +762,7 @@ test("JOUT-02 control: a planted fixture with an off-vocabulary reason fails by 
   );
 
   // act
-  const report = convertAndValidate([planted], (source) =>
-    toWirePayload(source, { kind: "command", commandId: "plugin", invocationId: "test-run" }),
-  );
+  const report = convertAndValidate([planted], toWirePayload);
 
   // assert
   assert.deepStrictEqual(tupleKeys(report.failures), ["planted section::off-vocabulary reason"]);
@@ -522,8 +778,8 @@ test("JOUT-02 control: a cascade payload carrying a raw-only member fails", () =
   // arrange
   const cascade = CATALOG_PRESENTED.find(({ source }) => source.kind === "cascade");
   assert.ok(cascade, "the catalog presents no cascade");
-  const foreignMember: Converter = (source) => ({
-    ...toWirePayload(source, { kind: "command", commandId: "plugin", invocationId: "test-run" }),
+  const foreignMember: Converter = (source, origin) => ({
+    ...toWirePayload(source, origin),
     causeMessage: "state unreadable",
   });
 
@@ -609,11 +865,7 @@ function committedWarning(): {
   readonly text: string;
 } {
   const presented = presentedAt(PRUNE_WARNING_KEY);
-  const payload = toWirePayload(presented.source, {
-    kind: "command",
-    commandId: "plugin",
-    invocationId: "test-run",
-  });
+  const payload = toWirePayload(presented.source, presented.origin);
   if (payload.kind !== "prune-committed-warning" || payload.cause === undefined) {
     throw new Error(`Expected a committed prune warning with a cause, got ${payload.kind}`);
   }
@@ -657,11 +909,7 @@ test("WIRE-08: no real payload carries a hidden path, a live Error, or an absent
 test("WIRE-08 control: the path-source marketplace info absPath is detected and accepted", () => {
   // arrange
   const presented = presentedAt(PATH_SOURCE_INFO_KEY);
-  const payload = toWirePayload(presented.source, {
-    kind: "command",
-    commandId: "plugin",
-    invocationId: "test-run",
-  });
+  const payload = toWirePayload(presented.source, presented.origin);
 
   // act
   const hidden = walkPayload(payload, "");
