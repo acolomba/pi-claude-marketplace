@@ -69,6 +69,8 @@ import {
 } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { UnsupportedModeError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
+import { notifyUsageInfo } from "../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
+import { openNotificationRun } from "../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import { retryTree } from "../orchestrators/plugin/scope-tree-inventory.ts";
 import { createGitOpsFake } from "../platform/git-ops-fake.ts";
 import { createHermeticEnvironment } from "../platform/hermetic-environment.ts";
@@ -170,6 +172,7 @@ interface CommandProbes {
   readonly runs: number;
   readonly capture?: ReturnType<typeof createJsonCapture>;
   readonly createInvocationId?: () => string;
+  readonly appendAttempts?: number;
 }
 
 interface WrapperUnderTest {
@@ -393,7 +396,7 @@ function registerCommandWithCache(
 
     when(() => pi.appendEntry)
       .thenReturn(appendEntry)
-      .times(1);
+      .times(probes.appendAttempts ?? 1);
   }
 
   if (toolReads > 0) {
@@ -430,25 +433,242 @@ function registerCommandUnderTest(probes: CommandProbes): CommandUnderTest {
 }
 
 for (const mode of ["json", "rpc"]) {
-  test(`registered list appends a complete cascade in ${mode} without UI access`, async (t) => {
-    // arrange
-    const { cwd } = await createHermeticScope(t, "machine-list");
-    await seedProjectMarketplace(cwd, "demo");
-    const manifestPath = marketplaceRecordIn(cwd, "demo").manifestPath;
-    await mkdir(path.dirname(manifestPath), { recursive: true });
-    await writeFile(manifestPath, JSON.stringify({ name: "demo", plugins: [] }));
-    const capture = createJsonCapture();
-    const ids = mock<{ createInvocationId(): string }>({
-      exactParams: true,
-      name: "invocation IDs",
+  for (const { args, commandId } of [
+    { args: "list --scope project", commandId: "plugin list" },
+    { args: "ls --scope project", commandId: "plugin list" },
+    { args: "browse", commandId: "plugin browse" },
+    { args: "", commandId: "plugin browse" },
+    { args: " \t ", commandId: "plugin browse" },
+  ]) {
+    test(`registered ${JSON.stringify(args)} appends a complete cascade in ${mode} without UI access`, async (t) => {
+      // arrange
+      const { cwd } = await createHermeticScope(t, "machine-list");
+      await seedProjectMarketplace(cwd, "demo");
+      const manifestPath = marketplaceRecordIn(cwd, "demo").manifestPath;
+      await mkdir(path.dirname(manifestPath), { recursive: true });
+      await writeFile(manifestPath, JSON.stringify({ name: "demo", plugins: [] }));
+      const capture = createJsonCapture();
+      const ids = mock<{ createInvocationId(): string }>({
+        exactParams: true,
+        name: "invocation IDs",
+      });
+      when(() => ids.createInvocationId())
+        .thenReturn("run-list-1")
+        .times(1);
+      const { registration, verifyRegistrar } = registerCommandUnderTest({
+        runs: 1,
+        capture,
+        createInvocationId: () => ids.createInvocationId(),
+      });
+      const ctx = {
+        mode,
+        cwd,
+        get ui() {
+          return capture.ui;
+        },
+      };
+
+      // act
+      try {
+        await Reflect.apply(registration.handler, undefined, [args, ctx]);
+      } catch {
+        // The retained capture ledger below must expose caught delivery failures.
+      }
+
+      // assert
+      assert.deepStrictEqual(capture.entries, [
+        {
+          customType: "claude-plugin",
+          payload: {
+            schemaVersion: 1,
+            kind: "cascade",
+            origin: { kind: "command", commandId, invocationId: "run-list-1" },
+            severity: "info",
+            needsReload: false,
+            tally: { label: "Plugin list", success: { count: 0 }, failures: 0, warnings: 0 },
+            marketplaces: [{ name: "demo", scope: "project", plugins: [] }],
+          },
+        },
+      ]);
+      capture.assertValid();
+      verifyRegistrar();
+      verify(ids);
     });
-    when(() => ids.createInvocationId())
-      .thenReturn("run-list-1")
-      .times(1);
+  }
+}
+
+for (const mode of ["json", "rpc"] as const) {
+  for (const { args, commandId, message, usage } of [
+    {
+      args: "help marketplace extra",
+      commandId: "plugin help",
+      message: 'Unknown help topic: "marketplace extra".',
+      usage: "Usage: /claude:plugin help [marketplace]",
+    },
+    {
+      args: "help invalid",
+      commandId: "plugin help",
+      message: 'Unknown help topic: "invalid".',
+      usage: "Usage: /claude:plugin help [marketplace]",
+    },
+    {
+      args: "marketplace help extra",
+      commandId: "marketplace help",
+      message: "marketplace help takes no arguments.",
+      usage: "Usage: /claude:plugin marketplace help",
+    },
+  ]) {
+    test(`registered ${args} retains its recognized identity in ${mode}`, async (t) => {
+      // arrange
+      const { cwd } = await createHermeticScope(t, "help-origin");
+      const capture = createJsonCapture();
+      const { registration, verifyRegistrar } = registerCommandUnderTest({
+        runs: 1,
+        capture,
+        createInvocationId: () => "help-run",
+      });
+      const ctx = {
+        mode,
+        cwd,
+        get ui() {
+          return capture.ui;
+        },
+      };
+
+      // act
+      await Reflect.apply(registration.handler, undefined, [args, ctx]);
+
+      // assert
+      assert.deepStrictEqual(capture.entries, [
+        {
+          customType: "claude-plugin",
+          payload: {
+            schemaVersion: 1,
+            kind: "usage-error",
+            severity: "error",
+            needsReload: false,
+            origin: { kind: "command", commandId, invocationId: "help-run" },
+            message,
+            usage,
+          },
+        },
+      ]);
+      capture.assertValid();
+      verifyRegistrar();
+    });
+  }
+
+  test(`keeps overlapping import runs and independent roots ordered in ${mode}`, async (t) => {
+    // arrange
+    const { cwd } = await createHermeticScope(t, "overlapping-imports");
+    const capture = createJsonCapture();
+    let finishFirst!: () => void;
+    let finishSecond!: () => void;
+    const first = new Promise<void>((resolve) => {
+      finishFirst = resolve;
+    });
+    const second = new Promise<void>((resolve) => {
+      finishSecond = resolve;
+    });
+    const completions = [first, second];
+    const invocationIds = ["run-a", "run-b"];
+    const importClaudeSettings: ImportDelegate = async ({ ctx, run }) => {
+      const completion = completions.shift()!;
+      notifyUsageInfo(ctx, run, "same");
+      notifyUsageInfo(ctx, run, "same");
+      await completion;
+      notifyUsageInfo(ctx, run, "same");
+      return {
+        addedMarketplaces: [],
+        changedResources: false,
+        diagnostics: [],
+        installedPlugins: [],
+        marketplaceFailures: [],
+        skippedExistingMarketplaces: [],
+        skippedExistingPlugins: [],
+        sourceMismatches: [],
+        unexpectedPluginFailures: [],
+        warnings: [],
+      };
+    };
+
+    const { registration, verifyRegistrar } = registerCommandWithCache(
+      createCompletionCache(),
+      undefined,
+      importClaudeSettings,
+      { runs: 2, capture, appendAttempts: 6, createInvocationId: () => invocationIds.shift()! },
+    );
+    const ctx = {
+      mode,
+      cwd,
+      get ui() {
+        return capture.ui;
+      },
+    };
+    const independentRoot = { ...capture.entrySink, getAllTools: () => [] };
+
+    // act
+    const firstCommand: unknown = Reflect.apply(registration.handler, undefined, [
+      "import --scope project",
+      ctx,
+    ]);
+    notifyUsageInfo(ctx, openNotificationRun(independentRoot, { kind: "hook" }), "same");
+    const secondCommand: unknown = Reflect.apply(registration.handler, undefined, [
+      "import --scope project",
+      ctx,
+    ]);
+    notifyUsageInfo(ctx, openNotificationRun(independentRoot, { kind: "load" }), "same");
+    finishSecond();
+    await secondCommand;
+    finishFirst();
+    await firstCommand;
+
+    // assert
+    assert.deepStrictEqual(
+      capture.entries,
+      [
+        { kind: "command", commandId: "plugin import", invocationId: "run-a" },
+        { kind: "command", commandId: "plugin import", invocationId: "run-a" },
+        { kind: "hook" },
+        { kind: "command", commandId: "plugin import", invocationId: "run-b" },
+        { kind: "command", commandId: "plugin import", invocationId: "run-b" },
+        { kind: "load" },
+        { kind: "command", commandId: "plugin import", invocationId: "run-b" },
+        { kind: "command", commandId: "plugin import", invocationId: "run-a" },
+      ].map((origin) => ({
+        customType: "claude-plugin",
+        payload: {
+          schemaVersion: 1,
+          kind: "usage-info",
+          severity: "info",
+          needsReload: false,
+          origin,
+          usage: "same",
+        },
+      })),
+    );
+    assert.deepStrictEqual(invocationIds, []);
+    capture.assertValid();
+    verifyRegistrar();
+  });
+
+  test(`keeps the enable origin through delegated installation in ${mode}`, async (t) => {
+    // arrange
+    const { cwd } = await createHermeticScope(t, "enable-delegation");
+    const state = await seedPrunableScope("project", cwd);
+    const plugin = state.marketplaces.mp!.plugins.orphan!;
+    plugin.enabled = false;
+    const sourceSkill = path.join(plugin.resolvedSource, "skills", "orphan-skill", "SKILL.md");
+    await mkdir(path.dirname(sourceSkill), { recursive: true });
+    await writeFile(sourceSkill, "---\nname: orphan-skill\ndescription: A skill\n---\nbody\n");
+    const locations = locationsFor("project", cwd);
+    await rm(path.join(locations.skillsTargetDir, "orphan-skill"), { recursive: true });
+    await saveState(locations.extensionRoot, state);
+    const capture = createJsonCapture();
     const { registration, verifyRegistrar } = registerCommandUnderTest({
       runs: 1,
       capture,
-      createInvocationId: () => ids.createInvocationId(),
+      createInvocationId: () => "enable-run",
     });
     const ctx = {
       mode,
@@ -459,11 +679,7 @@ for (const mode of ["json", "rpc"]) {
     };
 
     // act
-    try {
-      await Reflect.apply(registration.handler, undefined, ["list --scope project", ctx]);
-    } catch {
-      // The retained capture ledger below must expose caught delivery failures.
-    }
+    await Reflect.apply(registration.handler, undefined, ["enable orphan@mp --scope project", ctx]);
 
     // assert
     assert.deepStrictEqual(capture.entries, [
@@ -472,17 +688,38 @@ for (const mode of ["json", "rpc"]) {
         payload: {
           schemaVersion: 1,
           kind: "cascade",
-          origin: { kind: "command", commandId: "plugin list", invocationId: "run-list-1" },
           severity: "info",
-          needsReload: false,
-          tally: { label: "Plugin list", success: { count: 0 }, failures: 0, warnings: 0 },
-          marketplaces: [{ name: "demo", scope: "project", plugins: [] }],
+          needsReload: true,
+          origin: { kind: "command", commandId: "plugin enable", invocationId: "enable-run" },
+          marketplaces: [
+            {
+              name: "mp",
+              scope: "project",
+              plugins: [
+                {
+                  name: "orphan",
+                  id: "orphan@mp",
+                  scope: "project",
+                  status: "installed",
+                  version: "1.0.0",
+                  reasons: [],
+                },
+              ],
+            },
+          ],
         },
       },
     ]);
+    assert.strictEqual(
+      await readFile(path.join(locations.skillsTargetDir, "orphan-skill", "SKILL.md"), "utf8"),
+      "---\nname: orphan-skill\ndescription: A skill\n---\nbody\n",
+    );
+    assert.strictEqual(
+      (await loadState(locations.extensionRoot)).marketplaces.mp!.plugins.orphan!.enabled,
+      true,
+    );
     capture.assertValid();
     verifyRegistrar();
-    verify(ids);
   });
 }
 
