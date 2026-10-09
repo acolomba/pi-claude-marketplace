@@ -577,6 +577,12 @@ TMPDIR=/var/tmp/mcp-adapter-canary \
 
 The capture drives 0.19.2 alone. It adds the canary marketplace, installs `echo`, and writes the fixture. It refuses to write a fixture that still holds the sandbox, repository, or home path.
 
+The capture writes the fixture with one array element on each line, but `npm run check` expects the Prettier layout. Format the fixture before you commit it:
+
+```bash
+npx prettier --write tests/live-uat/fixtures/mcp-adapter-canary/legacy-v0.19.2.json
+```
+
 ### Observed result (2026-10-09, pi-mcp-adapter 5.2.0, pi 1.0.0)
 
 The run used `TMPDIR=/var/tmp/mcp4-p7-04` and the scratch prefix `/var/tmp/mcp4-p7-research/a520`, which held pi-mcp-adapter 5.2.0. The canary's output, verbatim, with the exit status appended by the shell:
