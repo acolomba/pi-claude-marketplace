@@ -19,7 +19,7 @@ Earlier milestones remain in [MILESTONES.md](MILESTONES.md).
 - [x] **Phase 3: Typed Raw Surfaces** — Every raw-string output surface becomes a typed model kind, so text is a pure formatter of the model (completed 2026-10-03)
 - [x] **Phase 4: Wire Schema and JSON Strategy** — A versioned typebox wire schema and a format-only JSON strategy, validated as a pure function and first consumed by the LLM tools (completed 2026-10-06)
 - [x] **Phase 5: Mode-Selected JSON Sink** — `ctx.mode` selects the strategy, and `json`/`rpc` output reaches consumers through `pi.appendEntry` from every output site (completed 2026-10-07)
-- [ ] **Phase 6: Command-Run Contract** — Payloads carry their origin and invocation, and every command run emits a complete set of payloads, even when it throws
+- [x] **Phase 6: Command-Run Contract** — Payloads carry their origin and invocation, and every command run emits a complete set of payloads, even when it throws (completed 2026-10-09)
 - [ ] **Phase 7: Mode Refusals, Real-Pi Verification, and Docs** — Browse and device-flow refuse clearly by mode, a real headless Pi run proves the contract, and the schema is documented
 
 Phases run in order, 1 through 7.
@@ -245,7 +245,7 @@ Plans:
 3. Every command emits all of its payloads before its handler's promise settles. A test that awaits the handler sees the complete set, and nothing is emitted after it.
 4. In `json` and `rpc`, an unexpected throw from any command handler becomes a typed `internal-error` payload with a redacted cause chain, so every command yields at least one payload. In `tui` and `print`, the behavior does not change.
 
-**Plans:** 4/4 plans executed, sequential (waves 1-4)
+**Plans:** 4/4 plans complete, sequential (waves 1-4)
 
 Plans:
 **Wave 1**
@@ -286,7 +286,7 @@ Plans:
 | 3. Typed Raw Surfaces | 4/4 | Complete    | 2026-10-03 |
 | 4. Wire Schema and JSON Strategy | 6/6 | Complete    | 2026-10-06 |
 | 5. Mode-Selected JSON Sink | 7/7 | Complete    | 2026-10-07 |
-| 6. Command-Run Contract | 4/4 | In Progress | - |
+| 6. Command-Run Contract | 4/4 | Complete    | 2026-10-09 |
 | 7. Mode Refusals, Real-Pi Verification, and Docs | 0/TBD | Not started | - |
 
 ## Carried Forward

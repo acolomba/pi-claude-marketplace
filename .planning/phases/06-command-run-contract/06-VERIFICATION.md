@@ -1,39 +1,31 @@
 ---
 phase: 06-command-run-contract
 verified: "2026-10-09T23:26:45Z"
-status: human_needed
+status: passed
 score: "15/15 must-haves verified"
 covered_files: [".planning/phases/01-presentation-model/notify-corpus/baseline.jsonl",".planning/phases/01-presentation-model/notify-corpus/meta.json",".planning/phases/06-command-run-contract/06-01-PLAN.md",".planning/phases/06-command-run-contract/06-01-SUMMARY.md",".planning/phases/06-command-run-contract/06-02-PLAN.md",".planning/phases/06-command-run-contract/06-02-SUMMARY.md",".planning/phases/06-command-run-contract/06-03-PLAN.md",".planning/phases/06-command-run-contract/06-03-SUMMARY.md",".planning/phases/06-command-run-contract/06-04-PLAN.md",".planning/phases/06-command-run-contract/06-04-SUMMARY.md",".planning/phases/06-command-run-contract/06-VALIDATION.md","docs/output-catalog.md","extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts","extensions/pi-claude-marketplace/bridges/hooks/settle.ts","extensions/pi-claude-marketplace/domain/github-auth.ts","extensions/pi-claude-marketplace/edge/command-run.ts","extensions/pi-claude-marketplace/edge/handlers/plugin/browse.ts","extensions/pi-claude-marketplace/edge/handlers/plugin/import.ts","extensions/pi-claude-marketplace/edge/handlers/plugin/update.ts","extensions/pi-claude-marketplace/edge/handlers/tools.ts","extensions/pi-claude-marketplace/edge/register.ts","extensions/pi-claude-marketplace/edge/router.ts","extensions/pi-claude-marketplace/index.ts","extensions/pi-claude-marketplace/orchestrators/auth-host.ts","extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts","extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts","extensions/pi-claude-marketplace/orchestrators/plugin/list-flow.ts","extensions/pi-claude-marketplace/platform/pi-api.ts","extensions/pi-claude-marketplace/shared/errors.ts","extensions/pi-claude-marketplace/shared/notification-command-error.ts","extensions/pi-claude-marketplace/shared/notification-dispatch.ts","extensions/pi-claude-marketplace/shared/notification-json.ts","extensions/pi-claude-marketplace/shared/notification-present.ts","extensions/pi-claude-marketplace/shared/notification-run.ts","extensions/pi-claude-marketplace/shared/notification-wire.ts","package-lock.json","package.json","schema/claude-plugin.schema.json","scripts/notify-corpus.mjs","scripts/test-coverage-direct.mjs","scripts/wire-schema.mjs","tests/architecture/catalog-uat/catalog-contract.test.ts","tests/architecture/catalog-uat/catalog-wire.test.ts","tests/architecture/no-credential-leak.test.ts","tests/architecture/wire-schema.test.ts","tests/bridges/hooks/async-rewake/registry.test.ts","tests/bridges/hooks/event-router.test.ts","tests/bridges/hooks/settle.test.ts","tests/edge/command-run.test.ts","tests/edge/handlers/marketplace/add.test.ts","tests/edge/handlers/marketplace/autoupdate.test.ts","tests/edge/handlers/marketplace/info.test.ts","tests/edge/handlers/marketplace/list.test.ts","tests/edge/handlers/marketplace/remove.test.ts","tests/edge/handlers/marketplace/shared.test.ts","tests/edge/handlers/marketplace/update.test.ts","tests/edge/handlers/plugin/bootstrap.test.ts","tests/edge/handlers/plugin/browse.test.ts","tests/edge/handlers/plugin/enable-disable.test.ts","tests/edge/handlers/plugin/fetch.test.ts","tests/edge/handlers/plugin/help.test.ts","tests/edge/handlers/plugin/import.test.ts","tests/edge/handlers/plugin/info.test.ts","tests/edge/handlers/plugin/install.test.ts","tests/edge/handlers/plugin/list.test.ts","tests/edge/handlers/plugin/pending.test.ts","tests/edge/handlers/plugin/prune.test.ts","tests/edge/handlers/plugin/reinstall.test.ts","tests/edge/handlers/plugin/shared.test.ts","tests/edge/handlers/plugin/uninstall.test.ts","tests/edge/handlers/plugin/update.test.ts","tests/edge/handlers/shared.test.ts","tests/edge/handlers/tools.test.ts","tests/edge/json-capture.ts","tests/edge/register.test.ts","tests/edge/router.test.ts","tests/index.test.ts","tests/orchestrators/auth-host.test.ts","tests/orchestrators/import/execute.test.ts","tests/orchestrators/marketplace/update.test.ts","tests/orchestrators/plugin/dependency-tag-probe.test.ts","tests/orchestrators/plugin/enable-disable.test.ts","tests/orchestrators/plugin/install-clone-probe.test.ts","tests/orchestrators/plugin/install-flow.test.ts","tests/orchestrators/plugin/list-flow.test.ts","tests/orchestrators/plugin/reinstall-flow.test.ts","tests/orchestrators/plugin/shared.test.ts","tests/orchestrators/plugin/update-flow.test.ts","tests/orchestrators/reconcile/apply.test.ts","tests/shared/notification-command-error.test.ts","tests/shared/notification-dispatch.test.ts","tests/shared/notification-json.test.ts","tests/shared/notification-present.test.ts","tests/shared/notification-run-seeds.ts","tests/shared/notification-run.test.ts","tests/shared/notification-wire.test.ts"]
 covered_digest: "v3:sha256:0b83fb8fd5502777f6045f02f9be6b8e272bee6afffdc1b22fca8ac4ccf715a3"
 behavior_unverified: 0
 overrides_applied: 0
-prohibitions_flagged: 2
+prohibitions_flagged: 0
 prohibition_dispositions:
   - statement: "MUST NOT turn invocation correlation into persistent user or cross-command tracking or telemetry."
     source: 06-01-PLAN.md
     descriptor: absent
-    status: unverified
-    classification: "UNCERTAIN (WARNING)"
-    flagged: true
-    flag: "unverified-prohibition — human review recommended"
+    status: verified
+    classification: "VERIFIED (human judgment)"
+    flagged: false
     evidence: "Per-run injected allocation, command-local state, strict origin projection, and no production identity consumer outside correlation/schema/delivery."
-    resolution: "Explicit human judgment required; no enforcement descriptor was supplied."
+    resolution: "User accepted item 1 through option 1: Accept both and continue; recorded in 06-UAT.md."
   - statement: "MUST NOT present an internal error or delivery failure as proof that completed changes were rolled back."
     source: 06-02-PLAN.md
     descriptor: absent
-    status: unverified
-    classification: "UNCERTAIN (WARNING)"
-    flagged: true
-    flag: "unverified-prohibition — human review recommended"
+    status: verified
+    classification: "VERIFIED (human judgment)"
+    flagged: false
     evidence: "Neutral error summary, retained reload knowledge, no business retry in transport recovery, and tests preserving completed changes."
-    resolution: "Explicit human judgment required; passing behavior tests do not resolve this presentation prohibition."
-human_verification:
-  - test: "Confirm that invocation IDs are solely command-run correlation, including their presence in Pi session entries."
-    expected: "No persistent user identifier, cross-command tracking relationship, or telemetry is introduced. A new command receives a new ID; load and hook origins carry none."
-    why_human: "The descriptorless prohibition requires an explicit judgment about intended use and persistence semantics. Source inspection and deterministic identity tests support it but are not authoritative acceptance."
-  - test: "Review internal-error and delivery-recovery output after a command has already completed changes."
-    expected: "Command failed unexpectedly. and its redacted cause indicate failure without claiming completed changes were undone; needsReload retains previously known true, and successful changes remain."
-    why_human: "The descriptorless prohibition concerns what the output implies to a consumer. Tests prove retained state and absence of business retry, but human judgment must accept the presentation."
+    resolution: "User accepted item 2 through option 1: Accept both and continue; recorded in 06-UAT.md."
+human_verification: []
 ---
 
 # Phase 6: Command-Run Contract Verification Report
@@ -41,11 +33,11 @@ human_verification:
 **Phase Goal:** A JSON consumer can tell where each payload came from and which command run produced it. Every command run yields a complete set of payloads before the command settles, and at least one payload even when its handler throws.
 
 **Verified:** 2026-10-09T23:26:45Z
-**Status:** human_needed
+**Status:** passed
 **Re-verification:** No — initial verification; no prior Phase 6 VERIFICATION.md existed.
 **Checkout:** features/json, HEAD 4aedaabfdb482614e655f80528def70d089bc171.
 
-The implementation meets the positive contract under the explicitly declared host limits below. All four roadmap success criteria and all 29 PLAN truth declarations are covered by 15 merged truths. Two separate prohibition judgments remain **UNCERTAIN (WARNING)** and require the interactive human checkpoint. The positive score does not count either prohibition as passed. There are no implementation blockers and no present-but-behavior-unverified truths.
+The implementation meets the positive contract under the explicitly declared host limits below. All four roadmap success criteria and all 29 PLAN truth declarations are covered by 15 merged truths. The user explicitly accepted both prohibition judgments in 06-UAT.md. The positive score remains distinct from these two human-approved judgments. There are no implementation blockers and no present-but-behavior-unverified truths.
 
 ## Verification Scope and Method
 
@@ -77,7 +69,7 @@ Source paths abbreviated below are relative to `extensions/pi-claude-marketplace
 | T14 | Real auth, delegated operation, and cascade promises join the outer command; finalization follows them, and retained callbacks add nothing after settlement. | VERIFIED | `auth-host.ts:169` awaits device flow; `github-auth.ts:402` emits code callback then returns polling; browse returns/awaits delegated handlers with the outer run; marketplace update and enable-disable owners await children. Fresh actual auth-poll, registered delayed throw, and overlap tests passed. Owner tests assert complete payload/settlement logs and late-callback silence. |
 | T15 | The frozen text corpus remains exactly 3149 entries with zero extras, and the output catalog is unchanged from 26cb0056. | VERIFIED | Independently read and asserted the strict saved corpus log: 3149 baseline entries, zero extras, 10089 passes, zero failures, one inherited skip. Git comparison of catalog and corpus baseline to 26cb0056 is empty; same-input full-gate reuse also covers text owners. No baseline recapture or weakening. |
 
-**Score:** 15/15 merged positive truths verified; 4/4 roadmap criteria; 0 present-but-behavior-unverified; **2 separately flagged prohibitions**. No verification override was used. No coincidental-reliance advisory was found: explicit state, awaits, guards, defaults, and caller-provided test inputs establish the relevant preconditions.
+**Score:** 15/15 merged positive truths verified; 4/4 roadmap criteria; 0 present-but-behavior-unverified; **2 human-approved prohibitions; 0 unresolved flags**. No verification override was used. No coincidental-reliance advisory was found: explicit state, awaits, guards, defaults, and caller-provided test inputs establish the relevant preconditions.
 
 ### Complete PLAN Truth Coverage
 
@@ -277,7 +269,7 @@ The full milestone roadmap was checked before closing the finding list. Phase 7 
 
 The independent final review covers 65 files and reports CLEAN. Security reassessment records ASVS level 1, 15/15 threats closed, no accepted risk. CR-01 has three fix commits (`e7a8182f`, `6680ff1b`, `045f53cd`) and the final validation is compliant. These reports corroborate the direct evidence, not replace it. No new security blocker or unresolved debt marker was found.
 
-## Human Verification Required
+## Human Verification Completed
 
 ### 1. Accept the scope of invocation correlation
 
@@ -299,7 +291,7 @@ The independent final review covers 65 files and reports CLEAN. Security reasses
 
 No positive must-have failed, no required artifact is missing/stubbed, and no key link is unwired. There is no implementation gap to send to gap planning. All behavior-dependent positive truths have runtime evidence; the behavior-unverified count is zero.
 
-Overall status is **human_needed**, because the two prohibition items remain unverified. Completion must not be reported as an unqualified pass until the interactive parent obtains their dispositions. No source change or additional full-suite run is required by the findings.
+Overall status is **passed** after the user selected option 1, "Accept both and continue." Both UAT rows pass, and both prohibition judgments are resolved by that explicit acceptance. No source change or additional full-suite run is required by the findings.
 
 The fingerprint was recomputed by this verifier with `node .codex/gsd-core/bin/gsd-tools.cjs query verification.fingerprint .planning/phases/06-command-run-contract <covered-files...>`. Its returned sorted `covered_files` and `covered_digest` were copied into frontmatter. Inputs cover the changed implementation/tests/schema, traced supporting owners, immutable corpus/catalog and relevant validation/build evidence; the owner automatically includes this phase's four PLAN/SUMMARY pairs. Volatile root STATE, ROADMAP and REQUIREMENTS were not added merely because they were read. The report itself is excluded by the owner.
 
@@ -309,3 +301,17 @@ Only this report is written. No commit, implementation edit, requirement/state t
 
 _Verified: 2026-10-09T23:26:45Z_
 _Verifier: gsd-verifier_
+
+## Human acceptance and canonical completion
+
+The user selected option 1, "Accept both and continue," for the two exact
+judgments above. Item 1 accepts fresh per-command IDs retained in Pi session
+entries without user tracking, cross-command tracking, or telemetry. Item 2
+accepts failure wording as reporting failure without claiming rollback.
+Completed changes and known reload state remain intact.
+
+The earlier uncertainty descriptions document the pre-acceptance assessment.
+Both are now human-approved. No negative test descriptor was invented and
+no failing automated check was overridden. The UAT-only completion predicate
+passed with two passing rows and no blockers before canonicalization.
+The covered implementation and fingerprint inputs are unchanged.

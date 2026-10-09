@@ -31,7 +31,7 @@
     {
       "number": "6",
       "name": "Command-Run Contract",
-      "status": "pending"
+      "status": "complete"
     },
     {
       "number": "7",
@@ -41,8 +41,8 @@
   ],
   "next": {
     "command": "/gsd:progress --next",
-    "label": "Advance to the next step",
-    "reason": "Phase 6 of 7 · executing"
+    "label": "Advance to the next step (plan phase 7)",
+    "reason": "Phase 7 of 7 — needs a plan"
   },
-  "updated_at": "2026-10-09T18:43:46.372Z"
+  "updated_at": "2026-10-09T23:38:53.731Z"
 }

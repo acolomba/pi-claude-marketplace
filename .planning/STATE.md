@@ -1,19 +1,20 @@
 ---
 gsd_state_version: "1.0"
 milestone: json-output
-current_phase: 6
-current_phase_name: Command-Run Contract
-status: awaiting_human_verification
-stopped_at: Phase 6 UAT has two intent judgments awaiting acceptance
-last_updated: "2026-10-09T23:32:55.694Z"
+current_phase: 7
+current_phase_name: Mode Refusals, Real-Pi Verification, and Docs
+status: planning
+stopped_at: Phase 6 complete, ready to plan Phase 7
+last_updated: "2026-10-09T23:38:53.659Z"
 last_activity: 2026-10-09
-last_activity_desc: Phase 6 implementation and remediation checks passed
-state_head: 4aedaabfdb482614e655f80528def70d089bc171
+last_activity_desc: Phase 6 complete, transitioned to Phase 7
+state_head: 736b104b967c279771942a63d7c50bfc5fb16f21
 progress:
   total_phases: 7
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 39
   completed_plans: 39
+  percent: 86
 milestone_name: Mode-Keyed Presentation Strategies
 ---
 
@@ -21,21 +22,21 @@ milestone_name: Mode-Keyed Presentation Strategies
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-10-07 after json-output Phase 5 completion)
+See: `.planning/PROJECT.md` (updated 2026-10-09 after json-output Phase 6 completion)
 
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 6 — Command-Run Contract
+**Current focus:** Phase 7 — Mode Refusals, Real-Pi Verification, and Docs
 
 ## Current Position
 
-Phase: 6 (Command-Run Contract) — AWAITING HUMAN VERIFICATION
-Plan: 4 of 4 complete
-Status: awaiting_human_verification
-Last activity: 2026-10-09 — Full gate, clean review, and security reassessment passed
+Phase: 7 — Mode Refusals, Real-Pi Verification, and Docs
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-10-09 — Phase 6 complete, transitioned to Phase 7
 
-Progress: [███████░░░] 71% (5 of 7 phases fully verified; 39 of 39 plans complete)
+Progress: [█████████░] 86% (6 of 7 phases fully verified; 39 of 39 plans complete)
 
 Phase 1's first plan captures the text wire-corpus baseline (every emitted
 `(message, severity)` pair and its argument count) before any renderer change;
@@ -169,11 +170,11 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-09T17:18:58.937Z
-**Stopped at:** Phase 6 context gathered
-**Resume file:** .planning/phases/06-command-run-contract/06-CONTEXT.md
+**Last session:** 2026-10-09T23:38:53.659Z
+**Stopped at:** Phase 6 complete, ready to plan Phase 7
+**Resume file:** None
 
-**Current work:** json-output on `features/json`. Phases 1 and 2 are complete
+**Earlier work:** json-output on `features/json`. Phases 1 and 2 are complete
 and verified. Phase 2's review-fix loop closed after three iterations with ten
 findings fixed (CR-01, WR-01..WR-06, IN-01..IN-03); D-07 now records 29 approved
 corpus replacements (29 / 2,632 / 2,661 against the original blob). The full
@@ -361,12 +362,10 @@ Text output remains unchanged. The user accepted this behavior with option 1
 on 2026-10-09. The redaction confirmation is resolved.
 
 The final verifier confirmed all 15 positive truths with no implementation
-gaps. Its fingerprint is current. 06-VERIFICATION.md has status human_needed
-for two descriptor-less prohibitions: correlation must not become tracking
-or telemetry, and failure output must not imply rollback. Both concrete
-judgments are saved in 06-UAT.md and are pending user acceptance.
+gaps. The user accepted both remaining judgments with option 1 on 2026-10-09:
+per-command correlation does not introduce tracking or telemetry, and failure
+output does not promise rollback. `06-UAT.md` records both checks as passed.
+`06-VERIFICATION.md` is passed with a current fingerprint. Phase 6 is complete.
 
-After acceptance, record both UAT results and finish the verification
-transition. Then continue the original
-`gsd-autonomous --from 6 --interactive` run into Phase 7. No phase or
-milestone completion is claimed at this checkpoint.
+**Current work:** Continue `gsd-autonomous --from 6 --interactive` with
+Phase 7 discussion, then planning and execution. The milestone remains open.

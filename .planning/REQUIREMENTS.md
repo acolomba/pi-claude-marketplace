@@ -57,7 +57,7 @@ model that already carries every presentation decision.
 - [x] **WIRE-01**: Every JSON payload carries an integer `schemaVersion` and a
   `kind` discriminant from one typebox union that covers every notification
   kind and every raw surface.
-- [ ] **WIRE-02**: Every payload carries required `severity` (the info /
+- [x] **WIRE-02**: Every payload carries required `severity` (the info /
   warning / error tri-state), `needsReload`, and `origin` (`command` with a
   machine command id, `load`, or `hook`).
 - [x] **WIRE-03**: Status, reason, scope, and severity tokens are emitted
@@ -69,7 +69,7 @@ model that already carries every presentation decision.
 - [x] **WIRE-05**: Payloads carry the model's `summary` line on warning and
   error, a numeric `tally`, and a `noOp` flag on the update no-op cascade.
 - [x] **WIRE-06**: Plugin rows carry `id: "<name>@<marketplace>"`.
-- [ ] **WIRE-07**: Every command-origin payload of one command run carries the
+- [x] **WIRE-07**: Every command-origin payload of one command run carries the
   same `invocationId`, minted by an injectable generator.
 - [x] **WIRE-08**: No payload discloses a path the text form does not show
   (NFR-9), proven by a whole-payload walk test.
@@ -85,9 +85,9 @@ model that already carries every presentation decision.
 - [x] **JOUT-02**: The JSON strategy is a format-only peer of the text strategy:
   every catalog fixture converts and validates against the schema, and a
   planted invalid fixture fails.
-- [ ] **JOUT-03**: Every command emits all of its payloads before its handler's
+- [x] **JOUT-03**: Every command emits all of its payloads before its handler's
   promise settles.
-- [ ] **JOUT-04**: In `json` and `rpc` modes, an unexpected throw from a command
+- [x] **JOUT-04**: In `json` and `rpc` modes, an unexpected throw from a command
   handler becomes a typed `internal-error` payload with a redacted cause chain,
   so every command yields at least one payload; `tui` and `print` behavior is
   unchanged.
@@ -197,18 +197,18 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PMOD-05 | Phase 2 | Complete |
 | TEXT-01 | Phase 3 | Complete |
 | WIRE-01 | Phase 4 | Complete |
-| WIRE-02 | Phase 6 | Pending |
+| WIRE-02 | Phase 6 | Complete |
 | WIRE-03 | Phase 4 | Complete |
 | WIRE-04 | Phase 4 | Complete |
 | WIRE-05 | Phase 4 | Complete |
 | WIRE-06 | Phase 4 | Complete |
-| WIRE-07 | Phase 6 | Pending |
+| WIRE-07 | Phase 6 | Complete |
 | WIRE-08 | Phase 4 | Complete |
 | WIRE-09 | Phase 4 | Complete |
 | JOUT-01 | Phase 5 | Complete |
 | JOUT-02 | Phase 4 | Complete |
-| JOUT-03 | Phase 6 | Pending |
-| JOUT-04 | Phase 6 | Pending |
+| JOUT-03 | Phase 6 | Complete |
+| JOUT-04 | Phase 6 | Complete |
 | JOUT-05 | Phase 5 | Complete |
 | RAWS-01 | Phase 3 | Complete |
 | RAWS-02 | Phase 3 | Complete |

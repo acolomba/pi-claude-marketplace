@@ -578,10 +578,14 @@ operator decision. Workstream `milestone` (force-install closeout) remains open.
 ### Active — json-output
 
 Remaining json-output requirements are tracked in [REQUIREMENTS.md](REQUIREMENTS.md):
-command-run metadata and completion, mode refusals, real-Pi verification,
-and documentation (Phases 6-7).
+mode refusals, real-Pi verification, and documentation (Phase 7).
 
 ### Validated
+
+- ✓ Canonical command identities, per-run correlation, explicit origins,
+  outcome enforcement, and contained failure recovery pass all 15 verification
+  truths. Both human judgments are accepted; text output is unchanged —
+  json-output Phase 6, 2026-10-09 (WIRE-02/07, JOUT-03/04).
 
 - ✓ Live mode selection delivers JSON/RPC reports as session entries and
   preserves text output. Unsupported modes are rejected before fresh command
@@ -1033,6 +1037,7 @@ test.ts` (43 V2 tests, +2 G-21-01 inventory-vs-transition regressions)
 | **D-10-01/09/12/17a/18 + review ruling (v1.20 Phase 10, 2026-09-22):** update constraint handling is a two-stage preflight: select the highest satisfying tag, then re-check the version that actually resolved before any write; the published held token is `{dependents constrain}` and stays outside the idempotent-reason set, so manual and automatic held rows are warnings; the constraint disclosure is required-but-nullable and atomically shaped on prepared, updated, and unchanged outcomes; tag listings are memoized once per repository or marketplace per run. The final review strengthened the commit-pinned git-source preflight test so it reaches the real source-kind branch instead of stubbing the verdict. | Keeps every update inside the ranges its same-scope installed dependents declare, preserves bulk progress and unconstrained behavior, prevents silent omission of user-visible constraint residue, and proves the sha-bearing git-source route through production logic rather than a test double. | -- Locked |
 | **D-11-01/02/03/04/05/06 (v1.20 Phase 11, 2026-09-23):** a missing foreign dependency requires exact membership in the governing root marketplace's validated allowlist before lookup or mutation; recorded dependencies remain exempt. Direct cascades keep their original root, while reload first checks every eligible original declarer and then uses the missing plugin's own policy for its children. Info displays the policy safely, and refusal names the policy root plus manual-install and allowlist-edit remedies. | Availability of a marketplace alone cannot authorize new code. Installed-first behavior and fail-clean retry remain intact across direct install and reload. | -- Locked |
 | **D-JO-01 (2026-09-30): one soft-dep snapshot per command** (json-output, Phase 1, D-05): `openNotificationRun(pi)` is the only `softDepStatus` caller and runs only at the command roots; every orchestrator and the notify family take the `NotificationRun` | Severity stamping and `{requires ...}` markers read the same snapshot, proven by a two-answer test through the registered command; renderers and grammar take no probe. | ✓ Good |
+| **D-JO-03 (2026-10-09): command correlation and failure semantics** (json-output, Phase 6): fresh per-command IDs may persist in Pi session entries; they carry no persistent user identity or cross-command tracking. Failure entries preserve completed changes and known reload requirements. | The user accepted both judgments; an unexpected failure never promises rollback. | ✓ Good |
 | **D-JO-02 (2026-09-30): a committed wire corpus is the byte oracle for the refactor** (json-output, Phase 1, D-01..D-04): an import-time hook records every `ctx.ui.notify` pair the unit and integration suites emit; each phase re-diffs it with `docs/output-catalog.md` | 2622 baseline entries stayed present across 16 plans; the scripts carry `fallow-ignore-file` markers and are deleted at milestone close. | — Pending (milestone close) |
 | **D-1-01 (2026-09-25): every host gets an auth bundle; the registry gates only Device Flow** (any-git-host, Phase 1): a host the registry does not claim takes the stored-credential path through `git credential fill` | One path serves Gitea, Forgejo, self-hosted GitLab and Bitbucket with no hostname literal; the host guard in `onAuth` replaces the two-host cap. | ✓ Good |
 | **D-2-01 (2026-09-26): clone at the verbatim URL, no retry and no fallback** (any-git-host, Phase 2): `.git` is appended only for a GitHub `owner/repo` source | Claude Code parity; a retry would absorb a 404 and mask a real failure. A suffix-less URL on a host that serves only `/repo.git` now fails, and the error names the URL sent (D-2-02). | ✓ Good |
@@ -1177,3 +1182,7 @@ Security records 18 mitigated and four accepted threats. Phase 5 is next._
 _Last updated: 2026-10-07 after json-output Phase 5: seven plans, six
 requirements, 6/6 verification, both human intent checks approved, clean
 code review and zero open security threats. Phase 6 has not started._
+
+_Last updated: 2026-10-09 after json-output Phase 6: four plans, four
+requirements, 15/15 verification truths, both human judgments accepted,
+clean code review and zero open security threats. Phase 7 discussion is next._
