@@ -37,7 +37,7 @@ The `/claude:plugin` command manages Claude marketplaces and plugins, like Claud
 
 - [Pi Coding Agent](https://pi.dev) 1.0.0 or newer
 - [pi-subagents](https://pi.dev/packages/pi-subagents) (optional but recommended, `pi install npm:pi-subagents`)
-- [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter) 5.1.0 or a later 5.x release (optional but recommended, `pi install npm:pi-mcp-adapter`)
+- [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter) 5.2.0 or a later 5.x release (optional but recommended, `pi install npm:pi-mcp-adapter`)
   - Pi's built-in MCP support does not satisfy this requirement.
 - [@quintinshaw/pi-dynamic-workflows](https://pi.dev/packages/@quintinshaw/pi-dynamic-workflows) (optional but recommended, `pi install npm:@quintinshaw/pi-dynamic-workflows`)
 
@@ -128,6 +128,8 @@ Plugin MCP servers get the names that Claude Code gives them. The model sees eac
 | `bar`       | `api`            | `plugin_bar_api_`   | `mcp__plugin_bar_api__<tool>`   | `plugin:bar:api`     |
 
 Two plugins can use the same server name, because each key holds the plugin name. The plugin install or update fails if another MCP configuration already defines the same key, or a key that differs only by `-` versus `_`. For more information, see [MCP compatibility](docs/mcp-compatibility.md).
+
+To learn what you must do when an upgrade renames your plugin MCP servers, and what each server state in `/claude:plugin info` means, see [MCP compatibility](docs/mcp-compatibility.md).
 
 ### Customizing generated agents
 

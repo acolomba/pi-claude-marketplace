@@ -6,7 +6,7 @@ Legend: `✓` supported, `✗` not supported, `⚠` partial (see notes), `--` no
 
 The Claude Code column reflects the MCP reference at [code.claude.com/docs/en/mcp](https://code.claude.com/docs/en/mcp) and the server schemas in the Claude Code 2.1.291 binary. The Pi column reflects pi-mcp-adapter 5.0.0 on Pi 1.0.0 and the sources under `extensions/pi-claude-marketplace/bridges/mcp/` and `extensions/pi-claude-marketplace/domain/`. Statements about run-time behavior come from a measurement on 2026-10-06. That measurement ran a real Pi 1.0.0 with pi-mcp-adapter 5.0.0 in a sandbox, with a local test MCP server and a stub model provider that logged each request.
 
-This extension does not run MCP servers itself. It writes one entry for each plugin server into the `mcp-adapter.json` file of the install scope: `~/.pi/agent/mcp-adapter.json` for the user scope, `<project>/.pi/mcp-adapter.json` for the project scope. pi-mcp-adapter reads that file and runs the servers.
+This extension does not run MCP servers itself. It writes one entry for each plugin server into the `mcp-adapter.json` file of the install scope: `~/.pi/agent/mcp-adapter.json` for the user scope, `<project>/.pi/mcp-adapter.json` for the project scope. pi-mcp-adapter reads that file and runs the servers. Earlier releases of this extension wrote these entries into the `mcp.json` file of the scope. `/reload` moves them into `mcp-adapter.json`. See [Upgrading](#upgrading).
 
 ## Server and tool names
 
@@ -224,6 +224,51 @@ Each command that writes the entries of a plugin shows the two warnings after it
 ### Proof against pi-mcp-adapter
 
 The rewrite depends on how pi-mcp-adapter expands values. A conformance test runs each expansion case through the functions of pi-mcp-adapter 5.1.0 and compares the output with the value of Claude Code. CI installs that exact version and runs the test with no skipped cases. The peer range of this extension for pi-mcp-adapter is `>=5.1.0 <6`.
+
+## Upgrading
+
+Earlier releases of this extension wrote each plugin server into the `mcp.json` file of the install scope, under the name that the plugin declares. On the first start or `/reload` after the upgrade, this extension moves the servers of each installed plugin from `mcp.json` into the `mcp-adapter.json` file of the same scope. It shows one notice that starts with `Plugin MCP servers moved from mcp.json to mcp-adapter.json.` The notice has one row for each moved server, for example `github -> plugin_acme_github_ (acme) [user]`. For the full notice, see [Plugin MCP servers moved out of mcp.json](output-catalog.md#plugin-mcp-servers-moved-out-of-mcpjson-amig-01-amig-03).
+
+On that first start, pi-mcp-adapter can also warn that `mcp.json` holds an ignored `_piClaudeMarketplace` setting. The adapter read the old entries before the move. The warning does no harm.
+
+A moved server keeps its declared name in `/claude:plugin info`, for example `plugin:acme:github`. Its key becomes `plugin_<plugin>_<server>_`, and its tools become `mcp__plugin_<plugin>_<server>__<tool>`. See [Server and tool names](#server-and-tool-names).
+
+### What the new names cost
+
+pi-mcp-adapter and pi-subagents keep some data under the old server names. The move does not carry that data to the new names:
+
+- Sign in again to each server that uses OAuth. pi-mcp-adapter keeps each sign-in under the server name.
+- Approve each project-scope server again. pi-mcp-adapter keeps each approval under the server name.
+- Run `/reload` one more time. pi-mcp-adapter reads its configuration when the session starts, before the move. Until the next `/reload`, it still shows the old names, and `/claude:plugin info` shows `not loaded` for each moved server. The live canary needed exactly one more `/reload`.
+- Edit the pi-subagents `mcp:` overrides and the agent files that name an old server or tool. Edit them by hand, because the move does not rewrite them. `mcp:<old-name>` becomes `mcp:plugin_<plugin>_<server>_`. A tool that pi-mcp-adapter named `<old-name>_<tool>` with its default prefix becomes `mcp__plugin_<plugin>_<server>__<tool>`.
+- Make your own changes again under the new name. The move writes each server as a fresh install writes it, so it does not carry an edit that you made to an old `mcp.json` entry (AMIG-01). For example, run `/mcp-adapter disable` again for a server that you turned off. The move removes the old-name settings that pi-mcp-adapter wrote for such a change. See [Old MCP server settings removed](output-catalog.md#old-mcp-server-settings-removed-amig-01).
+
+### Entries that stay in mcp.json
+
+Some entries cannot move. They stay in `mcp.json` and keep working under their old names. The notice lists them on every `/reload` until you remove the cause (AMIG-01, AMIG-04):
+
+| Cause                                                                                  | What to do                                                                                                |
+| -------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| No installed plugin in the scope owns the entry.                                       | Install the plugin, or remove the entry from `mcp.json`.                                                  |
+| The plugin comes from a git source, and its clone is not available offline.            | Run `/claude:plugin reinstall <plugin>@<marketplace>`.                                                    |
+| Another MCP configuration already defines the new key. No server of that plugin moves. | Remove or rename that server, then run `/reload`.                                                         |
+| The `mcp-adapter.json` file of the scope is not a valid MCP configuration.             | Fix the file, then run `/reload`. No server of that scope moves.                                          |
+| The marketplace copy cannot give the plugin source, or no longer lists the plugin.     | Run `/claude:plugin marketplace update <marketplace>`, or uninstall the plugin to remove its old entries. |
+| Another Pi process holds the lock on `state.json`.                                     | Run `/reload` again later.                                                                                |
+| The move wrote the new entries, but it could not update `mcp.json`.                    | Run `/reload` again. The next reload finishes the move.                                                   |
+
+For the exact rows, see [Plugin MCP servers left in mcp.json](output-catalog.md#plugin-mcp-servers-left-in-mcpjson-amig-01-amig-04) and [Plugin MCP server move stopped](output-catalog.md#plugin-mcp-server-move-stopped-amig-03).
+
+### Entries that the move removes
+
+The move removes an old entry and writes no new one in these cases:
+
+- The plugin no longer declares the server.
+- The server needs a feature that pi-mcp-adapter cannot run. The other servers of the plugin move, and the plugin becomes `(partially-installed)`. See [Partially available plugins](#partially-available-plugins).
+- The MCP configuration of the plugin is not valid. The move removes every server of that plugin, as a fresh install installs none of them.
+- The plugin is disabled.
+
+The notice lists each removed entry with its reason. See [Plugin MCP servers removed from mcp.json](output-catalog.md#plugin-mcp-servers-removed-from-mcpjson-amig-01-amig-03).
 
 ## Divergences and documented absences
 

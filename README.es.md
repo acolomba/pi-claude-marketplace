@@ -37,7 +37,7 @@ El comando `/claude:plugin` gestiona los mercados y complementos de Claude, como
 
 - [Pi Coding Agent](https://pi.dev) 1.0.0 o posterior
 - [pi-subagents](https://pi.dev/packages/pi-subagents) (opcional pero recomendado, `pi install npm:pi-subagents`)
-- [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter) 5.1.0 o una versión 5.x posterior (opcional pero recomendado, `pi install npm:pi-mcp-adapter`)
+- [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter) 5.2.0 o una versión 5.x posterior (opcional pero recomendado, `pi install npm:pi-mcp-adapter`)
   - La compatibilidad con MCP integrada en Pi no cumple este requisito.
 - [@quintinshaw/pi-dynamic-workflows](https://pi.dev/packages/@quintinshaw/pi-dynamic-workflows) (opcional pero recomendado, `pi install npm:@quintinshaw/pi-dynamic-workflows`)
 
@@ -128,6 +128,8 @@ Los servidores MCP de los complementos reciben los nombres que les da Claude Cod
 | `bar`                  | `api`                 | `plugin_bar_api_`                  | `mcp__plugin_bar_api__<tool>`   | `plugin:bar:api`          |
 
 Dos complementos pueden usar el mismo nombre de servidor, porque cada clave contiene el nombre del complemento. La instalación o actualización del complemento falla si otra configuración de MCP ya define la misma clave, o una clave que solo se diferencia por `-` frente a `_`. Para más información, consulta [Compatibilidad de MCP](docs/mcp-compatibility.md).
+
+Para saber qué debes hacer cuando una actualización cambia el nombre de tus servidores MCP de complementos, y qué significa cada estado de servidor que muestra `/claude:plugin info`, consulta [Compatibilidad de MCP](docs/mcp-compatibility.md).
 
 ### Personalización de los agentes generados
 
