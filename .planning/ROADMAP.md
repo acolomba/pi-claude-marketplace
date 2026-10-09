@@ -314,7 +314,16 @@ requirement (Phases 3 and 4), and no release may sit between the first write to
 3. Before the first status snapshot, after the adapter's empty shutdown snapshot, and when the adapter is absent, info shows an explicit unknown state instead of a guess. (ASTAT-02)
 4. Every new status token is a closed-catalog amendment in `docs/output-catalog.md`, and the catalog gates pass with the code. (ASTAT-02)
 
-**Plans**: TBD
+**Plans**: 3 plans in 3 waves
+
+**Wave 1**
+- [ ] 06-01-PLAN.md — a factory-owned tracker of the adapter's status channel reaches `info` through `EdgeDeps`; each written server shows its state first in its parentheses, `status unknown` / `not loaded` otherwise; nine catalog tokens byte-locked (ASTAT-01, ASTAT-02)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 06-02-PLAN.md — the same plugin in both scopes: the project row shows the state, the user row `overridden by project scope` (D-06-09; ASTAT-01, ASTAT-02)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 06-03-PLAN.md — conformance with pi-mcp-adapter 5.1.0: its own channel and version, the keys a real install writes in both scopes, the shutdown snapshot, a drift guard on its status union (ASTAT-01, ASTAT-02)
 
 **Notes.** The status tracker is created in the extension factory and injected through `EdgeDeps`, the way `completionCache` is, never held as a module global. It needs only the final names from Phase 3.
 
@@ -329,7 +338,7 @@ requirement (Phases 3 and 4), and no release may sit between the first write to
 **Success Criteria** (what must be TRUE):
 
 1. README, `docs/env-vars.md` (ENVDOC-01), `docs/hooks-compatibility.md` and the PRD/NFR-10 text describe adapter-file delivery, naming, tool search, the variable rules and every documented divergence. (ADOC-01)
-2. A live UAT in a sandboxed agent directory shows adapter 5 loading our entries, migrating a seeded legacy entry with the reloads counted, finding plugin tools through tool search, and `info` showing their status. (ADOC-02)
+2. A live UAT in a sandboxed agent directory shows adapter 5 loading our entries, migrating a seeded legacy entry with the reloads counted, finding plugin tools through tool search, and `info` showing their status, including `status unknown` in a deferred session until the first MCP use and a live state after it (D-06-06a). (ADOC-02)
 3. CHANGELOG records the milestone, and a version bump is offered before the PR. (ADOC-03)
 
 **Plans**: TBD
