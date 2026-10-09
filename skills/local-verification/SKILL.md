@@ -29,7 +29,7 @@ In CI, every check prints at info level. GitHub Actions sets the `CI` variable, 
 
 ## Committing
 
-Run `SKIP=npm-check pre-commit run --files <changed files>` first. It runs only the fixers and linters and takes seconds. A linter warning fails it too, because yamllint runs with `--strict`. If a fixer changes a file, restage the file and run the command again until it is clean.
+Run `SKIP=npm-check${SKIP:+,$SKIP} pre-commit run --files <changed files>` first. The `${SKIP:+,$SKIP}` part keeps the `SKIP=trufflehog` that a Claude Code cloud session exports. It runs only the fixers and linters and takes seconds. A linter warning fails it too, because yamllint runs with `--strict`. If a fixer changes a file, restage the file and run the command again until it is clean.
 
 Then run `git commit` in the foreground with the longest tool timeout available. Never background it and poll with sleep/grep loops. If a run can outlast the tool's foreground limit, background it once and wait for the completion notification. If a hook fails, the commit did not happen. Fix the cause, restage, and commit again. Never use `--amend` for this.
 

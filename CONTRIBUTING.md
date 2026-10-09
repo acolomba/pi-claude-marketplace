@@ -31,6 +31,22 @@ It installs the npm dependencies, including the pinned Pi version, and these too
 - [gsd-core](https://github.com/open-gsd/gsd-core)
 - [codegraph](https://github.com/colbymchenry/codegraph)
 
+### Claude Code cloud sessions
+
+A Claude Code cloud session runs in a VM that differs from a developer machine. The VM has no pipx and no Node 24. It runs as root. Its network policy blocks the Go toolchain download that the trufflehog hook needs, and the GitHub proxy cannot fetch the Git LFS objects of this repository. `scripts/init-cloud.sh` covers these differences, then runs `scripts/init.sh`. Its header lists each change.
+
+Set the setup script of the environment to this command. The environment dialog opens from the cloud environment menu in the title bar of the session, under Edit.
+
+```bash
+bash scripts/init-cloud.sh
+```
+
+The setup script runs in the clone before Claude Code launches, and the VM is cached with its result. GSD and its subagents, the codegraph and fallow MCP servers, and the pre-commit hooks are then in place when the session starts.
+
+The SessionStart hook in `.claude/settings.json` runs the same script in every cloud session. After the setup script, the hook only refreshes `node_modules`. Without the setup script, the hook installs everything after Claude Code has launched. Claude Code reads subagent definitions and starts MCP servers only at launch, so GSD's subagents and the two MCP servers are not available before the next session.
+
+A cloud session exports `SKIP=trufflehog`. When you skip more hooks, keep it: `SKIP=npm-check${SKIP:+,$SKIP} pre-commit run --files <changed files>`. The CI Lint workflow runs trufflehog.
+
 ## Running Pi against the checkout
 
 ```bash
@@ -46,7 +62,7 @@ npm run check          # full local gate: static checks, unit tests, direct cove
 npm run check:static   # typecheck, lint, fallow, format check, and gate scripts, in parallel
 npm run lint:fix       # ESLint with autofixes
 npm run format         # Prettier autoformat
-SKIP=npm-check pre-commit run --all-files
+SKIP=npm-check${SKIP:+,$SKIP} pre-commit run --all-files
 ```
 
 When a commit stages a file that the build or CI reads, the pre-commit hook runs `npm run check:commit`. It runs the static checks, the unit tests that have no source pair, and direct coverage for the staged source-test pairs only, so it is not a full check. Run `npm run check` before you open a pull request and after a merge, because a merge does not run the hook.

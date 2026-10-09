@@ -9,10 +9,18 @@ export PATH="$PATH:$HOME/.local/bin:$(npm prefix --global)/bin"
 export GIT_TERMINAL_PROMPT=0 GCM_INTERACTIVE=never
 git lfs install --local
 
-# pre-commit
+# pre-commit: pipx on a developer machine; the Claude Code cloud VM ships uv
+# and pip but no pipx
 if ! command -v pre-commit >/dev/null 2>&1; then
-    pipx install pre-commit
-    PATH="$PATH:$(pipx environment --value PIPX_BIN_DIR)"
+    if command -v pipx >/dev/null 2>&1; then
+        pipx install pre-commit
+        PATH="$PATH:$(pipx environment --value PIPX_BIN_DIR)"
+    elif command -v uv >/dev/null 2>&1; then
+        uv tool install pre-commit
+        PATH="$PATH:$(uv tool dir --bin)"
+    else
+        python3 -m pip install --user pre-commit
+    fi
 fi
 
 pre-commit install

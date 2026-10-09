@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Internal: a Claude Code cloud session can now set up the repository and run GSD. `scripts/init-cloud.sh` prepares the cloud VM and then runs `scripts/init.sh`, which now installs pre-commit with uv or pip when pipx is absent.
+
+  - The tests that deny access with `chmod` now probe whether the mode denies the process, instead of refusing uid 0.
+
 - More plugins with components that Pi cannot install are now partially available. Pass `--partial` to install the components that Pi supports. (#246)
 
   - A hooks module (a non-empty `modules` array in a hooks file) makes its plugin partially available. A `hooks.json` with only a module no longer makes its plugin unavailable.

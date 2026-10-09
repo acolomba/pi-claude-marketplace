@@ -87,6 +87,7 @@ import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-
 import { createNotificationBoundary } from "../../edge/notification-boundary.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+import { chmodDeniesThisProcess } from "../chmod-denial.ts";
 import { retryTree } from "../plugin/scope-tree-inventory.ts";
 
 import type { HooksRouting } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
@@ -266,11 +267,12 @@ async function createHermeticScopes(t: TestContext, label: string): Promise<Herm
     project: locationsFor("project", cwd),
     user: locationsFor("user", cwd),
     denyWrites: async (directory: string): Promise<void> => {
-      // A 0o555 directory stays writable for uid 0, so under root the EACCES
-      // this helper exists to provoke never happens and the case fails against
-      // the reconcile logic instead of naming the environment. Refuse up front.
-      if (typeof process.getuid === "function" && process.getuid() === 0) {
-        throw new Error("denyWrites cannot deny root; run this suite as a non-root user");
+      // A 0o555 directory stays writable for the usual uid 0, so under root
+      // the EACCES this helper exists to provoke never happens and the case
+      // fails against the reconcile logic instead of naming the environment.
+      // Refuse up front.
+      if (!(await chmodDeniesThisProcess())) {
+        throw new Error("denyWrites cannot deny this process; run this suite as a non-root user");
       }
 
       denied.push(directory);
@@ -2128,8 +2130,8 @@ describe("applyReconcile", () => {
       bar: { command: true },
     });
     const commandFile = path.join(marketplaceRoot, "plugins", "bar", "commands", "deploy.md");
-    if (typeof process.getuid === "function" && process.getuid() === 0) {
-      t.skip("cannot deny reads as root; run this suite as a non-root user");
+    if (!(await chmodDeniesThisProcess())) {
+      t.skip("cannot deny reads for this process; run this suite as a non-root user");
       return;
     }
 

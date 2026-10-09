@@ -4,6 +4,18 @@
     "pr-review-toolkit@claude-plugins-official": true
   },
   "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ \"${CLAUDE_CODE_REMOTE-}\" = true ] || exit 0; \"$CLAUDE_PROJECT_DIR\"/scripts/init-cloud.sh",
+            "timeout": 1200
+          }
+        ]
+      }
+    ],
     "UserPromptSubmit": [
       {
         "hooks": [
