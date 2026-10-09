@@ -229,7 +229,7 @@ for (const { title, cause, message } of [
   }
 }
 
-function expectedError(message: string, invocationId = "run-a") {
+function expectedError(message: string, invocationId = "run-a", needsReload = false) {
   return {
     customType: "claude-plugin",
     payload: {
@@ -237,12 +237,191 @@ function expectedError(message: string, invocationId = "run-a") {
       kind: "internal-error",
       origin: { kind: "command", commandId: "plugin update", invocationId },
       severity: "error",
-      needsReload: false,
+      needsReload,
       summary: "Command failed unexpectedly.",
       cause: { causeChain: [message], truncated: false },
     },
   };
 }
+
+for (const { failsTwice, expected } of [
+  {
+    failsTwice: false,
+    expected: [
+      {
+        customType: "claude-plugin",
+        payload: {
+          schemaVersion: 1,
+          origin: { kind: "command", commandId: "plugin update", invocationId: "run-a" },
+          kind: "usage-info",
+          severity: "info",
+          needsReload: false,
+          usage: "First.",
+        },
+      },
+      expectedError("Append failed."),
+      {
+        customType: "claude-plugin",
+        payload: {
+          schemaVersion: 1,
+          origin: { kind: "command", commandId: "plugin update", invocationId: "run-a" },
+          kind: "prune-committed-warning",
+          severity: "warning",
+          needsReload: true,
+          scope: "user",
+          summary: "Prune committed; finalization needs attention.",
+          cause: { causeChain: ["Saved."], truncated: false },
+        },
+      },
+      expectedError("Later failure.", "run-a", true),
+    ],
+  },
+  {
+    failsTwice: true,
+    expected: [
+      {
+        customType: "claude-plugin",
+        payload: {
+          schemaVersion: 1,
+          origin: { kind: "command", commandId: "plugin update", invocationId: "run-a" },
+          kind: "usage-info",
+          severity: "info",
+          needsReload: false,
+          usage: "First.",
+        },
+      },
+      expectedError("Append failed."),
+    ],
+  },
+]) {
+  test(`settles after append recovery with terminal failure ${failsTwice}`, async (t) => {
+    // arrange
+    const attempts: Array<{ customType: string; payload: unknown }> = [];
+    const pi = {
+      getAllTools: () => [],
+      appendEntry(customType: string, payload: unknown) {
+        assert.strictEqual(this, pi);
+        attempts.push({ customType, payload });
+        if (attempts.length === 1 || (failsTwice && attempts.length === 2)) {
+          throw new Error("Append failed.");
+        }
+      },
+    };
+    const previous = process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+    t.after(() => {
+      if (previous === undefined) {
+        delete process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+      } else {
+        process.env.PI_CLAUDE_MARKETPLACE_DEBUG = previous;
+      }
+    });
+    process.env.PI_CLAUDE_MARKETPLACE_DEBUG = "1";
+    t.mock.method(console, "error", () => {
+      throw new Error("Logger failed.");
+    });
+    const ctx = {
+      mode: "json",
+      get ui(): never {
+        throw new Error("Unexpected UI access");
+      },
+    };
+    let late: () => void = () => {
+      throw new Error("Missing callback");
+    };
+
+    // act
+    await runCommand(
+      pi,
+      ctx,
+      "plugin update",
+      (run) => {
+        late = () => {
+          notifyUsageInfo(ctx, run, "Late.");
+        };
+
+        notifyUsageInfo(ctx, run, "First.");
+        ctx.mode = "rpc";
+        notify(ctx, run, {
+          kind: "prune-committed-warning",
+          scope: "user",
+          cause: new Error("Saved."),
+        });
+        throw new Error("Later failure.");
+      },
+      createIds(),
+    );
+    const atSettlement = [...attempts];
+    ctx.mode = "unusable";
+    late();
+
+    // assert
+    assert.deepStrictEqual(atSettlement, expected);
+    assert.deepStrictEqual(attempts, expected);
+  });
+}
+
+test("does not retry or roll back committed work when its notification fails", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "command-transport-"));
+  t.after(async () => {
+    await rm(directory, { recursive: true, force: true });
+  });
+  const store = path.join(directory, "state.json");
+  const events: string[] = [];
+  const attempts: Array<{ customType: string; payload: unknown }> = [];
+  const pi = {
+    getAllTools: () => [],
+    appendEntry(customType: string, payload: unknown) {
+      attempts.push({ customType, payload });
+      if (attempts.length === 1) {
+        throw new Error("Append failed.");
+      }
+    },
+  };
+  const ctx = {
+    mode: "json",
+    get ui(): never {
+      throw new Error("Unexpected UI access");
+    },
+  };
+
+  // act
+  await runCommand(
+    pi,
+    ctx,
+    "plugin update",
+    async (run) => {
+      events.push("execute");
+      try {
+        await writeFile(store, '{"installed":true}');
+        events.push("committed");
+        notifyUsageInfo(ctx, run, "Committed.");
+      } catch {
+        events.push("rollback");
+        await writeFile(store, '{"installed":false}');
+      }
+    },
+    createIds(),
+  );
+
+  // assert
+  assert.strictEqual(await readFile(store, "utf8"), '{"installed":true}');
+  assert.deepStrictEqual(events, ["execute", "committed"]);
+  assert.deepStrictEqual(attempts, [
+    {
+      customType: "claude-plugin",
+      payload: {
+        schemaVersion: 1,
+        origin: { kind: "command", commandId: "plugin update", invocationId: "run-a" },
+        kind: "usage-info",
+        severity: "info",
+        needsReload: false,
+        usage: "Committed.",
+      },
+    },
+    expectedError("Append failed."),
+  ]);
+});
 
 for (const { name, emit, earlier } of [
   {

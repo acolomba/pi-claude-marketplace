@@ -1,3 +1,4 @@
+import { hookDebugLog } from "./debug-log.ts";
 import { resolveCommandError } from "./notification-command-error.ts";
 import {
   composePluginLines,
@@ -150,8 +151,7 @@ export function notifyCommandError(
     case "rpc": {
       const presentation = resolveCommandError(cause, state.needsReload);
       const isOutcome = isCommandOutcome(presentation);
-      appendEntry(entrySink, toWirePayload(presentation, origin));
-      state.hasOutcome ||= isOutcome;
+      appendCommand(entrySink, origin, state, toWirePayload(presentation, origin), isOutcome);
       return;
     }
   }
@@ -159,6 +159,38 @@ export function notifyCommandError(
 
 function appendEntry(sink: NotificationEntrySink, payload: ReturnType<typeof toWirePayload>): void {
   sink.appendEntry("claude-plugin", payload);
+}
+
+function appendCommand(
+  sink: NotificationEntrySink,
+  origin: Extract<NotificationOrigin, { kind: "command" }>,
+  state: CommandRunState,
+  payload: ReturnType<typeof toWirePayload>,
+  isOutcome: boolean,
+): void {
+  try {
+    appendEntry(sink, payload);
+  } catch (cause: unknown) {
+    // D-08: transport failures must not enter business recovery or rollback.
+    state.delivery = COMMAND_DELIVERY.recovering;
+    const recovery = resolveCommandError(cause, state.needsReload);
+    try {
+      appendEntry(sink, toWirePayload(recovery, origin));
+      state.hasOutcome = true;
+      state.delivery = COMMAND_DELIVERY.open;
+    } catch {
+      state.delivery = COMMAND_DELIVERY.closed;
+      try {
+        hookDebugLog(recovery.summary);
+      } catch {
+        // Debug output cannot restart delivery or reject the command.
+      }
+    }
+
+    return;
+  }
+
+  state.hasOutcome ||= isOutcome;
 }
 
 function emitWithSummary(ctx: NotificationContext, envelope: ResolvedEnvelope, body: string): void {
@@ -487,11 +519,21 @@ function emitPresentation(
     case "json":
     case "rpc": {
       const isOutcome = isCommandOutcome(presentation);
-      appendEntry(run.entrySink, toWirePayload(presentation, run.origin));
-      if (state !== undefined) {
-        state.hasOutcome ||= isOutcome;
+      const payload = toWirePayload(presentation, run.origin);
+      switch (run.origin.kind) {
+        case "command":
+          if (state !== undefined) {
+            appendCommand(run.entrySink, run.origin, state, payload, isOutcome);
+            return;
+          }
+
+          break;
+        case "load":
+        case "hook":
+          break;
       }
 
+      appendEntry(run.entrySink, payload);
       return;
     }
   }

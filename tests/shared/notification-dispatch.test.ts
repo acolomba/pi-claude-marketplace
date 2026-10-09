@@ -62,6 +62,344 @@ function createContext(t: TestContext): NotificationContext {
   };
 }
 
+function faultUsage(usage: string) {
+  return {
+    customType: "claude-plugin",
+    payload: {
+      schemaVersion: 1,
+      origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+      kind: "usage-info",
+      severity: "info",
+      needsReload: false,
+      usage,
+    },
+  };
+}
+
+function faultError(message: string, needsReload = false) {
+  return {
+    customType: "claude-plugin",
+    payload: {
+      schemaVersion: 1,
+      origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+      kind: "internal-error",
+      severity: "error",
+      needsReload,
+      summary: "Command failed unexpectedly.",
+      cause: { causeChain: [message], truncated: false },
+    },
+  };
+}
+
+function failingSink(failures: readonly number[]) {
+  const attempts: Array<{ customType: string; payload: unknown }> = [];
+  const sink = {
+    appendEntry(customType: string, payload: unknown): void {
+      assert.strictEqual(this, sink);
+      attempts.push({ customType, payload });
+      if (failures.includes(attempts.length)) {
+        throw new Error(`Append ${attempts.length} failed.`);
+      }
+    },
+  };
+  return { sink, attempts };
+}
+
+test("marks recovery before a sink callback can reenter delivery", () => {
+  // arrange
+  const attempts: Array<{ customType: string; payload: unknown }> = [];
+  const states: unknown[] = [];
+  const ctx = {
+    mode: "json",
+    get ui(): never {
+      throw new Error("Unexpected UI access");
+    },
+  };
+  const run = {
+    ...runWithNothingLoaded(),
+    entrySink: {
+      appendEntry(customType: string, payload: unknown): void {
+        attempts.push({ customType, payload });
+        states.push({ ...run.commandState });
+        if (attempts.length === 1) {
+          throw new Error("Append failed.");
+        }
+
+        notifyUsageInfo(ctx, run, "Reentrant.");
+      },
+    },
+  };
+
+  // act
+  notifyUsageInfo(ctx, run, "First.");
+
+  // assert
+  assert.deepStrictEqual(attempts, [faultUsage("First."), faultError("Append failed.")]);
+  assert.deepStrictEqual(states, [
+    { hasOutcome: false, needsReload: false, settled: false, delivery: "open" },
+    { hasOutcome: false, needsReload: false, settled: false, delivery: "recovering" },
+  ]);
+  assert.deepStrictEqual(run.commandState, {
+    hasOutcome: true,
+    needsReload: false,
+    settled: false,
+    delivery: "open",
+  });
+});
+
+for (const { debug, loggerThrows } of [
+  { debug: "0", loggerThrows: false },
+  { debug: "1", loggerThrows: false },
+  { debug: "1", loggerThrows: true },
+]) {
+  test(`contains terminal delivery with debug ${debug} and throwing logger ${loggerThrows}`, (t) => {
+    // arrange
+    const previous = process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+    t.after(() => {
+      if (previous === undefined) {
+        delete process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+      } else {
+        process.env.PI_CLAUDE_MARKETPLACE_DEBUG = previous;
+      }
+    });
+    process.env.PI_CLAUDE_MARKETPLACE_DEBUG = debug;
+    t.mock.method(console, "error", () => {
+      if (loggerThrows) {
+        throw new Error("Logger failed.");
+      }
+    });
+    const { sink, attempts } = failingSink([1, 2]);
+    const run = { ...runWithNothingLoaded(), entrySink: sink };
+    const ctx = {
+      mode: "json",
+      get ui(): never {
+        throw new Error("Unexpected UI access");
+      },
+    };
+
+    // act
+    notifyUsageInfo(ctx, run, "First.");
+    ctx.mode = "unusable";
+    notifyUsageInfo(ctx, run, "Later.");
+
+    // assert
+    assert.deepStrictEqual(attempts, [faultUsage("First."), faultError("Append 1 failed.")]);
+    assert.deepStrictEqual(run.commandState, {
+      hasOutcome: false,
+      needsReload: false,
+      settled: false,
+      delivery: "closed",
+    });
+  });
+}
+
+test("preserves direct dispatch for a command carrier without completion state", () => {
+  // arrange
+  const capture = createJsonCapture();
+  const seed = runWithNothingLoaded();
+  const run = { origin: seed.origin, softDeps: seed.softDeps, entrySink: capture.entrySink };
+  const ctx = {
+    mode: "json",
+    get ui() {
+      return capture.ui;
+    },
+  };
+
+  // act
+  notifyUsageInfo(ctx, run, "Done.");
+
+  // assert
+  assert.deepStrictEqual(capture.entries, [faultUsage("Done.")]);
+  capture.assertValid();
+});
+
+for (const { name, failures, expected, delivery, hasOutcome } of [
+  {
+    name: "first fault",
+    failures: [1],
+    expected: [
+      faultUsage("First."),
+      faultError("Append 1 failed."),
+      faultUsage("Second."),
+      faultUsage("Third."),
+    ],
+    delivery: "open",
+    hasOutcome: true,
+  },
+  {
+    name: "fault after success",
+    failures: [2],
+    expected: [
+      faultUsage("First."),
+      faultUsage("Second."),
+      faultError("Append 2 failed."),
+      faultUsage("Third."),
+    ],
+    delivery: "open",
+    hasOutcome: true,
+  },
+  {
+    name: "separate faults",
+    failures: [1, 3],
+    expected: [
+      faultUsage("First."),
+      faultError("Append 1 failed."),
+      faultUsage("Second."),
+      faultError("Append 3 failed."),
+      faultUsage("Third."),
+    ],
+    delivery: "open",
+    hasOutcome: true,
+  },
+  {
+    name: "failed recovery",
+    failures: [1, 2],
+    expected: [faultUsage("First."), faultError("Append 1 failed.")],
+    delivery: "closed",
+    hasOutcome: false,
+  },
+]) {
+  test(`bounds command append recovery for ${name}`, () => {
+    // arrange
+    const { sink, attempts } = failingSink(failures);
+    const run = { ...runWithNothingLoaded(), entrySink: sink };
+    const ctx = {
+      mode: "json",
+      get ui(): never {
+        throw new Error("Unexpected UI access");
+      },
+    };
+    let caught = false;
+
+    // act
+    try {
+      notifyUsageInfo(ctx, run, "First.");
+      ctx.mode = "rpc";
+      notifyUsageInfo(ctx, run, "Second.");
+      notifyUsageInfo(ctx, run, "Third.");
+    } catch {
+      caught = true;
+    }
+
+    // assert
+    assert.strictEqual(caught, false);
+    assert.deepStrictEqual(attempts, expected);
+    assert.deepStrictEqual(run.commandState, {
+      hasOutcome,
+      needsReload: false,
+      settled: false,
+      delivery,
+    });
+  });
+}
+
+for (const { failures, delivery, hasOutcome } of [
+  { failures: [1], delivery: "open", hasOutcome: true },
+  { failures: [1, 2], delivery: "closed", hasOutcome: false },
+]) {
+  test(`bounds recovery of an internal-error with failed attempts ${failures.join(",")}`, () => {
+    // arrange
+    const { sink, attempts } = failingSink(failures);
+    const run = { ...runWithNothingLoaded(), entrySink: sink };
+    const ctx = {
+      mode: "json",
+      get ui(): never {
+        throw new Error("Unexpected UI access");
+      },
+    };
+    assert.ok(run.origin.kind === "command" && run.commandState !== undefined);
+
+    // act
+    notifyCommandError(ctx, sink, run.origin, run.commandState, new Error("Operation failed."));
+
+    // assert
+    assert.deepStrictEqual(attempts, [
+      faultError("Operation failed."),
+      faultError("Append 1 failed."),
+    ]);
+    assert.deepStrictEqual(run.commandState, {
+      hasOutcome,
+      needsReload: false,
+      settled: false,
+      delivery,
+    });
+  });
+}
+
+test("preserves reload truth from a failed attempted outcome", () => {
+  // arrange
+  const { sink, attempts } = failingSink([1]);
+  const run = { ...runWithNothingLoaded(), entrySink: sink };
+  const ctx = {
+    mode: "json",
+    get ui(): never {
+      throw new Error("Unexpected UI access");
+    },
+  };
+
+  // act
+  notify(ctx, run, { kind: "prune-committed-warning", scope: "user", cause: new Error("Saved.") });
+
+  // assert
+  assert.deepStrictEqual(attempts, [
+    {
+      customType: "claude-plugin",
+      payload: {
+        schemaVersion: 1,
+        origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+        kind: "prune-committed-warning",
+        severity: "warning",
+        needsReload: true,
+        summary: "Prune committed; finalization needs attention.",
+        scope: "user",
+        cause: { causeChain: ["Saved."], truncated: false },
+      },
+    },
+    faultError("Append 1 failed.", true),
+  ]);
+  assert.deepStrictEqual(run.commandState, {
+    hasOutcome: true,
+    needsReload: true,
+    settled: false,
+    delivery: "open",
+  });
+});
+
+for (const kind of ["load", "hook"] as const) {
+  test(`leaves ${kind} append failures to its existing root`, () => {
+    // arrange
+    const { sink, attempts } = failingSink([1]);
+    const run = { ...runWithNothingLoaded(), entrySink: sink, origin: { kind } };
+    const ctx = {
+      mode: "json",
+      get ui(): never {
+        throw new Error("Unexpected UI access");
+      },
+    };
+
+    // act & assert
+    assert.throws(
+      () => {
+        notifyUsageInfo(ctx, run, "Lifecycle.");
+      },
+      { name: "Error", message: "Append 1 failed." },
+    );
+    assert.deepStrictEqual(attempts, [
+      {
+        customType: "claude-plugin",
+        payload: {
+          schemaVersion: 1,
+          origin: { kind },
+          kind: "usage-info",
+          severity: "info",
+          needsReload: false,
+          usage: "Lifecycle.",
+        },
+      },
+    ]);
+  });
+}
+
 for (const { message, outcome, reload } of [
   { message: { kind: "cascade", marketplaces: [] }, outcome: true, reload: false },
   {
@@ -6804,18 +7142,20 @@ test("retains a caught invalid device prompt append for final validation", () =>
     entrySink: {
       appendEntry(customType: string, payload: unknown) {
         assert.ok(typeof payload === "object" && payload !== null);
-        capture.entrySink.appendEntry(customType, { ...payload, accessToken: "forbidden-token" });
+        try {
+          capture.entrySink.appendEntry(customType, { ...payload, accessToken: "forbidden-token" });
+        } catch {
+          throw new Error("Invalid payload.");
+        }
       },
     },
   };
 
   // act
-  assert.throws(() => {
-    notifyDeviceFlowPrompt(ctx, run, {
-      verificationUri: "https://github.com/login/device",
-      userCode: "BAD-1234",
-    });
-  }, assert.AssertionError);
+  notifyDeviceFlowPrompt(ctx, run, {
+    verificationUri: "https://github.com/login/device",
+    userCode: "BAD-1234",
+  });
 
   // assert
   assert.deepStrictEqual(capture.entries, [
@@ -6831,6 +7171,10 @@ test("retains a caught invalid device prompt append for final validation", () =>
         userCode: "BAD-1234",
         accessToken: "forbidden-token",
       },
+    },
+    {
+      customType: "claude-plugin",
+      payload: { ...faultError("Invalid payload.").payload, accessToken: "forbidden-token" },
     },
   ]);
   assert.throws(() => {
