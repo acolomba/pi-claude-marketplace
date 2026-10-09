@@ -38,6 +38,13 @@
 //     process because `tool_search` searches only tools that are not active,
 //     and route A's search already activated the tool in its session.
 //
+// It also records, without asserting, whether Pi declares `tool_search` in a
+// session started with `--no-extensions`, and in one started with
+// `--no-extensions -e builtin:tool-search`. `scripts/pi.sh` starts Pi with
+// `--no-extensions` and passes `-e builtin:tool-search` because of that
+// reading. The probes measure Pi, not this extension, so they never change the
+// exit code.
+//
 // The model side is `openai-stub-server.mjs`, started as a child process with
 // `STUB_PORT=0` and a `STUB_SCRIPT` that replays the route's tool calls. No
 // real model and no key are used.
@@ -119,6 +126,14 @@ const PING_KEY = "plugin_ping_ping_";
 const ECHO_TOOL = "mcp__plugin_echo_echo__echo_canary";
 const ROUTE_A_PROMPT = "route-a: find the echo canary tool and call it with the text hi";
 const ROUTE_B_PROMPT = "route-b: load the echo canary tool with tool search and call it";
+const PROBE_PROMPT = "probe: reply with one word";
+const TOOL_SEARCH_PROBES = [
+  { label: "--no-extensions", flags: ["--no-extensions"] },
+  {
+    label: "--no-extensions -e builtin:tool-search",
+    flags: ["--no-extensions", "-e", "builtin:tool-search"],
+  },
+];
 const STUB_SCRIPTS = {
   "route-a": [
     { tool: "mcp", arguments: { search: "echo canary" } },
@@ -658,9 +673,9 @@ async function closeSession(session) {
   return state;
 }
 
-/** Starts Pi in RPC mode in the sandbox with `extensions`, in that order. */
-function openSession(pi, sandbox, extensions) {
-  const args = [pi.cliPath, "--mode", "rpc", "--offline", "--no-session"];
+/** Starts Pi in RPC mode in the sandbox with `flags`, then `extensions` in that order. */
+function openSession(pi, sandbox, extensions, flags = []) {
+  const args = [pi.cliPath, "--mode", "rpc", "--offline", "--no-session", ...flags];
   for (const extension of extensions) {
     args.push("--extension", extension);
   }
@@ -1303,6 +1318,28 @@ async function proveRoute(pi, ext, sandbox, stub, route) {
   await closeChecked(session, route.session);
 }
 
+/** One probe turn: whether its first model request declares `tool_search`. */
+async function probeToolSearch(pi, ext, sandbox, stub, probe) {
+  const extensions = [EXTENSION_ENTRY, ext.entry, sandbox.helper];
+  const session = openSession(pi, sandbox, extensions, probe.flags);
+  try {
+    const logStart = (await stubRequests(stub)).length;
+    const outcome = await sendStep(session.state, PROBE_PROMPT, true);
+    if (outcome.failure !== undefined) {
+      return `not measured (${outcome.failure})`;
+    }
+
+    const [first] = (await stubRequests(stub)).slice(logStart);
+    if (first === undefined) {
+      return "not measured (the turn sent no request to the stub)";
+    }
+
+    return `tool_search declared: ${first.tools?.includes("tool_search") ? "yes" : "no"}`;
+  } finally {
+    await closeSession(session);
+  }
+}
+
 async function teardown(root) {
   await Promise.all([...liveSessions].map((session) => closeSession(session)));
   liveStub?.kill("SIGKILL");
@@ -1324,6 +1361,10 @@ async function main(cli) {
     await proveMigration(pi, ext, sandbox);
     for (const route of searchRoutes(cli.invert)) {
       await proveRoute(pi, ext, sandbox, stub, route);
+    }
+
+    for (const probe of TOOL_SEARCH_PROBES) {
+      observed(`${probe.label}: ${await probeToolSearch(pi, ext, sandbox, stub, probe)}`);
     }
 
     printOut(`[${TAG}] all assertions proven; exit 0`);
