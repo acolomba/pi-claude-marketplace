@@ -83,9 +83,9 @@ Thus the first call to a tool of a stopped server waits while the server starts.
 A project-scope plugin writes its servers into `<project>/.pi/mcp-adapter.json`. pi-mcp-adapter treats every server from a project file as a project server, and it owns the trust rules for these servers:
 
 - In a project that Pi does not trust, pi-mcp-adapter blocks the server.
-- In a trusted project, an interactive session asks whether to allow the server the first time that the adapter loads it, at the `/reload` after the install. The first choice, `Don't allow`, is the default.
+- In a trusted project, an interactive session asks whether to allow the server when the adapter loads it, first at the `/reload` after the install. The first choice, `Don't allow`, is the default. pi-mcp-adapter does not remember `Don't allow`, so it asks again at each load until you allow the server.
 - pi-mcp-adapter keeps each approval for the exact entry, so it asks again after an update that changes the entry. Every update of a plugin from its own git source changes the entry, because the plugin moves to a new clone directory.
-- A headless session, such as a print, JSON or RPC session, skips a server that is not approved.
+- A headless session, such as a print, JSON or RPC session, skips a server that is not approved. There is one exception: when the user-global configuration of pi-mcp-adapter sets `settings.projectServers` to `allow`, a headless session in a trusted project runs the server without an approval. pi-mcp-adapter ignores this setting in a project file.
 
 While a server waits, `/claude:plugin info` shows `pending approval` for it. This extension never writes the approval files of pi-mcp-adapter (NFR-10). For the full rules, see [Project server trust](https://github.com/nicobailon/pi-mcp-adapter/blob/main/docs/configuration.md#project-server-trust) in the pi-mcp-adapter docs.
 
