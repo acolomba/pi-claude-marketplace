@@ -1167,9 +1167,18 @@ async function startStub(sandbox) {
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
+  let stubStderr = "";
+  liveStub.stderr.setEncoding("utf8");
+  liveStub.stderr.on("data", (chunk) => {
+    stubStderr += chunk;
+  });
   const port = await stubPort(liveStub);
   if (port === undefined) {
-    humanNeeded(`openai-stub-server.mjs printed no port within ${STUB_START_MS} ms.`);
+    const detail = stubStderr.trim();
+    humanNeeded(
+      `openai-stub-server.mjs printed no port within ${STUB_START_MS} ms.`,
+      detail === "" ? undefined : `Stub stderr:\n${detail}`,
+    );
   }
 
   await writeJson(path.join(sandbox.agentDir, "models.json"), {
