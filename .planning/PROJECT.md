@@ -614,6 +614,13 @@ v1.20 requirements are in [the archive](milestones/v1.20-REQUIREMENTS.md).
   install with a warning; one notice lists each rename, its sign-in and
   re-approval cost, and every entry left behind with a remedy that clears
   its cause (AMIG-01..04) — mcp-4 Phase 5, verified 2026-10-09.
+- ✓ `/claude:plugin info` shows each written plugin MCP server's state as
+  pi-mcp-adapter last reported it on `pi-mcp-adapter/status/v1` (Claude Code
+  words, first in the server's parentheses), `status unknown` / `not loaded`
+  when it cannot know, and `overridden by project scope` on the user row
+  when both scopes hold the plugin; the adapter is never imported and no
+  server is connected (ASTAT-01, ASTAT-02) — mcp-4 Phase 6, verified
+  2026-10-09.
 - ✓ Bare and wrapped plugin manifests follow consistent precedence, malformed
   manifests keep their failure behavior, and missing manifests remain valid —
   v1.20 Phase 1, verified 2026-09-14.
@@ -1073,6 +1080,11 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
+
+_Last updated: 2026-10-09 after mcp-4 Phase 6 (live MCP status in info)
+verified 10/10; review WR-01 (snapshot getter swap) fixed, 2 info open;
+security 12/12 closed. Phase 7 (docs and live proof) is next. Prior updates
+follow._
 
 _Last updated: 2026-10-09 after mcp-4 Phase 5 (automatic migration on /reload)
 verified 4/4; the review-fix loop converged clean at iteration 3 (WR-01..04

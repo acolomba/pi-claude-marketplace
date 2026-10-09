@@ -29,7 +29,7 @@ Decimal phases (2.1, 3.1) are urgent insertions only, marked INSERTED.
 - [x] **Phase 3: Claude Code tool names and tool search** - plugin MCP tools reach the model as `mcp__plugin_<plugin>_<server>__<tool>` through the key `plugin_<plugin>_<server>_` and a pinned `toolPrefix: "mcp"`, load on demand through Pi's tool search, and carry the manifest description and translated transport options. Starts with a measurement of the tool-name length Pi 1.0 accepts. (completed 2026-10-06)
 - [x] **Phase 4: Variable expansion at Claude Code parity** - plugin and project path variables and `${VAR:-default}` expand at install time by Claude's rules, plain `${VAR}` is left for the adapter at runtime, the adapter's second expansion is escaped or warned about, and Claude's credential deny-list holds for `url` and `headers`. Needs a threat model. (completed 2026-10-07)
 - [x] **Phase 5: Automatic migration on /reload** - `/reload` moves each installed plugin's marked entries from `mcp.json` into `mcp-adapter.json` in their final shape, adding before removing, idempotently, with one notice that lists the renames and what they cost the user. (completed 2026-10-09)
-- [ ] **Phase 6: Live MCP status in info** - `/claude:plugin info` shows each plugin MCP server's state from the adapter's status events, and an explicit unknown state when there is nothing to show.
+- [x] **Phase 6: Live MCP status in info** - `/claude:plugin info` shows each plugin MCP server's state from the adapter's status events, and an explicit unknown state when there is nothing to show. (completed 2026-10-09)
 - [ ] **Phase 7: Docs and live proof** - README and docs describe the new delivery and its divergences, a live UAT against a real adapter 5 proves the whole path, and the CHANGELOG records the milestone.
 
 **Release rule.** Phases 2 to 5 go out in one release. Every change to the entry shape (name,
@@ -314,7 +314,7 @@ requirement (Phases 3 and 4), and no release may sit between the first write to
 3. Before the first status snapshot, after the adapter's empty shutdown snapshot, and when the adapter is absent, info shows an explicit unknown state instead of a guess. (ASTAT-02)
 4. Every new status token is a closed-catalog amendment in `docs/output-catalog.md`, and the catalog gates pass with the code. (ASTAT-02)
 
-**Plans**: 3/3 plans executed in 3 waves
+**Plans**: 3/3 plans complete in 3 waves
 
 **Wave 1**
 - [x] 06-01-PLAN.md — a factory-owned tracker of the adapter's status channel reaches `info` through `EdgeDeps`; each written server shows its state first in its parentheses, `status unknown` / `not loaded` otherwise; nine catalog tokens byte-locked (ASTAT-01, ASTAT-02)
@@ -368,7 +368,7 @@ plan these phases with the UI gate skipped.
 | 3. Claude Code tool names and tool search | mcp-4 | 9/9 | Complete    | 2026-10-06 |
 | 4. Variable expansion at Claude Code parity | mcp-4 | 9/9 | Complete    | 2026-10-07 |
 | 5. Automatic migration on /reload | mcp-4 | 5/5 | Complete    | 2026-10-09 |
-| 6. Live MCP status in info | mcp-4 | 3/3 | In Progress | - |
+| 6. Live MCP status in info | mcp-4 | 3/3 | Complete    | 2026-10-09 |
 | 7. Docs and live proof | mcp-4 | 0/TBD | Not started | - |
 
 ## Carried Forward

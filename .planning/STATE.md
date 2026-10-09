@@ -2,44 +2,44 @@
 gsd_state_version: "1.0"
 milestone: mcp-4
 milestone_name: MCP 4
-current_phase: 06
-current_phase_name: Live MCP status in info
-status: verifying
-stopped_at: Completed 06-03-PLAN.md
-last_updated: "2026-10-09T18:51:57.832Z"
+current_phase: 7
+current_phase_name: Docs and live proof
+status: planning
+stopped_at: Phase 6 complete, ready to plan Phase 7
+last_updated: "2026-10-09T19:16:52.955Z"
 last_activity: 2026-10-09
-last_activity_desc: Phase 06 execution started
-state_head: cff9ad24adbffe08495096dfd0b31c2d65de3649
+last_activity_desc: Phase 6 complete, transitioned to Phase 7
+state_head: aa25cd0be27232dfe9b2e4f5fa3a7f3e46d048dc
 progress:
   total_phases: 7
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 47
   completed_plans: 47
-  percent: 71
+  percent: 86
 ---
 
 # Project State
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-10-09 after mcp-4 Phase 5)
+See: `.planning/PROJECT.md` (updated 2026-10-09 after mcp-4 Phase 6)
 
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 06 — Live MCP status in info
+**Current focus:** Phase 7 — Docs and live proof
 The roadmap has 7 phases and maps all 36 requirements. Phases 2 to 5
 go out in one release, because every entry-shape change costs users new
 sign-ins and approvals.
 
 ## Current Position
 
-Phase: 06 (Live MCP status in info) — EXECUTING
-Plan: 3 of 3
-Status: Phase complete — ready for verification
-Last activity: 2026-10-09 — Phase 06 execution started
+Phase: 7 — Docs and live proof
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-10-09 — Phase 6 complete, transitioned to Phase 7
 
-Progress: [███████░░░] 71%
+Progress: [█████████░] 86%
 
 ### workflows-replay closeout (merged from main)
 
@@ -72,7 +72,7 @@ still open with a comment explaining what landed.
 
 **Velocity:**
 
-- Total plans completed: 228
+- Total plans completed: 227
 - Average recorded duration: 11.9 min
 - Total recorded execution time: 30 hr 1 min
 
@@ -91,7 +91,7 @@ still open with a comment explaining what landed.
 | 03 | 9 | - | - |
 | 04 | 9 | - | - |
 | 5 | 5 | - | - |
-| 06 | 4 | - | - |
+| 6 | 3 | - | - |
 | 07 | 3 | - | - |
 | 8 | 3 | - | - |
 | 09 | 4 | - | - |
@@ -311,6 +311,10 @@ still open with a comment explaining what landed.
 
 Decisions are logged in the PROJECT.md Key Decisions table.
 
+- [mcp-4 Phase 6] info shows the adapter's last-reported server state in
+  Claude Code words (`failed` kept distinct), `status unknown` / `not loaded`
+  when unknown, `overridden by project scope` for the user row when both
+  scopes hold the plugin; severity stays info (D-06-01..10, D-06-06a).
 - [mcp-4 Phase 5] `/reload` moves plugin MCP entries out of `mcp.json`;
   old entries are cleanup, not input, and the marked entries are the only
   trigger (D-05-09, D-05-16, COMPAT-01).
@@ -828,11 +832,23 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Completed 06-03-PLAN.md
+**Stopped at:** Phase 6 complete, ready to plan Phase 7
 
 **Resume file:** None
 
-Last session: 2026-10-09T18:51:57.472Z
+Last session: 2026-10-09 (paused after Phase 6, context 68%)
+Phase 6 closed in the same `/gsd-autonomous --from 5 --interactive` run.
+Gates: discuss (4 areas + 3 post-research rulings), research, 3 plans in 3
+waves executed sequentially; Nyquist compliant; security 12/12 closed;
+review WR-01 (snapshot getter swap) fixed in 03a4104e, IN-01/02 open;
+`npm run check` green on 03c50f3a and on 3aafdfe3; verifier 10/10 passed.
+Nothing skipped. Resume: `/clear`, then `/gsd-autonomous --from 7
+--interactive` (Phase 7 discuss is next; its criterion 2 carries the
+deferred-session `status unknown` live check, D-06-06a). Out-of-scope
+note from review: `record.plugins[name]` lookups lack an own-property
+check (`info constructor@mp`), pre-existing — candidate BACKLOG item.
+
+Previous session: 2026-10-09
 Phase 5 closed in `/gsd-autonomous --from 5 --interactive`, sequential on this
 checkout. Gates: 5/5 plans; Nyquist validated; security 20/20 closed; the
 review-fix loop converged clean at iteration 3 (WR-01..04 fixed, 8 info open,
