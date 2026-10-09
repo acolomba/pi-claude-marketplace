@@ -1,9 +1,11 @@
 ---
 phase: 01-pi-1-0-floor-and-adapter-only-detection
-verified: 2026-10-03T02:00:00Z
+verified: 2026-10-09T23:45:43Z
 status: passed
 score: 5/5 must-haves verified
+re_verification: "scoped; baseline 25c8c717; head 51ebbc07"
 covered_files:
+  - .github/workflows/lint.yml
   - .planning/phases/01-pi-1-0-floor-and-adapter-only-detection/01-01-PLAN.md
   - .planning/phases/01-pi-1-0-floor-and-adapter-only-detection/01-01-SUMMARY.md
   - .planning/phases/01-pi-1-0-floor-and-adapter-only-detection/01-02-PLAN.md
@@ -22,6 +24,9 @@ covered_files:
   - .planning/phases/01-pi-1-0-floor-and-adapter-only-detection/01-08-SUMMARY.md
   - .planning/phases/01-pi-1-0-floor-and-adapter-only-detection/01-09-PLAN.md
   - .planning/phases/01-pi-1-0-floor-and-adapter-only-detection/01-09-SUMMARY.md
+  - AGENTS.md
+  - README.md
+  - docs/workflows-compatibility.md
   - extensions/pi-claude-marketplace/orchestrators/plugin/info.ts
   - extensions/pi-claude-marketplace/platform/pi-api.ts
   - extensions/pi-claude-marketplace/shared/concerns/soft-dep.ts
@@ -39,7 +44,7 @@ covered_files:
   - tests/live-uat/openai-stub-server.mjs
   - tests/live-uat/stop-canary.mjs
   - tests/platform/pi-api.test.ts
-covered_digest: "v2:sha256:02d77bb47e40a2fd76011a10827e03659e3b95c2dd3c905d4b0884463fce7be5"
+covered_digest: "v3:sha256:1b250e2e731d164811ded4fa0e6a115f5adc3c95a2e2bbf1cfa4cc66d0ceddb2"
 behavior_unverified: 0
 overrides_applied: 0
 ---
@@ -139,4 +144,74 @@ No gaps. The phase goal holds in the codebase: the extension declares and runs a
 ---
 
 _Verified: 2026-10-03_
+_Verifier: Claude (gsd-verifier)_
+
+---
+
+## Re-verification (2026-10-09)
+
+**Scope:** scoped re-verification. Baseline `25c8c717` (the commit that wrote the report above), head `51ebbc07` on `features/mcp-4`. The report read `stale` because later phases of the milestone and two merges of `origin/main` edited files in its `covered_files`. The original findings above stand as written. This section judges each truth against the tree at head, as amended.
+
+**Status:** passed, 5/5. No truth lost its support. No gap, no new human-verification item, no override.
+
+### Changed files
+
+Files in `covered_files` that changed between the baseline and head (`git diff --stat 25c8c717 HEAD`):
+
+| File | What changed since the baseline |
+| ---- | ------------------------------- |
+| `extensions/pi-claude-marketplace/orchestrators/plugin/info.ts` | +261 lines: MCP server lines by Claude name, unset and withheld variables, adapter status (ANAME-07, AVAR, ASTAT-01), project-override mark; main merges (#238, #246) |
+| `extensions/pi-claude-marketplace/platform/pi-api.ts` | comment rename; adds the `PiEventSource` interface (ASTAT-01). `hasLoadedPiMcpAdapter` and its helpers are byte-identical |
+| `extensions/pi-claude-marketplace/shared/notification-grammar.ts` | adds `appendMcpLine`, `mcpEntryText`, `variablePart`; decision-ID renames in comments. `appendRequiresLine` is unchanged |
+| `package.json`, `package-lock.json` | adapter peer `>=5.0.0` -> `>=5.1.0` (D-04-12) -> `>=5.2.0 <6` (D-07-07); main's dependency bumps; `strip-json-comments`; the `check` script restructure (#236) |
+| `scripts/pi.sh` | pins adapter 5.2.0 and engine 3.14.0 (#248); adds `-e builtin:tool-search` |
+| `tests/architecture/peer-floor.test.ts` | adapter range assertions follow the amended floor |
+| `tests/e2e/install-soft-deps.test.ts` | reads `mcp-adapter.json` under the generated Claude-name key |
+| `tests/integration/pi-subagents-peer.ts` | generic identity, floor and loader code moved to `tests/integration/optional-peer.ts`; the pi-subagents API is unchanged |
+| `tests/live-uat/README.md` | adds the MCP adapter canary, a 3.14.0 storage-canary run and the 3.14.0 install line; the 2026-10-02 Stop and agent-failure evidence is untouched |
+| `tests/live-uat/openai-stub-server.mjs` | +119 lines: scripted plugin-MCP tool call for the new adapter canary |
+| `tests/live-uat/stop-canary.mjs` | +2 lines: a no-op `events.on` on the fake Pi (ASTAT-01); assertions unchanged |
+
+Also changed since the baseline and cited below: `README.md` (adapter floor line), `AGENTS.md` (NFR-4 value unchanged), `.github/workflows/lint.yml` (fallow SHA unchanged). Unchanged since the baseline: `shared/concerns/soft-dep.ts`, `shared/notify-context.ts`, `tests/e2e/_rpc.ts`, `tests/e2e/adapter-detection-rpc.test.ts`, `tests/platform/pi-api.test.ts`.
+
+### Per-truth result
+
+| # | Truth (as amended) | Touched by | Result | Evidence |
+| - | ------------------ | ---------- | ------ | -------- |
+| 1 | Peer floor `>=1.0.0`, dev deps `^1.0.0`, FLOOR-01 pins the literal, `npm run check` passes with the typing and peer-test fixes (PIFL-01, PIFL-04) | `package.json`, `package-lock.json`, `peer-floor.test.ts` | VERIFIED (amended: the type-member pins gate was removed upstream) | `package.json` peer `@earendil-works/pi-coding-agent` is `>=1.0.0`, devDependencies are `^1.0.0` for it and for `pi-tui`; the lock holds 1.0.0 for both and its root peers mirror `package.json`. `peer-floor.test.ts` runs green. The orchestrator's `npm run check` on head exits 0. The `lint:type-members` gate this report cited no longer exists: main's #236 deleted `scripts/check-unused-type-members.*` and its `package.json` entries (quick task 261004-u7n removed the gate), so the "pins re-derived" clause is superseded, not broken. `typecheck` inside `npm run check` passes against Pi 1.0 types. |
+| 2 | devDependencies latest except TypeScript `^6.0.3`; `no-unsafe-enum-assignment` fixed in code; fallow action SHA matches fallow; `engines.node` and NFR-4 agree (PIFL-05, PIFL-06) | `package.json`, `package-lock.json`; `lint.yml` (not covered, read for the SHA) | VERIFIED | Lock: fallow 3.31.0, prettier 3.9.9, typescript-eslint 8.71.0, sonarjs 4.2.2, globals 17.13.0, import-x 4.17.1, typescript 6.0.3. `lint.yml` still pins `fallow-rs/fallow@71369f80... # v3.31.0`. `engines.node` is `^22.22.2 \|\| ^24.15.0 \|\| >=26.0.0` in `package.json` and the lock root; `AGENTS.md:59` and `.planning/PROJECT.md:946` state the same NFR-4 value. No `eslint-disable` or config override in `extensions`, `tests` or `eslint.config.js` names `no-unsafe-enum-assignment`. Lint is part of the green full gate. |
+| 3 | pi-subagents `>=0.74.0` and pi-mcp-adapter optional peers, adapter not a devDependency, both pi-subagents peer tests run zero-skip at 0.74.0 via `PI_SUBAGENTS_ROOT`, README states the adapter floor (PIFL-02, PIFL-03; amended by D-04-12 to 5.1.0 and by D-07-07 to `>=5.2.0 <6`; README drops the peer-gap line) | `package.json`, `package-lock.json`, `peer-floor.test.ts`, `pi-subagents-peer.ts`, `README.md` | VERIFIED as amended | Peers at head: pi-subagents `>=0.74.0`, pi-mcp-adapter `>=5.2.0 <6`, both `optional: true` in `peerDependenciesMeta`; the adapter is absent from dependencies, devDependencies and lock packages. `peer-floor.test.ts` asserts `>=5.2.0 <6` and the lock mirror, and passes. `README.md:40-42` states "5.2.0 or a later 5.x release" and "Pi's built-in MCP support does not satisfy this requirement"; the `pi-ai` peer-gap line is gone, as D-04-12 says. Own run: scratch `pi-subagents@0.74.0`, `PI_SUBAGENTS_ROOT=...`, `provenance-invisibility` and `skill-path-resolution`: pass 2, fail 0, skipped 0, diagnostic "pi-subagents 0.74.0". The loader refactor into `optional-peer.ts` kept the public functions and behavior. |
+| 4 | Stop canary and workflow-engine canary pass live on Pi 1.0; `scripts/pi.sh` pins the three versions (PIFL-07; engine amended 3.13.1 -> 3.14.0 by quick task 261006-kr1 / PR #248; adapter 5.0.0 -> 5.2.0 by D-04-12 and D-07-07) | `scripts/pi.sh`, `tests/live-uat/README.md`, `stop-canary.mjs`, `openai-stub-server.mjs` | VERIFIED as amended; live canaries not re-run | `scripts/pi.sh:111-115` pins `pi-mcp-adapter@5.2.0`, `pi-subagents@0.74.0`, `@quintinshaw/pi-dynamic-workflows@3.14.0`; `bash -n scripts/pi.sh` exits 0; it adds `-e builtin:tool-search` with the reason in a comment. The live-uat README keeps the verbatim 2026-10-02 pi 1.0.0 evidence: agent-failure canary (line 118, engine 3.13.1) and Stop canary (line 382: `pi exited with code 0`, exactly 8 blocks, exit 1 through the documented cap-trip routing, plus the exit-2 regression control at line 413). The engine move is recorded by a storage-canary run at engine 3.14.0 dated 2026-10-06 (line 211: W0 to W5 for both scopes, "all assertions proven; exit 0"). The `stop-canary.mjs` diff only adds a no-op `events.on` to the fake Pi, so its assertions are unchanged. `docs/workflows-compatibility.md` grades 3.14.0 as runtime-measured and tells readers to use 3.14.0 or newer. The agent-failure canary has no 3.14.0 run recorded; the 3.14.0 change is the storage root and result delivery (engine PRs #232, #238), which the storage canary covers. I ran no live canary (the brief bans `pi.sh`, `pi` and live canaries). |
+| 5 | With only Pi's built-in MCP active, install, list and info mark MCP as needing pi-mcp-adapter, proven by a built-in-only negative test; an adapter with `disableProxyTool` or from a fork is detected via its `mcp-adapter` command (ADET-01, ADET-02) | `platform/pi-api.ts`, `notification-grammar.ts`, `info.ts`, `install-soft-deps.test.ts` | VERIFIED | `hasLoadedPiMcpAdapter` at head is unchanged: it counts an extension command named `mcp-adapter[:n]` or an adapter `sourceInfo.source`; a bare `mcp` tool and Pi's built-in MCP do not count; each arm is guarded alone. `appendRequiresLine` (`notification-grammar.ts:1415-1428`) and `withCompanionRequirements` / `softDepStatus(opts.pi)` (`info.ts:2972,3090`) are intact. The info MCP changes add a separate `mcp:` line beside `requires:`. The only edit to `install-soft-deps.test.ts` is the on-disk key it reads (`mcp-adapter.json`, generated Claude-name key); every matrix case still asserts the marker. Own e2e run against the real Pi 1.0 CLI: 15/15 pass, 0 skipped, including built-in only, built-in disabled, `disableProxyTool` command-only, fork, `mcp-adapter:1/:2` and the foreign `mcp` tool. Unit suites: 411 pass, 0 fail. |
+
+**Score:** 5/5 truths verified, 0 behavior-unverified.
+
+### Commands run
+
+All runs used `TMPDIR=/var/tmp/mcp4-reverify-p1`. Nothing could write the real `~/.pi/agent`: the repo tests use hermetic homes, and no `pi`, `scripts/pi.sh` or live canary ran.
+
+| Command | Exit | Result |
+| ------- | ---- | ------ |
+| `git log --oneline 25c8c717..HEAD -- <file>` and `git diff` / `git diff --stat 25c8c717 HEAD` over the 12 listed files plus `soft-dep.ts`, `notify-context.ts`, `_rpc.ts`, `adapter-detection-rpc.test.ts`, `pi-api.test.ts`, `README.md`, `AGENTS.md`, `lint.yml` | 0 | full diffs read for `pi-api.ts`, `package.json`, `scripts/pi.sh`, `peer-floor.test.ts`, `install-soft-deps.test.ts`, `stop-canary.mjs`, `pi-subagents-peer.ts`, `notification-grammar.ts`, `README.md`, `AGENTS.md`, `lint.yml`; `info.ts` and the live-uat README read selectively |
+| `node --test tests/platform/pi-api.test.ts tests/architecture/peer-floor.test.ts tests/shared/concerns/soft-dep.test.ts tests/shared/notification-grammar.test.ts tests/orchestrators/plugin/info.test.ts` | 0 | tests 411, pass 411, fail 0, skipped 0 |
+| `PI_CM_E2E_REF=pinned node --test tests/e2e/adapter-detection-rpc.test.ts tests/e2e/install-soft-deps.test.ts` (works offline here) | 0 | tests 15, pass 15, fail 0, skipped 0 |
+| `npm install --prefix /var/tmp/mcp4-reverify-p1/subagents pi-subagents@0.74.0 --ignore-scripts --omit=peer --no-audit --no-fund` | 0 | 0.74.0 in a scratch prefix outside the repo; the global peer is 0.47.1, so without it the peer tests would skip |
+| `PI_SUBAGENTS_ROOT=/var/tmp/mcp4-reverify-p1/subagents/node_modules/pi-subagents node --test tests/integration/provenance-invisibility.test.ts tests/integration/skill-path-resolution.test.ts` | 0 | tests 2, pass 2, fail 0, skipped 0, "pi-subagents 0.74.0" |
+| `bash -n scripts/pi.sh` | 0 | syntax ok |
+| `node --check tests/live-uat/stop-canary.mjs` | 0 | syntax ok |
+| `node .claude/gsd-core/bin/gsd-tools.cjs query verification.fingerprint <phase dir> <files>` | 0 | `covered_files` and `covered_digest` in the frontmatter copied verbatim |
+
+`PI_MCP_ADAPTER_ROOT` pointed at the 5.2.0 install for the unit and e2e runs; none of the targeted files needs it.
+
+### Full-gate evidence
+
+The orchestrator ran `npm run check` on HEAD `51ebbc07` (clean tree) in this session: Node v26.11.0, `PI_MCP_ADAPTER_ROOT` = pi-mcp-adapter 5.2.0, `TMPDIR=/var/tmp/mcp4-check-tmp`. Exit 0: typecheck, lint, lint:workflows, fallow, format:check, test:corresponding, test:unpaired, test:integration, test:coverage:direct:all (merged `coverage/direct.lcov`, 269 records). Cited, not re-run.
+
+### Notes
+
+- ROADMAP success criterion 4 still names adapter 5.0.0 and engine 3.13.1 in its text. Criterion 3 carries the inline "amended by D-04-12 / D-07-07" note; criterion 4 does not. The pins moved by recorded decisions (D-04-12, D-07-07, quick task 261006-kr1), so it is judged as amended. The ROADMAP line could carry the same inline note. Documentation residue only.
+- The earlier `.planning/PROJECT.md` warning (old `{requires pi-mcp}` token at the former lines 883 and 885) was not re-checked. That file carries uncommitted orchestrator edits, and the brief says to ignore them.
+- `human_verification`: none before, none now.
+
+_Re-verified: 2026-10-09_
 _Verifier: Claude (gsd-verifier)_

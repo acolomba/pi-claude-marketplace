@@ -1,6 +1,6 @@
 ---
 phase: 02-adapter-file-delivery
-verified: 2026-10-06T00:00:00Z
+verified: 2026-10-09T23:45:56Z
 status: passed
 score: 5/5 roadmap success criteria verified; both previous gaps closed (gap-closure plans 02-09..02-12, 41 plan truths, 3 backstop); 8 new judgment-tier prohibitions approved by the operator; review IN-04 fixed (6cb09db2, D-02-23)
 covered_files:
@@ -33,6 +33,7 @@ covered_files:
   - extensions/pi-claude-marketplace/bridges/mcp/adapter-entry.ts
   - extensions/pi-claude-marketplace/bridges/mcp/collision-ancestors.ts
   - extensions/pi-claude-marketplace/bridges/mcp/collision-slots.ts
+  - extensions/pi-claude-marketplace/bridges/mcp/legacy.ts
   - extensions/pi-claude-marketplace/bridges/mcp/marker.ts
   - extensions/pi-claude-marketplace/bridges/mcp/safe-set.ts
   - extensions/pi-claude-marketplace/bridges/mcp/stage.ts
@@ -63,10 +64,15 @@ covered_files:
   - extensions/pi-claude-marketplace/shared/errors-bridges.ts
   - extensions/pi-claude-marketplace/shared/notification-dispatch.ts
   - package.json
-covered_digest: "v3:sha256:42128134894cad2de42fa002e6ea1bf88164939a38cd977f8a80aada920f9e03"
+  - tests/bridges/mcp/adapter-entry.test.ts
+  - tests/bridges/mcp/legacy.test.ts
+  - tests/bridges/mcp/stage.test.ts
+  - tests/integration/mcp-override-lifecycle.test.ts
+covered_digest: "v3:sha256:7383976fc8a886693e1e056ed9e15cdd17b72be108ca9988a2b1e1d2a22ce847"
 behavior_unverified: 0
+re_verification: "scoped; baseline bf456487; head 51ebbc07"
 overrides_applied: 0
-re_verification:
+gap_closure_re_verification:
   previous_status: "gaps_found"
   previous_score: "5/5 roadmap success criteria verified; 2 gaps (stub absorption loses user fields; D-02-NN source citations)"
   gaps_closed:
@@ -228,6 +234,63 @@ Other deferred gap-review Info items (IN-01 fold test, IN-02 asymmetric fact mod
 ### Gaps Summary
 
 Both previous gaps are closed. A user's marker-less override stub is now kept verbatim inside the marker, carried through update and reinstall, and written back on every unstage; the cross-scope integration test proves a project uninstall restores the user's original bytes exactly. No `D-02-19..22` citation remains in source or test titles, and the v1.20 citations are untouched. The five success criteria and AFILE-01..06 show no regression across 3,786 targeted tests and an independent probe. The operator approved the 8 new judgment-tier prohibitions, and 6cb09db2 (D-02-23) fixed review IN-04, so a written-back override no longer gains plugin-declared carried fields. Status is `passed`.
+
+## Re-verification (2026-10-09)
+
+**Scope:** scoped re-verification. Baseline `bf456487` (last write of this report), head `51ebbc07` (branch `features/mcp-4`). The report read `stale` because phases 3 to 7 of the milestone and a merge of `origin/main` edited files in `covered_files`. Phase 2's findings above are kept unchanged. Result: **every truth still holds, as amended**, status stays `passed`.
+
+### Changed covered files since bf456487
+
+- `docs/output-catalog.md`, `package.json` (peer `pi-mcp-adapter` `>=5.0.0` to `>=5.2.0 <6`, D-07-07, D-04-12)
+- `bridges/mcp/{adapter-doc,adapter-entry,marker,stage,types}.ts` (`adapter-doc.ts` changed one comment line only)
+- `orchestrators/marketplace/shared.ts`, `orchestrators/plugin/{enable-disable,install-cascade,install-disable-cascade,install-flow,install-outcome,reinstall-replace,update-swap}.ts`, `orchestrators/reconcile/apply.ts`
+- `persistence/locations.ts` (merge of main, PR #248: comment and doc text about the workflows root only; the `mcpAdapterJsonPath` lines are untouched)
+- `shared/errors-bridges.ts` (adds `definedAs` to `McpServerCollisionError` and a new `McpServerKeyCollisionError`), `shared/notification-dispatch.ts` (new notice kinds, section order, fold)
+- Untouched since baseline (empty `git diff`): `bridges/mcp/{unstage,collision-slots,collision-ancestors,safe-set}.ts`, `orchestrators/plugin/uninstall.ts`, `shared/atomic-json.ts`. The new bridge modules `adapter-escape.ts`, `legacy.ts`, `substitute.ts` come from phases 4 and 5.
+
+### Amendments that bear on Phase 2 (all deliberate, none breaks a Phase 2 promise)
+
+- **Entry key (ANAME-01, Phase 3):** the entry sits under `plugin_<plugin>_<server>_`, with `toolPrefix: "mcp"` and `directTools: "search"`, so a user override of our entry is a stub under that key. The lifecycle tests were renamed from `srv` to `plugin_hello_srv_`; every assertion about survival and write-back is unchanged.
+- **Closed field table and plugin-set fields (ANAME-07, Phase 3):** the carried set (`CARRIED_FIELDS`, 9 fields) is unchanged. The plugin's `timeout` may set `requestTimeoutMs`; the marker then lists it in `pluginSetFields`, carry-forward skips it, and write-back restores the user's own value. This is the decision Phase 2's roadmap note deferred to Phase 3 (D-02-22 carry-over note).
+- **Collision walk (ANAME-03, D-03-12, D-03-13, D-03-17):** keys are compared after folding `-` to `_`; a new `McpServerKeyCollisionError` refuses two servers of one plugin that fold to one key. The nine-source later-wins walk and the "partial entry is an override" rule are untouched (`collision-slots.ts` unchanged).
+- **Variables and credentials (AVAR, Phase 4):** new notice kinds follow `override-kept` in the notice order; the Phase 2 order `comments-dropped`, `left-unchanged`, `override-kept` is unchanged.
+- **Migration (AMIG, Phase 5, D-05-08 to D-05-10):** every staging path finishes the `mcp.json` move after writing `mcp-adapter.json`, with byte rollback. A stage also drops old-name leftovers the adapter wrote for the moved legacy entries: a stub kept while any source still defines the name, a panel copy (`directTools` full definition) always, a user's own full server never. Each removal is announced by a `leftover-removed` notice. D-05-09 states that nothing is carried from a legacy entry (supersedes D-02-06). This narrows "never lose anything the user wrote" to the old-name cleanup that D-05-10 names; it does not touch content under the new key or any unrelated server.
+- **Project-scope writes (D-05-08 narrowed 2026-10-09):** a stage writes only its own scope's files; project-file stub removal for a user-scope plugin takes only the project scope lock (`removeProjectDisableStubs`).
+
+### Per-truth table
+
+| Truth | Touched by | Result | Evidence |
+|-------|-----------|--------|----------|
+| 1. Install writes marked entries into the scope's `mcp-adapter.json`, uninstall removes exactly those; NFR-10 / locations / containment name the file (AFILE-01) | `stage.ts` (key, legacy sweep), `shared.ts` (`cascadeUnstagePlugin` dropped-name mapping), `locations.ts` (comments only) | HOLDS (as amended by ANAME-01, AMIG-02) | `locations.ts:66,212,293` still derive `mcpAdapterJsonPath` as `<scopeRoot>/mcp-adapter.json`; `stage.ts:420,588` write only that file (plus the scope's `mcp.json` removal at `:630`, inside the NFR-10 set, which keeps `mcp.json` for legacy entries); `unstage.ts` unchanged and still the sole path (`shared.ts` `unstageMcpServers`). `tests/persistence/locations.test.ts` and `tests/bridges/mcp/unstage.test.ts` pass; `mcp-override-lifecycle` asserts install, update, reinstall, uninstall bytes. |
+| 2. JSONC file with comments, trailing commas, BOM installs and keeps foreign keys; unparseable file refuses with typed error and exact bytes; comment loss warned once (AFILE-02, AFILE-04) | `stage.ts`, `notification-dispatch.ts`, `errors-bridges.ts`, `output-catalog.md` | HOLDS | `readMcpConfigDoc` unchanged (`adapter-doc.ts` comment only). `stage.ts:420-430` still returns `left-unchanged` for a noop and throws `McpConfigFileError` with servers (`readTargetConfig`, `:374-387`); `commentsDroppedNotices` first in `notices` (`:540`). `stage.test.ts` AFILE-02 and AFILE-04 cases (`:443,475,543,579,614`) and `adapter-doc.test.ts` BOM case pass; catalog byte lock `mcp-config-notices.test.ts` passes. |
+| 3. Legacy `mcp-servers` key honored (AFILE-03) | `stage.ts`, `adapter-doc.ts` (comment) | HOLDS | `withPluginServers(config, ...)` writes under `config.serverKey` (`stage.ts:514`); `stage.test.ts:641,680,1494,1533` (AFILE-03 cases) pass at HEAD. |
+| 4. Full-definition collision reported with the winning source; partial entry is an override (AFILE-05) | `stage.ts` (fold by `-`/`_`), `errors-bridges.ts` (`definedAs`) | HOLDS (as amended by ANAME-03, D-03-12/13/17) | `assertNoMcpCollisions` (`stage.ts:192-219`) still walks `walkMcpSources` (unchanged) and throws `McpServerCollisionError(name, owner.sourcePath, winningPath, owner.key)`; a marker-less partial entry is not a declarer (`isFullDefinition` in `adapter-doc.ts:94`, used at `collision-slots.ts:156`, both unchanged apart from one comment). `stage.test.ts:849-1083` AFILE-05 cases, including the disable-stub case `:994`, pass. |
+| 5. User override in our entry survives update and reinstall; closed carried set pinned against `ServerEntry` (AFILE-06) | `adapter-entry.ts`, `marker.ts`, `update-swap.ts`, `reinstall-replace.ts` | HOLDS (as amended by ANAME-07) | `CARRIED_FIELDS` is still the 9 fields. `adapter-entry.test.ts:1061` pins the vendored `ServerEntry` keys against the 5.2.0 floor and ran with 0 skips (`PI_MCP_ADAPTER_ROOT` 5.2.0). Integration `mcp-override-lifecycle` (4 cases, incl. new ANAME-07 case) shows `disabled: true` surviving update and reinstall, `keptOverride` in the marker, byte-identical user file across a project lifecycle, and write-back on uninstall. |
+| Gap 1: marker-less stub kept verbatim, written back on every unstage (D-02-21/22/23) | `marker.ts`, `adapter-entry.ts`, `adapter-doc.ts`, `shared.ts` | HOLDS (as amended by ANAME-07, D-05-10) | `restoredOverride` still writes back only the stub's own carried fields with live values (`adapter-entry.ts`, plus the plugin-set branch); `unstage.ts` unchanged. Integration cases `a /mcp-adapter enable made while the plugin is installed survives ...` (D-02-22) and `uninstall writes back no carried field the plugin's entry declares ...` (D-02-23) pass. The only user-content removal added since is the D-05-10 old-name cleanup above, which never touches the new key. |
+| Gap 2: no `D-02-19..22` in source or titles; 11 v1.20 `D-02-0x` lines intact | any commit | HOLDS | `rg -n 'D-02-(19\|20\|21\|22\|23)' extensions tests` and `rg -n 'D-02-1[0-9]' extensions tests` print nothing (exit 1); `rg -n 'D-02-0[0-9]' extensions tests` prints 11 lines; `git diff ceb44007 HEAD -- extensions tests` shows no `D-02-0x` line changed. |
+| Notice order and wording of `override-kept` (D-02-21, plan 02-11) | `notification-dispatch.ts`, `stage.ts` | HOLDS | Section order is still `comments-dropped`, `left-unchanged`, `override-kept` first, new kinds after; `inactiveOverrideFields` now also lists plugin-set fields. Lifecycle integration asserts the exact `MCP server override kept.` text with the new key. |
+| Prohibitions (credentials never active, no value in notices, write-back never a full definition) | `adapter-entry.ts`, `stage.ts`, phase 4 | HOLDS | `CARRIED_FIELDS` carries no credential field; `no-credential-leak.test.ts` and the notices tests pass; `restorableOverride` unchanged. Phase 4 withholds deny-listed credentials before they reach an entry, which strengthens the promise. |
+
+### Commands run (all from the repo root, `TMPDIR=/var/tmp/mcp4-reverify-p2`, `PI_MCP_ADAPTER_ROOT=/var/tmp/mcp4-p7-research/a520/node_modules/pi-mcp-adapter`)
+
+| Command | Exit | Result |
+|---------|------|--------|
+| `node --test tests/bridges/mcp/*.test.ts tests/architecture/{mcp-config-notices,mcp-migration-notice,no-credential-leak,peer-floor}.test.ts tests/shared/{notification-dispatch,errors-bridges,atomic-json}.test.ts tests/persistence/locations.test.ts` | 0 | 872 pass, 0 fail, 0 skipped |
+| `node --test tests/integration/{mcp-override-lifecycle,mcp-migration,mcp-legacy-sweep,mcp-variable-expansion,mcp-tool-rules,mcp-home-path-partial,standalone-prune}.test.ts` | 0 | 55 pass, 0 fail, 0 skipped |
+| `node --test tests/integration/{adapter-expansion-conformance,mcp-status-conformance}.test.ts` | 0 | 55 pass, 0 fail, 0 skipped (real 5.2.0 adapter) |
+| `node --test tests/orchestrators/{plugin,marketplace,reconcile,import}/*.test.ts` | 0 | 3318 pass, 0 fail, 0 skipped |
+| `rg -n 'D-02-(19\|20\|21\|22\|23)' extensions tests`; `rg -n 'D-02-1[0-9]' extensions tests` | 1, 1 | no output (expected) |
+| `node .claude/gsd-core/bin/gsd-tools.cjs query verification.fingerprint .planning/phases/02-adapter-file-delivery <covered implementation, test and doc files> legacy.ts mcp-override-lifecycle.test.ts adapter-entry.test.ts stage.test.ts legacy.test.ts` | 0 | `covered_files` and `covered_digest` copied verbatim into the frontmatter |
+
+No test file failed and none needed a re-run. Nothing wrote to the real `~/.pi/agent`.
+
+### Full-gate evidence
+
+`npm run check` on HEAD `51ebbc07` (clean tree), Node v26.11.0, `PI_MCP_ADAPTER_ROOT` = pi-mcp-adapter 5.2.0, `TMPDIR=/var/tmp/mcp4-check-tmp`: **exit 0** (typecheck, lint, lint:workflows, fallow, format:check, test:corresponding, test:unpaired, test:integration, test:coverage:direct:all; merged `coverage/direct.lcov`, 269 records). Run by the orchestrator in this session, cited and not re-run here.
+
+### Result
+
+Status stays `passed`. 5/5 roadmap success criteria and both gap-closure truths hold at HEAD as amended by D-03 (ANAME-01/03/07), D-04, D-05-08..10 and D-07-07. No new gap, no new human-verification item.
 
 ---
 

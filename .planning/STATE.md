@@ -21,12 +21,12 @@ progress:
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-10-09 after mcp-4 Phase 6)
+See: `.planning/PROJECT.md` (updated 2026-10-09 after mcp-4 Phase 7)
 
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 07 — Docs and live proof
+**Current focus:** mcp-4 milestone close — audit, complete, cleanup
 The roadmap has 7 phases and maps all 36 requirements. Phases 2 to 5
 go out in one release, because every entry-shape change costs users new
 sign-ins and approvals.
@@ -849,7 +849,15 @@ hit the same wall; convert it rather than re-disclosing it.
 
 **Resume file:** None
 
-Last session: 2026-10-09T22:57:15.140Z
+Last session: 2026-10-09
+Phase 7 closed: 5/5 plans; Nyquist validated; security verified (0 open);
+review 8/8 fixed; verifier 3/3, re-running the live canary against
+pi-mcp-adapter 5.2.0. `/gsd-autonomous --from 7` ran the transition, then
+the milestone lifecycle. Phases 1-6 read `stale` (later phases edited
+covered source files), so each gets a scoped re-verification before the
+audit.
+
+Previous session: 2026-10-09T22:57:15.140Z
 Phase 6 closed in the same `/gsd-autonomous --from 5 --interactive` run.
 Gates: discuss (4 areas + 3 post-research rulings), research, 3 plans in 3
 waves executed sequentially; Nyquist compliant; security 12/12 closed;

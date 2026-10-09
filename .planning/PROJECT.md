@@ -622,6 +622,14 @@ v1.20 requirements are in [the archive](milestones/v1.20-REQUIREMENTS.md).
   when both scopes hold the plugin; the adapter is never imported and no
   server is connected (ASTAT-01, ASTAT-02) — mcp-4 Phase 6, verified
   2026-10-09.
+- ✓ The docs describe plugin MCP delivery as built: `mcp-adapter.json`,
+  Claude Code names, tool search, variable rules, upgrading, the status
+  `info` shows, project approval, adapter settings, and every divergence
+  grouped with its license; the CHANGELOG records the milestone. A live
+  canary on Pi 1.0 with pi-mcp-adapter 5.2.0 proves the migration in one
+  reload, a fresh install, both tool-search routes and `info` status from
+  `status unknown` to `connected`; peer range `>=5.2.0 <6`
+  (GHSA-6qxp-vccf-f47h) (ADOC-01..03) — mcp-4 Phase 7, verified 2026-10-09.
 - ✓ Bare and wrapped plugin manifests follow consistent precedence, malformed
   manifests keep their failure behavior, and missing manifests remain valid —
   v1.20 Phase 1, verified 2026-09-14.
@@ -1081,6 +1089,11 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
+
+_Last updated: 2026-10-09 after mcp-4 Phase 7 (docs and live proof) verified
+3/3; review WR-01/02 and IN-01..06 fixed (8/8); security verified, 0 open;
+Nyquist validated. All seven phases are complete; the milestone audit and
+close are next. Prior updates follow._
 
 _Last updated: 2026-10-09 after mcp-4 Phase 6 (live MCP status in info)
 verified 10/10; review WR-01 (snapshot getter swap) fixed, 2 info open;

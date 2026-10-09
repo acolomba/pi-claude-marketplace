@@ -1,6 +1,7 @@
 ---
 phase: 05-automatic-migration-on-reload
-verified: 2026-10-09T17:30:00Z
+verified: 2026-10-09T23:44:34Z
+re_verification: "scoped; baseline 6f4d2d7c; head 51ebbc07"
 status: passed
 score: 4/4 must-haves verified
 covered_files:
@@ -34,11 +35,12 @@ covered_files:
   - "extensions/pi-claude-marketplace/shared/notification-dispatch.ts"
   - "extensions/pi-claude-marketplace/transaction/with-state-guard.ts"
   - "tests/architecture/mcp-migration-notice.test.ts"
+  - "tests/bridges/mcp/legacy.test.ts"
   - "tests/integration/mcp-legacy-sweep.test.ts"
   - "tests/integration/mcp-migration.test.ts"
   - "tests/integration/mcp-tool-rules.test.ts"
   - "tests/orchestrators/reconcile/mcp-migration.test.ts"
-covered_digest: "v3:sha256:22bdccb149265a5fee99b1c5715bd0f1424fcb839364406bb857b38aa70f0080"
+covered_digest: "v3:sha256:234b466f959f6166a36634853396cfe7ac9f3bd3ae2687e6f3bf49f0467559cf"
 behavior_unverified: 0
 overrides_applied: 0
 human_verification:
@@ -140,3 +142,46 @@ _Verifier: Claude (gsd-verifier)_
   (100% direct coverage for `mcp-migration.ts`; commit hook green). The
   covered digest above was recomputed with `verification.fingerprint` over
   the same covered files after that commit.
+
+## Re-verification (2026-10-09)
+
+Scoped re-verification. Baseline `6f4d2d7c`, head `51ebbc07`. `verification.status` had read `stale` because phases 6 and 7 edited files in `covered_files`. The original findings above are kept unchanged.
+
+### Changed files in `covered_files` since the baseline
+
+| File | Commits | What changed |
+|------|---------|--------------|
+| `docs/mcp-compatibility.md` | 85ed037b, 6d2abdbb, b71469da, 135b0ed8, fdbcd56a, e073d337, 99cae0d3 | Phase 7 docs: Upgrading, "Entries that stay in mcp.json", Server status in info, Divergences. Describes the migration; adds no behavior. |
+| `docs/output-catalog.md` | 58c5a007, b71469da (info status rows) | Diff touches only the `plugin info` section (new MCP status states, `(status unknown)` and `(connected)` suffixes on existing info blocks). The migration notice blocks ("moved", "left in", "removed", "stopped", "old settings removed", tool-rules warning) are untouched. |
+| `tests/integration/mcp-migration.test.ts` | fd9c887b | Two added lines: an import of `noStatusSnapshot` and `mcpStatus: noStatusSnapshot()` passed to `getPluginInfo` in the "removes an undeclared server..." test. No assertion removed or changed. |
+
+No production file in `covered_files` changed. Outside the list, `bridges/mcp/adapter-doc.ts` (comment only, 5.1.0 to 5.2.0) and `tests/bridges/mcp/adapter-entry.test.ts` (adapter floor constants) changed; neither carries a phase 5 truth. `orchestrators/plugin/info.ts` and the new `info-mcp-status.ts` changed for Phase 6 and are not part of the migration path.
+
+### Per-truth re-check
+
+| # | Truth (as amended) | Touched by | Result | Evidence |
+|---|--------------------|-----------|--------|----------|
+| 1 | `/reload` moves marked entries into `mcp-adapter.json` in the fresh-install shape; a second `/reload` changes no bytes (AMIG-01). No ROADMAP amendment marker on this criterion. | Only the two-line `mcpStatus` seed in `mcp-migration.test.ts` (fd9c887b); production code untouched. | HOLDS | `git show fd9c887b` shows the test edit is additive. Integration suite (18 tests) passes at HEAD, including the fresh-install oracle and no-byte-change reload tests. The Phase 7 live canary (`07-VERIFICATION.md` truth 2) saw the migration finish in one reload on adapter 5.2.0 (M1 notice, M3 `mcp.json` has no marked entry, `mcp-adapter.json` holds `plugin_echo_echo_`). |
+| 2 | A failure between adapter write and `mcp.json` removal loses no server; next `/reload` finishes with no duplicate; write order asserted (AMIG-01, AMIG-02). | None. | HOLDS | `orchestrators/reconcile/mcp-migration.ts`, `bridges/mcp/legacy.ts` and their tests have no diff since the baseline. 131 unit/architecture tests pass (was 130; the extra test came with the operator-ruling commit `79e71b25`, already inside the baseline fingerprint window). Integration "a filesystem refusal between the two writes..." passes. |
+| 3 | One migration notice with `old -> new` rows, the rename-cost line, and the reload hint (AMIG-03). Wording accepted by the operator (human_verification result kept). | `docs/output-catalog.md`, `docs/mcp-compatibility.md` (docs only). | HOLDS | The `Plugin MCP servers moved ...` catalog blocks (`output-catalog.md` lines 4367-4420) are not in the diff. `tests/architecture/mcp-migration-notice.test.ts` (the byte-equality gate between catalog blocks and the renderer) passes. `mcp-compatibility.md` Upgrading quotes the notice's first line and one row, both matching the catalog. |
+| 4 | A marked legacy entry with no owning record stays in `mcp.json` with a warning (AMIG-04). | None. | HOLDS | No production or test diff. Unowned-entry integration tests pass. `mcp-compatibility.md` "Entries that stay in mcp.json" lists the no-owner row with the matching remedy. |
+
+Test assertion weakening: none found. `git show fd9c887b -- tests/integration/mcp-migration.test.ts` is two insertions and no deletions.
+
+### Commands run
+
+Environment: `TMPDIR=/var/tmp/mcp4-reverify-p5`, `PI_MCP_ADAPTER_ROOT=/var/tmp/mcp4-p7-research/a520/node_modules/pi-mcp-adapter` (5.2.0). Repo tests use hermetic homes.
+
+| Command | Exit | Result |
+|---------|------|--------|
+| `git log --oneline 6f4d2d7c..HEAD -- docs/mcp-compatibility.md docs/output-catalog.md tests/integration/mcp-migration.test.ts` | 0 | 10 commits listed above |
+| `git diff 6f4d2d7c HEAD -- docs/output-catalog.md` / `-- docs/mcp-compatibility.md` / `git show fd9c887b -- tests/integration/mcp-migration.test.ts` | 0 | as summarised above |
+| `node --test tests/integration/mcp-migration.test.ts tests/integration/mcp-legacy-sweep.test.ts tests/integration/mcp-tool-rules.test.ts` | 0 | 18 pass, 0 fail |
+| `node --test tests/orchestrators/reconcile/mcp-migration.test.ts tests/bridges/mcp/legacy.test.ts tests/architecture/mcp-migration-notice.test.ts` | 0 | 131 pass, 0 fail |
+| `node .claude/gsd-core/bin/gsd-tools.cjs query verification.fingerprint ...` | 0 | `covered_files` and `covered_digest` copied verbatim into the frontmatter; `tests/bridges/mcp/legacy.test.ts` added because the truth 2 evidence rests on it |
+
+Full gate (cited, run by the orchestrator in this session): `npm run check` on HEAD `51ebbc07`, clean tree, Node v26.11.0, pi-mcp-adapter 5.2.0, `TMPDIR=/var/tmp/mcp4-check-tmp`: exit 0 (typecheck, lint, lint:workflows, fallow, format:check, test:corresponding, test:unpaired, test:integration, test:coverage:direct:all; merged `coverage/direct.lcov`, 269 records). Not re-run here.
+
+### Result
+
+All four truths still hold at HEAD. Status stays `passed`. No gaps.

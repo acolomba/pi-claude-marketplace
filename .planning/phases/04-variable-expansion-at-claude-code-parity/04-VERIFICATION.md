@@ -1,8 +1,9 @@
 ---
 phase: 04-variable-expansion-at-claude-code-parity
-verified: 2026-10-07T23:10:00Z
+verified: 2026-10-09T23:45:22Z
 status: passed
 score: 5/5 must-haves verified
+re_verification: "scoped; baseline e88226fa; head 51ebbc07"
 covered_files:
   - ".github/workflows/ci.yml"
   - ".planning/phases/04-variable-expansion-at-claude-code-parity/04-01-PLAN.md"
@@ -50,9 +51,11 @@ covered_files:
   - "package-lock.json"
   - "package.json"
   - "tests/bridges/mcp/adapter-escape.test.ts"
+  - "tests/bridges/mcp/stage.test.ts"
+  - "tests/domain/mcp-server-features.test.ts"
   - "tests/integration/adapter-expansion-conformance.test.ts"
   - "tests/integration/mcp-variable-expansion.test.ts"
-covered_digest: "v3:sha256:b54877a6f6eb85a34b77d59c53e972d8892e6fc0e278a389b0760e4544ae40ff"
+covered_digest: "v3:sha256:2fddf66528d4bf9e86678fb0938c16d8b5eded07552ecd39c5c89f30d12147a1"
 behavior_unverified: 0
 overrides_applied: 0
 human_verification:
@@ -188,3 +191,63 @@ Operator review on 2026-10-07 (asked inline during `/gsd-autonomous --from 4 --i
 4. The as-found `enable` row severity and `import` row shape: accepted for this phase and filed as BACKLOG `MCPROW-01`.
 
 Status set to `passed`.
+
+## Re-verification (2026-10-09)
+
+**Scope:** scoped re-verification. Baseline `e88226fa` (the commit of the report above), head `51ebbc07`. `verification.status` read `stale` because phases 5 to 7 edited files in `covered_files`. The original findings and the operator's human-verification result above stand unchanged. Result: **all 5 truths still hold, as amended. Status stays `passed`.**
+
+### Changed covered files since e88226fa
+
+- `.github/workflows/ci.yml` (2534109a): CI installs `pi-mcp-adapter@5.2.0`. The step is still `--ignore-scripts --omit=peer` with the same `zizmor` suppression, which the operator accepted.
+- `package.json`, `package-lock.json` (2534109a, D-07-07): peer range `>=5.2.0 <6`.
+- `README.md`, `README.es.md`, `docs/mcp-compatibility.md`, `docs/output-catalog.md` (phases 5 to 7 docs commits): adapter floor 5.2.0, status in info, migration, tool-rule notice. The variable-rule paragraph (docs/mcp-compatibility.md:256) now says 5.2.0 and keeps its claims. The catalog diff adds blocks and one `info` line state prefix. It removes no variable-notice text.
+- `bridges/mcp/stage.ts`, `bridges/mcp/types.ts`: legacy `mcp.json` removal, leftover removal, two-file replace and rollback (AMIG-01/02), `tool-rules-unenforced` notices.
+- `domain/mcp-server-features.ts`, `domain/resolver-types.ts`: `tools[].permission_policy` and `toolPermissions` no longer block (AMIG-01, Phase 5). They moved to `unenforcedToolRules`. The `command ~` and `args ~` features and their classifier are untouched.
+- `index.ts`: adds `createMcpStatusTracker` and passes `mcpStatus` to the edge. The `applyMcpAdapterEnv` calls at load and on `session_start` are untouched.
+- `orchestrators/marketplace/shared.ts`: `foldUnstageNotices` also drops `tool-rules-unenforced` for a removed server. The `variables-missing` and `credentials-blanked` drop (WR-03) is unchanged.
+- `orchestrators/plugin/info.ts`: adds a status stamp (`withServerStatus`) and a read-only project-record read. The `scanClaudeServerVariables` call (info.ts:1034) is untouched.
+- `shared/notification-dispatch.ts`, `notification-grammar.ts`, `notification-types.ts`: new notice kinds, the `McpServerStatus` token, and the state placed first in the `mcp:` line. The `unset` and `withheld` parts and the two variable notices keep their renderers.
+
+Files that carry the variable rule and have **no change** since e88226fa: `bridges/mcp/substitute.ts`, `adapter-escape.ts`, `adapter-entry.ts`, `domain/claude-mcp-variables.ts`, `domain/claude-credential-denylist.ts`, `shared/session-env.ts`, and the tests `adapter-escape.test.ts`, `adapter-expansion-conformance.test.ts`, `mcp-variable-expansion.test.ts`, `substitute.test.ts`, `claude-mcp-variables.test.ts`, `claude-credential-denylist.test.ts`. (`tests/bridges/mcp/adapter-entry.test.ts` changed only its 5.1.0 to 5.2.0 comments, its `shasum` comments and the pinned peer range string.)
+
+### Per-truth table
+
+| # | Truth | Touched by | Result | Evidence |
+|---|-------|------------|--------|----------|
+| 1 | Claude's five fields only; `CLAUDE_PLUGIN_ROOT`, `CLAUDE_PLUGIN_DATA`, project-scope `CLAUDE_PROJECT_DIR` (AVAR-01) | Nothing in the expansion code. `stage.ts` gained only legacy and notice logic; the project/user arm and the `process.env` read in `prepareStageMcpServers` are in the unchanged part of the diff. `index.ts` env calls untouched. | VERIFIED, holds | `substitute.ts`, `session-env.ts` byte-identical. `substitute.test.ts`, `session-env.test.ts`, `mcp-variable-expansion.test.ts` pass (450 tests, 0 skip). |
+| 2 | `${VAR:-default}` rule, plain `${VAR}` stays, no env value on disk, in fixtures or in notifications (AVAR-02) | `stage.ts` (new write paths), `legacy.ts`, `mcp-migration.ts` (new) | VERIFIED, holds | `grep process.env\|substituteAndInject\|expandClaudeValue\|stampServers` over `legacy.ts`, `reconcile/mcp-migration.ts`, `reconcile/apply.ts`, `info-mcp-status.ts`, `platform/mcp-status.ts` finds none. The migration removes old entries and re-stages through the same expansion, so it adds no new route for an environment value to reach a file. `mcp-variable-expansion.test.ts` asserts sentinels `avar-sentinel-04-02/03/09` absent from `mcp-adapter.json` and from every notification, and passes at HEAD. The conformance run feeds sentinels through the real adapter. |
+| 3 | Leading `!` written `!!`, adapter-only syntax escaped, real-adapter conformance, MENVX-01/ENVLIT-01 closed, `~` makes the plugin partial (AVAR-03) | `ci.yml`, `package.json` (floor 5.2.0, D-07-07); `mcp-server-features.ts` (tool rules no longer block, D-05 / AMIG-01) | VERIFIED, holds (as amended) | `adapter-escape.ts` and its test are unchanged. The conformance test, run against the real pi-mcp-adapter 5.2.0 (the floor the project now pins): 52 pass, 0 skip, 0 fail. `PI_MCP_ADAPTER_ROOT=/nonexistent` exits 1, so a missing adapter still fails the run. CI now installs 5.2.0 (ci.yml:121). The tool-rule change touches `remoteFeature` only. `command ~` and `args ~` still make the plugin `partially-available`: `mcp-server-features.test.ts` and `mcp-home-path-partial.test.ts` pass. The amended ROADMAP wording of the criterion (a re-expanded field with no escape warns, not a parity claim) is unaffected by it. |
+| 4 | Unset variable with no default warns at install (AVAR-04) | `stage.ts` (notice order), `foldUnstageNotices`, `notification-dispatch.ts`, `info.ts` | VERIFIED, holds | `variableNotices` is still built from the unchanged `variableReports`, and `toolRuleNotices` and `leftoverNotices` come after it, so the existing order holds. `foldUnstageNotices` still drops `variables-missing` and `credentials-blanked` for a removed server (WR-03). `info.ts:1034` still calls `scanClaudeServerVariables`. Tests pass: `stage.test.ts`, `mcp-config-notices.test.ts`, `shared.test.ts`, `info.test.ts`, `import/execute.test.ts:1923` and `reconcile/apply.test.ts:6149` (AVAR-04 cascade cases), `notification-dispatch.test.ts`, `notification-grammar.test.ts`. |
+| 5 | Credential deny-list blanks `url` and `headers` and a security test proves it (AVAR-05) | `notification-grammar.ts` and `notification-types.ts` (info line gains a state prefix only) | VERIFIED, holds | `claude-credential-denylist.ts` and `claude-mcp-variables.ts` are unchanged, with their tests. The `withheld` list still renders. `mcp-variable-expansion.test.ts:117` (the install-level security test) and the conformance sentinels pass. |
+
+### Threat-model claims
+
+- **No environment value on disk:** holds. See truth 2. The only new writers (`legacy.ts`, `reconcile/mcp-migration.ts`) do not read `process.env` and carry no old entry into the new file.
+- **Credential deny-list:** holds. Files and tests unchanged. Truth 5.
+- **No shell execution through a leading `!`:** holds. `adapter-escape.ts` is unchanged, and the conformance suite proves `!!` against the real adapter 5.2.0 functions.
+
+### Commands run
+
+All with `TMPDIR=/var/tmp/mcp4-reverify-p4`. The adapter runs also set `PI_MCP_ADAPTER_ROOT=/var/tmp/mcp4-p7-research/a520/node_modules/pi-mcp-adapter` (version 5.2.0, read from its `package.json`).
+
+| Command | Exit | Result |
+|---------|------|--------|
+| `node --test --test-reporter=tap tests/integration/adapter-expansion-conformance.test.ts` | 0 | 52 pass, 0 skip, 0 fail |
+| `PI_MCP_ADAPTER_ROOT=/nonexistent node --test tests/integration/adapter-expansion-conformance.test.ts` | 1 | fails as intended |
+| `node --test` on `claude-mcp-variables`, `claude-credential-denylist`, `mcp-server-features`, `adapter-escape`, `substitute`, `adapter-entry`, `session-env`, `mcp-variable-expansion`, `mcp-home-path-partial` | 0 | 450 pass, 0 fail, 0 skip |
+| `node --test` on `bridges/mcp/stage`, `bridges/mcp/types`, `architecture/mcp-config-notices`, `architecture/peer-floor`, `tests/index`, `marketplace/shared`, `plugin/info`, `integration/mcp-tool-rules` | 0 | 441 pass, 0 fail, 0 skip |
+| `node --test` on `import/execute`, `reconcile/apply`, `notification-dispatch`, `notification-grammar` | 0 | 550 pass, 0 fail, 0 skip |
+| `gsd-tools query verification.fingerprint ...` | 0 | `covered_files` and `covered_digest` copied verbatim into the frontmatter |
+
+No race test failed, so nothing was re-run.
+
+### Full-gate result
+
+The orchestrator ran `npm run check` on HEAD `51ebbc07` (clean tree), Node v26.11.0, `PI_MCP_ADAPTER_ROOT` = pi-mcp-adapter 5.2.0, `TMPDIR=/var/tmp/mcp4-check-tmp`: **exit 0** (typecheck, lint, lint:workflows, fallow, format:check, test:corresponding, test:unpaired, test:integration, test:coverage:direct:all; merged `coverage/direct.lcov`, 269 records). This verifier did not re-run it.
+
+### Result
+
+5/5 truths hold at HEAD as amended. Amendments applied: AMIG-01 (Phase 5: tool permission rules no longer block a plugin, so `unenforcedToolRules` replaces two blocking features) and D-07-07 (adapter floor 5.2.0). Neither changes a Phase 4 criterion's text or its proof. The four operator-accepted human-verification items above stand as recorded. The `info` line now has the shape `(state; unset A, B; withheld C)` since Phase 6 (ASTAT-01, D-06-03), a superset of the line the operator accepted. The `unset` and `withheld` wording is unchanged.
+
+_Re-verified: 2026-10-09_
+_Verifier: Claude (gsd-verifier)_

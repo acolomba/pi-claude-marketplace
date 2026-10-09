@@ -1,6 +1,6 @@
 ---
 phase: 03-claude-code-tool-names-and-tool-search
-verified: 2026-10-06T21:00:00Z
+verified: 2026-10-09T23:45:47Z
 status: passed
 score: 5/7 must-haves verified
 covered_files:
@@ -24,13 +24,25 @@ covered_files:
   - .planning/phases/03-claude-code-tool-names-and-tool-search/03-09-SUMMARY.md
   - docs/mcp-compatibility.md
   - extensions/pi-claude-marketplace/bridges/agents/convert.ts
+  - extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts
   - extensions/pi-claude-marketplace/bridges/mcp/adapter-entry.ts
   - extensions/pi-claude-marketplace/bridges/mcp/stage.ts
   - extensions/pi-claude-marketplace/bridges/mcp/unstage.ts
   - extensions/pi-claude-marketplace/domain/components/hooks/matcher.ts
+  - extensions/pi-claude-marketplace/domain/mcp-resolution.ts
   - extensions/pi-claude-marketplace/domain/mcp-server-features.ts
   - extensions/pi-claude-marketplace/domain/name.ts
-covered_digest: "v3:sha256:419727aea0923bb98aebb8a5f7ed47b723d439637aed8e0ea62373490c88d173"
+  - extensions/pi-claude-marketplace/orchestrators/plugin/info.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts
+  - tests/bridges/mcp/adapter-entry.test.ts
+  - tests/bridges/mcp/stage.test.ts
+  - tests/domain/mcp-resolution.test.ts
+  - tests/domain/mcp-server-features.test.ts
+  - tests/domain/name.test.ts
+  - tests/orchestrators/plugin/info.test.ts
+  - tests/orchestrators/plugin/install-flow.test.ts
+covered_digest: "v3:sha256:53b6d5970d463939a05ce4348d5c9999bb081b172d0a5748ea690d838e6733f8"
+re_verification: "scoped; baseline c492bbde; head 51ebbc07"
 behavior_unverified: 0
 overrides_applied: 0
 deferred:
@@ -170,4 +182,73 @@ No gaps block the phase goal. A plugin's MCP tools get the Claude Code key and p
 ---
 
 _Verified: 2026-10-06T21:00:00Z_
+_Verifier: Claude (gsd-verifier)_
+
+---
+
+## Re-verification (2026-10-09)
+
+**Scope:** scoped re-verification. Baseline `c492bbde`, head `51ebbc07`. `verification.status` read `stale` because later phases edited files in `covered_files`. The findings above stay as written. The review decisions in `human_verification` (WR-01..03 and the fallow audit) were settled by the operator and stay as they are; this pass does not reopen them. Status stays `passed`: every truth still holds as amended. The `score` line is the original one, kept unchanged (truths 3b and 5b rest on those operator decisions).
+
+### Changed files since the baseline
+
+| File | Commits (since `c492bbde`) | What changed |
+| ---- | -------------------------- | ------------ |
+| `docs/mcp-compatibility.md` | 20+ `docs(mcp)` commits, Phases 4, 5, 7 | Variable expansion, approval, migration, status, upgrade notes, grouped divergences, 5.2.0 floor |
+| `bridges/mcp/adapter-entry.ts` | `0f4d7a8e` (Phase 4) | Translate first, then expand variables (AVAR-01..03); `stampServers` also returns `variableReports` |
+| `bridges/mcp/stage.ts` | Phases 4 and 5 (`257483b6`, `c2291945`, `7a7d9783`, `c26007be`, ...) | Legacy `mcp.json` move and leftover removal (AMIG-01/02), variable and tool-rule notices, multi-file replace and rollback |
+| `domain/mcp-server-features.ts` | Phases 4 and 5 (`00000855`, `2bbce472`) | `command ~` / `args ~` block (D-04-06); tool permission rules move from blocking to a warning (D-05-05) |
+
+Not changed since the baseline (empty `git diff --stat`): `domain/name.ts`, `domain/components/hooks/matcher.ts`, `bridges/agents/convert.ts`, `bridges/mcp/unstage.ts`, `bridges/hooks/dispatch.ts`, `domain/mcp-resolution.ts`. Touched indirectly, so checked too: `orchestrators/plugin/info.ts` (Phase 6 status and Phase 4 variable lists) and `orchestrators/plugin/install-outcome.ts` (19-line AMIG-02 notice change in `mcpPhase`).
+
+### Per-truth result
+
+| # | Truth | Touched by | Result | Evidence at HEAD |
+| - | ----- | ---------- | ------ | ---------------- |
+| 1 | SC1 names, key `plugin_<p>_<s>_`, `toolPrefix: "mcp"`, one builder | Not touched: `name.ts` unchanged. `stage.ts` and `adapter-entry.ts` changed but still call the builder | VERIFIED | Spot check: `("acme","a😀b")` gives `plugin_acme_a__b_`, `("my-tools","db.x y")` gives `plugin_my-tools_db_x_y_`, `("acme","")` gives `plugin_acme__`. `translateMcpServer` still ends every entry with `directTools` and `toolPrefix: "mcp"`, and drops a plugin-declared `toolPrefix`. The replace regex appears only at `name.ts:251` (the other `[A-Za-z0-9_-]` hits are the matcher and `if:` segment validators and an unrelated skill-token regex). `stage.ts` imports `generatedMcpServerKey` and `foldedMcpServerKey` from `domain/name.ts`. Live: the Phase 7 canary shows `plugin_echo_echo_` with `toolPrefix "mcp"` and the tool `mcp__plugin_echo_echo__echo_canary` (07-VERIFICATION truth 2) |
+| 2 | SC2 hook matcher, `if:`, agent `tools:` match delivered tools | Not touched: `matcher.ts`, `convert.ts`, `dispatch.ts` unchanged | VERIFIED | Targeted run below: matcher, dispatch and convert tests pass. The agent mapping reads the servers written by the install, whose key builder is unchanged |
+| 3a | SC3 same-plugin, cross-plugin and `-`/`_`-folded key clash refused; no length check (amended by D-03-12, D-03-13, D-03-17) | `stage.ts` (touched). The `keyedServers` walk and the `foldedMcpServerKey` comparison are not in the diff | VERIFIED | The stage diff adds the legacy move, notices and rollback; it leaves the collision walk alone. Spot check: `foldedMcpServerKey("plugin_foo_my-db_") === foldedMcpServerKey("plugin_foo_my_db_")` is `true`. `stage.test.ts` collision cases and `install-outcome.test.ts` `ANAME` pass. No tool-name length check in `domain/` or `bridges/mcp/` (the only `length > 128` is the unrelated saved-workflow name gate, `name.ts:393`) |
+| 3b | SC3 wording "before any write" | `stage.ts`, `install-outcome.ts` touched; ledger order not changed (`mcpPhase` is still the fifth phase) | VERIFIED as decided (WR-03 settled by the operator) | Behavior is the one the first report described: the refusal is raised in `mcpPhase`, and the ledger rolls the earlier phases back. Phase 5 makes that rollback restore both `mcp-adapter.json` and `mcp.json` (`restoreFiles`, `stage.ts`). `docs/mcp-compatibility.md:27` still says "fails before it writes anything". I did not reopen the WR-03 decision |
+| 4 | SC4 `directTools: "search"`, `alwaysLoad` gives `true`, `lifecycle` unset, divergence documented | `mcp-server-features.ts` and docs touched; the `directTools` and `lifecycle` logic is not in the diff | VERIFIED | Spot check: `{command:"a", alwaysLoad:true}` gives `directTools: true`; an entry without it gives `"search"`; plugin `lifecycle`, `auth`, `toolPrefix` and `directTools` never reach the entry. Docs: `mcp-compatibility.md:36-44` (search and `alwaysLoad`), `:77-79` and `:339` (lazy `lifecycle`, divergence with reason ANAME-05). Live: the Phase 7 canary shows `directTools "search"` and a tool found only after `mcp({ search })` and `tool_search` |
+| 5a | SC5 `description`, `sse` to `httpTransport`, timeout and OAuth callback port, `{unsupported mcp}` partial install (amended by D-03-10, then D-04-06 and D-05-05) | `mcp-server-features.ts` touched | VERIFIED as amended | Spot check: `{type:"sse", timeout:5000, oauth:{callbackPort:8080}, ...}` gives `httpTransport:"sse"`, `requestTimeoutMs:5000`, `oauth.redirectUri:"http://localhost:8080/callback"`, `description:"desc"`. `classifyMcpServer`: `ws`, `headersHelper` and `oauth.xaa` still `blocked`. Changed set, both decided: `command ~` and `args ~` now block (D-04-06, AVAR-03), and `tools[].permission_policy` / `toolPermissions` no longer block (D-05-05, which amends D-03-10 and D-03-20; the server installs with a `tool-rules-unenforced` notice). A valid remote server with `toolPermissions: {a:"allow"}` classifies `supported`. Malformed input (`command: ""`, `timeout: 0`, `url` with no `type`) is still `malformed`. The `--partial` and `info` behavior is covered by the `ANAME`/`AFILE` install-flow tests and the info tests below. ROADMAP SC5's `(ws, headersHelper, ...)` list is open-ended, so the amendments stay inside the criterion |
+| 5b | ANAME-07 OAuth with `headers` | `mcp-server-features.ts` touched; `oauthField` not in the diff | VERIFIED as decided (WR-02 settled by the operator) | `oauthField` still maps `clientId`, `callbackPort`, `authServerMetadataUrl` and `scopes`, and the translated entry still sets no `auth`. I did not reopen the WR-02 decision |
+| - | Docs: naming, search, length, lifecycle, divergences | `docs/mcp-compatibility.md` touched heavily | VERIFIED | The naming (`:15-17`), key table (`:19-23`), folding refusal (`:27`), tool search (`:36-44`), length (`:69`, Anthropic 128), lifecycle (`:77-79`), `{unsupported mcp}` partial install (`:158`) and `{malformed mcp}` (`:168`) sections are all present. Later phases added text; none contradicts a Phase 3 statement |
+| - | `info` shows `plugin:<p>:<s>` and names each left-out server with its feature | `info.ts` touched (Phase 4 variable lists, Phase 6 status) | VERIFIED | `composeMcpEntries` still builds the name with `mcpServerDisplayName` and sets `unsupportedFeature` on each dropped server. `info.test.ts`, `edge/handlers/plugin/info.test.ts`, `info-mcp-status.test.ts` and `catalog-contract.test.ts` pass (274 tests) |
+| - | A partial install writes only the supported servers | `install-outcome.ts` (+9 lines, notices only) | VERIFIED | `mcpPhase` still passes `c.resolved.mcpServers` (supported servers only); the diff only appends the legacy-removal notices after a `replaced` result |
+
+### Deferred truth, closed by Phase 7
+
+The original deferred item (a real Pi 1.0 with pi-mcp-adapter 5 loads the entries this extension itself writes, and the model reaches the tools through search under the Claude names) is closed. `.planning/phases/07-docs-and-live-proof/07-VERIFICATION.md`, truth 2 (ADOC-02, VERIFIED, status `passed`), records `tests/live-uat/mcp-adapter-canary.mjs` run against pi-mcp-adapter 5.2.0 on Pi 1.0.0 in a sandbox: exit 0, 14 PASS lines. It shows the production key `plugin_echo_echo_` with `toolPrefix "mcp"` and `directTools "search"`, the tool `mcp__plugin_echo_echo__echo_canary` declared only after the search, and a successful tool call. I did not re-run the canary (the task forbids it); the evidence is Phase 7's own run. The original `deferred` entry above stays as written.
+
+### Commands run (repository root, hermetic)
+
+`TMPDIR=/var/tmp/mcp4-reverify-p3`, `PI_MCP_ADAPTER_ROOT=/var/tmp/mcp4-p7-research/a520/node_modules/pi-mcp-adapter` (pi-mcp-adapter 5.2.0).
+
+| Command | Exit | Result |
+| ------- | ---- | ------ |
+| `node --test tests/domain/name.test.ts tests/domain/mcp-server-features.test.ts tests/domain/components/hooks/matcher.test.ts tests/bridges/mcp/adapter-entry.test.ts tests/bridges/mcp/stage.test.ts tests/bridges/mcp/unstage.test.ts tests/bridges/mcp/marker.test.ts tests/bridges/agents/convert.test.ts tests/bridges/hooks/dispatch.test.ts tests/domain/mcp-resolution.test.ts` | 0 | 632 pass, 0 fail, 0 skipped |
+| `node --test --test-name-pattern 'ANAME\|AFILE' tests/orchestrators/plugin/install-flow.test.ts` | 0 | 29 pass, 0 fail |
+| `node --test --test-name-pattern 'ANAME' tests/orchestrators/plugin/install-outcome.test.ts` | 0 | 3 pass, 0 fail |
+| `node --test --test-name-pattern 'ANAME\|AFILE' tests/orchestrators/plugin/update-flow.test.ts` | 0 | 9 pass, 0 fail (the baseline run used a narrower pattern and saw 3) |
+| `node --test tests/orchestrators/plugin/info.test.ts tests/architecture/catalog-uat/catalog-contract.test.ts tests/edge/handlers/plugin/info.test.ts tests/orchestrators/plugin/info-mcp-status.test.ts` | 0 | 274 pass, 0 fail, 0 skipped |
+| `node` spot-check scripts (key builder, fold, `translateMcpServer`, `classifyMcpServer`, `unenforcedToolRules`) | 0 | Outputs quoted in the table above |
+| `git diff --stat c492bbde HEAD -- <covered files>` and `git log --oneline c492bbde..HEAD -- <4 files>` | 0 | Changed-file list above |
+| `node .claude/gsd-core/bin/gsd-tools.cjs query verification.fingerprint <phase dir> <files>` | 0 | `covered_files` and `covered_digest` copied verbatim into the frontmatter |
+
+Every test run was a single targeted `node --test` invocation with no flake and no re-run. No live canary, `pi` or `scripts/pi.sh` was run, so the real `~/.pi/agent` was not touched.
+
+### Full-gate evidence
+
+The orchestrator ran `npm run check` in this session on HEAD `51ebbc07` (clean tree), Node v26.11.0, `PI_MCP_ADAPTER_ROOT` = pi-mcp-adapter 5.2.0, `TMPDIR=/var/tmp/mcp4-check-tmp`: exit 0 across typecheck, lint, lint:workflows, fallow, format:check, test:corresponding, test:unpaired, test:integration and test:coverage:direct:all (merged `coverage/direct.lcov`, 269 records). I did not re-run it.
+
+### Notes
+
+- `03-REVIEW-DISPOSITION.md` still lists all ten findings as `open` (recorded 2026-10-06). The decisions for WR-01..03 and the fallow audit were relayed to this pass by the orchestrator; I found no later record of them in the repository. The disposition file is out of scope and I did not edit it.
+- `docs/mcp-compatibility.md:27` still reads "fails before it writes anything", the wording WR-03 asked to either enforce or reword. This matches the operator decision as relayed; flagged only so the two stay visible together.
+
+### Re-verification verdict
+
+Status `passed`. No truth regressed. Truths 1 and 2 and their code (`name.ts`, `matcher.ts`, `convert.ts`, `dispatch.ts`) are untouched. Truths 3a, 4 and 5a rest on files that changed, and each still holds at HEAD with two decided amendments (D-04-06 adds a `~` block; D-05-05 moves permission rules from blocking to a warning).
+
+_Re-verified: see `verified` in the frontmatter_
 _Verifier: Claude (gsd-verifier)_

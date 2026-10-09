@@ -1,6 +1,6 @@
 ---
 phase: 06-live-mcp-status-in-info
-verified: 2026-10-09T20:00:00Z
+verified: 2026-10-09T23:44:46Z
 status: passed
 score: 10/10 must-haves verified
 covered_files:
@@ -24,7 +24,8 @@ covered_files:
   - tests/integration/pi-mcp-adapter-peer.ts
   - tests/orchestrators/plugin/info-mcp-status.test.ts
   - tests/platform/mcp-status.test.ts
-covered_digest: "v3:sha256:d74ad21dc646ccd384c19f10deec1c78eff2b2779d729259bad1397677a33eec"
+covered_digest: "v3:sha256:73cd431009d47a907fa0ce35ebd6e05dfbbaaa2f1368d12d188da866817e2c07"
+re_verification: "scoped; baseline aa25cd0b; head 51ebbc07"
 behavior_unverified: 0
 overrides_applied: 0
 ---
@@ -83,4 +84,60 @@ No gaps. All four roadmap success criteria and the plan-level truths, key links 
 ---
 
 _Verified: 2026-10-09_
+_Verifier: Claude (gsd-verifier)_
+
+## Re-verification (2026-10-09)
+
+**Scope:** scoped re-verification. Baseline `aa25cd0b`, head `51ebbc07`. The earlier findings above stand and are unchanged.
+**Trigger:** `verification.status` read `stale` because Phase 7 edited two files in `covered_files`.
+
+### Changed covered files since the baseline
+
+| File | Commit | What changed (`git diff aa25cd0b HEAD`) |
+|------|--------|------------------------------------------|
+| `extensions/pi-claude-marketplace/platform/mcp-status.ts` | `58c5a007` | One line, a doc comment only: "pi-mcp-adapter 5.1.0 reports" became "5.2.0". No code, type or schema change. Confirmed comment-only. |
+| `docs/output-catalog.md` | `b71469da`, `58c5a007` | One prose paragraph under the status token table: "5.1.0" became "5.2.0" and one sentence was added (a server the reload move wrote into `mcp-adapter.json` in this session reads `not loaded` until the next `/reload`, D-05-15). The token table and every byte-locked state block are untouched. |
+
+No other file in `covered_files` changed. `git diff aa25cd0b HEAD --stat` over `extensions/pi-claude-marketplace/{shared,edge,orchestrators}`, `index.ts`, `tests/platform`, `tests/orchestrators`, `tests/integration/mcp-status-conformance.test.ts` and `tests/integration/pi-mcp-adapter-peer.ts` is empty. Other changes in the range (`bridges/mcp/adapter-doc.ts` comment, `peer-floor`, `adapter-entry` and `mcp-override-lifecycle` tests, live-UAT files) are outside this phase's covered files and its truths.
+
+The added catalog sentence is consistent with the code: `lookup` answers `not loaded` for a key the usable snapshot does not list, and a server written to `mcp-adapter.json` in this session is not in the adapter's snapshot until the adapter re-reads its config on `/reload`. Catalog contract and parser tests pass (below).
+
+### Per-truth result
+
+| # | Truth | Touched by | Result | Evidence |
+|---|-------|------------|--------|----------|
+| 1 | SC1/ASTAT-01 adapter state in info, no adapter import | `mcp-status.ts` comment only | VERIFIED | Code unchanged. `mcp-status.test.ts`, `info.test.ts`, `index.test.ts`, `edge/handlers/plugin/info.test.ts` pass (328/328 with the other two files). |
+| 2 | SC2 lazy server shows resting state | none | VERIFIED | Untouched. `info-mcp-status.test.ts` matrix passes. |
+| 3 | SC3/ASTAT-02 explicit unknown | doc paragraph (wording only) | VERIFIED | Tracker code unchanged. Platform tests pass. Conformance test with real 5.2.0 shutdown snapshot passes. Phase 7 canary (`07-VERIFICATION.md` truth 2) saw `(status unknown)` in a fresh deferred session, then `(connected)` after first MCP use on a real adapter 5.2.0 and Pi 1.0.0: this also covers the deferred-session reading (D-06-06a). |
+| 4 | SC4 closed-catalog amendment, gates pass | `docs/output-catalog.md` prose | VERIFIED | Token table and byte-locked blocks identical to the baseline. `catalog-contract`, `catalog-parser`, `notify-closed-set-locks`, `closed-set-enrollment`, `notify-grammar-invariant`, `notify-stamp-coverage`, `notify-producer-wire-coverage` and related architecture tests pass (151 tests). Full gate green (below). |
+| 5 | Shadow rule D-06-09 | none | VERIFIED | `info-mcp-status.ts`, `info.ts` unchanged. Info suites pass. |
+| 6 | `--scope user` read-only on the project record | none | VERIFIED | Untouched. The unparseable-`state.json` test passes in `info.test.ts`. |
+| 7 | Severity unchanged, no state on disabled/not-installed rows | none | VERIFIED | Untouched. Owner tests pass. |
+| 8 | Prohibitions: no payload text, no stale/guessed state, no publish, no persistence | `mcp-status.ts` comment only | VERIFIED | Code unchanged. `index.test.ts` strict bus mock (only `on`) and the platform tests pass. |
+| 9 | Conformance with the adapter | adapter version moved 5.1.0 to 5.2.0 | VERIFIED | Originally proven on 5.1.0. Re-run at HEAD against pi-mcp-adapter 5.2.0 (`PI_MCP_ADAPTER_ROOT=/var/tmp/mcp4-p7-research/a520/node_modules/pi-mcp-adapter`, `package.json` version `5.2.0`): 3/3 pass, 0 skipped. The channel, version and union are unchanged in 5.2.0. |
+| 10 | Drift guard on status union, channel, snapshot version | adapter 5.2.0 | VERIFIED | Third conformance case passes against 5.2.0 `dist/types.d.ts`. |
+
+Score: 10/10 still hold. No gaps. `behavior_unverified: 0`, no overrides.
+
+### Commands run (all with `TMPDIR=/var/tmp/mcp4-reverify-p6`)
+
+| Command | Exit | Result |
+|---------|------|--------|
+| `git log --oneline aa25cd0b..HEAD -- docs/output-catalog.md extensions/pi-claude-marketplace/platform/mcp-status.ts` | 0 | `b71469da`, `58c5a007` |
+| `git diff aa25cd0b HEAD -- extensions/pi-claude-marketplace/platform/mcp-status.ts docs/output-catalog.md` | 0 | comment-only and prose-only, as described above |
+| `PI_MCP_ADAPTER_ROOT=<5.2.0> node --test tests/integration/mcp-status-conformance.test.ts` | 0 | 3 pass, 0 fail, 0 skipped |
+| `node --test tests/platform/mcp-status.test.ts tests/orchestrators/plugin/info-mcp-status.test.ts tests/orchestrators/plugin/info.test.ts tests/index.test.ts tests/edge/handlers/plugin/info.test.ts` | 0 | 328 pass, 0 fail |
+| `node --test tests/architecture/{closed-set-enrollment,notify-closed-set-locks,notify-grammar-invariant,notify-stamp-coverage,notify-producer-wire-coverage}.test.ts tests/architecture/catalog-uat` | 0 | 51 pass, 0 fail |
+| `node --test tests/architecture/catalog-uat/catalog-contract.test.ts tests/architecture/catalog-uat/catalog-parser.test.ts tests/architecture/{partial-vocabulary-guard,mcp-migration-notice,mcp-config-notices}.test.ts` | 0 | 100 pass, 0 fail |
+| `gsd-tools query verification.fingerprint ...` | 0 | refreshed `covered_digest` (all 15 implementation, test and doc entries unchanged in the list) |
+
+### Full-gate evidence (supplied by the orchestrator, not re-run here)
+
+`npm run check` on HEAD `51ebbc07` (clean tree), Node v26.11.0, `PI_MCP_ADAPTER_ROOT` = pi-mcp-adapter 5.2.0, `TMPDIR=/var/tmp/mcp4-check-tmp`: exit 0 (typecheck, lint, lint:workflows, fallow, format:check, test:corresponding, test:unpaired, test:integration, test:coverage:direct:all; merged `coverage/direct.lcov`, 269 records).
+
+### Re-verification verdict
+
+Status stays `passed`. The only changes were an adapter-version word in a doc comment and in one catalog paragraph, plus one added catalog sentence that matches the code. The deferred-session reading is now also evidenced by the Phase 7 live canary.
+
+_Re-verified: see `verified:` in the frontmatter_
 _Verifier: Claude (gsd-verifier)_
