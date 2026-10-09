@@ -1648,7 +1648,12 @@ first-declarer-wins walk), `bridges/mcp/stage.ts`
 that locks the slot order, and the RN-5 user-contract wording wherever it
 enumerates the slots.
 
-## ENVDOC-01: `docs/env-vars.md` has drifted behind two upstreams
+## ~~ENVDOC-01: `docs/env-vars.md` has drifted behind two upstreams~~ -- CLOSED
+
+Closed 2026-10-09 by ADOC-01 in the `mcp-4` milestone. `docs/env-vars.md`
+now re-anchors the "MCP runtime env inheritance" section to pi-mcp-adapter
+5.2.0, around `resolveCommandSecret` and its `!` and `!!` rules, and gives
+`AI_AGENT` a pi-only row with no spawn-order caveat.
 
 Surfaced 2026-08-13 from the same upstream release review that produced
 [MCPSRC-01]. Two independent staleness points, both in `docs/env-vars.md`,
