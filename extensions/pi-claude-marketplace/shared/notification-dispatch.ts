@@ -1,3 +1,4 @@
+import { resolveCommandError } from "./notification-command-error.ts";
 import {
   composePluginLines,
   composeReconcileAppliedBody,
@@ -32,7 +33,11 @@ import type {
   ResolvedMarketplace,
   ResolvedRawSurface,
 } from "./notification-resolve.ts";
-import type { NotificationRun } from "./notification-run.ts";
+import type {
+  NotificationEntrySink,
+  NotificationOrigin,
+  NotificationRun,
+} from "./notification-run.ts";
 import type {
   CascadeNotificationMessage,
   DeviceFlowPrompt,
@@ -81,6 +86,28 @@ function deliver(ctx: NotificationContext, args: NotifyArguments): void {
     ctx.ui.notify(args[0]);
   } else {
     ctx.ui.notify(args[0], args[1]);
+  }
+}
+
+/** Delivers a command failure without requiring an inventory snapshot. */
+export function notifyCommandError(
+  ctx: NotificationContext,
+  entrySink: NotificationEntrySink,
+  origin: Extract<NotificationOrigin, { kind: "command" }>,
+  needsReload: boolean,
+  cause: unknown,
+): void {
+  switch (requireNotificationMode(ctx.mode)) {
+    case "tui":
+    case "print":
+      // Command handlers can throw any value; text preserves its identity.
+      throw cause;
+    case "json":
+    case "rpc": {
+      const presentation = resolveCommandError(cause, needsReload);
+      entrySink.appendEntry("claude-plugin", toWirePayload(presentation, origin));
+      return;
+    }
   }
 }
 

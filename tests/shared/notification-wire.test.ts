@@ -5,6 +5,64 @@ import { Compile } from "typebox/compile";
 
 import { NOTIFICATION_PAYLOAD_SCHEMA } from "../../extensions/pi-claude-marketplace/shared/notification-wire.ts";
 
+function internalErrorPayload(): Record<string, unknown> {
+  return {
+    schemaVersion: 1,
+    kind: "internal-error",
+    origin: { kind: "command", commandId: "plugin update", invocationId: "run-a" },
+    severity: "error",
+    needsReload: false,
+    summary: "Command failed unexpectedly.",
+    cause: { causeChain: ["failed"], truncated: false },
+  };
+}
+
+test("accepts a complete command internal-error payload", () => {
+  // arrange
+  const validator = Compile(NOTIFICATION_PAYLOAD_SCHEMA);
+
+  // act
+  const valid = validator.Check(internalErrorPayload());
+
+  // assert
+  assert.strictEqual(valid, true);
+});
+
+for (const { title, fields } of [
+  { title: "load origin", fields: { origin: { kind: "load" } } },
+  { title: "hook origin", fields: { origin: { kind: "hook" } } },
+  { title: "wrong severity", fields: { severity: "warning" } },
+  { title: "null cause", fields: { cause: null } },
+  { title: "live stack", fields: { stack: "private" } },
+  { title: "nonboolean reload", fields: { needsReload: "false" } },
+]) {
+  test(`rejects internal-error with ${title}`, () => {
+    // arrange
+    const validator = Compile(NOTIFICATION_PAYLOAD_SCHEMA);
+    const payload = { ...internalErrorPayload(), ...fields };
+
+    // act
+    const valid = validator.Check(payload);
+
+    // assert
+    assert.strictEqual(valid, false);
+  });
+}
+
+for (const field of ["cause", "summary", "needsReload", "severity", "origin"]) {
+  test(`rejects internal-error without ${field}`, () => {
+    // arrange
+    const validator = Compile(NOTIFICATION_PAYLOAD_SCHEMA);
+    const { [field]: _omitted, ...payload } = internalErrorPayload();
+
+    // act
+    const valid = validator.Check(payload);
+
+    // assert
+    assert.strictEqual(valid, false);
+  });
+}
+
 /** A valid failed row carrying every optional row field once. */
 function failedRow(): Record<string, unknown> {
   return {

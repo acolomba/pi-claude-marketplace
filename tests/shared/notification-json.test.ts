@@ -12,6 +12,7 @@ import {
 
 import { runWithNothingLoaded } from "./notification-run-seeds.ts";
 
+import type { CommandErrorPresentation } from "../../extensions/pi-claude-marketplace/shared/notification-command-error.ts";
 import type {
   CascadePresentation,
   NotificationPresentation,
@@ -33,6 +34,59 @@ import type {
   Reason,
 } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 import type { Scope } from "../../extensions/pi-claude-marketplace/shared/types.ts";
+
+test("projects complete internal-error facts without undeclared properties", () => {
+  // arrange
+  const presentation = {
+    kind: "internal-error",
+    severity: "error",
+    needsReload: true,
+    summary: "Command failed unexpectedly.",
+    cause: { causeChain: ["failed", "nested"], truncated: true, stack: "private" },
+    stack: "private",
+  } as const satisfies CommandErrorPresentation & {
+    readonly stack: string;
+    readonly cause: { readonly stack: string };
+  };
+  const origin = {
+    kind: "command",
+    commandId: "plugin update",
+    invocationId: "run-a",
+    alias: "ignored",
+  } as const;
+
+  // act
+  const payload = toWirePayload(presentation, origin);
+
+  // assert
+  assert.deepStrictEqual(payload, {
+    schemaVersion: 1,
+    kind: "internal-error",
+    origin: { kind: "command", commandId: "plugin update", invocationId: "run-a" },
+    severity: "error",
+    needsReload: true,
+    summary: "Command failed unexpectedly.",
+    cause: { causeChain: ["failed", "nested"], truncated: true },
+  });
+  assert.notStrictEqual(payload.cause, presentation.cause);
+});
+
+test("rejects a non-command internal-error projection", () => {
+  // arrange
+  const presentation: CommandErrorPresentation = {
+    kind: "internal-error",
+    severity: "error",
+    needsReload: false,
+    summary: "Command failed unexpectedly.",
+    cause: { causeChain: ["failed"], truncated: false },
+  };
+
+  // act & assert
+  assert.throws(() => {
+    // @ts-expect-error Internal errors require a command origin.
+    toWirePayload(presentation, { kind: "load" });
+  }, TypeError);
+});
 
 for (const kind of ["load", "hook"] as const) {
   test(`projects only ${kind} origin fields`, () => {

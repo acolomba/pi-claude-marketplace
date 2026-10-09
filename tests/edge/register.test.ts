@@ -82,6 +82,7 @@ import { createNotificationBoundary } from "./notification-boundary.ts";
 import type { Notification } from "./notification-boundary.ts";
 import type { EdgeDeps } from "../../extensions/pi-claude-marketplace/edge/types.ts";
 import type { ClaudeImportExecutionResult } from "../../extensions/pi-claude-marketplace/orchestrators/import/index.ts";
+import type { UpdatePluginsFn } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts";
 import type { PluginUpdateOutcome } from "../../extensions/pi-claude-marketplace/orchestrators/types.ts";
 import type { ExtensionState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type {
@@ -172,7 +173,9 @@ interface CommandProbes {
   readonly runs: number;
   readonly capture?: ReturnType<typeof createJsonCapture>;
   readonly createInvocationId?: () => string;
+  readonly createRecoveryId?: () => string;
   readonly appendAttempts?: number;
+  readonly updatePlugins?: UpdatePluginsFn;
 }
 
 interface WrapperUnderTest {
@@ -409,8 +412,14 @@ function registerCommandWithCache(
     pi,
     createEdgeDeps(completionCache, importClaudeSettings, gitOps),
     hooksRouting,
-    createPluginUpdateOperations(hooksRouting, completionCache).updatePlugins,
-    { createInvocationId: probes.createInvocationId ?? (() => "run-list-1") },
+    probes.updatePlugins ??
+      createPluginUpdateOperations(hooksRouting, completionCache).updatePlugins,
+    {
+      createInvocationId: probes.createInvocationId ?? (() => "run-list-1"),
+      ...(probes.createRecoveryId === undefined
+        ? {}
+        : { createRecoveryId: probes.createRecoveryId }),
+    },
   );
 
   const registration = commandOptions.value;
@@ -430,6 +439,166 @@ function registerCommandWithCache(
 
 function registerCommandUnderTest(probes: CommandProbes): CommandUnderTest {
   return registerCommandWithCache(createCompletionCache(), undefined, undefined, probes);
+}
+
+for (const mode of ["json", "rpc"]) {
+  test(`registered update reports a failed ID allocator before inventory in ${mode}`, async (t) => {
+    // arrange
+    const { cwd } = await createHermeticScope(t, "update-id-failure");
+    const capture = createJsonCapture();
+    const ids = mock<{ primary(): string; recovery(): string }>({
+      exactParams: true,
+      name: "invocation IDs",
+    });
+    when(() => ids.primary())
+      .thenThrow(new Error("ID failed"))
+      .times(1);
+    when(() => ids.recovery())
+      .thenReturn("recovery-a")
+      .times(1);
+    const { registration, verifyRegistrar } = registerCommandUnderTest({
+      runs: 0,
+      capture,
+      createInvocationId: () => ids.primary(),
+      createRecoveryId: () => ids.recovery(),
+      updatePlugins: () => {
+        throw new Error("Unexpected update");
+      },
+    });
+    const ctx = {
+      mode,
+      cwd,
+      get ui() {
+        return capture.ui;
+      },
+    };
+
+    // act
+    await Reflect.apply(registration.handler, undefined, ["update", ctx]);
+
+    // assert
+    assert.deepStrictEqual(capture.entries, [
+      {
+        customType: "claude-plugin",
+        payload: {
+          schemaVersion: 1,
+          kind: "internal-error",
+          origin: { kind: "command", commandId: "plugin update", invocationId: "recovery-a" },
+          severity: "error",
+          needsReload: false,
+          summary: "Command failed unexpectedly.",
+          cause: { causeChain: ["ID failed"], truncated: false },
+        },
+      },
+    ]);
+    capture.assertValid();
+    verifyRegistrar();
+    verify(ids);
+  });
+
+  test(`registered update delivers an unexpected failure before output in ${mode}`, async (t) => {
+    // arrange
+    const { cwd } = await createHermeticScope(t, "update-failure");
+    const capture = createJsonCapture();
+    const { registration, verifyRegistrar } = registerCommandUnderTest({
+      runs: 1,
+      capture,
+      updatePlugins: () => Promise.reject(new Error("Update failed.")),
+    });
+    const ctx = {
+      mode,
+      cwd,
+      get ui() {
+        return capture.ui;
+      },
+    };
+
+    // act
+    const completion = await Promise.resolve()
+      .then(async () => {
+        await Reflect.apply(registration.handler, undefined, ["update", ctx]);
+      })
+      .then(
+        () => "fulfilled",
+        () => "rejected",
+      );
+
+    // assert
+    assert.strictEqual(completion, "fulfilled");
+    assert.deepStrictEqual(capture.entries, [
+      {
+        customType: "claude-plugin",
+        payload: {
+          schemaVersion: 1,
+          kind: "internal-error",
+          origin: { kind: "command", commandId: "plugin update", invocationId: "run-list-1" },
+          severity: "error",
+          needsReload: false,
+          summary: "Command failed unexpectedly.",
+          cause: { causeChain: ["Update failed."], truncated: false },
+        },
+      },
+    ]);
+    capture.assertValid();
+    verifyRegistrar();
+  });
+
+  test(`registered update retains equal earlier entries before failure in ${mode}`, async (t) => {
+    // arrange
+    const { cwd } = await createHermeticScope(t, "update-partial");
+    const capture = createJsonCapture();
+    const { registration, verifyRegistrar } = registerCommandUnderTest({
+      runs: 1,
+      capture,
+      appendAttempts: 3,
+      updatePlugins: ({ ctx, run }) => {
+        notifyUsageInfo(ctx, run, "Updated.");
+        notifyUsageInfo(ctx, run, "Updated.");
+        return Promise.reject(new Error("Update failed."));
+      },
+    });
+    const ctx = {
+      mode,
+      cwd,
+      get ui() {
+        return capture.ui;
+      },
+    };
+    const earlierEntry = {
+      customType: "claude-plugin",
+      payload: {
+        schemaVersion: 1,
+        kind: "usage-info",
+        origin: { kind: "command", commandId: "plugin update", invocationId: "run-list-1" },
+        severity: "info",
+        needsReload: false,
+        usage: "Updated.",
+      },
+    };
+
+    // act
+    await Reflect.apply(registration.handler, undefined, ["update", ctx]);
+
+    // assert
+    assert.deepStrictEqual(capture.entries, [
+      earlierEntry,
+      earlierEntry,
+      {
+        customType: "claude-plugin",
+        payload: {
+          schemaVersion: 1,
+          kind: "internal-error",
+          origin: { kind: "command", commandId: "plugin update", invocationId: "run-list-1" },
+          severity: "error",
+          needsReload: false,
+          summary: "Command failed unexpectedly.",
+          cause: { causeChain: ["Update failed."], truncated: false },
+        },
+      },
+    ]);
+    capture.assertValid();
+    verifyRegistrar();
+  });
 }
 
 for (const mode of ["json", "rpc"]) {

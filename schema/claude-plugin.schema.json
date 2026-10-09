@@ -2002,6 +2002,45 @@
         "reason": { "type": "string" }
       },
       "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "schemaVersion",
+        "kind",
+        "origin",
+        "severity",
+        "needsReload",
+        "summary",
+        "cause"
+      ],
+      "properties": {
+        "schemaVersion": { "type": "number", "const": 1 },
+        "kind": { "type": "string", "const": "internal-error" },
+        "origin": {
+          "type": "object",
+          "required": ["kind", "commandId", "invocationId"],
+          "properties": {
+            "kind": { "type": "string", "const": "command" },
+            "commandId": { "type": "string", "minLength": 1 },
+            "invocationId": { "type": "string", "minLength": 1 }
+          },
+          "additionalProperties": false
+        },
+        "severity": { "type": "string", "const": "error" },
+        "needsReload": { "type": "boolean" },
+        "summary": { "type": "string" },
+        "cause": {
+          "type": "object",
+          "required": ["causeChain", "truncated"],
+          "properties": {
+            "causeChain": { "type": "array", "items": { "type": "string" } },
+            "truncated": { "type": "boolean" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
     }
   ]
 }

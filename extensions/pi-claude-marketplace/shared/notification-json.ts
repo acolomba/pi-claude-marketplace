@@ -2,6 +2,7 @@ import { RAW_SURFACE_SEVERITY } from "./notification-resolve.ts";
 
 import type { HookSummaryEntry } from "./concerns/hooks.ts";
 import type { SerializedCauseChain } from "./errors.ts";
+import type { CommandErrorPresentation } from "./notification-command-error.ts";
 import type { CascadePresentation, NotificationPresentation } from "./notification-present.ts";
 import type {
   ResolvedEnvelope,
@@ -49,13 +50,33 @@ export function toWirePayload(
   origin: NotificationOrigin,
 ): Type.Static<typeof CASCADE_PAYLOAD_SCHEMA>;
 export function toWirePayload(
+  source: CommandErrorPresentation,
+  origin: Extract<NotificationOrigin, { kind: "command" }>,
+): Extract<Type.Static<typeof NOTIFICATION_PAYLOAD_SCHEMA>, { kind: "internal-error" }>;
+export function toWirePayload(
   source: NotificationPresentation | ResolvedRawSurface,
   origin: NotificationOrigin,
 ): Type.Static<typeof NOTIFICATION_PAYLOAD_SCHEMA>;
 export function toWirePayload(
-  source: NotificationPresentation | ResolvedRawSurface,
+  source: NotificationPresentation | ResolvedRawSurface | CommandErrorPresentation,
   origin: NotificationOrigin,
 ): Type.Static<typeof NOTIFICATION_PAYLOAD_SCHEMA> {
+  if (source.kind === "internal-error") {
+    if (origin.kind !== "command") {
+      throw new TypeError("Internal errors require command origin.");
+    }
+
+    return {
+      schemaVersion: 1,
+      kind: source.kind,
+      origin: { kind: origin.kind, commandId: origin.commandId, invocationId: origin.invocationId },
+      severity: source.severity,
+      needsReload: source.needsReload,
+      summary: source.summary,
+      cause: wireCause(source.cause),
+    };
+  }
+
   return "envelope" in source ? wirePresentation(source, origin) : wireRawSurface(source, origin);
 }
 
