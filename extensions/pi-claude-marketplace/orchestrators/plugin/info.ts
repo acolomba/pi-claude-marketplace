@@ -63,6 +63,7 @@ import { rowClaimsInstallDisabled } from "../../domain/unsupported-components.ts
 import { locationsFor, type ScopedLocations } from "../../persistence/locations.ts";
 import {
   isRecordedButDisabled,
+  loadState,
   type ExtensionState,
   type PluginInstallRecord,
 } from "../../persistence/state-io.ts";
@@ -94,7 +95,7 @@ import {
 import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import { DEFAULT_CREDENTIAL_OPS, buildCloneAuth } from "../auth-host.ts";
 import { crossScopeFlag } from "../marketplace/shared.ts";
-import { collectMarketplaceRecordsByScope } from "../scope-fanout.ts";
+import { collectMarketplaceRecordsByScope, type ScopedMarketplaceRecord } from "../scope-fanout.ts";
 
 import {
   canonicalCloneUrl,
@@ -138,7 +139,8 @@ export interface GetPluginInfoOptions {
    * ASTAT-01 / ASTAT-02: the extension load's status tracker. Info reads
    * pi-mcp-adapter's last snapshot from it and stamps each written server's
    * state. It never connects a server and never asks the adapter for a
-   * snapshot.
+   * snapshot. Under `--scope user` info also reads the project scope's
+   * installation record, read-only, to mark the servers it overrides.
    */
   readonly mcpStatus: McpStatusReader;
   readonly marketplace: string;
@@ -2987,14 +2989,47 @@ function withCompanionRequirements(built: InfoBlock, probe: SoftDepStatus): Info
 
 /**
  * ASTAT-01: stamps the block's written MCP servers with the state
- * pi-mcp-adapter last reported, read against the block's own scope record.
+ * pi-mcp-adapter last reported, read against the block's own scope record and
+ * the same plugin's project-scope record.
  */
 function withServerStatus(
   built: InfoBlock,
   record: PluginInstallRecord | undefined,
   mcpStatus: McpStatusReader,
+  projectRecord: PluginInstallRecord | undefined,
 ): InfoBlock {
-  return { ...built, block: withMcpServerStatus(built.block, record, mcpStatus) };
+  return { ...built, block: withMcpServerStatus(built.block, record, mcpStatus, projectRecord) };
+}
+
+/**
+ * ASTAT-01: the plugin's installation record in the project scope, which
+ * decides whether a user row's MCP servers are overridden. The fan-out already
+ * read it; under `--scope user` it is read here without persisting a
+ * migration, so info writes nothing (NFR-5: a local read only).
+ */
+async function readProjectInstallRecord(
+  opts: GetPluginInfoOptions,
+  found: readonly ScopedMarketplaceRecord[],
+): Promise<PluginInstallRecord | undefined> {
+  const project = found.find((f) => f.scope === "project");
+  if (project !== undefined) {
+    return project.record.plugins[opts.plugin];
+  }
+
+  if (opts.scope !== "user") {
+    return undefined;
+  }
+
+  try {
+    const state = await loadState(locationsFor("project", opts.cwd).extensionRoot, {
+      persistMigration: false,
+    });
+    return state.marketplaces[opts.marketplace]?.plugins[opts.plugin];
+  } catch {
+    // A project state that cannot be read counts as not overriding, so it can
+    // never fail a user-scope info.
+    return undefined;
+  }
 }
 
 async function getPluginInfoWithReader(
@@ -3053,6 +3088,7 @@ async function getPluginInfoWithReader(
 
   // ADET-01: one probe snapshot stamps the `requires:` entries on every block.
   const probe = softDepStatus(opts.pi);
+  const projectRecord = await readProjectInstallRecord(opts, found);
 
   // D-100-08 / ENBL-17: every found scope goes to `buildBlock`, including a
   // recorded-but-disabled one. A disabled record its manifest still declares
@@ -3083,6 +3119,7 @@ async function getPluginInfoWithReader(
       withCompanionRequirements(soleBlock, probe),
       sole.record.plugins[opts.plugin],
       opts.mcpStatus,
+      projectRecord,
     );
     notify(opts.ctx, opts.pi, built.block);
     emitFetchSkip(opts, scopes, [built]);
@@ -3122,6 +3159,7 @@ async function getPluginInfoWithReader(
         withCompanionRequirements(scopeBlock, probe),
         f.record.plugins[opts.plugin],
         opts.mcpStatus,
+        projectRecord,
       );
     }),
   );

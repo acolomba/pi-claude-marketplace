@@ -7298,6 +7298,255 @@ test("ASTAT-01: in a both-scopes fan-out each row's servers are stamped from its
   });
 });
 
+/** Seeds `mp` with a state-only `alpha` record in `scope`. */
+async function seedAlphaRecord(
+  scope: "user" | "project",
+  scopeRoot: string,
+  cwd: string,
+  alpha: { readonly mcpServers: readonly string[]; readonly disabled?: boolean },
+): Promise<void> {
+  await seedPathMarketplace({
+    scope,
+    scopeRoot,
+    cwd,
+    mpName: "mp",
+    manifest: { name: "mp", plugins: [] },
+    installed: {
+      alpha: {
+        version: "1.0.0",
+        ...(alpha.disabled === true && { disabled: true }),
+        resources: { skills: [], mcpServers: alpha.mcpServers },
+      },
+    },
+  });
+}
+
+test("ASTAT-01: with the plugin in both scopes, the project row shows the adapter's state and the user row reads overridden by project scope", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    await seedAlphaRecord("project", path.join(cwd, ".pi"), cwd, { mcpServers: ["srv"] });
+    await seedAlphaRecord("user", path.join(home, ".pi", "agent"), cwd, { mcpServers: ["srv"] });
+    const mcpStatus = statusSnapshot([{ name: "plugin_alpha_srv_", status: "connected" }]);
+    const { ctx, pi, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, pi, mcpStatus, marketplace: "mp", plugin: "alpha", cwd });
+
+    // assert
+    assert.deepEqual(notifications, [
+      {
+        message: [
+          "● mp [project] <no autoupdate>",
+          "  ● alpha v1.0.0 (installed) {not in manifest}",
+          "    mcp: plugin:alpha:srv (connected)",
+          "    requires: pi-mcp-adapter (missing)",
+          "",
+          "● mp [user] <no autoupdate>",
+          "  ● alpha v1.0.0 (installed) {not in manifest}",
+          "    mcp: plugin:alpha:srv (overridden by project scope)",
+          "    requires: pi-mcp-adapter (missing)",
+        ].join("\n"),
+      },
+    ]);
+  });
+});
+
+test("ASTAT-01: under --scope user the user row reads overridden by project scope from the project scope's record", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    await seedAlphaRecord("project", path.join(cwd, ".pi"), cwd, { mcpServers: ["srv"] });
+    await seedAlphaRecord("user", path.join(home, ".pi", "agent"), cwd, { mcpServers: ["srv"] });
+    const mcpStatus = statusSnapshot([{ name: "plugin_alpha_srv_", status: "connected" }]);
+    const { ctx, pi, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({
+      ctx,
+      pi,
+      mcpStatus,
+      marketplace: "mp",
+      plugin: "alpha",
+      scope: "user",
+      cwd,
+    });
+
+    // assert
+    assert.deepEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ● alpha v1.0.0 (installed) {not in manifest}",
+          "    mcp: plugin:alpha:srv (overridden by project scope)",
+          "    requires: pi-mcp-adapter (missing)",
+        ].join("\n"),
+      },
+    ]);
+  });
+});
+
+test("ASTAT-01: under --scope user an unparseable project state.json leaves the user row with the snapshot's state and is not rewritten", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    await seedAlphaRecord("user", path.join(home, ".pi", "agent"), cwd, { mcpServers: ["srv"] });
+    const projectStateJson = locationsFor("project", cwd).stateJsonPath;
+    await mkdir(path.dirname(projectStateJson), { recursive: true });
+    await writeFile(projectStateJson, "{", "utf8");
+    const mcpStatus = statusSnapshot([{ name: "plugin_alpha_srv_", status: "connected" }]);
+    const { ctx, pi, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({
+      ctx,
+      pi,
+      mcpStatus,
+      marketplace: "mp",
+      plugin: "alpha",
+      scope: "user",
+      cwd,
+    });
+
+    // assert
+    assert.deepEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ● alpha v1.0.0 (installed) {not in manifest}",
+          "    mcp: plugin:alpha:srv (connected)",
+          "    requires: pi-mcp-adapter (missing)",
+        ].join("\n"),
+      },
+    ]);
+    assert.deepEqual(await readdir(path.dirname(projectStateJson)), ["state.json"]);
+    assert.equal(await readFile(projectStateJson, "utf8"), "{");
+  });
+});
+
+test("ENBL-08 / ASTAT-01: a disabled project record shows (disabled) with no state and leaves the user row with the snapshot's state", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    await seedAlphaRecord("project", path.join(cwd, ".pi"), cwd, {
+      mcpServers: ["srv"],
+      disabled: true,
+    });
+    await seedAlphaRecord("user", path.join(home, ".pi", "agent"), cwd, { mcpServers: ["srv"] });
+    const mcpStatus = statusSnapshot([{ name: "plugin_alpha_srv_", status: "connected" }]);
+    const { ctx, pi, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, pi, mcpStatus, marketplace: "mp", plugin: "alpha", cwd });
+
+    // assert
+    assert.deepEqual(notifications, [
+      {
+        message: [
+          "● mp [project] <no autoupdate>",
+          "  ◍ alpha v1.0.0 (disabled) {not in manifest}",
+          "    mcp: plugin:alpha:srv",
+          "    requires: pi-mcp-adapter (missing)",
+          "",
+          "● mp [user] <no autoupdate>",
+          "  ● alpha v1.0.0 (installed) {not in manifest}",
+          "    mcp: plugin:alpha:srv (connected)",
+          "    requires: pi-mcp-adapter (missing)",
+        ].join("\n"),
+      },
+    ]);
+  });
+});
+
+test("ASTAT-02: with no snapshot both rows of the fan-out read status unknown", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    await seedAlphaRecord("project", path.join(cwd, ".pi"), cwd, { mcpServers: ["srv"] });
+    await seedAlphaRecord("user", path.join(home, ".pi", "agent"), cwd, { mcpServers: ["srv"] });
+    const { ctx, pi, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({
+      ctx,
+      pi,
+      mcpStatus: noStatusSnapshot(),
+      marketplace: "mp",
+      plugin: "alpha",
+      cwd,
+    });
+
+    // assert
+    assert.deepEqual(notifications, [
+      {
+        message: [
+          "● mp [project] <no autoupdate>",
+          "  ● alpha v1.0.0 (installed) {not in manifest}",
+          "    mcp: plugin:alpha:srv (status unknown)",
+          "    requires: pi-mcp-adapter (missing)",
+          "",
+          "● mp [user] <no autoupdate>",
+          "  ● alpha v1.0.0 (installed) {not in manifest}",
+          "    mcp: plugin:alpha:srv (status unknown)",
+          "    requires: pi-mcp-adapter (missing)",
+        ].join("\n"),
+      },
+    ]);
+  });
+});
+
+test("ASTAT-01: a project record that lists a different server leaves the user row's server with the snapshot's state", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    await seedAlphaRecord("project", path.join(cwd, ".pi"), cwd, { mcpServers: ["other"] });
+    await seedAlphaRecord("user", path.join(home, ".pi", "agent"), cwd, { mcpServers: ["srv"] });
+    const mcpStatus = statusSnapshot([
+      { name: "plugin_alpha_other_", status: "connected" },
+      { name: "plugin_alpha_srv_", status: "failed" },
+    ]);
+    const { ctx, pi, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, pi, mcpStatus, marketplace: "mp", plugin: "alpha", cwd });
+
+    // assert
+    assert.deepEqual(notifications, [
+      {
+        message: [
+          "● mp [project] <no autoupdate>",
+          "  ● alpha v1.0.0 (installed) {not in manifest}",
+          "    mcp: plugin:alpha:other (connected)",
+          "    requires: pi-mcp-adapter (missing)",
+          "",
+          "● mp [user] <no autoupdate>",
+          "  ● alpha v1.0.0 (installed) {not in manifest}",
+          "    mcp: plugin:alpha:srv (failed)",
+          "    requires: pi-mcp-adapter (missing)",
+        ].join("\n"),
+      },
+    ]);
+  });
+});
+
+test("ASTAT-01: without --scope and with the marketplace in the user scope only, the user row's server keeps the snapshot's state", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    await seedAlphaRecord("user", path.join(home, ".pi", "agent"), cwd, { mcpServers: ["srv"] });
+    const mcpStatus = statusSnapshot([{ name: "plugin_alpha_srv_", status: "connected" }]);
+    const { ctx, pi, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, pi, mcpStatus, marketplace: "mp", plugin: "alpha", cwd });
+
+    // assert
+    assert.deepEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ● alpha v1.0.0 (installed) {not in manifest}",
+          "    mcp: plugin:alpha:srv (connected)",
+          "    requires: pi-mcp-adapter (missing)",
+        ].join("\n"),
+      },
+    ]);
+  });
+});
+
 test("ASTAT-02: a snapshot status holding an escape sequence reads status unknown and its text never reaches the message", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange

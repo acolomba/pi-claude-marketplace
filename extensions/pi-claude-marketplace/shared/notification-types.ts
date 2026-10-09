@@ -872,8 +872,11 @@ export interface PluginInfoRowBase {
  * comma because it sits inside the server's parentheses. `status unknown`
  * means there is no usable snapshot, or the snapshot holds a status this
  * release does not know. `not loaded` means a usable snapshot does not list
- * the server. A bare literal union like the other closed sets, not a
- * `StatusToken`.
+ * the server. `overridden by project scope` covers the same plugin installed
+ * in both scopes: both scopes' adapter files hold one key, pi-mcp-adapter
+ * loads the project file last and runs the project entry, so the user row's
+ * server reads this token. The wording follows Claude Code's "overridden by".
+ * A bare literal union like the other closed sets, not a `StatusToken`.
  */
 export type McpServerStatus =
   | "connected"
@@ -884,7 +887,8 @@ export type McpServerStatus =
   | "not connected"
   | "failed"
   | "status unknown"
-  | "not loaded";
+  | "not loaded"
+  | "overridden by project scope";
 
 /**
  * ANAME-01 / ANAME-07: one plugin MCP server on the info surface, stamped by

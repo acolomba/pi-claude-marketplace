@@ -177,6 +177,7 @@ const MCP_SERVER_STATUS_ENROLLMENT: Record<McpServerStatus, true> = {
   failed: true,
   "status unknown": true,
   "not loaded": true,
+  "overridden by project scope": true,
 };
 
 // Standalone notifications have their own discriminator set. Scoped prune
@@ -235,8 +236,8 @@ test("SNM-02: MarketplaceStatus is the closed 7-entry marketplace-status set", (
   assert.strictEqual(Object.keys(MARKETPLACE_STATUS_ENROLLMENT).length, 7);
 });
 
-test("ASTAT-02: McpServerStatus is the closed 9-entry MCP server status set", () => {
-  assert.strictEqual(Object.keys(MCP_SERVER_STATUS_ENROLLMENT).length, 9);
+test("ASTAT-02: McpServerStatus is the closed 10-entry MCP server status set", () => {
+  assert.strictEqual(Object.keys(MCP_SERVER_STATUS_ENROLLMENT).length, 10);
 });
 
 test("standalone notification kinds include scoped prune outcomes exactly", () => {

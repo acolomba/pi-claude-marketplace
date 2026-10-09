@@ -695,6 +695,46 @@ export const PLUGIN_INFO_FIXTURES: FixtureMap = {
       },
     },
 
+    // ASTAT-01: the adapter runs the project entry, so the user row's server is overridden.
+    "installed-both-scopes-mcp-overridden": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "plugin-info-cascade",
+        blocks: [
+          {
+            kind: "plugin-info",
+            marketplaceName: "mp",
+            marketplaceScope: "project",
+            marketplaceDetails: { autoupdate: false },
+            plugin: {
+              status: "installed",
+              name: "ops-tools",
+              version: "1.0.0",
+              componentsResolved: true,
+              components: { mcp: [{ name: "plugin:ops-tools:alerts", status: "connected" }] },
+              requires: [{ companion: "pi-mcp-adapter", missing: false }],
+            },
+          },
+          {
+            kind: "plugin-info",
+            marketplaceName: "mp",
+            marketplaceScope: "user",
+            marketplaceDetails: { autoupdate: false },
+            plugin: {
+              status: "installed",
+              name: "ops-tools",
+              version: "1.0.0",
+              componentsResolved: true,
+              components: {
+                mcp: [{ name: "plugin:ops-tools:alerts", status: "overridden by project scope" }],
+              },
+              requires: [{ companion: "pi-mcp-adapter", missing: false }],
+            },
+          },
+        ],
+      },
+    },
+
     // INFO-09: the same fan-out when NEITHER scope's manifest declares the
     // plugin. Both blocks are `(installed) {not in manifest}` rather than
     // `(failed)`, so they join one `info` cascade instead of being separated

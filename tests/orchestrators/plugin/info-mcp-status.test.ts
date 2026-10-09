@@ -13,16 +13,18 @@ import type {
   PluginInfoMessage,
   PluginInfoRowBase,
 } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
+import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 
 /** An info block for plugin `alpha` with resolved components. */
 function infoBlock(
   status: PluginInfoRowBase["status"],
   mcp: readonly McpServerSummaryEntry[] | undefined,
+  marketplaceScope: Scope = "user",
 ): PluginInfoMessage {
   return {
     kind: "plugin-info",
     marketplaceName: "mp",
-    marketplaceScope: "user",
+    marketplaceScope,
     marketplaceDetails: { autoupdate: false },
     plugin: {
       status,
@@ -79,7 +81,12 @@ for (const { answer, token } of [
     const block = infoBlock("installed", [{ name: "plugin:alpha:api" }]);
 
     // act
-    const stamped = withMcpServerStatus(block, installRecord(["api"]), answering(answer));
+    const stamped = withMcpServerStatus(
+      block,
+      installRecord(["api"]),
+      answering(answer),
+      undefined,
+    );
 
     // assert
     assert.deepStrictEqual(
@@ -94,7 +101,12 @@ test("ASTAT-01: a partially-installed row's recorded server is stamped", () => {
   const block = infoBlock("partially-installed", [{ name: "plugin:alpha:api" }]);
 
   // act
-  const stamped = withMcpServerStatus(block, installRecord(["api"]), answering("cached"));
+  const stamped = withMcpServerStatus(
+    block,
+    installRecord(["api"]),
+    answering("cached"),
+    undefined,
+  );
 
   // assert
   assert.deepStrictEqual(
@@ -118,7 +130,12 @@ for (const status of [
     const block = infoBlock(status, [{ name: "plugin:alpha:api" }]);
 
     // act
-    const stamped = withMcpServerStatus(block, installRecord(["api"]), answering("connected"));
+    const stamped = withMcpServerStatus(
+      block,
+      installRecord(["api"]),
+      answering("connected"),
+      undefined,
+    );
 
     // assert
     assert.deepStrictEqual(stamped, infoBlock(status, [{ name: "plugin:alpha:api" }]));
@@ -136,7 +153,12 @@ test("ASTAT-01: an installed row with unresolved components is left as it is", (
   };
 
   // act
-  const stamped = withMcpServerStatus(block, installRecord(["api"]), answering("connected"));
+  const stamped = withMcpServerStatus(
+    block,
+    installRecord(["api"]),
+    answering("connected"),
+    undefined,
+  );
 
   // assert
   assert.deepStrictEqual(stamped, {
@@ -153,7 +175,7 @@ test("ASTAT-01: an installed row without an installation record is left as it is
   const block = infoBlock("installed", [{ name: "plugin:alpha:api" }]);
 
   // act
-  const stamped = withMcpServerStatus(block, undefined, answering("connected"));
+  const stamped = withMcpServerStatus(block, undefined, answering("connected"), undefined);
 
   // assert
   assert.deepStrictEqual(stamped, infoBlock("installed", [{ name: "plugin:alpha:api" }]));
@@ -164,7 +186,12 @@ test("ASTAT-01: an installed row without an mcp list is left as it is", () => {
   const block = infoBlock("installed", undefined);
 
   // act
-  const stamped = withMcpServerStatus(block, installRecord(["api"]), answering("connected"));
+  const stamped = withMcpServerStatus(
+    block,
+    installRecord(["api"]),
+    answering("connected"),
+    undefined,
+  );
 
   // assert
   assert.deepStrictEqual(stamped, infoBlock("installed", undefined));
@@ -179,7 +206,12 @@ test("ASTAT-01: a left-out server keeps only its unsupported feature and an unre
   ]);
 
   // act
-  const stamped = withMcpServerStatus(block, installRecord(["api", "live"]), answering("failed"));
+  const stamped = withMcpServerStatus(
+    block,
+    installRecord(["api", "live"]),
+    answering("failed"),
+    undefined,
+  );
 
   // assert
   assert.deepStrictEqual(
@@ -201,7 +233,7 @@ test("ANAME-01 / ASTAT-01: the reader is asked for the recorded server's generat
   const block = infoBlock("installed", [{ name: "plugin:alpha:my.api" }]);
 
   // act
-  const stamped = withMcpServerStatus(block, installRecord(["my.api"]), mcpStatus);
+  const stamped = withMcpServerStatus(block, installRecord(["my.api"]), mcpStatus, undefined);
 
   // assert
   assert.deepStrictEqual(
@@ -224,6 +256,7 @@ test("ASTAT-01: stamping keeps the entry order and the unset and withheld lists,
     block,
     installRecord(["beta", "zeta"]),
     answering("needs-auth"),
+    undefined,
   );
 
   // assert
@@ -243,4 +276,111 @@ test("ASTAT-01: stamping keeps the entry order and the unset and withheld lists,
     ]),
   );
   assert.deepStrictEqual(block, infoBlock("installed", entries()));
+});
+
+for (const { answer, token } of [
+  { answer: "connected", token: "overridden by project scope" },
+  { answer: "cached", token: "overridden by project scope" },
+  { answer: "needs-auth", token: "overridden by project scope" },
+  { answer: "blocked", token: "overridden by project scope" },
+  { answer: "disabled", token: "overridden by project scope" },
+  { answer: "not-connected", token: "overridden by project scope" },
+  { answer: "failed", token: "overridden by project scope" },
+  { answer: "unrecognized", token: "overridden by project scope" },
+  { answer: "unlisted", token: "overridden by project scope" },
+  { answer: "no-snapshot", token: "status unknown" },
+] as const satisfies readonly {
+  answer: ReturnType<McpStatusReader["lookup"]>;
+  token: McpServerStatus;
+}[]) {
+  test(`ASTAT-01: a user row's server the enabled project record lists, answering ${answer}, reads ${token}`, () => {
+    // arrange
+    const block = infoBlock("installed", [{ name: "plugin:alpha:api" }]);
+
+    // act
+    const stamped = withMcpServerStatus(
+      block,
+      installRecord(["api"]),
+      answering(answer),
+      installRecord(["api"]),
+    );
+
+    // assert
+    assert.deepStrictEqual(
+      stamped,
+      infoBlock("installed", [{ name: "plugin:alpha:api", status: token }]),
+    );
+  });
+}
+
+test("ASTAT-01: a project row is never overridden by its own project record", () => {
+  // arrange
+  const block = infoBlock("installed", [{ name: "plugin:alpha:api" }], "project");
+
+  // act
+  const stamped = withMcpServerStatus(
+    block,
+    installRecord(["api"]),
+    answering("connected"),
+    installRecord(["api"]),
+  );
+
+  // assert
+  assert.deepStrictEqual(
+    stamped,
+    infoBlock("installed", [{ name: "plugin:alpha:api", status: "connected" }], "project"),
+  );
+});
+
+for (const { label, projectRecord } of [
+  {
+    label: "a disabled project record",
+    projectRecord: { ...installRecord(["api"]), enabled: false },
+  },
+  { label: "a project record without the server", projectRecord: installRecord(["other"]) },
+  { label: "no project record", projectRecord: undefined },
+] as const satisfies readonly {
+  label: string;
+  projectRecord: PluginInstallRecord | undefined;
+}[]) {
+  test(`ENBL-08 / ASTAT-01: with ${label} the user row's server keeps the snapshot's state`, () => {
+    // arrange
+    const block = infoBlock("installed", [{ name: "plugin:alpha:api" }]);
+
+    // act
+    const stamped = withMcpServerStatus(
+      block,
+      installRecord(["api"]),
+      answering("failed"),
+      projectRecord,
+    );
+
+    // assert
+    assert.deepStrictEqual(
+      stamped,
+      infoBlock("installed", [{ name: "plugin:alpha:api", status: "failed" }]),
+    );
+  });
+}
+
+test("ASTAT-01: only the user row's server the project record lists reads overridden by project scope", () => {
+  // arrange
+  const block = infoBlock("installed", [{ name: "plugin:alpha:api" }, { name: "plugin:alpha:db" }]);
+
+  // act
+  const stamped = withMcpServerStatus(
+    block,
+    installRecord(["api", "db"]),
+    answering("connected"),
+    installRecord(["api"]),
+  );
+
+  // assert
+  assert.deepStrictEqual(
+    stamped,
+    infoBlock("installed", [
+      { name: "plugin:alpha:api", status: "overridden by project scope" },
+      { name: "plugin:alpha:db", status: "connected" },
+    ]),
+  );
 });
