@@ -63,6 +63,13 @@ parentheses.
   snapshot exists but does not list the server's adapter key (for example
   the plugin was installed this session and the adapter has not read its
   config yet).
+- **D-06-06a (operator, 2026-10-09, after research):** adapter 5.1.0 sends an
+  empty snapshot at every `session_start` and, in a deferred session (every
+  server lazy, none from a project file, every tool list cached), nothing
+  more until the first MCP use. So `status unknown` is the normal view in
+  such a session. Keep the token; the catalog prose says the adapter reports
+  status only after its first MCP activity in a session. Phase 7 UAT checks
+  it live.
 - **D-06-07:** When the adapter is not loaded, each server still shows
   `status unknown`, alongside the existing `requires: pi-mcp-adapter
   (missing)` line. One rule for every installed server (ASTAT-02 as written).
@@ -78,10 +85,13 @@ parentheses.
   the scope row whose entry the adapter actually loads shows the snapshot's
   status; the other row's server shows a closed token that says it is
   shadowed by the other scope (wording drafted as a catalog amendment).
-  Research must confirm the adapter's precedence between the user and
-  project files, and whether install even allows this case (D-02-03
-  collision rule); if it cannot occur, this decision is moot and needs no
-  token. — **Reversibility:** costly — adds a closed-catalog token.
+  **Settled 2026-10-09 after research:** the case occurs (the collision check
+  skips entries marked for the same plugin and marketplace), and the
+  adapter reads `<cwd>/.pi/mcp-adapter.json` last, so the project row owns
+  the snapshot entry. The user row's server shows `overridden by project
+  scope` (Claude Code 2.1.294 "overridden by" wording). It appears only when
+  a usable snapshot exists; with none, both rows show `status unknown`
+  (D-06-07). A failed read of the project state counts as not overridden. — **Reversibility:** costly — adds a closed-catalog token.
 - **D-06-10:** Status never changes info's severity; info stays `info`, as
   the `(missing)` companion tag does.
 
@@ -91,8 +101,8 @@ parentheses.
   `status unknown` is the expected reading), tracker module name and
   location, and the subscription lifecycle across `/reload` and
   `session_shutdown`.
-- Exact wording of the shadowed token (D-06-09), drafted as a closed-catalog
-  amendment for operator review.
+- Installed rows with unresolved components (cold git clone) have no `mcp:`
+  line today and get no status.
 
 </decisions>
 
