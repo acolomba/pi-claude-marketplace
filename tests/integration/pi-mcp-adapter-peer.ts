@@ -1,8 +1,9 @@
 // tests/integration/pi-mcp-adapter-peer.ts
 //
-// pi-mcp-adapter peer support for the conformance test that runs this
+// pi-mcp-adapter peer support for the conformance tests that run this
 // extension's written MCP values through the adapter's own functions
-// (AVAR-03, AVAR-05).
+// (AVAR-03, AVAR-05) and check the status tracker against the adapter's own
+// status channel, snapshot version and status union (ASTAT-01).
 //
 // PIFL-03: pi-mcp-adapter is an optional peer and never a dependency of this
 // repository. `PI_MCP_ADAPTER_ROOT` is the only lookup; there is no global
@@ -15,6 +16,8 @@
 //
 // The adapter's `exports` map does not expose `dist/utils.js` or
 // `dist/mcp-auth-flow.js`, so the loader imports them by absolute file URL.
+// `dist/types.js` is the one module this needs that the map does publish
+// (`./types`); it is loaded in place like the others.
 
 import { readFile } from "node:fs/promises";
 import path from "node:path";
@@ -58,6 +61,12 @@ export interface PiMcpAdapterAuthFlow {
   }) => PiMcpAdapterOAuthConfig;
 }
 
+/** The `dist/types.js` constants the status conformance test reads. */
+export interface PiMcpAdapterTypes {
+  readonly MCP_STATUS_EVENT: string;
+  readonly MCP_STATUS_SNAPSHOT_VERSION: number;
+}
+
 /**
  * Finds the pi-mcp-adapter package named by `PI_MCP_ADAPTER_ROOT`. Returns
  * undefined when the variable is unset or empty. Throws when the root holds
@@ -83,7 +92,7 @@ export async function findPiMcpAdapterPackage(): Promise<OptionalPeer | undefine
 /** Imports `dist/<module>.js` from the peer in place. */
 export async function loadPiMcpAdapterModule<T>(
   peer: OptionalPeer,
-  module: "utils" | "mcp-auth-flow",
+  module: "utils" | "mcp-auth-flow" | "types",
 ): Promise<T> {
   return importPeerModule<T>(peer, "dist", `${module}.js`);
 }
@@ -91,7 +100,7 @@ export async function loadPiMcpAdapterModule<T>(
 /** Reads the text of one compiled `dist/` file, for the drift guard. */
 export async function readPiMcpAdapterDist(
   peer: OptionalPeer,
-  file: "server-manager.js" | "utils.js" | "mcp-auth-flow.js",
+  file: "server-manager.js" | "utils.js" | "mcp-auth-flow.js" | "types.d.ts",
 ): Promise<string> {
   return readFile(path.join(peer.root, "dist", file), "utf8");
 }

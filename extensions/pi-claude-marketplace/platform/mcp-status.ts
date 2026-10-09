@@ -8,6 +8,9 @@
 // pi-mcp-adapter is a soft dependency and is never imported: the channel name
 // is a string literal here, and the snapshot shape is declared locally with
 // only the fields this module reads.
+// `tests/integration/mcp-status-conformance.test.ts` checks the channel name,
+// the snapshot version and the seven statuses against pi-mcp-adapter's own
+// published contract.
 //
 // The channel is push-only, so info reads the last snapshot the adapter sent.
 // One tracker lives for one extension load. Pi drops every `pi.events`
