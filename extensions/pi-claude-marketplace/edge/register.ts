@@ -42,6 +42,7 @@ import { hookDebugLog } from "../shared/debug-log.ts";
 import { errorMessage } from "../shared/errors.ts";
 import { openNotificationRun, requireNotificationMode } from "../shared/notification-run.ts";
 
+import { runCommand } from "./command-run.ts";
 import {
   isClaudePluginCommandLine,
   normalizeCompletionWhitespace,
@@ -94,9 +95,13 @@ export function registerClaudePluginCommand(
   deps: EdgeDeps,
   hooksRouting: InstallHooksRouting,
   updatePlugins: UpdatePluginsFn,
-  options: { readonly createInvocationId?: () => string } = {},
+  options: {
+    readonly createInvocationId?: () => string;
+    readonly createRecoveryId?: () => string;
+  } = {},
 ): void {
   const createInvocationId = options.createInvocationId ?? randomUUID;
+  const createRecoveryId = options.createRecoveryId ?? randomUUID;
   const reinstallPlugins = createNodeReinstallPlugins(hooksRouting, deps.completionCache);
   const install = makeInstallHandler(hooksRouting, deps.completionCache);
   const uninstall = makeUninstallHandler(hooksRouting, deps.completionCache);
@@ -144,12 +149,13 @@ export function registerClaudePluginCommand(
     handler: (args, ctx) => {
       requireNotificationMode(ctx.mode);
       const route = selectClaudePluginRoute(args, handlers);
-      const run = openNotificationRun(pi, {
-        kind: "command",
-        commandId: route.commandId,
-        invocationId: createInvocationId(),
-      });
-      return routeClaudePlugin(route, handlers, ctx, run);
+      return runCommand(
+        pi,
+        ctx,
+        route.commandId,
+        (run) => routeClaudePlugin(route, handlers, ctx, run),
+        { createInvocationId, createRecoveryId, openRun: openNotificationRun },
+      );
     },
     // This `process.cwd()` is the single sanctioned site.
     // The arrow body runs per completion lookup and reads

@@ -12,6 +12,7 @@ import {
   emitReconcileAppliedContextCascade,
   emitUpdateNoOpCascade,
   notify,
+  notifyCommandError,
   notifyAsyncRewakeSummary,
   notifyDeviceFlowPrompt,
   notifyDiagnostic,
@@ -54,6 +55,71 @@ function createContext(t: TestContext): NotificationContext {
     mode: "tui",
     ui: { notify: t.mock.fn((_message: string, _severity?: "info" | "warning" | "error") => {}) },
   };
+}
+
+for (const mode of ["json", "rpc"]) {
+  test(`delivers a resolved command error without inventory in ${mode}`, () => {
+    // arrange
+    const capture = createJsonCapture();
+    const ctx = {
+      mode,
+      get ui() {
+        return capture.ui;
+      },
+    };
+    const origin = { kind: "command", commandId: "plugin update", invocationId: "run-a" } as const;
+    const sink = {
+      appendEntry(customType: string, payload: unknown) {
+        assert.strictEqual(this, sink);
+        capture.entrySink.appendEntry(customType, payload);
+      },
+    };
+
+    // act
+    notifyCommandError(ctx, sink, origin, true, new Error("Failed at /private/work/config.json"));
+
+    // assert
+    assert.deepStrictEqual(capture.entries, [
+      {
+        customType: "claude-plugin",
+        payload: {
+          schemaVersion: 1,
+          kind: "internal-error",
+          origin,
+          severity: "error",
+          needsReload: true,
+          summary: "Command failed unexpectedly.",
+          cause: { causeChain: ["Failed at config.json"], truncated: false },
+        },
+      },
+    ]);
+    capture.assertValid();
+  });
+}
+
+for (const mode of ["tui", "print"]) {
+  test(`rethrows the exact command failure without UI access in ${mode}`, () => {
+    // arrange
+    const capture = createJsonCapture();
+    const ctx = {
+      mode,
+      get ui() {
+        return capture.ui;
+      },
+    };
+    const origin = { kind: "command", commandId: "plugin update", invocationId: "run-a" } as const;
+    const cause = new Error("failed");
+
+    // act & assert
+    assert.throws(
+      () => {
+        notifyCommandError(ctx, capture.entrySink, origin, false, cause);
+      },
+      (error: unknown) => error === cause,
+    );
+    assert.deepStrictEqual(capture.entries, []);
+    capture.assertValid();
+  });
 }
 
 for (const mode of ["json", "rpc"]) {

@@ -261,15 +261,16 @@ const RETAINED_WORKFLOW = Type.Object(
  * D-01 / WIRE-05: the envelope fields every payload kind carries. `summary` is
  * present on warning and error payloads only, and it may be empty.
  */
+const COMMAND_ORIGIN = Type.Object(
+  {
+    kind: Type.Literal("command"),
+    commandId: Type.String({ minLength: 1 }),
+    invocationId: Type.String({ minLength: 1 }),
+  },
+  { additionalProperties: false },
+);
 const ORIGIN = Type.Union([
-  Type.Object(
-    {
-      kind: Type.Literal("command"),
-      commandId: Type.String({ minLength: 1 }),
-      invocationId: Type.String({ minLength: 1 }),
-    },
-    { additionalProperties: false },
-  ),
+  COMMAND_ORIGIN,
   Type.Object({ kind: Type.Literal("load") }, { additionalProperties: false }),
   Type.Object({ kind: Type.Literal("hook") }, { additionalProperties: false }),
 ]);
@@ -593,4 +594,16 @@ export const NOTIFICATION_PAYLOAD_SCHEMA = Type.Union([
   STOP_OVERRIDE_CAP_PAYLOAD,
   RECONCILE_ABORTED_PAYLOAD,
   PLUGIN_PATH_SKIPPED_PAYLOAD,
+  Type.Object(
+    {
+      schemaVersion: Type.Literal(1),
+      kind: Type.Literal("internal-error"),
+      origin: COMMAND_ORIGIN,
+      severity: Type.Literal("error"),
+      needsReload: Type.Boolean(),
+      summary: Type.String(),
+      cause: CAUSE,
+    },
+    { additionalProperties: false },
+  ),
 ]);
