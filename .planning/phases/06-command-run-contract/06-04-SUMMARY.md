@@ -220,3 +220,12 @@ Only planning Markdown changed after these results. Validation now records
 Developer confirmation of the redaction logic remains required before
 final goal verification. Both descriptor-less prohibition flags remain
 unresolved. These checks do not mark Phase 6 complete.
+
+## Developer confirmation
+
+On 2026-10-09, the user selected option 1, "Accept and continue verification."
+The accepted machine-error behavior replaces local paths with `[path]` and
+ambiguous affected causes with `Command failure details omitted.`. Text
+output remains unchanged. This resolves the redaction confirmation required
+by the fix workflow. It does not resolve the two prohibition flags or claim
+native Windows filesystem execution.

@@ -611,3 +611,12 @@ prohibition flags remain unresolved for the final verifier.
 | Gaps found | 1 |
 | Resolved | 1 |
 | Escalated | 0 |
+
+## Developer confirmation
+
+On 2026-10-09, the user selected option 1, "Accept and continue verification."
+The accepted machine-error behavior replaces local paths with `[path]` and
+ambiguous affected causes with `Command failure details omitted.`. Text
+output remains unchanged. This resolves the redaction confirmation required
+by the fix workflow. It does not resolve the two prohibition flags or claim
+native Windows filesystem execution.

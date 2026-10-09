@@ -21,7 +21,7 @@ status: all_fixed
 
 ### CR-01: Windows current-drive-rooted paths escape detection
 
-**Status:** fixed: requires human verification
+**Status:** fixed: developer confirmed (option 1, 2026-10-09)
 **Commit:** `045f53cd5060082c5df6371853338f6765cd1c2d`
 **Subject:** `fix: redact current-drive-rooted paths in machine errors`
 
@@ -131,3 +131,12 @@ The passing commit hook and focused checks are not a full GSD gate verdict.
 _Fixed: 2026-10-09T22:35:31Z_
 _Fixer: the agent (gsd-code-fixer)_
 _Iteration: 3_
+
+## Developer confirmation
+
+On 2026-10-09, the user selected option 1, "Accept and continue verification."
+The accepted machine-error behavior replaces local paths with `[path]` and
+ambiguous affected causes with `Command failure details omitted.`. Text
+output remains unchanged. This resolves the redaction confirmation required
+by the fix workflow. It does not resolve the two prohibition flags or claim
+native Windows filesystem execution.
