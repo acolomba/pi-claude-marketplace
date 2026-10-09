@@ -341,7 +341,20 @@ requirement (Phases 3 and 4), and no release may sit between the first write to
 2. A live UAT in a sandboxed agent directory shows adapter 5 loading our entries, migrating a seeded legacy entry with the reloads counted, finding plugin tools through tool search, and `info` showing their status, including `status unknown` in a deferred session until the first MCP use and a live state after it (D-06-06a). (ADOC-02)
 3. CHANGELOG records the milestone, and a version bump is offered before the PR. (ADOC-03)
 
-**Plans**: TBD
+**Plans**: 5 plans in 4 waves
+
+**Wave 1**
+- [ ] 07-01-PLAN.md — the optional pi-mcp-adapter peer becomes `>=5.2.0 <6` (advisory GHSA-6qxp-vccf-f47h) in the manifest, lock, gates, CI pin, comments and records after a byte-level re-check; `scripts/pi.sh` keeps Pi's `tool_search` (ADOC-02, ADOC-01)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 07-02-PLAN.md — the operator-run canary captures the legacy entry from 0.19.2 on Pi 1.0, proves the migration with one reload, a fresh install and the `mcp({ search })` route on a real pi-mcp-adapter 5.2.0 (ADOC-02)
+- [ ] 07-03-PLAN.md — the CHANGELOG records the milestone in grouped bullets with the action-needed link and the 0.20.0 bump offer; env-vars.md (ENVDOC-01), hooks-compatibility.md and the PRD describe the MCP behavior as built (ADOC-03, ADOC-01)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 07-04-PLAN.md — the canary adds the `tool_search` route and the `--no-extensions` reading, and tests/live-uat/README.md records its verbatim result and negative control (ADOC-02)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 07-05-PLAN.md — docs/mcp-compatibility.md gains Upgrading, Server status in info, project approval, adapter settings and grouped divergences; both READMEs name 5.2.0 and link it (ADOC-01)
 
 **Notes.** Unit tests prove we wrote the file; only a live adapter proves it reads it. The live-canary scratch-engine route is known. The UAT also confirms whether `scripts/pi.sh`'s `--no-extensions` still leaves `builtin:tool-search` loaded on Pi 1.0.
 
@@ -369,7 +382,7 @@ plan these phases with the UI gate skipped.
 | 4. Variable expansion at Claude Code parity | mcp-4 | 9/9 | Complete    | 2026-10-07 |
 | 5. Automatic migration on /reload | mcp-4 | 5/5 | Complete    | 2026-10-09 |
 | 6. Live MCP status in info | mcp-4 | 3/3 | Complete    | 2026-10-09 |
-| 7. Docs and live proof | mcp-4 | 0/TBD | Not started | - |
+| 7. Docs and live proof | mcp-4 | 0/5 | Not started | - |
 
 ## Carried Forward
 
