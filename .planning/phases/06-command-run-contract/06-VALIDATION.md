@@ -415,7 +415,7 @@ production module or export is permitted.
 - [x] New source-test pairs reach 100% direct coverage in the final combined gate.
 - [x] Strict text corpus and catalog checks pass for the isolated 06-04 tree; combined-tree confirmation remains parent-owned.
 - [x] All combined-wave gates pass; final unchanged phase inputs share the fourth-wave result.
-- [ ] High/critical threats have verified mitigations.
+- [x] Independent security audit verified all 15 declared mitigations; threats_open is 0.
 - [x] Descriptor-less prohibition flags are surfaced to parent/verifier; both remain flagged-unverified.
 - [x] Independent validation audit found all nine tasks covered; nyquist_compliant is true.
 
