@@ -282,6 +282,7 @@ Some entries cannot move. They stay in `mcp.json` and keep working under their o
 | No installed plugin in the scope owns the entry.                                       | Install the plugin, or remove the entry from `mcp.json`.                                                  |
 | The plugin comes from a git source, and its clone is not available offline.            | Run `/claude:plugin reinstall <plugin>@<marketplace>`.                                                    |
 | Another MCP configuration already defines the new key. No server of that plugin moves. | Remove or rename that server, then run `/reload`.                                                         |
+| The `mcp.json` file of the scope is not a valid MCP configuration.                     | Fix the file, then run `/reload`. No server of that scope moves.                                          |
 | The `mcp-adapter.json` file of the scope is not a valid MCP configuration.             | Fix the file, then run `/reload`. No server of that scope moves.                                          |
 | The marketplace copy cannot give the plugin source, or no longer lists the plugin.     | Run `/claude:plugin marketplace update <marketplace>`, or uninstall the plugin to remove its old entries. |
 | Another Pi process holds the lock on `state.json`.                                     | Run `/reload` again later.                                                                                |
