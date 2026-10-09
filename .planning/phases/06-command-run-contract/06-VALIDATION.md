@@ -25,7 +25,7 @@ phase with number 06 is a dependency.
 | Quick feedback | Each task's exact owner command below |
 | Combined wave and phase gate | `npm run check` |
 | Full gate timeout | 2400 seconds; a timeout is a failure to verify |
-| Measured task latency | 06-04-01 tracer: 5.99 s; 06-04-02 owners: 4.80 s; evidence below |
+| Measured task latency | 06-04-01 tracer: 5.99 s; 06-04-02 committed owners: 4.70 s; evidence below |
 | Security | ASVS level 1; high and critical findings block |
 | New packages or services | None |
 | Discovery | Level 0: existing internal router/run/dispatch/schema patterns; live source checked after CodeGraph |
@@ -170,7 +170,7 @@ Every task has an automated command and a sibling fails_when in its PLAN.
 | 06-03-02 | 03 | 3 | JOUT-04, JOUT-03 | T-06-08, T-06-09, T-06-10 | One recovery per append fault, successful recovery preserves later output/reload, failed recovery closes delivery, no retry/rollback | `node --test tests/shared/notification-dispatch.test.ts tests/edge/command-run.test.ts tests/orchestrators/plugin/list-flow.test.ts` | Existing plus 06-02-01 pair | Pending |
 | 06-03-03 | 03 | 3 | JOUT-03, JOUT-04, WIRE-07 | T-06-06, T-06-07, T-06-09, T-06-11 | Existing root integration, valid empty outcomes, later output/reload after successful recovery | `node --test tests/edge/register.test.ts tests/edge/command-run.test.ts tests/shared/notification-dispatch.test.ts` | Existing plus 06-02-01 pair | Pending |
 | 06-04-01 | 04 | 4 | WIRE-02, WIRE-07, JOUT-03, JOUT-04 | T-06-12 | Deferred auth/cascade/delegation settlement and identity | `node --test tests/edge/register.test.ts tests/orchestrators/auth-host.test.ts tests/orchestrators/marketplace/update.test.ts tests/orchestrators/plugin/enable-disable.test.ts` | Existing | PASS, exit 0; 5.99 s post-commit tracer |
-| 06-04-02 | 04 | 4 | WIRE-02, WIRE-07, JOUT-03, JOUT-04 | T-06-13, T-06-14 | Full fixture inventory, strict preservation, AUTH-09 internal-error enrollment and planted disclosure controls | `node --test tests/architecture/catalog-uat/catalog-wire.test.ts tests/architecture/no-credential-leak.test.ts tests/architecture/wire-schema.test.ts` | Existing | PASS, exit 0; 95 tests, 4.80 s; combined gate pending |
+| 06-04-02 | 04 | 4 | WIRE-02, WIRE-07, JOUT-03, JOUT-04 | T-06-13, T-06-14 | Full fixture inventory, strict preservation, AUTH-09 internal-error enrollment and planted disclosure controls | `node --test tests/architecture/catalog-uat/catalog-wire.test.ts tests/architecture/no-credential-leak.test.ts tests/architecture/wire-schema.test.ts` | Existing | PASS, exit 0; 95 tests, 4.70 s at task commit; combined gate pending |
 
 T-06-SC is the permitted phase-wide repeated supply-chain threat ID. No task
 installs packages; any scope change introducing an install must first supply
@@ -470,6 +470,11 @@ text-exception tests remain unchanged.
   `df3ea92e9aedae6a0193ed8e71e54656e0f8755eac92cb3848ad3f0c34fc9839`.
   The diff contains the three architecture test files; no untracked executable
   input was added. Final task commit SHA and hook results are in 06-04-SUMMARY.md.
+- Final clean reference: task 06-04-02 committed as
+  `8a0d27805faf8382502790e0941b4655a6865643`. Its normal check:commit hook
+  passed, after a clean Fallow audit and fixer pass. The exact owner command
+  passed again on that commit, exit 0, 95 tests, zero skips, 4.704 seconds.
+  Log: `/tmp/0604-task2-final.log`. Only planning Markdown changed afterward.
 - Local RED controls were observed against the existing implementation by
   temporarily disabling missing-outcome finalization and removing the
   internal-error origin. Both named targets failed the intended complete
@@ -513,6 +518,14 @@ changed. No skipped test was introduced.
 
 `git diff --exit-code 26cb0056 -- docs/output-catalog.md` passed with exit 0
 and an empty diff. No catalog or corpus baseline was changed or recaptured.
+
+The final producer rerun on clean task commit
+`8a0d27805faf8382502790e0941b4655a6865643` also passed: exit 0, 142.62 seconds,
+9385 tests, 9384 passing, one inherited skip, zero failures. The strict
+3149/zero-extra and no-missing/no-extra assertions passed again, as did the
+catalog comparison. Final logs: `/tmp/0604-corpus-final.log` and
+`/tmp/0604-corpus-final-time.log`. The executable diff from that commit remains
+empty; subsequent validation and summary edits are planning Markdown only.
 
 Combined-wave `npm run check`, final phase verification, and full threat review
 remain pending for the parent. This document does not promote those gates or
