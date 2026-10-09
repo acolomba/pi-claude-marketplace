@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import test from "node:test";
 
 import { runCommand } from "../../extensions/pi-claude-marketplace/edge/command-run.ts";
@@ -8,12 +11,191 @@ import { openNotificationRun } from "../../extensions/pi-claude-marketplace/shar
 
 import { createJsonCapture } from "./json-capture.ts";
 
+test("retains committed local state and earlier output after a command throws", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "command-partial-"));
+  t.after(async () => {
+    await rm(directory, { recursive: true, force: true });
+  });
+  const store = path.join(directory, "state.json");
+  await writeFile(store, '{"installed":false}');
+  const capture = createJsonCapture();
+  const pi = { ...capture.entrySink, getAllTools: () => [] };
+  const ctx = {
+    mode: "json",
+    get ui() {
+      return capture.ui;
+    },
+  };
+
+  // act
+  await runCommand(
+    pi,
+    ctx,
+    "plugin update",
+    async (run) => {
+      await writeFile(store, '{"installed":true}');
+      notifyUsageInfo(ctx, run, "Committed.");
+      throw new Error("Later work failed.");
+    },
+    createIds(),
+  );
+
+  // assert
+  assert.strictEqual(await readFile(store, "utf8"), '{"installed":true}');
+  assert.deepStrictEqual(capture.entries, [
+    {
+      customType: "claude-plugin",
+      payload: {
+        schemaVersion: 1,
+        kind: "usage-info",
+        severity: "info",
+        needsReload: false,
+        origin: { kind: "command", commandId: "plugin update", invocationId: "run-a" },
+        usage: "Committed.",
+      },
+    },
+    expectedError("Later work failed."),
+  ]);
+  capture.assertValid();
+});
+
+for (const { start, finish } of [
+  { start: "tui", finish: "json" },
+  { start: "print", finish: "rpc" },
+]) {
+  test(`delivers the error using live ${finish} after starting in ${start}`, async () => {
+    // arrange
+    const capture = createJsonCapture();
+    const pi = { ...capture.entrySink, getAllTools: () => [] };
+    const ctx = {
+      mode: start,
+      get ui() {
+        return capture.ui;
+      },
+    };
+
+    // act
+    await runCommand(
+      pi,
+      ctx,
+      "plugin update",
+      () => {
+        ctx.mode = finish;
+        return Promise.reject(new Error("failed"));
+      },
+      createIds(),
+    );
+
+    // assert
+    assert.deepStrictEqual(capture.entries, [expectedError("failed")]);
+    capture.assertValid();
+  });
+}
+
+for (const { start, finish } of [
+  { start: "json", finish: "tui" },
+  { start: "rpc", finish: "print" },
+]) {
+  test(`preserves the original throw using live ${finish} after starting in ${start}`, async () => {
+    // arrange
+    const capture = createJsonCapture();
+    const pi = { ...capture.entrySink, getAllTools: () => [] };
+    const ctx = {
+      mode: start,
+      get ui() {
+        return capture.ui;
+      },
+    };
+    const failure = new Error("failed");
+
+    // act & assert
+    await assert.rejects(
+      runCommand(
+        pi,
+        ctx,
+        "plugin update",
+        () => {
+          ctx.mode = finish;
+          return Promise.reject(failure);
+        },
+        createIds(),
+      ),
+      (error: unknown) => error === failure,
+    );
+    assert.deepStrictEqual(capture.entries, []);
+    capture.assertValid();
+  });
+}
+
 function createIds() {
   return {
     createInvocationId: () => "run-a",
     createRecoveryId: () => "recovery-a",
     openRun: openNotificationRun,
   };
+}
+
+for (const { title, cause, message } of [
+  { title: "null", cause: null, message: "Unknown thrown value." },
+  { title: "undefined", cause: undefined, message: "Unknown thrown value." },
+  { title: "string", cause: "failed string", message: "failed string" },
+  { title: "object", cause: { secret: "private" }, message: "[object Object]" },
+]) {
+  for (const mode of ["json", "rpc"]) {
+    test(`delivers a schema-valid error for thrown ${title} in ${mode}`, async () => {
+      // arrange
+      const capture = createJsonCapture();
+      const pi = { ...capture.entrySink, getAllTools: () => [] };
+      const ctx = {
+        mode,
+        get ui() {
+          return capture.ui;
+        },
+      };
+
+      // act
+      // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- exercises arbitrary thrown values at the command boundary
+      await runCommand(pi, ctx, "plugin update", () => Promise.reject(cause), createIds());
+
+      // assert
+      assert.deepStrictEqual(capture.entries, [expectedError(message)]);
+      capture.assertValid();
+    });
+  }
+
+  for (const mode of ["tui", "print"]) {
+    test(`preserves thrown ${title} identity in ${mode}`, async () => {
+      // arrange
+      const capture = createJsonCapture();
+      const pi = { ...capture.entrySink, getAllTools: () => [] };
+      const ctx = {
+        mode,
+        get ui() {
+          return capture.ui;
+        },
+      };
+
+      // act
+      const completion = await runCommand(
+        pi,
+        ctx,
+        "plugin update",
+        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- text must retain the original non-Error thrown value
+        () => Promise.reject(cause),
+        createIds(),
+      ).then(
+        () => ({ status: "fulfilled", cause: undefined }),
+        (error: unknown) => ({ status: "rejected", cause: error }),
+      );
+
+      // assert
+      assert.deepStrictEqual(completion, { status: "rejected", cause });
+      assert.strictEqual(completion.cause, cause);
+      assert.deepStrictEqual(capture.entries, []);
+      capture.assertValid();
+    });
+  }
 }
 
 function expectedError(message: string, invocationId = "run-a") {

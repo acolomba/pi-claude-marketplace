@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { Compile } from "typebox/compile";
+
+import { resolveCommandError } from "../../extensions/pi-claude-marketplace/shared/notification-command-error.ts";
 import {
   toWireMarketplaces,
   toWirePayload,
@@ -9,6 +12,7 @@ import {
   presentCascade,
   presentUpdateNoOp,
 } from "../../extensions/pi-claude-marketplace/shared/notification-present.ts";
+import { NOTIFICATION_PAYLOAD_SCHEMA } from "../../extensions/pi-claude-marketplace/shared/notification-wire.ts";
 
 import { runWithNothingLoaded } from "./notification-run-seeds.ts";
 
@@ -34,6 +38,103 @@ import type {
   Reason,
 } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 import type { Scope } from "../../extensions/pi-claude-marketplace/shared/types.ts";
+
+function assertSafeCommandPayload(payload: unknown): void {
+  if (typeof payload === "string") {
+    assert.doesNotMatch(payload, /secret123|user:private|ghp_abcdefghijklmnop/);
+    assert.doesNotMatch(
+      payload,
+      /file:\/+|\\\\|(?<![\w:/\\])(?:[A-Za-z]:[\\/]|\/)[\w.\\/~-]+[\\/][\w.\\/~-]+/i,
+    );
+    return;
+  }
+
+  if (typeof payload === "boolean") {
+    return;
+  }
+
+  if (typeof payload === "number") {
+    assert.ok(Number.isFinite(payload));
+    return;
+  }
+
+  assert.ok(payload !== null && typeof payload === "object");
+  assert.ok(Array.isArray(payload) || Object.getPrototypeOf(payload) === Object.prototype);
+  assert.deepStrictEqual(Object.getOwnPropertySymbols(payload), []);
+  for (const [key, member] of Object.entries(payload)) {
+    assert.notStrictEqual(key, "stack");
+    assertSafeCommandPayload(member);
+  }
+}
+
+test("converts hostile command causes to schema-valid disclosure-safe plain JSON", () => {
+  // arrange
+  const cause = new Error("https://user:private@host/repo Bearer secret123 ghp_abcdefghijklmnop", {
+    cause: new Error(
+      "/private/work/config.json C:\\private\\work\\config.json \\\\server file:///private/work/config.json file:/private/work/config.json",
+    ),
+  });
+  const presentation = resolveCommandError(cause, true);
+  const origin = { kind: "command", commandId: "plugin update", invocationId: "run-a" } as const;
+  const validator = Compile(NOTIFICATION_PAYLOAD_SCHEMA);
+
+  // act
+  const payload = toWirePayload(presentation, origin);
+
+  // assert
+  assert.deepStrictEqual(payload, {
+    schemaVersion: 1,
+    kind: "internal-error",
+    origin,
+    severity: "error",
+    needsReload: true,
+    summary: "Command failed unexpectedly.",
+    cause: {
+      causeChain: [
+        "https://***@host/repo Bearer *** ***",
+        "config.json config.json [path] [path] [path]",
+      ],
+      truncated: false,
+    },
+  });
+  assert.strictEqual(validator.Check(payload), true);
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(payload)), payload);
+  assertSafeCommandPayload(payload);
+});
+
+for (const { title, cause } of [
+  { title: "credentials", cause: { causeChain: ["Bearer secret123"], truncated: false } },
+  { title: "POSIX path", cause: { causeChain: ["/private/work/config.json"], truncated: false } },
+  { title: "Windows path", cause: { causeChain: ["C:\\private\\config.json"], truncated: false } },
+  { title: "bare UNC root", cause: { causeChain: ["\\\\server"], truncated: false } },
+  { title: "file URL", cause: { causeChain: ["file:/private/config.json"], truncated: false } },
+  { title: "live Error", cause: new Error("failed") },
+  { title: "stack", cause: { causeChain: ["failed"], truncated: false, stack: "private" } },
+  { title: "null member", cause: null },
+  { title: "undefined member", cause: undefined },
+  { title: "function member", cause: () => "private" },
+  { title: "symbol member", cause: Symbol("private") },
+  { title: "nonfinite number", cause: Infinity },
+  { title: "symbol key", cause: { [Symbol("private")]: "private" } },
+]) {
+  test(`the command payload disclosure check rejects planted ${title}`, () => {
+    // arrange
+    const payload = {
+      schemaVersion: 1,
+      kind: "internal-error",
+      origin: { kind: "command", commandId: "plugin update", invocationId: "run-a" },
+      severity: "error",
+      needsReload: false,
+      summary: "Command failed unexpectedly.",
+      cause,
+    };
+
+    // act & assert
+    assert.throws(() => {
+      assertSafeCommandPayload(payload);
+    }, assert.AssertionError);
+  });
+}
 
 test("projects complete internal-error facts without undeclared properties", () => {
   // arrange

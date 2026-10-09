@@ -35,7 +35,7 @@ function resolveCause(cause: unknown): SerializedCauseChain {
 
     return {
       causeChain: serialized.causeChain.map((message) =>
-        redactAbsolutePaths(message.replace(/file:\/\/[^\s"'<>]+|\\\\[^\s"'<>]+/gi, "[path]")),
+        redactAbsolutePaths(message.replace(/file:\/+[^\s"'<>]+|\\\\[^\s"'<>]+/gi, "[path]")),
       ),
       truncated: serialized.truncated,
     };
