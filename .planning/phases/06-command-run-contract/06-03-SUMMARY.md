@@ -218,4 +218,11 @@ STATE.md, state.json, ROADMAP.md, config.json, REQUIREMENTS.md, and parent check
 
 ## Self-Check: PASSED
 
+The parent merged this plan as `b44becd2` and ran `npm run check` on the
+clean combined tree with Node `v26.11.0`. It passed with exit 0, including
+integration tests and direct coverage for all 266 source/test pairs.
+The schema-drift gate passed; codebase-map drift remains an advisory to use
+live source. GSD reported the documented `tests/index.test.ts` fixture change
+as an advisory scope addition during merge.
+
 All ten implementation files exist. All three exact task SHAs are ancestors of HEAD. The persisted ledger measures three task commits and the exact boundaries recorded above. The working tree and index were clean except for the pre-existing runtime symlink before summary creation. Catalog and protected planning-file comparisons passed; no temporary negative-control mutation remains.
