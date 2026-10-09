@@ -341,7 +341,7 @@ requirement (Phases 3 and 4), and no release may sit between the first write to
 2. A live UAT in a sandboxed agent directory shows adapter 5 loading our entries, migrating a seeded legacy entry with the reloads counted, finding plugin tools through tool search, and `info` showing their status, including `status unknown` in a deferred session until the first MCP use and a live state after it (D-06-06a). (ADOC-02)
 3. CHANGELOG records the milestone, and a version bump is offered before the PR. (ADOC-03)
 
-**Plans**: 4/5 plans executed in 4 waves
+**Plans**: 5/5 plans executed in 4 waves
 
 **Wave 1**
 - [x] 07-01-PLAN.md — the optional pi-mcp-adapter peer becomes `>=5.2.0 <6` (advisory GHSA-6qxp-vccf-f47h) in the manifest, lock, gates, CI pin, comments and records after a byte-level re-check; `scripts/pi.sh` keeps Pi's `tool_search` (ADOC-02, ADOC-01)
@@ -354,7 +354,7 @@ requirement (Phases 3 and 4), and no release may sit between the first write to
 - [x] 07-04-PLAN.md — the canary adds the `tool_search` route and the `--no-extensions` reading, and tests/live-uat/README.md records its verbatim result and negative control (ADOC-02)
 
 **Wave 4** *(blocked on Wave 3 completion)*
-- [ ] 07-05-PLAN.md — docs/mcp-compatibility.md gains Upgrading, Server status in info, project approval, adapter settings and grouped divergences; both READMEs name 5.2.0 and link it (ADOC-01)
+- [x] 07-05-PLAN.md — docs/mcp-compatibility.md gains Upgrading, Server status in info, project approval, adapter settings and grouped divergences; both READMEs name 5.2.0 and link it (ADOC-01)
 
 **Notes.** Unit tests prove we wrote the file; only a live adapter proves it reads it. The live-canary scratch-engine route is known. The UAT also confirms whether `scripts/pi.sh`'s `--no-extensions` still leaves `builtin:tool-search` loaded on Pi 1.0.
 
@@ -382,7 +382,7 @@ plan these phases with the UI gate skipped.
 | 4. Variable expansion at Claude Code parity | mcp-4 | 9/9 | Complete    | 2026-10-07 |
 | 5. Automatic migration on /reload | mcp-4 | 5/5 | Complete    | 2026-10-09 |
 | 6. Live MCP status in info | mcp-4 | 3/3 | Complete    | 2026-10-09 |
-| 7. Docs and live proof | mcp-4 | 4/5 | In Progress | - |
+| 7. Docs and live proof | mcp-4 | 5/5 | In Progress | - |
 
 ## Carried Forward
 

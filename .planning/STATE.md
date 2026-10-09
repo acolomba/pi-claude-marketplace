@@ -4,17 +4,17 @@ milestone: mcp-4
 milestone_name: MCP 4
 current_phase: 07
 current_phase_name: Docs and live proof
-status: executing
-stopped_at: Completed 07-04-PLAN.md
-last_updated: "2026-10-09T22:44:37.896Z"
+status: verifying
+stopped_at: Completed 07-05-PLAN.md
+last_updated: "2026-10-09T22:57:26.910Z"
 last_activity: 2026-10-09
 last_activity_desc: Phase 07 execution started
-state_head: 6e3e6a6200187d2193c6276a026ba23f2103ccd9
+state_head: bd4aad6b3a24e89817f4d808e5acdb862b6fc53a
 progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 52
-  completed_plans: 51
+  completed_plans: 52
   percent: 86
 ---
 
@@ -36,7 +36,7 @@ sign-ins and approvals.
 
 Phase: 07 (Docs and live proof) — EXECUTING
 Plan: 5 of 5
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-10-09 — Phase 07 execution started
 
 Progress: [█████████░] 86%
@@ -297,6 +297,7 @@ still open with a comment explaining what landed.
 | Phase 07 P02 | 14 min | 2 tasks | 3 files |
 | Phase 07 P03 | 8 min | 3 tasks | 5 files |
 | Phase 07 P04 | 11 min | 2 tasks | 3 files |
+| Phase 07 P05 | 7 min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -711,6 +712,7 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 07]: [mcp-4 Phase 7] env-vars.md gives AI_AGENT its own footnote: Pi sets it at process start, so it has no spawn-order caveat
 - [Phase 07]: [mcp-4 Phase 7] PRD PI-11 (pi-subagents only) stays stale; D-07-14 scopes the PRD update to MCP mentions
 - [Phase 07]: [mcp-4 Phase 7] Both live-canary search routes run through one route driver; the --no-extensions probes are recorded, never asserted
+- [Phase 07]: [07-05] Upgrade notes give the old Pi tool name as <old-name>_<tool> (pi-mcp-adapter default server prefix; 0.19.2 entries carried no toolPrefix), not mcp__<old-name>__<tool>
 
 ### Pending Todos
 
@@ -844,11 +846,11 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Completed 07-04-PLAN.md
+**Stopped at:** Completed 07-05-PLAN.md
 
 **Resume file:** None
 
-Last session: 2026-10-09T22:44:37.540Z
+Last session: 2026-10-09T22:57:15.140Z
 Phase 6 closed in the same `/gsd-autonomous --from 5 --interactive` run.
 Gates: discuss (4 areas + 3 post-research rulings), research, 3 plans in 3
 waves executed sequentially; Nyquist compliant; security 12/12 closed;

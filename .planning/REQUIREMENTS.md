@@ -129,7 +129,7 @@ Research: `.planning/research/SUMMARY.md` (and STACK, FEATURES, ARCHITECTURE, PI
 
 ### Docs and live proof (ADOC)
 
-- [ ] **ADOC-01**: README, `docs/env-vars.md` (ENVDOC-01), `docs/hooks-compatibility.md` and the
+- [x] **ADOC-01**: README, `docs/env-vars.md` (ENVDOC-01), `docs/hooks-compatibility.md` and the
   PRD/NFR-10 text describe adapter-file delivery, naming, tool search, variable rules and the
   documented divergences.
 - [x] **ADOC-02**: A live UAT in a sandboxed agent directory proves adapter 5 loads our entries,
@@ -196,7 +196,7 @@ Research: `.planning/research/SUMMARY.md` (and STACK, FEATURES, ARCHITECTURE, PI
 | AMIG-04 | Phase 5 | Complete |
 | ASTAT-01 | Phase 6 | Complete |
 | ASTAT-02 | Phase 6 | Complete |
-| ADOC-01 | Phase 7 | Pending |
+| ADOC-01 | Phase 7 | Complete |
 | ADOC-02 | Phase 7 | Complete |
 | ADOC-03 | Phase 7 | Complete |
 
