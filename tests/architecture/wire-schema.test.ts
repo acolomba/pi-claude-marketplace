@@ -16,6 +16,7 @@ interface WireSchemaModule {
 }
 
 interface PayloadMember {
+  readonly required: readonly string[];
   readonly properties: {
     readonly kind: { readonly const: string };
     readonly schemaVersion: { readonly const: number };
@@ -129,6 +130,30 @@ test("a committed schema missing one payload kind fails the drift comparison", a
     assertMatchesSource(planted, built);
   }, assert.AssertionError);
 });
+
+for (const field of ["origin", "severity", "needsReload"] as const) {
+  test(`the committed schema requires ${field} on all kinds and detects its removal`, async () => {
+    // arrange
+    const committed = await committedSchemaDocument();
+    const built = wireSchema.buildWireSchemaDocument();
+
+    // act
+    const missing = committed.anyOf.filter((member) => !member.required.includes(field));
+    const planted = {
+      ...committed,
+      anyOf: committed.anyOf.map((member) => ({
+        ...member,
+        required: member.required.filter((key) => key !== field),
+      })),
+    };
+
+    // assert
+    assert.deepStrictEqual(missing, []);
+    assert.throws(() => {
+      assertMatchesSource(planted, built);
+    }, assert.AssertionError);
+  });
+}
 
 test("package.json files lists the committed schema", async () => {
   // arrange
