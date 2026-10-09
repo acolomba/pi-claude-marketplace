@@ -1048,7 +1048,16 @@ test("AUTH-09 / PMOD-04: the planted-credential assertion reports an unredacted 
 function assertSafeCommandPayload(payload: unknown): void {
   if (typeof payload === "string") {
     assert.doesNotMatch(payload, /gh[pousr]_[A-Za-z0-9]+|alice:s3cret|s3cret|Bearer secret123/);
-    for (const disclosure of ["private", "Private Data", "用户", "秘密", "server", "file:/"]) {
+    for (const disclosure of [
+      "private",
+      "Private Data",
+      "用户",
+      "秘密",
+      "server",
+      "file:/",
+      "Confidential Client",
+      "Connor",
+    ]) {
       assert.strictEqual(payload.includes(disclosure), false, `Disclosed ${disclosure}`);
     }
 
@@ -1098,7 +1107,7 @@ for (const mode of ["json", "rpc"] as const) {
         causeChain: [
           "https://***@github.com/o/r.git Bearer *** ***",
           "[path]",
-          'open "[path]" and "[path]" and "[path]"; failed at:[path]',
+          "Command failure details omitted.",
         ],
         truncated: false,
       },
@@ -1117,7 +1126,63 @@ for (const mode of ["json", "rpc"] as const) {
   });
 }
 
+for (const message of [
+  "ENOENT: no such file or directory, open '/tmp/review-absent/'Confidential Client'/secret.json'",
+  "ENOENT: no such file or directory, open '/tmp/review-absent/O'Connor/secret.json'",
+  "ENOENT: no such file or directory, open '/tmp/review-absent/\nConfidential Client/secret.json'",
+  "failed at /Users/<Confidential Client>/secret.json",
+]) {
+  for (const mode of ["json", "rpc"]) {
+    test(`AUTH-09: ${mode} omits ambiguous directory details in ${JSON.stringify(message)}`, () => {
+      // arrange
+      const capture = createJsonCapture();
+      const origin = {
+        kind: "command",
+        commandId: "plugin update",
+        invocationId: "safe-error",
+      } as const;
+      const ctx: NotificationContext = {
+        mode,
+        get ui() {
+          return capture.ui;
+        },
+      };
+
+      // act
+      notifyCommandError(
+        ctx,
+        capture.entrySink,
+        origin,
+        createCommandRunState(),
+        new Error(message),
+      );
+
+      // assert
+      assert.deepStrictEqual(capture.entries, [
+        {
+          customType: "claude-plugin",
+          payload: {
+            schemaVersion: 1,
+            kind: "internal-error",
+            origin,
+            severity: "error",
+            needsReload: false,
+            summary: "Command failed unexpectedly.",
+            cause: { causeChain: ["Command failure details omitted."], truncated: false },
+          },
+        },
+      ]);
+      assertSafeCommandPayload(capture.entries);
+      capture.assertValid();
+    });
+  }
+}
+
 for (const [name, disclosure] of [
+  ["quoted directory suffix", "open '[path]'Confidential Client'[path]'"],
+  ["apostrophe directory suffix", "open '[path]'Connor[path]'"],
+  ["newline directory suffix", "open '[path]\nConfidential Client[path]'"],
+  ["angle-bracket directory suffix", "failed at [path]<Confidential Client>[path]"],
   ["credential", GITHUB_TOKEN],
   ["userinfo", USERINFO_URL],
   ["bearer token", "Bearer secret123"],

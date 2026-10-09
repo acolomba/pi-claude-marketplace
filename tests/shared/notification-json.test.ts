@@ -42,7 +42,16 @@ import type { Scope } from "../../extensions/pi-claude-marketplace/shared/types.
 function assertSafeCommandPayload(payload: unknown): void {
   if (typeof payload === "string") {
     assert.doesNotMatch(payload, /secret123|user:private|ghp_abcdefghijklmnop/);
-    for (const disclosure of ["private", "Private Data", "用户", "秘密", "server", "file:/"]) {
+    for (const disclosure of [
+      "private",
+      "Private Data",
+      "用户",
+      "秘密",
+      "server",
+      "file:/",
+      "Confidential Client",
+      "Connor",
+    ]) {
       assert.strictEqual(payload.includes(disclosure), false, `Disclosed ${disclosure}`);
     }
 
@@ -98,7 +107,7 @@ test("converts hostile command causes to schema-valid disclosure-safe plain JSON
       causeChain: [
         "https://***@host/repo Bearer *** ***",
         "[path]",
-        'open "[path]" and "[path]" and "[path]"; failed at:[path]',
+        "Command failure details omitted.",
       ],
       truncated: false,
     },
@@ -108,7 +117,53 @@ test("converts hostile command causes to schema-valid disclosure-safe plain JSON
   assertSafeCommandPayload(payload);
 });
 
+for (const message of [
+  "ENOENT: no such file or directory, open '/tmp/review-absent/'Confidential Client'/secret.json'",
+  "ENOENT: no such file or directory, open '/tmp/review-absent/O'Connor/secret.json'",
+  "ENOENT: no such file or directory, open '/tmp/review-absent/\nConfidential Client/secret.json'",
+  "failed at /Users/<Confidential Client>/secret.json",
+]) {
+  test(`converts ambiguous path details safely for ${JSON.stringify(message)}`, () => {
+    // arrange
+    const presentation = resolveCommandError(new Error(message), true);
+    const origin = { kind: "command", commandId: "plugin update", invocationId: "run-a" } as const;
+    const validator = Compile(NOTIFICATION_PAYLOAD_SCHEMA);
+
+    // act
+    const payload = toWirePayload(presentation, origin);
+
+    // assert
+    assert.deepStrictEqual(payload, {
+      schemaVersion: 1,
+      kind: "internal-error",
+      origin,
+      severity: "error",
+      needsReload: true,
+      summary: "Command failed unexpectedly.",
+      cause: { causeChain: ["Command failure details omitted."], truncated: false },
+    });
+    assert.strictEqual(validator.Check(payload), true);
+    assertSafeCommandPayload(payload);
+  });
+}
+
 for (const { title, cause } of [
+  {
+    title: "quoted directory suffix",
+    cause: { causeChain: ["open '[path]'Confidential Client'[path]'"], truncated: false },
+  },
+  {
+    title: "apostrophe directory suffix",
+    cause: { causeChain: ["open '[path]'Connor[path]'"], truncated: false },
+  },
+  {
+    title: "newline directory suffix",
+    cause: { causeChain: ["open '[path]\nConfidential Client[path]'"], truncated: false },
+  },
+  {
+    title: "angle-bracket directory suffix",
+    cause: { causeChain: ["failed at [path]<Confidential Client>[path]"], truncated: false },
+  },
   { title: "credentials", cause: { causeChain: ["Bearer secret123"], truncated: false } },
   { title: "POSIX path", cause: { causeChain: ["/private/work/config.json"], truncated: false } },
   { title: "Windows path", cause: { causeChain: ["C:\\private\\config.json"], truncated: false } },

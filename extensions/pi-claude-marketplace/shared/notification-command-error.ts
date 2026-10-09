@@ -2,6 +2,8 @@ import { serializeCauseChain } from "./errors.ts";
 
 import type { SerializedCauseChain } from "./errors.ts";
 
+const OMITTED_CAUSE = "Command failure details omitted.";
+
 /** Resolved machine-only facts for an unexpected command failure. */
 export interface CommandErrorPresentation {
   readonly kind: "internal-error";
@@ -43,20 +45,42 @@ function resolveCause(cause: unknown): SerializedCauseChain {
 }
 
 function redactCommandPaths(message: string): string {
-  let quoted = message;
-  for (const quote of ['"', "'", "`"]) {
-    const quotedPath = new RegExp(
-      `${quote}(?:file:/|[a-z]:[\\\\/]|\\\\\\\\|/)[^${quote}\\r\\n]*${quote}`,
-      "gi",
-    );
-    quoted = quoted.replace(quotedPath, `${quote}[path]${quote}`);
+  const locations = message.matchAll(/https?:\/\/[^\s"'`<>]+|file:\/|\b[a-z]:[\\/]|\\\\|\//gi);
+  for (const location of locations) {
+    if (/^https?:/i.test(location[0])) {
+      continue;
+    }
+
+    return redactPathTail(message.slice(0, location.index), message.slice(location.index));
   }
 
-  // Unquoted paths can contain spaces. Mask through the next delimiter rather
-  // than retain a suffix that could still name a private directory or file.
-  // HTTP(S) URLs stay readable. Other prefixes cannot exempt a local path.
-  return quoted.replace(
-    /(https?:\/\/[^\s"'`<>]+)|(?:file:\/|\b[a-z]:[\\/]|\\\\|\/)[^\r\n"'`<>]*/gi,
-    (_match, remoteUrl: string | undefined) => remoteUrl ?? "[path]",
-  );
+  return message;
+}
+
+function redactPathTail(prefix: string, tail: string): string {
+  let pathText = tail;
+  let suffix = "";
+  const quote = prefix.at(-1);
+  if (quote === '"' || quote === "'" || quote === "`") {
+    const closingQuote = tail.indexOf(quote);
+    if (closingQuote === -1) {
+      return OMITTED_CAUSE;
+    }
+
+    pathText = tail.slice(0, closingQuote);
+    suffix = tail.slice(closingQuote);
+    // Only a fixed display suffix may survive a quoted path. Arbitrary text
+    // after a quote can be part of a filename, including in Node errors.
+    if (suffix !== quote && suffix !== `${quote} failed`) {
+      return OMITTED_CAUSE;
+    }
+  }
+
+  // Delimiters and control characters can be filename bytes. Suppress the
+  // entire cause when its path cannot be removed without guessing boundaries.
+  if (/["'`<>\p{Cc}\p{Zl}\p{Zp}]/u.test(pathText)) {
+    return OMITTED_CAUSE;
+  }
+
+  return `${prefix}[path]${suffix}`;
 }

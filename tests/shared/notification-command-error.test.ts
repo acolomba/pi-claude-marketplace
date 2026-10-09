@@ -4,6 +4,44 @@ import test from "node:test";
 import { resolveCommandError } from "../../extensions/pi-claude-marketplace/shared/notification-command-error.ts";
 
 for (const localPath of [
+  "/tmp/review-absent/'Confidential Client'/secret.json",
+  "/tmp/review-absent/O'Connor/secret.json",
+  "/tmp/review-absent/\nConfidential Client/secret.json",
+  "/Users/<Confidential Client>/secret.json",
+  '/Users/"Confidential Client"/secret.json',
+  "/Users/`Confidential Client`/secret.json",
+  "/Users/\r\nConfidential Client/secret.json",
+  "/Users/\tConfidential Client/secret.json",
+  "C:\\Users\\O'Connor\\secret.json",
+  "\\\\server\\'Confidential Client'\\secret.json",
+  "file:///Users/<Confidential Client>/secret.json",
+]) {
+  for (const message of [localPath, `open '${localPath}'`, `open "${localPath}"`]) {
+    test(`omits ambiguous path details from ${JSON.stringify(message)}`, () => {
+      // arrange
+      const cause = new Error(message, { cause: new Error("unchanged cause") });
+
+      // act
+      const presentation = resolveCommandError(cause, true);
+
+      // assert
+      assert.deepStrictEqual(presentation, {
+        kind: "internal-error",
+        severity: "error",
+        needsReload: true,
+        summary: "Command failed unexpectedly.",
+        cause: {
+          causeChain: ["Command failure details omitted.", "unchanged cause"],
+          truncated: false,
+        },
+      });
+      assert.strictEqual(JSON.stringify(presentation).includes("Confidential Client"), false);
+      assert.strictEqual(JSON.stringify(presentation).includes("Connor"), false);
+    });
+  }
+}
+
+for (const localPath of [
   "/Private Data/client/secret.json",
   "/用户/秘密/config.json",
   "C:\\Private Data\\client\\secret.json",
@@ -45,6 +83,36 @@ for (const localPath of [
 }
 
 for (const { title, cause, causeChain } of [
+  {
+    title: "unterminated path quote",
+    cause: "open '/private/work/config.json",
+    causeChain: ["Command failure details omitted."],
+  },
+  {
+    title: "backtick-wrapped path",
+    cause: "open `/private/work/config.json`",
+    causeChain: ["open `[path]`"],
+  },
+  {
+    title: "remote URL before a local path",
+    cause: 'https://user:private@host/repo failed at "/Private Data/config.json"',
+    causeChain: ['https://***@host/repo failed at "[path]"'],
+  },
+  {
+    title: "URL-like text inside a local path",
+    cause: "/Private Data/https://host/Confidential Client/secret.json",
+    causeChain: ["[path]"],
+  },
+  {
+    title: "Unicode line separator in a path",
+    cause: "/Users/\u2028Confidential Client/secret.json",
+    causeChain: ["Command failure details omitted."],
+  },
+  {
+    title: "Unicode paragraph separator in a path",
+    cause: "/Users/\u2029Confidential Client/secret.json",
+    causeChain: ["Command failure details omitted."],
+  },
   {
     title: "nested credentials",
     cause: new Error("https://user:secret@host/repo", {

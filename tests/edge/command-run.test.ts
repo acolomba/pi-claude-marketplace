@@ -201,7 +201,58 @@ function createIds() {
   };
 }
 
+for (const directoryName of [
+  "'Confidential Client'",
+  "O'Connor",
+  "\nConfidential Client",
+  "<Confidential Client>",
+  '"Confidential Client"',
+  "`Confidential Client`",
+  "\r\nConfidential Client",
+]) {
+  for (const mode of ["json", "rpc"]) {
+    test(`omits real filesystem details for ${JSON.stringify(directoryName)} in ${mode}`, async (t) => {
+      // arrange
+      const directory = await mkdtemp(path.join(tmpdir(), "command-missing-path-"));
+      t.after(async () => {
+        await rm(directory, { recursive: true, force: true });
+      });
+      const absentFile = path.join(directory, "missing", directoryName, "secret.json");
+      const capture = createJsonCapture();
+      const pi = { ...capture.entrySink, getAllTools: () => [] };
+      const ctx = {
+        mode,
+        get ui() {
+          return capture.ui;
+        },
+      };
+
+      // act
+      await runCommand(
+        pi,
+        ctx,
+        "plugin update",
+        async () => {
+          await readFile(absentFile);
+        },
+        createIds(),
+      );
+
+      // assert
+      assert.deepStrictEqual(capture.entries, [expectedError("Command failure details omitted.")]);
+      assert.strictEqual(JSON.stringify(capture.entries).includes("Confidential Client"), false);
+      assert.strictEqual(JSON.stringify(capture.entries).includes("Connor"), false);
+      capture.assertValid();
+    });
+  }
+}
+
 for (const { message, safeMessage, disclosure } of [
+  {
+    message: "failed at /Users/<Confidential Client>/secret.json",
+    safeMessage: "Command failure details omitted.",
+    disclosure: "Confidential Client",
+  },
   {
     message: 'ENOENT: open "/Private Data/client/secret.json"',
     safeMessage: 'ENOENT: open "[path]"',
