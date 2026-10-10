@@ -4,17 +4,17 @@ milestone: mcp-4
 milestone_name: MCP 4
 current_phase: 8
 current_phase_name: Clear milestone debt
-status: executing
-stopped_at: Completed 08-20-PLAN.md
-last_updated: "2026-10-10T07:06:15.127Z"
+status: verifying
+stopped_at: Completed 08-21-PLAN.md
+last_updated: "2026-10-10T07:19:13.037Z"
 last_activity: 2026-10-09
 last_activity_desc: Phase 8 execution started
-state_head: d45f5b5db18af278bc7617d7287789cbbd572db8
+state_head: f47a2c9edf2699127d891fc139c432991c82d300
 progress:
   total_phases: 8
   completed_phases: 7
   total_plans: 73
-  completed_plans: 72
+  completed_plans: 73
   percent: 88
 ---
 
@@ -36,7 +36,7 @@ sign-ins and approvals.
 
 Phase: 8 (Clear milestone debt) — EXECUTING
 Plan: 21 of 21
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-10-09 — Phase 8 execution started
 
 Progress: [█████████░] 88%
@@ -318,6 +318,7 @@ still open with a comment explaining what landed.
 | Phase 08 P18 | 11min | 3 tasks | 11 files |
 | Phase 08 P19 | 15min | 2 tasks | 1 files |
 | Phase 08 P20 | 10min | 2 tasks | 6 files |
+| Phase 08 P21 | 15min | 3 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -759,6 +760,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 08]: Reconcile, import, config write-back and marketplace modules read by own key and write config maps with setOwn; mcp-migration imports the shared ownValue (D-08-07)
 - [Phase 08]: End-to-end reserved-name proof runs the registered /claude:plugin handler and the real applyReconcile in a hermetic home; install __proto__@<mp> is refused at the closure root-key token rule as (failed) {invalid manifest}, and the resolver's (unavailable) {unsupported source} row surfaces through list
 - [Phase 08]: The MCP bridge keeps one isPlainObject, exported from bridges/mcp/marker.ts (a module with no sibling imports); the ENOTDIR-as-absent change in stage.ts readOptionalBytes is declined because such a stage throws before it records a prior file
+- [Phase 08]: Every Phase 1-7 review ledger is closed by hand with open: 0; fixed rows cite commits, wontfix rows carry reasons, and ledgers holding wontfix note the code-review parser reads it as open (DEBT-02)
+- [Phase 08]: Broken-windows entry 90 (misleading dependency cause for an invalid root plugin name) is carried by BACKLOG ROOTKEY-01 and waived in the ledger; code unchanged
 
 ### Pending Todos
 
@@ -892,11 +895,11 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Completed 08-20-PLAN.md
+**Stopped at:** Completed 08-21-PLAN.md
 
 **Resume file:** None
 
-Last session: 2026-10-10T07:06:14.640Z
+Last session: 2026-10-10T07:19:12.527Z
 Phase 7 closed: 5/5 plans; Nyquist validated; security verified (0 open);
 review 8/8 fixed; verifier 3/3, re-running the live canary against
 pi-mcp-adapter 5.2.0. `/gsd-autonomous --from 7` ran the transition, then

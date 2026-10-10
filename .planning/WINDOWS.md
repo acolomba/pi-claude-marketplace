@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 24
-waived_count: 27
+open_count: 23
+waived_count: 28
 fixed_count: 39
 total_count: 90
-last_updated: 2026-10-10T06:58:57.793Z
+last_updated: 2026-10-10T07:14:44.742Z
 ---
 
 # Broken Windows Ledger
@@ -104,7 +104,7 @@ last_updated: 2026-10-10T06:58:57.793Z
 | 87 | 09 | deviation | tests/orchestrators/plugin/install-flow.test.ts | 11732 | ESLint @typescript-eslint/require-await on marketplaceTagProbe (introduced by 09-03's 71dcea21); plan 09-04 defers the fix per Task 3's own instruction not to fix earlier-plan defects | fixed |  | 2026-09-22T07:47:54.363Z | 2026-09-22T08:03:16.136Z |
 | 88 | 04 | stub | extensions/pi-claude-marketplace/bridges/mcp/substitute.ts |  | [mcp-4] VariableReport.blanked is always empty until the credential deny-list arm lands (plan 04-03) | fixed |  | 2026-10-07T16:56:58.753Z | 2026-10-07T17:39:33.278Z |
 | 89 | 04 | stub | extensions/pi-claude-marketplace/bridges/mcp/stage.ts |  | [mcp-4] prepareStageMcpServers ignores stampServers variableReports until the missing-variable notice lands (plan 04-02) | fixed |  | 2026-10-07T16:56:59.121Z | 2026-10-07T17:11:49.465Z |
-| 90 | 08 | deviation | extensions/pi-claude-marketplace/domain/dependency-closure.ts | 490 | [mcp-4] install __proto__@<mp> is refused by the closure root-key token rule as (failed) {invalid manifest} with the cause 'declares an unusable dependency (root: ...)', not the resolver's (unavailable) {unsupported source}; the same cause text reaches any root name outside the dependency token alphabet (e.g. _x@mp) | open |  | 2026-10-10T06:58:57.793Z |  |
+| 90 | 08 | deviation | extensions/pi-claude-marketplace/domain/dependency-closure.ts | 490 | [mcp-4] install __proto__@<mp> is refused by the closure root-key token rule as (failed) {invalid manifest} with the cause 'declares an unusable dependency (root: ...)', not the resolver's (unavailable) {unsupported source}; the same cause text reaches any root name outside the dependency token alphabet (e.g. _x@mp) | waived | [mcp-4] Carried by BACKLOG.md ROOTKEY-01 (f47a2c9e): the refusal is correct and no record or file changes; only the cause text misleads, and choosing the right verdict for an invalid root name needs an upstream check first. Not fixed in the debt phase. | 2026-10-10T06:58:57.793Z | 2026-10-10T07:14:44.742Z |
 
 ````json
 [
@@ -1216,10 +1216,10 @@ last_updated: 2026-10-10T06:58:57.793Z
     "file": "extensions/pi-claude-marketplace/domain/dependency-closure.ts",
     "line": 490,
     "description": "[mcp-4] install __proto__@<mp> is refused by the closure root-key token rule as (failed) {invalid manifest} with the cause 'declares an unusable dependency (root: ...)', not the resolver's (unavailable) {unsupported source}; the same cause text reaches any root name outside the dependency token alphabet (e.g. _x@mp)",
-    "status": "open",
-    "reason": "",
+    "status": "waived",
+    "reason": "[mcp-4] Carried by BACKLOG.md ROOTKEY-01 (f47a2c9e): the refusal is correct and no record or file changes; only the cause text misleads, and choosing the right verdict for an invalid root name needs an upstream check first. Not fixed in the debt phase.",
     "recorded_at": "2026-10-10T06:58:57.793Z",
-    "resolved_at": null,
+    "resolved_at": "2026-10-10T07:14:44.742Z",
     "milestone": null
   }
 ]
