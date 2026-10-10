@@ -16,7 +16,7 @@
  */
 
 import { hookDebugLog } from "../shared/debug-log.ts";
-import { errorMessage } from "../shared/errors.ts";
+import { DeviceFlowUnavailableError, errorMessage } from "../shared/errors.ts";
 
 import type { CredentialOps } from "./git-credential.ts";
 import type { GitCredentials } from "./git.ts";
@@ -137,8 +137,9 @@ export type BuildAuthCallbacksOpts =
  *   next invocation re-enters via onAuth, which falls through to
  *   `onAuthRequired` on the (now-empty) fill miss.
  * - CP-10 (no raw exception escape): both callbacks wrap their bodies in
- *   try/catch and convert any thrown error into `{ cancel: true }` -- the
- *   value isomorphic-git receives is unchanged. Error messages from
+ *   try/catch and convert unrelated errors into `{ cancel: true }`.
+ *   DeviceFlowUnavailableError preserves the fixed print-mode remedy.
+ *   Error messages from
  *   CredentialOps and onAuthRequired are intentionally NOT interpolated into
  *   RETURN VALUES or notify calls -- a credential could be interpolated into
  *   an upstream Error, so surfacing it to the user or to isomorphic-git
@@ -207,7 +208,11 @@ export function buildAuthCallbacks(opts: BuildAuthCallbacksOpts): {
       hookDebugLog(`onAuth: Device Flow failed for ${opts.host}: ${result.reason}`, "auth");
       return { cancel: true };
     } catch (err) {
-      // CP-10: catch ANY thrown error from the URL parse / fill /
+      if (err instanceof DeviceFlowUnavailableError) {
+        throw err;
+      }
+
+      // CP-10: catch other errors from the URL parse / fill /
       // onAuthRequired and turn it into a cancel; isomorphic-git never sees
       // the raw error. The caught message is still routed through
       // hookDebugLog rather than dropped -- platform/git-credential.ts's own

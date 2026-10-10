@@ -1,5 +1,15 @@
 import { redactCredentials } from "./redact-credentials.ts";
 
+/** Refuses a new device flow when print mode cannot show its authorization prompt. */
+export class DeviceFlowUnavailableError extends Error {
+  constructor() {
+    super(
+      "Device-flow authentication is unavailable in print mode. Retry with --mode json or interactive Pi.",
+    );
+    this.name = "DeviceFlowUnavailableError";
+  }
+}
+
 /** Rejects a host mode before an operation starts or output is delivered. */
 export class UnsupportedModeError extends Error {
   readonly mode: string;

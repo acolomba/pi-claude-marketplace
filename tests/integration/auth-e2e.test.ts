@@ -21,13 +21,20 @@
  */
 
 import assert from "node:assert/strict";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
+
+import http from "isomorphic-git/http/node";
 
 import { initiateDeviceFlow } from "../../extensions/pi-claude-marketplace/domain/github-auth.ts";
 import {
   buildAuthCallbacks,
   type OnAuthRequiredFn,
 } from "../../extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts";
+import { clone } from "../../extensions/pi-claude-marketplace/platform/git.ts";
+import { DeviceFlowUnavailableError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { notifyDeviceFlowPrompt } from "../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
 import { createDeviceFlowFake } from "../domain/device-flow-fake.ts";
 import { createCredentialOpsFake } from "../platform/credential-ops-fake.ts";
@@ -40,6 +47,65 @@ import type {
 } from "../../extensions/pi-claude-marketplace/domain/github-auth.ts";
 import type { GitCredentials } from "../../extensions/pi-claude-marketplace/platform/git.ts";
 import type { NotificationContext } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { GitHttpRequest, GitHttpResponse } from "isomorphic-git/http/node";
+
+test("real Git clone preserves a device-flow refusal from its auth callback", async (t) => {
+  // arrange
+  const dir = await mkdtemp(join(tmpdir(), "auth-clone-"));
+  t.after(async () => rm(dir, { recursive: true, force: true }));
+  const credentials = createCredentialOpsFake({ boundary: "memory" });
+  const refusal = new DeviceFlowUnavailableError();
+  const requests: string[] = [];
+  async function* responseBody(): AsyncIterableIterator<Uint8Array> {
+    await Promise.resolve();
+    yield new Uint8Array();
+  }
+
+  t.mock.method(http, "request", async (request: GitHttpRequest): Promise<GitHttpResponse> => {
+    requests.push(request.url);
+    assert.deepStrictEqual(requests, [
+      "https://github.com/owner/repo/info/refs?service=git-upload-pack",
+    ]);
+    await Promise.resolve();
+    return {
+      url: request.url,
+      statusCode: 401,
+      statusMessage: "Unauthorized",
+      headers: {},
+      body: responseBody(),
+    };
+  });
+
+  // act & assert
+  await assert.rejects(
+    clone({
+      dir,
+      url: "https://github.com/owner/repo",
+      auth: {
+        kind: "device-flow",
+        host: "github.com",
+        credentialOps: credentials.credentialOps,
+        onAuthRequired: () => Promise.reject(refusal),
+      },
+    }),
+    (error: unknown) => {
+      assert.strictEqual(error, refusal);
+      assert.strictEqual(
+        refusal.message,
+        "Device-flow authentication is unavailable in print mode. Retry with --mode json or interactive Pi.",
+      );
+      return true;
+    },
+  );
+  assert.deepStrictEqual(requests, [
+    "https://github.com/owner/repo/info/refs?service=git-upload-pack",
+  ]);
+  assert.deepStrictEqual(credentials.calls, {
+    fill: [{ host: "github.com" }],
+    approve: [],
+    reject: [],
+  });
+});
 
 interface CredentialAdapterOptions {
   readonly store?: ReadonlyMap<string, GitCredentials>;
