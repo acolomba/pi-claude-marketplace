@@ -1061,37 +1061,30 @@ today; it is a discoverability ceiling, not a data loss.
 
 Code seams: `.github/workflows/lint.yml` (`fallow-audit`).
 
-## MRO-01: mode-aware structured output via `ctx.mode` and `pi.appendEntry`
+## MRO-01: mode-aware structured output via `ctx.mode` and `pi.appendEntry` — CLOSED
 
-Surfaced during the 2026-08-10 competitive analysis of `@nklisch/pi-plugins`
-(`docs/competitive-analysis/pi-plugins.md`, recommendation #11). Verified
-2026-08-13 directly against our own pinned `@earendil-works/pi-coding-agent`:
-every `ExtensionContext` carries a real `mode: "tui" | "rpc" | "json" |
-"print"` field, set by how the user invoked Pi (`pi` interactive, `pi -p`,
-`pi --mode json`, or the RPC stdin/stdout protocol). We never read it. Our
-sole output primitive, `ctx.ui.notify(message: string, type?)`, takes a plain
-formatted string and a severity -- no structured-payload slot.
+Closed 2026-10-10. Surfaced during the 2026-08-10 competitive analysis of
+`@nklisch/pi-plugins` (`docs/competitive-analysis/pi-plugins.md`,
+recommendation #11).
 
-A user driving `/claude:plugin` through `pi --mode json` or RPC gets the same
-human-formatted string wrapped in a JSON envelope today, not real
-machine-readable data. `@nklisch/pi-plugins` solved this on the low-level
-`pi.appendEntry<T>(customType, data)` primitive -- confirmed present in our
-own pinned Pi version too, under "Append a custom entry to the session for
-state persistence (not sent to LLM)". Their `pi-control-channel.ts` keys
-output by mode: rpc/json modes emit `appendEntry` frames, print mode writes
-stdout lines, tui is a no-op. A versioned grammar, closed exit-code
-vocabulary, and pagination sit on top of that channel, none of which are
-scoped here.
+The extension reads `ctx.mode` and selects exactly one transport. In
+`tui`/`print`, it uses `ctx.ui.notify`. Pi keeps print notifications silent,
+so scripts use `--mode json`. In `json`/`rpc`, the JSON strategy uses
+`pi.appendEntry` to emit versioned custom `claude-plugin` entries. Pi owns
+the event framing. The extension never writes directly to stdout/stderr.
 
-Direction for later: design a structured shape for the existing
-`NotificationMessage` / `PluginInfoRow` discriminated types in
-`shared/notify.ts` (most of the shape work already exists), and emit it via
-`pi.appendEntry` when `ctx.mode` is `"json"` or `"rpc"`, alongside (not
-instead of) the existing human `notify()` line.
+The earlier claim that JSON and RPC receive the same human notification
+string was incorrect. These modes receive structured payloads. The earlier
+proposal to emit structured output alongside `notify`, or to use print
+stdout, was also incorrect. Transport selection is exclusive. RPC
+front-ends render the entries, including device-flow instructions.
 
-Code seams: `shared/notify.ts` (message shapes), `platform/pi-api.ts`
-(re-exports `ExtensionContext`), `edge/router.ts` (the `/claude:plugin`
-command entry point every handler's `ctx` flows through).
+The [JSON output guide](../docs/json-output.md) documents every payload kind,
+field, compatibility rule, command verdict, and delivery limitation.
+[Real-runtime tests](../tests/e2e/pi-json-output.test.ts) passed on Pi
+0.87.1 and exact 0.86.1, including startup stream absence, RPC `get_entries`,
+and slash-only persistence timing. The executed commands and results are in
+[the runtime summary](phases/07-mode-refusals-real-pi-verification-and-docs/07-03-SUMMARY.md#verification-evidence).
 
 <!--
 Pruned 2026-09-09: shipped under workflows-detection and workflows-replay, one
