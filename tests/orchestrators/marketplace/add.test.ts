@@ -322,7 +322,10 @@ function addMarketplace(
  * D-05: every emission renders from the run's snapshot, so no tool inventory
  * is present to probe.
  */
-function makeCtx(expectedNotifications = 1): {
+function makeCtx(
+  expectedNotifications = 1,
+  expectedModeReads = expectedNotifications,
+): {
   ctx: ExtensionContext;
   run: NotificationRun;
   notifications: NotifyRecord[];
@@ -334,7 +337,7 @@ function makeCtx(expectedNotifications = 1): {
   if (expectedNotifications > 0) {
     when(() => ctx.mode)
       .thenReturn("tui")
-      .times(expectedNotifications);
+      .times(expectedModeReads);
     when(() => ctx.ui)
       .thenReturn(ui)
       .times(expectedNotifications);
@@ -2379,7 +2382,7 @@ test("AUTH-01 add: credentialOps.fill HIT bypasses Device Flow and clones with t
 test("AUTH-01 add: credentialOps.fill MISS triggers Device Flow which produces a token via initiateDeviceFlow", async () => {
   await withTmpScope(async ({ cwd }) => {
     // arrange
-    const { ctx, run, notifications } = makeCtx(2);
+    const { ctx, run, notifications } = makeCtx(2, 3);
 
     // Empty store -> fill returns null (MISS).
     const { credOps: credentialOps, state: credState } = createCredentialOps();

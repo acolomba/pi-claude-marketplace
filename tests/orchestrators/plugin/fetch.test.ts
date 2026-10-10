@@ -112,13 +112,17 @@ interface CacheBoundary {
   readonly seam: FetchCloneCacheSeam;
 }
 
-function notificationBoundary(name: string, expectedCalls = 1): NotificationBoundary {
+function notificationBoundary(
+  name: string,
+  expectedCalls = 1,
+  expectedModeReads = expectedCalls,
+): NotificationBoundary {
   const ctx = mock<ExtensionContext>({ exactParams: true, name: `${name} context` });
   const ui = mock<NotificationUi>({ exactParams: true, name: `${name} UI` });
   const notifications: CapturedNotification[] = [];
   when(() => ctx.mode)
     .thenReturn("tui")
-    .times(expectedCalls);
+    .times(expectedModeReads);
   when(() => ctx.ui)
     .thenReturn(ui)
     .times(expectedCalls);
@@ -736,7 +740,7 @@ test("materializes a cold unpinned GitHub mirror through Device Flow once per ho
         { accessToken: "token", kind: "success", scope: "repo", tokenType: "bearer" },
       ],
     });
-    const boundary = notificationBoundary("Device Flow", 2);
+    const boundary = notificationBoundary("Device Flow", 2, 3);
     const originalMirror = cache.seam.materializeOrRefreshPluginMirror;
     const seam: FetchCloneCacheSeam = {
       ...cache.seam,
@@ -892,7 +896,7 @@ test("memoizes one accepted Device Flow result across a same-host sweep", async 
         { accessToken: "token", kind: "success", scope: "repo", tokenType: "bearer" },
       ],
     });
-    const boundary = notificationBoundary("memoized Device Flow", 2);
+    const boundary = notificationBoundary("memoized Device Flow", 2, 3);
     const authResults: unknown[] = [];
     const seam: FetchCloneCacheSeam = {
       materializeOrRefreshPluginMirror() {
@@ -1858,7 +1862,7 @@ test("classifies a denied Device Flow as authentication required", async () => {
       network: "disabled",
       pollResponses: [{ kind: "access_denied" }],
     });
-    const boundary = notificationBoundary("denied Device Flow", 2);
+    const boundary = notificationBoundary("denied Device Flow", 2, 3);
     const seam: FetchCloneCacheSeam = {
       materializeOrRefreshPluginMirror() {
         return Promise.reject(new Error("unexpected mirror call"));
@@ -1947,7 +1951,7 @@ test("fails cleanly when Device Flow credential approval rejects", async () => {
         { accessToken: "token", kind: "success", scope: "repo", tokenType: "bearer" },
       ],
     });
-    const boundary = notificationBoundary("approve failure", 2);
+    const boundary = notificationBoundary("approve failure", 2, 3);
     const seam: FetchCloneCacheSeam = {
       materializeOrRefreshPluginMirror() {
         return Promise.reject(new Error("unexpected mirror call"));
