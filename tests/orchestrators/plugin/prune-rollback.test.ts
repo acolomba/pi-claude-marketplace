@@ -1289,13 +1289,6 @@ test("NFR-3: a failed restore write leaves the adapter file in place and keeps i
     let entriesAtWrite: readonly string[] = [];
     const rollback = await preparePruneRollback(locations, [fixture.member], {
       removeBackup: rm,
-      link: async (from, to) => {
-        if (to === locations.mcpAdapterJsonPath) {
-          throw new Error("adapter link refused");
-        }
-
-        await link(from, to);
-      },
       writeMetadata: async (target) => {
         entriesAtWrite = await readdir(configDirectory);
         throw new Error(`write refused at ${target}`);
@@ -1368,6 +1361,80 @@ test("NFR-3: an adapter removed after the rollback reads the recorded unstage wr
         backup: await readFile(path.join(locations.extensionRoot, rollback.backupName, "6")),
       },
       { entries: ["agents", "mcp.json", "pi-claude-marketplace"], backup: original },
+    );
+  });
+});
+
+test("D-02-19: an adapter replaced by a directory during the last byte check is refused without a raw EISDIR", async () => {
+  await withHermeticEnvironment("prune-rollback-own-write-directory-", async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    const fixture = await seed(locations);
+    const original = Buffer.from('{ "mcpServers": { "orphan": 1 } }\n');
+    await writeFile(locations.mcpAdapterJsonPath, original);
+    const rollback = await preparePruneRollback(locations, [fixture.member], {
+      removeBackup: rm,
+      readMetadata: async (target) => {
+        await rm(target);
+        await mkdir(target);
+        return readFile(target);
+      },
+    });
+    const ownBytes = Buffer.from('{\n  "mcpServers": {}\n}\n');
+    await writeFile(locations.mcpAdapterJsonPath, ownBytes);
+    rollback.recordMcpWrites([{ path: locations.mcpAdapterJsonPath, bytes: ownBytes }]);
+
+    // act
+    const failures = await rollback.rollback();
+
+    // assert
+    assert.deepStrictEqual(
+      failures.map(({ phase, cause }) => ({ phase, message: cause.message })),
+      [
+        {
+          phase: "mcp adapter",
+          message: `Prune rollback found an occupied metadata path at ${locations.mcpAdapterJsonPath}.`,
+        },
+      ],
+    );
+    assert.deepStrictEqual(
+      {
+        adapterIsDirectory: (await lstat(locations.mcpAdapterJsonPath)).isDirectory(),
+        adapterEntries: await readdir(locations.mcpAdapterJsonPath),
+        backup: await readFile(path.join(locations.extensionRoot, rollback.backupName, "6")),
+      },
+      { adapterIsDirectory: true, adapterEntries: [], backup: original },
+    );
+  });
+});
+
+test("NFR-3: a read error other than a vanished or replaced adapter propagates from the last byte check", async () => {
+  await withHermeticEnvironment("prune-rollback-own-write-read-error-", async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    const fixture = await seed(locations);
+    const original = Buffer.from('{ "mcpServers": { "orphan": 1 } }\n');
+    await writeFile(locations.mcpAdapterJsonPath, original);
+    const denied = Object.assign(new Error("adapter read denied"), { code: "EACCES" });
+    const rollback = await preparePruneRollback(locations, [fixture.member], {
+      removeBackup: rm,
+      readMetadata: () => Promise.reject(denied),
+    });
+    const ownBytes = Buffer.from('{\n  "mcpServers": {}\n}\n');
+    await writeFile(locations.mcpAdapterJsonPath, ownBytes);
+    rollback.recordMcpWrites([{ path: locations.mcpAdapterJsonPath, bytes: ownBytes }]);
+
+    // act
+    const failures = await rollback.rollback();
+
+    // assert
+    assert.deepStrictEqual(failures, [{ phase: "mcp adapter", cause: denied }]);
+    assert.deepStrictEqual(
+      {
+        live: await readFile(locations.mcpAdapterJsonPath),
+        backup: await readFile(path.join(locations.extensionRoot, rollback.backupName, "6")),
+      },
+      { live: ownBytes, backup: original },
     );
   });
 });

@@ -48,6 +48,8 @@ export interface PruneRestoreOps {
   readonly afterMetadataRead?: (target: string) => Promise<void>;
   readonly inspectBackup?: (target: string) => Promise<Stats>;
   readonly writeMetadata?: (target: string, bytes: Buffer) => Promise<void>;
+  /** Reads the live metadata file for the byte check just before the write. */
+  readonly readMetadata?: (target: string) => Promise<Buffer>;
 }
 
 /** Snapshot held until state persistence succeeds or every restore completes. */
@@ -240,10 +242,23 @@ async function metadataVerdict(
     : { kind: "occupied" };
 }
 
-async function holdsBytes(file: string, bytes: Buffer): Promise<boolean> {
-  return (
-    (await pathExists(file)) && (await lstat(file)).isFile() && (await readFile(file)).equals(bytes)
-  );
+// D-02-19: a path removed or replaced by a directory while it is read does not
+// hold this prune's write, so the caller reports the occupied-path refusal.
+async function holdsBytes(
+  file: string,
+  bytes: Buffer,
+  read: (target: string) => Promise<Buffer>,
+): Promise<boolean> {
+  try {
+    return (await lstat(file)).isFile() && (await read(file)).equals(bytes);
+  } catch (error: unknown) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === "ENOENT" || code === "ENOTDIR" || code === "EISDIR") {
+      return false;
+    }
+
+    throw error;
+  }
 }
 
 async function restoreMetadata(
@@ -261,7 +276,10 @@ async function restoreMetadata(
   // restore never moves or deletes the live file. An edit that lands between
   // this check and the write's rename is overwritten; the state.json restore
   // accepts the same window.
-  if (verdict.kind === "own-write" && (await holdsBytes(saved.target, verdict.ownWrite))) {
+  if (
+    verdict.kind === "own-write" &&
+    (await holdsBytes(saved.target, verdict.ownWrite, ops.readMetadata ?? readFile))
+  ) {
     await (ops.writeMetadata ?? writeFileAtomic)(saved.target, verdict.original);
     return;
   }
