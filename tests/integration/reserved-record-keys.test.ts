@@ -7,7 +7,10 @@
 //
 // - A plugin named `constructor` installs, lists, shows, disables, enables and
 //   uninstalls, and state.json holds it as an own key after each save.
-// - A reload whose claude-plugins.json declares `constructor@mp` installs it.
+// - It updates, and removing its marketplace uninstalls it.
+// - A reload whose claude-plugins.json declares `constructor@mp` or
+//   `hello@constructor` installs it, and an import of `constructor@mp`
+//   installs it and writes its config entry.
 // - A marketplace that also declares `__proto__` installs its other plugins,
 //   and it lists `__proto__` as unavailable. An install of `__proto__` is
 //   refused and changes no file.
@@ -37,20 +40,26 @@ import { noStatusSnapshot } from "../platform/mcp-status-seed.ts";
 
 import type { NotifyRecord } from "../e2e/_helpers.ts";
 
+interface StoredRecord {
+  readonly version: string;
+  readonly enabled: boolean;
+}
+
 interface StoredState {
   readonly marketplaces: Readonly<
-    Record<string, { readonly plugins: Readonly<Record<string, { readonly enabled: boolean }>> }>
+    Record<string, { readonly plugins: Readonly<Record<string, StoredRecord>> }>
   >;
 }
 
 /**
- * Seeds path marketplace `<marketplace>-src` under `cwd` declaring `plugins`,
- * each with one skill, and returns its root.
+ * Seeds path marketplace `<marketplace>-src` under `cwd` declaring `plugins`
+ * at `version`, each with one skill, and returns its root.
  */
 async function seedMarketplace(
   cwd: string,
   marketplace: string,
   plugins: readonly string[],
+  version = "1.0.0",
 ): Promise<string> {
   const marketplaceRoot = path.join(cwd, `${marketplace}-src`);
   for (const plugin of plugins) {
@@ -58,7 +67,7 @@ async function seedMarketplace(
     await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
     await writeFile(
       path.join(pluginRoot, ".claude-plugin", "plugin.json"),
-      JSON.stringify({ name: plugin, version: "1.0.0" }),
+      JSON.stringify({ name: plugin, version }),
     );
     await mkdir(path.join(pluginRoot, "skills", "greet"), { recursive: true });
     await writeFile(
@@ -75,7 +84,7 @@ async function seedMarketplace(
       plugins: plugins.map((plugin) => ({
         name: plugin,
         source: `./plugins/${plugin}`,
-        version: "1.0.0",
+        version,
       })),
     }),
   );
@@ -87,16 +96,17 @@ function registeredCommand(cwd: string): (args: string) => Promise<NotifyRecord[
   const mock = makeMockPi([]);
   const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
   const completionCache = createCompletionCache();
+  const pluginUpdates = createPluginUpdateOperations(hooksRouting, completionCache);
   registerClaudePluginCommand(
     mock.pi,
     {
       completionCache,
       mcpStatus: noStatusSnapshot(),
       gitOps: createGitOpsFake({ boundary: "memory" }).gitOps,
-      beginPluginUpdateRun: () => () => Promise.reject(new Error("no update run expected")),
+      beginPluginUpdateRun: pluginUpdates.beginPluginUpdateRun,
     },
     hooksRouting,
-    createPluginUpdateOperations(hooksRouting, completionCache).updatePlugins,
+    pluginUpdates.updatePlugins,
   );
   const command = mock.commands.get("claude:plugin");
   assert.ok(command);
@@ -107,17 +117,21 @@ function registeredCommand(cwd: string): (args: string) => Promise<NotifyRecord[
   };
 }
 
-// `Object.entries` lists own keys only, so a `constructor` record appears here
-// only when state.json stores it as an own key.
+// `Object.hasOwn` and `Object.entries` read own keys only, so a `constructor`
+// marketplace or plugin record appears here only when state.json stores it as
+// an own key.
 async function recordedPlugins(
   cwd: string,
   marketplace: string,
-): Promise<readonly (readonly [string, boolean])[]> {
+): Promise<readonly (readonly [string, string, boolean])[]> {
   const state = JSON.parse(
     await readFile(locationsFor("project", cwd).stateJsonPath, "utf8"),
   ) as StoredState;
-  return Object.entries(state.marketplaces[marketplace]?.plugins ?? {}).map(
-    ([name, record]) => [name, record.enabled] as const,
+  const plugins = Object.hasOwn(state.marketplaces, marketplace)
+    ? state.marketplaces[marketplace]?.plugins
+    : undefined;
+  return Object.entries(plugins ?? {}).map(
+    ([name, record]) => [name, record.version, record.enabled] as const,
   );
 }
 
@@ -162,7 +176,7 @@ test("D-08-07: a plugin named constructor installs, lists, shows, disables, enab
         message: "● mp [project]\n  ● constructor v1.0.0 (installed)\n\n/reload to pick up changes",
       },
     ]);
-    assert.deepStrictEqual(afterInstall, [["constructor", true]]);
+    assert.deepStrictEqual(afterInstall, [["constructor", "1.0.0", true]]);
     assert.deepStrictEqual(listed, [
       {
         message:
@@ -181,13 +195,13 @@ test("D-08-07: a plugin named constructor installs, lists, shows, disables, enab
         message: "● mp [project]\n  ◍ constructor v1.0.0 (disabled)\n\n/reload to pick up changes",
       },
     ]);
-    assert.deepStrictEqual(afterDisable, [["constructor", false]]);
+    assert.deepStrictEqual(afterDisable, [["constructor", "1.0.0", false]]);
     assert.deepStrictEqual(enabled, [
       {
         message: "● mp [project]\n  ● constructor v1.0.0 (installed)\n\n/reload to pick up changes",
       },
     ]);
-    assert.deepStrictEqual(afterEnable, [["constructor", true]]);
+    assert.deepStrictEqual(afterEnable, [["constructor", "1.0.0", true]]);
     assert.deepStrictEqual(uninstalled, [
       {
         message:
@@ -198,39 +212,145 @@ test("D-08-07: a plugin named constructor installs, lists, shows, disables, enab
   });
 });
 
-test("D-08-07: a reload whose config declares constructor@mp installs it as an own record", async () => {
-  await withHermeticEnvironment("reserved-record-keys-reload-", async ({ cwd }) => {
+for (const { marketplace, plugins, plugin } of [
+  { marketplace: "mp", plugins: ["constructor", "hello"], plugin: "constructor" },
+  { marketplace: "constructor", plugins: ["hello"], plugin: "hello" },
+]) {
+  test(`D-08-07: a reload whose config declares ${plugin}@${marketplace} installs it as an own record`, async () => {
+    await withHermeticEnvironment("reserved-record-keys-reload-", async ({ cwd }) => {
+      // arrange
+      const marketplaceRoot = await seedMarketplace(cwd, marketplace, plugins);
+      await mkdir(path.join(cwd, ".pi"), { recursive: true });
+      await writeFile(
+        path.join(cwd, ".pi", "claude-plugins.json"),
+        JSON.stringify({
+          schemaVersion: 1,
+          marketplaces: { [marketplace]: { source: marketplaceRoot } },
+          plugins: { [`${plugin}@${marketplace}`]: {} },
+        }),
+      );
+      const { ctx, notifications } = makeCtx(cwd);
+      const applyReconcile = createApplyReconcile({ loadState });
+
+      // act
+      await applyReconcile({
+        ctx,
+        pi: makeMockPi([]).pi,
+        cwd,
+        completionCache: createCompletionCache(),
+        hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+        reason: "reload",
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message: `● ${marketplace} [project] (added)\n  ● ${plugin} (installed)\n\nReconcile: 2 successes`,
+        },
+      ]);
+      assert.deepStrictEqual(await recordedPlugins(cwd, marketplace), [[plugin, "1.0.0", true]]);
+    });
+  });
+}
+
+test("D-08-07: a plugin named constructor updates, and removing its marketplace uninstalls it", async () => {
+  await withHermeticEnvironment("reserved-record-keys-update-", async ({ cwd }) => {
     // arrange
     const marketplaceRoot = await seedMarketplace(cwd, "mp", ["constructor", "hello"]);
-    await mkdir(path.join(cwd, ".pi"), { recursive: true });
-    await writeFile(
-      path.join(cwd, ".pi", "claude-plugins.json"),
-      JSON.stringify({
-        schemaVersion: 1,
-        marketplaces: { mp: { source: marketplaceRoot } },
-        plugins: { "constructor@mp": {} },
-      }),
-    );
-    const { ctx, notifications } = makeCtx(cwd);
-    const applyReconcile = createApplyReconcile({ loadState });
+    const run = registeredCommand(cwd);
+    await run(`marketplace add ${marketplaceRoot} --scope project`);
+    await run("install constructor@mp --scope project");
+    await seedMarketplace(cwd, "mp", ["constructor", "hello"], "1.1.0");
 
     // act
-    await applyReconcile({
-      ctx,
-      pi: makeMockPi([]).pi,
-      cwd,
-      completionCache: createCompletionCache(),
-      hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
-      reason: "reload",
-    });
+    const updated = await run("update constructor@mp");
+    const afterUpdate = await recordedPlugins(cwd, "mp");
+    const refreshed = await run("marketplace update mp");
+    const removed = await run("marketplace remove mp");
+    const stateAfterRemove: unknown = JSON.parse(
+      await readFile(locationsFor("project", cwd).stateJsonPath, "utf8"),
+    );
 
     // assert
-    assert.deepStrictEqual(notifications, [
+    assert.deepStrictEqual(updated, [
       {
-        message: "● mp [project] (added)\n  ● constructor (installed)\n\nReconcile: 2 successes",
+        message:
+          "● mp [project]\n  ● constructor v1.0.0 → v1.1.0 (updated)\n\n/reload to pick up changes",
       },
     ]);
-    assert.deepStrictEqual(await recordedPlugins(cwd, "mp"), [["constructor", true]]);
+    assert.deepStrictEqual(afterUpdate, [["constructor", "1.1.0", true]]);
+    assert.deepStrictEqual(refreshed, [{ message: "● mp [project] (skipped) {up-to-date}" }]);
+    assert.deepStrictEqual(removed, [
+      {
+        message:
+          "● mp [project] (removed)\n  ○ constructor (uninstalled)\n\n/reload to pick up changes",
+      },
+    ]);
+    assert.deepStrictEqual(stateAfterRemove, { schemaVersion: 3, marketplaces: {} });
+  });
+});
+
+test("D-08-07: an import of constructor@mp installs it, and disable and uninstall write its config entry back", async () => {
+  await withHermeticEnvironment("reserved-record-keys-import-", async ({ cwd }) => {
+    // arrange
+    const marketplaceRoot = await seedMarketplace(cwd, "mp", ["constructor", "hello"]);
+    await mkdir(path.join(cwd, ".claude"), { recursive: true });
+    await writeFile(
+      path.join(cwd, ".claude", "settings.json"),
+      JSON.stringify({
+        extraKnownMarketplaces: { mp: { source: { source: "directory", path: marketplaceRoot } } },
+        enabledPlugins: { "constructor@mp": true },
+      }),
+    );
+    const configPath = path.join(cwd, ".pi", "claude-plugins.json");
+    const run = registeredCommand(cwd);
+
+    // act
+    const imported = await run("import --scope project");
+    const configAfterImport: unknown = JSON.parse(await readFile(configPath, "utf8"));
+    const afterImport = await recordedPlugins(cwd, "mp");
+    const disabled = await run("disable constructor@mp");
+    const configAfterDisable: unknown = JSON.parse(await readFile(configPath, "utf8"));
+    const uninstalled = await run("uninstall constructor@mp");
+    const configAfterUninstall: unknown = JSON.parse(await readFile(configPath, "utf8"));
+    const afterUninstall = await recordedPlugins(cwd, "mp");
+
+    // assert
+    assert.deepStrictEqual(imported, [
+      {
+        message:
+          "● mp [project] (added)\n  ● constructor (installed)\n\nImport: 2 successes\n\n" +
+          "/reload to pick up changes",
+      },
+    ]);
+    assert.deepStrictEqual(configAfterImport, {
+      schemaVersion: 1,
+      marketplaces: { mp: { source: marketplaceRoot } },
+      plugins: { "constructor@mp": {} },
+    });
+    assert.deepStrictEqual(afterImport, [["constructor", "1.0.0", true]]);
+    assert.deepStrictEqual(disabled, [
+      {
+        message: "● mp [project]\n  ◍ constructor v1.0.0 (disabled)\n\n/reload to pick up changes",
+      },
+    ]);
+    assert.deepStrictEqual(configAfterDisable, {
+      schemaVersion: 1,
+      marketplaces: { mp: { source: marketplaceRoot } },
+      plugins: { "constructor@mp": { enabled: false } },
+    });
+    assert.deepStrictEqual(uninstalled, [
+      {
+        message:
+          "● mp [project]\n  ○ constructor v1.0.0 (uninstalled)\n\n/reload to pick up changes",
+      },
+    ]);
+    assert.deepStrictEqual(configAfterUninstall, {
+      schemaVersion: 1,
+      marketplaces: { mp: { source: marketplaceRoot } },
+      plugins: {},
+    });
+    assert.deepStrictEqual(afterUninstall, []);
   });
 });
 
@@ -276,32 +396,45 @@ test("D-08-07: a marketplace that declares __proto__ installs hello, lists __pro
       },
     ]);
     assert.deepStrictEqual(filesAfter, filesBefore);
-    assert.deepStrictEqual(await recordedPlugins(cwd, "hostile"), [["hello", true]]);
-    assert.deepStrictEqual(await recordedPlugins(cwd, "mp"), [["constructor", true]]);
+    assert.deepStrictEqual(await recordedPlugins(cwd, "hostile"), [["hello", "1.0.0", true]]);
+    assert.deepStrictEqual(await recordedPlugins(cwd, "mp"), [["constructor", "1.0.0", true]]);
   });
 });
 
+function marketplaceNotAdded(name: string): NotifyRecord {
+  return {
+    message: `A marketplace operation has failed.\n\n⊘ ${name} (failed) {marketplace not added}`,
+    severity: "error",
+  };
+}
+
+function pluginFailed(name: string, outcome: string): NotifyRecord {
+  return {
+    message: `A plugin operation has failed.\n\n● mp [project]\n  ⊘ ${name} ${outcome}`,
+    severity: "error",
+  };
+}
+
 for (const { command, notification } of [
-  {
-    command: (name: string) => `info x@${name}`,
-    notification: (name: string): NotifyRecord => ({
-      message: `A marketplace operation has failed.\n\n⊘ ${name} (failed) {marketplace not added}`,
-      severity: "error",
-    }),
-  },
+  { command: (name: string) => `info x@${name}`, notification: marketplaceNotAdded },
+  { command: (name: string) => `reinstall x@${name}`, notification: marketplaceNotAdded },
+  { command: (name: string) => `marketplace update ${name}`, notification: marketplaceNotAdded },
+  { command: (name: string) => `marketplace remove ${name}`, notification: marketplaceNotAdded },
   {
     command: (name: string) => `uninstall ${name}@mp`,
-    notification: (name: string): NotifyRecord => ({
-      message: `A plugin operation has failed.\n\n● mp [project]\n  ⊘ ${name} (failed) {not installed}`,
-      severity: "error",
-    }),
+    notification: (name: string) => pluginFailed(name, "(failed) {not installed}"),
   },
   {
     command: (name: string) => `enable ${name}@mp`,
-    notification: (name: string): NotifyRecord => ({
-      message: `A plugin operation has failed.\n\n● mp [project]\n  ⊘ ${name} (skipped) {not installed}`,
-      severity: "error",
-    }),
+    notification: (name: string) => pluginFailed(name, "(skipped) {not installed}"),
+  },
+  {
+    command: (name: string) => `reinstall ${name}@mp`,
+    notification: (name: string) => pluginFailed(name, "(skipped) {not installed}"),
+  },
+  {
+    command: (name: string) => `update ${name}@mp`,
+    notification: (name: string) => pluginFailed(name, "(failed) {not in manifest}"),
   },
 ]) {
   test(`D-08-07: ${command("constructor")} prints what ${command("absent")} prints and changes no file`, async () => {
