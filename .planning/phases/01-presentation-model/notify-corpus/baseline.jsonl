@@ -3147,3 +3147,4 @@
 {"file":"tests/shared/notify-context.test.ts","message":"\u25cf official [user]\n  \u25cf alpha (installed)","severity":null,"argc":1}
 {"file":"tests/shared/notify-context.test.ts","message":"\u25cf official [user]\n  \u25cf alpha (installed)\n\nPlugin inspect: 1 success","severity":null,"argc":1}
 {"file":"tests/shared/notify-context.test.ts","message":"\u25cf official [user]\n  \u25cf alpha (installed)\n\nPlugin update: nothing to update","severity":null,"argc":1}
+{"file":"tests/edge/handlers/plugin/browse.test.ts","message":"Browse is unavailable in print mode. Use /claude:plugin list instead.","severity":"error","argc":2}
