@@ -2,7 +2,7 @@
 gsd_state_version: "1.0"
 milestone: mcp-4
 status: completed
-stopped_at: mcp-4 milestone closed and archived; UAT check and cleanup next
+stopped_at: mcp-4 milestone closed and archived; PR #250 open, awaiting merge
 last_updated: "2026-10-10T13:22:09.180Z"
 last_activity: 2026-10-10
 last_activity_desc: Completed quick task 261010-cfi — Accept Node 24 and 26 EISDIR text in mcp-migration test
@@ -26,7 +26,7 @@ See: `.planning/PROJECT.md` (updated 2026-10-10 after mcp-4 milestone close)
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** mcp-4 closed; next: UAT check, cleanup, version bump and PR.
+**Current focus:** mcp-4 closed; PR #250 is open and awaits review and merge.
 All 8 phases (01/ to 08/) and 41/41 requirements are complete, and the
 re-audit passed. The archive is `.planning/milestones/mcp-4-*`; the phase
 directories stay under `.planning/phases/` until `/gsd-cleanup`. The 02/ to
@@ -37,7 +37,7 @@ costs users new sign-ins and approvals.
 
 Phase: Milestone mcp-4 complete
 Plan: —
-Status: Milestone complete; next the UAT check, `/gsd-cleanup`, the version bump offer and the PR
+Status: Milestone complete; UAT check, `/gsd-cleanup` and the 0.20.0 version bump done; PR #250 open, awaiting merge
 Last activity: 2026-10-10 — Completed quick task 261010-cfi: Accept Node 24 and 26 EISDIR text in mcp-migration test
 
 ### workflows-replay closeout (merged from main)

@@ -4,7 +4,7 @@
 
 ## Milestone: mcp-4 -- MCP 4
 
-**Completed:** 2026-10-10 on `features/mcp-4` (not yet merged, no npm release yet)
+**Completed:** 2026-10-10 on `features/mcp-4` (PR #250 open, not yet merged, no npm release yet)
 **Phases:** 8 (1-8) | **Plans:** 73 | **Tasks:** 176 | **Requirements:** 41/41 | **Audit:** passed (8/8 phases, 12/12 integration seams, 6/6 flows, Nyquist compliant on all 8, `threats_open: 0`) -- first `tech_debt`; Phase 8 cleared it
 
 ### What Was Built

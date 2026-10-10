@@ -1,6 +1,6 @@
 # Milestones: pi-claude-marketplace
 
-## mcp-4 -- MCP 4 (Completed: 2026-10-10; on features/mcp-4, not yet merged or released)
+## mcp-4 -- MCP 4 (Completed: 2026-10-10; on features/mcp-4, PR #250 open, not yet merged or released)
 
 **Phases completed:** 8 phases (1-8), 73 plans, 176 tasks; 41/41 requirements.
 
@@ -32,12 +32,13 @@ compliant on all 8 phases; `threats_open: 0`. One minor item, ROOTKEY-01 (a
 misleading cause line for a root plugin name outside the dependency token
 alphabet), is carried in `BACKLOG.md`.
 
-**Release state:** the work is on `features/mcp-4` and not yet merged. The
-0.20.0 version bump (D-07-11) and the CHANGELOG lines for the debt-clearing
-changes are PR-time steps. Phases 2 to 5 must go out in one release.
+**Release state:** the work is on `features/mcp-4` as PR #250, not yet merged.
+The 0.20.0 version bump (D-07-11) and the CHANGELOG lines for the debt-clearing
+changes are on the branch. Phases 2 to 5 must go out in one release.
 
 **Archive:** `.planning/milestones/mcp-4-{ROADMAP,REQUIREMENTS,MILESTONE-AUDIT}.md`;
-phase records stay under `.planning/phases/` until `/gsd-cleanup`.
+phase and quick-task records are under `.planning/milestones/mcp-4-phases/` and
+`.planning/milestones/mcp-4-quick/`.
 
 ---
 
