@@ -24,9 +24,9 @@ This extension gives the tools the same names. It applies the same rule to `plug
 
 `/claude:plugin info` shows each server by its Claude Code name, `plugin:<plugin>:<server>`, with the server name exactly as the plugin declares it. The pi-mcp-adapter panel and commands, such as `/mcp-adapter disable`, show and accept the key, with its `_` at the end. pi-subagents `mcp:` entries also use the key.
 
-Two plugins can declare servers with the same name. Their keys differ, because each key holds the plugin name.
+Two plugins can declare servers with the same name. Their keys usually differ, because each key holds the plugin name. A pair of servers whose names give the same key is refused like any other collision. For example, `plugin:a_b:c` and `plugin:a:b_c` both give the key `plugin_a_b_c_`.
 
-An install, update, or reinstall fails before it writes anything if the new key is equal to the key of another server. The other server can belong to the same plugin, to another plugin, or to any MCP configuration that pi-mcp-adapter reads. Pi groups the tools of a server under a name in which every `-` of the key becomes `_`. So the install also fails if the two keys are equal after every `-` becomes `_`, for example `plugin_foo_my-db_` and `plugin_foo_my_db_`. Claude Code runs these two servers side by side. This refusal applies only to Pi (ANAME-03). See [Divergences and documented absences](#divergences-and-documented-absences).
+An install, update, or reinstall fails if the new key is equal to the key of another server, and it leaves nothing behind: the command rolls back every component that it already wrote. The other server can belong to the same plugin, to another plugin, or to any MCP configuration that pi-mcp-adapter reads. Pi groups the tools of a server under a name in which every `-` of the key becomes `_`. So the install also fails if the two keys are equal after every `-` becomes `_`, for example `plugin_foo_my-db_` and `plugin_foo_my_db_`. Claude Code runs these two servers side by side. This refusal applies only to Pi (ANAME-03). See [Divergences and documented absences](#divergences-and-documented-absences).
 
 ## Tool search
 
@@ -211,7 +211,7 @@ A call that the model makes through the `mcp` tool of pi-mcp-adapter, such as `m
 
 A `tools:` entry of a plugin agent that names one of the plugin's own MCP tools becomes a pi-subagents `mcp:` entry. For example, `mcp__plugin_foo_api__query` becomes `mcp:plugin_foo_api_/query`. pi-subagents runs MCP tools only in background launches, so such an agent needs `async: true`. See [Customizing generated agents](../README.md#customizing-generated-agents).
 
-pi-subagents compares the tool part of an `mcp:` entry with the tool name that the server reports. If that name holds a character that Claude Code replaces, such as `.` or a space, the Claude Code form of the name does not match. Then the agent cannot get the tool through its Claude Code name.
+pi-subagents compares the tool part of an `mcp:` entry with the exact tool names that the server reports. If the server reports no tool with exactly that name, pi-subagents does not start the agent: the whole launch fails, not only that tool. This happens when the server renames or removes the tool, when the agent misspells the tool name, and when the tool name holds a character that Claude Code replaces, such as `.` or a space, because then the Claude Code form of the name does not match. To avoid this, give the agent the whole server: name `mcp:plugin_<plugin>_<server>_` in the `tools` of a pi-subagents agent override. See [Customizing generated agents](../README.md#customizing-generated-agents).
 
 ## Variables
 

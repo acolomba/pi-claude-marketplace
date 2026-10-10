@@ -36,7 +36,7 @@ The `/claude:plugin` command manages Claude marketplaces and plugins, like Claud
 ## Prerequisites
 
 - [Pi Coding Agent](https://pi.dev) 1.0.0 or newer
-- [pi-subagents](https://pi.dev/packages/pi-subagents) (optional but recommended, `pi install npm:pi-subagents`)
+- [pi-subagents](https://pi.dev/packages/pi-subagents) 0.74.0 or newer (optional but recommended, `pi install npm:pi-subagents`)
 - [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter) 5.2.0 or a later 5.x release (optional but recommended, `pi install npm:pi-mcp-adapter`)
   - Pi's built-in MCP support does not satisfy this requirement.
 - [@quintinshaw/pi-dynamic-workflows](https://pi.dev/packages/@quintinshaw/pi-dynamic-workflows) (optional but recommended, `pi install npm:@quintinshaw/pi-dynamic-workflows`)
@@ -127,7 +127,7 @@ Plugin MCP servers get the names that Claude Code gives them. The model sees eac
 | `foo`       | `my.db`          | `plugin_foo_my_db_` | `mcp__plugin_foo_my_db__<tool>` | `plugin:foo:my.db`   |
 | `bar`       | `api`            | `plugin_bar_api_`   | `mcp__plugin_bar_api__<tool>`   | `plugin:bar:api`     |
 
-Two plugins can use the same server name, because each key holds the plugin name. The plugin install or update fails if another MCP configuration already defines the same key, or a key that differs only by `-` versus `_`. For more information, see [MCP compatibility](docs/mcp-compatibility.md).
+Two plugins can usually use the same server name, because each key holds the plugin name. The plugin install or update fails if another MCP configuration already defines the same key, or a key that differs only by `-` versus `_`. For example, `plugin:a_b:c` and `plugin:a:b_c` both get the key `plugin_a_b_c_`, so the second install fails. For more information, see [MCP compatibility](docs/mcp-compatibility.md).
 
 To learn what you must do when an upgrade renames your plugin MCP servers, and what each server state in `/claude:plugin info` means, see [MCP compatibility](docs/mcp-compatibility.md).
 
@@ -137,9 +137,9 @@ This extension converts each plugin agent into a pi-subagents agent file named `
 
 Three conversion rules to know:
 
-- If the source agent does not declare `tools:`, the generated agent has no tool allowlist. pi-subagents then grants its default builtin tools, like Claude Code grants every tool available to subagents. Background children also receive ambient extension tools, such as MCP tools from pi-mcp-adapter. If the source agent sets `disallowedTools`, those names become `excludeTools`, which needs pi-subagents 0.62.0 or newer. Older versions ignore the field.
+- If the source agent does not declare `tools:`, the generated agent has no tool allowlist. pi-subagents then grants its default builtin tools, like Claude Code grants every tool available to subagents. Background children also receive ambient extension tools, such as MCP tools from pi-mcp-adapter. If the source agent sets `disallowedTools`, those names become `excludeTools`.
 - Agent-level `allowed-tools`, `mcpServers`, `permissionMode`, and `hooks` fields are dropped, with a warning that explains why. Claude Code ignores all four on plugin agents (`allowed-tools` is a slash-command field). The plugin's own MCP servers and its hooks.json still install.
-- A `tools:` entry that names one of the plugin's own MCP tools in Claude Code form, `mcp__plugin_<plugin>_<server>__<tool>`, becomes the pi-subagents entry `mcp:plugin_<plugin>_<server>_/<tool>`. An entry that names a whole server, `mcp__plugin_<plugin>_<server>` or `mcp__plugin_<plugin>_<server>__*`, becomes `mcp:plugin_<plugin>_<server>_`. pi-subagents runs MCP tools only in background launches, so launch such an agent with `async: true`. A foreground launch fails, and so does a launch before pi-mcp-adapter has cached the server's tools. This extension does not add `async: true` for you. The MCP tool names of other servers, including servers that the install leaves out, are dropped with a warning.
+- A `tools:` entry that names one of the plugin's own MCP tools in Claude Code form, `mcp__plugin_<plugin>_<server>__<tool>`, becomes the pi-subagents entry `mcp:plugin_<plugin>_<server>_/<tool>`. An entry that names a whole server, `mcp__plugin_<plugin>_<server>` or `mcp__plugin_<plugin>_<server>__*`, becomes `mcp:plugin_<plugin>_<server>_`. A per-tool entry must match a tool name that the server reports exactly. If the server renamed or removed the tool, or the name is misspelled, the whole agent launch fails. To avoid this, grant the whole server, `mcp:plugin_<plugin>_<server>_`, with an agent override (see below). pi-subagents runs MCP tools only in background launches, so launch such an agent with `async: true`. A foreground launch fails, and so does a launch before pi-mcp-adapter has cached the server's tools. This extension does not add `async: true` for you. The MCP tool names of other servers, including servers that the install leaves out, are dropped with a warning.
 
 To change a generated agent's settings so the change survives plugin updates, use pi-subagents agent overrides in your Pi settings file (`~/.pi/agent/settings.json` for the user scope, `<project>/.pi/settings.json` for the project scope):
 
