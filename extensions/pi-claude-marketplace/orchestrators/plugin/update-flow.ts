@@ -75,6 +75,7 @@ import { notifyMcpConfigNotices } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import { type PluginFailedMessage } from "../../shared/notification-types.ts";
 import { notifyUpdateNoOpWithContext, notifyWithContext } from "../../shared/notify-context.ts";
+import { ownValue } from "../../shared/own-key.ts";
 import { DEFAULT_GIT_OPS, refreshGitHubClone, type GitOps } from "../marketplace/shared.ts";
 import { marketplaceInOtherScope } from "../marketplace/shared.ts";
 
@@ -142,7 +143,7 @@ function makeSyncCloneOnce(
     synced.add(key);
 
     const state = await loadState(locations.extensionRoot);
-    const mp = state.marketplaces[mpName];
+    const mp = ownValue(state.marketplaces, mpName);
     if (mp === undefined) {
       throw new MarketplaceNotFoundError(mpName, [scope]);
     }
@@ -910,7 +911,7 @@ async function enumerateMarketplaceTarget(
   // misattributed to `{not found}` (M10/M11).
   const resolved = await resolveUpdateMarketplaceScope(cwd, mpName, target, explicitScope);
   const state = await loadState(resolved.locations.extensionRoot);
-  const mp = state.marketplaces[mpName];
+  const mp = ownValue(state.marketplaces, mpName);
   if (mp === undefined) {
     // `resolveUpdateMarketplaceScope` can hand back the REQUESTED scope without
     // a container there, so this arm carries the ordinary explicit-scope miss

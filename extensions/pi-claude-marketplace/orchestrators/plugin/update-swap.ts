@@ -109,6 +109,7 @@ import { createRemovalOps, type RemovalOps } from "../../shared/fs-utils.ts";
 import { RECOVERY_PLUGIN_REINSTALL_PREFIX } from "../../shared/markers.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
+import { ownValue } from "../../shared/own-key.ts";
 import {
   withStateGuard,
   type LockedStateTransactionDeps,
@@ -578,12 +579,12 @@ async function markUpdateInProgress(
   await withStateGuard(
     locations,
     (s) => {
-      const sMp = s.marketplaces[marketplace];
+      const sMp = ownValue(s.marketplaces, marketplace);
       if (sMp === undefined) {
         throw new PluginUpdateConcurrencyError("marketplace-removed", plugin, marketplace);
       }
 
-      const sRecord = sMp.plugins[plugin];
+      const sRecord = ownValue(sMp.plugins, plugin);
       if (sRecord === undefined) {
         throw new PluginUpdateConcurrencyError("plugin-uninstalled", plugin, marketplace);
       }
@@ -862,14 +863,14 @@ async function finalizeUpdateRecord(
   await withStateGuard(
     locations,
     async (s) => {
-      const sMp = s.marketplaces[marketplace];
+      const sMp = ownValue(s.marketplaces, marketplace);
       if (sMp === undefined) {
         throw new PluginUpdateConcurrencyError("marketplace-removed", plugin, marketplace, {
           lifecycle: "finalize",
         });
       }
 
-      const sRecord = sMp.plugins[plugin];
+      const sRecord = ownValue(sMp.plugins, plugin);
       if (sRecord === undefined) {
         throw new PluginUpdateConcurrencyError("plugin-uninstalled", plugin, marketplace, {
           lifecycle: "finalize",

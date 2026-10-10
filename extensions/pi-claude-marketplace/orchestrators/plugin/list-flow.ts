@@ -68,6 +68,7 @@ import {
   type MarketplaceRows,
   type Plural,
 } from "../../shared/notify-context.ts";
+import { ownValue } from "../../shared/own-key.ts";
 import { narrowProbeError as sharedNarrowProbeError } from "../../shared/probe-classifiers.ts";
 
 import { availableRowMessage, type FilterBucket } from "./list-candidate-row.ts";
@@ -377,7 +378,7 @@ async function enumerateMarketplacePlugins(args: {
       manifestEntry,
       { marketplaceRoot: mpRecord.marketplaceRoot, marketplaceName: mpName },
       locationsFor(pluginScope, opts.cwd),
-      pluginScopeConfig.plugins[`${manifestEntry.name}@${mpName}`]?.entry.enabled,
+      ownValue(pluginScopeConfig.plugins, `${manifestEntry.name}@${mpName}`)?.entry.enabled,
     );
     if (shouldShow(opts, row.status, bucket)) {
       rows.push(row);
@@ -647,7 +648,7 @@ export async function loadPluginListPayload(
       continue;
     }
 
-    const userMp = userState.marketplaces[mpName];
+    const userMp = ownValue(userState.marketplaces, mpName);
     // Orphan-fold rule: if the project-scope record is a CLONE of the
     // user-scope record (same marketplaceRoot), DO NOT emit a separate
     // project-scope block. The project-scope plugins fold under the
@@ -662,7 +663,7 @@ export async function loadPluginListPayload(
       mpName,
       mpScope: "project",
       mpRecord,
-      autoupdate: projectMerged.marketplaces[mpName]?.entry.autoupdate ?? false,
+      autoupdate: ownValue(projectMerged.marketplaces, mpName)?.entry.autoupdate ?? false,
       scopeConfig: projectMerged,
       extraPlugins: [],
     });
@@ -677,7 +678,7 @@ export async function loadPluginListPayload(
 
     // Fold orphan project plugins iff the matching project-scope record
     // is a clone (per D-13-17 semantics) and exists.
-    const projectMp = projectState.marketplaces[mpName];
+    const projectMp = ownValue(projectState.marketplaces, mpName);
     const { folded, foldedNames } = isOrphanMarketplaceClone(projectMp, mpRecord)
       ? // eslint-disable-next-line no-await-in-loop -- bounded by the user marketplaces, one orphan fold each
         await computeOrphanFold(opts, mpName, projectMp, projectMerged)
@@ -689,7 +690,7 @@ export async function loadPluginListPayload(
       mpName,
       mpScope: "user",
       mpRecord,
-      autoupdate: userMerged.marketplaces[mpName]?.entry.autoupdate ?? false,
+      autoupdate: ownValue(userMerged.marketplaces, mpName)?.entry.autoupdate ?? false,
       scopeConfig: userMerged,
       extraPlugins: folded,
       excludeFromAvailable: foldedNames,
