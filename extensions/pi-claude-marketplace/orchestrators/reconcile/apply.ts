@@ -82,6 +82,7 @@ import {
 } from "../../shared/notification-dispatch.ts";
 import { type Reason } from "../../shared/notification-types.ts";
 import { notifyReconcileAppliedWithContext } from "../../shared/notify-context.ts";
+import { ownValue } from "../../shared/own-key.ts";
 import { redactAbsolutePaths, redactCauseChain } from "../../shared/redact-absolute-paths.ts";
 import { withLockedStateTransaction, withStateGuard } from "../../transaction/with-state-guard.ts";
 import { addMarketplace } from "../marketplace/add.ts";
@@ -1007,7 +1008,7 @@ async function stampDependencyDisabled(
   const loc = locationsFor(scope, opts.cwd);
   await withStateGuard(loc, (fresh) => {
     for (const op of transitioned) {
-      const record = fresh.marketplaces[op.marketplace]?.plugins[op.plugin];
+      const record = ownValue(ownValue(fresh.marketplaces, op.marketplace)?.plugins, op.plugin);
       if (record !== undefined) {
         record.dependencyDisabled = true;
       }

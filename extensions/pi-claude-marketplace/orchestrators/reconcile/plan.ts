@@ -48,6 +48,7 @@
 import { parsePluginSource, samePlannedSource, sourceLogical } from "../../domain/source.ts";
 import { isDeclaredEnabled } from "../../persistence/config-io.ts";
 import { isRecordedButDisabled } from "../../persistence/state-io.ts";
+import { ownValue } from "../../shared/own-key.ts";
 
 import { emptyReconcilePlan } from "./types.ts";
 
@@ -137,7 +138,7 @@ function recordedSourceCandidates(
 ): string[] {
   const candidates: string[] = [];
   for (const [name, record] of Object.entries(recorded)) {
-    if (declared[name] !== undefined) {
+    if (ownValue(declared, name) !== undefined) {
       continue;
     }
 
@@ -156,7 +157,7 @@ function collectMarketplaceClaim(
   declared: MergedConfig["marketplaces"],
   recorded: ExtensionState["marketplaces"],
 ): void {
-  if (recorded[declaredMarketplace] !== undefined) {
+  if (ownValue(recorded, declaredMarketplace) !== undefined) {
     acc.recordedByDeclared.set(declaredMarketplace, declaredMarketplace);
     return;
   }
@@ -295,7 +296,7 @@ function diffMarketplaces(
       continue;
     }
 
-    const recordedRecord = recorded[mpName];
+    const recordedRecord = ownValue(recorded, mpName);
     if (recordedRecord === undefined) {
       // A unique source match means the declaration is already fulfilled by
       // the recorded canonical identity. Planning an add here would clone it
@@ -466,7 +467,7 @@ function classifyDeclaredPlugin(
   // is in `marketplacesToRemove`): installing into / disabling under a
   // marketplace being torn down is contradictory, so the entry surfaces as
   // a diagnostic instead of an install/disable action.
-  if (declaredMarketplaces[declaredMarketplace] === undefined) {
+  if (ownValue(declaredMarketplaces, declaredMarketplace) === undefined) {
     acc.dangling.push({
       scope,
       cause: "dangling-reference",
@@ -507,7 +508,7 @@ function classifyDeclaredPlugin(
     // is NOT already disabled (artifacts still materialised) needs the action --
     // symmetric with the enable branch's "recorded + enabled" steady state
     // below.
-    const record = state.marketplaces[marketplace]?.plugins[plugin];
+    const record = ownValue(ownValue(state.marketplaces, marketplace)?.plugins, plugin);
     if (recorded && record !== undefined && !isRecordedButDisabled(record)) {
       // Declared-disabled but still materialised: drop artifacts without
       // removing the version pin (D-04 / ENBL-02).
@@ -531,7 +532,7 @@ function classifyDeclaredPlugin(
   // consequence-disable is structurally indistinguishable from an ordinary
   // declared-enabled / recorded-disabled divergence, so without it every
   // reload would re-enable a record the same reload then disables again.
-  const record = state.marketplaces[marketplace]?.plugins[plugin];
+  const record = ownValue(ownValue(state.marketplaces, marketplace)?.plugins, plugin);
   if (
     record !== undefined &&
     isRecordedButDisabled(record) &&
@@ -688,7 +689,7 @@ function buildDependencyDisableBucket(
     const record =
       parsed === undefined
         ? undefined
-        : state.marketplaces[parsed.marketplace]?.plugins[parsed.plugin];
+        : ownValue(ownValue(state.marketplaces, parsed.marketplace)?.plugins, parsed.plugin);
     if (parsed === undefined || record === undefined || isAlreadyDependencyDisabled(record)) {
       continue;
     }
@@ -740,7 +741,7 @@ function isEligibleDependencyInstallDependent(
   const record =
     parsed === undefined
       ? undefined
-      : state.marketplaces[parsed.marketplace]?.plugins[parsed.plugin];
+      : ownValue(ownValue(state.marketplaces, parsed.marketplace)?.plugins, parsed.plugin);
   if (record === undefined) {
     return false;
   }

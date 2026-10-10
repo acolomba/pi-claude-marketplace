@@ -80,6 +80,7 @@ import { isRecordedButDisabled } from "../../persistence/state-io.ts";
 import { McpConfigFileError, McpServerCollisionError } from "../../shared/errors-bridges.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { pathExists } from "../../shared/fs-utils.ts";
+import { ownValue } from "../../shared/own-key.ts";
 import { narrowResolverNotes } from "../../shared/probe-classifiers.ts";
 import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import { SCOPES } from "../../shared/types.ts";
@@ -162,11 +163,6 @@ interface StagedOwner {
 interface PlannedPlugin {
   readonly plugin: string;
   readonly marketplace: string;
-}
-
-/** The value under an own key only, so a marker string such as `constructor` names no record. */
-function ownValue<T>(map: Readonly<Record<string, T>>, key: string): T | undefined {
-  return Object.hasOwn(map, key) ? map[key] : undefined;
 }
 
 function inBucket(bucket: readonly PlannedPlugin[], owner: LegacyMcpOwner): boolean {
