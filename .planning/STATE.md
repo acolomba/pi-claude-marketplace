@@ -738,7 +738,7 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 08]: info requires line counts only MCP servers the install writes (ADET-01)
 - [Phase 08]: D-08-05: a warm recorded-sha clone with no plugin at the declared path gets the source-outdated migration row, whose remedy is /claude:plugin update
 - [Phase 08]: A failed project stub probe keeps every staged owner's legacy entries with an unfinished row (NFR-2, NFR-3)
-- [Phase 08]: A stored MCP server choice is { plugin, fields } under _piClaudeMarketplace.serverChoices; only the recording plugin consumes it (D-08-02)
+- [Phase 08]: A stored MCP server choice is { plugin, marketplace, fields } under _piClaudeMarketplace.serverChoices; only the recording plugin@marketplace consumes it (D-08-02; marketplace added by review fix WR-02, 28a1bf0c)
 - [Phase 08]: Unstage keeps choices only in mcp-adapter.json; legacy mcp.json composes with withPluginServers
 - [Phase 08]: An override the user emptied leaves the file at unstage; a kept {} stub round-trips (AFILE-06)
 - [Phase 08]: D-08-05: reinstall treats a mirror whose HEAD cannot be read as unusable and materializes the recorded-sha clone; the reload migration's presence probe makes the same choice with file reads only

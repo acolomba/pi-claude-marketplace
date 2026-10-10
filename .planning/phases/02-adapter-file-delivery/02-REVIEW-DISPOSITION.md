@@ -86,11 +86,11 @@ recorded: 2026-10-04T10:18:04.891Z
 | IN-09 | info | fixed | b86ad6d3 |
 | WR-01 | warning | fixed | 02-REVIEW-FIX.md (not in the current review) |
 | WR-02 | warning | fixed | 02-REVIEW-FIX.md (not in the current review) |
-| WR-04 | warning | fixed | 02-REVIEW-FIX.iter2.md (not in the current review) |
-| CR-01 | critical | fixed | 02-REVIEW-FIX.iter2.md (not in the current review) |
-| WR-07 | warning | fixed | 02-REVIEW-FIX.iter2.md (not in the current review) |
-| WR-05 | warning | fixed | 02-REVIEW-FIX.iter2.md (not in the current review) |
-| WR-03 | warning | fixed | 02-REVIEW-FIX.iter2.md (not in the current review) |
+| WR-04 | warning | fixed | b47972fb, f692a2c7 (recorded in 02-REVIEW-FIX.md history; the iter2 report was never committed) |
+| CR-01 | critical | fixed | e6cd1997 (recorded in 02-REVIEW-FIX.md history; the iter2 report was never committed) |
+| WR-07 | warning | fixed | e6cd1997 (recorded in 02-REVIEW-FIX.md history; the iter2 report was never committed) |
+| WR-05 | warning | fixed | 883ddd21 (recorded in 02-REVIEW-FIX.md history; the iter2 report was never committed) |
+| WR-03 | warning | fixed | 13958368 (recorded in 02-REVIEW-FIX.md history; the iter2 report was never committed) |
 | WR-06 | warning | wontfix | D-02-18: a failed multi-member cascade keeps the marker-keyed unstage; D-02-11's byte restore covers a single-plugin install |
 
 Finding IDs were reused across the full-phase review (5bfa6baf) and the

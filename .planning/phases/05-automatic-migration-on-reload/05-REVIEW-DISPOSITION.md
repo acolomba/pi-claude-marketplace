@@ -66,12 +66,12 @@ recorded: 2026-10-09T16:12:24.394Z
 | IN-04 | info | wontfix | `commitPreparedMcp` makes one write, so there is nothing to restore; its doc comment states the one-write contract |
 | IN-05 | info | fixed | e0187b8b |
 | IN-06 | info | fixed | 70f91bd8 |
-| IN-07 | info | fixed | 14c70964, de427118 (D-08-05); the missing-checkout case keeps `marketplace-unreadable`, and the catalog explains its remedy (remove and add the marketplace again, or uninstall) |
+| IN-07 | info | fixed | 14c70964, de427118 (D-08-05); the missing-checkout case keeps `marketplace-unreadable`, and the catalog row leads with uninstall and offers `marketplace update` when the copy is out of date (49345f38) |
 | IN-08 | info | fixed | 32bf8982, 5ba2752c, de427118 (D-08-05) |
 | WR-01 | warning | fixed | 05-REVIEW-FIX.md (not in the current review) |
 | WR-02 | warning | fixed | 05-REVIEW-FIX.md (not in the current review) |
 | WR-03 | warning | fixed | 05-REVIEW-FIX.md (not in the current review) |
-| WR-04 | warning | fixed | 05-REVIEW-FIX.iter2.md (not in the current review) |
+| WR-04 | warning | fixed | 7a7d9783 (iteration-1 fix; the iter2 report was never committed) |
 
 `wontfix` is outside the code-review parser's `open|fixed|skipped|deferred` set, so a later
 `/gsd-code-review` run on this phase would read it as `open`; this ledger was closed by hand

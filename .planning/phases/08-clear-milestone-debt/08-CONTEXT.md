@@ -116,6 +116,9 @@ D-08 decisions below.
     (`missing-subdir` / `escapes`) gets a row naming
     `/claude:plugin update <plugin>@<marketplace>`. Amend D-05-02 and the
     catalog block together.
+  - Amended 2026-10-10 by review fix WR-04 (9003e476): only `missing-subdir`
+    gets the `source-outdated` row. An `escapes` path fails in every commit,
+    so `update` cannot clear it; it gets the `marketplace-unreadable` row.
 
 ### Phase 4 IN-02: explicit environment
 

@@ -3800,7 +3800,7 @@ Closed 2026-10-10 by the `mcp-4` milestone debt work. Disposition:
 fields (D-08-01). A user's per-server choices now survive plugin disable then
 enable, uninstall then reinstall, and an update that drops the server: they
 move into the top-level `_piClaudeMarketplace.serverChoices` member of
-`mcp-adapter.json`, recorded with the plugin name, in the same atomic write
+`mcp-adapter.json`, recorded with the plugin and marketplace names (review fix 28a1bf0c), in the same atomic write
 that removes or writes the entry (D-08-02, NFR-1). Commits: `fb345e31` and
 `00e310e7` (code and lifecycle tests), `57182472` (pi-mcp-adapter 5.2.0
 loads a user file that holds a stored choice), `73200878` (docs). The
