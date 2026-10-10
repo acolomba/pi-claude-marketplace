@@ -397,6 +397,7 @@ async function installCanary(root) {
     registerTool: () => {},
     on: () => {},
     getAllTools: () => [],
+    getCommands: () => [],
     // ASTAT-01: the factory subscribes to pi-mcp-adapter's status channel.
     events: { on: () => () => {} },
   };

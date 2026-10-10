@@ -319,6 +319,7 @@ async function loadExtension() {
     registerTool: () => {},
     on: () => {},
     getAllTools: () => [],
+    getCommands: () => [],
   };
   let sink = [];
   const ctx = {

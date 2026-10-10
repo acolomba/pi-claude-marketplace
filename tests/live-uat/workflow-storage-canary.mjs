@@ -169,6 +169,7 @@ async function loadExtension(projectDir) {
     registerTool: () => {},
     on: () => {},
     getAllTools: () => [{ name: "workflow" }, { name: "workflow_control" }],
+    getCommands: () => [],
   };
   let sink = [];
   const ctx = {

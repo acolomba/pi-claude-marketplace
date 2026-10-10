@@ -171,6 +171,9 @@ function sendToolCall(res, model, step, streaming) {
 
 const server = createServer((req, res) => {
   let body = "";
+  req.on("error", () => {
+    res.destroy();
+  });
   req.on("data", (chunk) => {
     body += chunk;
   });
@@ -190,6 +193,10 @@ const server = createServer((req, res) => {
     }
     sendCompletion(res, model);
   });
+});
+server.on("error", (error) => {
+  console.error(`openai-stub: ${error.message}`);
+  process.exit(1);
 });
 server.listen(PORT, HOST, () => {
   console.log(`openai-stub listening on http://${HOST}:${server.address().port}/v1`);
