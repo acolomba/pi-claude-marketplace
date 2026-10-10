@@ -38,14 +38,17 @@
 // record stays in place and is reported, unless the scope's reconcile plan
 // installs it in the same reload: that install removes the entry itself. An
 // owner the plan uninstalls, disables or enables is skipped silently for the
-// same reason. An owner whose manifest no longer lists it in a valid form,
-// whose source cannot be read offline, whose new key another config source
-// already defines, or whose scope holds a config file that does not parse
-// stays in place with a row, and the next `/reload` tries again. So does a
-// git owner whose recorded commit has no plugin at the declared path
-// (D-08-05). Each row names a remedy that clears its cause. Nothing is
-// damped: such an entry is reported on every reload until its cause is
-// cleared (COMPAT-01 keeps no state).
+// same reason. The plan's toggle buckets come from the reload's first read,
+// so when a dependency install in the same reload refreshes them, an owner
+// skipped as planned for a dependency disable keeps its legacy entries with
+// no row for one reload, and the next reload moves or reports it. An owner
+// whose manifest no longer lists it in a valid form, whose source cannot be
+// read offline, whose new key another config source already defines, or
+// whose scope holds a config file that does not parse stays in place with a
+// row, and the next `/reload` tries again. So does a git owner whose recorded
+// commit has no plugin at the declared path (D-08-05). Each row names a
+// remedy that clears its cause. Nothing is damped: such an entry is reported
+// on every reload until its cause is cleared (COMPAT-01 keeps no state).
 //
 // NFR-5: no network. This module stays outside `NETWORK_SEAMS` and never names
 // the git surface. A path source is read from the marketplace's current
@@ -103,10 +106,11 @@ import type {
 import type { LockedStateTransaction } from "../../transaction/with-state-guard.ts";
 
 /**
- * The step's writes and its clock. A test replaces a member to record the
- * write order or to fail one write (AMIG-02).
+ * The step's reads of mcp.json, its writes and its clock. A test replaces a
+ * member to record the write order or to fail one read or write (AMIG-02).
  */
 export interface McpMigrationOperations {
+  readonly readLegacyMcpOwners: typeof readLegacyMcpOwners;
   readonly prepareStageMcpServers: typeof prepareStageMcpServers;
   readonly commitPreparedMcp: typeof commitPreparedMcp;
   readonly saveState: (tx: LockedStateTransaction) => Promise<void>;
@@ -116,6 +120,7 @@ export interface McpMigrationOperations {
 }
 
 const REAL_OPERATIONS: McpMigrationOperations = {
+  readLegacyMcpOwners,
   prepareStageMcpServers,
   commitPreparedMcp,
   saveState: async (tx) => {
@@ -633,6 +638,31 @@ function stubOwner({ action }: StagedOwner): ProjectDisableStubOwner {
 }
 
 /**
+ * The staged owners with a project stub under an old name, or undefined after
+ * a row per staged owner when the probe fails.
+ */
+async function ownersWithStubs(
+  input: McpMigrationInput,
+  staged: readonly StagedOwner[],
+): Promise<readonly StagedOwner[] | undefined> {
+  try {
+    const probes = await Promise.all(
+      staged.map(async (owner) => ({
+        owner,
+        names: await projectDisableStubNames(input.cwd, stubOwner(owner)),
+      })),
+    );
+    return probes.filter(({ names }) => names.length > 0).map(({ owner }) => owner);
+  } catch (err) {
+    for (const owner of staged) {
+      pushRemovalFailureRow(input, owner.action, err, "project-scope mcp-adapter.json");
+    }
+
+    return undefined;
+  }
+}
+
+/**
  * AMIG-01: `/mcp-adapter disable` writes its stub into the project
  * `mcp-adapter.json` whatever the server's scope, so the user-scope move also
  * drops the stubs under the staged owners' old names there. Project-scope
@@ -645,6 +675,8 @@ function stubOwner({ action }: StagedOwner): ProjectDisableStubOwner {
  * the owners whose legacy entries can go now. When the project file cannot
  * be written, an owner with a stub there keeps its legacy entries and its
  * stub, gets a row naming that file, and the next `/reload` tries again.
+ * When the stub probe itself fails, no owner can tell whether it has a stub
+ * there, so every staged owner keeps its legacy entries and gets that row.
  */
 async function clearProjectStubs(
   input: McpMigrationInput,
@@ -655,13 +687,11 @@ async function clearProjectStubs(
     return staged;
   }
 
-  const probes = await Promise.all(
-    staged.map(async (owner) => ({
-      owner,
-      names: await projectDisableStubNames(input.cwd, stubOwner(owner)),
-    })),
-  );
-  const withStubs = probes.filter(({ names }) => names.length > 0).map(({ owner }) => owner);
+  const withStubs = await ownersWithStubs(input, staged);
+  if (withStubs === undefined) {
+    return [];
+  }
+
   if (withStubs.length === 0) {
     return staged;
   }
@@ -708,14 +738,16 @@ async function ownerActions(
 
 /**
  * The scope's legacy owners, or undefined after a file-unreadable row when
- * `mcp.json` does not parse.
+ * `mcp.json` does not parse. The locked re-read reports the same way, since
+ * the file can change after the unlocked read.
  */
 async function readOwnersOrReport(
   input: McpMigrationInput,
+  operations: McpMigrationOperations,
   locations: ScopedLocations,
 ): Promise<readonly LegacyMcpOwner[] | undefined> {
   try {
-    return await readLegacyMcpOwners(locations.mcpJsonPath);
+    return await operations.readLegacyMcpOwners(locations.mcpJsonPath);
   } catch (err) {
     if (!(err instanceof McpConfigFileError)) {
       throw err;
@@ -755,7 +787,11 @@ async function migrateLocked(
     return;
   }
 
-  const owners = await readLegacyMcpOwners(locations.mcpJsonPath);
+  const owners = await readOwnersOrReport(input, operations, locations);
+  if (owners === undefined) {
+    return;
+  }
+
   const staged: StagedOwner[] = [];
   let recordsChanged = false;
   for (const action of await ownerActions(input, locations, tx.state, owners)) {
@@ -793,7 +829,7 @@ export async function migrateLegacyMcpEntries(
   operations: McpMigrationOperations = REAL_OPERATIONS,
 ): Promise<void> {
   const locations = locationsFor(input.scope, input.cwd);
-  const owners = await readOwnersOrReport(input, locations);
+  const owners = await readOwnersOrReport(input, operations, locations);
   if (owners === undefined || owners.length === 0) {
     return;
   }

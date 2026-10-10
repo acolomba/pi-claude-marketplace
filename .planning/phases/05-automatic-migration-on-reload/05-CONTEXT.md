@@ -66,6 +66,15 @@ Source comments cite requirement IDs (AMIG-0N), never `D-05-NN`.
   `marketplace-unreadable` row, which suggests `marketplace update <mp>` or
   `uninstall <p>@<mp>`. A plugin the manifest no longer lists gets the
   `not-listed` row with the same two remedies.
+  **Amended 2026-10-09 (D-08-05):** a git source whose warm recorded-sha
+  clone has no plugin at its declared path (`missing-subdir`, `escapes`)
+  gets the `source-outdated` row, which suggests `/claude:plugin update
+  <p>@<mp>`: an update installs the source the marketplace now declares. A
+  mirror whose HEAD cannot be read no longer makes reinstall fail, because
+  reinstall falls back to the recorded-sha clone, so that cause keeps the
+  `reinstall` remedy and the remedy holds. A missing marketplace checkout
+  keeps the `marketplace-unreadable` row; the output catalog explains that
+  it needs the marketplace removed and added again, or an uninstall.
 - **D-05-03:** The move is MCP-only. Skills, agents, hooks and workflows are
   untouched and no `reinstalled` row is emitted. Per plugin: stage into
   `mcp-adapter.json`, then remove the plugin's marked entries from `mcp.json`.

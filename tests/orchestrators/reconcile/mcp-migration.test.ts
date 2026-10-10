@@ -22,6 +22,7 @@ import lockfile from "proper-lockfile";
 import {
   commitPreparedMcp,
   prepareStageMcpServers,
+  readLegacyMcpOwners,
   removeLegacyMcpEntries,
   removeProjectDisableStubs,
 } from "../../../extensions/pi-claude-marketplace/bridges/mcp/index.ts";
@@ -222,9 +223,13 @@ function helloRow<
   return { kind, scope: "project", plugin: "hello", marketplace, servers: ["srv"] };
 }
 
-/** The real bridge writes and `tx.save()`, each logged as it runs, with a fixed clock. */
+/**
+ * The real `mcp.json` read, and the real bridge writes and `tx.save()`, each
+ * write logged as it runs, with a fixed clock.
+ */
 function recordingOperations(log: string[]): McpMigrationOperations {
   return {
+    readLegacyMcpOwners,
     prepareStageMcpServers: async (input) => {
       log.push(`prepare ${input.pluginName}@${input.marketplaceName}`);
       return prepareStageMcpServers(input);
@@ -297,6 +302,7 @@ function writeRecordingOperations(
   }
 
   return {
+    readLegacyMcpOwners,
     prepareStageMcpServers,
     commitPreparedMcp: (prepared) =>
       observed("commitPreparedMcp", locations.mcpAdapterJsonPath, () =>
@@ -1026,6 +1032,39 @@ describe("migrateLegacyMcpEntries", () => {
       assert.deepStrictEqual(await retryTree(scope.locations.scopeRoot), treeBefore);
     });
   }
+
+  test("AMIG-01: an mcp.json that stops parsing before the locked re-read gives one file-unreadable row and no write", async (t) => {
+    // arrange
+    const scope = await createProjectScope(t, "legacy-reread-broken");
+    await seedTwoMovableOwners(scope);
+    const stateBytes = await readFile(scope.locations.stateJsonPath);
+    const log: string[] = [];
+    const operations: McpMigrationOperations = {
+      ...recordingOperations(log),
+      readLegacyMcpOwners: async (filePath) => {
+        const owners = await readLegacyMcpOwners(filePath);
+        await writeFile(filePath, "{ broken");
+        return owners;
+      },
+    };
+    const input = migrationInput(scope.cwd);
+
+    // act
+    await migrateLegacyMcpEntries(input, operations);
+
+    // assert
+    assert.deepStrictEqual(
+      { rows: input.rows, notices: input.notices, log },
+      {
+        rows: [{ kind: "file-unreadable", scope: "project", file: "mcp.json" }],
+        notices: [],
+        log: [],
+      },
+    );
+    assert.strictEqual(await readFile(scope.locations.mcpJsonPath, "utf8"), "{ broken");
+    assert.deepStrictEqual(await readFile(scope.locations.stateJsonPath), stateBytes);
+    await assert.rejects(readFile(scope.locations.mcpAdapterJsonPath), { code: "ENOENT" });
+  });
 
   test("AMIG-01: an mcp.json read failure other than a config defect propagates", async (t) => {
     // arrange
@@ -1783,6 +1822,49 @@ describe("migrateLegacyMcpEntries", () => {
       },
     );
     assert.strictEqual(await readFile(project.mcpAdapterJsonPath, "utf8"), PROJECT_STUBS_TEXT);
+    assert.strictEqual(await readFile(user.mcpJsonPath, "utf8"), legacyBytes);
+  });
+
+  test("AMIG-02: a project stub probe that throws keeps a user owner's legacy entry with an unfinished row", async (t) => {
+    // arrange
+    const { cwd } = await createProjectScope(t, "user-project-adapter-dir");
+    const user = await seedUserMoveOwner(cwd, PROJECT_STUBS_TEXT);
+    const legacyBytes = await readFile(user.mcpJsonPath, "utf8");
+    const projectAdapterPath = locationsFor("project", cwd).mcpAdapterJsonPath;
+    const log: string[] = [];
+    const recording = recordingOperations(log);
+    const operations: McpMigrationOperations = {
+      ...recording,
+      commitPreparedMcp: async (prepared) => {
+        const committed = await recording.commitPreparedMcp(prepared);
+        await rm(projectAdapterPath);
+        await mkdir(projectAdapterPath);
+        return committed;
+      },
+    };
+    const input = { ...migrationInput(cwd), scope: "user" } as const;
+
+    // act
+    await migrateLegacyMcpEntries(input, operations);
+
+    // assert
+    assert.deepStrictEqual(
+      { rows: input.rows, log },
+      {
+        rows: [
+          {
+            kind: "unfinished",
+            scope: "user",
+            plugin: "hello",
+            marketplace: "mp",
+            servers: ["srv"],
+            file: "project-scope mcp-adapter.json",
+            detail: "EISDIR: illegal operation on a directory, read 'mcp-adapter.json'",
+          },
+        ],
+        log: ["prepare hello@mp", "commit"],
+      },
+    );
     assert.strictEqual(await readFile(user.mcpJsonPath, "utf8"), legacyBytes);
   });
 
