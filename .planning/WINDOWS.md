@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 23
+open_count: 24
 waived_count: 27
 fixed_count: 39
-total_count: 89
-last_updated: 2026-10-07T17:39:33.278Z
+total_count: 90
+last_updated: 2026-10-10T06:58:57.793Z
 ---
 
 # Broken Windows Ledger
@@ -104,6 +104,7 @@ last_updated: 2026-10-07T17:39:33.278Z
 | 87 | 09 | deviation | tests/orchestrators/plugin/install-flow.test.ts | 11732 | ESLint @typescript-eslint/require-await on marketplaceTagProbe (introduced by 09-03's 71dcea21); plan 09-04 defers the fix per Task 3's own instruction not to fix earlier-plan defects | fixed |  | 2026-09-22T07:47:54.363Z | 2026-09-22T08:03:16.136Z |
 | 88 | 04 | stub | extensions/pi-claude-marketplace/bridges/mcp/substitute.ts |  | [mcp-4] VariableReport.blanked is always empty until the credential deny-list arm lands (plan 04-03) | fixed |  | 2026-10-07T16:56:58.753Z | 2026-10-07T17:39:33.278Z |
 | 89 | 04 | stub | extensions/pi-claude-marketplace/bridges/mcp/stage.ts |  | [mcp-4] prepareStageMcpServers ignores stampServers variableReports until the missing-variable notice lands (plan 04-02) | fixed |  | 2026-10-07T16:56:59.121Z | 2026-10-07T17:11:49.465Z |
+| 90 | 08 | deviation | extensions/pi-claude-marketplace/domain/dependency-closure.ts | 490 | [mcp-4] install __proto__@<mp> is refused by the closure root-key token rule as (failed) {invalid manifest} with the cause 'declares an unusable dependency (root: ...)', not the resolver's (unavailable) {unsupported source}; the same cause text reaches any root name outside the dependency token alphabet (e.g. _x@mp) | open |  | 2026-10-10T06:58:57.793Z |  |
 
 ````json
 [
@@ -1206,6 +1207,19 @@ last_updated: 2026-10-07T17:39:33.278Z
     "reason": "",
     "recorded_at": "2026-10-07T16:56:59.121Z",
     "resolved_at": "2026-10-07T17:11:49.465Z",
+    "milestone": null
+  },
+  {
+    "id": 90,
+    "kind": "deviation",
+    "phase": "08",
+    "file": "extensions/pi-claude-marketplace/domain/dependency-closure.ts",
+    "line": 490,
+    "description": "[mcp-4] install __proto__@<mp> is refused by the closure root-key token rule as (failed) {invalid manifest} with the cause 'declares an unusable dependency (root: ...)', not the resolver's (unavailable) {unsupported source}; the same cause text reaches any root name outside the dependency token alphabet (e.g. _x@mp)",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-10-10T06:58:57.793Z",
+    "resolved_at": null,
     "milestone": null
   }
 ]
