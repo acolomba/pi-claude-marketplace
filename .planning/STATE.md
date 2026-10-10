@@ -4,16 +4,16 @@ milestone: json-output
 current_phase: 7
 current_phase_name: Mode Refusals, Real-Pi Verification, and Docs
 status: executing
-stopped_at: Phase 7 planning; corpus exception D-14 approved
-last_updated: "2026-10-10T02:03:14.907Z"
-last_activity: 2026-10-09
-last_activity_desc: Phase 6 complete, transitioned to Phase 7
-state_head: 64bcfa027530b55319446ea781facab229df92cd
+stopped_at: Phase 7 wave 1 verified; executing documentation plan 07-04
+last_updated: "2026-10-10T02:42:52.383Z"
+last_activity: 2026-10-10
+last_activity_desc: Phase 7 wave 1 verified; documentation execution next
+state_head: 1cbd639af089625db95ffa5fae1ee3e52850e529
 progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 45
-  completed_plans: 39
+  completed_plans: 42
 milestone_name: Mode-Keyed Presentation Strategies
 ---
 
@@ -30,12 +30,12 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: 7 (Mode Refusals, Real-Pi Verification, and Docs) — READY TO EXECUTE
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-10-09 — Phase 6 complete, transitioned to Phase 7
+Phase: 7 — Mode Refusals, Real-Pi Verification, and Docs
+Plan: 3 of 6 complete; 07-04 next
+Status: Executing
+Last activity: 2026-10-10 — Wave 1 merged and full combined-tree check passed
 
-Progress: [█████████░] 86% (6 of 7 phases fully verified; 39 of 39 plans complete)
+Progress: [█████████░] 86% (6 of 7 phases fully verified; 42 of 45 plans complete)
 
 Phase 1's first plan captures the text wire-corpus baseline (every emitted
 `(message, severity)` pair and its argument count) before any renderer change;
@@ -169,9 +169,9 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-10T01:35:18.766Z
-**Stopped at:** Phase 7 planning; corpus exception D-14 approved
-**Resume file:** .planning/phases/07-mode-refusals-real-pi-verification-and-docs/07-CONTEXT.md
+**Last session:** 2026-10-10T02:42:51.985Z
+**Stopped at:** Phase 7 wave 1 verified; executing documentation plan 07-04
+**Resume file:** .planning/phases/07-mode-refusals-real-pi-verification-and-docs/07-04-PLAN.md
 
 **Earlier work:** json-output on `features/json`. Phases 1 and 2 are complete
 and verified. Phase 2's review-fix loop closed after three iterations with ten
