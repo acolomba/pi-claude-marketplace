@@ -2,6 +2,41 @@
 
 *A living document updated after each milestone. Lessons feed forward into future planning.*
 
+## Milestone: mcp-4 -- MCP 4
+
+**Completed:** 2026-10-10 on `features/mcp-4` (not yet merged, no npm release yet)
+**Phases:** 8 (1-8) | **Plans:** 73 | **Tasks:** 176 | **Requirements:** 41/41 | **Audit:** passed (8/8 phases, 12/12 integration seams, 6/6 flows, Nyquist compliant on all 8, `threats_open: 0`) -- first `tech_debt`; Phase 8 cleared it
+
+### What Was Built
+- Pi 1.0 became the floor, with pi-subagents 0.74.0 and pi-mcp-adapter 5.2.0; only the adapter itself satisfies the MCP soft dependency, never Pi's built-in MCP.
+- Plugin MCP servers are written to the adapter's own `mcp-adapter.json` under Claude Code's tool names, load through tool search, and keep the user's per-server choices across update, reinstall, disable and uninstall.
+- Variables expand by Claude Code's rules with no environment value written to disk; a `/reload` moves old `mcp.json` entries into the new file; `info` shows each server's live state.
+
+### What Worked
+- **Sequential executors in one worktree, each commit checked by the hook.** Plans ran one after another in the milestone worktree, and every build-input commit ran `check:commit`. There were no per-plan worktrees to merge back, and a broken commit failed at the commit, not at the phase gate.
+- **Scoped re-verification instead of a full rerun.** When Phase 8 edited files that Phases 1-7 cover, each phase was re-verified only against the diff from its own baseline. That took one pass per phase and still found a real hygiene gap in Phase 2 (a decision ID put back into a comment).
+- **Measuring against the real adapter.** Conformance suites run the escape, the entry shape and the status contract through pi-mcp-adapter's own `dist/` code, with drift guards. An operator-run canary on a real Pi 1.0 proved the whole path, including the one-reload cost of the rename.
+
+### What Was Inefficient
+- **The first audit read `tech_debt`, and clearing it took a whole phase.** Open review findings in every phase, a fallow audit verdict of `warn`, two open BACKLOG items and stale records added up to 21 plans in Phase 8. Most of that could have been closed inside the phase that made it.
+- **Review-fix loops added rounds.** Phases 2, 4 and 5 each needed a second review-fix iteration, and Phase 3 left its findings in a disposition file that lagged the operator's UAT decisions until Phase 8.
+- **A later phase staled the earlier VERIFICATION reports.** Phase 8 edited files that Phases 1-7 had verified, so the close needed seven scoped re-verifications before the re-audit could pass.
+
+### Patterns Established
+- **A remedy must clear its own cause.** A notice that tells the user to run `reinstall` must name a command that fixes the problem it reports (D-08-05, NFR-3).
+- **State maps are read and written by own key only.** `ownValue` and `setOwn` replace `in` checks and bracket writes, so `constructor` and `__proto__` behave like any other plugin or marketplace name (D-08-07).
+- **Translate through a closed table pinned to an upstream version.** The Claude Code 2.1.291 field table drops every key it does not name, and a feature the adapter cannot honor makes the plugin partially available instead of installing something that silently differs.
+
+### Key Lessons
+1. **Close review findings in the phase that raised them.** A finding left `open` or `deferred` comes back at the audit as debt, with less context and a larger fix.
+2. **Run the fallow audit before each phase gate, not only before the PR.** Clone groups added early were cheap to fix then and cost several plans in Phase 8.
+3. **Expect a later phase to stale an earlier verification.** Plan the scoped re-verification into the close instead of treating it as a surprise.
+
+### Cost Observations
+- Model mix: not measured for this milestone
+- Timeline: 2026-10-01 -> 2026-10-10, ~385 first-parent commits on the branch
+- Notable: Phase 8 alone was 21 of the 73 plans.
+
 ## Milestone: any-git-host -- Any Git Host
 
 **Completed:** 2026-09-30 on `features/git-hosts` (workstream `git-hosts`; merged to main in PR #221 as `a0d3aef1`, no npm release yet)
@@ -912,6 +947,7 @@ Result: 8/8 INFO requirements satisfied, 1459/1459 tests GREEN, full catalog UAT
 | workflows-detection | 1 | Unsupported declaration as opaque presence; shared strict/loose collector; exact no-materialization boundary |
 | v1.19 | 10 | One mirrored owner test per production module, coverage measured in isolation; land-the-control-first sequencing; plants over green runs as the standard of proof |
 | v1.20 | 12 | Dependency provenance in records, upstream parity research, and a final clean-tree gate |
+| mcp-4 | 8 | Conformance against the real adapter's code; sequential executors in one worktree; a debt phase after a `tech_debt` audit; scoped re-verification at close |
 
 ### Cumulative Quality
 
@@ -926,6 +962,7 @@ Result: 8/8 INFO requirements satisfied, 1459/1459 tests GREEN, full catalog UAT
 | workflows-detection | 3649 + 21 int assertions | Fixed unsupported convention, reason parity, rollback/retry, and exact resource/discovery boundaries |
 | v1.19 | 5144 + 31 int | 204/204 mirrored pairs at zero correspondence violations; per-pair direct coverage measured in isolation; gate scripts finally wired into `npm run check`; green on two Node majors |
 | v1.20 | 7760 + 63 int | Full `npm run check` green in a clean checkout; 100% aggregate production coverage; one deferred live credential UAT subcase |
+| mcp-4 | not recorded | Full `npm run check` green with both peer roots (pi-mcp-adapter 5.2.0, pi-subagents 0.74.0); fallow audit `pass` with 0 introduced groups; all review ledgers `open: 0` |
 
 ### Top Lessons (Verified Across Milestones)
 
