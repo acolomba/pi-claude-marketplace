@@ -453,7 +453,8 @@ function mcpConfigNoticeSections(
  * override field names, environment variable names or tool permission field
  * names only, so it carries no absolute path, no field value, no variable
  * value and no tool name (AVAR-05). A leftover's old name is read from a
- * config file, so its control characters are escaped. The host UI prepends
+ * config file, so its control and format characters and its line and
+ * paragraph separators are escaped. The host UI prepends
  * the `Warning:` label to the summary line. The byte form is locked by
  * `tests/architecture/mcp-config-notices.test.ts` against the
  * `mcp-comments-dropped`, `mcp-config-left-unchanged`, `mcp-override-kept`,
@@ -652,21 +653,28 @@ const MCP_MIGRATION_STOPPED_SUMMARY = "Plugin MCP servers in mcp.json need atten
 const MCP_MIGRATION_COST_LINE =
   "The new names reset what pi-mcp-adapter keeps for each server name: sign in again to servers that use OAuth, and approve project servers again. Until you reload, pi-mcp-adapter can still show the old names.";
 
-/** Whether a UTF-16 code unit is a C0 control, DEL, or a C1 control. */
-function isControlCodeUnit(code: number): boolean {
-  return code <= 0x1f || (code >= 0x7f && code <= 0x9f);
+/** A control, a format character such as a bidi control, or a line or paragraph separator. */
+const ESCAPED_CODE_POINT = /^[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]$/u;
+
+/** `\u` and four lowercase hex digits for each UTF-16 code unit of `char`. */
+function codeUnitEscapes(char: string): string {
+  let escaped = "";
+  for (let index = 0; index < char.length; index += 1) {
+    escaped += `\\u${char.charCodeAt(index).toString(16).padStart(4, "0")}`;
+  }
+
+  return escaped;
 }
 
 /**
- * AMIG-03: writes each C0 or C1 control character as `\u` and four
- * lowercase hex digits, so a name read from a config file cannot move the
- * cursor or end a line in the notice.
+ * AMIG-03: escapes each control, format, line separator and paragraph
+ * separator code point, so a file-derived name cannot move the cursor, end a
+ * line, or reorder the text around it in the notice.
  */
 function printable(text: string): string {
-  return Array.from(text, (char) => {
-    const code = char.charCodeAt(0);
-    return isControlCodeUnit(code) ? `\\u${code.toString(16).padStart(4, "0")}` : char;
-  }).join("");
+  return Array.from(text, (char) =>
+    ESCAPED_CODE_POINT.test(char) ? codeUnitEscapes(char) : char,
+  ).join("");
 }
 
 /** Plain code-unit order: no locale, no normalization. */
@@ -862,8 +870,9 @@ function mcpMigrationSeverity(
 
 /**
  * AMIG-01 / AMIG-03 / AMIG-04 IL-2 seam: the one migration notice per reload,
- * covering both scopes. With no row it sends nothing. Otherwise it sends one
- * notification: a summary line, a blank line, the moved rows, the removed
+ * covering both scopes. With no row it sends the notices through
+ * `notifyMcpConfigNotices`, so a written file's facts still reach the user,
+ * and with neither it sends nothing. Otherwise it sends one notification: a summary line, a blank line, the moved rows, the removed
  * rows with their reason, the rows left in `mcp.json` (stopped,
  * file-unreadable, unowned, not-listed, source-unreadable, source-outdated,
  * marketplace-unreadable, collision, unfinished), then, when a row moved, the cost line, then the lines of every
@@ -877,8 +886,9 @@ function mcpMigrationSeverity(
  * not enforced, and `"info"` otherwise: a server removed because its plugin
  * no longer declares it or is disabled does not by itself warn. A row names
  * old names, the adapter key, the plugin, the marketplace and the
- * scope, and every control character in a file-derived string is escaped; a
- * detail or source label carries no absolute path. The byte form is locked
+ * scope; every control or format character and every line or paragraph
+ * separator in a file-derived string is escaped, and a detail or source
+ * label carries no absolute path. The byte form is locked
  * by `tests/architecture/mcp-migration-notice.test.ts` against the
  * `mcp-migration-moved`, `mcp-migration-stopped`,
  * `mcp-migration-left-in-place`, `mcp-migration-removed` and
@@ -886,6 +896,7 @@ function mcpMigrationSeverity(
  */
 export function notifyMcpMigration(ctx: NotificationContext, report: McpMigrationReport): void {
   if (report.rows.length === 0) {
+    notifyMcpConfigNotices(ctx, report.notices);
     return;
   }
 

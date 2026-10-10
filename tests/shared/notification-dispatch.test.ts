@@ -5996,6 +5996,52 @@ test("AFILE-06: a repeated override-kept notice renders once", (t) => {
   );
 });
 
+test("AFILE-06: a later override-kept notice for a server replaces the earlier one in its first position", (t) => {
+  // arrange
+  const ctx = createContext(t);
+
+  // act
+  notifyMcpConfigNotices(ctx as never, [
+    {
+      kind: "override-kept",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "srv",
+      fields: ["env"],
+    },
+    {
+      kind: "override-kept",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "other",
+      fields: ["cwd"],
+    },
+    {
+      kind: "override-kept",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "beta",
+      server: "srv",
+      fields: ["headers"],
+    },
+  ]);
+
+  // assert
+  assert.deepStrictEqual(
+    ctx.ui.notify.mock.calls.map((call) => call.arguments),
+    [
+      [
+        "MCP server override kept.\n\n" +
+          'beta now provides "srv" in the project-scope mcp-adapter.json. Your override for "srv" is kept, but these fields of it stop applying: headers. It comes back when you uninstall or disable beta.\n' +
+          'hello now provides "other" in the project-scope mcp-adapter.json. Your override for "other" is kept, but these fields of it stop applying: cwd. It comes back when you uninstall or disable hello.',
+        "warning",
+      ],
+    ],
+  );
+});
+
 test("AFILE-06: mixed MCP config notices send comments-dropped, then left-unchanged, then override-kept", (t) => {
   // arrange
   const ctx = createContext(t);
@@ -6655,22 +6701,77 @@ test("AMIG-01: control characters in a leftover's old name render as \\u escapes
   );
 });
 
+test("AMIG-01: line separators and format characters in a leftover's old name render as \\u escapes", (t) => {
+  // arrange
+  const ctx = createContext(t);
+
+  // act
+  notifyMcpConfigNotices(ctx as never, [
+    {
+      kind: "leftover-removed",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "s\u2028r\u202ev",
+    },
+  ]);
+
+  // assert
+  assert.deepStrictEqual(
+    ctx.ui.notify.mock.calls.map((call) => call.arguments),
+    [
+      [
+        'Old MCP server settings removed.\n\nRemoved "s\\u2028r\\u202ev" from the project-scope mcp-adapter.json: pi-mcp-adapter had written it under the old name of a server from hello, for example for /mcp-adapter disable, and it no longer applies.',
+        "warning",
+      ],
+    ],
+  );
+});
+
 const MCP_MIGRATION_COST_LINE =
   "The new names reset what pi-mcp-adapter keeps for each server name: sign in again to servers that use OAuth, and approve project servers again. Until you reload, pi-mcp-adapter can still show the old names.";
 
 describe("notifyMcpMigration", () => {
-  test("AMIG-03: a report with no row sends nothing, even with config notices", (t) => {
+  test("AMIG-03: a report with no row and no notice sends nothing", (t) => {
+    // arrange
+    const ctx = createContext(t);
+
+    // act
+    notifyMcpMigration(ctx as never, { rows: [], notices: [] });
+
+    // assert
+    assert.equal(ctx.ui.notify.mock.callCount(), 0);
+  });
+
+  test("AMIG-03: a report with notices but no row sends each notice section as its own warning", (t) => {
     // arrange
     const ctx = createContext(t);
 
     // act
     notifyMcpMigration(ctx as never, {
       rows: [],
-      notices: [{ kind: "comments-dropped", scope: "project", file: "mcp.json" }],
+      notices: [
+        {
+          kind: "variables-missing",
+          scope: "user",
+          file: "mcp-adapter.json",
+          plugin: "hello",
+          server: "plugin_hello_srv_",
+          names: ["DD_SITE"],
+        },
+      ],
     });
 
     // assert
-    assert.equal(ctx.ui.notify.mock.callCount(), 0);
+    assert.deepStrictEqual(
+      ctx.ui.notify.mock.calls.map((call) => call.arguments),
+      [
+        [
+          'MCP server variables not set.\n\nServer "plugin_hello_srv_" from hello in the user-scope mcp-adapter.json uses environment variables that were not set at install: DD_SITE.',
+          "warning",
+        ],
+      ],
+    );
   });
 
   test("AMIG-03: moved rows sort project first, then by plugin and old name in code-unit order, at info", (t) => {
@@ -7081,6 +7182,44 @@ describe("notifyMcpMigration", () => {
             "/reload to pick up changes",
           ].join("\n"),
           "warning",
+        ],
+      ],
+    );
+  });
+
+  test("AMIG-03: line separators and format characters in a file-derived name render as \\u escapes", (t) => {
+    // arrange
+    const ctx = createContext(t);
+
+    // act
+    notifyMcpMigration(ctx as never, {
+      rows: [
+        {
+          kind: "moved",
+          scope: "project",
+          plugin: "ac\u2029me",
+          marketplace: "mp",
+          from: "s\u2028r\u202ev\u200b\u{e0001}",
+          to: "plugin_acme_srv_",
+        },
+      ],
+      notices: [],
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      ctx.ui.notify.mock.calls.map((call) => call.arguments),
+      [
+        [
+          [
+            "Plugin MCP servers moved from mcp.json to mcp-adapter.json.",
+            "",
+            "Moved to mcp-adapter.json:",
+            "  s\\u2028r\\u202ev\\u200b\\udb40\\udc01 -> plugin_acme_srv_ (ac\\u2029me) [project]",
+            MCP_MIGRATION_COST_LINE,
+            "/reload to pick up changes",
+          ].join("\n"),
+          "info",
         ],
       ],
     );
