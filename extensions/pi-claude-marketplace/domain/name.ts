@@ -59,6 +59,15 @@ export function assertSafeName(name: string, label?: string): void {
 }
 
 /**
+ * D-08-07: whether `name` is a state map key that a bracket write turns into a
+ * prototype change. Every state read and write uses own keys, so `constructor`,
+ * `toString` and the other `Object.prototype` names stay valid names.
+ */
+export function isReservedRecordKey(name: string): boolean {
+  return name === "__proto__";
+}
+
+/**
  * Skill name generator (RN-1 / SK-2).
  *
  * Format: `<plugin>-<skill>` on every platform. Elides a matching plugin

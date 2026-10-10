@@ -55,6 +55,7 @@ import path from "node:path";
 
 import { networkCloneUrl, originMatchesSource } from "../../domain/clone-key.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
+import { isReservedRecordKey } from "../../domain/name.ts";
 import { parsePluginSource } from "../../domain/source.ts";
 import { loadConfig } from "../../persistence/config-io.ts";
 import { writeMarketplaceConfigEntry } from "../../persistence/config-write-back.ts";
@@ -315,6 +316,31 @@ function classifyAddError(rawErr: unknown): ContentReason | undefined {
   }
 
   return undefined;
+}
+
+/**
+ * Reads the manifest at `manifestPath` and returns the marketplace name it
+ * declares. A `__proto__` name fails as `invalid manifest` (D-08-07), and a
+ * name the scope already holds fails as a duplicate (MA-8), both before any
+ * state mutation.
+ */
+async function newMarketplaceName(
+  manifestPath: string,
+  marketplaces: ExtensionState["marketplaces"],
+  scope: Scope,
+): Promise<string> {
+  const { name } = await loadMarketplaceManifest(manifestPath);
+  if (isReservedRecordKey(name)) {
+    throw new InvalidMarketplaceManifestError(
+      `marketplace.json schema invalid: name "${name}" is reserved`,
+    );
+  }
+
+  if (ownValue(marketplaces, name) !== undefined) {
+    throw new MarketplaceDuplicateNameError(name, scope);
+  }
+
+  return name;
 }
 
 /**
@@ -856,16 +882,9 @@ async function addGitClonedInGuard(args: {
     //    rename it into place.
     await writeOwnershipMarker(stagingDir);
 
-    // 3. Read + validate manifest.
+    // 3-4. Read + validate manifest; MA-8: duplicate name in this scope.
     const manifestPath = path.join(stagingDir, ".claude-plugin", "marketplace.json");
-    const parsed = await loadMarketplaceManifest(manifestPath);
-
-    const derivedName = parsed.name;
-
-    // 4. MA-8: duplicate name in this scope.
-    if (ownValue(state.marketplaces, derivedName) !== undefined) {
-      throw new MarketplaceDuplicateNameError(derivedName, locations.scope);
-    }
+    const derivedName = await newMarketplaceName(manifestPath, state.marketplaces, locations.scope);
 
     // 5. MA-6/MA-12/MA-13: recognize-remove-rename on the final destination.
     // A leftover is the extension's own when it carries the ownership marker
@@ -1057,15 +1076,8 @@ async function addPathInGuard(args: {
     throw notUsable;
   }
 
-  // Read + validate manifest.
-  const parsed = await loadMarketplaceManifest(manifestPath);
-
-  const derivedName = parsed.name;
-
-  // MA-8: duplicate name in scope.
-  if (ownValue(state.marketplaces, derivedName) !== undefined) {
-    throw new MarketplaceDuplicateNameError(derivedName, locations.scope);
-  }
+  // Read + validate manifest; MA-8: duplicate name in scope.
+  const derivedName = await newMarketplaceName(manifestPath, state.marketplaces, locations.scope);
 
   // MA-4: source already preserves the user-typed `~` verbatim
   // (ParsedSource.raw) via pathSource() factory. We store the parsed

@@ -40,7 +40,7 @@ import { parseDeclaredDependencies } from "./dependencies.ts";
 import { resolveHooks, type HooksResolution } from "./hooks-resolution.ts";
 import { MANIFEST_CANDIDATES } from "./manifest-path.ts";
 import { resolveStrictMcp, type McpResolution } from "./mcp-resolution.ts";
-import { assertSafeName } from "./name.ts";
+import { assertSafeName, isReservedRecordKey } from "./name.ts";
 import {
   parsePluginSource,
   type GitHubSource,
@@ -513,6 +513,16 @@ async function preflightStages(
   const partial = emptyResolution();
   // Caller bug if name validation throws -- entry came through PLUGIN_ENTRY_VALIDATOR.
   assertSafeName(entry.name);
+
+  if (isReservedRecordKey(entry.name)) {
+    return {
+      kind: "unavailable",
+      result: unavailable(entry.name, [
+        ...partial.notes,
+        `malformed marketplace entry: plugin name "${entry.name}" is reserved`,
+      ]),
+    };
+  }
 
   // domain/manifest.ts::normalizeDependencyEntries isolates a marketplace
   // entry whose declared `dependencies` failed to parse before this resolver

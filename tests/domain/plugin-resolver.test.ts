@@ -95,6 +95,36 @@ test("resolveStrict lets a valid dependencies declaration fall through to ordina
   );
 });
 
+test("D-08-07: an entry named __proto__ resolves unavailable as a malformed entry", async () => {
+  // arrange
+  const context = resolveContext(marketplaceRoot, { [pathUnderMarketplace("./local")]: "dir" });
+
+  // act
+  const resolved = await resolveStrict(pluginEntry({ name: "__proto__" }), context);
+
+  // assert
+  assert.deepStrictEqual(resolved, {
+    state: "unavailable",
+    installable: false,
+    name: "__proto__",
+    notes: ['malformed marketplace entry: plugin name "__proto__" is reserved'],
+  });
+});
+
+test("D-08-07: an entry named constructor resolves installable", async () => {
+  // arrange
+  const context = resolveContext(marketplaceRoot, { [pathUnderMarketplace("./local")]: "dir" });
+
+  // act
+  const resolved = await resolveStrict(pluginEntry({ name: "constructor" }), context);
+
+  // assert
+  assert.deepStrictEqual(
+    { state: resolved.state, name: resolved.name, notes: resolved.notes },
+    { state: "installable", name: "constructor", notes: [] },
+  );
+});
+
 /**
  * Build an in-memory ResolveContext. `files` maps absolute paths to either:
  *   - "dir"           -> directory exists

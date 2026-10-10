@@ -1337,6 +1337,61 @@ test("MA-8 / D-08-07: refuses a second add of a marketplace named constructor", 
   });
 });
 
+test("D-08-07: refuses a path marketplace named __proto__ as an invalid manifest", async (t) => {
+  await createHermeticEnvironment(t, "mp-add-proto-home-");
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    const marketplaceRoot = await writeNamedPathMarketplace(cwd, "__proto__");
+    const { ctx, pi, notifications } = makeCtx();
+    const { gitOps } = createGitOps();
+
+    // act
+    await addMarketplace({ ctx, pi, scope: "project", cwd, rawSource: marketplaceRoot, gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A marketplace operation has failed.\n\n" +
+          `⊘ ${marketplaceRoot} [project] (failed) {invalid manifest}`,
+        severity: "error",
+      },
+    ]);
+    assert.deepStrictEqual((await loadState(locations.extensionRoot)).marketplaces, {});
+  });
+});
+
+test("D-08-07: refuses a cloned marketplace named __proto__ as an invalid manifest", async (t) => {
+  await createHermeticEnvironment(t, "mp-add-proto-clone-home-");
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    const fixtureSourceDir = await writeNamedPathMarketplace(cwd, "__proto__");
+    const { ctx, pi, notifications } = makeCtx();
+    const { gitOps } = createGitOps({ fixtureSourceDir });
+
+    // act
+    await addMarketplace({
+      ctx,
+      pi,
+      scope: "project",
+      cwd,
+      rawSource: "anthropics/claude-plugins-official",
+      gitOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A marketplace operation has failed.\n\n" +
+          "⊘ anthropics/claude-plugins-official [project] (failed) {invalid manifest}",
+        severity: "error",
+      },
+    ]);
+    assert.deepStrictEqual((await loadState(locations.extensionRoot)).marketplaces, {});
+  });
+});
+
 test("rejects a path marketplace with a scalar dependency allowlist", async () => {
   await withTmpScope(async ({ cwd, locations }) => {
     // arrange

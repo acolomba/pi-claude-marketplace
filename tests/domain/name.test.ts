@@ -10,6 +10,7 @@ import {
   generatedMcpServerKey,
   generatedSkillName,
   generatedWorkflowName,
+  isReservedRecordKey,
   mcpServerDisplayName,
 } from "../../extensions/pi-claude-marketplace/domain/name.ts";
 import { UnsafeGeneratedNameError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
@@ -172,6 +173,35 @@ describe("assertSafeName", () => {
         assert.strictEqual(error.message, errorMessage);
         return true;
       });
+    });
+  }
+});
+
+describe("isReservedRecordKey", () => {
+  test("D-08-07: reserves __proto__", () => {
+    // arrange
+    const name = "__proto__";
+
+    // act
+    const reserved = isReservedRecordKey(name);
+
+    // assert
+    assert.strictEqual(reserved, true);
+  });
+
+  for (const name of [
+    ...Object.getOwnPropertyNames(Object.prototype).filter((member) => member !== "__proto__"),
+    "tools",
+  ]) {
+    test(`D-08-07: leaves ${JSON.stringify(name)} a valid name`, () => {
+      // arrange
+      const recordKey = name;
+
+      // act
+      const reserved = isReservedRecordKey(recordKey);
+
+      // assert
+      assert.strictEqual(reserved, false);
     });
   }
 });
