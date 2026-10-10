@@ -86,7 +86,10 @@ export const ADAPTER_EMPTY_ENV = "PI_CLAUDE_MARKETPLACE_EMPTY";
 const ADAPTER_MARKER = /\$env:|\{env:/;
 
 // A tail that the entry text after a kept `${CLAUDE_PROJECT_DIR}` can complete
-// into a marker.
+// into a marker. New entries escape that text (AVAR-03,
+// `bridges/mcp/adapter-escape.ts`), so this guards entries written before the
+// escape: legacy `mcp.json` entries that the reload migration has not moved yet,
+// until a reinstall, an update or the migration rewrites them.
 const PARTIAL_MARKER_TAIL = /[${](?:e(?:nv?)?)?$/;
 
 /**
@@ -98,19 +101,30 @@ const PARTIAL_MARKER_TAIL = /[${](?:e(?:nv?)?)?$/;
  * The reserved variable is set to the empty string before `readCwd` runs, so
  * it is set even when `readCwd` throws: the split tokens in written entries
  * need it set, and the adapter refuses a `url` that names an unset variable.
- * A throw from `readCwd` propagates and leaves `CLAUDE_PROJECT_DIR` unchanged.
+ * A throw from `readCwd` propagates after `CLAUDE_PROJECT_DIR` is removed, so
+ * no server reads a stale or inherited project.
  *
  * A working directory that holds `$env:` or `{env:`, or ends in `$`, `{` or a
  * longer prefix of either marker, is not exported (AVAR-05). The adapter would
- * expand the marker, and plugin text after the reference can complete such a
- * tail into a reference to a withheld credential. The skip also removes any
+ * expand the marker. The tail check guards entries written before text after a
+ * kept reference was escaped: in those, plugin text after the reference can
+ * complete such a tail into a reference to a withheld credential. Those are the
+ * legacy `mcp.json` entries the reload migration has not moved yet, until a
+ * reinstall, an update or the migration rewrites them. The skip also removes any
  * previous `CLAUDE_PROJECT_DIR`, so no server reads a stale or inherited
  * project. Returns `false` for that skip so the caller can log it; this module
  * does not log. Bash and MCP children inherit both values.
  */
 export function applyMcpAdapterEnv(readCwd: () => string): boolean {
   process.env[ADAPTER_EMPTY_ENV] = "";
-  const cwd = readCwd();
+  let cwd: string;
+  try {
+    cwd = readCwd();
+  } catch (error: unknown) {
+    Reflect.deleteProperty(process.env, "CLAUDE_PROJECT_DIR");
+    throw error;
+  }
+
   if (ADAPTER_MARKER.test(cwd) || PARTIAL_MARKER_TAIL.test(cwd)) {
     Reflect.deleteProperty(process.env, "CLAUDE_PROJECT_DIR");
     return false;
