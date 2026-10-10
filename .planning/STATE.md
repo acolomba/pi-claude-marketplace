@@ -4,17 +4,16 @@ milestone: json-output
 current_phase: 7
 current_phase_name: Mode Refusals, Real-Pi Verification, and Docs
 status: completed
-stopped_at: Phase 7 complete — all phases complete
-last_updated: "2026-10-10T15:55:20.967Z"
+stopped_at: Phase 8 context gathered
+last_updated: "2026-10-10T18:20:25.318Z"
 last_activity: 2026-10-10
 last_activity_desc: Phase 7 complete
-state_head: 3b1c61c7898a1157bee0dcb03213658a62d59538
+state_head: 779c9512074fa2244a27995c26a6ad15e32972ea
 progress:
   total_phases: 8
   completed_phases: 7
   total_plans: 45
   completed_plans: 45
-  percent: 88
 milestone_name: Mode-Keyed Presentation Strategies
 ---
 
@@ -170,9 +169,9 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-10T12:16:56.451000Z
-**Stopped at:** Phase 7 complete — all phases complete
-**Resume file:** None
+**Last session:** 2026-10-10T18:20:24.899Z
+**Stopped at:** Phase 8 context gathered
+**Resume file:** .planning/phases/08-address-tech-debt-ledger-dispositions-and-advisory/08-CONTEXT.md
 
 **Earlier work:** json-output on `features/json`. Phases 1 and 2 are complete
 and verified. Phase 2's review-fix loop closed after three iterations with ten
