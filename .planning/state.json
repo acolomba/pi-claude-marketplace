@@ -41,13 +41,13 @@
     {
       "number": "8",
       "name": "Clear milestone debt",
-      "status": "pending"
+      "status": "in_progress"
     }
   ],
   "next": {
     "command": "/gsd:progress --next",
     "label": "Advance to the next step",
-    "reason": "Phase 8 of 8 · 73% · executing"
+    "reason": "Phase 8 of 8 · 74% · executing"
   },
-  "updated_at": "2026-10-10T03:01:27.783Z"
+  "updated_at": "2026-10-10T03:18:16.334Z"
 }

@@ -5,17 +5,17 @@ milestone_name: MCP 4
 current_phase: 8
 current_phase_name: Clear milestone debt
 status: executing
-stopped_at: Completed 08-01-PLAN.md
-last_updated: "2026-10-10T03:01:32.347Z"
+stopped_at: Completed 08-02-PLAN.md
+last_updated: "2026-10-10T03:18:24.272Z"
 last_activity: 2026-10-09
 last_activity_desc: Phase 8 execution started
-state_head: 10d7cb260afd90b8d7ded440fba435e325ab93ef
+state_head: e0187b8bf42ad83f5fd9939cd4797f8cf9518c9e
 progress:
   total_phases: 8
   completed_phases: 7
   total_plans: 73
-  completed_plans: 53
-  percent: 73
+  completed_plans: 54
+  percent: 74
 ---
 
 # Project State
@@ -35,11 +35,11 @@ sign-ins and approvals.
 ## Current Position
 
 Phase: 8 (Clear milestone debt) — EXECUTING
-Plan: 2 of 21
+Plan: 3 of 21
 Status: Ready to execute
 Last activity: 2026-10-09 — Phase 8 execution started
 
-Progress: [███████░░░] 73%
+Progress: [███████░░░] 74%
 
 ### workflows-replay closeout (merged from main)
 
@@ -299,6 +299,7 @@ still open with a comment explaining what landed.
 | Phase 07 P04 | 11 min | 2 tasks | 3 files |
 | Phase 07 P05 | 7 min | 3 tasks | 4 files |
 | Phase 08 P01 | 13min | 3 tasks | 6 files |
+| Phase 08 P02 | 17min | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -716,6 +717,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 07]: [07-05] Upgrade notes give the old Pi tool name as <old-name>_<tool> (pi-mcp-adapter default server prefix; 0.19.2 entries carried no toolPrefix), not mcp__<old-name>__<tool>
 - [Phase 08]: Plugin-info clone groups removed by hoisting one shared fixture row, never suppressed (D-08-08)
 - [Phase 08]: info requires line counts only MCP servers the install writes (ADET-01)
+- [Phase 08]: D-08-05: a warm recorded-sha clone with no plugin at the declared path gets the source-outdated migration row, whose remedy is /claude:plugin update
+- [Phase 08]: A failed project stub probe keeps every staged owner's legacy entries with an unfinished row (NFR-2, NFR-3)
 
 ### Pending Todos
 
@@ -849,11 +852,11 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Completed 08-01-PLAN.md
+**Stopped at:** Completed 08-02-PLAN.md
 
 **Resume file:** None
 
-Last session: 2026-10-10T03:01:31.898Z
+Last session: 2026-10-10T03:18:23.852Z
 Phase 7 closed: 5/5 plans; Nyquist validated; security verified (0 open);
 review 8/8 fixed; verifier 3/3, re-running the live canary against
 pi-mcp-adapter 5.2.0. `/gsd-autonomous --from 7` ran the transition, then
