@@ -1,9 +1,10 @@
 // tests/integration/pi-mcp-adapter-peer.ts
 //
 // pi-mcp-adapter peer support for the conformance tests that run this
-// extension's written MCP values through the adapter's own functions
-// (AVAR-03, AVAR-05) and check the status tracker against the adapter's own
-// status channel, snapshot version and status union (ASTAT-01).
+// extension's written MCP values and entries through the adapter's own
+// functions (AVAR-03, AVAR-05, D-08-02, D-08-04) and check the status tracker
+// against the adapter's own status channel, snapshot version and status union
+// (ASTAT-01).
 //
 // PIFL-03: pi-mcp-adapter is an optional peer and never a dependency of this
 // repository. `PI_MCP_ADAPTER_ROOT` is the only lookup; there is no global
@@ -14,8 +15,9 @@
 //
 // PIFL-02: the range is package.json `peerDependencies["pi-mcp-adapter"]`.
 //
-// The adapter's `exports` map does not expose `dist/utils.js` or
-// `dist/mcp-auth-flow.js`, so the loader imports them by absolute file URL.
+// The adapter's `exports` map does not expose `dist/utils.js`,
+// `dist/mcp-auth-flow.js`, `dist/mcp-auth-fetch.js` or `dist/config.js`, so
+// the loader imports them by absolute file URL.
 // `dist/types.js` is the one module this needs that the map does publish
 // (`./types`); it is loaded in place like the others.
 
@@ -53,12 +55,28 @@ export interface PiMcpAdapterOAuthConfig {
   readonly authServerMetadataUrl?: string;
 }
 
-/** The `dist/mcp-auth-flow.js` function the conformance test drives. */
+/** The `dist/mcp-auth-flow.js` functions the conformance tests drive. */
 export interface PiMcpAdapterAuthFlow {
   /** Reads `process.env`. */
   readonly extractOAuthConfig: (definition: {
     readonly oauth: Readonly<Record<string, string>>;
   }) => PiMcpAdapterOAuthConfig;
+  readonly supportsOAuth: (definition: Readonly<Record<string, unknown>>) => boolean;
+}
+
+/** The `dist/mcp-auth-fetch.js` function the entry conformance test drives. */
+export interface PiMcpAdapterAuthFetch {
+  /** Reads `process.env`, and throws a `TypeError` for a header OAuth mode refuses. */
+  readonly resolveOAuthHeaders: (values: Readonly<Record<string, string>> | undefined) => Headers;
+}
+
+/** The `dist/config.js` function the entry conformance test drives. */
+export interface PiMcpAdapterConfig {
+  /** Reads every config source under `HOME`, `PI_CODING_AGENT_DIR` and `cwd`. */
+  readonly loadMcpConfig: (
+    overridePath?: string,
+    cwd?: string,
+  ) => { readonly mcpServers: Readonly<Record<string, unknown>> };
 }
 
 /** The `dist/types.js` constants the status conformance test reads. */
@@ -92,7 +110,7 @@ export async function findPiMcpAdapterPackage(): Promise<OptionalPeer | undefine
 /** Imports `dist/<module>.js` from the peer in place. */
 export async function loadPiMcpAdapterModule<T>(
   peer: OptionalPeer,
-  module: "utils" | "mcp-auth-flow" | "types",
+  module: "utils" | "mcp-auth-flow" | "mcp-auth-fetch" | "config" | "types",
 ): Promise<T> {
   return importPeerModule<T>(peer, "dist", `${module}.js`);
 }
