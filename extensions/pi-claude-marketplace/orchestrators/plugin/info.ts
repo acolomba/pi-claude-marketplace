@@ -86,6 +86,7 @@ import {
   type MarketplaceRows,
   type Plural,
 } from "../../shared/notify-context.ts";
+import { ownValue } from "../../shared/own-key.ts";
 import { PathContainmentError, assertPathInside } from "../../shared/path-safety.ts";
 import {
   narrowProbeError,
@@ -1255,7 +1256,7 @@ async function buildBlock(args: {
   // rescue that block (BOUND-01) -- which is why `lookupDeclaredPlugin`
   // (D-99-02a) is reachable only on the successful-read path and answers
   // `declared` or `absent`, never "unknown".
-  const installed = mpRecord.plugins[pluginName];
+  const installed = ownValue(mpRecord.plugins, pluginName);
   const lookup = lookupDeclaredPlugin(manifest, pluginName);
   if (lookup.kind === "absent") {
     if (installed !== undefined) {
@@ -3014,7 +3015,7 @@ async function readProjectInstallRecord(
 ): Promise<PluginInstallRecord | undefined> {
   const project = found.find((f) => f.scope === "project");
   if (project !== undefined) {
-    return project.record.plugins[opts.plugin];
+    return ownValue(project.record.plugins, opts.plugin);
   }
 
   if (opts.scope !== "user") {
@@ -3025,7 +3026,7 @@ async function readProjectInstallRecord(
     const state = await loadState(locationsFor("project", opts.cwd).extensionRoot, {
       persistMigration: false,
     });
-    return state.marketplaces[opts.marketplace]?.plugins[opts.plugin];
+    return ownValue(ownValue(state.marketplaces, opts.marketplace)?.plugins, opts.plugin);
   } catch {
     // A project state that cannot be read counts as not overriding, so it can
     // never fail a user-scope info.
@@ -3118,7 +3119,7 @@ async function getPluginInfoWithReader(
     });
     const built = withServerStatus(
       withCompanionRequirements(soleBlock, probe),
-      sole.record.plugins[opts.plugin],
+      ownValue(sole.record.plugins, opts.plugin),
       opts.mcpStatus,
       projectRecord,
     );
@@ -3158,7 +3159,7 @@ async function getPluginInfoWithReader(
       });
       return withServerStatus(
         withCompanionRequirements(scopeBlock, probe),
-        f.record.plugins[opts.plugin],
+        ownValue(f.record.plugins, opts.plugin),
         opts.mcpStatus,
         projectRecord,
       );

@@ -50,6 +50,7 @@ import {
 } from "../../shared/errors.ts";
 import { notify } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
+import { ownValue } from "../../shared/own-key.ts";
 
 import type { UnstageAgentFailure } from "../../bridges/agents/types.ts";
 import type { UnstageWorkflowFailure } from "../../bridges/workflows/types.ts";
@@ -623,7 +624,7 @@ export function classifyAutoupdateFlip(
   // D-04: undefined === false. Read through `Record<string, unknown>` cast
   // (legacy field; not on MARKETPLACE_RECORD_SCHEMA since SPLIT-01).
   if (name !== undefined) {
-    const record = state.marketplaces[name];
+    const record = ownValue(state.marketplaces, name);
     if (record === undefined) {
       throw new MarketplaceNotFoundError(name, []);
     }
@@ -671,11 +672,11 @@ async function resolveScopeFromState(
     loadState(projectLocations.extensionRoot),
   ]);
 
-  if (mpName in projectState.marketplaces) {
+  if (ownValue(projectState.marketplaces, mpName) !== undefined) {
     return { scope: "project", locations: projectLocations };
   }
 
-  if (mpName in userState.marketplaces) {
+  if (ownValue(userState.marketplaces, mpName) !== undefined) {
     return { scope: "user", locations: userLocations };
   }
 
@@ -731,7 +732,7 @@ export async function resolveScopeOrNotifyNotAdded(
   // MarketplaceNotFoundError(name, [scope]) raw past the orchestrator).
   const locations = opts.scope === "user" ? userLocations : projectLocations;
   const preState = await loadState(locations.extensionRoot);
-  if (preState.marketplaces[opts.name] === undefined) {
+  if (ownValue(preState.marketplaces, opts.name) === undefined) {
     const otherLocations = opts.scope === "user" ? projectLocations : userLocations;
     const elsewhere = await marketplaceRecordedIn(
       otherLocations.scope,
@@ -911,7 +912,7 @@ async function marketplaceRecordedIn(
 ): Promise<boolean> {
   try {
     const state = await loadState(resolveLocations().extensionRoot);
-    return state.marketplaces[name] !== undefined;
+    return ownValue(state.marketplaces, name) !== undefined;
   } catch (err) {
     hookDebugLog(
       `cross-scope probe for "${name}" in ${scope} scope failed: ${errorMessage(err)}`,

@@ -1054,6 +1054,57 @@ test("UXG-08: missing plugin in known marketplace emits `⊘ <plugin> (failed) {
   });
 });
 
+test("D-08-07: info of a plugin named constructor renders the row of any absent plugin", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [{ name: "real", source: "./real", version: "1.0.0" }] },
+      installablePluginDirs: ["real"],
+    });
+    const { ctx, pi, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "constructor", cwd });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "A plugin operation has failed.",
+          "",
+          "● mp [user] <no autoupdate>",
+          "  ⊘ constructor (failed) {not in manifest}",
+        ].join("\n"),
+        severity: "error",
+      },
+    ]);
+  });
+});
+
+test("D-08-07: info in a marketplace named constructor reports the marketplace as not added", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const { ctx, pi, notifications } = makeCtx(1, 0);
+
+    // act
+    await getPluginInfo({ ctx, pi, marketplace: "constructor", plugin: "x", cwd });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A marketplace operation has failed.\n\n⊘ constructor (failed) {marketplace not added}",
+        severity: "error",
+      },
+    ]);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // (h2) GRAM-04: a `(failed)` block on the BOTH-scopes path must NOT hide inside
 // the info-severity `plugin-info-cascade`. It is separated out and surfaced as

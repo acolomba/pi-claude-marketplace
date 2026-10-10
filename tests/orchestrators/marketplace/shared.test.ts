@@ -1829,6 +1829,71 @@ test("resolveScopeOrNotifyNotAdded names the user scope holding the container on
   boundary.verifyAll();
 });
 
+test("D-08-07: resolveScopeOrNotifyNotAdded reports a marketplace named constructor as not added", async (t) => {
+  // arrange
+  const { userLocations, projectLocations } = await createHermeticScopes(t, "notify-reserved");
+  await saveMarketplaces(userLocations, []);
+  await saveMarketplaces(projectLocations, []);
+  const boundary = notificationBoundary({
+    message:
+      "A marketplace operation has failed.\n\n⊘ constructor (failed) {marketplace not added}",
+    severity: "error",
+  });
+
+  // act
+  const resolved = await resolveScopeOrNotifyNotAdded(
+    { ctx: boundary.ctx, pi: boundary.pi, name: "constructor" },
+    userLocations,
+    projectLocations,
+  );
+
+  // assert
+  assert.equal(resolved, undefined);
+  boundary.verifyAll();
+});
+
+test("D-08-07: resolveScopeOrNotifyNotAdded finds no marketplace named toString in either scope", async (t) => {
+  // arrange
+  const { userLocations, projectLocations } = await createHermeticScopes(
+    t,
+    "notify-reserved-explicit",
+  );
+  await saveMarketplaces(userLocations, []);
+  await saveMarketplaces(projectLocations, []);
+  const boundary = notificationBoundary({
+    message:
+      "A marketplace operation has failed.\n\n⊘ toString [user] (failed) {marketplace not added}",
+    severity: "error",
+  });
+
+  // act
+  const resolved = await resolveScopeOrNotifyNotAdded(
+    { ctx: boundary.ctx, pi: boundary.pi, name: "toString", scope: "user" },
+    userLocations,
+    projectLocations,
+  );
+
+  // assert
+  assert.equal(resolved, undefined);
+  boundary.verifyAll();
+});
+
+test("D-08-07: classifyAutoupdateFlip throws not found for a marketplace named constructor", () => {
+  // arrange
+  const state: ExtensionState = { schemaVersion: 2, marketplaces: {} };
+
+  // act & assert
+  assert.throws(
+    () => classifyAutoupdateFlip(state, "constructor", true),
+    (error: unknown) => {
+      assert.ok(error instanceof MarketplaceNotFoundError);
+      assert.equal(error.mpName, "constructor");
+      assert.deepStrictEqual(error.scopes, []);
+      return true;
+    },
+  );
+});
+
 for (const scope of ["user", "project"] satisfies readonly Scope[]) {
   test(`marketplaceInOtherScope finds a container recorded opposite an explicit ${scope} scope`, async (t) => {
     // arrange
