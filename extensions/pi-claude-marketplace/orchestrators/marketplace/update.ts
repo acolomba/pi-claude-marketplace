@@ -117,6 +117,7 @@ import {
   type Plural,
   type Single,
 } from "../../shared/notify-context.ts";
+import { ownValue } from "../../shared/own-key.ts";
 import {
   withLockedStateTransaction,
   type LockedStateTransactionDeps,
@@ -169,10 +170,11 @@ export interface UpdateMarketplaceOptions {
    */
   readonly pluginUpdate?: PluginUpdateFn;
   /**
-   * Soft-dep probe target. `pi.getAllTools` is the source of truth for
-   * whether `pi-subagents` / `pi-mcp-adapter` are loaded. Required (not
-   * optional) so every `notify(ctx, pi, ...)` call has a non-null reference;
-   * the renderer threads `softDepStatus(pi)` internally at notify-time.
+   * Soft-dep probe target. `pi.getAllTools()` and `pi.getCommands()` are the
+   * source of truth for whether `pi-subagents` / `pi-mcp-adapter` are loaded.
+   * Required (not optional) so every `notify(ctx, pi, ...)` call has a
+   * non-null reference; the renderer threads `softDepStatus(pi)` internally at
+   * notify-time.
    */
   readonly pi: PiInventory;
   /**
@@ -527,11 +529,11 @@ async function snapshotAfterRefresh(args: RefreshOneArgs): Promise<RefreshSnapsh
   // state. Read it OUTSIDE the lock (read-only seam; mergeScopeConfigs is a
   // pure reducer over loadConfig, which never throws).
   const { merged } = await loadMergedScopeConfig(locations);
-  const autoupdate = merged.marketplaces[name]?.entry.autoupdate ?? false;
+  const autoupdate = ownValue(merged.marketplaces, name)?.entry.autoupdate ?? false;
   return withLockedStateTransaction(
     locations,
     async (tx) => {
-      const record = tx.state.marketplaces[name];
+      const record = ownValue(tx.state.marketplaces, name);
       if (record === undefined) {
         // TOCTOU race: the marketplace was removed between
         // `resolveScopeOrNotifyNotAdded`'s pre-guard `loadState` and this guard's

@@ -70,6 +70,7 @@ import {
   type MarketplaceRows,
   type Single,
 } from "../../shared/notify-context.ts";
+import { ownValue } from "../../shared/own-key.ts";
 import {
   withLockedStateTransaction,
   type LockedStateTransactionDeps,
@@ -165,7 +166,10 @@ export type RemoveMarketplaceOutcome =
 
 export interface RemoveMarketplaceOptions {
   readonly ctx: NotificationContext;
-  /** Factory `pi` reference -- carries `getAllTools()` for RH-5 soft-dep probes. */
+  /**
+   * Factory `pi` reference -- carries `getAllTools()` and `getCommands()` for the
+   * soft-dependency probes (RH-5, ADET-02, WDEP-01).
+   */
   readonly pi: PiInventory;
   readonly name: string;
   /** Lifecycle-owned completion cache shared with the command's readers. */
@@ -252,11 +256,11 @@ async function resolveScopeOrFailedOutcome(
       loadState(userLocations.extensionRoot),
       loadState(projectLocations.extensionRoot),
     ]);
-    if (opts.name in projectState.marketplaces) {
+    if (ownValue(projectState.marketplaces, opts.name) !== undefined) {
       return { scope: "project", locations: projectLocations };
     }
 
-    if (opts.name in userState.marketplaces) {
+    if (ownValue(userState.marketplaces, opts.name) !== undefined) {
       return { scope: "user", locations: userLocations };
     }
 
@@ -265,7 +269,7 @@ async function resolveScopeOrFailedOutcome(
 
   const candLocations = opts.scope === "user" ? userLocations : projectLocations;
   const preState = await loadState(candLocations.extensionRoot);
-  if (preState.marketplaces[opts.name] === undefined) {
+  if (ownValue(preState.marketplaces, opts.name) === undefined) {
     return notAddedOutcome(opts.name, [opts.scope]);
   }
 
@@ -451,7 +455,7 @@ async function cascadeRemoveFromLayer(
   }
 
   const suffix = `@${marketplace}`;
-  const declaresMarketplace = cfg.config.marketplaces?.[marketplace] !== undefined;
+  const declaresMarketplace = ownValue(cfg.config.marketplaces, marketplace) !== undefined;
   const declaresPluginUnderIt = Object.keys(cfg.config.plugins ?? {}).some((key) =>
     key.endsWith(suffix),
   );
@@ -540,7 +544,7 @@ async function runRemoveLockBody(args: {
   }
 
   const state = tx.state as { marketplaces: Record<string, ExtensionMarketplaceRow> };
-  const record = state.marketplaces[opts.name];
+  const record = ownValue(state.marketplaces, opts.name);
   if (record === undefined) {
     // Concurrent removal between pre-guard probe and the lock body:
     // save the (unchanged) state and let the post-guard arm emit the

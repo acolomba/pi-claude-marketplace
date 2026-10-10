@@ -22,11 +22,11 @@
 // boundary at one emission, zero probes, and no stated working directory, then
 // calls `verifyBoundary()`. The zero-probe half is a post-hoc report rather than
 // a fail-fast -- `hasLoadedPiSubagents` and `hasLoadedPiMcpAdapter` each swallow
-// a throw from `pi.getAllTools()` and degrade to "unloaded" -- so the call is
-// mandatory and the emission count is never relied on alone. Both counts are
-// measured against the module rather than inherited: a delegating case spends
-// one soft-dependency probe and one `ctx.cwd` read, a rejecting case spends
-// neither.
+// a throw from `pi.getAllTools()` or `pi.getCommands()` and degrade to
+// "unloaded" -- so the call is mandatory and the emission count is never
+// relied on alone. Both counts are measured against the module rather than
+// inherited: a delegating case spends one soft-dependency probe and one
+// `ctx.cwd` read, a rejecting case spends neither.
 //
 // Both scopes are seeded in every case, rejecting ones included, so a workflow
 // that did run would have a record to remove. The two scope roots are
