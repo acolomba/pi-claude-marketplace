@@ -662,7 +662,10 @@ const ESCAPED_CODE_POINT = /^[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]$/u;
 function codeUnitEscapes(char: string): string {
   let escaped = "";
   for (let index = 0; index < char.length; index += 1) {
-    escaped += String.raw`\u${char.charCodeAt(index).toString(16).padStart(4, "0")}`;
+    // A one-unit slice keeps a surrogate half apart from its pair, so
+    // `codePointAt` reads the code unit, not the astral code point.
+    const unit = Number(char.slice(index, index + 1).codePointAt(0));
+    escaped += String.raw`\u${unit.toString(16).padStart(4, "0")}`;
   }
 
   return escaped;
