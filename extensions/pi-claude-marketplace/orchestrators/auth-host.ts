@@ -37,6 +37,7 @@
 import { findProviderForHost } from "../domain/auth-registry.ts";
 import { initiateDeviceFlow } from "../domain/github-auth.ts";
 import { NODE_CREDENTIAL_SPAWN, createCredentialOps } from "../platform/git-credential.ts";
+import { DeviceFlowUnavailableError } from "../shared/errors.ts";
 import { notifyDeviceFlowPrompt } from "../shared/notification-dispatch.ts";
 
 import type { DeviceFlowHttp } from "../domain/github-auth.ts";
@@ -186,6 +187,10 @@ export function buildAuthForHost(args: {
     const memoized = authMemo?.get(host);
     if (memoized !== undefined) {
       return memoized;
+    }
+
+    if (ctx.mode === "print") {
+      throw new DeviceFlowUnavailableError();
     }
 
     const result = await initiateDeviceFlow({

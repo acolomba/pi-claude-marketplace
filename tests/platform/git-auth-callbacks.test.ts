@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import { buildAuthCallbacks } from "../../extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts";
+import { DeviceFlowUnavailableError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 
 import { createCredentialOpsFake } from "./credential-ops-fake.ts";
 import { captureDebugLog } from "./debug-log-capture.ts";
@@ -17,6 +18,29 @@ const OTHER_HOST = "other.example.invalid";
 const OTHER_REMOTE_URL = `https://${OTHER_HOST}/owner/repo.git`;
 
 describe("buildAuthCallbacks", () => {
+  test("preserves the typed device-flow refusal after a credential miss", async () => {
+    // arrange
+    const credentials = createCredentialOpsFake({ boundary: "memory" });
+    const refusal = new DeviceFlowUnavailableError();
+    const callbacks = buildAuthCallbacks({
+      kind: "device-flow",
+      host: HOST,
+      credentialOps: credentials.credentialOps,
+      onAuthRequired: () => Promise.reject(refusal),
+    });
+
+    // act & assert
+    await assert.rejects(callbacks.onAuth(REMOTE_URL), (error: unknown) => {
+      assert.strictEqual(error, refusal);
+      return true;
+    });
+    assert.deepStrictEqual(credentials.calls, {
+      fill: [{ host: HOST }],
+      approve: [],
+      reject: [],
+    });
+  });
+
   test("returns a stored credential without requesting interactive auth", async () => {
     // arrange
     const credentials = createCredentialOpsFake({
