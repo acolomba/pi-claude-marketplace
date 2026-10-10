@@ -5,16 +5,16 @@ milestone_name: MCP 4
 current_phase: 8
 current_phase_name: Clear milestone debt
 status: executing
-stopped_at: Completed 08-17-PLAN.md
-last_updated: "2026-10-10T06:32:18.743Z"
+stopped_at: Completed 08-18-PLAN.md
+last_updated: "2026-10-10T06:44:36.821Z"
 last_activity: 2026-10-09
 last_activity_desc: Phase 8 execution started
-state_head: 57a41582280cb3ef7cebd5a131b6aec2f1cf86cb
+state_head: 5ab12f701b9dd22d308556cacd236edf81cfe0bf
 progress:
   total_phases: 8
   completed_phases: 7
   total_plans: 73
-  completed_plans: 69
+  completed_plans: 70
   percent: 88
 ---
 
@@ -35,7 +35,7 @@ sign-ins and approvals.
 ## Current Position
 
 Phase: 8 (Clear milestone debt) — EXECUTING
-Plan: 18 of 21
+Plan: 19 of 21
 Status: Ready to execute
 Last activity: 2026-10-09 — Phase 8 execution started
 
@@ -315,6 +315,7 @@ still open with a comment explaining what landed.
 | Phase 08 P14 | 15min | 3 tasks | 5 files |
 | Phase 08 P16 | 16min | 2 tasks | 12 files |
 | Phase 08 P17 | 12min | 2 tasks | 9 files |
+| Phase 08 P18 | 11min | 3 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -753,6 +754,7 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 08]: README prerequisites name the pi-subagents 0.74.0 floor; per-scope choice storage is recorded as a User choices divergence (D-08-02)
 - [Phase 08]: Own-key install, enable, disable and uninstall: test Proxies that fake a record answer getOwnPropertyDescriptor, and ones that drop a write trap defineProperty, because ownValue and setOwn bypass get and set (D-08-07)
 - [Phase 08]: Reinstall, update and list read state records by own key; the reinstalled record is written with setOwn (D-08-07)
+- [Phase 08]: Reconcile, import, config write-back and marketplace modules read by own key and write config maps with setOwn; mcp-migration imports the shared ownValue (D-08-07)
 
 ### Pending Todos
 
@@ -886,11 +888,11 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Completed 08-17-PLAN.md
+**Stopped at:** Completed 08-18-PLAN.md
 
 **Resume file:** None
 
-Last session: 2026-10-10T06:32:18.316Z
+Last session: 2026-10-10T06:44:36.386Z
 Phase 7 closed: 5/5 plans; Nyquist validated; security verified (0 open);
 review 8/8 fixed; verifier 3/3, re-running the live canary against
 pi-mcp-adapter 5.2.0. `/gsd-autonomous --from 7` ran the transition, then
