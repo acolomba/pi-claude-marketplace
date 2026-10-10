@@ -4,8 +4,7 @@
 // SelectList browser over configured marketplaces and their plugins.
 //
 // TUI-only: `ctx.mode === "tui"` guards `ctx.ui.custom` (a terminal
-// component). In non-TUI modes (rpc/json/print) the handler falls back to
-// the `list` subcommand so the user still gets a useful inventory.
+// component). Non-TUI modes receive a refusal naming the `list` command.
 //
 // Data is read-only (`loadMarketplaceEntries` -> `loadVisibleMarketplaces`,
 // and the per-marketplace `pluginLoader` -> `loadPluginListPayload`). The
@@ -41,11 +40,10 @@ const USAGE = "Usage: /claude:plugin browse";
 /**
  * The existing subcommand handlers the browser dispatches into. Passed in by
  * `register.ts` so the browse handler does not reconstruct the handler map
- * (no circular factory). `list` is the non-TUI fallback. Each handler
- * receives the browse command's own notification run.
+ * (no circular factory). Each handler receives the browse command's own
+ * notification run.
  */
 export interface BrowseActionHandlers {
-  readonly list: SubcommandHandler;
   readonly install: SubcommandHandler;
   readonly uninstall: SubcommandHandler;
   readonly pluginInfo: SubcommandHandler;
@@ -135,10 +133,13 @@ export function makeBrowseHandler(handlers: BrowseActionHandlers): SubcommandHan
       return;
     }
 
-    // Non-TUI modes have no terminal for `ctx.ui.custom`; fall back to the
-    // inventory surface so `browse` is never a no-op.
-    if (ctx.mode !== "tui") {
-      await handlers.list("", ctx, run);
+    // Non-TUI modes have no terminal for the picker.
+    const mode = ctx.mode;
+    if (mode !== "tui") {
+      notifyUsageError(ctx, run, {
+        message: `Browse is unavailable in ${mode} mode. Use /claude:plugin list instead.`,
+        usage: mode === "print" ? "" : USAGE,
+      });
       return;
     }
 

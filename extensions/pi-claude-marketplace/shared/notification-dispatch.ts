@@ -243,7 +243,7 @@ export function notifyPluginPathSkipped(
 /**
  * Usage error notify (ES-3 primitive). Builds the `usage-error` kind from the
  * caller's message and usage block (RAWS-01, D-06). The text strategy joins
- * them with one blank line at explicit `error` severity (SNM-13); that blank
+ * them with one blank line when usage is nonempty, at `error` severity (SNM-13); that blank
  * line is part of the user contract, and
  * `tests/shared/notification-dispatch.test.ts` asserts it byte-for-byte (the
  * SNM-13 case).

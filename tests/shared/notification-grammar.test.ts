@@ -1591,8 +1591,8 @@ for (const [kind, { surface, expectedArguments }] of Object.entries(RAW_SURFACE_
   });
 }
 
-// RAWS-01 / D-06: the usage kinds join the producer's strings as-is with one
-// blank line, and have no no-op. RAWS-02 / D-05: a diagnostic keeps its lines
+// RAWS-01 / D-06: nonempty usage joins the message with one blank line.
+// Usage kinds have no no-op. RAWS-02 / D-05: a diagnostic keeps its lines
 // in caller order, duplicates and empty strings included, and only a
 // zero-length line list emits nothing. RAWS-05 / D-07 / D-08: the hook kinds
 // pass the author's summary and the plugin id through untouched, the cap is
@@ -1605,9 +1605,21 @@ for (const { title, surface, expectedArguments } of [
     expectedArguments: ["Usage: x\n\nUsage: x", "error"],
   },
   {
-    title: "emits only the separator for an empty message and usage",
+    title: "emits an empty message without a separator when usage is empty",
     surface: { kind: "usage-error", message: "", usage: "" },
-    expectedArguments: ["\n\n", "error"],
+    expectedArguments: ["", "error"],
+  },
+  {
+    title: "emits only the refusal when usage is empty",
+    surface: {
+      kind: "usage-error",
+      message: "Browse is unavailable in print mode. Use /claude:plugin list instead.",
+      usage: "",
+    },
+    expectedArguments: [
+      "Browse is unavailable in print mode. Use /claude:plugin list instead.",
+      "error",
+    ],
   },
   {
     title: "keeps a trailing newline on the message untrimmed",

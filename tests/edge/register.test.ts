@@ -1305,9 +1305,6 @@ for (const mode of ["json", "rpc"]) {
   for (const { args, commandId } of [
     { args: "list --scope project", commandId: "plugin list" },
     { args: "ls --scope project", commandId: "plugin list" },
-    { args: "browse", commandId: "plugin browse" },
-    { args: "", commandId: "plugin browse" },
-    { args: " \t ", commandId: "plugin browse" },
   ]) {
     test(`registered ${JSON.stringify(args)} appends a complete cascade in ${mode} without UI access`, async (t) => {
       // arrange
@@ -1362,6 +1359,54 @@ for (const mode of ["json", "rpc"]) {
       capture.assertValid();
       verifyRegistrar();
       verify(ids);
+    });
+  }
+}
+
+for (const mode of ["json", "rpc"] as const) {
+  for (const args of ["browse", "", " \t "]) {
+    test(`registered ${JSON.stringify(args)} refuses each browse invocation in ${mode} without state or UI access`, async () => {
+      // arrange
+      const capture = createJsonCapture();
+      let invocation = 0;
+      const { registration, verifyRegistrar } = registerCommandUnderTest({
+        runs: 2,
+        capture,
+        appendAttempts: 2,
+        createInvocationId: () => `browse-run-${++invocation}`,
+      });
+      const ctx = {
+        mode,
+        get cwd(): string {
+          throw new Error("Browse refusal must not load marketplace state");
+        },
+        get ui() {
+          return capture.ui;
+        },
+      };
+
+      // act
+      await Reflect.apply(registration.handler, undefined, [args, ctx]);
+      await Reflect.apply(registration.handler, undefined, [args, ctx]);
+
+      // assert
+      assert.deepStrictEqual(
+        capture.entries,
+        ["browse-run-1", "browse-run-2"].map((invocationId) => ({
+          customType: "claude-plugin",
+          payload: {
+            schemaVersion: 1,
+            kind: "usage-error",
+            origin: { kind: "command", commandId: "plugin browse", invocationId },
+            severity: "error",
+            needsReload: false,
+            message: `Browse is unavailable in ${mode} mode. Use /claude:plugin list instead.`,
+            usage: "Usage: /claude:plugin browse",
+          },
+        })),
+      );
+      capture.assertValid();
+      verifyRegistrar();
     });
   }
 }
