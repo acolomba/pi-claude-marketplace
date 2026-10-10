@@ -5,17 +5,17 @@ milestone_name: MCP 4
 current_phase: 8
 current_phase_name: Clear milestone debt
 status: executing
-stopped_at: Completed 08-09-PLAN.md
-last_updated: "2026-10-10T04:33:08.667Z"
+stopped_at: Completed 08-10-PLAN.md
+last_updated: "2026-10-10T04:50:21.922Z"
 last_activity: 2026-10-09
 last_activity_desc: Phase 8 execution started
-state_head: 9e36c6940b8a299dbb8816a5a434d1cc3c2a3299
+state_head: 57182472f638432866033bcabfe966fca0be06e5
 progress:
   total_phases: 8
   completed_phases: 7
   total_plans: 73
-  completed_plans: 61
-  percent: 84
+  completed_plans: 62
+  percent: 85
 ---
 
 # Project State
@@ -35,11 +35,11 @@ sign-ins and approvals.
 ## Current Position
 
 Phase: 8 (Clear milestone debt) — EXECUTING
-Plan: 10 of 21
+Plan: 11 of 21
 Status: Ready to execute
 Last activity: 2026-10-09 — Phase 8 execution started
 
-Progress: [████████░░] 84%
+Progress: [█████████░] 85%
 
 ### workflows-replay closeout (merged from main)
 
@@ -307,6 +307,7 @@ still open with a comment explaining what landed.
 | Phase 08 P07 | 6min | 3 tasks | 5 files |
 | Phase 08 P08 | 14min | 2 tasks | 5 files |
 | Phase 08 P09 | 10min | 2 tasks | 8 files |
+| Phase 08 P10 | 13min | 3 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -735,6 +736,9 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 08]: dispatchRow keeps an unknown-valued view of the render map and casts the looked-up arm once; a typed RenderFn view fails tsc (function parameters are contravariant)
 - [Phase 08]: D-08-03: the adapter-loaded enable and import shapes are pinned by tests; SEV-01 kept, no renderer change
 - [Phase 08]: D-08-07: shared/own-key.ts (ownValue, setOwn) is the own-key helper every zone imports; isReservedRecordKey reserves only __proto__; marketplace add checks reserved and duplicate names in one helper (newMarketplaceName)
+- [Phase 08]: D-08-04 header cleanliness is checked on written values with the adapter's own reference regex; the split token is unclean even if its variable is set
+- [Phase 08]: A non-string written header value withdraws auth (defense in depth; the resolver marks it malformed)
+- [Phase 08]: An unparseable authServerMetadataUrl is malformed before any feature blocks
 
 ### Pending Todos
 
@@ -868,11 +872,11 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Completed 08-09-PLAN.md
+**Stopped at:** Completed 08-10-PLAN.md
 
 **Resume file:** None
 
-Last session: 2026-10-10T04:32:56.562Z
+Last session: 2026-10-10T04:50:21.521Z
 Phase 7 closed: 5/5 plans; Nyquist validated; security verified (0 open);
 review 8/8 fixed; verifier 3/3, re-running the live canary against
 pi-mcp-adapter 5.2.0. `/gsd-autonomous --from 7` ran the transition, then
