@@ -6728,6 +6728,75 @@ test("AMIG-01: line separators and format characters in a leftover's old name re
   );
 });
 
+test("AMIG-03: line separators and format characters in a leftover's plugin name render as \\u escapes", (t) => {
+  // arrange
+  const ctx = createContext(t);
+
+  // act
+  notifyMcpConfigNotices(ctx as never, [
+    {
+      kind: "leftover-removed",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "he\u2028ll\u202eo",
+      server: "srv",
+    },
+  ]);
+
+  // assert
+  assert.deepStrictEqual(
+    ctx.ui.notify.mock.calls.map((call) => call.arguments),
+    [
+      [
+        'Old MCP server settings removed.\n\nRemoved "srv" from the project-scope mcp-adapter.json: pi-mcp-adapter had written it under the old name of a server from he\\u2028ll\\u202eo, for example for /mcp-adapter disable, and it no longer applies.',
+        "warning",
+      ],
+    ],
+  );
+});
+
+test("AMIG-03: line separators and format characters in plugin and server names render as \\u escapes in the other MCP config notices", (t) => {
+  // arrange
+  const ctx = createContext(t);
+  const names = {
+    scope: "project",
+    file: "mcp-adapter.json",
+    plugin: "he\u2028ll\u202eo",
+    server: "s\u2028r\u202ev",
+  } as const;
+
+  // act
+  notifyMcpConfigNotices(ctx as never, [
+    { kind: "override-kept", ...names, fields: ["env"] },
+    { kind: "variables-missing", ...names, names: ["API_URL"] },
+    { kind: "credentials-blanked", ...names, names: ["ANTHROPIC_API_KEY"] },
+    { kind: "tool-rules-unenforced", ...names, fields: ["toolPermissions"] },
+  ]);
+
+  // assert
+  assert.deepStrictEqual(
+    ctx.ui.notify.mock.calls.map((call) => call.arguments),
+    [
+      [
+        'MCP server override kept.\n\nhe\\u2028ll\\u202eo now provides "s\\u2028r\\u202ev" in the project-scope mcp-adapter.json. Your override for "s\\u2028r\\u202ev" is kept, but these fields of it stop applying: env. It comes back when you uninstall or disable he\\u2028ll\\u202eo.',
+        "warning",
+      ],
+      [
+        'MCP server variables not set.\n\nServer "s\\u2028r\\u202ev" from he\\u2028ll\\u202eo in the project-scope mcp-adapter.json uses environment variables that were not set at install: API_URL.',
+        "warning",
+      ],
+      [
+        'MCP server credentials withheld.\n\nServer "s\\u2028r\\u202ev" from he\\u2028ll\\u202eo in the project-scope mcp-adapter.json references credential variables that Claude Code never sends to a remote server: ANTHROPIC_API_KEY. They were written as empty values.',
+        "warning",
+      ],
+      [
+        'MCP server tool rules not enforced.\n\nServer "s\\u2028r\\u202ev" from he\\u2028ll\\u202eo in the project-scope mcp-adapter.json declares tool permission rules that pi-mcp-adapter does not enforce: toolPermissions. Its tools run without these rules.',
+        "warning",
+      ],
+    ],
+  );
+});
+
 const MCP_MIGRATION_COST_LINE =
   "The new names reset what pi-mcp-adapter keeps for each server name: sign in again to servers that use OAuth, and approve project servers again. Until you reload, pi-mcp-adapter can still show the old names.";
 

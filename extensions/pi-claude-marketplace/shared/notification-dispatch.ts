@@ -328,11 +328,11 @@ function mcpConfigFileLine(notice: McpConfigFileNotice): string {
 }
 
 function mcpOverrideKeptLine(notice: McpOverrideKeptNotice): string {
-  return `${notice.plugin} now provides "${notice.server}" in the ${notice.scope}-scope ${notice.file}. Your override for "${notice.server}" is kept, but these fields of it stop applying: ${notice.fields.join(", ")}. It comes back when you uninstall or disable ${notice.plugin}.`;
+  return `${printable(notice.plugin)} now provides "${printable(notice.server)}" in the ${notice.scope}-scope ${notice.file}. Your override for "${printable(notice.server)}" is kept, but these fields of it stop applying: ${notice.fields.join(", ")}. It comes back when you uninstall or disable ${printable(notice.plugin)}.`;
 }
 
 function mcpVariablesMissingLine(notice: McpVariablesMissingNotice): string {
-  return `Server "${notice.server}" from ${notice.plugin} in the ${notice.scope}-scope ${notice.file} uses environment variables that were not set at install: ${notice.names.join(", ")}.`;
+  return `Server "${printable(notice.server)}" from ${printable(notice.plugin)} in the ${notice.scope}-scope ${notice.file} uses environment variables that were not set at install: ${notice.names.join(", ")}.`;
 }
 
 function isVariablesMissing(notice: McpConfigNotice): notice is McpVariablesMissingNotice {
@@ -340,7 +340,7 @@ function isVariablesMissing(notice: McpConfigNotice): notice is McpVariablesMiss
 }
 
 function mcpCredentialsBlankedLine(notice: McpCredentialsBlankedNotice): string {
-  return `Server "${notice.server}" from ${notice.plugin} in the ${notice.scope}-scope ${notice.file} references credential variables that Claude Code never sends to a remote server: ${notice.names.join(", ")}. They were written as empty values.`;
+  return `Server "${printable(notice.server)}" from ${printable(notice.plugin)} in the ${notice.scope}-scope ${notice.file} references credential variables that Claude Code never sends to a remote server: ${notice.names.join(", ")}. They were written as empty values.`;
 }
 
 function isCredentialsBlanked(notice: McpConfigNotice): notice is McpCredentialsBlankedNotice {
@@ -348,7 +348,7 @@ function isCredentialsBlanked(notice: McpConfigNotice): notice is McpCredentials
 }
 
 function mcpToolRulesUnenforcedLine(notice: McpToolRulesUnenforcedNotice): string {
-  return `Server "${notice.server}" from ${notice.plugin} in the ${notice.scope}-scope ${notice.file} declares tool permission rules that pi-mcp-adapter does not enforce: ${notice.fields.join(", ")}. Its tools run without these rules.`;
+  return `Server "${printable(notice.server)}" from ${printable(notice.plugin)} in the ${notice.scope}-scope ${notice.file} declares tool permission rules that pi-mcp-adapter does not enforce: ${notice.fields.join(", ")}. Its tools run without these rules.`;
 }
 
 function isToolRulesUnenforced(notice: McpConfigNotice): notice is McpToolRulesUnenforcedNotice {
@@ -356,7 +356,7 @@ function isToolRulesUnenforced(notice: McpConfigNotice): notice is McpToolRulesU
 }
 
 function mcpLeftoverRemovedLine(notice: McpLeftoverRemovedNotice): string {
-  return `Removed "${printable(notice.server)}" from the ${notice.scope}-scope ${notice.file}: pi-mcp-adapter had written it under the old name of a server from ${notice.plugin}, for example for /mcp-adapter disable, and it no longer applies.`;
+  return `Removed "${printable(notice.server)}" from the ${notice.scope}-scope ${notice.file}: pi-mcp-adapter had written it under the old name of a server from ${printable(notice.plugin)}, for example for /mcp-adapter disable, and it no longer applies.`;
 }
 
 function isLeftoverRemoved(notice: McpConfigNotice): notice is McpLeftoverRemovedNotice {
@@ -452,9 +452,9 @@ function mcpConfigNoticeSections(
  * A line names the scope, the file basename, the plugin, the server, and
  * override field names, environment variable names or tool permission field
  * names only, so it carries no absolute path, no field value, no variable
- * value and no tool name (AVAR-05). A leftover's old name is read from a
- * config file, so its control and format characters and its line and
- * paragraph separators are escaped. The host UI prepends
+ * value and no tool name (AVAR-05). Plugin and server names come from plugin
+ * or config files, so their control and format characters and their line and
+ * paragraph separators are escaped in every line. The host UI prepends
  * the `Warning:` label to the summary line. The byte form is locked by
  * `tests/architecture/mcp-config-notices.test.ts` against the
  * `mcp-comments-dropped`, `mcp-config-left-unchanged`, `mcp-override-kept`,
