@@ -6,6 +6,7 @@ import {
   inactiveOverrideFields,
   restoredOverride,
   stampServers,
+  userCarriedFields,
 } from "../../../extensions/pi-claude-marketplace/bridges/mcp/adapter-entry.ts";
 
 import type { McpSubstitutionContext } from "../../../extensions/pi-claude-marketplace/bridges/mcp/substitute.ts";
@@ -80,6 +81,8 @@ const CARRIED_KEYS: readonly string[] = [
   "requestTimeoutMs",
   "debug",
   "searchKeywords",
+  "openUi",
+  "trace",
 ];
 
 const MARKER = { plugin: "acme", marketplace: "catalog" };
@@ -568,6 +571,33 @@ describe("stampServers", () => {
     assert.strictEqual(JSON.stringify(stamping.stamped), JSON.stringify({ server: expectedEntry }));
   });
 
+  test("D-08-01: a restage keeps the user's openUi and trace after the other carried fields", () => {
+    // arrange
+    const previous = {
+      command: "old-command",
+      trace: false,
+      openUi: true,
+      disabled: true,
+      _piClaudeMarketplace: MARKER,
+    };
+
+    // act
+    const stamping = stampServers({
+      servers: { server: { command: "plugin-command" } },
+      pluginName: "acme",
+      marketplaceName: "catalog",
+      substitution: PROJECT_CONTEXT,
+      previous: { server: previous },
+      keptOverrides: {},
+    });
+
+    // assert
+    assert.strictEqual(
+      JSON.stringify(stamping.stamped),
+      '{"server":{"command":"plugin-command","env":{"CLAUDE_PLUGIN_ROOT":"/plugin/root","CLAUDE_PLUGIN_DATA":"/plugin/data"},"directTools":"search","toolPrefix":"mcp","disabled":true,"openUi":true,"trace":false,"_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog"}}}',
+    );
+  });
+
   test("AFILE-06: a previous entry's credentials, env and owned fields never reach a command-only entry", () => {
     // arrange
     const servers = { server: { command: "plugin-command" } };
@@ -600,6 +630,8 @@ describe("stampServers", () => {
         requestTimeoutMs: "previous-requestTimeoutMs",
         debug: "previous-debug",
         searchKeywords: "previous-searchKeywords",
+        openUi: "previous-openUi",
+        trace: "previous-trace",
         _piClaudeMarketplace: MARKER,
       },
     });
@@ -1039,8 +1071,54 @@ describe("restoredOverride", () => {
     // assert
     assert.strictEqual(
       JSON.stringify(restored),
-      '{"env":{"STUB_TOKEN":"stub-secret"},"disabled":"live-disabled","approveTools":"live-approveTools","includeTools":"live-includeTools","excludeTools":"live-excludeTools","lifecycle":"live-lifecycle","idleTimeout":"live-idleTimeout","requestTimeoutMs":"live-requestTimeoutMs","debug":"live-debug","searchKeywords":"live-searchKeywords"}',
+      '{"env":{"STUB_TOKEN":"stub-secret"},"disabled":"live-disabled","approveTools":"live-approveTools","includeTools":"live-includeTools","excludeTools":"live-excludeTools","lifecycle":"live-lifecycle","idleTimeout":"live-idleTimeout","requestTimeoutMs":"live-requestTimeoutMs","debug":"live-debug","searchKeywords":"live-searchKeywords","openUi":"live-openUi","trace":"live-trace"}',
     );
+  });
+});
+
+describe("userCarriedFields", () => {
+  test("D-08-02: returns the entry's carried fields in carried-set order and nothing else", () => {
+    // arrange
+    const entry = {
+      trace: true,
+      command: "plugin-command",
+      env: { STUB_TOKEN: "stub-secret" },
+      headers: { Authorization: "stub-header" },
+      openUi: true,
+      disabled: true,
+      directTools: "search",
+      _piClaudeMarketplace: MARKER,
+    };
+
+    // act
+    const fields = userCarriedFields(entry);
+
+    // assert
+    assert.strictEqual(JSON.stringify(fields), '{"disabled":true,"openUi":true,"trace":true}');
+  });
+
+  test("D-08-02: leaves out the carried fields the entry's marker lists as plugin-set", () => {
+    // arrange
+    const entry = {
+      url: "https://acme.example/mcp",
+      requestTimeoutMs: 60000,
+      approveTools: ["read"],
+      _piClaudeMarketplace: { ...MARKER, pluginSetFields: ["requestTimeoutMs"] },
+    };
+
+    // act
+    const fields = userCarriedFields(entry);
+
+    // assert
+    assert.deepStrictEqual(fields, { approveTools: ["read"] });
+  });
+
+  test("D-08-02: a non-object entry holds no carried field", () => {
+    // act
+    const fields = userCarriedFields("not-an-entry");
+
+    // assert
+    assert.deepStrictEqual(fields, {});
   });
 });
 

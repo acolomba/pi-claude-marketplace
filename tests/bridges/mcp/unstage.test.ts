@@ -699,6 +699,44 @@ test("AFILE-01: removes the plugin's legacy mcp.json entries and keeps foreign e
   assert.strictEqual((adapterMetadata as NodeJS.ErrnoException).code, "ENOENT");
 });
 
+test("D-08-02: the adapter file stores a removed entry's user choices and the legacy mcp.json never gains the member", async (t) => {
+  // arrange
+  const { locations } = await createScope(t, "mcp-unstage-choices-");
+  const owned = '{"plugin":"acme","marketplace":"official"}';
+  await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+  await writeFile(
+    locations.mcpAdapterJsonPath,
+    `{"mcpServers":{"plugin_acme_srv_":{"command":"new","disabled":true,"openUi":true,"_piClaudeMarketplace":${owned}}}}\n`,
+    "utf8",
+  );
+  await writeFile(
+    locations.mcpJsonPath,
+    `{"mcpServers":{"srv":{"command":"old","disabled":true,"_piClaudeMarketplace":${owned}}}}\n`,
+    "utf8",
+  );
+
+  // act
+  await unstageMcpServers({ locations, marketplaceName: "official", pluginName: "acme" });
+  const adapterDoc: unknown = JSON.parse(await readFile(locations.mcpAdapterJsonPath, "utf8"));
+  const legacyDoc: unknown = JSON.parse(await readFile(locations.mcpJsonPath, "utf8"));
+
+  // assert
+  assert.deepStrictEqual(
+    { adapterDoc, legacyDoc },
+    {
+      adapterDoc: {
+        mcpServers: {},
+        _piClaudeMarketplace: {
+          serverChoices: {
+            plugin_acme_srv_: { plugin: "acme", fields: { disabled: true, openUi: true } },
+          },
+        },
+      },
+      legacyDoc: { mcpServers: {} },
+    },
+  );
+});
+
 test("AFILE-01: lists adapter names first, then legacy names not already listed", async (t) => {
   // arrange
   const { locations } = await createScope(t, "mcp-unstage-legacy-order-");

@@ -1261,6 +1261,156 @@ describe("prepareStageMcpServers", () => {
     assert.strictEqual(secondBytes, expectedBytes);
   });
 
+  test("D-08-02: a stored choice carries into the new entry, the stage consumes it, and a second stage writes the same bytes", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-stored-choice-");
+    await writeSource(
+      locations.mcpAdapterJsonPath,
+      JSON.stringify({
+        mcpServers: { mine: { command: "mine" } },
+        _piClaudeMarketplace: {
+          serverChoices: {
+            plugin_acme_server_: {
+              plugin: "acme",
+              fields: { disabled: true, openUi: true, env: { STUB_TOKEN: "stub-secret" } },
+            },
+          },
+        },
+      }),
+    );
+    const expectedDoc = {
+      mcpServers: {
+        mine: { command: "mine" },
+        plugin_acme_server_: {
+          url: "https://acme.example/mcp",
+          directTools: "search",
+          toolPrefix: "mcp",
+          disabled: true,
+          openUi: true,
+          _piClaudeMarketplace: { plugin: "acme", marketplace: "catalog" },
+        },
+      },
+    };
+    await commitPreparedMcp(await prepareAcme(locations, cwd));
+    const firstBytes = await readFile(locations.mcpAdapterJsonPath, "utf8");
+
+    // act
+    await commitPreparedMcp(await prepareAcme(locations, cwd));
+    const secondBytes = await readFile(locations.mcpAdapterJsonPath, "utf8");
+
+    // assert
+    assert.deepStrictEqual(JSON.parse(firstBytes), expectedDoc);
+    assert.strictEqual(secondBytes, firstBytes);
+  });
+
+  test("D-08-02: an absorbed stub's fields win over the stored choice field by field", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-stored-under-stub-");
+    await writeSource(
+      locations.mcpAdapterJsonPath,
+      JSON.stringify({
+        mcpServers: { plugin_acme_server_: { disabled: false } },
+        _piClaudeMarketplace: {
+          serverChoices: {
+            plugin_acme_server_: { plugin: "acme", fields: { trace: true, disabled: true } },
+          },
+        },
+      }),
+    );
+
+    // act
+    await commitPreparedMcp(await prepareAcme(locations, cwd));
+    const storedDoc: unknown = JSON.parse(await readFile(locations.mcpAdapterJsonPath, "utf8"));
+
+    // assert
+    assert.deepStrictEqual(storedDoc, {
+      mcpServers: {
+        plugin_acme_server_: {
+          url: "https://acme.example/mcp",
+          directTools: "search",
+          toolPrefix: "mcp",
+          disabled: false,
+          trace: true,
+          _piClaudeMarketplace: {
+            plugin: "acme",
+            marketplace: "catalog",
+            keptOverride: { disabled: false },
+          },
+        },
+      },
+    });
+  });
+
+  test("D-08-02: the plugin's previous entry wins over a stale stored choice, which the stage drops", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-stale-choice-");
+    await writeSource(
+      locations.mcpAdapterJsonPath,
+      JSON.stringify({
+        mcpServers: {
+          plugin_acme_server_: {
+            url: "https://old.example/mcp",
+            approveTools: ["read"],
+            _piClaudeMarketplace: { plugin: "acme", marketplace: "catalog" },
+          },
+        },
+        _piClaudeMarketplace: {
+          serverChoices: {
+            plugin_acme_server_: { plugin: "acme", fields: { approveTools: true, debug: true } },
+          },
+        },
+      }),
+    );
+
+    // act
+    await commitPreparedMcp(await prepareAcme(locations, cwd));
+    const storedDoc: unknown = JSON.parse(await readFile(locations.mcpAdapterJsonPath, "utf8"));
+
+    // assert
+    assert.deepStrictEqual(storedDoc, {
+      mcpServers: {
+        plugin_acme_server_: {
+          url: "https://acme.example/mcp",
+          directTools: "search",
+          toolPrefix: "mcp",
+          approveTools: ["read"],
+          _piClaudeMarketplace: { plugin: "acme", marketplace: "catalog" },
+        },
+      },
+    });
+  });
+
+  test("D-08-02: another plugin's stored choice under the key is neither applied nor removed", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-foreign-choice-");
+    const member = {
+      serverChoices: {
+        plugin_acme_server_: { plugin: "other", fields: { approveTools: true } },
+      },
+    };
+    await writeSource(
+      locations.mcpAdapterJsonPath,
+      JSON.stringify({ _piClaudeMarketplace: member }),
+    );
+
+    // act
+    await commitPreparedMcp(await prepareAcme(locations, cwd));
+    const storedDoc: unknown = JSON.parse(await readFile(locations.mcpAdapterJsonPath, "utf8"));
+
+    // assert
+    assert.deepStrictEqual(storedDoc, {
+      _piClaudeMarketplace: member,
+      mcpServers: {
+        plugin_acme_server_: {
+          url: "https://acme.example/mcp",
+          directTools: "search",
+          toolPrefix: "mcp",
+          _piClaudeMarketplace: { plugin: "acme", marketplace: "catalog" },
+        },
+      },
+    });
+  });
+
   test("AFILE-06: staging over a stub with env and headers reports one override-kept notice naming them", async (t) => {
     // arrange
     const { cwd, locations } = await createProjectScope(t, "mcp-stage-override-notice-");

@@ -523,3 +523,73 @@ test("ANAME-07: a project install over a stub keeps the user's timeout for write
     );
   });
 });
+
+/** Rewrites the installed `plugin_hello_srv_` entry through `edit`, as a user's edit would. */
+async function editInstalledEntry(
+  filePath: string,
+  edit: (entry: Record<string, unknown>) => Record<string, unknown>,
+): Promise<void> {
+  const doc = JSON.parse(await readFile(filePath, "utf8")) as {
+    mcpServers: { plugin_hello_srv_: Record<string, unknown> };
+  };
+  doc.mcpServers.plugin_hello_srv_ = edit(doc.mcpServers.plugin_hello_srv_);
+  await writeFile(filePath, `${JSON.stringify(doc, null, 2)}\n`);
+}
+
+test("D-08-02: a project user's disabled and openUi choices survive uninstall then reinstall", async () => {
+  await withHermeticEnvironment("mcp-choices-reinstall-", async ({ cwd }) => {
+    // arrange
+    const pluginRoot = await seedMcpPlugin(cwd, ["project"]);
+    const locations = locationsFor("project", cwd);
+    const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
+    const completionCache = createCompletionCache();
+    const install = createInstallOperation(hooksRouting, completionCache);
+    const uninstall = createUninstallOperation(hooksRouting, completionCache);
+    const request = { scope: "project", cwd, marketplace: "mp", plugin: "hello" } as const;
+    await install({ ...makeCtx().session, ...request });
+    // `/mcp-adapter disable plugin_hello_srv_` and a hand edit of `openUi`.
+    await editInstalledEntry(locations.mcpAdapterJsonPath, (entry) => ({
+      ...entry,
+      disabled: true,
+      openUi: true,
+    }));
+
+    // act
+    await uninstall({ ...makeCtx().session, ...request });
+    const uninstalled: unknown = JSON.parse(await readFile(locations.mcpAdapterJsonPath, "utf8"));
+    await install({ ...makeCtx().session, ...request });
+    const reinstalled: unknown = JSON.parse(await readFile(locations.mcpAdapterJsonPath, "utf8"));
+
+    // assert
+    assert.deepStrictEqual(
+      { uninstalled, reinstalled },
+      {
+        uninstalled: {
+          mcpServers: {},
+          _piClaudeMarketplace: {
+            serverChoices: {
+              plugin_hello_srv_: { plugin: "hello", fields: { disabled: true, openUi: true } },
+            },
+          },
+        },
+        reinstalled: {
+          mcpServers: {
+            plugin_hello_srv_: {
+              command: "node",
+              args: ["v1.js"],
+              env: {
+                CLAUDE_PLUGIN_ROOT: pluginRoot,
+                CLAUDE_PLUGIN_DATA: path.join(locations.dataRoot, "mp", "hello"),
+              },
+              directTools: "search",
+              toolPrefix: "mcp",
+              disabled: true,
+              openUi: true,
+              _piClaudeMarketplace: { plugin: "hello", marketplace: "mp" },
+            },
+          },
+        },
+      },
+    );
+  });
+});

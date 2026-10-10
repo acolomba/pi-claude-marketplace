@@ -12,7 +12,9 @@ import {
   partitionServers,
   readMcpConfigDoc,
   restoredOverrideNames,
+  storedChoicesFor,
   withPluginServers,
+  withPluginServersKeepingChoices,
   type McpConfigDoc,
   type McpServerKey,
 } from "../../../extensions/pi-claude-marketplace/bridges/mcp/adapter-doc.ts";
@@ -33,6 +35,24 @@ function adapterGrammar(text: string): unknown {
 
 const ACME_MARKER = { plugin: "acme", marketplace: "catalog" };
 const OTHER_MARKER = { plugin: "other", marketplace: "catalog" };
+
+/** A config whose server maps are the document's `mcpServers` and `mcp-servers` objects. */
+function configOf(doc: Record<string, unknown>): McpConfigDoc {
+  const serverMaps = new Map<McpServerKey, Readonly<Record<string, unknown>>>();
+  for (const key of ADAPTER_SERVER_KEYS) {
+    const servers = doc[key];
+    if (servers !== undefined) {
+      serverMaps.set(key, servers as Readonly<Record<string, unknown>>);
+    }
+  }
+
+  return {
+    doc,
+    serverKey: [...serverMaps.keys()][0] ?? "mcpServers",
+    serverMaps,
+    hadComments: false,
+  };
+}
 
 describe("readMcpConfigDoc", () => {
   for (const { description, text, expectedConfig } of [
@@ -964,4 +984,340 @@ describe("restoredOverrideNames", () => {
     // assert
     assert.deepStrictEqual(names, []);
   });
+});
+
+describe("storedChoicesFor", () => {
+  test("D-08-02: returns the fields of each asked key the store records for the plugin", () => {
+    // arrange
+    const config = configOf({
+      _piClaudeMarketplace: {
+        serverChoices: {
+          mine: { plugin: "acme", fields: { disabled: true } },
+          foreign: { plugin: "other", fields: { approveTools: true } },
+          unasked: { plugin: "acme", fields: { trace: true } },
+          scalar: "not-a-choice",
+          unnamed: { plugin: 7, fields: { disabled: true } },
+          fieldless: { plugin: "acme", fields: ["disabled"] },
+        },
+      },
+    });
+
+    // act
+    const stored = storedChoicesFor(config, "acme", [
+      "mine",
+      "foreign",
+      "scalar",
+      "unnamed",
+      "fieldless",
+      "missing",
+      "toString",
+    ]);
+
+    // assert
+    assert.deepStrictEqual(stored, { mine: { disabled: true } });
+  });
+
+  for (const { description, doc } of [
+    { description: "no member", doc: { mcpServers: {} } },
+    { description: "a member that is not an object", doc: { _piClaudeMarketplace: null } },
+    {
+      description: "a serverChoices value that is not an object",
+      doc: { _piClaudeMarketplace: { serverChoices: [] } },
+    },
+  ]) {
+    test(`D-08-02: returns nothing for a document with ${description}`, () => {
+      // act
+      const stored = storedChoicesFor(configOf(doc), "acme", ["mine"]);
+
+      // assert
+      assert.deepStrictEqual(stored, {});
+    });
+  }
+});
+
+describe("withPluginServersKeepingChoices", () => {
+  test("D-08-02: a leaving entry stores only its user carried fields outside the written-back override", () => {
+    // arrange
+    const config = configOf({
+      mcpServers: {
+        srv: {
+          command: "plugin-command",
+          env: { STUB_TOKEN: "stub-secret" },
+          headers: { Authorization: "stub-header" },
+          requestTimeoutMs: 60000,
+          approveTools: ["live"],
+          disabled: true,
+          openUi: true,
+          _piClaudeMarketplace: {
+            ...ACME_MARKER,
+            pluginSetFields: ["requestTimeoutMs"],
+            keptOverride: { approveTools: ["kept"], env: { STUB_TOKEN: "stub-secret" } },
+          },
+        },
+        mine: { command: "mine" },
+      },
+    });
+
+    // act
+    const next = withPluginServersKeepingChoices(config, "acme", "catalog", {});
+
+    // assert
+    assert.strictEqual(
+      JSON.stringify(next),
+      JSON.stringify({
+        mcpServers: {
+          srv: { approveTools: ["live"], env: { STUB_TOKEN: "stub-secret" } },
+          mine: { command: "mine" },
+        },
+        _piClaudeMarketplace: {
+          serverChoices: { srv: { plugin: "acme", fields: { disabled: true, openUi: true } } },
+        },
+      }),
+    );
+  });
+
+  test("D-08-02: a leaving entry with no user carried field writes no store", () => {
+    // arrange
+    const config = configOf({
+      mcpServers: {
+        srv: {
+          command: "plugin-command",
+          requestTimeoutMs: 60000,
+          _piClaudeMarketplace: { ...ACME_MARKER, pluginSetFields: ["requestTimeoutMs"] },
+        },
+      },
+    });
+
+    // act
+    const next = withPluginServersKeepingChoices(config, "acme", "catalog", {});
+
+    // assert
+    assert.deepStrictEqual(next, { mcpServers: {} });
+  });
+
+  test("D-08-02: a restaged entry stores nothing and a dropped one stores its choice", () => {
+    // arrange
+    const config = configOf({
+      mcpServers: {
+        kept: { command: "kept", disabled: true, _piClaudeMarketplace: ACME_MARKER },
+        dropped: { command: "dropped", trace: true, _piClaudeMarketplace: ACME_MARKER },
+      },
+      "mcp-servers": {
+        dropped: { command: "unread", debug: true, _piClaudeMarketplace: ACME_MARKER },
+      },
+    });
+
+    // act
+    const next = withPluginServersKeepingChoices(config, "acme", "catalog", {
+      kept: { command: "kept-v2" },
+    });
+
+    // assert
+    assert.deepStrictEqual(next, {
+      mcpServers: { kept: { command: "kept-v2" } },
+      "mcp-servers": {},
+      _piClaudeMarketplace: {
+        serverChoices: { dropped: { plugin: "acme", fields: { trace: true } } },
+      },
+    });
+  });
+
+  test("D-08-02: a capture appends to an existing member in its position and replaces another plugin's entry in place", () => {
+    // arrange
+    const config = configOf({
+      _piClaudeMarketplace: {
+        note: "kept",
+        serverChoices: {
+          srv: { plugin: "other", fields: { approveTools: true } },
+          foreign: { plugin: "other", fields: { disabled: true } },
+        },
+      },
+      mcpServers: {
+        srv: { command: "srv", disabled: false, _piClaudeMarketplace: ACME_MARKER },
+        added: { command: "added", lifecycle: "eager", _piClaudeMarketplace: ACME_MARKER },
+      },
+    });
+
+    // act
+    const next = withPluginServersKeepingChoices(config, "acme", "catalog", {});
+
+    // assert
+    assert.strictEqual(
+      JSON.stringify(next),
+      JSON.stringify({
+        _piClaudeMarketplace: {
+          note: "kept",
+          serverChoices: {
+            srv: { plugin: "acme", fields: { disabled: false } },
+            foreign: { plugin: "other", fields: { disabled: true } },
+            added: { plugin: "acme", fields: { lifecycle: "eager" } },
+          },
+        },
+        mcpServers: {},
+      }),
+    );
+  });
+
+  test("D-08-02: a capture under an existing member without serverChoices adds the map last", () => {
+    // arrange
+    const config = configOf({
+      _piClaudeMarketplace: { note: "kept" },
+      mcpServers: { srv: { command: "srv", trace: true, _piClaudeMarketplace: ACME_MARKER } },
+    });
+
+    // act
+    const next = withPluginServersKeepingChoices(config, "acme", "catalog", {});
+
+    // assert
+    assert.strictEqual(
+      JSON.stringify(next),
+      JSON.stringify({
+        _piClaudeMarketplace: {
+          note: "kept",
+          serverChoices: { srv: { plugin: "acme", fields: { trace: true } } },
+        },
+        mcpServers: {},
+      }),
+    );
+  });
+
+  test("WR-01: stores the choice of a server named __proto__ as an own entry", () => {
+    // arrange
+    const servers = JSON.parse(
+      '{"__proto__":{"command":"x","disabled":true,"_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog"}}}',
+    ) as Record<string, unknown>;
+    const config = configOf({ mcpServers: servers });
+
+    // act
+    const next = withPluginServersKeepingChoices(config, "acme", "catalog", {});
+
+    // assert
+    assert.strictEqual(
+      JSON.stringify(next),
+      '{"mcpServers":{},"_piClaudeMarketplace":{"serverChoices":{"__proto__":{"plugin":"acme","fields":{"disabled":true}}}}}',
+    );
+  });
+
+  test("D-08-02: staging a key consumes only the store entry the plugin recorded", () => {
+    // arrange
+    const config = configOf({
+      _piClaudeMarketplace: {
+        serverChoices: {
+          mine: { plugin: "acme", fields: { disabled: true } },
+          foreign: { plugin: "other", fields: { approveTools: true } },
+          later: { plugin: "acme", fields: { trace: true } },
+        },
+        note: "kept",
+      },
+      mcpServers: {},
+    });
+
+    // act
+    const next = withPluginServersKeepingChoices(config, "acme", "catalog", {
+      mine: { command: "mine" },
+      foreign: { command: "foreign" },
+    });
+
+    // assert
+    assert.strictEqual(
+      JSON.stringify(next),
+      JSON.stringify({
+        _piClaudeMarketplace: {
+          serverChoices: {
+            foreign: { plugin: "other", fields: { approveTools: true } },
+            later: { plugin: "acme", fields: { trace: true } },
+          },
+          note: "kept",
+        },
+        mcpServers: { mine: { command: "mine" }, foreign: { command: "foreign" } },
+      }),
+    );
+  });
+
+  test("D-08-02: consuming the last choice removes serverChoices and an emptied member", () => {
+    // arrange
+    const config = configOf({
+      _piClaudeMarketplace: {
+        serverChoices: { mine: { plugin: "acme", fields: { disabled: true } } },
+      },
+      mcpServers: {},
+    });
+
+    // act
+    const next = withPluginServersKeepingChoices(config, "acme", "catalog", {
+      mine: { command: "mine" },
+    });
+
+    // assert
+    assert.deepStrictEqual(next, { mcpServers: { mine: { command: "mine" } } });
+  });
+
+  test("D-08-02: consuming the last choice keeps a member that holds another key", () => {
+    // arrange
+    const config = configOf({
+      _piClaudeMarketplace: {
+        note: "kept",
+        serverChoices: { mine: { plugin: "acme", fields: { disabled: true } } },
+      },
+      mcpServers: {},
+    });
+
+    // act
+    const next = withPluginServersKeepingChoices(config, "acme", "catalog", {
+      mine: { command: "mine" },
+    });
+
+    // assert
+    assert.deepStrictEqual(next, {
+      _piClaudeMarketplace: { note: "kept" },
+      mcpServers: { mine: { command: "mine" } },
+    });
+  });
+
+  test("D-08-02: a document with nothing captured or consumed keeps its member as it is", () => {
+    // arrange
+    const config = configOf({
+      _piClaudeMarketplace: {
+        serverChoices: {},
+        foreign: { plugin: "other", fields: { disabled: true } },
+      },
+      mcpServers: { srv: { command: "srv", _piClaudeMarketplace: ACME_MARKER } },
+    });
+
+    // act
+    const next = withPluginServersKeepingChoices(config, "acme", "catalog", {
+      other: { command: "other" },
+    });
+
+    // assert
+    assert.deepStrictEqual(next, {
+      _piClaudeMarketplace: {
+        serverChoices: {},
+        foreign: { plugin: "other", fields: { disabled: true } },
+      },
+      mcpServers: { other: { command: "other" } },
+    });
+  });
+
+  for (const { description, member } of [
+    { description: "a member that is not an object", member: ["kept"] },
+    {
+      description: "a serverChoices value that is not an object",
+      member: { serverChoices: "kept" },
+    },
+  ]) {
+    test(`D-08-02: leaves ${description} unchanged and captures nothing`, () => {
+      // arrange
+      const config = configOf({
+        _piClaudeMarketplace: member,
+        mcpServers: { srv: { command: "srv", disabled: true, _piClaudeMarketplace: ACME_MARKER } },
+      });
+
+      // act
+      const next = withPluginServersKeepingChoices(config, "acme", "catalog", {});
+
+      // assert
+      assert.deepStrictEqual(next, { _piClaudeMarketplace: member, mcpServers: {} });
+    });
+  }
 });

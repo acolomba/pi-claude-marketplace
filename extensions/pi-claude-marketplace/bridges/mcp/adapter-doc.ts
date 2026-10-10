@@ -12,6 +12,13 @@
 // when the entry leaves the file, the override is written back in its place.
 // Each carried field the override holds takes the entry's value, and no other
 // carried field is added (AFILE-06, AFILE-01).
+//
+// The top-level `_piClaudeMarketplace.serverChoices` member of the adapter
+// file holds a leaving server's user choices, keyed by its generated key and
+// recorded with the owning plugin's name, until that plugin stages the key
+// again (D-08-02). pi-mcp-adapter 5.2.0 ignores and keeps unknown top-level
+// members. Only the adapter file holds the member; Pi's legacy `mcp.json`
+// never gains it.
 
 import { readFile } from "node:fs/promises";
 
@@ -19,7 +26,7 @@ import stripJsonComments from "strip-json-comments";
 
 import { McpConfigFileError } from "../../shared/errors-bridges.ts";
 
-import { restoredOverride } from "./adapter-entry.ts";
+import { restoredOverride, userCarriedFields } from "./adapter-entry.ts";
 import { CLAUDE_MARKETPLACE_MARKER_KEY, isOwnedBy, keptOverrideOf } from "./marker.ts";
 import { safeSet } from "./safe-set.ts";
 
@@ -300,6 +307,15 @@ export function restoredOverrideNames(
 }
 
 /**
+ * AFILE-06: the override an owned entry writes back when it leaves the file,
+ * or none when its marker keeps none.
+ */
+function writtenBackOverride(entry: unknown): Record<string, unknown> | undefined {
+  const kept = restorableOverride(entry);
+  return kept === undefined ? undefined : restoredOverride(kept, entry);
+}
+
+/**
  * What one existing entry leaves in its place: itself, the override its
  * marker keeps with its own carried fields taking the entry's values
  * (AFILE-06), or nothing. A name in `replaced` is restaged in this map, so the
@@ -313,8 +329,7 @@ function survivingEntry(
 ): unknown {
   const restaged = Object.hasOwn(replaced, name);
   if (isOwnedBy(entry, owner.pluginName, owner.marketplaceName)) {
-    const kept = restaged ? undefined : restorableOverride(entry);
-    return kept === undefined ? undefined : restoredOverride(kept, entry);
+    return restaged ? undefined : writtenBackOverride(entry);
   }
 
   return restaged && isOverlay(entry) ? undefined : entry;
@@ -384,4 +399,214 @@ export function withPluginServers(
 
   next[config.serverKey] = target;
   return next;
+}
+
+const SERVER_CHOICES_KEY = "serverChoices";
+
+/** One well-formed store entry: the owning plugin and its carried fields (D-08-02). */
+interface StoredChoice {
+  readonly plugin: string;
+  readonly fields: Readonly<Record<string, unknown>>;
+}
+
+/** The choice store's member and its `serverChoices` map; each is `{}` when absent. */
+interface ChoiceStore {
+  readonly member: Readonly<Record<string, unknown>>;
+  readonly choices: Readonly<Record<string, unknown>>;
+}
+
+function ownValue(record: Readonly<Record<string, unknown>>, key: string): unknown {
+  return Object.hasOwn(record, key) ? record[key] : undefined;
+}
+
+/**
+ * D-08-02: the document's choice store, or none when the member or its
+ * `serverChoices` value is present but not a plain object. Such a store is
+ * left as it is.
+ */
+function readChoiceStore(doc: RawMcpDoc): ChoiceStore | undefined {
+  const member = Object.hasOwn(doc, CLAUDE_MARKETPLACE_MARKER_KEY)
+    ? doc[CLAUDE_MARKETPLACE_MARKER_KEY]
+    : {};
+  if (!isPlainObject(member)) {
+    return undefined;
+  }
+
+  const choices = Object.hasOwn(member, SERVER_CHOICES_KEY) ? member[SERVER_CHOICES_KEY] : {};
+  return isPlainObject(choices) ? { member, choices } : undefined;
+}
+
+function storedChoiceOf(
+  choices: Readonly<Record<string, unknown>>,
+  name: string,
+): StoredChoice | undefined {
+  const value = ownValue(choices, name);
+  if (!isPlainObject(value)) {
+    return undefined;
+  }
+
+  const plugin = ownValue(value, "plugin");
+  const fields = ownValue(value, "fields");
+  return typeof plugin === "string" && isPlainObject(fields) ? { plugin, fields } : undefined;
+}
+
+/**
+ * D-08-02: for each key, the fields of the choice the store records for
+ * `pluginName` under that key. A store entry another plugin recorded is not
+ * returned, so a choice such as `approveTools` never reaches a different
+ * plugin's server under a colliding key.
+ */
+export function storedChoicesFor(
+  config: McpConfigDoc,
+  pluginName: string,
+  keys: readonly string[],
+): Record<string, Readonly<Record<string, unknown>>> {
+  const stored: Record<string, Readonly<Record<string, unknown>>> = {};
+  const store = readChoiceStore(config.doc);
+  if (store === undefined) {
+    return stored;
+  }
+
+  for (const key of keys) {
+    const choice = storedChoiceOf(store.choices, key);
+    if (choice?.plugin === pluginName) {
+      safeSet(stored, key, choice.fields);
+    }
+  }
+
+  return stored;
+}
+
+/**
+ * D-08-02: the user's carried fields a leaving entry stores, minus the fields
+ * of the override it writes back, which keep their values there (AFILE-06).
+ */
+function leavingChoice(entry: unknown): Record<string, unknown> {
+  const writtenBack = writtenBackOverride(entry) ?? {};
+  const choice: Record<string, unknown> = {};
+  for (const [field, value] of Object.entries(userCarriedFields(entry))) {
+    if (!Object.hasOwn(writtenBack, field)) {
+      choice[field] = value;
+    }
+  }
+
+  return choice;
+}
+
+/**
+ * D-08-02: the choice each of the plugin's entries that leaves the file
+ * stores, keyed by server name. The selected key comes first and a name's
+ * first entry wins, as in `ownedServers`. A name in `entries` is restaged, so
+ * its entry carries its choices itself.
+ */
+function capturedChoices(
+  config: McpConfigDoc,
+  pluginName: string,
+  marketplaceName: string,
+  entries: Readonly<Record<string, unknown>>,
+): Record<string, StoredChoice> {
+  const captured: Record<string, StoredChoice> = {};
+  for (const [name, entry] of Object.entries(ownedServers(config, pluginName, marketplaceName))) {
+    const fields = Object.hasOwn(entries, name) ? {} : leavingChoice(entry);
+    if (Object.keys(fields).length > 0) {
+      safeSet(captured, name, { plugin: pluginName, fields });
+    }
+  }
+
+  return captured;
+}
+
+/**
+ * A copy of `record` with `key` set to `value` in its position, appended when
+ * absent, or removed when `value` is undefined.
+ */
+function withMember(
+  record: Readonly<Record<string, unknown>>,
+  key: string,
+  value: unknown,
+): Record<string, unknown> {
+  const members: Array<[string, unknown]> = Object.entries(record).map(([name, member]) => [
+    name,
+    name === key ? value : member,
+  ]);
+  if (!Object.hasOwn(record, key)) {
+    members.push([key, value]);
+  }
+
+  const next: Record<string, unknown> = {};
+  for (const [name, member] of members) {
+    if (member !== undefined) {
+      safeSet(next, name, member);
+    }
+  }
+
+  return next;
+}
+
+/** The store's next `serverChoices` map: captures replace or append, consumed names leave. */
+function nextChoices(
+  choices: Readonly<Record<string, unknown>>,
+  captured: Readonly<Record<string, StoredChoice>>,
+  consumed: readonly string[],
+): Record<string, unknown> {
+  const next: Record<string, unknown> = {};
+  for (const [name, choice] of Object.entries(choices)) {
+    if (!consumed.includes(name)) {
+      safeSet(next, name, ownValue(captured, name) ?? choice);
+    }
+  }
+
+  for (const [name, choice] of Object.entries(captured)) {
+    if (!Object.hasOwn(next, name)) {
+      safeSet(next, name, choice);
+    }
+  }
+
+  return next;
+}
+
+/**
+ * D-08-02: `withPluginServers`, with the adapter file's choice store updated
+ * in the same document, so the one atomic write that removes or writes an
+ * entry also moves its choices (NFR-1). Each of the plugin's entries that
+ * leaves stores its user carried fields outside the override it writes back,
+ * as `{ plugin, fields }` under its name, replacing any store entry there.
+ * Each name in `entries` consumes the store entry `pluginName` recorded under
+ * it; another plugin's store entry stays. A document with nothing captured or
+ * consumed keeps its member as it is. The member is added last only when a
+ * choice is captured, `serverChoices` leaves when it empties, and the member
+ * leaves when it then holds nothing. A member or `serverChoices` value that is
+ * not a plain object is kept as it is and nothing is captured.
+ */
+export function withPluginServersKeepingChoices(
+  config: McpConfigDoc,
+  pluginName: string,
+  marketplaceName: string,
+  entries: Readonly<Record<string, unknown>>,
+): RawMcpDoc {
+  const next = withPluginServers(config, pluginName, marketplaceName, entries);
+  const store = readChoiceStore(config.doc);
+  if (store === undefined) {
+    return next;
+  }
+
+  const captured = capturedChoices(config, pluginName, marketplaceName, entries);
+  const consumed = Object.keys(entries).filter(
+    (name) => storedChoiceOf(store.choices, name)?.plugin === pluginName,
+  );
+  if (Object.keys(captured).length === 0 && consumed.length === 0) {
+    return next;
+  }
+
+  const choices = nextChoices(store.choices, captured, consumed);
+  const member = withMember(
+    store.member,
+    SERVER_CHOICES_KEY,
+    Object.keys(choices).length > 0 ? choices : undefined,
+  );
+  return withMember(
+    next,
+    CLAUDE_MARKETPLACE_MARKER_KEY,
+    Object.keys(member).length > 0 ? member : undefined,
+  );
 }

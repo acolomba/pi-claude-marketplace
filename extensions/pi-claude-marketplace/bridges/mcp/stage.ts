@@ -57,7 +57,8 @@ import {
   ADAPTER_SERVER_KEYS,
   partitionServers,
   readMcpConfigDoc,
-  withPluginServers,
+  storedChoicesFor,
+  withPluginServersKeepingChoices,
   type McpConfigDoc,
 } from "./adapter-doc.ts";
 import { inactiveOverrideFields, stampServers } from "./adapter-entry.ts";
@@ -387,6 +388,24 @@ async function readTargetConfig(
 }
 
 /**
+ * D-08-02: each overlay with the stored choice for its name below it, field by
+ * field, so the user's stub wins over the choice the store kept.
+ */
+function overStoredChoices(
+  overlays: Readonly<Record<string, unknown>>,
+  stored: Readonly<Record<string, Readonly<Record<string, unknown>>>>,
+): Record<string, unknown> {
+  const merged: Record<string, unknown> = {};
+  for (const [name, overlay] of Object.entries(overlays)) {
+    // `partitionServers` admits only plain-object overlays.
+    const fields = overlay as Readonly<Record<string, unknown>>;
+    safeSet(merged, name, Object.hasOwn(stored, name) ? { ...stored[name], ...fields } : fields);
+  }
+
+  return merged;
+}
+
+/**
  * MC-6 prepare: in-memory only. Reads the scope's `mcp-adapter.json`,
  * partitions existing entries by marker across both server keys, checks each
  * new key against the full definitions in pi-mcp-adapter's nine config
@@ -488,9 +507,12 @@ export async function prepareStageMcpServers(input: StageMcpInput): Promise<Prep
   // replaces. A marker-less override stub under the selected key wins over the
   // plugin's previous marked entry. The new entry keeps the absorbed stub, or
   // the override the plugin's previous entry kept, in its marker. Overlays and
-  // the plugin's entries under the selected key never share a name. Object
-  // spread defines own data properties, so a server named `__proto__` stays an
-  // own key (WR-01).
+  // the plugin's entries under the selected key never share a name. D-08-02:
+  // a key with no previous entry of the plugin carries the choice the store
+  // keeps for it, below an absorbed stub's fields; the write consumes it.
+  // Object spread defines own data properties, so a server named `__proto__`
+  // stays an own key (WR-01).
+  const stored = storedChoicesFor(config, pluginName, newKeys);
   const {
     stamped,
     warnings: stampWarnings,
@@ -500,7 +522,7 @@ export async function prepareStageMcpServers(input: StageMcpInput): Promise<Prep
     pluginName,
     marketplaceName,
     substitution,
-    previous: { ...ours, ...overlays },
+    previous: { ...stored, ...ours, ...overStoredChoices(overlays, stored) },
     keptOverrides: { ...keptOverrides, ...overlays },
     description: input.description,
   });
@@ -511,7 +533,7 @@ export async function prepareStageMcpServers(input: StageMcpInput): Promise<Prep
   const rewritesTarget = newKeys.length > 0 || Object.keys(ours).length > 0 || leftovers.length > 0;
   const next = rewritesTarget
     ? withoutServers(
-        withPluginServers(config, pluginName, marketplaceName, stamped),
+        withPluginServersKeepingChoices(config, pluginName, marketplaceName, stamped),
         config.serverKey,
         leftovers,
       )

@@ -10,7 +10,10 @@
 // Each carried field the override holds takes the entry's value, so a later
 // `/mcp-adapter enable` or `disable` wins. A carried field the override lacks
 // is not added, so a value the plugin's entry declares stays out of it
-// (AFILE-01, AFILE-06).
+// (AFILE-01, AFILE-06). In the adapter file, the same write stores each
+// removed entry's other user choices under the top-level
+// `_piClaudeMarketplace.serverChoices` member, for the plugin's next stage of
+// that key (D-08-02).
 //
 // The scope's legacy `mcp.json` holds entries written before the bridge moved
 // to `mcp-adapter.json`. Unstage removes the plugin's entries there too, by
@@ -56,6 +59,7 @@ import {
   readMcpConfigDoc,
   restoredOverrideNames,
   withPluginServers,
+  withPluginServersKeepingChoices,
   type McpConfigDoc,
   type McpServerKey,
 } from "./adapter-doc.ts";
@@ -154,10 +158,13 @@ async function writeUnstageTargets(
   for (const target of targets) {
     let bytes: Buffer;
     try {
+      // D-08-02: only the adapter file keeps the removed entries' choices.
+      const compose =
+        target.file === "mcp-adapter.json" ? withPluginServersKeepingChoices : withPluginServers;
       // eslint-disable-next-line no-await-in-loop -- a failed write reports only the files written before it
       bytes = await atomicWriteJson(
         target.filePath,
-        withPluginServers(target.config, owner.pluginName, owner.marketplaceName, {}),
+        compose(target.config, owner.pluginName, owner.marketplaceName, {}),
       );
     } catch (err) {
       if (writtenTargets.length === 0) {

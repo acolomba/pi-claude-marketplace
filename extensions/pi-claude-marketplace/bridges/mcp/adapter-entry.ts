@@ -48,6 +48,8 @@ const CARRIED_FIELDS = [
   "requestTimeoutMs",
   "debug",
   "searchKeywords",
+  "openUi",
+  "trace",
 ] as const;
 
 const CARRIED_FIELD_SET: ReadonlySet<string> = new Set(CARRIED_FIELDS);
@@ -135,6 +137,15 @@ function carriedFields(previous: unknown, pluginSet: readonly string[]): Record<
   }
 
   return carried;
+}
+
+/**
+ * D-08-02 / AFILE-06: the user's carried fields on an entry, in carried-set
+ * order: each carried field it holds as an own property, minus the fields its
+ * marker lists as plugin-set, whose values are the plugin's (ANAME-07).
+ */
+export function userCarriedFields(entry: unknown): Record<string, unknown> {
+  return carriedFields(entry, pluginSetFieldsOf(entry));
 }
 
 /**
