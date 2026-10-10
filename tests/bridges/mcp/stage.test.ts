@@ -1541,6 +1541,38 @@ describe("prepareStageMcpServers", () => {
     assert.strictEqual(storedBytes, expectedBytes);
   });
 
+  test("AFILE-06: a stage that drops a server whose kept override the user's later enable emptied removes it and reports no override-restored", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-override-emptied-");
+    await writeSource(
+      locations.mcpAdapterJsonPath,
+      '{"mcpServers":{"plugin_acme_old_":{"url":"https://old.example/mcp","_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog","keptOverride":{"disabled":true}}}}}',
+    );
+    const expectedBytes = `{
+  "mcpServers": {
+    "plugin_acme_server_": {
+      "url": "https://acme.example/mcp",
+      "directTools": "search",
+      "toolPrefix": "mcp",
+      "_piClaudeMarketplace": {
+        "plugin": "acme",
+        "marketplace": "catalog"
+      }
+    }
+  }
+}
+`;
+
+    // act
+    const prepared = await prepareAcme(locations, cwd);
+    await commitPreparedMcp(prepared);
+    const storedBytes = await readFile(locations.mcpAdapterJsonPath, "utf8");
+
+    // assert
+    assert.deepStrictEqual(prepared.result.notices, []);
+    assert.strictEqual(storedBytes, expectedBytes);
+  });
+
   test("ANAME-07: staging a plugin timeout over a stub's timeout writes the plugin's value and names the stub's", async (t) => {
     // arrange
     const { cwd, locations } = await createProjectScope(t, "mcp-stage-plugin-set-");

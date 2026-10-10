@@ -284,8 +284,8 @@ export function partitionServers(
  * kept override an unstage writes back, which is what
  * `withPluginServers(config, pluginName, marketplaceName, {})` does. The
  * selected key comes first, each map in file order, and a name appears once.
- * The same `restorableOverride` test decides both, so the names and the
- * write-back agree on which kept values are still overrides.
+ * The same `writtenBackOverride` test decides both, so a kept override that
+ * the entry's carried fields empty is neither written back nor named.
  */
 export function restoredOverrideNames(
   config: McpConfigDoc,
@@ -297,7 +297,7 @@ export function restoredOverrideNames(
     for (const [name, entry] of Object.entries(servers)) {
       if (
         isOwnedBy(entry, pluginName, marketplaceName) &&
-        restorableOverride(entry) !== undefined
+        writtenBackOverride(entry) !== undefined
       ) {
         names.add(name);
       }

@@ -954,6 +954,7 @@ describe("restoredOverrideNames", () => {
     const unselected = {
       first: {
         command: "first",
+        disabled: true,
         _piClaudeMarketplace: { ...ACME_MARKER, keptOverride: { disabled: true } },
       },
       shared: {
@@ -978,6 +979,7 @@ describe("restoredOverrideNames", () => {
       user: { disabled: true },
       last: {
         command: "last",
+        lifecycle: "eager",
         _piClaudeMarketplace: { ...ACME_MARKER, keptOverride: { lifecycle: "eager" } },
       },
     };
@@ -997,6 +999,25 @@ describe("restoredOverrideNames", () => {
     // assert
     assert.deepStrictEqual(names, ["shared", "last", "first"]);
     assert.strictEqual(Object.isFrozen(names), true);
+  });
+
+  test("AFILE-06: leaves out an entry whose kept override the user's later enable emptied", () => {
+    // arrange
+    const config = configOf({
+      mcpServers: {
+        srv: {
+          command: "srv",
+          _piClaudeMarketplace: { ...ACME_MARKER, keptOverride: { disabled: true } },
+        },
+        stub: { command: "stub", _piClaudeMarketplace: { ...ACME_MARKER, keptOverride: {} } },
+      },
+    });
+
+    // act
+    const names = restoredOverrideNames(config, "acme", "catalog");
+
+    // assert
+    assert.deepStrictEqual(names, ["stub"]);
   });
 
   test("AFILE-06: lists nothing when no entry of the plugin keeps an override", () => {

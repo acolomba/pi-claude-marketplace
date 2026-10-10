@@ -1093,6 +1093,34 @@ test("AFILE-06: each rewritten file reports its comments notice, then one overri
   });
 });
 
+test("AFILE-06: an unstage that removes an entry whose kept override the user's later enable emptied reports no override-restored fact", async (t) => {
+  // arrange
+  const { locations } = await createScope(t, "mcp-unstage-override-emptied-");
+  await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+  await writeFile(
+    locations.mcpAdapterJsonPath,
+    '{"mcpServers":{"srv":{"command":"srv","_piClaudeMarketplace":{"plugin":"acme","marketplace":"official","keptOverride":{"disabled":true}}}}}\n',
+    "utf8",
+  );
+
+  // act
+  const unstage = await unstageMcpServers({
+    locations,
+    marketplaceName: "official",
+    pluginName: "acme",
+  });
+
+  // assert
+  assert.deepStrictEqual(unstage, {
+    removedNames: ["srv"],
+    warnings: [],
+    notices: [],
+    written: [
+      { path: locations.mcpAdapterJsonPath, bytes: Buffer.from('{\n  "mcpServers": {}\n}\n') },
+    ],
+  });
+});
+
 test("AFILE-06: a failed legacy write reports the override the adapter file already wrote back", async (t) => {
   // arrange
   const { cwd, locations } = await createScope(t, "mcp-unstage-override-partial-");
