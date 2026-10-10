@@ -4,16 +4,16 @@ milestone: json-output
 current_phase: 08
 current_phase_name: "Address tech debt: ledger dispositions and advisory"
 status: executing
-stopped_at: Phase 8 context gathered
-last_updated: "2026-10-10T19:30:08.482Z"
+stopped_at: Completed 08-01-PLAN.md
+last_updated: "2026-10-10T20:03:20.293Z"
 last_activity: 2026-10-10
 last_activity_desc: Phase 08 execution started
-state_head: 5fd28a83d0f798f04e6196e44a14ad196132bf3e
+state_head: a12dfa162ce619b0aee4379acde28f7bb086d43d
 progress:
   total_phases: 8
   completed_phases: 7
   total_plans: 49
-  completed_plans: 45
+  completed_plans: 46
 milestone_name: Mode-Keyed Presentation Strategies
 ---
 
@@ -31,8 +31,8 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 08 (Address tech debt: ledger dispositions and advisory) — EXECUTING
-Plan: 1 of 4
-Status: Executing Phase 08
+Plan: 2 of 4
+Status: Ready to execute
 Last activity: 2026-10-10 — Phase 08 execution started
 
 Progress: [██████████] 100% (7 of 7 phases fully verified; 45 of 45 plans complete)
@@ -169,9 +169,9 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-10T18:20:24.899Z
-**Stopped at:** Phase 8 context gathered
-**Resume file:** .planning/phases/08-address-tech-debt-ledger-dispositions-and-advisory/08-CONTEXT.md
+**Last session:** 2026-10-10T20:03:19.879Z
+**Stopped at:** Completed 08-01-PLAN.md
+**Resume file:** None
 
 **Earlier work:** json-output on `features/json`. Phases 1 and 2 are complete
 and verified. Phase 2's review-fix loop closed after three iterations with ten
@@ -285,6 +285,7 @@ archived milestone artifacts.
 | Phase 05 P05 | 30 min | 2 tasks | 10 files |
 | Phase 05 P06 | 29 min | 2 tasks | 8 files |
 | Phase 05 P07 | 32 min | 2 tasks | 2 files |
+| Phase 08 P01 | 28 min | 3 tasks | 1 files |
 
 ## Decisions
 
@@ -345,6 +346,7 @@ archived milestone artifacts.
 - [Phase 04]: PMOD-04: an out-of-band plugin row without a name keeps that shape; resolveRows redacts a row name only when the row carries one
 
 - [Phase 04]: On 2026-10-06 the user accepted both conservative masking rules: split row names ending in scheme://host:port and hyphenated text after Bearer. Resume the review loop, re-verification, and autonomous continuation.
+- [Phase 08]: D-07 applied: root brace-expansion bumped 5.0.9 to 5.0.12 lock-only (--ignore-scripts) after the user approved the artifact at checkpoint 08-01-02; D-08 keeps the Pi-shrinkwrapped nested copy at 5.0.9 as the single npm audit path
 
 ## Current Verification Checkpoint
 
