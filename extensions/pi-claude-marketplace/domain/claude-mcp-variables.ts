@@ -10,13 +10,13 @@
 // variable's name, so no environment value leaves this module. The caller
 // supplies the environment.
 //
-// AVAR-05: Claude withholds deny-listed variables (`domain/claude-credential-
-// denylist.ts`). The decision is made here, at install, and never left for the
-// adapter, so a variable set later cannot reach the server. A remote field
-// (`url`, `headers`) writes `""` for a remote-sink name whether or not it is
-// set. A plain field (`command`, `args`, `env`) writes `""` for a plain name
-// that is set; when it is unset, the field gets the `:-` default, or the
-// literal `${NAME}` text and a missing report.
+// AVAR-05: Claude withholds deny-listed variables
+// (`domain/claude-credential-denylist.ts`). The decision is made here, at
+// install, and never left for the adapter, so a variable set later cannot
+// reach the server. A remote field (`url`, `headers`) writes `""` for a
+// remote-sink name whether or not it is set. A plain field (`command`, `args`,
+// `env`) writes `""` for a plain name that is set; when it is unset, the field
+// gets the `:-` default, or the literal `${NAME}` text and a missing report.
 
 import {
   CREDENTIAL_BASE_URL_NAMES,

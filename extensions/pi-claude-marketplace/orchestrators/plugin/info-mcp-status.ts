@@ -7,8 +7,8 @@
 // NFR-5: network-free. This module is outside `NETWORK_SEAMS` and names no git
 // surface.
 //
-// The join is an exact string match on `generatedMcpServerKey(plugin,
-// recordedServer)`, because pi-mcp-adapter reports raw config keys. Only the
+// The status lookup key is `generatedMcpServerKey(plugin, server)`, an exact
+// string match, because pi-mcp-adapter reports raw config keys. Only the
 // servers the installation record lists get a state: the manifest arm lists
 // the current declaration, which can differ from what install wrote. A
 // disabled record's servers are out of the adapter configuration (ENBL-08),

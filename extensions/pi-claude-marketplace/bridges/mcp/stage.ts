@@ -435,8 +435,8 @@ function overStoredChoices(
  * `credentials-blanked` notice for set credentials blanked in `url` or
  * `headers` (AVAR-04, AVAR-05), then one `tool-rules-unenforced` notice per
  * server that declares tool permission rules (ANAME-07). AS-8 noop
- * short-circuits when there is nothing new AND nothing previously-ours -- in
- * that case
+ * short-circuits when there is nothing new, nothing previously-ours and no
+ * marked entry in the legacy `mcp.json` (AMIG-01) -- in that case
  * `commitPreparedMcp` writes no file (PRD success criterion: AS-8 noop
  * produces no `mcp-adapter.json`).
  *
