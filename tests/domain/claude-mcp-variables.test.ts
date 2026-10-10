@@ -504,6 +504,22 @@ interface ScanRow {
 
 const SCAN_ROWS: readonly ScanRow[] = [
   {
+    title: "AVAR-04: a builtin placeholder never joins the text after it into a variable",
+    server: { command: "$${CLAUDE_PLUGIN_ROOT}{PI_CM_JOINED}", args: ["${PI_CM_E}"] },
+    env: {},
+    scan: { unset: ["PI_CM_E"], withheld: [] },
+  },
+  {
+    title: "AVAR-04: a remote builtin placeholder never joins the text after it into a variable",
+    server: {
+      type: "http",
+      url: "https://a.example/$${CLAUDE_PROJECT_DIR}{PI_CM_JOINED}",
+      headers: { "X-Data": "$${CLAUDE_PLUGIN_DATA}{PI_CM_JOINED}" },
+    },
+    env: {},
+    scan: { unset: [], withheld: [] },
+  },
+  {
     title:
       "AVAR-04: lists a stdio server's unset args name and its set plain-listed env credential",
     server: {

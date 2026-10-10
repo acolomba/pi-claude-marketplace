@@ -244,6 +244,15 @@ const ROWS: readonly TranslationRow[] = [
       ...SEARCH_OWNED,
     },
   },
+  ...["https://", "https://bad host"].map((authServerMetadataUrl): TranslationRow => ({
+    title: `ANAME-07: an authServerMetadataUrl of ${JSON.stringify(authServerMetadataUrl)} that does not parse is not copied`,
+    server: {
+      type: "http",
+      url: "https://a.example",
+      oauth: { clientId: "pi-client", authServerMetadataUrl },
+    },
+    entry: { url: "https://a.example", oauth: { clientId: "pi-client" }, ...SEARCH_OWNED },
+  })),
   {
     title: "ANAME-07: an http authServerMetadataUrl is not copied",
     server: {
@@ -425,6 +434,31 @@ const VERDICT_ROWS: readonly VerdictRow[] = [
       kind: "malformed",
       detail: '/oauth/authServerMetadataUrl: must match pattern "^https://"',
     },
+  },
+  ...["https://", "https://bad host"].map((authServerMetadataUrl): VerdictRow => ({
+    title: `ANAME-07: an authServerMetadataUrl of ${JSON.stringify(authServerMetadataUrl)} that does not parse is malformed`,
+    server: { type: "sse", url: "x", oauth: { authServerMetadataUrl } },
+    verdict: { kind: "malformed", detail: "/oauth/authServerMetadataUrl: must be a valid URL" },
+  })),
+  {
+    title:
+      "ANAME-07: an authServerMetadataUrl that does not parse is malformed before headersHelper blocks",
+    server: {
+      type: "http",
+      url: "x",
+      headersHelper: "sign",
+      oauth: { authServerMetadataUrl: "https://bad host" },
+    },
+    verdict: { kind: "malformed", detail: "/oauth/authServerMetadataUrl: must be a valid URL" },
+  },
+  {
+    title: "ANAME-07: an https authServerMetadataUrl that parses is supported",
+    server: {
+      type: "http",
+      url: "x",
+      oauth: { authServerMetadataUrl: "https://auth.example/.well-known/x" },
+    },
+    verdict: SUPPORTED,
   },
   {
     title: "ANAME-07: empty scopes are malformed",

@@ -223,10 +223,13 @@ interface ScannedFields {
   readonly values: readonly string[];
 }
 
-// A builtin never names a variable, so the scan gives each one an empty path.
-// At user scope Pi's process supplies `CLAUDE_PROJECT_DIR`.
-const SCAN_BUILTINS: ClaudeBuiltins = { pluginRoot: "", pluginData: "", projectDir: "" };
+// A builtin never names a variable, so the scan gives each one the path `/`,
+// which can neither form nor complete a `${...}` reference with the text
+// beside it. At user scope Pi's process supplies `CLAUDE_PROJECT_DIR`.
+const SCAN_BUILTINS: ClaudeBuiltins = { pluginRoot: "/", pluginData: "/", projectDir: "/" };
 
+// Claude Code maps `streamable-http` to `http` before it expands variables, so
+// the scan treats it as remote.
 const REMOTE_TYPES: ReadonlySet<string> = new Set(["sse", "http", "streamable-http"]);
 
 // AVAR-01: Claude writes the values under these env keys without expansion.

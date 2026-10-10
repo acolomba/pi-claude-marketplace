@@ -114,7 +114,11 @@ function oauthField(oauth: unknown): { oauth?: Record<string, string> } {
   }
 
   const metadataUrl = oauth.authServerMetadataUrl;
-  if (typeof metadataUrl === "string" && metadataUrl.startsWith("https://")) {
+  if (
+    typeof metadataUrl === "string" &&
+    metadataUrl.startsWith("https://") &&
+    URL.canParse(metadataUrl)
+  ) {
     mapped.authServerMetadataUrl = metadataUrl;
   }
 
@@ -380,10 +384,19 @@ function classifyStdio(server: unknown): McpServerVerdict {
     : malformed(STDIO_SERVER.Errors(server));
 }
 
+// Claude's schema also checks `authServerMetadataUrl` as a URL, which the
+// typebox pattern cannot express.
 function classifyRemote(server: unknown): McpServerVerdict {
-  return REMOTE_SERVER.Check(server)
-    ? featureVerdict(remoteFeature(server))
-    : malformed(REMOTE_SERVER.Errors(server));
+  if (!REMOTE_SERVER.Check(server)) {
+    return malformed(REMOTE_SERVER.Errors(server));
+  }
+
+  const metadataUrl = server.oauth?.authServerMetadataUrl;
+  if (metadataUrl !== undefined && !URL.canParse(metadataUrl)) {
+    return { kind: "malformed", detail: "/oauth/authServerMetadataUrl: must be a valid URL" };
+  }
+
+  return featureVerdict(remoteFeature(server));
 }
 
 function classifyWs(server: unknown): McpServerVerdict {
