@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-10-10
+
 - Pi Coding Agent 1.0.0 or newer is now required.
 
   - Plugin agents now need pi-subagents 0.74.0 or newer.
@@ -20,8 +22,13 @@
   - A server that uses an MCP feature Pi cannot run makes its plugin partially available with `{unsupported mcp}`. Pass `--partial` to install the rest.
   - A server with per-tool permission rules installs with the warning `MCP server tool rules not enforced.`
   - `/reload` moves the servers that earlier releases wrote to `mcp.json` and shows one notice that lists each `old -> new` name.
+  - Your own choices for a plugin MCP server in `mcp-adapter.json`, such as `disabled` or `approveTools`, survive an update, a reinstall, a plugin disable then enable, and an uninstall then reinstall. `openUi` and `trace` are now kept too.
+  - A remote server whose headers hold no `Authorization` key keeps OAuth, as in Claude Code, when every header value is set.
+  - When a plugin moved in its source, the `/reload` notice now tells you to run `/claude:plugin update`. `/claude:plugin reinstall` now works when the cached git mirror cannot be read.
 
 - `/claude:plugin info` now shows the state that pi-mcp-adapter reports for each plugin MCP server, such as `connected` or `status unknown`.
+
+- Plugins and marketplaces named like built-in JavaScript properties, such as `constructor`, now work in every command. `__proto__` is refused as a name.
 
 - Action needed after upgrading: sign in to OAuth servers again, approve project servers again, and run `/reload` once more to see the new names. Edit pi-subagents `mcp:` overrides and agent files that name old servers by hand. See [Upgrading](docs/mcp-compatibility.md#upgrading).
 

@@ -107,5 +107,5 @@
     "typecheck": "tsc --noEmit --incremental --tsBuildInfoFile node_modules/.cache/typescript/tsconfig.tsbuildinfo"
   },
   "type": "module",
-  "version": "0.19.2"
+  "version": "0.20.0"
 }
