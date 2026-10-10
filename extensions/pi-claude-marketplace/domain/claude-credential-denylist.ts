@@ -245,7 +245,10 @@ const REMOTE_PROXY_AND_INDEX_NAMES = [
 ];
 
 // `br`: the memory API names.
-const MEMORY_API_NAMES = ["CLAUDE_CODE_MEMORY_API_BASE_URL", "CLAUDE_CODE_MEMORY_API_TOKEN"];
+const MEMORY_API_NAMES = new Set([
+  "CLAUDE_CODE_MEMORY_API_BASE_URL",
+  "CLAUDE_CODE_MEMORY_API_TOKEN",
+]);
 
 // `ON`: Claude's provider and service endpoints.
 const CLAUDE_ENDPOINT_NAMES = [
@@ -322,7 +325,7 @@ export function matchesPlainNamePattern(upper: string): boolean {
   const name = upper.replace(/^INPUT_/, "");
   return (
     isArtifactBaseUrlName(name) ||
-    MEMORY_API_NAMES.includes(name) ||
+    MEMORY_API_NAMES.has(name) ||
     name.startsWith("OTEL_") ||
     name === "CLAUDE_CODE_OTEL_DIAG_STDERR"
   );
@@ -406,7 +409,7 @@ const BUNDLER_HOST = "(?:[A-Za-z0-9]+(?:___[A-Za-z0-9]+)*__)+[A-Za-z]{2,}";
 
 // `w5t`: a Bundler host credential.
 const BUNDLER_CREDENTIAL_NAME = new RegExp(
-  `^(?:INPUT_)?BUNDLE_(?!(?:${BUNDLER_SETTING_WORDS.join("|")})__(?!${BUNDLER_HOST}$))\\w*__`,
+  String.raw`^(?:INPUT_)?BUNDLE_(?!(?:${BUNDLER_SETTING_WORDS.join("|")})__(?!${BUNDLER_HOST}$))\w*__`,
   "i",
 );
 
@@ -417,7 +420,7 @@ const GIT_CONFIG_KEY_NAME = /^GIT_CONFIG_KEY_[0-9][A-Za-z0-9_]*$/;
 
 // `Fae`: Claude's secret-looking-name heuristic.
 function looksLikeSecretName(name: string): boolean {
-  const normalized = name.replace(AUTH0_PREFIX, "").replace(/-/g, "_");
+  const normalized = name.replace(AUTH0_PREFIX, "").replaceAll("-", "_");
   return (
     (SECRET_NAME.test(normalized) ||
       SECRET_NAME.test(splitCamelCase(normalized)) ||
@@ -448,7 +451,7 @@ const REGISTRY_USER_PREFIX = new RegExp(`^(?:INPUT_)?(?:${REGISTRY_USER_PREFIXES
 
 // `v5t`: a per-registry credential name.
 function isRegistryCredentialName(name: string): boolean {
-  const normalized = name.replace(/-/g, "_");
+  const normalized = name.replaceAll("-", "_");
   return (
     REGISTRY_CREDENTIAL_PREFIX.test(normalized) &&
     (REGISTRY_USER_PREFIX.test(normalized) ||

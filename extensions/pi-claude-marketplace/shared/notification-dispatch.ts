@@ -662,7 +662,7 @@ const ESCAPED_CODE_POINT = /^[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]$/u;
 function codeUnitEscapes(char: string): string {
   let escaped = "";
   for (let index = 0; index < char.length; index += 1) {
-    escaped += `\\u${char.charCodeAt(index).toString(16).padStart(4, "0")}`;
+    escaped += String.raw`\u${char.charCodeAt(index).toString(16).padStart(4, "0")}`;
   }
 
   return escaped;

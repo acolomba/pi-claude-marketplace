@@ -191,7 +191,7 @@ export async function readMcpConfigDoc(
     return emptyConfig(serverKeys[0], false);
   }
 
-  const body = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
+  const body = text.codePointAt(0) === 0xfeff ? text.slice(1) : text;
   const hadComments = stripJsonComments(body) !== body;
   const stripped = stripJsonComments(body, { trailingCommas: true });
   if (stripped.trim() === "") {
