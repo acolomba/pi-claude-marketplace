@@ -21,7 +21,7 @@ Earlier milestones remain in [MILESTONES.md](MILESTONES.md).
 - [x] **Phase 5: Mode-Selected JSON Sink** — `ctx.mode` selects the strategy, and `json`/`rpc` output reaches consumers through `pi.appendEntry` from every output site (completed 2026-10-07)
 - [x] **Phase 6: Command-Run Contract** — Payloads carry their origin and invocation, and every command run emits a complete set of payloads, even when it throws (completed 2026-10-09)
 - [x] **Phase 7: Mode Refusals, Real-Pi Verification, and Docs** — Browse and device-flow refuse clearly by mode, a real headless Pi run proves the contract, and the schema is documented (completed 2026-10-10)
-- [ ] **Phase 8: Address tech debt: ledger dispositions and advisory** — Give every open WINDOWS.md ledger entry a disposition and resolve the carried advisory
+- [x] **Phase 8: Address tech debt: ledger dispositions and advisory** — Give every open WINDOWS.md ledger entry a disposition and resolve the carried advisory (completed 2026-10-10)
 
 Phases run in order, 1 through 8.
 
@@ -307,7 +307,7 @@ Plans:
 4. BACKLOG.md carries WOUT-01 (workflow output quality unobserved) and DEPADV-01 (nested brace-expansion pinned by Pi's shrinkwrap). DEP-07-03-01 in the phase 7 deferred items points at DEPADV-01.
 5. `03-VALIDATION.md` reads `nyquist_compliant: true`. `01-VALIDATION.md` stays `false` with its contradicting checkbox unticked. `npm run check` is green with no new suppression and the text corpus unchanged.
 
-**Plans:** 4/4 plans executed, sequential (waves 1-4), in the main checkout
+**Plans:** 4/4 plans complete, sequential (waves 1-4), in the main checkout
 
 Plans:
 **Wave 1**
@@ -333,7 +333,7 @@ Plans:
 | 5. Mode-Selected JSON Sink | 7/7 | Complete    | 2026-10-07 |
 | 6. Command-Run Contract | 4/4 | Complete    | 2026-10-09 |
 | 7. Mode Refusals, Real-Pi Verification, and Docs | 6/6 | Complete    | 2026-10-10 |
-| 8. Address tech debt: ledger dispositions and advisory | 4/4 | In Progress | - |
+| 8. Address tech debt: ledger dispositions and advisory | 4/4 | Complete    | 2026-10-10 |
 
 ## Carried Forward
 
