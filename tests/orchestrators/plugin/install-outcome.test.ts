@@ -242,6 +242,7 @@ test("returns the marketplace-absent discriminant without mutating state", async
     plugin: "empty",
     scope: "project",
     removalOps: createRemovalOps(),
+    env: {},
   });
 
   // assert
@@ -264,6 +265,7 @@ test("projects the complete empty-plugin summary and preserves a caller pin", as
     plugin: "empty",
     scope: "project",
     removalOps: createRemovalOps(),
+    env: {},
   });
 
   // assert
@@ -402,6 +404,7 @@ test("captures the resolved version when a concurrent record aborts state commit
       plugin: "empty",
       scope: "project",
       removalOps: createRemovalOps(),
+      env: {},
     },
     capture,
   );
@@ -449,6 +452,7 @@ test("unwinds when the marketplace disappears before state commit", async (t) =>
       plugin: "empty",
       scope: "project",
       removalOps: createRemovalOps(),
+      env: {},
     },
     capture,
   );
@@ -477,6 +481,7 @@ test("preserves installedAt while replacing an existing disabled record", async 
     plugin: "empty",
     scope: "project",
     removalOps: createRemovalOps(),
+    env: {},
   });
 
   // assert
@@ -515,6 +520,7 @@ test("LOAD-02: re-materializing a held-down record drops the dependency marker",
     plugin: "empty",
     scope: "project",
     removalOps: createRemovalOps(),
+    env: {},
   });
 
   // assert -- a key-presence check, because the contract is that the state
@@ -590,6 +596,7 @@ async function installWithFaultedStagingCleanup(
     plugin: "empty",
     scope: "project",
     removalOps: removal.removalOps,
+    env: {},
   });
 
   assert.ok(ledgerOutcome.kind === "installed");
@@ -664,6 +671,7 @@ test("surfaces the workflows staging cleanup leak and still lands the install", 
     plugin: "empty",
     scope: "project",
     removalOps: createRemovalOps(),
+    env: {},
   });
 
   // assert
@@ -736,6 +744,7 @@ test("a failed workflows removal during rollback surfaces as its own partial rat
       plugin: "empty",
       scope: "project",
       removalOps: createRemovalOps(),
+      env: {},
     },
     capture,
   );
@@ -792,6 +801,7 @@ test("throws already-installed when a target-scope record exists and the caller 
     plugin: "empty",
     scope: "project",
     removalOps: createRemovalOps(),
+    env: {},
   });
 
   // assert
@@ -827,6 +837,7 @@ test("throws not-in-manifest for a plugin the cached manifest does not carry", a
     plugin: "ghost",
     scope: "project",
     removalOps: createRemovalOps(),
+    env: {},
   });
 
   // assert
@@ -858,6 +869,7 @@ test("CMP-3: a project-target install adopts a clone of the user-scope marketpla
     plugin: "empty",
     scope: "project",
     removalOps: createRemovalOps(),
+    env: {},
   });
 
   // assert
@@ -888,6 +900,7 @@ test("flags binaries as unsupported when the marketplace is an official one", as
     plugin: "empty",
     scope: "project",
     removalOps: createRemovalOps(),
+    env: {},
     partial: true,
   });
 
@@ -918,6 +931,7 @@ test("--partial admits the partially-available arm the default gate refuses", as
     plugin: "empty",
     scope: "project" as const,
     removalOps: createRemovalOps(),
+    env: {},
   };
 
   // act
@@ -963,6 +977,7 @@ test("collects the per-source frontmatter degrade records from the skills and co
     plugin: "empty",
     scope: "project",
     removalOps: createRemovalOps(),
+    env: {},
   });
 
   // assert
@@ -1019,6 +1034,7 @@ test("AS-7: a retired foreign agent target is preserved while a distinct agent i
     plugin: "empty",
     scope: "project",
     removalOps: createRemovalOps(),
+    env: {},
   });
 
   // assert
@@ -1059,6 +1075,7 @@ test("writes the hooks config and records the plugin's hooks slug on the state r
     plugin: "empty",
     scope: "project",
     removalOps: createRemovalOps(),
+    env: {},
   });
 
   // assert
@@ -1106,6 +1123,7 @@ test("an mcp phase that cannot even prepare unwinds the hooks config the phase b
       plugin: "empty",
       scope: "project",
       removalOps: createRemovalOps(),
+      env: {},
     },
     capture,
   );
@@ -1158,6 +1176,7 @@ test("a hooks.json that turns malformed after resolution unwinds the ledger", as
       plugin: "empty",
       scope: "project",
       removalOps,
+      env: {},
     },
     capture,
   );
@@ -1216,6 +1235,7 @@ async function assertFailingPhaseUndoIsInert(
       plugin: "empty",
       scope: "project",
       removalOps: createRemovalOps(),
+      env: {},
     },
     capture,
   );
@@ -1284,6 +1304,7 @@ test("stages the declared mcp servers and records their generated names", async 
     plugin: "empty",
     scope: "project",
     removalOps: createRemovalOps(),
+    env: {},
   });
 
   // assert
@@ -1332,6 +1353,7 @@ test("ANAME-02: an agent's Claude-form MCP tool name installs as a pi-subagents 
     plugin: "empty",
     scope: "project",
     removalOps: createRemovalOps(),
+    env: {},
   });
 
   // assert
@@ -1365,6 +1387,7 @@ test("ANAME-02: a server left out by a partial install is not granted to the plu
     plugin: "empty",
     scope: "project",
     removalOps: createRemovalOps(),
+    env: {},
     partial: true,
   });
 
@@ -1398,6 +1421,7 @@ test("AFILE-04: staging over a commented mcp-adapter.json reports the comments-d
     plugin: "empty",
     scope: "project",
     removalOps: createRemovalOps(),
+    env: {},
   });
 
   // assert
@@ -1437,6 +1461,7 @@ test("AFILE-04: a later-phase failure restores the commented mcp-adapter.json by
       plugin: "empty",
       scope: "project",
       removalOps: createRemovalOps(),
+      env: {},
     },
     capture,
   );
@@ -1480,6 +1505,7 @@ test("AMIG-02: a plugin with a commented legacy entry installs, and its MCP noti
     plugin: "empty",
     scope: "project",
     removalOps: createRemovalOps(),
+    env: {},
   });
 
   // assert
@@ -1520,6 +1546,7 @@ test("AMIG-02: a later-phase failure restores mcp.json and mcp-adapter.json byte
       plugin: "empty",
       scope: "project",
       removalOps: createRemovalOps(),
+      env: {},
     },
     capture,
   );
@@ -1585,6 +1612,7 @@ test("AFILE-04 / NFR-3: an mcp restore that cannot write is reported as the mcp 
           plugin: "empty",
           scope: "project",
           removalOps: createRemovalOps(),
+          env: {},
         },
         capture,
         transaction,
@@ -1622,6 +1650,7 @@ test("AFILE-02: a plugin with no MCP servers installs over an unparseable mcp-ad
     plugin: "empty",
     scope: "project",
     removalOps: createRemovalOps(),
+    env: {},
   });
 
   // assert
@@ -1656,6 +1685,7 @@ test("AFILE-02: a plugin with MCP servers refuses an unparseable mcp-adapter.jso
         plugin: "empty",
         scope: "project",
         removalOps: createRemovalOps(),
+        env: {},
       },
       capture,
     ),
@@ -1690,6 +1720,7 @@ test("ANAME-03: an install whose two servers share one key refuses before any wr
       plugin: "empty",
       scope: "project",
       removalOps: createRemovalOps(),
+      env: {},
     }),
     (error: unknown) => {
       assert.ok(error instanceof McpServerKeyCollisionError);
@@ -1729,6 +1760,7 @@ test("PURL-09 / D-77-01 / D-77-02: a git-source install takes its root and its v
     plugin: "empty",
     scope: "project",
     removalOps: createRemovalOps(),
+    env: {},
     // The ledger injects THIS policy into the resolver, which stays
     // network-free: the resolver hands the parsed git source back and the
     // callback answers with the clone-anchored plugin root plus the sha it
@@ -1780,6 +1812,7 @@ test("RESV-03: a source pin override materializes the pinned commit, not the ent
     plugin: "empty",
     scope: "project",
     removalOps: createRemovalOps(),
+    env: {},
     sourcePinOverride: RESOLVED_SHA,
     cloneProbe: async (options) => {
       probed.push(options.source);
@@ -1838,6 +1871,7 @@ test("the callback reaches the real clone probe through the ledger's own cache, 
     plugin: "empty",
     scope: "project",
     removalOps: createRemovalOps(),
+    env: {},
     authMemo,
     deviceFlowHttp: deviceFlow.http,
     cloneCacheSeam: {
@@ -1884,6 +1918,7 @@ test("TAGS-01/03 (D-07-06/07): a pinned path-source install records the tag's ow
     plugin: "empty",
     scope: "project",
     removalOps: createRemovalOps(),
+    env: {},
     sourcePinOverride: RESOLVED_SHA,
     pinVersionOverride: "2.1.0",
     pathPinProbe: (options) => {
@@ -1932,6 +1967,7 @@ test("an unpinned path-source install threads neither pathPluginPin nor resolveP
     plugin: "empty",
     scope: "project",
     removalOps: createRemovalOps(),
+    env: {},
     pathPinProbe: () =>
       Promise.reject(new Error("an unpinned path install must never probe a tag")),
   });
@@ -1969,6 +2005,7 @@ test("D-07-06: with no pathPinProbe override, a pinned path-source install falls
     plugin: "empty",
     scope: "project",
     removalOps: createRemovalOps(),
+    env: {},
     sourcePinOverride: tagOid,
     pinVersionOverride: "1.0.0",
   });
@@ -2001,6 +2038,7 @@ test("D-07-06: a pinned path-source install whose callback does not materialize 
     plugin: "empty",
     scope: "project",
     removalOps: createRemovalOps(),
+    env: {},
     sourcePinOverride: RESOLVED_SHA,
     pinVersionOverride: "2.1.0",
     pathPinProbe: () =>

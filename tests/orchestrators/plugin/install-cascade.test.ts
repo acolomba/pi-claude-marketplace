@@ -298,6 +298,7 @@ function ledgerOptionsFor(cwd: string): (member: ResolvedCascadeMember) => Insta
     marketplace: member.marketplace,
     plugin: member.name,
     removalOps: createRemovalOps(),
+    env: {},
     ...(member.pin !== undefined && { sourcePinOverride: member.pin.oid }),
     ...(member.pin !== undefined && { pinVersionOverride: member.pin.version }),
   });

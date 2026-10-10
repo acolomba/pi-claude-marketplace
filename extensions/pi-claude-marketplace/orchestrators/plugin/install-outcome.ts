@@ -141,6 +141,7 @@ import type { PreparedCommandsStaging } from "../../bridges/commands/index.ts";
 import type { McpReplacement } from "../../bridges/mcp/index.ts";
 import type { PreparedSkillsStaging } from "../../bridges/skills/index.ts";
 import type { PreparedWorkflowsStaging } from "../../bridges/workflows/index.ts";
+import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
 import type { PluginEntry } from "../../domain/components/plugin.ts";
 import type { MarketplaceManifest } from "../../domain/manifest.ts";
 import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
@@ -202,6 +203,11 @@ export interface InstallLedgerOptions {
    * one phase's cleanup and observe the leak the commit path returns.
    */
   readonly removalOps: RemovalOps;
+  /**
+   * D-08-06 / AVAR-02: the environment Claude's variable rule reads when the
+   * mcp phase stages servers. The operation's entry point binds it.
+   */
+  readonly env: ClaudeEnv;
   readonly credentialOps?: CredentialOps;
   readonly deviceFlowHttp?: DeviceFlowHttp;
   readonly authMemo?: Map<string, AuthAttemptResult>;
@@ -973,6 +979,7 @@ async function runInstallLedgerBody(
         pluginData: c.pluginDataDir,
         sourcePath: `${c.resolved.pluginRoot}#mcpServers`,
         description: c.resolved.description,
+        env: opts.env,
       });
       c.mcpReplacement = await replacePreparedMcp(prep);
       const result = prep.result;

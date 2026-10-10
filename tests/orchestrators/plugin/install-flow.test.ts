@@ -3703,6 +3703,56 @@ test("AFILE-04: a failed dependency cascade still reports the removed comments a
 // server that references it reports the variable as missing.
 const UNSET_VARIABLE_ARGS = ["${PI_CM_UNSET_IN_EVERY_ENV}"];
 
+const STAGING_INSTALLED_ROW = {
+  message: "● mp [project]\n  ● hello v0.0.1 (installed)\n\n/reload to pick up changes",
+};
+
+for (const { title, env, expectedNotifications } of [
+  {
+    title: "reports no missing variable that its environment sets",
+    env: { PI_CM_SET_FOR_STAGING: "1" },
+    expectedNotifications: [STAGING_INSTALLED_ROW],
+  },
+  {
+    title: "reports a variable its environment lacks as not set",
+    env: {},
+    expectedNotifications: [
+      STAGING_INSTALLED_ROW,
+      {
+        severity: "warning",
+        message:
+          'MCP server variables not set.\n\nServer "plugin_hello_server1_" from hello in the project-scope mcp-adapter.json uses environment variables that were not set at install: PI_CM_SET_FOR_STAGING.',
+      },
+    ],
+  },
+]) {
+  test(`D-08-06: an install built with an explicit environment ${title}`, async () => {
+    await withHermeticHome(async ({ completionCache, hooksRouting, transaction }) => {
+      const cwd = await mkdtemp(path.join(tmpdir(), "install-staging-env-"));
+      try {
+        // arrange
+        await seedPathMarketplaceWithPlugin({
+          cwd,
+          marketplaceRoot: path.join(cwd, "mp-src"),
+          marketplaceName: "mp",
+          pluginName: "hello",
+          mcpServers: { server1: { command: "node", args: ["${PI_CM_SET_FOR_STAGING}"] } },
+        });
+        const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
+        const installPlugin = createInstallPlugin(transaction, hooksRouting, completionCache, env);
+
+        // act
+        await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+
+        // assert
+        assert.deepStrictEqual(notifications, expectedNotifications);
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
+
 test("AVAR-04: a failed dependency cascade shows no variable notice for the dependency server its undo removed", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-avar04-cascade-failed-"));
@@ -14874,6 +14924,7 @@ test("WLIF-01: a re-stage over a kept record displaces the plugin's own envelope
         plugin: "hello",
         scope: "project",
         removalOps: createRemovalOps(),
+        env: {},
         allowExistingRecord: true,
       });
 
@@ -14944,6 +14995,7 @@ test("WLIF-05: the projection reports the placed names in discovery order, stabl
         plugin: "hello",
         scope: "project",
         removalOps: createRemovalOps(),
+        env: {},
         allowExistingRecord: true,
       });
 
@@ -15006,6 +15058,7 @@ test("WLIF-05: a refused re-stage places nothing and leaves the foreign envelope
           plugin: "hello",
           scope: "project",
           removalOps: createRemovalOps(),
+          env: {},
           allowExistingRecord: true,
         }),
         { name: "WorkflowTargetOccupiedError" },
@@ -15052,6 +15105,7 @@ test("WLIF-01: a statePhase failure takes the envelope and the staging tree back
           plugin: "hello",
           scope: "project",
           removalOps: createRemovalOps(),
+          env: {},
         }),
         { name: "ConcurrentInstallError" },
       );
@@ -15261,6 +15315,7 @@ test("WLIF-03: an undo that cannot remove a placed envelope raises the typed fai
             marketplace: "mp",
             plugin: "hello",
             removalOps: createRemovalOps(),
+            env: {},
             scope: "project",
           },
           capture,
@@ -15320,6 +15375,7 @@ test("T-112-01: an envelope this install did not place survives the undo byte-un
           plugin: "hello",
           scope: "project",
           removalOps: createRemovalOps(),
+          env: {},
         }),
         { name: "ConcurrentInstallError" },
       );
@@ -15386,6 +15442,7 @@ test("WLIF-03: an unremovable envelope does not abort the rest of the removal", 
             marketplace: "mp",
             plugin: "hello",
             removalOps: createRemovalOps(),
+            env: {},
             scope: "project",
           },
           capture,

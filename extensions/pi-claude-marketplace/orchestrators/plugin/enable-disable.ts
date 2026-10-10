@@ -113,6 +113,7 @@ import type {
   runInstallLedger,
 } from "./install-outcome.ts";
 import type { HooksRouting } from "../../bridges/hooks/index.ts";
+import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
 import type {
   ClosureLookup,
   ClosureMember,
@@ -252,6 +253,15 @@ export interface EnableDisablePluginOptions {
   readonly notifications?: EnableDisablePluginNotifications;
 }
 
+/**
+ * The options a `createSetPluginEnabled` operation runs with: the caller's
+ * options plus the environment its factory was built with. D-08-06: the
+ * enable branch stages MCP servers with `env`.
+ */
+interface SetEnabledRunOptions extends EnableDisablePluginOptions {
+  readonly env: ClaudeEnv;
+}
+
 /** Owns only the semantic transaction steps composed by enable and disable. */
 export interface EnableDisableTransaction {
   readonly cascadeUnstagePlugin: typeof cascadeUnstagePlugin;
@@ -349,7 +359,7 @@ type SetEnabledOutcome =
  */
 async function materializeEnableRoot(
   transaction: EnableDisableTransaction,
-  opts: EnableDisablePluginOptions,
+  opts: SetEnabledRunOptions,
   scope: Scope,
   locations: ScopedLocations,
   state: ExtensionState,
@@ -397,6 +407,7 @@ async function materializeEnableRoot(
       // `install-flow.ts`, so it is the second composition root that supplies
       // the required removal port.
       removalOps: createRemovalOps(),
+      env: opts.env,
     },
     capture,
   );
@@ -473,7 +484,7 @@ interface MaterializedEnableRoot {
  */
 async function runEnableBranch(
   transaction: EnableDisableTransaction,
-  opts: EnableDisablePluginOptions,
+  opts: SetEnabledRunOptions,
   scope: Scope,
   locations: ScopedLocations,
   state: ExtensionState,
@@ -880,7 +891,7 @@ async function unstageBackToDisabled(
  */
 function buildEnableCascadeMemberPhase(
   transaction: EnableDisableTransaction,
-  opts: EnableDisablePluginOptions,
+  opts: SetEnabledRunOptions,
   scope: Scope,
   locations: ScopedLocations,
   state: ExtensionState,
@@ -907,6 +918,7 @@ function buildEnableCascadeMemberPhase(
             allowExistingRecord: true,
             partial,
             removalOps: createRemovalOps(),
+            env: opts.env,
           },
           capture,
         );
@@ -983,7 +995,7 @@ function buildEnableCascadeMemberPhase(
  */
 function buildEnableRootPhase(
   transaction: EnableDisableTransaction,
-  opts: EnableDisablePluginOptions,
+  opts: SetEnabledRunOptions,
   scope: Scope,
   locations: ScopedLocations,
   state: ExtensionState,
@@ -1066,7 +1078,7 @@ function enableCascadeSkipRow(member: EnableCascadeMember): EnableCascadeMemberR
  */
 function buildEnableCascadeMemberPhases(
   transaction: EnableDisableTransaction,
-  opts: EnableDisablePluginOptions,
+  opts: SetEnabledRunOptions,
   scope: Scope,
   locations: ScopedLocations,
   state: ExtensionState,
@@ -1166,7 +1178,7 @@ function buildEnableCascadeConfigPhase(
  */
 async function runEnableCascadeMembers(
   transaction: EnableDisableTransaction,
-  opts: EnableDisablePluginOptions,
+  opts: SetEnabledRunOptions,
   scope: Scope,
   locations: ScopedLocations,
   state: ExtensionState,
@@ -1228,7 +1240,7 @@ async function runEnableCascadeMembers(
  */
 async function runEnableCascadeWithRoot(args: {
   readonly transaction: EnableDisableTransaction;
-  readonly opts: EnableDisablePluginOptions;
+  readonly opts: SetEnabledRunOptions;
   readonly scope: Scope;
   readonly locations: ScopedLocations;
   readonly state: ExtensionState;
@@ -1409,7 +1421,7 @@ type BranchDispatchResult =
 async function dispatchBranch(args: {
   readonly transaction: EnableDisableTransaction;
   readonly hooksRouting: EnableDisableHooksRouting;
-  readonly opts: EnableDisablePluginOptions;
+  readonly opts: SetEnabledRunOptions;
   readonly scope: Scope;
   readonly locations: ScopedLocations;
   readonly state: ExtensionState;
@@ -1979,7 +1991,7 @@ interface IdempotentEnableCascadeResult {
 async function settleIdempotentEnableCascade(args: {
   readonly transaction: EnableDisableTransaction;
   readonly hooksRouting: EnableDisableHooksRouting;
-  readonly opts: EnableDisablePluginOptions;
+  readonly opts: SetEnabledRunOptions;
   readonly scope: Scope;
   readonly locations: ScopedLocations;
   readonly state: ExtensionState;
@@ -2063,7 +2075,7 @@ async function settleIdempotentEnableCascade(args: {
 async function runFreshEnableCascadeWithRoot(args: {
   readonly transaction: EnableDisableTransaction;
   readonly hooksRouting: EnableDisableHooksRouting;
-  readonly opts: EnableDisablePluginOptions;
+  readonly opts: SetEnabledRunOptions;
   readonly scope: Scope;
   readonly locations: ScopedLocations;
   readonly state: ExtensionState;
@@ -2155,7 +2167,7 @@ async function runFreshEnableCascadeWithRoot(args: {
 async function setPluginEnabledWithTransaction(
   transaction: EnableDisableTransaction,
   hooksRouting: EnableDisableHooksRouting,
-  opts: EnableDisablePluginOptions,
+  opts: SetEnabledRunOptions,
 ): Promise<EnableDisablePluginOutcome | undefined> {
   const orchestrated = opts.notifications?.mode === "orchestrated";
   const outcome = await runSetEnabledOutcome(transaction, hooksRouting, opts, orchestrated);
@@ -2173,7 +2185,7 @@ async function setPluginEnabledWithTransaction(
 async function runSetEnabledOutcome(
   transaction: EnableDisableTransaction,
   hooksRouting: EnableDisableHooksRouting,
-  opts: EnableDisablePluginOptions,
+  opts: SetEnabledRunOptions,
   orchestrated: boolean,
 ): Promise<EnableDisablePluginOutcome> {
   const { ctx, pi, cwd, marketplace, plugin, enable } = opts;
@@ -2492,9 +2504,15 @@ export interface SetPluginEnabledOperation {
   (opts: EnableDisablePluginOptions): Promise<EnableDisablePluginOutcome | undefined>;
 }
 
+/**
+ * D-08-06: `env` is the environment the enable branch stages MCP servers with.
+ * It defaults to Pi's process environment here, at the entry point, the way
+ * `createGetPluginInfo` binds it.
+ */
 export function createSetPluginEnabled(
   transaction: EnableDisableTransaction,
   hooksRouting: EnableDisableHooksRouting,
+  env: ClaudeEnv = process.env,
 ): SetPluginEnabledOperation {
   function configuredSetPluginEnabled(
     opts: EnableDisablePluginOptions & { notifications: { mode: "orchestrated" } },
@@ -2505,7 +2523,7 @@ export function createSetPluginEnabled(
   function configuredSetPluginEnabled(
     opts: EnableDisablePluginOptions,
   ): Promise<EnableDisablePluginOutcome | undefined> {
-    return setPluginEnabledWithTransaction(transaction, hooksRouting, opts);
+    return setPluginEnabledWithTransaction(transaction, hooksRouting, { ...opts, env });
   }
 
   return configuredSetPluginEnabled;

@@ -77,6 +77,7 @@ import type {
   InstallPluginNotifications,
 } from "./install-outcome.ts";
 import type { InstallMsg } from "./install.messaging.ts";
+import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
 import type { ClosureLookupResult, ClosureSubject } from "../../domain/dependency-closure.ts";
 import type { PluginConfigEntry, ScopeConfig } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
@@ -299,6 +300,7 @@ type InstallLedgerCallerOptions = Pick<
  */
 function buildInstallLedgerOptions(
   opts: InstallLedgerCallerOptions,
+  env: ClaudeEnv,
   core: {
     scope: Scope;
     cwd: string;
@@ -334,6 +336,7 @@ function buildInstallLedgerOptions(
     // port as a required member, so this assembly point is the one place the real
     // operations enter the install path.
     removalOps: createRemovalOps(),
+    env,
     ...(opts.credentialOps !== undefined && { credentialOps: opts.credentialOps }),
     ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
     ...(opts.authMemo !== undefined && { authMemo: opts.authMemo }),
@@ -1020,6 +1023,8 @@ interface PromotionArgs {
   readonly transaction: InstallTransaction;
   /** AFILE-04: receives the re-materialization's notices before the config write. */
   readonly sink: CascadeFailureSink;
+  /** D-08-06: the environment the re-materialization stages MCP servers with. */
+  readonly env: ClaudeEnv;
 }
 
 /**
@@ -1207,6 +1212,7 @@ async function materializePromotedRecord(
       allowExistingRecord: true,
       partial: !record.compatibility.installable,
       removalOps: createRemovalOps(),
+      env: args.env,
     },
     args.capture,
     args.transaction,
@@ -1462,6 +1468,7 @@ async function installPluginWithTransaction(
   transaction: InstallTransaction,
   hooksRouting: InstallHooksRouting,
   completionCache: CompletionCache,
+  env: ClaudeEnv,
   opts: InstallPluginOptions,
 ): Promise<InstallPluginOutcome> {
   const { ctx, pi, scope, cwd, marketplace, plugin } = opts;
@@ -1594,6 +1601,7 @@ async function installPluginWithTransaction(
           capture,
           transaction,
           sink: cascadeFailure,
+          env,
         });
         if (promotion !== undefined) {
           await tx.save();
@@ -1665,7 +1673,7 @@ async function installPluginWithTransaction(
             const isRoot = member.key === rootKey;
             const pinVersion =
               member.pin?.version ?? (isRoot ? opts.pinVersionOverride : undefined);
-            return buildInstallLedgerOptions(opts, {
+            return buildInstallLedgerOptions(opts, env, {
               scope,
               cwd,
               marketplace: member.marketplace,
@@ -2183,13 +2191,21 @@ async function installPluginWithTransaction(
   }
 }
 
-/** Bind install orchestration to one required semantic transaction owner. */
+/**
+ * Bind install orchestration to one required semantic transaction owner.
+ *
+ * D-08-06: `env` is the environment the install stages MCP servers with. It
+ * defaults to Pi's process environment here, at the entry point, the way
+ * `createGetPluginInfo` binds it.
+ */
 export function createInstallPlugin(
   transaction: InstallTransaction,
   hooksRouting: InstallHooksRouting,
   completionCache: CompletionCache,
+  env: ClaudeEnv = process.env,
 ): (opts: InstallPluginOptions) => Promise<InstallPluginOutcome> {
-  return (opts) => installPluginWithTransaction(transaction, hooksRouting, completionCache, opts);
+  return (opts) =>
+    installPluginWithTransaction(transaction, hooksRouting, completionCache, env, opts);
 }
 
 /**
@@ -2302,6 +2318,7 @@ async function installMissingDependencyWithTransaction(
   transaction: InstallTransaction,
   hooksRouting: InstallHooksRouting,
   completionCache: CompletionCache,
+  env: ClaudeEnv,
   opts: InstallMissingDependencyOptions,
 ): Promise<InstallMissingDependencyOutcome> {
   const { ctx, pi, scope, cwd, marketplace, plugin } = opts;
@@ -2397,7 +2414,7 @@ async function installMissingDependencyWithTransaction(
               })
             )?.sourceRecord,
           ledgerOptionsFor: (member) =>
-            buildInstallLedgerOptions(opts, {
+            buildInstallLedgerOptions(opts, env, {
               scope,
               cwd,
               marketplace: member.marketplace,
@@ -2502,12 +2519,17 @@ async function installMissingDependencyWithTransaction(
   };
 }
 
-/** Bind the missing-dependency install to one required semantic transaction owner. */
+/**
+ * Bind the missing-dependency install to one required semantic transaction
+ * owner. D-08-06: `env` defaults to Pi's process environment, as it does for
+ * `createInstallPlugin`.
+ */
 export function createInstallMissingDependency(
   transaction: InstallTransaction,
   hooksRouting: InstallHooksRouting,
   completionCache: CompletionCache,
+  env: ClaudeEnv = process.env,
 ): (opts: InstallMissingDependencyOptions) => Promise<InstallMissingDependencyOutcome> {
   return (opts) =>
-    installMissingDependencyWithTransaction(transaction, hooksRouting, completionCache, opts);
+    installMissingDependencyWithTransaction(transaction, hooksRouting, completionCache, env, opts);
 }
