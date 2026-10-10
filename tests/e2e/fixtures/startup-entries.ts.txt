@@ -1,0 +1,19 @@
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+
+export default function startupEntries(pi: ExtensionAPI): void {
+  pi.on("session_start", async () => {
+    pi.appendEntry("runtime-startup", { marker: "session_start", origin: "startup" });
+  });
+  pi.on("resources_discover", async () => {
+    pi.appendEntry("runtime-startup", { marker: "resources_discover", origin: "startup" });
+  });
+  pi.registerCommand("startup-proof", {
+    description: "Reports startup markers already held in session memory",
+    handler: async (_args, ctx) => {
+      const markers = ctx.sessionManager.getEntries()
+        .filter((entry) => entry.type === "custom" && entry.customType === "runtime-startup")
+        .map((entry) => entry.data);
+      pi.appendEntry("runtime-proof", { origin: "command", markers });
+    },
+  });
+}
