@@ -1,0 +1,17 @@
+{
+  "command": "npm run check",
+  "timeoutSeconds": 2400,
+  "exitStatus": 0,
+  "head": "a9673e102e62e3d15b23622ad485dde53aa2b251",
+  "node": "v26.11.1",
+  "completedAt": "2026-10-10T03:58:42.742Z",
+  "executableDiffFromStrictHead": "D\tscripts/notify-corpus.hook.mjs\nD\tscripts/notify-corpus.mjs\nD\tscripts/notify-corpus.negative.mjs",
+  "strictInputEvidence": "07-CORPUS-FINAL.json",
+  "retirementAudit": {
+    "command": "node .planning/phases/07-mode-refusals-real-pi-verification-and-docs/07-corpus-audit.mjs --retired",
+    "exitStatus": 0,
+    "report": "PASS: exactly three tools retired; 848 remaining tracked files read; behavior inputs unchanged\n"
+  },
+  "reportSha256": "e1dd92c7a375b1ad032077649bcb7a007cf2fa326936ae5219caaf531a9e76f7",
+  "report": "\n> pi-claude-marketplace@0.19.2 check\n> npm run --silent check:static && npm run --silent test:unpaired && npm run --silent test:integration && npm run --silent test:coverage:direct:all\n\npassed typecheck (52.2 s)\npassed lint (300.2 s)\npassed lint:workflows (0.3 s)\npassed fallow (4.9 s)\npassed format:check (56.4 s)\npassed test:corresponding (3.4 s)\nMerged LCOV: coverage/direct.lcov (266 records)\n"
+}
