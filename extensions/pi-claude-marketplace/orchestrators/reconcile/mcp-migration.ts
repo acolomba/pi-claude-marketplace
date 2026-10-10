@@ -45,8 +45,8 @@
 // whose manifest no longer lists it in a valid form, whose source cannot be
 // read offline, whose new key another config source already defines, or
 // whose scope holds a config file that does not parse stays in place with a
-// row, and the next `/reload` tries again. So does a git owner whose recorded
-// commit has no plugin at the declared path (D-08-05). Each row names a
+// row, and the next `/reload` tries again. So does a git owner whose cached
+// source has no plugin at the declared path (D-08-05). Each row names a
 // remedy that clears its cause. Nothing is damped: such an entry is reported
 // on every reload until its cause is cleared (COMPAT-01 keeps no state).
 //
@@ -260,8 +260,11 @@ type OfflineMiss =
 /**
  * The git-root resolver of the offline read (NFR-5), whether the plugin's
  * clone could not be read from the cache (it is missing, or its probe threw),
- * and whether the warm clone has no plugin at the declared path. A record
- * with a sha reads that sha's warm clone; one without has no clone to read.
+ * and whether the cached source has no plugin at the declared path. A record
+ * with a sha reads a present mirror of an unpinned source, else that sha's
+ * warm clone; one without has no clone to read. A declared path that leaves
+ * the clone is not a missing path: it leaves every commit, so an update
+ * cannot clear it.
  */
 interface OfflineCloneRead {
   readonly resolve: (source: GitBackedSource) => Promise<GitPluginRootResult>;
@@ -285,7 +288,7 @@ function offlineCloneRead(
       const result: GitPluginRootResult =
         probe === undefined ? { kind: "not-cached" } : await probe(source);
       unread = result.kind === "not-cached";
-      missing = result.kind === "missing-subdir" || result.kind === "escapes";
+      missing = result.kind === "missing-subdir";
       return result;
     },
     cloneUnread: () => unread,
@@ -306,12 +309,13 @@ function missKind(clone: OfflineCloneRead): Exclude<OfflineMiss, "not-listed"> {
  * Re-resolves the plugin from the cached marketplace manifest with no network
  * (NFR-5). Each miss names the cause a command can clear (AMIG-01):
  * `source-unreadable` for a git clone the cache cannot give, which a
- * reinstall fetches; `source-outdated` for a warm clone of the recorded
- * commit with no plugin at the declared path, which an update replaces with
- * the source the marketplace now declares (D-08-05); `not-listed` when the
- * manifest has no valid entry for the plugin; `marketplace-unreadable` for
- * any other read failure, such as a missing or unparseable manifest or a
- * plugin directory the marketplace copy lacks. A reinstall reads the same
+ * reinstall fetches; `source-outdated` for a cached source, the warm mirror
+ * or the recorded commit's clone, with no plugin at the declared path, which
+ * an update replaces with the source the marketplace now declares (D-08-05);
+ * `not-listed` when the manifest has no valid entry for the plugin;
+ * `marketplace-unreadable` for any other read failure, such as a missing or
+ * unparseable manifest, a plugin directory the marketplace copy lacks, or a
+ * declared git-subdir path that leaves the clone. A reinstall reads the same
  * marketplace copy, so it clears neither of the last two.
  */
 async function resolveOffline(

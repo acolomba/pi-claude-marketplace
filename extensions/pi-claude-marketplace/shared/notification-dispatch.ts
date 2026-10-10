@@ -533,9 +533,9 @@ export interface McpMigrationNotListedRow {
 
 /**
  * AMIG-01: an installed plugin whose source the cached marketplace copy
- * cannot give: a missing or unparseable manifest, or a source the copy lacks.
- * A reinstall reads the same copy, so the remedy is a marketplace update or an
- * uninstall.
+ * cannot give: a missing or unparseable manifest, a source the copy lacks, or
+ * a declared git-subdir path that leaves the plugin's repository. A reinstall
+ * reads the same copy, so the remedy is a marketplace update or an uninstall.
  */
 export interface McpMigrationMarketplaceUnreadableRow {
   readonly kind: "marketplace-unreadable";
@@ -546,10 +546,10 @@ export interface McpMigrationMarketplaceUnreadableRow {
 }
 
 /**
- * D-08-05 / AMIG-01: an installed git-source plugin whose recorded commit, as
- * its warm clone holds it, has no plugin at the path the marketplace declares.
- * An update installs the source the marketplace now declares, so the remedy
- * is an update.
+ * D-08-05 / AMIG-01: an installed git-source plugin whose cached source, the
+ * warm mirror of an unpinned source or the clone of the recorded commit, has
+ * no plugin at the path the marketplace declares. An update installs the
+ * source the marketplace now declares, so the remedy is an update.
  */
 export interface McpMigrationSourceOutdatedRow {
   readonly kind: "source-outdated";
@@ -796,7 +796,7 @@ function leftRowLine(row: McpMigrationLeftRow): string {
     case "source-unreadable":
       return `${ownerRowPrefix(row)} The plugin source is not available offline. Run /claude:plugin reinstall ${printable(row.plugin)}@${printable(row.marketplace)} to move it.`;
     case "source-outdated":
-      return `${ownerRowPrefix(row)} The installed commit of ${printable(row.plugin)} has no plugin at its declared path. Run /claude:plugin update ${printable(row.plugin)}@${printable(row.marketplace)} to move it.`;
+      return `${ownerRowPrefix(row)} The cached source of ${printable(row.plugin)} has no plugin at its declared path. Run /claude:plugin update ${printable(row.plugin)}@${printable(row.marketplace)} to move it.`;
     case "marketplace-unreadable":
       return `${ownerRowPrefix(row)} The ${printable(row.marketplace)} marketplace copy cannot give the source of ${printable(row.plugin)}. Run /claude:plugin marketplace update ${printable(row.marketplace)}, or /claude:plugin uninstall ${printable(row.plugin)}@${printable(row.marketplace)} to remove it.`;
     case "collision":

@@ -7498,7 +7498,7 @@ describe("notifyMcpMigration", () => {
           "Plugin MCP servers in mcp.json need attention.\n\n" +
             "Left in mcp.json:\n" +
             "  tool (legacy) [user] The official marketplace copy cannot give the source of legacy. Run /claude:plugin marketplace update official, or /claude:plugin uninstall legacy@official to remove it.\n" +
-            "  mod, aux (moved) [user] The installed commit of moved has no plugin at its declared path. Run /claude:plugin update moved@official to move it.",
+            "  mod, aux (moved) [user] The cached source of moved has no plugin at its declared path. Run /claude:plugin update moved@official to move it.",
           "warning",
         ],
       ],

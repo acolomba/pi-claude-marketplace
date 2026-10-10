@@ -488,9 +488,10 @@ interface GitOwnerSeed {
   /**
    * `warm` lays the plugin out under the recorded-sha clone;
    * `warm-without-path` declares a `git-subdir` source whose path that clone
-   * lacks; `headless-mirror` leaves a mirror without `.git/HEAD`.
+   * lacks; `warm-escaping-path` declares one whose path leaves that clone;
+   * `headless-mirror` leaves a mirror without `.git/HEAD`.
    */
-  readonly cache: "warm" | "warm-without-path" | "cold" | "headless-mirror";
+  readonly cache: "warm" | "warm-without-path" | "warm-escaping-path" | "cold" | "headless-mirror";
 }
 
 /**
@@ -502,16 +503,19 @@ async function seedGitOwner(
   { cwd, locations }: Scope,
   seed: GitOwnerSeed,
 ): Promise<{ readonly cloneDir: string; readonly legacyBytes: string }> {
-  const location =
-    seed.cache === "warm-without-path"
-      ? { source: "git-subdir", url: GIT_URL, path: "plugins/hello" }
-      : { source: "url", url: GIT_URL };
+  const location = {
+    "warm-without-path": { source: "git-subdir", url: GIT_URL, path: "plugins/hello" },
+    "warm-escaping-path": { source: "git-subdir", url: GIT_URL, path: "../escape" },
+    warm: { source: "url", url: GIT_URL },
+    cold: { source: "url", url: GIT_URL },
+    "headless-mirror": { source: "url", url: GIT_URL },
+  }[seed.cache];
   const source = seed.pinned ? { ...location, sha: MANIFEST_SHA } : location;
   const parsed = parsePluginSource(source);
   assert.ok(parsed.kind === "url" || parsed.kind === "git-subdir");
   const cloneUrl = canonicalCloneUrl(parsed);
   const cloneDir = await locations.pluginCloneDir(pluginCloneKey(cloneUrl, RECORDED_SHA));
-  if (seed.cache === "warm-without-path") {
+  if (seed.cache === "warm-without-path" || seed.cache === "warm-escaping-path") {
     await mkdir(path.join(cloneDir, "plugins"), { recursive: true });
   } else if (seed.cache === "warm") {
     await mkdir(path.join(cloneDir, ".claude-plugin"), { recursive: true });
@@ -1379,6 +1383,29 @@ describe("migrateLegacyMcpEntries", () => {
     assert.deepStrictEqual(
       { rows: input.rows, log },
       { rows: [helloRow("source-outdated")], log: [] },
+    );
+    assert.strictEqual(await readFile(scope.locations.mcpJsonPath, "utf8"), legacyBytes);
+    await assert.rejects(readFile(scope.locations.mcpAdapterJsonPath), { code: "ENOENT" });
+  });
+
+  test("AMIG-01: a declared path that leaves the recorded-sha clone gives one marketplace-unreadable row and no write", async (t) => {
+    // arrange
+    const scope = await createProjectScope(t, "git-escaping");
+    const { legacyBytes } = await seedGitOwner(scope, {
+      recordedSha: RECORDED_SHA,
+      pinned: true,
+      cache: "warm-escaping-path",
+    });
+    const log: string[] = [];
+    const input = migrationInput(scope.cwd);
+
+    // act
+    await migrateLegacyMcpEntries(input, recordingOperations(log));
+
+    // assert
+    assert.deepStrictEqual(
+      { rows: input.rows, log },
+      { rows: [helloRow("marketplace-unreadable")], log: [] },
     );
     assert.strictEqual(await readFile(scope.locations.mcpJsonPath, "utf8"), legacyBytes);
     await assert.rejects(readFile(scope.locations.mcpAdapterJsonPath), { code: "ENOENT" });
