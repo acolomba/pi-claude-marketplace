@@ -1919,7 +1919,7 @@ async function resolveIdempotentOutcome(
   installed: { readonly version: string },
 ): Promise<SetEnabledOutcome> {
   const { marketplace, plugin, enable, orchestrated } = write;
-  const configEnabled = selection.current.plugins?.[`${plugin}@${marketplace}`]?.enabled;
+  const configEnabled = ownValue(selection.current.plugins, `${plugin}@${marketplace}`)?.enabled;
   if (orchestrated || configEnabled === undefined || configEnabled === enable) {
     return { kind: "idempotent" };
   }

@@ -109,6 +109,7 @@ import { shaVersion } from "../../domain/version.ts";
 import { ConcurrentInstallError, PluginShapeError } from "../../shared/errors.ts";
 import { type RemovalOps } from "../../shared/fs-utils.ts";
 import { type DegradeKind } from "../../shared/notify-reasons.ts";
+import { ownValue, setOwn } from "../../shared/own-key.ts";
 import {
   runPhases,
   type Phase,
@@ -473,10 +474,10 @@ async function preflightInstallResolve(
 
   // Target container: same scope record when present, or a cloned
   // project-scope container when CMP-3 fell back to user marketplace.
-  let targetMp = state.marketplaces[marketplace];
+  let targetMp = ownValue(state.marketplaces, marketplace);
   if (targetMp === undefined) {
     targetMp = cloneMarketplaceRecordForTargetScope(source.sourceRecord, scope);
-    state.marketplaces[marketplace] = targetMp;
+    setOwn(state.marketplaces, marketplace, targetMp);
   }
 
   // PI-15 early-sanity check: an existing record in the target scope throws
@@ -485,7 +486,7 @@ async function preflightInstallResolve(
   // other-scope installs do not block this target. D-54-01 / ENBL-02:
   // `allowExistingRecord` skips the throw so the enable path can
   // re-materialize a KEPT disabled record in place.
-  if (targetMp.plugins[plugin] !== undefined && opts.allowExistingRecord !== true) {
+  if (ownValue(targetMp.plugins, plugin) !== undefined && opts.allowExistingRecord !== true) {
     // PI-5 (already-installed) and PI-15 (race-at-commit) collapse here;
     // this site surfaces the PI-5 wording and the state-commit phase's
     // defensive throw surfaces PI-15.
@@ -1026,8 +1027,10 @@ async function runInstallLedgerBody(
       // what lets the commit displace the plugin's own envelopes aside
       // instead of hitting the occupancy refusal. Spread conditionally --
       // `exactOptionalPropertyTypes` rejects an explicit `undefined`.
-      const previousWorkflowNames =
-        c.stateSnapshot.marketplaces[c.marketplace]?.plugins[c.plugin]?.resources.workflows;
+      const previousWorkflowNames = ownValue(
+        ownValue(c.stateSnapshot.marketplaces, c.marketplace)?.plugins,
+        c.plugin,
+      )?.resources.workflows;
       const prep = await prepareStageWorkflows({
         locations: c.locations,
         pluginName: c.plugin,
@@ -1119,8 +1122,8 @@ async function runInstallLedgerBody(
       // so the ledger unwinds the staged bridges. D-54-01 / ENBL-02:
       // `allowExistingRecord` skips the throw -- the enable path
       // re-materializes the KEPT disabled record in place.
-      const mpInner = c.stateSnapshot.marketplaces[c.marketplace];
-      const existing = mpInner?.plugins[c.plugin];
+      const mpInner = ownValue(c.stateSnapshot.marketplaces, c.marketplace);
+      const existing = ownValue(mpInner?.plugins, c.plugin);
       if (existing !== undefined && opts.allowExistingRecord !== true) {
         throw new ConcurrentInstallError(c.plugin, c.marketplace);
       }
@@ -1135,7 +1138,7 @@ async function runInstallLedgerBody(
       }
 
       const nowIso = new Date().toISOString();
-      mpInner.plugins[c.plugin] = {
+      setOwn(mpInner.plugins, c.plugin, {
         version: c.version,
         resolvedSource: c.resolved.pluginRoot,
         // D-77-02 / PURL-09: persist the full 40-hex resolved commit sha for
@@ -1213,7 +1216,7 @@ async function runInstallLedgerBody(
         // uninstalled, only disabled. Fresh installs stamp now.
         installedAt: existing?.installedAt ?? nowIso,
         updatedAt: nowIso,
-      };
+      });
     },
     // undo intentionally absent: at state-commit phase time the guard
     // has not flushed yet, and on throw the guard does NOT save the

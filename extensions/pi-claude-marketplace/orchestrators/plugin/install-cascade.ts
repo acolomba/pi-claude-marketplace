@@ -100,6 +100,7 @@ import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { parsePluginSource } from "../../domain/source.ts";
 import { isRecordedButDisabled, toDisabledRecord } from "../../persistence/state-io.ts";
+import { ownValue, setOwn } from "../../shared/own-key.ts";
 import { runPhases } from "../../transaction/phase-ledger.ts";
 import { DEFAULT_CREDENTIAL_OPS } from "../auth-host.ts";
 import { cascadeUnstagePlugin, foldUnstageNotices } from "../marketplace/shared.ts";
@@ -592,7 +593,7 @@ async function resolveMemberTagSource(
 ): Promise<MemberTagSource> {
   const lookup =
     options.marketplaceRecordFor ??
-    ((marketplace: string) => Promise.resolve(options.state.marketplaces[marketplace]));
+    ((marketplace: string) => Promise.resolve(ownValue(options.state.marketplaces, marketplace)));
   const record = await lookup(member.marketplace);
   if (record === undefined) {
     return { kind: "absent" };
@@ -775,7 +776,7 @@ async function resolveOneMember(
  * version the check never saw would be the worst of both.
  */
 function recordedVersionOf(state: ExtensionState, member: ClosureMember): string | undefined {
-  return state.marketplaces[member.marketplace]?.plugins[member.name]?.version;
+  return ownValue(ownValue(state.marketplaces, member.marketplace)?.plugins, member.name)?.version;
 }
 
 /**
@@ -798,7 +799,7 @@ function disabledRecordOf(
     return undefined;
   }
 
-  const record = state.marketplaces[member.marketplace]?.plugins[member.name];
+  const record = ownValue(ownValue(state.marketplaces, member.marketplace)?.plugins, member.name);
   return record !== undefined && isRecordedButDisabled(record) ? record : undefined;
 }
 
@@ -1050,8 +1051,8 @@ async function unstageMaterializedMember(
     return undefined;
   }
 
-  const marketplaceRecord = options.state.marketplaces[member.marketplace];
-  const installed = marketplaceRecord?.plugins[member.name];
+  const marketplaceRecord = ownValue(options.state.marketplaces, member.marketplace);
+  const installed = ownValue(marketplaceRecord?.plugins, member.name);
   if (marketplaceRecord === undefined || installed === undefined) {
     return undefined;
   }
@@ -1159,9 +1160,10 @@ function buildReEnableMemberPhase(
         return;
       }
 
-      unstaged.marketplaceRecord.plugins[member.name] = toDisabledRecord(
-        unstaged.installed,
-        new Date().toISOString(),
+      setOwn(
+        unstaged.marketplaceRecord.plugins,
+        member.name,
+        toDisabledRecord(unstaged.installed, new Date().toISOString()),
       );
     },
   };

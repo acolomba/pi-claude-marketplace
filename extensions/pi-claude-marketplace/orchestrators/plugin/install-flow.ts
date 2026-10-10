@@ -21,6 +21,7 @@ import { createRemovalOps } from "../../shared/fs-utils.ts";
 import { notify, notifyMcpConfigNotices } from "../../shared/notification-dispatch.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
 import { companionSeverity, malformedReasonsForKinds } from "../../shared/notify-reasons.ts";
+import { ownValue } from "../../shared/own-key.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 import { cascadeUnstagePlugin, crossScopeFlag, foldUnstageNotices } from "../marketplace/shared.ts";
 
@@ -114,7 +115,10 @@ import type { InstallPluginOutcome } from "../types.ts";
  */
 export interface InstallPluginOptions {
   readonly ctx: NotificationContext;
-  /** Factory `pi` reference -- carries `getAllTools()` for RH-3/RH-4 soft-dep probes. */
+  /**
+   * Factory `pi` reference -- carries `getAllTools()` and `getCommands()` for the
+   * soft-dependency probes (RH-3, ADET-02, WDEP-01).
+   */
   readonly pi: PiInventory;
   readonly scope: Scope;
   /** Project-scope cwd (ignored for user scope; see locationsFor). */
@@ -1053,7 +1057,7 @@ interface PromotionArgs {
  */
 async function promoteDependencyRecord(args: PromotionArgs): Promise<PromotionOutcome | undefined> {
   const { marketplace, plugin } = args.opts;
-  const record = args.state.marketplaces[marketplace]?.plugins[plugin];
+  const record = ownValue(ownValue(args.state.marketplaces, marketplace)?.plugins, plugin);
   if (record?.provenance !== "dependency" || refusesPromotion(args.opts, record)) {
     return undefined;
   }
@@ -2340,7 +2344,7 @@ async function installMissingDependencyWithTransaction(
         // pass may already have materialized this key, or it is a disabled
         // record this path leaves alone. Either way the key is already
         // recorded, so this arm saves nothing and installs nothing.
-        if (state.marketplaces[marketplace]?.plugins[plugin] !== undefined) {
+        if (ownValue(ownValue(state.marketplaces, marketplace)?.plugins, plugin) !== undefined) {
           return { kind: "already-recorded" };
         }
 

@@ -377,18 +377,25 @@ test("captures the resolved version when a concurrent record aborts state commit
   };
   let pluginReads = 0;
   marketplace.plugins = new Proxy(marketplace.plugins, {
-    get(target, property, receiver): unknown {
+    getOwnPropertyDescriptor(target, property): PropertyDescriptor | undefined {
       if (property === "empty") {
         pluginReads += 1;
-        // Reads, in order: the early-sanity check, the workflows phase's
-        // previous-names lookup, then the state commit. The raced record must
-        // appear at the LAST of the three so the failure is driven from
-        // `statePhase` -- the only phase that can fail after the workflows
-        // phase, which is the last bridge slot.
-        return pluginReads >= 3 ? racedRecord : undefined;
+        // Own-key reads (D-08-07), in order: the early-sanity check, the
+        // workflows phase's previous-names lookup, then the state commit. The
+        // raced record must appear at the LAST of the three so the failure is
+        // driven from `statePhase` -- the only phase that can fail after the
+        // workflows phase, which is the last bridge slot.
+        return pluginReads >= 3
+          ? { configurable: true, enumerable: true, value: racedRecord, writable: true }
+          : undefined;
       }
 
-      return Reflect.get(target, property, receiver) as unknown;
+      return Reflect.getOwnPropertyDescriptor(target, property);
+    },
+    get(target, property, receiver): unknown {
+      return property === "empty" && pluginReads >= 3
+        ? racedRecord
+        : (Reflect.get(target, property, receiver) as unknown);
     },
   });
   const capture = { rollbackPartials: [], version: undefined };
@@ -704,13 +711,20 @@ test("a failed workflows removal during rollback surfaces as its own partial rat
   };
   let pluginReads = 0;
   marketplace.plugins = new Proxy(marketplace.plugins, {
-    get(target, property, receiver): unknown {
+    getOwnPropertyDescriptor(target, property): PropertyDescriptor | undefined {
       if (property === "empty") {
         pluginReads += 1;
-        return pluginReads >= 3 ? racedRecord : undefined;
+        return pluginReads >= 3
+          ? { configurable: true, enumerable: true, value: racedRecord, writable: true }
+          : undefined;
       }
 
-      return Reflect.get(target, property, receiver) as unknown;
+      return Reflect.getOwnPropertyDescriptor(target, property);
+    },
+    get(target, property, receiver): unknown {
+      return property === "empty" && pluginReads >= 3
+        ? racedRecord
+        : (Reflect.get(target, property, receiver) as unknown);
     },
   });
   const stuckPath = path.join(locations.workflowsSavedDir, "empty:delta.json");

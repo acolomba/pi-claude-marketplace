@@ -2,6 +2,7 @@ import { toDisabledRecord } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { malformedReasonsForKinds } from "../../shared/notify-reasons.ts";
+import { ownValue, setOwn } from "../../shared/own-key.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 
 import { applyPartialCascadeFold } from "./shared.ts";
@@ -92,8 +93,8 @@ function locateFreshlyInstalledRecord(
       readonly installed: InstallDisableCascadePluginRecord;
     }
   | undefined {
-  const marketplaceRecord = state.marketplaces[marketplace];
-  const installed = marketplaceRecord?.plugins[plugin];
+  const marketplaceRecord = ownValue(state.marketplaces, marketplace);
+  const installed = ownValue(marketplaceRecord?.plugins, plugin);
   if (marketplaceRecord === undefined || installed === undefined) {
     return undefined;
   }
@@ -182,9 +183,10 @@ export function composeInstallDisableCascade(dependencies: {
         return foldFailedDisableCascade(target.installed, cascade, dependencies.now);
       }
 
-      target.marketplace.plugins[options.plugin] = toDisabledRecord(
-        target.installed,
-        dependencies.now(),
+      setOwn(
+        target.marketplace.plugins,
+        options.plugin,
+        toDisabledRecord(target.installed, dependencies.now()),
       );
       return {
         ok: true,

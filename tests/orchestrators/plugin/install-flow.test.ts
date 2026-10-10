@@ -11952,10 +11952,10 @@ test("orchestrated install reports when the state write does not retain its fres
           const marketplace = parsed.marketplaces.mp;
           if (marketplace !== undefined) {
             marketplace.plugins = new Proxy(marketplace.plugins, {
-              set(target, property, value, receiver) {
+              defineProperty(target, property, descriptor) {
                 return property === "vanishing"
                   ? true
-                  : Reflect.set(target, property, value, receiver);
+                  : Reflect.defineProperty(target, property, descriptor);
               },
             });
           }
@@ -13178,10 +13178,10 @@ test("retry proof: install: state commit race after staged work retries from unc
           const marketplace = parsed.marketplaces.mp;
           if (marketplace !== undefined) {
             marketplace.plugins = new Proxy(marketplace.plugins, {
-              set(target, property, value, receiver) {
+              defineProperty(target, property, descriptor) {
                 return property === "retryable"
                   ? true
-                  : Reflect.set(target, property, value, receiver);
+                  : Reflect.defineProperty(target, property, descriptor);
               },
             });
           }
@@ -14650,10 +14650,11 @@ async function entriesOf(directory: string): Promise<string[]> {
 
 /**
  * Make `statePhase` throw `ConcurrentInstallError` by revealing a raced record
- * only on the LAST read of `marketplaces[mp].plugins[plugin]`.
+ * only on the LAST own-key read of `marketplaces[mp].plugins[plugin]`.
  *
  * Reads, in order: the early-sanity check, the workflows phase's
- * previous-names lookup, then the state commit.
+ * previous-names lookup, then the state commit. Each one asks for the own
+ * property first (D-08-07), so the trap counts those requests.
  */
 function raceRecordAtStateCommit(
   state: ExtensionState,
@@ -14674,13 +14675,19 @@ function raceRecordAtStateCommit(
   };
   let reads = 0;
   marketplace.plugins = new Proxy(marketplace.plugins, {
-    get(target, property, receiver): unknown {
+    getOwnPropertyDescriptor(target, property): PropertyDescriptor | undefined {
       if (property === plugin) {
         reads += 1;
-        return reads >= 3 ? racedRecord : undefined;
+        return reads >= 3
+          ? { configurable: true, enumerable: true, value: racedRecord, writable: true }
+          : undefined;
       }
 
-      const value: unknown = Reflect.get(target, property, receiver);
+      return Reflect.getOwnPropertyDescriptor(target, property);
+    },
+    get(target, property, receiver): unknown {
+      const value: unknown =
+        property === plugin && reads >= 3 ? racedRecord : Reflect.get(target, property, receiver);
       return value;
     },
   });

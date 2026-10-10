@@ -526,7 +526,10 @@ async function deletePluginFromLayer(
   marketplace: string,
 ): Promise<void> {
   const cfg = await loadConfig(configPath);
-  if (cfg.status !== "valid" || cfg.config.plugins?.[`${plugin}@${marketplace}`] === undefined) {
+  if (
+    cfg.status !== "valid" ||
+    ownValue(cfg.config.plugins, `${plugin}@${marketplace}`) === undefined
+  ) {
     return;
   }
 
