@@ -37,8 +37,7 @@ The `/claude:plugin` command manages Claude marketplaces and plugins, like Claud
 
 - [Pi Coding Agent](https://pi.dev) 1.0.0 or newer
 - [pi-subagents](https://pi.dev/packages/pi-subagents) 0.74.0 or newer (optional but recommended, `pi install npm:pi-subagents`)
-- [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter) 5.2.0 or a later 5.x release (optional but recommended, `pi install npm:pi-mcp-adapter`)
-  - Pi's built-in MCP support does not satisfy this requirement.
+- [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter) 5.2.0 or a later 5.x release (optional but recommended, `pi install npm:pi-mcp-adapter`). Pi's built-in MCP support does not satisfy this requirement.
 - [@quintinshaw/pi-dynamic-workflows](https://pi.dev/packages/@quintinshaw/pi-dynamic-workflows) (optional but recommended, `pi install npm:@quintinshaw/pi-dynamic-workflows`)
 
 ## Usage
@@ -127,10 +126,6 @@ Plugin MCP servers get the names that Claude Code gives them. The model sees eac
 | `foo`       | `my.db`          | `plugin_foo_my_db_` | `mcp__plugin_foo_my_db__<tool>` | `plugin:foo:my.db`   |
 | `bar`       | `api`            | `plugin_bar_api_`   | `mcp__plugin_bar_api__<tool>`   | `plugin:bar:api`     |
 
-Two plugins can usually use the same server name, because each key holds the plugin name. The plugin install or update fails if another MCP configuration already defines the same key, or a key that differs only by `-` versus `_`. For example, `plugin:a_b:c` and `plugin:a:b_c` both get the key `plugin_a_b_c_`, so the second install fails. For more information, see [MCP compatibility](docs/mcp-compatibility.md).
-
-To learn what you must do when an upgrade renames your plugin MCP servers, and what each server state in `/claude:plugin info` means, see [MCP compatibility](docs/mcp-compatibility.md).
-
 ### Scoping
 
 You can install marketplaces and plugins in the user scope or the project scope. The default is user scope.
@@ -141,7 +136,7 @@ You can also install the same plugin in both the user and project scopes. Then t
 
 ### Partially available plugins
 
-Some plugins contain unsupported components: an unmappable hook, an LSP server, a theme, or an MCP server that uses a feature pi-mcp-adapter cannot run, such as a `ws` transport or `headersHelper`. To install or update these plugins partially, pass the `--partial` option. This extension installs the supported components and ignores the unsupported ones. For more information about MCP servers, see [MCP compatibility](docs/mcp-compatibility.md).
+Some plugins contain unsupported components: an unmappable hook, an LSP server, a theme, or an MCP server that uses a feature pi-mcp-adapter cannot run. To install or update these plugins partially, pass the `--partial` option. This extension installs the supported components and ignores the unsupported ones.
 
 List partially available plugins.
 
