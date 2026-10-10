@@ -5,16 +5,16 @@ current_phase: 7
 current_phase_name: Mode Refusals, Real-Pi Verification, and Docs
 status: completed
 stopped_at: Phase 7 complete — all phases complete
-last_updated: "2026-10-10T12:16:28.439Z"
+last_updated: "2026-10-10T15:55:20.967Z"
 last_activity: 2026-10-10
 last_activity_desc: Phase 7 complete
-state_head: e89497f4a2da6b01eec93d86704253c0ab7f2831
+state_head: 3b1c61c7898a1157bee0dcb03213658a62d59538
 progress:
-  total_phases: 7
+  total_phases: 8
   completed_phases: 7
   total_plans: 45
   completed_plans: 45
-  percent: 100
+  percent: 88
 milestone_name: Mode-Keyed Presentation Strategies
 ---
 
@@ -373,3 +373,9 @@ The six phase requirements are complete. Full `npm run check` passed at
 `bfd0d2db` on Node `v26.11.1`; only planning Markdown changed afterwards.
 The root dependency advisory and optional-peer integration skip remain recorded
 in the phase deferred items. The milestone remains open for audit and archival.
+
+## Accumulated Context
+
+### Roadmap Evolution
+
+- Phase 8 added: Address tech debt: ledger dispositions and advisory

@@ -21,8 +21,9 @@ Earlier milestones remain in [MILESTONES.md](MILESTONES.md).
 - [x] **Phase 5: Mode-Selected JSON Sink** — `ctx.mode` selects the strategy, and `json`/`rpc` output reaches consumers through `pi.appendEntry` from every output site (completed 2026-10-07)
 - [x] **Phase 6: Command-Run Contract** — Payloads carry their origin and invocation, and every command run emits a complete set of payloads, even when it throws (completed 2026-10-09)
 - [x] **Phase 7: Mode Refusals, Real-Pi Verification, and Docs** — Browse and device-flow refuse clearly by mode, a real headless Pi run proves the contract, and the schema is documented (completed 2026-10-10)
+- [ ] **Phase 8: Address tech debt: ledger dispositions and advisory** — Give every open WINDOWS.md ledger entry a disposition and resolve the carried advisory
 
-Phases run in order, 1 through 7.
+Phases run in order, 1 through 8.
 
 **Milestone invariants.** Each phase leaves `npm run check` green: fallow
 boundaries and production dead-code with no new suppression, the
@@ -292,6 +293,17 @@ Plans:
 **Wave 4** *(blocked on Wave 3 completion)*
 - [x] 07-06-PLAN.md — Refusal corpus ledger and temporary tool retirement
 
+
+### Phase 8: Address tech debt: ledger dispositions and advisory
+
+**Goal:** [To be planned]
+**Requirements**: TBD
+**Depends on:** Phase 7
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 8 to break down)
+
 ## Progress
 
 | Phase | Plans Complete | Status | Completed |
@@ -303,6 +315,7 @@ Plans:
 | 5. Mode-Selected JSON Sink | 7/7 | Complete    | 2026-10-07 |
 | 6. Command-Run Contract | 4/4 | Complete    | 2026-10-09 |
 | 7. Mode Refusals, Real-Pi Verification, and Docs | 6/6 | Complete    | 2026-10-10 |
+| 8. Address tech debt: ledger dispositions and advisory | 0/0 | Not started | - |
 
 ## Carried Forward
 
