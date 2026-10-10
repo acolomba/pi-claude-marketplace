@@ -1365,7 +1365,7 @@ test("NFR-3: an adapter removed after the rollback reads the recorded unstage wr
   });
 });
 
-test("D-02-19: an adapter replaced by a directory during the last byte check is refused without a raw EISDIR", async () => {
+test("NFR-3: an adapter replaced by a directory during the last byte check is refused without a raw EISDIR", async () => {
   await withHermeticEnvironment("prune-rollback-own-write-directory-", async ({ cwd }) => {
     // arrange
     const locations = locationsFor("project", cwd);

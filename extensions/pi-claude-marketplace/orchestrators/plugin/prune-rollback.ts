@@ -242,7 +242,7 @@ async function metadataVerdict(
     : { kind: "occupied" };
 }
 
-// D-02-19: a path removed or replaced by a directory while it is read does not
+// NFR-3: a path removed or replaced by a directory while it is read does not
 // hold this prune's write, so the caller reports the occupied-path refusal.
 async function holdsBytes(
   file: string,
