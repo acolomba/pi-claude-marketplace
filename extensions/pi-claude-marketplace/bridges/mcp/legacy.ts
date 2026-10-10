@@ -37,7 +37,12 @@ import {
   type McpServerKey,
 } from "./adapter-doc.ts";
 import { walkMcpSources, type McpSourceDeclaration } from "./collision-slots.ts";
-import { CLAUDE_MARKETPLACE_MARKER_KEY, isOwnedBy, markerOwnerOf } from "./marker.ts";
+import {
+  CLAUDE_MARKETPLACE_MARKER_KEY,
+  isOwnedBy,
+  isPlainObject,
+  markerOwnerOf,
+} from "./marker.ts";
 import { safeSet } from "./safe-set.ts";
 
 import type {
@@ -143,10 +148,6 @@ export async function readLegacyMcpNames(
   }
 
   return config === undefined ? [] : ownedNames(config, pluginName, marketplaceName);
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function isLeftover(entry: unknown, panelCopies: boolean): boolean {

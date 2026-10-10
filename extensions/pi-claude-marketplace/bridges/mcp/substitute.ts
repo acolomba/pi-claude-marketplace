@@ -16,6 +16,7 @@
 import { expandClaudeValue } from "../../domain/claude-mcp-variables.ts";
 
 import { serializeLiteral, serializeSegments } from "./adapter-escape.ts";
+import { isPlainObject } from "./marker.ts";
 import { safeSet } from "./safe-set.ts";
 
 import type { ClaudeBuiltins, ClaudeEnv, FieldClass } from "../../domain/claude-mcp-variables.ts";
@@ -63,10 +64,6 @@ export interface SubstitutedEntry {
 // AVAR-01: Claude writes the values under these env keys without expansion,
 // whether injected or declared.
 const LITERAL_ENV_KEYS: ReadonlySet<string> = new Set(["CLAUDE_PLUGIN_ROOT", "CLAUDE_PLUGIN_DATA"]);
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 function expandedValue(
   raw: string,

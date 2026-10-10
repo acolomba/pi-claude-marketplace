@@ -71,7 +71,7 @@ import {
   removeLegacyMcpEntries,
   withoutServers,
 } from "./legacy.ts";
-import { isOwnedBy, pluginSetFieldsOf } from "./marker.ts";
+import { isOwnedBy, isPlainObject, pluginSetFieldsOf } from "./marker.ts";
 import { safeSet } from "./safe-set.ts";
 
 import type { McpSubstitutionContext, VariableReport } from "./substitute.ts";
@@ -221,10 +221,6 @@ async function assertNoMcpCollisions(check: McpCollisionCheck): Promise<void> {
       throw new McpServerCollisionError(name, owner.sourcePath, winningPath, owner.key);
     }
   }
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function commentsDroppedNotices(hadComments: boolean, scope: Scope): McpConfigFileNotice[] {
