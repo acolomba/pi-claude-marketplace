@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 24
+open_count: 25
 waived_count: 27
 fixed_count: 37
-total_count: 88
-last_updated: 2026-10-03T15:02:22.034Z
+total_count: 89
+last_updated: 2026-10-10T04:04:37.773Z
 ---
 
 # Broken Windows Ledger
@@ -103,6 +103,7 @@ last_updated: 2026-10-03T15:02:22.034Z
 | 86 | 01 | deviation | extensions/pi-claude-marketplace/orchestrators/plugin/info.ts |  | buildRemoteNotInstalledRow spreads a dependencies field the componentsResolved:false row shape does not carry, so the D-01-32 cold-git fallback renders nothing | fixed |  | 2026-09-13T19:27:02.848Z | 2026-09-17T16:14:30.946Z |
 | 87 | 09 | deviation | tests/orchestrators/plugin/install-flow.test.ts | 11732 | ESLint @typescript-eslint/require-await on marketplaceTagProbe (introduced by 09-03's 71dcea21); plan 09-04 defers the fix per Task 3's own instruction not to fix earlier-plan defects | fixed |  | 2026-09-22T07:47:54.363Z | 2026-09-22T08:03:16.136Z |
 | 88 | 04 | deviation | extensions/pi-claude-marketplace/shared/notification-dispatch.ts |  | [json-output] composeContextBlocks kept in dispatch: renderMpHeader and composePluginLines have no other production reader; ~110 test sites import them | open |  | 2026-10-03T15:02:22.034Z |  |
+| 89 | 07 | skipped-test | tests/integration/skill-path-resolution.test.ts | 124 | [json-output] Existing optional pi-subagents resolver integration case skips because its module is unavailable; no new test skip was introduced. Evidence: TEST-07-06-01 in phase deferred-items.md. | open |  | 2026-10-10T04:04:37.773Z |  |
 
 ````json
 [
@@ -1191,6 +1192,19 @@ last_updated: 2026-10-03T15:02:22.034Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-10-03T15:02:22.034Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 89,
+    "kind": "skipped-test",
+    "phase": "07",
+    "file": "tests/integration/skill-path-resolution.test.ts",
+    "line": 124,
+    "description": "[json-output] Existing optional pi-subagents resolver integration case skips because its module is unavailable; no new test skip was introduced. Evidence: TEST-07-06-01 in phase deferred-items.md.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-10-10T04:04:37.773Z",
     "resolved_at": null,
     "milestone": null
   }

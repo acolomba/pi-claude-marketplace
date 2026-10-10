@@ -4,16 +4,16 @@ milestone: json-output
 current_phase: 7
 current_phase_name: Mode Refusals, Real-Pi Verification, and Docs
 status: executing
-stopped_at: Phase 7 wave 3 verified; executing corpus retirement plan 07-06
-last_updated: "2026-10-10T03:36:29.226Z"
+stopped_at: Phase 7 all plans and waves verified; phase audits next
+last_updated: "2026-10-10T04:05:51.999Z"
 last_activity: 2026-10-10
-last_activity_desc: Phase 7 wave 3 verified; corpus retirement execution next
-state_head: 597e30f21f3c0dc75cd8e132301abd2e480bfcf2
+last_activity_desc: Phase 7 all six plans verified; phase audits in progress
+state_head: 773004759eb6d400ab48136696d81a6f44f7e5f6
 progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 45
-  completed_plans: 44
+  completed_plans: 45
 milestone_name: Mode-Keyed Presentation Strategies
 ---
 
@@ -31,11 +31,11 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 7 — Mode Refusals, Real-Pi Verification, and Docs
-Plan: 5 of 6 complete; 07-06 next
+Plan: 6 of 6 complete; phase audits next
 Status: Executing
-Last activity: 2026-10-10 — Wave 3 merged and full combined-tree check passed
+Last activity: 2026-10-10 — Wave 4 merged and full combined-tree check passed
 
-Progress: [█████████░] 86% (6 of 7 phases fully verified; 44 of 45 plans complete)
+Progress: [█████████░] 86% (6 of 7 phases fully verified; 45 of 45 plans complete)
 
 Phase 1's first plan captures the text wire-corpus baseline (every emitted
 `(message, severity)` pair and its argument count) before any renderer change;
@@ -169,9 +169,9 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-10T03:36:28.814Z
-**Stopped at:** Phase 7 wave 3 verified; executing corpus retirement plan 07-06
-**Resume file:** .planning/phases/07-mode-refusals-real-pi-verification-and-docs/07-06-PLAN.md
+**Last session:** 2026-10-10T04:05:51.156Z
+**Stopped at:** Phase 7 all plans and waves verified; phase audits next
+**Resume file:** .planning/phases/07-mode-refusals-real-pi-verification-and-docs/07-WAVE-4-VERIFICATION.md
 
 **Earlier work:** json-output on `features/json`. Phases 1 and 2 are complete
 and verified. Phase 2's review-fix loop closed after three iterations with ten
