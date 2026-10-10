@@ -131,32 +131,6 @@ Dos complementos normalmente pueden usar el mismo nombre de servidor, porque cad
 
 Para saber qué debes hacer cuando una actualización cambia el nombre de tus servidores MCP de complementos, y qué significa cada estado de servidor que muestra `/claude:plugin info`, consulta [Compatibilidad de MCP](docs/mcp-compatibility.md).
 
-### Personalización de los agentes generados
-
-Esta extensión convierte cada agente de complemento en un archivo de agente de pi-subagents llamado `pi-claude-marketplace-<plugin>-<agent>`. No edites estos archivos: install, update y reinstall los regeneran.
-
-Tres reglas de conversión que conviene conocer:
-
-- Si el agente de origen no declara `tools:`, el agente generado no tiene lista de herramientas permitidas. pi-subagents entonces otorga sus herramientas integradas predeterminadas, igual que Claude Code otorga todas las herramientas disponibles para subagentes. Los procesos hijos en segundo plano también reciben herramientas de extensiones del entorno, como las herramientas MCP de pi-mcp-adapter. Si el agente de origen define `disallowedTools`, esos nombres se convierten en `excludeTools`.
-- Los campos de agente `allowed-tools`, `mcpServers`, `permissionMode` y `hooks` se descartan, con una advertencia que explica el motivo. Claude Code ignora los cuatro en agentes de complementos (`allowed-tools` es un campo de comandos de barra). Los servidores MCP propios del complemento y su hooks.json sí se instalan.
-- Una entrada de `tools:` que nombra una de las herramientas MCP propias del complemento en la forma de Claude Code, `mcp__plugin_<plugin>_<server>__<tool>`, se convierte en la entrada de pi-subagents `mcp:plugin_<plugin>_<server>_/<tool>`. Una entrada que nombra un servidor completo, `mcp__plugin_<plugin>_<server>` o `mcp__plugin_<plugin>_<server>__*`, se convierte en `mcp:plugin_<plugin>_<server>_`. Una entrada de una sola herramienta debe coincidir exactamente con un nombre de herramienta que informa el servidor. Si el servidor cambió el nombre de la herramienta o la quitó, o si el nombre tiene un error de escritura, falla todo el lanzamiento del agente. Para evitarlo, concede el servidor completo, `mcp:plugin_<plugin>_<server>_`, con una anulación de agente (consulta más abajo). pi-subagents ejecuta herramientas MCP solo en lanzamientos en segundo plano, así que lanza ese agente con `async: true`. Un lanzamiento en primer plano falla, y también falla un lanzamiento antes de que pi-mcp-adapter guarde en caché las herramientas del servidor. Esta extensión no añade `async: true` por ti. Los nombres de herramientas MCP de otros servidores, incluidos los servidores que la instalación deja fuera, se descartan con una advertencia.
-
-Para cambiar la configuración de un agente generado de forma que el cambio sobreviva a las actualizaciones del complemento, usa las anulaciones de agentes de pi-subagents en tu archivo de configuración de Pi (`~/.pi/agent/settings.json` para el ámbito de usuario, `<project>/.pi/settings.json` para el ámbito del proyecto):
-
-```json
-{
-  "subagents": {
-    "agentOverrides": {
-      "pi-claude-marketplace-foo-reviewer": {
-        "tools": "read,bash,mcp:plugin_foo_github_"
-      }
-    }
-  }
-}
-```
-
-Una anulación reemplaza el mismo campo en el frontmatter generado. Una entrada `mcp:<key>` otorga las herramientas MCP directas del servidor de pi-mcp-adapter guardado bajo `<key>`, como `plugin_foo_github_` para el servidor `github` del complemento `foo`. pi-subagents carga herramientas MCP solo para procesos hijos en segundo plano (`async: true`).
-
 ### Ámbito (Scoping)
 
 Puedes instalar mercados y complementos en el ámbito de usuario o en el ámbito del proyecto. El valor predeterminado es el ámbito de usuario.
