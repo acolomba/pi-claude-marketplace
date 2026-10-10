@@ -25,6 +25,7 @@ import { readFile } from "node:fs/promises";
 import stripJsonComments from "strip-json-comments";
 
 import { McpConfigFileError } from "../../shared/errors-bridges.ts";
+import { ownValue } from "../../shared/own-key.ts";
 
 import { restoredOverride, userCarriedFields } from "./adapter-entry.ts";
 import {
@@ -424,10 +425,6 @@ interface StoredChoice {
 interface ChoiceStore {
   readonly member: Readonly<Record<string, unknown>>;
   readonly choices: Readonly<Record<string, unknown>>;
-}
-
-function ownValue(record: Readonly<Record<string, unknown>>, key: string): unknown {
-  return Object.hasOwn(record, key) ? record[key] : undefined;
 }
 
 /**
