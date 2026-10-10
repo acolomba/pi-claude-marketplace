@@ -281,7 +281,11 @@ function inventoryEntries(run: RpcSessionResult, key: "tools" | "commands"): rea
   const inventory: unknown = JSON.parse(notify.message);
   const entries: unknown =
     typeof inventory === "object" && inventory !== null ? Reflect.get(inventory, key) : undefined;
-  return Array.isArray(entries) ? entries : [];
+  if (!Array.isArray(entries)) {
+    assert.fail(`the inventory probe's ${key} field is not an array`);
+  }
+
+  return entries;
 }
 
 function namedEntries(entries: readonly unknown[], name: string): readonly unknown[] {
@@ -290,8 +294,14 @@ function namedEntries(entries: readonly unknown[], name: string): readonly unkno
   );
 }
 
+/** Reads a positive integer PID, so an empty file never becomes `process.kill(0, ...)`. */
 async function readPid(pidFile: string): Promise<number> {
-  return Number(await readFile(pidFile, "utf8"));
+  const pid = Number(await readFile(pidFile, "utf8"));
+  if (!Number.isInteger(pid) || pid <= 0) {
+    assert.fail(`${pidFile} holds no PID`);
+  }
+
+  return pid;
 }
 
 /**
@@ -362,19 +372,26 @@ test(
 
     // act
     const run = await runPluginSession(env, [sentinel], "mcp__", t.signal);
-    // Register the sentinel's cleanup before any read that can throw, so a
-    // failed case never leaves the long-lived sentinel running.
-    const sentinelPid = await readPid(sentinelPidFile);
-    t.after(() => {
-      try {
-        process.kill(sentinelPid, "SIGKILL");
-      } catch {
-        // The sentinel is already gone, which is what the case expects.
-      }
-    });
+    // Register the sentinel's cleanup before any assertion that can throw, so
+    // a failed case never leaves the long-lived sentinel running. A missing PID
+    // file waits for `assertCleanSession`, which names a failed extension load.
+    const sentinelPid = await readPid(sentinelPidFile).catch(() => undefined);
+    if (sentinelPid !== undefined) {
+      t.after(() => {
+        try {
+          process.kill(sentinelPid, "SIGKILL");
+        } catch {
+          // The sentinel is already gone, which is what the case expects.
+        }
+      });
+    }
 
     // assert
     assertCleanSession(run);
+    if (sentinelPid === undefined) {
+      assert.fail(`the group sentinel wrote no PID to ${sentinelPidFile}`);
+    }
+
     assert.deepStrictEqual(mcpCommands(run), [{ name: "mcp", sourcePath: "builtin:mcp" }]);
     assert.deepStrictEqual(namedEntries(inventoryEntries(run, "tools"), "mcp__stub__echo"), [
       expectedTool,
