@@ -7243,6 +7243,69 @@ test("AVAR-04: an enable cascade undo shows no variable notice for the member se
   });
 });
 
+test("AVAR-04 / AVAR-05: with pi-mcp-adapter loaded, enable reports an info success row and the MCP notices as separate warnings (D-08-03)", async (t) => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const savedSite = process.env.PI_CM_AVAR_SITE;
+    const savedCredential = process.env.ANTHROPIC_API_KEY;
+    t.after(() => {
+      if (savedSite === undefined) {
+        delete process.env.PI_CM_AVAR_SITE;
+      } else {
+        process.env.PI_CM_AVAR_SITE = savedSite;
+      }
+
+      if (savedCredential === undefined) {
+        delete process.env.ANTHROPIC_API_KEY;
+      } else {
+        process.env.ANTHROPIC_API_KEY = savedCredential;
+      }
+    });
+    delete process.env.PI_CM_AVAR_SITE;
+    process.env.ANTHROPIC_API_KEY = "avar-sentinel-enable";
+    await seedRealDisabledMarketplace(home, {
+      marketplaceName: "mp",
+      pluginName: "foo",
+      version: "1.2.3",
+      mcpServers: {
+        local: { command: "node", args: ["--site", "${PI_CM_AVAR_SITE}"] },
+        api: {
+          type: "http",
+          url: "https://mcp.example.test/mcp",
+          headers: { Authorization: "Bearer ${ANTHROPIC_API_KEY}" },
+        },
+      },
+    });
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({
+      ctx,
+      pi: makePi([], [adapterCommand()]),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      { message: "● mp [user]\n  ● foo v1.2.3 (installed)\n\n/reload to pick up changes" },
+      {
+        severity: "warning",
+        message:
+          'MCP server variables not set.\n\nServer "plugin_foo_local_" from foo in the user-scope mcp-adapter.json uses environment variables that were not set at install: PI_CM_AVAR_SITE.',
+      },
+      {
+        severity: "warning",
+        message:
+          'MCP server credentials withheld.\n\nServer "plugin_foo_api_" from foo in the user-scope mcp-adapter.json references credential variables that Claude Code never sends to a remote server: ANTHROPIC_API_KEY. They were written as empty values.',
+      },
+    ]);
+  });
+});
+
 test("AFILE-02: enabling a plugin with no MCP servers over an unparseable mcp-adapter.json leaves it unchanged and says so", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
