@@ -121,6 +121,7 @@ async function seedLegacyAgentUpdate(t: TestContext, coexist: boolean) {
     locations,
     hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     completionCache: createCompletionCache(),
+    env: {},
     cascade: true,
     cleanupClones: () => Promise.resolve(),
   } as const;
@@ -345,6 +346,7 @@ test("atomically replaces staged resources and finalizes the update ledger", asy
           locations,
           hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
           completionCache: createCompletionCache(),
+          env: {},
           cascade: true,
           cleanupClones: () => Promise.resolve(),
         },
@@ -412,6 +414,7 @@ test("D-10-17a: the updated outcome forwards the preflight's own constraint, key
           locations,
           hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
           completionCache: createCompletionCache(),
+          env: {},
           cascade: true,
           cleanupClones: () => Promise.resolve(),
         },
@@ -463,6 +466,7 @@ test("D-10-17a: an unconstrained update forwards constraint: undefined, key stil
           locations,
           hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
           completionCache: createCompletionCache(),
+          env: {},
           cascade: true,
           cleanupClones: () => Promise.resolve(),
         },
@@ -521,6 +525,7 @@ test("WR-01: a successful path-source swap drops a stale resolvedSha the fresh r
           locations,
           hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
           completionCache: createCompletionCache(),
+          env: {},
           cascade: true,
           cleanupClones: () => {
             cleanupCalls += 1;
@@ -583,6 +588,7 @@ test("finalizes the update ledger even when the post-finalize hooks-cache refres
           locations,
           hooksRouting,
           completionCache: createCompletionCache(),
+          env: {},
           cascade: true,
           cleanupClones: () => Promise.resolve(),
         },
@@ -637,6 +643,7 @@ test("retains the intent ledger and old resource tree after a replacement failur
           locations,
           hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
           completionCache: createCompletionCache(),
+          env: {},
           cascade: true,
           cleanupClones: () => Promise.resolve(),
         },
@@ -684,6 +691,7 @@ async function prepareMcpUpdate(cwd: string, adapterText: string) {
     locations,
     hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     completionCache: createCompletionCache(),
+    env: {},
     cascade: true,
     cleanupClones: () => Promise.resolve(),
   } as const;

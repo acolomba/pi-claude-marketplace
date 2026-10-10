@@ -96,10 +96,12 @@ import type { UpdatePluginsOptions, UpdatePluginsTarget } from "./update-preflig
 import type {
   DirectThreePhaseArgs,
   ThreePhaseArgs,
+  ThreePhaseArgsBase,
   UpdatePhase3Failure,
   UpdatePhase3FailedOutcome,
   UpdateRunOutcome,
 } from "./update-swap.ts";
+import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
 import type { ReleaseTagCandidate } from "../../domain/release-tag.ts";
 import type { ParsedSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
@@ -154,6 +156,9 @@ function makeSyncCloneOnce(
   };
 }
 
+/** The collaborators `createPluginUpdateOperations` binds into every target's arguments. */
+type UpdateBindings = Pick<ThreePhaseArgsBase, "hooksRouting" | "completionCache" | "env">;
+
 /**
  * Build the per-target `runThreePhaseUpdate` argument bag for the DIRECT
  * update path. Every optional seam is spread only when set, so the cascade
@@ -164,8 +169,7 @@ function buildDirectThreePhaseArgs(
   opts: UpdatePluginsOptions,
   target: ResolvedTarget,
   cardinality: "single" | "plural",
-  hooksRouting: UpdateHooksRouting,
-  completionCache: CompletionCache,
+  bindings: UpdateBindings,
   constraintTagMemo: Map<string, readonly RemoteTag[]>,
   constraintMarketplaceTagMemo: Map<string, readonly ReleaseTagCandidate[]>,
 ): DirectThreePhaseArgs {
@@ -175,8 +179,7 @@ function buildDirectThreePhaseArgs(
     scope: target.scope,
     cwd: opts.cwd,
     locations: target.locations,
-    hooksRouting,
-    completionCache,
+    ...bindings,
     cascade: false,
     ctx: opts.ctx,
     // `pi` threads the phase-3a aggregate direct-path notify inside
@@ -240,8 +243,7 @@ function buildDirectThreePhaseArgs(
  */
 async function updatePluginsWith(
   opts: UpdatePluginsOptions,
-  hooksRouting: UpdateHooksRouting,
-  completionCache: CompletionCache,
+  bindings: UpdateBindings,
   runPluginUpdate: UpdatePluginRunner,
   composeCascade: UpdateCascadeComposer,
 ): Promise<void> {
@@ -317,8 +319,7 @@ async function updatePluginsWith(
           opts,
           t,
           cardinality,
-          hooksRouting,
-          completionCache,
+          bindings,
           constraintTagMemo,
           constraintMarketplaceTagMemo,
         ),
@@ -554,8 +555,7 @@ function renderUpdateCascadeIfAny(
  * failures) are captured into `partition='failed'` outcomes. PUP-9.
  */
 async function updateSinglePluginWith(
-  hooksRouting: UpdateHooksRouting,
-  completionCache: CompletionCache,
+  bindings: UpdateBindings,
   runPluginUpdate: UpdatePluginRunner,
   plugin: string,
   marketplace: string,
@@ -579,8 +579,7 @@ async function updateSinglePluginWith(
       scope,
       cwd,
       locations,
-      hooksRouting,
-      completionCache,
+      ...bindings,
       cascade: true,
       // SEV-03 / D-69-01: the autoupdate cascade TAKES the partial path
       // automatically. A partially-upgradable candidate (re-resolves `partially-available`)
@@ -1054,18 +1053,24 @@ async function runPluginUpdate(args: ThreePhaseArgs): Promise<UpdateRunOutcome> 
  * Binds update enumeration, preflight, swap, cascade, and lifecycle routing once.
  * `stateTransaction` replaces the state I/O of every locked save the update
  * makes; production callers omit it.
+ *
+ * D-08-06: `env` is the environment the update stages MCP servers with. It
+ * defaults to Pi's process environment here, at the entry point, the way
+ * `createGetPluginInfo` binds it.
  */
 export function createPluginUpdateOperations(
   hooksRouting: UpdateHooksRouting,
   completionCache: CompletionCache,
   stateTransaction?: LockedStateTransactionDeps,
+  env: ClaudeEnv = process.env,
 ): PluginUpdateOperations {
+  const bindings: UpdateBindings = { hooksRouting, completionCache, env };
   const run: typeof runPluginUpdate =
     stateTransaction === undefined
       ? runPluginUpdate
       : (args) => runPluginUpdate({ ...args, stateTransaction });
   const updatePlugins: UpdatePluginsFn = (options) =>
-    updatePluginsWith(options, hooksRouting, completionCache, run, composeUpdateCascade);
+    updatePluginsWith(options, bindings, run, composeUpdateCascade);
   // D-10-18: ONE memo pair per autoupdate run. `beginPluginUpdateRun`
   // allocates the pair, so the pair's lifetime is the run's and a release tag
   // pushed between two runs is visible to the second. The pair spans every
@@ -1075,7 +1080,7 @@ export function createPluginUpdateOperations(
     const constraintTagMemo = new Map<string, readonly RemoteTag[]>();
     const constraintMarketplaceTagMemo = new Map<string, readonly ReleaseTagCandidate[]>();
     return (plugin, marketplace, scope) =>
-      updateSinglePluginWith(hooksRouting, completionCache, run, plugin, marketplace, scope, {
+      updateSinglePluginWith(bindings, run, plugin, marketplace, scope, {
         tagMemo: constraintTagMemo,
         marketplaceTagMemo: constraintMarketplaceTagMemo,
       });

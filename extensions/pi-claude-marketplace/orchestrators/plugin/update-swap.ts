@@ -129,6 +129,7 @@ import type { PreparedCommandsStaging } from "../../bridges/commands/index.ts";
 import type { PreparedMcpStaging } from "../../bridges/mcp/index.ts";
 import type { PreparedSkillsStaging } from "../../bridges/skills/index.ts";
 import type { PreparedWorkflowsStaging } from "../../bridges/workflows/index.ts";
+import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
 import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
 import type { InstalledReferenceNames } from "../../domain/skill-tokens.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
@@ -156,6 +157,8 @@ export interface ThreePhaseArgsBase {
   readonly locations: ScopedLocations;
   readonly hooksRouting: UpdateHooksRouting;
   readonly completionCache: CompletionCache;
+  /** D-08-06: the environment the update stages MCP servers with. */
+  readonly env: ClaudeEnv;
   readonly mapModel?: boolean;
   readonly local?: boolean;
   readonly partial?: boolean;
@@ -330,6 +333,7 @@ async function prepareUpdateHandles(
       pluginData: pluginDataDir,
       sourcePath: `${installable.pluginRoot}#mcpServers`,
       description: installable.description,
+      env: args.env,
     });
     handles.workflows = await prepareStageWorkflows({
       locations,

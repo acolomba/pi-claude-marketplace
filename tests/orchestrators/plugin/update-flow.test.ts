@@ -11051,6 +11051,64 @@ test("AFILE-04: the cascade update entry returns the notice without notifying", 
   });
 });
 
+const STAGING_VARIABLE_NOTICE: NotifyRecord = {
+  severity: "warning",
+  message:
+    'MCP server variables not set.\n\nServer "plugin_hello_server1_" from hello in the project-scope mcp-adapter.json uses environment variables that were not set at install: PI_CM_SET_FOR_STAGING.',
+};
+
+for (const { label, env, notices } of [
+  { label: "sets", env: { PI_CM_SET_FOR_STAGING: "1" }, notices: [] },
+  { label: "lacks", env: {}, notices: [STAGING_VARIABLE_NOTICE] },
+] as const) {
+  test(`D-08-06: an update whose environment ${label} a variable stages with that environment`, async () => {
+    await withHermeticHome(async () => {
+      // arrange
+      const cwd = await createCaseDir(`update-env-${label}-`);
+      try {
+        const { pluginRoot } = await seedMcpUpdate(cwd, '{ "mcpServers": {} }\n');
+        await writeFile(
+          path.join(pluginRoot, ".mcp.json"),
+          JSON.stringify({
+            mcpServers: { server1: { command: "node", args: ["${PI_CM_SET_FOR_STAGING}"] } },
+          }),
+        );
+        const operations = createPluginUpdateOperations(
+          createHooksRouting(createHooksRuntime(), { readHooksJson }),
+          createCompletionCache(),
+          undefined,
+          env,
+        );
+        const { ctx, pi, notifications } = makeCtx();
+
+        // act
+        await operations.updatePlugins({
+          ctx,
+          pi,
+          scope: "project",
+          cwd,
+          target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+        });
+
+        // assert
+        assert.deepStrictEqual(notifications, [
+          {
+            message:
+              "A plugin operation needs attention.\n\n" +
+              "● mp [project]\n" +
+              "  ● hello v1.0.0 → v1.0.1 (updated) {requires pi-mcp-adapter}\n\n" +
+              "/reload to pick up changes",
+            severity: "warning",
+          },
+          ...notices,
+        ]);
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
+
 test("AFILE-02: updating a plugin with no MCP servers over an unparseable mcp-adapter.json leaves it unchanged and says so", async () => {
   await withHermeticHome(async () => {
     // arrange
