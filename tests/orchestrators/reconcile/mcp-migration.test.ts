@@ -1947,6 +1947,17 @@ describe("migrateLegacyMcpEntries", () => {
 
     // act
     await migrateLegacyMcpEntries(input, operations);
+    // Read back the runtime's own errno wording: later majors append the offending path to it.
+    // NFR-9: the unfinished row names that path by its basename. The failure's identity is not
+    // runtime-owned, so the probe pins it.
+    const readFailure = await readFile(projectAdapterPath, "utf8").catch((error: unknown) => {
+      const errno = error as NodeJS.ErrnoException;
+      assert.deepStrictEqual(
+        { code: errno.code, syscall: errno.syscall },
+        { code: "EISDIR", syscall: "read" },
+      );
+      return errno.message;
+    });
 
     // assert
     assert.deepStrictEqual(
@@ -1960,7 +1971,7 @@ describe("migrateLegacyMcpEntries", () => {
             marketplace: "mp",
             servers: ["srv"],
             file: "project-scope mcp-adapter.json",
-            detail: "EISDIR: illegal operation on a directory, read 'mcp-adapter.json'",
+            detail: readFailure.replaceAll(projectAdapterPath, "mcp-adapter.json"),
           },
         ],
         log: ["prepare hello@mp", "commit"],
