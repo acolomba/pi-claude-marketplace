@@ -734,6 +734,55 @@ describe("migrateLegacyMcpEntries", () => {
     assert.deepStrictEqual(log, ["prepare hello@mp", "commit", "removeLegacy hello@mp"]);
   });
 
+  for (const { label, env, notices } of [
+    { label: "sets", env: { PI_CM_SET_FOR_STAGING: "1" }, notices: [] },
+    {
+      label: "lacks",
+      env: {},
+      notices: [
+        {
+          kind: "variables-missing",
+          scope: "project",
+          file: "mcp-adapter.json",
+          plugin: "hello",
+          server: "plugin_hello_srv_",
+          names: ["PI_CM_SET_FOR_STAGING"],
+        },
+      ],
+    },
+  ] as const) {
+    test(`D-08-06: a move whose environment ${label} a variable stages with that environment`, async (t) => {
+      // arrange
+      const { cwd, locations } = await createProjectScope(t, `env-${label}`);
+      const server = { command: "node", args: ["${PI_CM_SET_FOR_STAGING}"] };
+      const marketplace = await seedMarketplace(cwd, { hello: { servers: { srv: server } } });
+      await seedState(
+        locations,
+        stateWith(cwd, marketplace, {
+          hello: pluginRecord(marketplace.marketplaceRoot, "hello", ["srv"]),
+        }),
+      );
+      await writeLegacy(locations, { srv: legacyEntry("hello") });
+      const input = migrationInput(cwd);
+
+      // act
+      await migrateLegacyMcpEntries(input, recordingOperations([]), env);
+
+      // assert
+      assert.deepStrictEqual(input.rows, [
+        {
+          kind: "moved",
+          scope: "project",
+          plugin: "hello",
+          marketplace: "mp",
+          from: "srv",
+          to: "plugin_hello_srv_",
+        },
+      ]);
+      assert.deepStrictEqual(input.notices, notices);
+    });
+  }
+
   test("AMIG-01: records that lack a declared server get the staged names, saved once between the adapter writes and the removals", async (t) => {
     // arrange
     const { cwd, locations } = await createProjectScope(t, "record-update");

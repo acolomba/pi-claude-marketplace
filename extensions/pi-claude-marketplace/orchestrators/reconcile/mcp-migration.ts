@@ -91,6 +91,7 @@ import { makeRecordedShaPresenceProbe } from "../plugin/git-source-probe.ts";
 
 import type { McpMigrationInput, ReconcilePlan } from "./types.ts";
 import type { LegacyMcpOwner, ProjectDisableStubOwner } from "../../bridges/mcp/index.ts";
+import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
 import type {
   GitPluginRootResult,
   MaterializablePlugin,
@@ -457,6 +458,7 @@ async function stageOwner(
   operations: McpMigrationOperations,
   locations: ScopedLocations,
   action: OwnerAction,
+  env: ClaudeEnv,
 ): Promise<readonly string[] | undefined> {
   const { owner } = action;
   const { servers, pluginRoot, description } = stagedSource(action);
@@ -471,6 +473,7 @@ async function stageOwner(
       pluginData: await locations.pluginDataDir(owner.marketplace, owner.plugin),
       sourcePath: `${pluginRoot}#mcpServers`,
       description,
+      env,
     });
     const result = await operations.commitPreparedMcp(prepared);
     input.notices.push(...result.notices);
@@ -782,6 +785,7 @@ async function migrateLocked(
   operations: McpMigrationOperations,
   locations: ScopedLocations,
   tx: LockedStateTransaction,
+  env: ClaudeEnv,
 ): Promise<void> {
   if (!(await adapterConfigReadable(input, locations))) {
     return;
@@ -796,7 +800,7 @@ async function migrateLocked(
   let recordsChanged = false;
   for (const action of await ownerActions(input, locations, tx.state, owners)) {
     // eslint-disable-next-line no-await-in-loop -- each stage reads the mcp-adapter.json the previous one wrote
-    const stagedNames = await stageOwner(input, operations, locations, action);
+    const stagedNames = await stageOwner(input, operations, locations, action, env);
     if (stagedNames !== undefined) {
       staged.push({ action, stagedNames });
       recordsChanged = recordAction(action, stagedNames, operations.now) || recordsChanged;
@@ -823,10 +827,15 @@ async function migrateLocked(
  * the extension directory (WR-05). Under the lock an unparseable
  * `mcp-adapter.json` stops the scope before any write. A failure while
  * moving one plugin becomes a row and the other plugins still move.
+ *
+ * D-08-06: `env` is the environment the move stages MCP servers with. It
+ * defaults to Pi's process environment here, at the entry point, the way
+ * `createGetPluginInfo` binds it.
  */
 export async function migrateLegacyMcpEntries(
   input: McpMigrationInput,
   operations: McpMigrationOperations = REAL_OPERATIONS,
+  env: ClaudeEnv = process.env,
 ): Promise<void> {
   const locations = locationsFor(input.scope, input.cwd);
   const owners = await readOwnersOrReport(input, operations, locations);
@@ -843,6 +852,6 @@ export async function migrateLegacyMcpEntries(
   }
 
   await withLockedStateTransaction(locations, (tx) =>
-    migrateLocked(input, operations, locations, tx),
+    migrateLocked(input, operations, locations, tx, env),
   );
 }
