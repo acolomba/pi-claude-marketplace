@@ -5,16 +5,16 @@ milestone_name: MCP 4
 current_phase: 8
 current_phase_name: Clear milestone debt
 status: executing
-stopped_at: Completed 08-14-PLAN.md
-last_updated: "2026-10-10T06:01:33.544Z"
+stopped_at: Completed 08-16-PLAN.md
+last_updated: "2026-10-10T06:18:13.540Z"
 last_activity: 2026-10-09
 last_activity_desc: Phase 8 execution started
-state_head: c2e89982381523b26f72a23a8fa274e181a68086
+state_head: 309f84e4fd012128650dd4613660741bc2b6a08e
 progress:
   total_phases: 8
   completed_phases: 7
   total_plans: 73
-  completed_plans: 67
+  completed_plans: 68
   percent: 88
 ---
 
@@ -35,7 +35,7 @@ sign-ins and approvals.
 ## Current Position
 
 Phase: 8 (Clear milestone debt) — EXECUTING
-Plan: 16 of 21
+Plan: 17 of 21
 Status: Ready to execute
 Last activity: 2026-10-09 — Phase 8 execution started
 
@@ -313,6 +313,7 @@ still open with a comment explaining what landed.
 | Phase 08 P15 | 9min | 2 tasks | 9 files |
 | Phase 08 P13 | 16min | 2 tasks | 5 files |
 | Phase 08 P14 | 15min | 3 tasks | 5 files |
+| Phase 08 P16 | 16min | 2 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -749,6 +750,7 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 08]: Own-key target resolution: resolveCrossScopePluginTarget and resolveInstalledMarketplaceTarget share one private explicit-scope helper (resolveExplicitScope) and one two-scope loader (loadBothScopes); the audit stays pass with no marker (D-08-07, D-08-08)
 - [Phase 08]: Stage tests that drive no variable pass env {}; process-environment AVAR-02 cases set and restore the variable through t.after
 - [Phase 08]: README prerequisites name the pi-subagents 0.74.0 floor; per-scope choice storage is recorded as a User choices divergence (D-08-02)
+- [Phase 08]: Own-key install, enable, disable and uninstall: test Proxies that fake a record answer getOwnPropertyDescriptor, and ones that drop a write trap defineProperty, because ownValue and setOwn bypass get and set (D-08-07)
 
 ### Pending Todos
 
@@ -882,11 +884,11 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Completed 08-14-PLAN.md
+**Stopped at:** Completed 08-16-PLAN.md
 
 **Resume file:** None
 
-Last session: 2026-10-10T06:01:33.120Z
+Last session: 2026-10-10T06:18:13.111Z
 Phase 7 closed: 5/5 plans; Nyquist validated; security verified (0 open);
 review 8/8 fixed; verifier 3/3, re-running the live canary against
 pi-mcp-adapter 5.2.0. `/gsd-autonomous --from 7` ran the transition, then
