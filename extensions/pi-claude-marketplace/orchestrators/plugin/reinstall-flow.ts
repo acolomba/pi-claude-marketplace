@@ -71,6 +71,7 @@ import {
 } from "../../shared/notification-types.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
 import { skipSeverity } from "../../shared/notify-reasons.ts";
+import { ownValue } from "../../shared/own-key.ts";
 import {
   type LockedStateTransaction,
   type LockedStateTransactionDeps,
@@ -714,8 +715,8 @@ async function runLockedReinstall(
   opts: ReinstallPluginOptions,
 ): Promise<LockedSuccess> {
   const { scope, cwd, marketplace, plugin } = opts;
-  const mp = tx.state.marketplaces[marketplace];
-  const oldRecord = mp?.plugins[plugin];
+  const mp = ownValue(tx.state.marketplaces, marketplace);
+  const oldRecord = ownValue(mp?.plugins, plugin);
   if (mp === undefined || oldRecord === undefined) {
     return {
       outcome: owners.recordReinstallOutcome({
