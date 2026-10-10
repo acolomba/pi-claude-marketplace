@@ -207,7 +207,8 @@ const HELLO_PLANNED = { scope: "project", plugin: "hello", marketplace: "mp" } a
 
 /** The row of an owner `hello` whose one legacy entry `srv` stays in place. */
 function helloRow<
-  Kind extends "unowned" | "not-listed" | "source-unreadable" | "marketplace-unreadable",
+  Kind extends
+    "unowned" | "not-listed" | "source-unreadable" | "source-outdated" | "marketplace-unreadable",
 >(
   kind: Kind,
   marketplace = "mp",
@@ -478,8 +479,12 @@ interface GitOwnerSeed {
   readonly recordedSha?: string;
   /** Whether the manifest pins `MANIFEST_SHA`. */
   readonly pinned: boolean;
-  /** `warm` lays the plugin out under the recorded-sha clone; `headless-mirror` leaves a mirror without `.git/HEAD`. */
-  readonly cache: "warm" | "cold" | "headless-mirror";
+  /**
+   * `warm` lays the plugin out under the recorded-sha clone;
+   * `warm-without-path` declares a `git-subdir` source whose path that clone
+   * lacks; `headless-mirror` leaves a mirror without `.git/HEAD`.
+   */
+  readonly cache: "warm" | "warm-without-path" | "cold" | "headless-mirror";
 }
 
 /**
@@ -491,14 +496,18 @@ async function seedGitOwner(
   { cwd, locations }: Scope,
   seed: GitOwnerSeed,
 ): Promise<{ readonly cloneDir: string; readonly legacyBytes: string }> {
-  const source = seed.pinned
-    ? { source: "url", url: GIT_URL, sha: MANIFEST_SHA }
-    : { source: "url", url: GIT_URL };
+  const location =
+    seed.cache === "warm-without-path"
+      ? { source: "git-subdir", url: GIT_URL, path: "plugins/hello" }
+      : { source: "url", url: GIT_URL };
+  const source = seed.pinned ? { ...location, sha: MANIFEST_SHA } : location;
   const parsed = parsePluginSource(source);
-  assert.strictEqual(parsed.kind, "url");
+  assert.ok(parsed.kind === "url" || parsed.kind === "git-subdir");
   const cloneUrl = canonicalCloneUrl(parsed);
   const cloneDir = await locations.pluginCloneDir(pluginCloneKey(cloneUrl, RECORDED_SHA));
-  if (seed.cache === "warm") {
+  if (seed.cache === "warm-without-path") {
+    await mkdir(path.join(cloneDir, "plugins"), { recursive: true });
+  } else if (seed.cache === "warm") {
     await mkdir(path.join(cloneDir, ".claude-plugin"), { recursive: true });
     await writeFile(
       path.join(cloneDir, ".claude-plugin", "plugin.json"),
@@ -1238,6 +1247,29 @@ describe("migrateLegacyMcpEntries", () => {
       await assert.rejects(readFile(scope.locations.mcpAdapterJsonPath), { code: "ENOENT" });
     });
   }
+
+  test("AMIG-01 / D-08-05: a recorded commit with no plugin at the declared path gives one source-outdated row and no write", async (t) => {
+    // arrange
+    const scope = await createProjectScope(t, "git-outdated");
+    const { legacyBytes } = await seedGitOwner(scope, {
+      recordedSha: RECORDED_SHA,
+      pinned: true,
+      cache: "warm-without-path",
+    });
+    const log: string[] = [];
+    const input = migrationInput(scope.cwd);
+
+    // act
+    await migrateLegacyMcpEntries(input, recordingOperations(log));
+
+    // assert
+    assert.deepStrictEqual(
+      { rows: input.rows, log },
+      { rows: [helloRow("source-outdated")], log: [] },
+    );
+    assert.strictEqual(await readFile(scope.locations.mcpJsonPath, "utf8"), legacyBytes);
+    await assert.rejects(readFile(scope.locations.mcpAdapterJsonPath), { code: "ENOENT" });
+  });
 
   for (const { source, key, label, write } of [
     {

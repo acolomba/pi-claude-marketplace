@@ -545,6 +545,20 @@ export interface McpMigrationMarketplaceUnreadableRow {
 }
 
 /**
+ * D-08-05 / AMIG-01: an installed git-source plugin whose recorded commit, as
+ * its warm clone holds it, has no plugin at the path the marketplace declares.
+ * An update installs the source the marketplace now declares, so the remedy
+ * is an update.
+ */
+export interface McpMigrationSourceOutdatedRow {
+  readonly kind: "source-outdated";
+  readonly scope: Scope;
+  readonly plugin: string;
+  readonly marketplace: string;
+  readonly servers: readonly string[];
+}
+
+/**
  * AMIG-01: an installed plugin whose new key another config source already
  * defines in full, so none of its servers moved. `key` is that source's key
  * and `source` names it as the row reads it: a scope file with its article
@@ -616,6 +630,7 @@ export type McpMigrationRow =
   | McpMigrationUnownedRow
   | McpMigrationNotListedRow
   | McpMigrationSourceUnreadableRow
+  | McpMigrationSourceOutdatedRow
   | McpMigrationMarketplaceUnreadableRow
   | McpMigrationCollisionRow
   | McpMigrationFileUnreadableRow
@@ -687,6 +702,7 @@ function leftRowKeys(row: McpMigrationLeftRow): readonly [plugin: string, name: 
     case "unowned":
     case "not-listed":
     case "source-unreadable":
+    case "source-outdated":
     case "marketplace-unreadable":
     case "collision":
     case "unfinished":
@@ -771,6 +787,8 @@ function leftRowLine(row: McpMigrationLeftRow): string {
       return `${ownerRowPrefix(row)} The ${printable(row.marketplace)} marketplace no longer lists ${printable(row.plugin)} in a valid form. Run /claude:plugin marketplace update ${printable(row.marketplace)}, or /claude:plugin uninstall ${printable(row.plugin)}@${printable(row.marketplace)} to remove it.`;
     case "source-unreadable":
       return `${ownerRowPrefix(row)} The plugin source is not available offline. Run /claude:plugin reinstall ${printable(row.plugin)}@${printable(row.marketplace)} to move it.`;
+    case "source-outdated":
+      return `${ownerRowPrefix(row)} The installed commit of ${printable(row.plugin)} has no plugin at its declared path. Run /claude:plugin update ${printable(row.plugin)}@${printable(row.marketplace)} to move it.`;
     case "marketplace-unreadable":
       return `${ownerRowPrefix(row)} The ${printable(row.marketplace)} marketplace copy cannot give the source of ${printable(row.plugin)}. Run /claude:plugin marketplace update ${printable(row.marketplace)}, or /claude:plugin uninstall ${printable(row.plugin)}@${printable(row.marketplace)} to remove it.`;
     case "collision":
@@ -847,7 +865,7 @@ function mcpMigrationSeverity(
  * covering both scopes. With no row it sends nothing. Otherwise it sends one
  * notification: a summary line, a blank line, the moved rows, the removed
  * rows with their reason, the rows left in `mcp.json` (stopped,
- * file-unreadable, unowned, not-listed, source-unreadable,
+ * file-unreadable, unowned, not-listed, source-unreadable, source-outdated,
  * marketplace-unreadable, collision, unfinished), then, when a row moved, the cost line, then the lines of every
  * `mcpConfigNoticeSections` section, then, when a row moved or was removed,
  * the reload hint. Moved and removed rows sort project before user, then by

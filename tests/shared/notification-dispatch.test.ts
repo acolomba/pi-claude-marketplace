@@ -7229,6 +7229,46 @@ describe("notifyMcpMigration", () => {
     });
   }
 
+  test("D-08-05: a source-outdated row names an update and sorts by plugin beside a marketplace-unreadable row", (t) => {
+    // arrange
+    const ctx = createContext(t);
+
+    // act
+    notifyMcpMigration(ctx as never, {
+      rows: [
+        {
+          kind: "source-outdated",
+          scope: "user",
+          plugin: "moved",
+          marketplace: "official",
+          servers: ["mod", "aux"],
+        },
+        {
+          kind: "marketplace-unreadable",
+          scope: "user",
+          plugin: "legacy",
+          marketplace: "official",
+          servers: ["tool"],
+        },
+      ],
+      notices: [],
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      ctx.ui.notify.mock.calls.map((call) => call.arguments),
+      [
+        [
+          "Plugin MCP servers in mcp.json need attention.\n\n" +
+            "Left in mcp.json:\n" +
+            "  tool (legacy) [user] The official marketplace copy cannot give the source of legacy. Run /claude:plugin marketplace update official, or /claude:plugin uninstall legacy@official to remove it.\n" +
+            "  mod, aux (moved) [user] The installed commit of moved has no plugin at its declared path. Run /claude:plugin update moved@official to move it.",
+          "warning",
+        ],
+      ],
+    );
+  });
+
   test("AMIG-03: left-in-place rows sort with the stopped rows by scope, then plugin, then first old name", (t) => {
     // arrange
     const ctx = createContext(t);

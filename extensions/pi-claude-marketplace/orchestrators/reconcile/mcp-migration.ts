@@ -41,9 +41,11 @@
 // same reason. An owner whose manifest no longer lists it in a valid form,
 // whose source cannot be read offline, whose new key another config source
 // already defines, or whose scope holds a config file that does not parse
-// stays in place with a row, and the next `/reload` tries again. Each row
-// names a remedy that clears its cause. Nothing is damped: such an entry is reported on every reload
-// until its cause is cleared (COMPAT-01 keeps no state).
+// stays in place with a row, and the next `/reload` tries again. So does a
+// git owner whose recorded commit has no plugin at the declared path
+// (D-08-05). Each row names a remedy that clears its cause. Nothing is
+// damped: such an entry is reported on every reload until its cause is
+// cleared (COMPAT-01 keeps no state).
 //
 // NFR-5: no network. This module stays outside `NETWORK_SEAMS` and never names
 // the git surface. A path source is read from the marketplace's current
@@ -250,47 +252,65 @@ function readableOffline(resolved: ResolvedPlugin): boolean {
 }
 
 /** Why an owner's source gives no resolve the move can act on. */
-type OfflineMiss = "not-listed" | "source-unreadable" | "marketplace-unreadable";
+type OfflineMiss =
+  "not-listed" | "source-unreadable" | "source-outdated" | "marketplace-unreadable";
 
 /**
- * The git-root resolver of the offline read (NFR-5), and whether the
- * plugin's clone could not be read from the cache: it is missing, or its
- * probe threw. A record with a sha reads that sha's warm clone; one without
- * has no clone to read.
+ * The git-root resolver of the offline read (NFR-5), whether the plugin's
+ * clone could not be read from the cache (it is missing, or its probe threw),
+ * and whether the warm clone has no plugin at the declared path. A record
+ * with a sha reads that sha's warm clone; one without has no clone to read.
  */
+interface OfflineCloneRead {
+  readonly resolve: (source: GitBackedSource) => Promise<GitPluginRootResult>;
+  readonly cloneUnread: () => boolean;
+  readonly pathMissing: () => boolean;
+}
+
 function offlineCloneRead(
   locations: ScopedLocations,
   record: PluginInstallRecord,
-): {
-  readonly resolve: (source: GitBackedSource) => Promise<GitPluginRootResult>;
-  readonly cloneUnread: () => boolean;
-} {
+): OfflineCloneRead {
   const probe =
     record.resolvedSha === undefined
       ? undefined
       : makeRecordedShaPresenceProbe(locations, record.resolvedSha);
   let unread = false;
+  let missing = false;
   return {
     resolve: async (source) => {
       unread = true;
       const result: GitPluginRootResult =
         probe === undefined ? { kind: "not-cached" } : await probe(source);
       unread = result.kind === "not-cached";
+      missing = result.kind === "missing-subdir" || result.kind === "escapes";
       return result;
     },
     cloneUnread: () => unread,
+    pathMissing: () => missing,
   };
+}
+
+/** The miss of a resolve the move cannot act on, by what the clone read found. */
+function missKind(clone: OfflineCloneRead): Exclude<OfflineMiss, "not-listed"> {
+  if (clone.cloneUnread()) {
+    return "source-unreadable";
+  }
+
+  return clone.pathMissing() ? "source-outdated" : "marketplace-unreadable";
 }
 
 /**
  * Re-resolves the plugin from the cached marketplace manifest with no network
  * (NFR-5). Each miss names the cause a command can clear (AMIG-01):
  * `source-unreadable` for a git clone the cache cannot give, which a
- * reinstall fetches; `not-listed` when the manifest has no valid entry for
- * the plugin; `marketplace-unreadable` for any other read failure, such as a
- * missing or unparseable manifest or a plugin directory the marketplace copy
- * lacks. A reinstall reads the same marketplace copy, so it clears neither of
- * the last two.
+ * reinstall fetches; `source-outdated` for a warm clone of the recorded
+ * commit with no plugin at the declared path, which an update replaces with
+ * the source the marketplace now declares (D-08-05); `not-listed` when the
+ * manifest has no valid entry for the plugin; `marketplace-unreadable` for
+ * any other read failure, such as a missing or unparseable manifest or a
+ * plugin directory the marketplace copy lacks. A reinstall reads the same
+ * marketplace copy, so it clears neither of the last two.
  */
 async function resolveOffline(
   locations: ScopedLocations,
@@ -315,7 +335,7 @@ async function resolveOffline(
       return resolved;
     }
 
-    return clone.cloneUnread() ? "source-unreadable" : "marketplace-unreadable";
+    return missKind(clone);
   } catch {
     // The entries keep working under their old names; the next reload tries
     // again.

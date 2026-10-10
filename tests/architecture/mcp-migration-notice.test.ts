@@ -109,6 +109,13 @@ const CATALOG_REPORT_ROWS: readonly CatalogReportRow[] = [
           servers: ["tool"],
         },
         {
+          kind: "source-outdated",
+          scope: "user",
+          plugin: "moved",
+          marketplace: "official",
+          servers: ["mod"],
+        },
+        {
           kind: "not-listed",
           scope: "user",
           plugin: "retired",
