@@ -630,6 +630,13 @@ v1.20 requirements are in [the archive](milestones/v1.20-REQUIREMENTS.md).
   reload, a fresh install, both tool-search routes and `info` status from
   `status unknown` to `connected`; peer range `>=5.2.0 <6`
   (GHSA-6qxp-vccf-f47h) (ADOC-01..03) — mcp-4 Phase 7, verified 2026-10-09.
+- ✓ The milestone carries no debt: the PR passes the fallow audit, every
+  Phase 1-7 review finding is fixed or closed with a reason, a user's
+  per-server MCP choices (now with `openUi` and `trace`) survive disable then
+  enable and uninstall then reinstall, remote servers keep OAuth beside clean
+  non-Authorization headers, MCP staging takes an explicit environment, and
+  state lookups read own keys only (`__proto__` refused as a name)
+  (DEBT-01..05) — mcp-4 Phase 8, verified 2026-10-10.
 - ✓ Bare and wrapped plugin manifests follow consistent precedence, malformed
   manifests keep their failure behavior, and missing manifests remain valid —
   v1.20 Phase 1, verified 2026-09-14.
@@ -1089,6 +1096,11 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
+
+_Last updated: 2026-10-10 after mcp-4 Phase 8 (clear milestone debt) verified
+5/5; review WR-01..04 and IN-01..03 fixed (7/7); security verified, 0 open;
+Nyquist validated. All eight phases are complete; the milestone re-audit and
+close are next. Prior updates follow._
 
 _Last updated: 2026-10-09 after mcp-4 Phase 7 (docs and live proof) verified
 3/3; review WR-01/02 and IN-01..06 fixed (8/8); security verified, 0 open;
