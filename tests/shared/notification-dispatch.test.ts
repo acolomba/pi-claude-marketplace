@@ -5922,6 +5922,34 @@ test("AFILE-06: one override-kept notice sends its exact warning bytes", (t) => 
   );
 });
 
+test("AFILE-06: control, line-separator and bidi characters in an override-kept field name render as \\u escapes", (t) => {
+  // arrange
+  const ctx = createContext(t);
+
+  // act
+  notifyMcpConfigNotices(ctx as never, [
+    {
+      kind: "override-kept",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "srv",
+      fields: ["e\u001b[2Jn\nv", "he\u2028ad\u202eers"],
+    },
+  ]);
+
+  // assert
+  assert.deepStrictEqual(
+    ctx.ui.notify.mock.calls.map((call) => call.arguments),
+    [
+      [
+        'MCP server override kept.\n\nhello now provides "srv" in the project-scope mcp-adapter.json. Your override for "srv" is kept, but these fields of it stop applying: e\\u001b[2Jn\\u000av, he\\u2028ad\\u202eers. It comes back when you uninstall or disable hello.',
+        "warning",
+      ],
+    ],
+  );
+});
+
 test("AFILE-06: override-kept notices for two servers share one warning with a line each, in list order", (t) => {
   // arrange
   const ctx = createContext(t);

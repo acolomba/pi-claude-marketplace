@@ -328,7 +328,7 @@ function mcpConfigFileLine(notice: McpConfigFileNotice): string {
 }
 
 function mcpOverrideKeptLine(notice: McpOverrideKeptNotice): string {
-  return `${printable(notice.plugin)} now provides "${printable(notice.server)}" in the ${notice.scope}-scope ${notice.file}. Your override for "${printable(notice.server)}" is kept, but these fields of it stop applying: ${notice.fields.join(", ")}. It comes back when you uninstall or disable ${printable(notice.plugin)}.`;
+  return `${printable(notice.plugin)} now provides "${printable(notice.server)}" in the ${notice.scope}-scope ${notice.file}. Your override for "${printable(notice.server)}" is kept, but these fields of it stop applying: ${notice.fields.map(printable).join(", ")}. It comes back when you uninstall or disable ${printable(notice.plugin)}.`;
 }
 
 function mcpVariablesMissingLine(notice: McpVariablesMissingNotice): string {
