@@ -56,9 +56,13 @@ import {
   DependencyCascadeError,
   PluginShapeError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
-import { createNotificationBoundary } from "../../edge/notification-boundary.ts";
+import {
+  createNotificationBoundary,
+  expectSoftDepProbes,
+} from "../../edge/notification-boundary.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+import { adapterCommand } from "../../platform/pi-inventory-seed.ts";
 
 import type { HooksRouting } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import type { HooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
@@ -1920,11 +1924,13 @@ test("AFILE-04: import over a commented mcp-adapter.json shows the comments-remo
   verifyBoundary();
 });
 
-test("AVAR-04: an import reports the unset variable and the withheld credential after its cascade", async (t) => {
-  // arrange
-  // Plugin `hello` declares a stdio server that reads the unset
-  // `PI_CM_AVAR_SITE` and a remote server that sends the set
-  // `ANTHROPIC_API_KEY`, which Claude Code never sends to a remote server.
+/**
+ * AVAR-04: plugin `hello` declares a stdio server that reads the unset
+ * `PI_CM_AVAR_SITE` and a remote server that sends the set
+ * `ANTHROPIC_API_KEY`, which Claude Code never sends to a remote server. The
+ * project settings declare it enabled.
+ */
+async function seedVariableNoticePlugin(t: TestContext): Promise<{ cwd: string }> {
   const savedSite = process.env.PI_CM_AVAR_SITE;
   const savedCredential = process.env.ANTHROPIC_API_KEY;
   t.after(() => {
@@ -1942,7 +1948,6 @@ test("AVAR-04: an import reports the unset variable and the withheld credential 
   delete process.env.PI_CM_AVAR_SITE;
   process.env.ANTHROPIC_API_KEY = "avar-sentinel-04-09";
   const { cwd } = await createHermeticScopes(t, "mcp-variable-notices");
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(3, 1);
   const marketplaceRoot = path.join(cwd, "fixture-mp");
   await writeUnder(
     path.join(marketplaceRoot, ".claude-plugin", "marketplace.json"),
@@ -1972,6 +1977,31 @@ test("AVAR-04: an import reports the unset variable and the withheld credential 
     path.join(cwd, ".claude", "settings.json"),
     settingsNaming(marketplaceRoot, { "hello@fixture-mp": true }),
   );
+  return { cwd };
+}
+
+/** AVAR-04 / AVAR-05: the two notices an import of the seeded `hello` sends. */
+function variableNotices(): Array<{ message: string; severity: "warning" }> {
+  return [
+    {
+      message:
+        "MCP server variables not set.\n\n" +
+        'Server "plugin_hello_local_" from hello in the project-scope mcp-adapter.json uses environment variables that were not set at install: PI_CM_AVAR_SITE.',
+      severity: "warning",
+    },
+    {
+      message:
+        "MCP server credentials withheld.\n\n" +
+        'Server "plugin_hello_api_" from hello in the project-scope mcp-adapter.json references credential variables that Claude Code never sends to a remote server: ANTHROPIC_API_KEY. They were written as empty values.',
+      severity: "warning",
+    },
+  ];
+}
+
+test("AVAR-04: an import reports the unset variable and the withheld credential after its cascade", async (t) => {
+  // arrange
+  const { cwd } = await seedVariableNoticePlugin(t);
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(3, 1);
 
   // act
   await importClaudeSettings({
@@ -1992,23 +2022,42 @@ test("AVAR-04: an import reports the unset variable and the withheld credential 
         "Import: 2 successes\n\n" +
         "/reload to pick up changes",
     },
-    {
-      message:
-        "MCP server variables not set.\n\n" +
-        'Server "plugin_hello_local_" from hello in the project-scope mcp-adapter.json uses environment variables that were not set at install: PI_CM_AVAR_SITE.',
-      severity: "warning",
-    },
-    {
-      message:
-        "MCP server credentials withheld.\n\n" +
-        'Server "plugin_hello_api_" from hello in the project-scope mcp-adapter.json references credential variables that Claude Code never sends to a remote server: ANTHROPIC_API_KEY. They were written as empty values.',
-      severity: "warning",
-    },
+    ...variableNotices(),
   ]);
   assert.deepStrictEqual(
     notifications.filter(({ message }) => message.includes("avar-sentinel-04-09")),
     [],
   );
+  verifyBoundary();
+});
+
+test("AVAR-04 / AVAR-05: with pi-mcp-adapter loaded, an import reports an info row and the MCP notices as separate warnings (D-08-03)", async (t) => {
+  // arrange
+  const { cwd } = await seedVariableNoticePlugin(t);
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(3, 0);
+  expectSoftDepProbes(pi, 1, [], [adapterCommand()]);
+
+  // act
+  await importClaudeSettings({
+    ctx,
+    cwd,
+    gitOps: createOfflineGitOps(),
+    pi,
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["project"],
+  });
+
+  // assert
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "● fixture-mp [project] (added)\n" +
+        "  ● hello (installed)\n\n" +
+        "Import: 2 successes\n\n" +
+        "/reload to pick up changes",
+    },
+    ...variableNotices(),
+  ]);
   verifyBoundary();
 });
 

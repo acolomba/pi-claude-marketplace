@@ -45,7 +45,7 @@ import { MarketplaceNotFoundError } from "../../../extensions/pi-claude-marketpl
 import { notify } from "../../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
 import { withLockedStateTransaction } from "../../../extensions/pi-claude-marketplace/transaction/with-state-guard.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
-import { adapterCommand } from "../../platform/pi-inventory-seed.ts";
+import { adapterCommand, toolInventoryItem } from "../../platform/pi-inventory-seed.ts";
 
 import type { HooksRouting } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import type { HooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
@@ -58,7 +58,6 @@ import type {
   CommandInventoryItem,
   NotificationContext,
   PiInventory,
-  ToolInventoryItem,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
 /**
@@ -115,18 +114,11 @@ function makeCtx(cwd: string): { ctx: NotificationContext; notifications: Notify
   return { ctx, notifications };
 }
 
-function toolInfo(name: string): ToolInventoryItem {
-  return {
-    name,
-    sourceInfo: { source: "test" },
-  };
-}
-
 function makePi(
   toolNames: readonly string[] = [],
   commands: readonly CommandInventoryItem[] = [],
 ): PiInventory {
-  return { getAllTools: () => toolNames.map(toolInfo), getCommands: () => commands };
+  return { getAllTools: () => toolNames.map(toolInventoryItem), getCommands: () => commands };
 }
 
 function createUpdatePlugins() {

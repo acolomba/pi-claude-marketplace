@@ -7,7 +7,10 @@
  */
 import { Type } from "typebox";
 
-import type { PiInventory } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type {
+  PiInventory,
+  ToolInventoryItem,
+} from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { SlashCommandInfo, ToolInfo } from "@earendil-works/pi-coding-agent";
 
 export function toolInfo(name: string): ToolInfo {
@@ -23,6 +26,11 @@ export function toolInfo(name: string): ToolInfo {
       source: "test",
     },
   } satisfies ToolInfo;
+}
+
+/** The minimal tool entry the soft-dependency probe reads: a name and a source. */
+export function toolInventoryItem(name: string): ToolInventoryItem {
+  return { name, sourceInfo: { source: "test" } };
 }
 
 /** A Pi inventory with no tools and no slash commands. */

@@ -71,7 +71,7 @@ import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { captureDebugLog } from "../../platform/debug-log-capture.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
-import { adapterCommand } from "../../platform/pi-inventory-seed.ts";
+import { adapterCommand, toolInventoryItem } from "../../platform/pi-inventory-seed.ts";
 
 import { retryTree } from "./scope-tree-inventory.ts";
 
@@ -90,7 +90,6 @@ import type {
   CommandInventoryItem,
   NotificationContext,
   PiInventory,
-  ToolInventoryItem,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { CompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
@@ -290,13 +289,6 @@ interface NotifyRecord {
   severity?: string;
 }
 
-function toolInfo(name: string): ToolInventoryItem {
-  return {
-    name,
-    sourceInfo: { source: "test" },
-  };
-}
-
 function makeCtx(piOverrides?: {
   readonly toolNames?: readonly string[];
   readonly commands?: readonly CommandInventoryItem[];
@@ -314,7 +306,7 @@ function makeCtx(piOverrides?: {
     },
   };
   const pi: PiInventory = {
-    getAllTools: () => (piOverrides?.toolNames ?? []).map(toolInfo),
+    getAllTools: () => (piOverrides?.toolNames ?? []).map(toolInventoryItem),
     getCommands: () => piOverrides?.commands ?? [],
   };
   return { ctx, pi, notifications };
