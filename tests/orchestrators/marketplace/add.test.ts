@@ -1266,6 +1266,77 @@ test("accepts a path marketplace with an allowed dependency marketplace", async 
   });
 });
 
+/** Writes a path marketplace whose manifest declares `name` and no plugins. */
+async function writeNamedPathMarketplace(cwd: string, name: string): Promise<string> {
+  const marketplaceRoot = path.join(cwd, "named-marketplace");
+  const manifestDirectory = path.join(marketplaceRoot, ".claude-plugin");
+  await mkdir(manifestDirectory, { recursive: true });
+  await writeFile(
+    path.join(manifestDirectory, "marketplace.json"),
+    JSON.stringify({ name, plugins: [] }),
+  );
+  return marketplaceRoot;
+}
+
+test("D-08-07: adds a path marketplace named constructor", async (t) => {
+  await createHermeticEnvironment(t, "mp-add-constructor-home-");
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    const marketplaceRoot = await writeNamedPathMarketplace(cwd, "constructor");
+    const { ctx, pi, notifications } = makeCtx();
+    const { gitOps } = createGitOps();
+
+    // act
+    await addMarketplace({ ctx, pi, scope: "project", cwd, rawSource: marketplaceRoot, gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [{ message: "● constructor [project] (added)" }]);
+    assert.deepStrictEqual(Object.keys((await loadState(locations.extensionRoot)).marketplaces), [
+      "constructor",
+    ]);
+  });
+});
+
+test("MA-8 / D-08-07: refuses a second add of a marketplace named constructor", async (t) => {
+  await createHermeticEnvironment(t, "mp-add-constructor-dup-home-");
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    const marketplaceRoot = await writeNamedPathMarketplace(cwd, "constructor");
+    const first = makeCtx();
+    await addMarketplace({
+      ctx: first.ctx,
+      pi: first.pi,
+      scope: "project",
+      cwd,
+      rawSource: marketplaceRoot,
+      gitOps: createGitOps().gitOps,
+    });
+    const { ctx, pi, notifications } = makeCtx();
+
+    // act
+    await addMarketplace({
+      ctx,
+      pi,
+      scope: "project",
+      cwd,
+      rawSource: marketplaceRoot,
+      gitOps: createGitOps().gitOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A marketplace operation has failed.\n\n⊘ constructor [project] (failed) {duplicate name}",
+        severity: "error",
+      },
+    ]);
+    assert.deepStrictEqual(Object.keys((await loadState(locations.extensionRoot)).marketplaces), [
+      "constructor",
+    ]);
+  });
+});
+
 test("rejects a path marketplace with a scalar dependency allowlist", async () => {
   await withTmpScope(async ({ cwd, locations }) => {
     // arrange

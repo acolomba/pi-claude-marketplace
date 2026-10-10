@@ -18,13 +18,13 @@
 //             a tree carrying the marker whose `origin` names the source is
 //             removed; every other outcome throws
 //       fs.rename(stagingDir, finalDir)                     // atomic, same-FS by D-09
-//       state.marketplaces[derivedName] = { ... }
+//       setOwn(state.marketplaces, derivedName, { ... })
 //
 //     if (path):
 //       resolve manifest path on disk per MA-3
 //       read + MARKETPLACE_VALIDATOR.Check(manifest.json)
 //       MA-8 duplicate-name check on state.marketplaces[<derivedName>]
-//       state.marketplaces[derivedName] = { ... }            // NFR-5: NO gitOps calls
+//       setOwn(state.marketplaces, derivedName, { ... })     // NFR-5: NO gitOps calls
 //   })
 //
 //   // The success notification is a single
@@ -85,6 +85,7 @@ import {
   type MarketplaceRows,
   type Single,
 } from "../../shared/notify-context.ts";
+import { ownValue, setOwn } from "../../shared/own-key.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
 import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
@@ -862,7 +863,7 @@ async function addGitClonedInGuard(args: {
     const derivedName = parsed.name;
 
     // 4. MA-8: duplicate name in this scope.
-    if (derivedName in state.marketplaces) {
+    if (ownValue(state.marketplaces, derivedName) !== undefined) {
       throw new MarketplaceDuplicateNameError(derivedName, locations.scope);
     }
 
@@ -896,7 +897,7 @@ async function addGitClonedInGuard(args: {
     stagedAtFinal = true;
 
     // 7. Mutate state.
-    state.marketplaces[derivedName] = {
+    setOwn(state.marketplaces, derivedName, {
       name: derivedName,
       scope: locations.scope,
       source,
@@ -905,7 +906,7 @@ async function addGitClonedInGuard(args: {
       marketplaceRoot: finalDir,
       lastUpdatedAt: new Date().toISOString(),
       plugins: {},
-    };
+    });
     return derivedName;
   } catch (err) {
     // MA-9: append leaks rather than mask original error.
@@ -1062,14 +1063,14 @@ async function addPathInGuard(args: {
   const derivedName = parsed.name;
 
   // MA-8: duplicate name in scope.
-  if (derivedName in state.marketplaces) {
+  if (ownValue(state.marketplaces, derivedName) !== undefined) {
     throw new MarketplaceDuplicateNameError(derivedName, locations.scope);
   }
 
   // MA-4: source already preserves the user-typed `~` verbatim
   // (ParsedSource.raw) via pathSource() factory. We store the parsed
   // source object directly -- ST-6 funnel re-validates on next load.
-  state.marketplaces[derivedName] = {
+  setOwn(state.marketplaces, derivedName, {
     name: derivedName,
     scope: locations.scope,
     source,
@@ -1078,7 +1079,7 @@ async function addPathInGuard(args: {
     marketplaceRoot,
     lastUpdatedAt: new Date().toISOString(),
     plugins: {},
-  };
+  });
   return derivedName;
 }
 
