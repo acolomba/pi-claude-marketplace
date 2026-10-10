@@ -121,7 +121,7 @@ Task-level map (every plan from 01-02 on also runs `node scripts/notify-corpus.m
 - [x] Wave 0 covers all MISSING references
 - [x] No watch-mode flags
 - [ ] Feedback latency < 180s is a target, not a measured guarantee. The latest full unit run took 404 seconds. Use focused commands for task feedback.
-- [x] `nyquist_compliant: true` set in frontmatter
+- [ ] `nyquist_compliant: true` set in frontmatter
 
 **Approval:** validated 2026-10-01 against existing passing evidence. No test additions were needed.
 
