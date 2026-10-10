@@ -742,3 +742,24 @@ These are native wire values, including spaces and hyphens. They are not the lab
 `RowHint`: `partial-install`, `partial-update`, `stale-gate-update`, `enable`.
 
 `Reason`: `up-to-date`, `not found`, `already installed`, `not installed`, `not in manifest`, `invalid manifest`, `no longer installable`, `unsupported source`, `unsupported component`, `unsupported hooks`, `lsp`, `requires pi-subagents`, `requires pi-mcp`, `rollback partial`, `unreadable`, `unparseable`, `unreadable manifest`, `source mismatch`, `plugins remain`, `concurrently uninstalled`, `concurrently updated`, `stale clone`, `duplicate name`, `lock held`, `already autoupdate`, `already no autoupdate`, `already enabled`, `already disabled`, `permission denied`, `source missing`, `network unreachable`, `marketplace not added`, `marketplace not added to user scope`, `marketplace not added to project scope`, `orphan rewake`, `authentication required`, `dangling reference`, `malformed mcp`, `malformed skill`, `malformed command`, `installs disabled`, `marketplace in user scope`, `marketplace in project scope`, `data kept`, `no matching version`, `version conflict`, `constraint too complex`, `invalid version constraint`, `dependency marketplace not added`, `dependency cycle`, `dependency failed`, `dependency promoted`, `dependency pruned`, `dependency unsatisfied`, `dependency version unsatisfied`, `dependents unsatisfied`, `dependency current copy`, `dependency enabled`, `dependents remain`, `dependency installed`, `dependents constrain`, `cross-marketplace`, `stale workflow command`, `requires pi-dynamic-workflows`, `components now supported`.
+
+## Limitations
+
+Print mode uses Pi's silent `notify` behavior. Scripts that need plugin output must use `--mode json`. Plugin command severity does not determine Pi's process exit status. Pi can exit zero after a command reports an error. Independent CLI or runtime failures can still return nonzero. Check both the process status and the selected command's payloads.
+
+Entries emitted during `session_start` and `resources_discover` are not streamed in JSON or RPC mode. These hooks run before the output subscription starts. RPC clients can retrieve those entries with `get_entries`. The absence of a startup entry from the stream does not mean that the hook did not run.
+
+RPC front-ends receive custom `claude-plugin` entries through the JSON strategy. They do not also receive the human `notify` text. Front-ends must render these entries, at least the `device-flow-prompt` fields `verificationUri` and `userCode`, so users can authorize the device.
+
+A slash-command-only run does not create its initial session file until an assistant message exists. This applies even when persistence is enabled. The independent `--no-session` flag disables persistence altogether. An entry in session memory or the event stream therefore does not prove that Pi wrote a session file.
+
+The [real-runtime tests](../tests/e2e/pi-json-output.test.ts) passed on installed Pi 0.87.1 and the separate exact-floor fixture, Pi 0.86.1. Both runs verified schema-valid command output, startup memory without streaming, RPC retrieval, and slash-only persistence timing. The [execution record](../.planning/phases/07-mode-refusals-real-pi-verification-and-docs/07-03-SUMMARY.md#verification-evidence) records the commands, versions, and results. These tests use fresh directories and no operator credentials.
+
+Output delivery has four accepted limits:
+
+- Each ordinary command append failure gets one direct recovery attempt on the same sink. Successful recovery permits later entries and a new recovery attempt for a later independent failure.
+- The extension does not retry the business operation because output failed.
+- Failed output does not undo completed changes or promise rollback. Earlier results and `needsReload` remain relevant.
+- If the sink also rejects recovery, delivery closes. Sustained sink failure can leave no command outcome, even after work completed.
+
+The [command-run evidence](../.planning/phases/06-command-run-contract/06-03-SUMMARY.md#fault-path-evidence) covers recovery, retained changes, and separate overlapping invocations. Invocation IDs correlate output for one command, including its nested work. They are not persistent user identifiers or cross-session tracking, and the extension sends no telemetry. If no known outcome arrives, the examples fail with `No command outcome received`. Prompts, diagnostics, silence, and a zero Pi exit status cannot establish success. Keep earlier payloads when a later failure arrives.
