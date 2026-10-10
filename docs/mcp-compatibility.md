@@ -169,7 +169,11 @@ A server config that the schema of Claude Code rejects is malformed. Examples ar
 
 ## User overrides
 
-You can change a plugin server's entry in `mcp-adapter.json` yourself. For example, `/mcp-adapter disable` writes `disabled: true`. When this extension updates or reinstalls the plugin, it keeps your values of these fields: `disabled`, `approveTools`, `includeTools`, `excludeTools`, `lifecycle`, `idleTimeout`, `requestTimeoutMs`, `debug`, and `searchKeywords`.
+You can change a plugin server's entry in `mcp-adapter.json` yourself. This extension keeps your values of these fields: `disabled`, `approveTools`, `includeTools`, `excludeTools`, `lifecycle`, `idleTimeout`, `requestTimeoutMs`, `debug`, `searchKeywords`, `openUi`, and `trace`. Your values survive an update, a reinstall, a plugin disable then enable, and an uninstall then reinstall (D-08-01, D-08-02).
+
+While the server is not installed, this extension keeps your values in the same `mcp-adapter.json`, under the top-level member `_piClaudeMarketplace.serverChoices`. This happens when you disable or uninstall the plugin, and when an update drops the server. pi-mcp-adapter ignores this member. Each stored choice records the server key and the plugin name. When the same plugin writes the server again, your values go back into its entry and leave the store. A stored choice never applies to a server of another plugin, even one with the same key.
+
+`/mcp-adapter disable` writes its choice into the project file, `<project>/.pi/mcp-adapter.json`, whatever the scope of the server. So for a user-scope plugin, that choice already lives outside the plugin's entry, and it applies only in that project. For a project-scope plugin, the choice lands in the plugin's entry, and the store above keeps it. The store also keeps the values that you write into an entry yourself, in either scope.
 
 One exception exists. If the plugin's own entry sets one of these fields, the plugin owns that field. Today this applies only to `requestTimeoutMs`, which comes from the server's `timeout`. An update or a reinstall then writes the plugin's value, not yours. This matches Claude Code, where a user cannot change the timeout of a plugin server.
 
@@ -345,6 +349,10 @@ The behaviors below differ from Claude Code. Each item names its reason: a recor
 - A tool that its server reports with `_meta["anthropic/alwaysLoad"]: true` still loads on demand. Claude Code keeps such a tool in the prompt. Reason: a Pi capability gap. pi-mcp-adapter ignores the `_meta` of a tool, and this extension writes the entry before the tool list is known.
 - A server with tool permission rules installs and runs without them, with the warning `MCP server tool rules not enforced.` The schema of Claude Code accepts these rules for a remote server. Reason: a project decision (ANAME-07). pi-mcp-adapter has no rule for each tool, so the warning tells you that the rules do not apply. See [Tool permission rules](#tool-permission-rules).
 - Some pi-mcp-adapter settings change or drop plugin servers, and this extension gives no warning about them. Reason: a project decision (ADOC-01). These settings are your own pi-mcp-adapter configuration. See [pi-mcp-adapter settings that change plugin servers](#pi-mcp-adapter-settings-that-change-plugin-servers).
+
+### User choices
+
+- Claude Code keeps the `/mcp` choice for a plugin server per project, in `~/.claude.json`, keyed by `plugin:<plugin>:<server>`. This extension keeps your choices for a server per scope file, in the `mcp-adapter.json` of the install scope, keyed by the server key and the plugin name. So a value that you write into a user-scope entry applies in every project. Reason: a Pi capability gap (D-08-02). pi-mcp-adapter has no per-project store for the fields of a user-scope entry. The one exception is the `disabled` choice, which `/mcp-adapter disable` writes into the project file. See [User overrides](#user-overrides).
 
 ### Variables
 
