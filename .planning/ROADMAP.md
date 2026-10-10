@@ -308,10 +308,20 @@ Plans:
 4. BACKLOG.md carries WOUT-01 (workflow output quality unobserved) and DEPADV-01 (nested brace-expansion pinned by Pi's shrinkwrap). DEP-07-03-01 in the phase 7 deferred items points at DEPADV-01.
 5. `03-VALIDATION.md` reads `nyquist_compliant: true`. `01-VALIDATION.md` stays `false` with its contradicting checkbox unticked. `npm run check` is green with no new suppression and the text corpus unchanged.
 
-**Plans:** 0 plans
+**Plans:** 4 plans, sequential (waves 1-4), in the main checkout
 
 Plans:
-- [ ] TBD (run /gsd-plan-phase 8 to break down)
+**Wave 1**
+- [ ] 08-01-PLAN.md — Root lock brace-expansion fix behind a package-legitimacy checkpoint
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 08-02-PLAN.md — Resolve the pi-subagents root before the hermetic HOME swap
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 08-03-PLAN.md — WOUT-01 and DEPADV-01 carriers, deferred-item pointers, and validation records
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 08-04-PLAN.md — Ledger dispositions through a dry-run-proven script, then the phase gate
 
 ## Progress
 
