@@ -36,6 +36,7 @@ import { notify, notifyDiagnostic } from "../../shared/notification-dispatch.ts"
 import { type ContentReason } from "../../shared/notification-types.ts";
 import { type PluginSkippedMessage } from "../../shared/notification-types.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
+import { ownValue, setOwn } from "../../shared/own-key.ts";
 import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import { crossScopeFlag, marketplaceInOtherScope } from "../marketplace/shared.ts";
 
@@ -277,6 +278,55 @@ function otherScope(scope: Scope): Scope {
   return scope === "project" ? "user" : "project";
 }
 
+/** D-08-07: whether `state` records `plugin` under `marketplace`, by own keys only. */
+function hasPluginRecord(state: ExtensionState, marketplace: string, plugin: string): boolean {
+  return ownValue(ownValue(state.marketplaces, marketplace)?.plugins, plugin) !== undefined;
+}
+
+/** Both scopes' locations and state, loaded in parallel for the unqualified target forms. */
+async function loadBothScopes(cwd: string): Promise<{
+  readonly projectLocations: ScopedLocations;
+  readonly userLocations: ScopedLocations;
+  readonly projectState: ExtensionState;
+  readonly userState: ExtensionState;
+}> {
+  const projectLocations = locationsFor("project", cwd);
+  const userLocations = locationsFor("user", cwd);
+  const [projectState, userState] = await Promise.all([
+    loadState(projectLocations.extensionRoot),
+    loadState(userLocations.extensionRoot),
+  ]);
+  return { projectLocations, userLocations, projectState, userState };
+}
+
+/**
+ * SCOPE-01: the explicit-scope arm of the lifecycle target resolvers. A
+ * container in the requested scope resolves there. Otherwise the OTHER scope
+ * is consulted, so a target present only there is reported rather than
+ * collapsed into a silent miss: `presentInOther` gives `other-scope`, and
+ * anything else means the marketplace is not added in the requested scope.
+ */
+async function resolveExplicitScope(
+  cwd: string,
+  marketplace: string,
+  requestedScope: Scope,
+  presentInOther: (otherState: ExtensionState) => boolean,
+): Promise<CrossScopePluginResolution> {
+  const requestedLocations = locationsFor(requestedScope, cwd);
+  const requestedState = await loadState(requestedLocations.extensionRoot);
+  if (ownValue(requestedState.marketplaces, marketplace) !== undefined) {
+    return { kind: "resolved", scope: requestedScope, locations: requestedLocations };
+  }
+
+  const otherScopeName = otherScope(requestedScope);
+  const otherState = await loadState(locationsFor(otherScopeName, cwd).extensionRoot);
+  if (presentInOther(otherState)) {
+    return { kind: "other-scope", presentIn: otherScopeName, requestedScope };
+  }
+
+  return { kind: "marketplace-absent", requestedScope };
+}
+
 /**
  * SCOPE-01: resolve a (marketplace, plugin) lifecycle target across scopes.
  * Mirrors the `loadState`/`locationsFor` read pattern from
@@ -291,46 +341,25 @@ export async function resolveCrossScopePluginTarget(opts: {
   readonly explicitScope?: Scope;
 }): Promise<CrossScopePluginResolution> {
   if (opts.explicitScope !== undefined) {
-    const requestedScope = opts.explicitScope;
-    const requestedLocations = locationsFor(requestedScope, opts.cwd);
-    const requestedState = await loadState(requestedLocations.extensionRoot);
-
-    // Container present in the requested scope: resolve there. The plugin
-    // row may still be absent -- the caller's `installed === undefined`
-    // branch handles that silent converge.
-    if (requestedState.marketplaces[opts.marketplace] !== undefined) {
-      return { kind: "resolved", scope: requestedScope, locations: requestedLocations };
-    }
-
-    // Container absent in the requested scope: consult the OTHER scope so a
-    // target present only there is reported (SCOPE-01) rather than collapsed
-    // into a silent/not-in-manifest miss.
-    const otherScopeName = otherScope(requestedScope);
-    const otherLocations = locationsFor(otherScopeName, opts.cwd);
-    const otherState = await loadState(otherLocations.extensionRoot);
-    if (otherState.marketplaces[opts.marketplace]?.plugins[opts.plugin] !== undefined) {
-      return { kind: "other-scope", presentIn: otherScopeName, requestedScope };
-    }
-
-    // Absent in the requested scope, and either absent or merely container-
-    // present-without-the-plugin in the other scope: the marketplace the
-    // operator asked for (in the requested scope) is not added there.
-    return { kind: "marketplace-absent", requestedScope };
+    // The plugin row may be absent from a resolved container -- the caller's
+    // `installed === undefined` branch handles that silent converge. A
+    // container that holds no such row in the other scope reads as not added
+    // in the requested scope.
+    return resolveExplicitScope(opts.cwd, opts.marketplace, opts.explicitScope, (otherState) =>
+      hasPluginRecord(otherState, opts.marketplace, opts.plugin),
+    );
   }
 
   // Unqualified form: prefer project, then user (CMP-5 ordering preserved).
-  const projectLocations = locationsFor("project", opts.cwd);
-  const userLocations = locationsFor("user", opts.cwd);
-  const [projectState, userState] = await Promise.all([
-    loadState(projectLocations.extensionRoot),
-    loadState(userLocations.extensionRoot),
-  ]);
+  const { projectLocations, userLocations, projectState, userState } = await loadBothScopes(
+    opts.cwd,
+  );
 
-  if (projectState.marketplaces[opts.marketplace]?.plugins[opts.plugin] !== undefined) {
+  if (hasPluginRecord(projectState, opts.marketplace, opts.plugin)) {
     return { kind: "resolved", scope: "project", locations: projectLocations };
   }
 
-  if (userState.marketplaces[opts.marketplace]?.plugins[opts.plugin] !== undefined) {
+  if (hasPluginRecord(userState, opts.marketplace, opts.plugin)) {
     return { kind: "resolved", scope: "user", locations: userLocations };
   }
 
@@ -338,11 +367,11 @@ export async function resolveCrossScopePluginTarget(opts: {
   // somewhere" (resolved against that container's scope so the caller's
   // silent-converge path applies) from "container absent in both"
   // (marketplace-absent, no requestedScope bracket for the bare form).
-  if (projectState.marketplaces[opts.marketplace] !== undefined) {
+  if (ownValue(projectState.marketplaces, opts.marketplace) !== undefined) {
     return { kind: "resolved", scope: "project", locations: projectLocations };
   }
 
-  if (userState.marketplaces[opts.marketplace] !== undefined) {
+  if (ownValue(userState.marketplaces, opts.marketplace) !== undefined) {
     return { kind: "resolved", scope: "user", locations: userLocations };
   }
 
@@ -436,7 +465,7 @@ export async function resolveInstallMarketplaceSource(opts: {
   readonly marketplace: string;
   readonly targetState: ExtensionState;
 }): Promise<ResolvedInstallMarketplaceSource | undefined> {
-  const targetRecord = opts.targetState.marketplaces[opts.marketplace];
+  const targetRecord = ownValue(opts.targetState.marketplaces, opts.marketplace);
   if (targetRecord !== undefined) {
     return { sourceScope: opts.targetScope, sourceRecord: targetRecord };
   }
@@ -447,7 +476,7 @@ export async function resolveInstallMarketplaceSource(opts: {
 
   const userLocations = locationsFor("user", opts.cwd);
   const userState = await loadState(userLocations.extensionRoot);
-  const userRecord = userState.marketplaces[opts.marketplace];
+  const userRecord = ownValue(userState.marketplaces, opts.marketplace);
   return userRecord === undefined ? undefined : { sourceScope: "user", sourceRecord: userRecord };
 }
 
@@ -555,11 +584,12 @@ function synthesizeUndeclaredMarketplaceSource(
   state: ExtensionState,
   marketplace: string,
 ): string | undefined {
-  if (scopeConfigs.some((c) => c.marketplaces?.[marketplace] !== undefined)) {
+  if (scopeConfigs.some((c) => ownValue(c.marketplaces, marketplace) !== undefined)) {
     return undefined;
   }
 
-  const raw = (state.marketplaces[marketplace]?.source as { raw?: unknown } | undefined)?.raw;
+  const record = ownValue(state.marketplaces, marketplace);
+  const raw = (record?.source as { raw?: unknown } | undefined)?.raw;
   return typeof raw === "string" ? raw : undefined;
 }
 
@@ -742,7 +772,7 @@ function resolveTargetIsLocal(
     return true;
   }
 
-  return localCfg.status === "valid" && localCfg.config.plugins?.[key] !== undefined;
+  return localCfg.status === "valid" && ownValue(localCfg.config.plugins, key) !== undefined;
 }
 
 type InvalidConfigLoad = Extract<ConfigLoadResult, { status: "invalid" }>;
@@ -860,7 +890,10 @@ export async function overwriteDisabledMemberEntries(args: {
   for (const key of args.keys) {
     // eslint-disable-next-line no-await-in-loop -- per-key read-modify-write of its config file
     const selection = await args.select({ locations: args.locations, local: undefined, key });
-    if (selection.kind !== "selected" || selection.current.plugins?.[key]?.enabled !== false) {
+    if (
+      selection.kind !== "selected" ||
+      ownValue(selection.current.plugins, key)?.enabled !== false
+    ) {
       continue;
     }
 
@@ -895,13 +928,13 @@ export async function resolveInstalledPluginTarget(opts: {
 
   const projectLocations = locationsFor("project", opts.cwd);
   const projectState = await loadState(projectLocations.extensionRoot);
-  if (projectState.marketplaces[opts.marketplace]?.plugins[opts.plugin] !== undefined) {
+  if (hasPluginRecord(projectState, opts.marketplace, opts.plugin)) {
     return { scope: "project", locations: projectLocations };
   }
 
   const userLocations = locationsFor("user", opts.cwd);
   const userState = await loadState(userLocations.extensionRoot);
-  if (userState.marketplaces[opts.marketplace]?.plugins[opts.plugin] !== undefined) {
+  if (hasPluginRecord(userState, opts.marketplace, opts.plugin)) {
     return { scope: "user", locations: userLocations };
   }
 
@@ -951,37 +984,21 @@ export async function resolveInstalledMarketplaceTarget(opts: {
   readonly explicitScope?: Scope;
 }): Promise<ScopedMarketplaceResolution> {
   if (opts.explicitScope !== undefined) {
-    const requestedScope = opts.explicitScope;
-    const requestedLocations = locationsFor(requestedScope, opts.cwd);
-    const requestedState = await loadState(requestedLocations.extensionRoot);
-
-    // Container present in the requested scope: resolve there (the plugin set
-    // may be empty -- the caller still reads it as the update target).
-    if (requestedState.marketplaces[opts.marketplace] !== undefined) {
-      return { kind: "resolved", scope: requestedScope, locations: requestedLocations };
-    }
-
-    // Container absent in the requested scope: consult the OTHER scope so a
-    // marketplace present only there is reported (SCOPE-01) rather than
-    // collapsed into a raw not-found throw.
-    const otherScopeName = otherScope(requestedScope);
-    const otherLocations = locationsFor(otherScopeName, opts.cwd);
-    const otherState = await loadState(otherLocations.extensionRoot);
-    if (otherState.marketplaces[opts.marketplace] !== undefined) {
-      return { kind: "other-scope", presentIn: otherScopeName, requestedScope };
-    }
-
-    return { kind: "marketplace-absent", requestedScope };
+    // A resolved container's plugin set may be empty -- the caller still reads
+    // it as the update target.
+    return resolveExplicitScope(
+      opts.cwd,
+      opts.marketplace,
+      opts.explicitScope,
+      (otherState) => ownValue(otherState.marketplaces, opts.marketplace) !== undefined,
+    );
   }
 
-  const projectLocations = locationsFor("project", opts.cwd);
-  const userLocations = locationsFor("user", opts.cwd);
-  const [projectState, userState] = await Promise.all([
-    loadState(projectLocations.extensionRoot),
-    loadState(userLocations.extensionRoot),
-  ]);
-  const projectRecord = projectState.marketplaces[opts.marketplace];
-  const userRecord = userState.marketplaces[opts.marketplace];
+  const { projectLocations, userLocations, projectState, userState } = await loadBothScopes(
+    opts.cwd,
+  );
+  const projectRecord = ownValue(projectState.marketplaces, opts.marketplace);
+  const userRecord = ownValue(userState.marketplaces, opts.marketplace);
 
   if (projectRecord !== undefined && Object.keys(projectRecord.plugins).length > 0) {
     return { kind: "resolved", scope: "project", locations: projectLocations };
@@ -1259,7 +1276,7 @@ export function removePluginRecord(
     schemaVersion: state.schemaVersion,
     marketplaces: { ...state.marketplaces },
   };
-  const mp = cloned.marketplaces[marketplace];
+  const mp = ownValue(cloned.marketplaces, marketplace);
   if (mp === undefined) {
     return cloned;
   }
@@ -1267,7 +1284,7 @@ export function removePluginRecord(
   const newPlugins = { ...mp.plugins };
   // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- newPlugins is a Record<string,...> local to this helper.
   delete newPlugins[plugin];
-  cloned.marketplaces[marketplace] = { ...mp, plugins: newPlugins };
+  setOwn(cloned.marketplaces, marketplace, { ...mp, plugins: newPlugins });
   return cloned;
 }
 
@@ -1311,7 +1328,7 @@ export async function maybeWritePluginConfigBack(opts: {
 
   const current: ScopeConfig = cfg.status === "valid" ? cfg.config : { schemaVersion: 1 };
   const key = `${opts.plugin}@${opts.marketplace}`;
-  const existingEntry = current.plugins?.[key];
+  const existingEntry = ownValue(current.plugins, key);
   if (existingEntry !== undefined) {
     return { invalidConfig: false };
   }

@@ -490,6 +490,64 @@ for (const { notInstalledAt, expectedReasons } of [
 }
 
 describe("resolveCrossScopePluginTarget", () => {
+  test("D-08-07: resolves a plugin named constructor to the scope that records it", async () => {
+    // arrange
+    await withTempScopes(async ({ cwd }) => {
+      await saveScopedState(cwd, "project", { mp: {} });
+      await saveScopedState(cwd, "user", { mp: { constructor: makePluginRecord({}) } });
+
+      // act
+      const resolution = await resolveCrossScopePluginTarget({
+        cwd,
+        marketplace: "mp",
+        plugin: "constructor",
+      });
+
+      // assert
+      assert.equal(resolution.kind, "resolved");
+      if (resolution.kind === "resolved") {
+        assert.equal(resolution.scope, "user");
+        assertLocationsEquivalent(resolution.locations, locationsFor("user", cwd));
+      }
+    });
+  });
+
+  test("D-08-07: reports an explicit miss when the other container records no plugin named toString", async () => {
+    // arrange
+    await withTempScopes(async ({ cwd }) => {
+      await saveScopedState(cwd, "project", { mp: {} });
+
+      // act
+      const resolution = await resolveCrossScopePluginTarget({
+        cwd,
+        marketplace: "mp",
+        plugin: "toString",
+        explicitScope: "user",
+      });
+
+      // assert
+      assert.deepStrictEqual(resolution, { kind: "marketplace-absent", requestedScope: "user" });
+    });
+  });
+
+  test("D-08-07: reports a marketplace named constructor as absent from both scopes", async () => {
+    // arrange
+    await withTempScopes(async ({ cwd }) => {
+      await saveScopedState(cwd, "project", {});
+      await saveScopedState(cwd, "user", {});
+
+      // act
+      const resolution = await resolveCrossScopePluginTarget({
+        cwd,
+        marketplace: "constructor",
+        plugin: "alpha",
+      });
+
+      // assert
+      assert.deepStrictEqual(resolution, { kind: "marketplace-absent" });
+    });
+  });
+
   test("resolves an explicit scope whose marketplace container exists", async () => {
     // arrange
     await withTempScopes(async ({ cwd }) => {
@@ -1239,6 +1297,24 @@ describe("overwriteDisabledMemberEntries", () => {
 });
 
 describe("resolveInstalledPluginTarget", () => {
+  test("D-08-07: finds no installed plugin named toString or __proto__ in either scope", async () => {
+    // arrange
+    await withTempScopes(async ({ cwd }) => {
+      await saveScopedState(cwd, "project", { mp: {} });
+      await saveScopedState(cwd, "user", { mp: {} });
+
+      // act
+      const targets = await Promise.all(
+        ["toString", "__proto__"].map((plugin) =>
+          resolveInstalledPluginTarget({ cwd, marketplace: "mp", plugin }),
+        ),
+      );
+
+      // assert
+      assert.deepStrictEqual(targets, [undefined, undefined]);
+    });
+  });
+
   test("returns an explicit scope without consulting stored state", async () => {
     // arrange
     await withTempScopes(async ({ cwd }) => {
@@ -1319,6 +1395,38 @@ describe("resolveInstalledPluginTarget", () => {
 });
 
 describe("resolveInstalledMarketplaceTarget", () => {
+  test("D-08-07: reports a marketplace named constructor as absent with no record anywhere", async () => {
+    // arrange
+    await withTempScopes(async ({ cwd }) => {
+      // act
+      const resolution = await resolveInstalledMarketplaceTarget({
+        cwd,
+        marketplace: "constructor",
+      });
+
+      // assert
+      assert.deepStrictEqual(resolution, { kind: "marketplace-absent" });
+    });
+  });
+
+  test("D-08-07: reports an explicit miss for a marketplace named __proto__", async () => {
+    // arrange
+    await withTempScopes(async ({ cwd }) => {
+      await saveScopedState(cwd, "project", {});
+      await saveScopedState(cwd, "user", {});
+
+      // act
+      const resolution = await resolveInstalledMarketplaceTarget({
+        cwd,
+        marketplace: "__proto__",
+        explicitScope: "user",
+      });
+
+      // assert
+      assert.deepStrictEqual(resolution, { kind: "marketplace-absent", requestedScope: "user" });
+    });
+  });
+
   test("resolves an explicit scope whose marketplace exists", async () => {
     // arrange
     await withTempScopes(async ({ cwd }) => {

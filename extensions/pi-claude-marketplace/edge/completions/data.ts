@@ -39,6 +39,7 @@
 //                  known plugin.
 
 import { ManifestSoftFailError } from "../../shared/completion-cache.ts";
+import { ownValue } from "../../shared/own-key.ts";
 import { SCOPES } from "../../shared/types.ts";
 
 import type { LocationsResolverLike } from "../../orchestrators/edge-deps.ts";
@@ -348,7 +349,7 @@ async function installedNamesInTarget(
   marketplace: string,
 ): Promise<ReadonlySet<string>> {
   const state = await resolver.loadStateForScope(targetScope);
-  const plugins = state.marketplaces[marketplace]?.plugins ?? {};
+  const plugins = ownValue(state.marketplaces, marketplace)?.plugins ?? {};
   return new Set(Object.keys(plugins));
 }
 
