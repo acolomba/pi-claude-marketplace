@@ -3,17 +3,18 @@ gsd_state_version: "1.0"
 milestone: json-output
 current_phase: 7
 current_phase_name: Mode Refusals, Real-Pi Verification, and Docs
-status: executing
-stopped_at: Phase 7 automated verification passed; seven human UAT reviews pending
-last_updated: "2026-10-10T04:44:56.032Z"
+status: completed
+stopped_at: Phase 7 complete — all phases complete
+last_updated: "2026-10-10T12:16:28.439Z"
 last_activity: 2026-10-10
-last_activity_desc: Phase 7 machine checks passed; seven human reviews pending
-state_head: bfd0d2dbb2eaac37c51084c7d08eb665aaa1cc07
+last_activity_desc: Phase 7 complete
+state_head: e89497f4a2da6b01eec93d86704253c0ab7f2831
 progress:
   total_phases: 7
-  completed_phases: 6
+  completed_phases: 7
   total_plans: 45
   completed_plans: 45
+  percent: 100
 milestone_name: Mode-Keyed Presentation Strategies
 ---
 
@@ -21,21 +22,21 @@ milestone_name: Mode-Keyed Presentation Strategies
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-10-09 after json-output Phase 6 completion)
+See: `.planning/PROJECT.md` (updated 2026-10-10 after json-output Phase 7 completion)
 
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 7 — Mode Refusals, Real-Pi Verification, and Docs
+**Current focus:** json-output milestone audit and archival
 
 ## Current Position
 
 Phase: 7 — Mode Refusals, Real-Pi Verification, and Docs
-Plan: 6 of 6 complete; 7 human UAT reviews pending
-Status: Executing
-Last activity: 2026-10-10 — Verifier found no machine gaps; human review pending
+Plan: 6 of 6 complete; all 7 human reviews passed
+Status: All phases complete
+Last activity: 2026-10-10 — Phase 7 complete
 
-Progress: [█████████░] 86% (6 of 7 phases fully verified; 45 of 45 plans complete)
+Progress: [██████████] 100% (7 of 7 phases fully verified; 45 of 45 plans complete)
 
 Phase 1's first plan captures the text wire-corpus baseline (every emitted
 `(message, severity)` pair and its argument count) before any renderer change;
@@ -169,9 +170,9 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-10T04:44:55.613Z
-**Stopped at:** Phase 7 automated verification passed; seven human UAT reviews pending
-**Resume file:** .planning/phases/07-mode-refusals-real-pi-verification-and-docs/07-UAT.md
+**Last session:** 2026-10-10T12:16:56.451000Z
+**Stopped at:** Phase 7 complete — all phases complete
+**Resume file:** None
 
 **Earlier work:** json-output on `features/json`. Phases 1 and 2 are complete
 and verified. Phase 2's review-fix loop closed after three iterations with ten
@@ -366,5 +367,9 @@ per-command correlation does not introduce tracking or telemetry, and failure
 output does not promise rollback. `06-UAT.md` records both checks as passed.
 `06-VERIFICATION.md` is passed with a current fingerprint. Phase 6 is complete.
 
-**Current work:** Continue `gsd-autonomous --from 6 --interactive` with
-Phase 7 discussion, then planning and execution. The milestone remains open.
+**Current work:** Phase 7 is complete. All seven UAT reviews passed explicitly
+on 2026-10-10; canonical verification and the phase-completion predicate pass.
+The six phase requirements are complete. Full `npm run check` passed at
+`bfd0d2db` on Node `v26.11.1`; only planning Markdown changed afterwards.
+The root dependency advisory and optional-peer integration skip remain recorded
+in the phase deferred items. The milestone remains open for audit and archival.

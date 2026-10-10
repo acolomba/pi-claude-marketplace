@@ -1,6 +1,8 @@
 # Phase 7 Coverage Audit
 
-No external API integration: this phase changes mode refusals in existing Pi/auth paths, verifies the existing runtime contract, documents it, and retires temporary test tooling. It adds no service, provider, OAuth flow, ORM, or AI-product capability.
+No external API integration: changes cover existing Pi/auth mode refusals, runtime verification, documentation, and temporary test-tool retirement.
+
+This phase adds no service, provider, OAuth flow, ORM, or AI-product capability.
 
 All rows below describe planned coverage, not passed implementation. D-14 and the current-runtime parent probe supersede the historical open questions in RESEARCH.md. The separate 0.86.1 runtime remains an execution requirement.
 

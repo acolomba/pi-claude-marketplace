@@ -577,10 +577,15 @@ operator decision. Workstream `milestone` (force-install closeout) remains open.
 
 ### Active — json-output
 
-Remaining json-output requirements are tracked in [REQUIREMENTS.md](REQUIREMENTS.md):
-mode refusals, real-Pi verification, and documentation (Phase 7).
+All json-output requirements are validated in [REQUIREMENTS.md](REQUIREMENTS.md).
+Milestone audit and archival remain pending.
 
 ### Validated
+
+- ✓ Mode refusals, real-Pi verification at installed and peer-floor versions,
+  the complete JSON reference, and policy corrections are verified. All seven
+  human reviews passed — json-output Phase 7, 2026-10-10
+  (MODE-03/04, TENB-03, JDOC-01/02/03).
 
 - ✓ Canonical command identities, per-run correlation, explicit origins,
   outcome enforcement, and contained failure recovery pass all 15 verification
@@ -1186,3 +1191,7 @@ code review and zero open security threats. Phase 6 has not started._
 _Last updated: 2026-10-09 after json-output Phase 6: four plans, four
 requirements, 15/15 verification truths, both human judgments accepted,
 clean code review and zero open security threats. Phase 7 discussion is next._
+
+_Last updated: 2026-10-10 after json-output Phase 7: six plans and six
+requirements complete, all seven human reviews passed, and zero open security
+threats. All seven phases are complete; milestone audit and archival remain._

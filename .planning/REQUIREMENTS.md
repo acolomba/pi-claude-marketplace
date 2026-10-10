@@ -118,9 +118,9 @@ model that already carries every presentation decision.
 - [x] **MODE-02**: Any other mode value raises a typed `UnsupportedModeError`
   from a membership check that runs before any state change; lifecycle handlers
   log it and never rethrow.
-- [ ] **MODE-03**: `browse` outside `tui` emits an error-severity payload that
+- [x] **MODE-03**: `browse` outside `tui` emits an error-severity payload that
   names `list`, replacing the `list` fallback.
-- [ ] **MODE-04**: In `print` mode, an operation that needs device-flow
+- [x] **MODE-04**: In `print` mode, an operation that needs device-flow
   authentication fails fast with a typed error pointing at `--mode json` or
   `tui`, instead of polling until the code expires.
 
@@ -138,26 +138,26 @@ model that already carries every presentation decision.
 - [x] **TENB-02**: Every test fake of the notification or extension context
   carries an explicit `mode`, required by the type; the `as unknown as
   ExtensionContext` casts that hide a missing `mode` are removed or given one.
-- [ ] **TENB-03**: A real-Pi e2e test runs
+- [x] **TENB-03**: A real-Pi e2e test runs
   `pi -p --mode json --no-session --offline "/claude:plugin list"` and asserts a
   schema-valid `claude-plugin` entry on stdout, pinning `entry_appended` at the
   peer floor and pinning that startup-emitted entries are not streamed.
 
 ### Documentation
 
-- [ ] **JDOC-01**: A schema reference documents kinds, fields, the
+- [x] **JDOC-01**: A schema reference documents kinds, fields, the
   compatibility policy (additive changes -- new optional field, kind, or
   closed-set member -- do not bump `schemaVersion`; removals, renames, type or
   meaning changes do), and the verdict rule (maximum severity over
   command-origin entries), with a `jq` example.
-- [ ] **JDOC-02**: The documented limitations: print mode is silent (scripts use
+- [x] **JDOC-02**: The documented limitations: print mode is silent (scripts use
   `--mode json`); Pi exits 0 regardless; startup (`session_start` /
   `resources_discover`) entries are not streamed in `json`/`rpc` (RPC clients can
   use `get_entries`); RPC front-ends no longer receive notify text and must
   render `claude-plugin` entries, the device-flow prompt at minimum; a
   slash-command-only run writes no session file until an assistant message
   exists.
-- [ ] **JDOC-03**: AGENTS.md's IL-2 output-channel line is amended to match
+- [x] **JDOC-03**: AGENTS.md's IL-2 output-channel line is amended to match
   PROJECT.md (D8), and backlog MRO-01 is closed with its two wrong claims
   corrected.
 
@@ -217,15 +217,15 @@ Which phases cover which requirements. Updated during roadmap creation.
 | RAWS-05 | Phase 3 | Complete |
 | MODE-01 | Phase 5 | Complete |
 | MODE-02 | Phase 5 | Complete |
-| MODE-03 | Phase 7 | Pending |
-| MODE-04 | Phase 7 | Pending |
+| MODE-03 | Phase 7 | Complete |
+| MODE-04 | Phase 7 | Complete |
 | LLMT-01 | Phase 4 | Complete |
 | TENB-01 | Phase 5 | Complete |
 | TENB-02 | Phase 5 | Complete |
-| TENB-03 | Phase 7 | Pending |
-| JDOC-01 | Phase 7 | Pending |
-| JDOC-02 | Phase 7 | Pending |
-| JDOC-03 | Phase 7 | Pending |
+| TENB-03 | Phase 7 | Complete |
+| JDOC-01 | Phase 7 | Complete |
+| JDOC-02 | Phase 7 | Complete |
+| JDOC-03 | Phase 7 | Complete |
 
 **Coverage:**
 - v1 requirements: 36 total

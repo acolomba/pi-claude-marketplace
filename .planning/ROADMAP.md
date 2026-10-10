@@ -20,7 +20,7 @@ Earlier milestones remain in [MILESTONES.md](MILESTONES.md).
 - [x] **Phase 4: Wire Schema and JSON Strategy** — A versioned typebox wire schema and a format-only JSON strategy, validated as a pure function and first consumed by the LLM tools (completed 2026-10-06)
 - [x] **Phase 5: Mode-Selected JSON Sink** — `ctx.mode` selects the strategy, and `json`/`rpc` output reaches consumers through `pi.appendEntry` from every output site (completed 2026-10-07)
 - [x] **Phase 6: Command-Run Contract** — Payloads carry their origin and invocation, and every command run emits a complete set of payloads, even when it throws (completed 2026-10-09)
-- [ ] **Phase 7: Mode Refusals, Real-Pi Verification, and Docs** — Browse and device-flow refuse clearly by mode, a real headless Pi run proves the contract, and the schema is documented
+- [x] **Phase 7: Mode Refusals, Real-Pi Verification, and Docs** — Browse and device-flow refuse clearly by mode, a real headless Pi run proves the contract, and the schema is documented (completed 2026-10-10)
 
 Phases run in order, 1 through 7.
 
@@ -275,7 +275,7 @@ Plans:
 5. The IL-2 output-channel line in AGENTS.md matches PROJECT.md (D8). Backlog MRO-01 is closed, and its two wrong claims are corrected.
 6. Milestone close-out for the Phase 1 corpus tool. After the final corpus re-diff comes back empty, the three `scripts/notify-corpus*.mjs` files are deleted (Phase 1 D-01), and no file outside `.planning/` names them. The `docs/output-catalog.md` prose that says `composeReasons` appends the soft-dep markers is amended to name the resolve step, and the device-flow prose (around lines 4088-4090) that says the domain emits the prompt is amended to name the dispatch module's text strategy (Phase 3 CONTEXT). This is the milestone's one sanctioned catalog edit: prose only, no fenced block changes, and `EXPECTED_STATE_COUNT` / `EXPECTED_UTF8_BYTES` do not move.
 
-**Plans:** 6/6 plans executed
+**Plans:** 6/6 plans complete
 
 Plans:
 **Wave 1**
@@ -302,7 +302,7 @@ Plans:
 | 4. Wire Schema and JSON Strategy | 6/6 | Complete    | 2026-10-06 |
 | 5. Mode-Selected JSON Sink | 7/7 | Complete    | 2026-10-07 |
 | 6. Command-Run Contract | 4/4 | Complete    | 2026-10-09 |
-| 7. Mode Refusals, Real-Pi Verification, and Docs | 6/6 | In Progress | - |
+| 7. Mode Refusals, Real-Pi Verification, and Docs | 6/6 | Complete    | 2026-10-10 |
 
 ## Carried Forward
 
