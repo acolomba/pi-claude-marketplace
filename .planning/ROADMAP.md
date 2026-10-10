@@ -31,6 +31,7 @@ Decimal phases (2.1, 3.1) are urgent insertions only, marked INSERTED.
 - [x] **Phase 5: Automatic migration on /reload** - `/reload` moves each installed plugin's marked entries from `mcp.json` into `mcp-adapter.json` in their final shape, adding before removing, idempotently, with one notice that lists the renames and what they cost the user. (completed 2026-10-09)
 - [x] **Phase 6: Live MCP status in info** - `/claude:plugin info` shows each plugin MCP server's state from the adapter's status events, and an explicit unknown state when there is nothing to show. (completed 2026-10-09)
 - [x] **Phase 7: Docs and live proof** - README and docs describe the new delivery and its divergences, a live UAT against a real adapter 5 proves the whole path, and the CHANGELOG records the milestone. (completed 2026-10-09)
+- [ ] **Phase 8: Clear milestone debt** - the PR passes the fallow audit, every open review finding is fixed or closed with a reason, MCPOVR-01 and MCPROW-01 are settled, `openUi` and `trace` become carried fields, state lookups refuse inherited keys, and the planning records match the code.
 
 **Release rule.** Phases 2 to 5 go out in one release. Every change to the entry shape (name,
 `directTools`, escaping) invalidates the adapter's per-server state: OAuth sign-ins, project
@@ -358,9 +359,30 @@ requirement (Phases 3 and 4), and no release may sit between the first write to
 
 **Notes.** Unit tests prove we wrote the file; only a live adapter proves it reads it. The live-canary scratch-engine route is known. The UAT also confirms whether `scripts/pi.sh`'s `--no-extensions` still leaves `builtin:tool-search` loaded on Pi 1.0.
 
+### Phase 8: Clear milestone debt
+
+**Goal**: The milestone closes with no carried debt: the pull request passes the fallow audit, every open review finding is fixed or closed with a recorded reason, the two MCP backlog items are settled, and the planning records match the code.
+
+**Depends on**: Phase 7
+
+**Requirements**: none new (closes the audit's tech debt; see `.planning/mcp-4-MILESTONE-AUDIT.md`)
+
+**Success Criteria** (what must be TRUE):
+
+1. `npx fallow audit --base <merge-base with origin/main>` reports verdict `pass`, so the Lint `fallow-audit` job passes the PR.
+2. Every review finding of Phases 1-7 reads `fixed`, `wontfix` with a reason, or `already-fixed` in its disposition file; none reads `open`, `deferred` or `skipped`.
+3. A user's `openUi` and `trace` choices in `mcp-adapter.json` survive update and reinstall like the other carried fields (D-08-01).
+4. MCPOVR-01 and MCPROW-01 are fixed or closed by a recorded decision, and name-indexed state lookups refuse inherited keys such as `constructor` (OWNKEY-01).
+5. The planning records match the code: ROADMAP Phase 1 criterion 4, `STATE.md`'s ADET-02 wording, and the Phase 2/3 disposition ledgers.
+
+**Plans**: 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 8 to break down)
+
 ## Progress
 
-**Execution order:** 1 → 2 → 3 → 4 → 5 → 7. Phase 6 can start once Phase 3 is complete and run
+**Execution order:** 1 → 2 → 3 → 4 → 5 → 7 → 8. Phase 6 can start once Phase 3 is complete and run
 alongside Phases 4 and 5. Phases 2 to 5 go out in one release (see the release rule above).
 
 **Gate for every phase:** the full `npm run check` stays green at each phase gate, as
@@ -383,6 +405,7 @@ plan these phases with the UI gate skipped.
 | 5. Automatic migration on /reload | mcp-4 | 5/5 | Complete    | 2026-10-09 |
 | 6. Live MCP status in info | mcp-4 | 3/3 | Complete    | 2026-10-09 |
 | 7. Docs and live proof | mcp-4 | 5/5 | Complete    | 2026-10-09 |
+| 8. Clear milestone debt | mcp-4 | 0/0 | Not started | - |
 
 ## Carried Forward
 
