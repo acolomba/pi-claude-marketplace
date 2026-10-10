@@ -145,3 +145,11 @@ judgments remain pending; no skipped behavior or dependency advisory is waived.
 | Gaps found | 0 |
 | Resolved | 0 |
 | Escalated | 0 |
+
+## Post-review verification
+
+WR-01 added the executable guide to both check selectors in `0dffe6c1`.
+Fresh full capture, strict zero-extra comparison, both real-Pi runtimes,
+retirement audit, and `npm run check` all passed after the correction.
+See `07-REVIEW-FIXES.md` and the refreshed durable evidence. Human judgments
+and pre-existing deferred items retain their prior disposition.

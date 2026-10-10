@@ -17,7 +17,7 @@ the two installed Pi CLIs. The candidate capture is retained separately.
   "originalCommit": "64bcfa027530b55319446ea781facab229df92cd",
   "originalSha256": "fa5b6d6c76a089ba0362fa80291487e63d225b3a0ce416689624c342f2725ea3",
   "captureSha256": "9108545d1c83532894985ed7a1dc8e500cb097d6a333ae42ff9aedcf91aec611",
-  "head": "b079351028f13aae0ab44f981907d1f71da14f13",
+  "head": "0dffe6c1deeb9609360f8c4614fa7b9a2f43e5c1",
   "node": "v26.11.1",
   "oldTotal": 3149,
   "newTotal": 3150,
@@ -80,3 +80,11 @@ This optional-peer gap is not a claim of executed integration coverage.
 
 The descriptor-less prohibition against concealing regressions or claiming
 unexecuted runtime proof remains **flagged-unverified** for parent review.
+
+## Review-fix refresh
+
+After WR-01 corrected the CI and commit check selectors, the full capture and
+strict comparison were repeated against that configuration. The ledgered tuple,
+counts, candidate bytes, and amended baseline are unchanged. The JSON head
+above identifies the refreshed capture; the pre-amendment ledger remains in
+commit `bf2e84ab`. See `07-REVIEW-FIXES.md` for the final verification result.

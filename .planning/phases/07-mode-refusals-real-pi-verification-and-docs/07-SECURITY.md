@@ -81,3 +81,11 @@ TEST-07-06-01 / WINDOWS 89 also remains visible and is not counted as executed.
 - [x] `status: verified` set; descriptor-less human judgments remain separate.
 
 **Approval:** Planned mitigations verified 2026-10-10.
+
+## Post-review verification
+
+WR-01 added the executable guide to both check selectors in `0dffe6c1`.
+Fresh full capture, strict zero-extra comparison, both real-Pi runtimes,
+retirement audit, and `npm run check` all passed after the correction.
+See `07-REVIEW-FIXES.md` and the refreshed durable evidence. Human judgments
+and pre-existing deferred items retain their prior disposition.
