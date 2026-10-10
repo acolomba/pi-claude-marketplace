@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 milestone: json-output
 current_phase: 7
 current_phase_name: Mode Refusals, Real-Pi Verification, and Docs
-status: planning
-stopped_at: Phase 7 researched; resolve refusal corpus additions before planning
-last_updated: "2026-10-10T00:59:57.869Z"
+status: executing
+stopped_at: Phase 7 planning; corpus exception D-14 approved
+last_updated: "2026-10-10T02:03:14.907Z"
 last_activity: 2026-10-09
 last_activity_desc: Phase 6 complete, transitioned to Phase 7
-state_head: 406e8d699aac037ec43e27c5a4b82107d785ee47
+state_head: 64bcfa027530b55319446ea781facab229df92cd
 progress:
   total_phases: 7
   completed_phases: 6
-  total_plans: 39
+  total_plans: 45
   completed_plans: 39
 milestone_name: Mode-Keyed Presentation Strategies
 ---
@@ -30,9 +30,9 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: 7 — Mode Refusals, Real-Pi Verification, and Docs
+Phase: 7 (Mode Refusals, Real-Pi Verification, and Docs) — READY TO EXECUTE
 Plan: Not started
-Status: Ready to plan
+Status: Ready to execute
 Last activity: 2026-10-09 — Phase 6 complete, transitioned to Phase 7
 
 Progress: [█████████░] 86% (6 of 7 phases fully verified; 39 of 39 plans complete)
@@ -169,9 +169,9 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-10T00:59:57.501Z
-**Stopped at:** Phase 7 researched; resolve refusal corpus additions before planning
-**Resume file:** .planning/phases/07-mode-refusals-real-pi-verification-and-docs/07-RESEARCH.md
+**Last session:** 2026-10-10T01:35:18.766Z
+**Stopped at:** Phase 7 planning; corpus exception D-14 approved
+**Resume file:** .planning/phases/07-mode-refusals-real-pi-verification-and-docs/07-CONTEXT.md
 
 **Earlier work:** json-output on `features/json`. Phases 1 and 2 are complete
 and verified. Phase 2's review-fix loop closed after three iterations with ten

@@ -451,3 +451,28 @@ The user approved option 1: allow only samples from the new Phase 7 refusals,
 preserve all 3,149 existing samples, record every addition, and keep catalog
 examples unchanged. CONTEXT.md D-14 is the canonical scoped exception.
 Earlier unresolved-policy statements are historical; planning can proceed.
+
+## Package Legitimacy Audit
+
+Planning addendum for the independently provisioned peer-floor fixture only.
+The existing product dependency is unchanged. Registry metadata was checked
+with network access on 2026-10-10 UTC, including the exact 0.86.1 version.
+
+| Package | Registry | Age | Downloads | Source Repo | Verdict | Disposition |
+| --- | --- | --- | --- | --- | --- | --- |
+| @earendil-works/pi-coding-agent@0.86.1 | npm | Published 2026-09-20; package created 2026-05-07 | 4,366,827/week at audit | https://github.com/earendil-works/pi, packages/coding-agent | [SUS] | Age-only signal; retain exact-version human authorization from D-11 and the current planning instruction in 07-03-02 before provisioning |
+
+The default package-legitimacy CLI examined the latest release. Its compiled
+checkPackages seam was then called with version 0.86.1; the only remaining
+reason was too-new. Existence, repository, downloads, and absence of
+postinstall were verified; no suspicious execution script was reported.
+No package was classified SLOP. This records the signal without relabeling it.
+
+Exact registry tarball:
+https://registry.npmjs.org/@earendil-works/pi-coding-agent/-/pi-coding-agent-0.86.1.tgz
+
+Exact integrity:
+`sha512-vZBuNfJnruxZyemZ3O05V0S/Ylze08ahFTIQ1Mik++gVdOevPl89gt/Uv0U97BPAJaj9cj6Vf9rcIgKtUrd0BA==`
+
+The already downloaded tarball independently matched that SHA-512. This is
+artifact identity evidence, not a successful peer-floor runtime test.
