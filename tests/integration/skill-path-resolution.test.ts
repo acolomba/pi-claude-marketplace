@@ -19,10 +19,12 @@
 // package -- global or local -- always lives under one. This test copies
 // the installed package's real, unmodified `src/` tree into a scratch
 // directory outside node_modules and imports the internal module from
-// there by an absolute file path via `pathToFileURL`. Every step is
-// wrapped in try/catch, skipping gracefully on any failure so
-// `npm run check` stays green in environments where the optional peer is
-// absent.
+// there by an absolute file path via `pathToFileURL`. The test skips only
+// when the peer is absent: no root resolves, or the resolved root has no
+// `src/` tree. A present peer that fails to copy or import fails the test,
+// and so does an explicit `PI_SUBAGENTS_ROOT` that names an existing
+// directory with no `src/` tree, because either one means the check
+// silently stopped running.
 
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -56,16 +58,22 @@ interface PiSubagentsSkillsModule {
   readonly discoverAvailableSkills: (cwd: string) => DiscoveredSkillLike[];
 }
 
+interface PiSubagentsRoot {
+  readonly dir: string;
+  /** True when `PI_SUBAGENTS_ROOT` named the root, so the operator opted in. */
+  readonly explicit: boolean;
+}
+
 /**
  * Locates the installed pi-subagents package root. Checks an env override
  * first, then falls back to the conventional global npm install location
  * (`npm root -g`) so the test works across machines without hardcoding a
  * platform-specific path.
  */
-function resolvePiSubagentsPackageRoot(): string | undefined {
+function resolvePiSubagentsPackageRoot(): PiSubagentsRoot | undefined {
   const override = process.env.PI_SUBAGENTS_ROOT;
   if (override) {
-    return override;
+    return { dir: override, explicit: true };
   }
 
   try {
@@ -73,7 +81,9 @@ function resolvePiSubagentsPackageRoot(): string | undefined {
       encoding: "utf8",
       timeout: 5000,
     }).trim();
-    return globalNodeModules ? path.join(globalNodeModules, "pi-subagents") : undefined;
+    return globalNodeModules
+      ? { dir: path.join(globalNodeModules, "pi-subagents"), explicit: false }
+      : undefined;
   } catch {
     // Global npm root lookup is best-effort; treated as "not reachable".
     return undefined;
@@ -81,44 +91,41 @@ function resolvePiSubagentsPackageRoot(): string | undefined {
 }
 
 /**
- * Copies `packageRoot`'s real `src/` tree into `<scratchRoot>/pi-subagents-src`
+ * Copies the package's real `src/` tree into `<scratchRoot>/pi-subagents-src`
  * (outside node_modules, sidestepping Node's node_modules type-stripping
  * restriction) and dynamically imports the internal skills module from
- * there by absolute file path. Returns undefined when `packageRoot` is
- * undefined or when any later step fails (package not installed, internal
- * module moved, copy failed, loader cannot strip the external `.ts`) so
- * callers can skip the test gracefully rather than fail on absence.
+ * there by absolute file path. Returns undefined only when the peer is
+ * absent, so the caller can skip. Throws when the `src/` tree exists but
+ * the copy, the module lookup, or the import fails, and when an explicit
+ * `PI_SUBAGENTS_ROOT` names an existing directory with no `src/` tree.
  */
 async function loadPiSubagentsSkillsModule(
-  packageRoot: string | undefined,
+  root: PiSubagentsRoot | undefined,
   scratchRoot: string,
 ): Promise<PiSubagentsSkillsModule | undefined> {
-  if (!packageRoot) {
+  if (!root) {
     return undefined;
   }
 
-  const installedSrcDir = path.join(packageRoot, "src");
+  const installedSrcDir = path.join(root.dir, "src");
   if (!existsSync(installedSrcDir)) {
+    if (root.explicit && existsSync(root.dir)) {
+      assert.fail(`PI_SUBAGENTS_ROOT=${root.dir} exists but has no src/ tree`);
+    }
+
     return undefined;
   }
 
   const scratchSrcDir = path.join(scratchRoot, "pi-subagents-src");
-  try {
-    await cp(installedSrcDir, scratchSrcDir, { recursive: true });
-  } catch {
-    return undefined;
-  }
+  await cp(installedSrcDir, scratchSrcDir, { recursive: true });
 
   const internalModulePath = path.join(scratchSrcDir, "agents", "skills.ts");
-  if (!existsSync(internalModulePath)) {
-    return undefined;
-  }
+  assert.ok(
+    existsSync(internalModulePath),
+    `pi-subagents at ${root.dir} has a src/ tree but no agents/skills.ts`,
+  );
 
-  try {
-    return (await import(pathToFileURL(internalModulePath).href)) as PiSubagentsSkillsModule;
-  } catch {
-    return undefined;
-  }
+  return (await import(pathToFileURL(internalModulePath).href)) as PiSubagentsSkillsModule;
 }
 
 test("SC-2 / AGSK-06: emitted skillPath resolves the staged skill via pi-subagents' resolveSkillsWithFallback and stays out of the global catalog", async (t) => {

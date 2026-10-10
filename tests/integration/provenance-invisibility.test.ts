@@ -19,8 +19,8 @@
 // segment. This test reuses skill-path-resolution's pattern -- copy the
 // installed package's real `src/` tree into a scratch directory outside
 // node_modules and import the module by absolute file path via
-// `pathToFileURL`, skipping gracefully on any failure so `npm run check`
-// stays green where the optional peer is absent.
+// `pathToFileURL`. It skips only when the peer is absent, and fails when a
+// present peer does not load, with the same rules as skill-path-resolution.
 //
 // CI gap: no .github/workflows/*.yml step installs pi-subagents globally, so
 // resolvePiSubagentsPackageRoot() always resolves to an absent package in CI
@@ -48,15 +48,21 @@ interface PiSubagentsFrontmatterModule {
   };
 }
 
+interface PiSubagentsRoot {
+  readonly dir: string;
+  /** True when `PI_SUBAGENTS_ROOT` named the root, so the operator opted in. */
+  readonly explicit: boolean;
+}
+
 /**
  * Locates the installed pi-subagents package root. Checks an env override
  * first, then falls back to the conventional global npm install location
  * (`npm root -g`) -- identical to skill-path-resolution.test.ts.
  */
-function resolvePiSubagentsPackageRoot(): string | undefined {
+function resolvePiSubagentsPackageRoot(): PiSubagentsRoot | undefined {
   const override = process.env.PI_SUBAGENTS_ROOT;
   if (override) {
-    return override;
+    return { dir: override, explicit: true };
   }
 
   try {
@@ -64,7 +70,9 @@ function resolvePiSubagentsPackageRoot(): string | undefined {
       encoding: "utf8",
       timeout: 5000,
     }).trim();
-    return globalNodeModules ? path.join(globalNodeModules, "pi-subagents") : undefined;
+    return globalNodeModules
+      ? { dir: path.join(globalNodeModules, "pi-subagents"), explicit: false }
+      : undefined;
   } catch {
     // Global npm root lookup is best-effort; treated as "not reachable".
     return undefined;
@@ -72,45 +80,42 @@ function resolvePiSubagentsPackageRoot(): string | undefined {
 }
 
 /**
- * Copies `packageRoot`'s real `src/` tree into
+ * Copies the package's real `src/` tree into
  * `<scratchRoot>/pi-subagents-src` (outside node_modules, sidestepping Node's
  * node_modules type-stripping restriction) and dynamically imports the agent
  * frontmatter parser module from there by absolute file path. Returns
- * undefined when `packageRoot` is undefined or when any later step fails, so
- * callers can skip the test gracefully rather than fail on absence.
+ * undefined only when the peer is absent, so the caller can skip. Throws
+ * when the `src/` tree exists but the copy, the module lookup, or the import
+ * fails, and when an explicit `PI_SUBAGENTS_ROOT` names an existing
+ * directory with no `src/` tree.
  */
 async function loadPiSubagentsFrontmatterModule(
-  packageRoot: string | undefined,
+  root: PiSubagentsRoot | undefined,
   scratchRoot: string,
 ): Promise<PiSubagentsFrontmatterModule | undefined> {
-  if (!packageRoot) {
+  if (!root) {
     return undefined;
   }
 
-  const installedSrcDir = path.join(packageRoot, "src");
+  const installedSrcDir = path.join(root.dir, "src");
   if (!existsSync(installedSrcDir)) {
+    if (root.explicit && existsSync(root.dir)) {
+      assert.fail(`PI_SUBAGENTS_ROOT=${root.dir} exists but has no src/ tree`);
+    }
+
     return undefined;
   }
 
   const scratchSrcDir = path.join(scratchRoot, "pi-subagents-src");
-  try {
-    await cp(installedSrcDir, scratchSrcDir, { recursive: true });
-  } catch {
-    return undefined;
-  }
+  await cp(installedSrcDir, scratchSrcDir, { recursive: true });
 
   const frontmatterModulePath = path.join(scratchSrcDir, "agents", "frontmatter.ts");
-  if (!existsSync(frontmatterModulePath)) {
-    return undefined;
-  }
+  assert.ok(
+    existsSync(frontmatterModulePath),
+    `pi-subagents at ${root.dir} has a src/ tree but no agents/frontmatter.ts`,
+  );
 
-  try {
-    return (await import(
-      pathToFileURL(frontmatterModulePath).href
-    )) as PiSubagentsFrontmatterModule;
-  } catch {
-    return undefined;
-  }
+  return (await import(pathToFileURL(frontmatterModulePath).href)) as PiSubagentsFrontmatterModule;
 }
 
 test("T-d8i-01: provenance stays invisible to pi-subagents' own frontmatter parser", async (t) => {
