@@ -72,17 +72,17 @@ function resolvePiSubagentsPackageRoot(): string | undefined {
 }
 
 /**
- * Copies the installed package's real `src/` tree into
+ * Copies `packageRoot`'s real `src/` tree into
  * `<scratchRoot>/pi-subagents-src` (outside node_modules, sidestepping Node's
  * node_modules type-stripping restriction) and dynamically imports the agent
  * frontmatter parser module from there by absolute file path. Returns
- * undefined on ANY failure so callers can skip the test gracefully rather
- * than fail on absence.
+ * undefined when `packageRoot` is undefined or when any later step fails, so
+ * callers can skip the test gracefully rather than fail on absence.
  */
 async function loadPiSubagentsFrontmatterModule(
+  packageRoot: string | undefined,
   scratchRoot: string,
 ): Promise<PiSubagentsFrontmatterModule | undefined> {
-  const packageRoot = resolvePiSubagentsPackageRoot();
   if (!packageRoot) {
     return undefined;
   }
@@ -114,9 +114,10 @@ async function loadPiSubagentsFrontmatterModule(
 }
 
 test("T-d8i-01: provenance stays invisible to pi-subagents' own frontmatter parser", async (t) => {
+  const piSubagentsRoot = resolvePiSubagentsPackageRoot();
   const tmpRoot = await mkdtemp(path.join(tmpdir(), "provenance-invis-"));
   try {
-    const fm = await loadPiSubagentsFrontmatterModule(tmpRoot);
+    const fm = await loadPiSubagentsFrontmatterModule(piSubagentsRoot, tmpRoot);
     if (!fm) {
       t.skip("pi-subagents frontmatter parser not reachable in this environment");
       return;
