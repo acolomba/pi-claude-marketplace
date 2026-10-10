@@ -116,3 +116,17 @@ migration of legacy `mcp.json`; remote OAuth server with headers.
   pinned test).
 - Ship prep: version bump offer and CHANGELOG lines at PR time; commit
   8578407a has no attribution trailers (cannot be amended).
+
+## Re-check after the close (2026-10-10)
+
+The verdict stays `passed`. The commits after `f09a4e59` change no behavior:
+
+- `e34cec12` reads the EISDIR wording back from the runtime in one test.
+- `354e3cf8` bumps the version to 0.20.0. CHANGELOG `[0.20.0]` holds the
+  debt-clearing lines, so the ship-prep item above is resolved.
+- `97e55e68`, `57c26358` and `ed058a41` apply the TypeScript review skills,
+  correct three comments, and clear six SonarCloud smells with equivalent code.
+
+Evidence at `ed058a41` (PR #250): all nine CI checks pass, and the SonarCloud
+gate is OK with 100% new-code coverage and 0% duplication. ROOTKEY-01 is still
+open in BACKLOG. The missing trailers on `8578407a` cannot be fixed.
