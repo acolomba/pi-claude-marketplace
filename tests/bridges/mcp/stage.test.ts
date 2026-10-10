@@ -1310,6 +1310,7 @@ describe("prepareStageMcpServers", () => {
           serverChoices: {
             plugin_acme_server_: {
               plugin: "acme",
+              marketplace: "catalog",
               fields: { disabled: true, openUi: true, env: { STUB_TOKEN: "stub-secret" } },
             },
           },
@@ -1350,7 +1351,11 @@ describe("prepareStageMcpServers", () => {
         mcpServers: { plugin_acme_server_: { disabled: false } },
         _piClaudeMarketplace: {
           serverChoices: {
-            plugin_acme_server_: { plugin: "acme", fields: { trace: true, disabled: true } },
+            plugin_acme_server_: {
+              plugin: "acme",
+              marketplace: "catalog",
+              fields: { trace: true, disabled: true },
+            },
           },
         },
       }),
@@ -1394,7 +1399,11 @@ describe("prepareStageMcpServers", () => {
         },
         _piClaudeMarketplace: {
           serverChoices: {
-            plugin_acme_server_: { plugin: "acme", fields: { approveTools: true, debug: true } },
+            plugin_acme_server_: {
+              plugin: "acme",
+              marketplace: "catalog",
+              fields: { approveTools: true, debug: true },
+            },
           },
         },
       }),
@@ -1418,36 +1427,43 @@ describe("prepareStageMcpServers", () => {
     });
   });
 
-  test("D-08-02: another plugin's stored choice under the key is neither applied nor removed", async (t) => {
-    // arrange
-    const { cwd, locations } = await createProjectScope(t, "mcp-stage-foreign-choice-");
-    const member = {
-      serverChoices: {
-        plugin_acme_server_: { plugin: "other", fields: { approveTools: true } },
-      },
-    };
-    await writeSource(
-      locations.mcpAdapterJsonPath,
-      JSON.stringify({ _piClaudeMarketplace: member }),
-    );
+  for (const { owner, choice } of [
+    {
+      owner: "another plugin",
+      choice: { plugin: "other", marketplace: "catalog", fields: { approveTools: true } },
+    },
+    {
+      owner: "the same-named plugin of another marketplace",
+      choice: { plugin: "acme", marketplace: "community", fields: { approveTools: false } },
+    },
+  ]) {
+    test(`D-08-02: the stored choice of ${owner} under the key is neither applied nor removed`, async (t) => {
+      // arrange
+      const { cwd, locations } = await createProjectScope(t, "mcp-stage-foreign-choice-");
+      const member = { serverChoices: { plugin_acme_server_: choice } };
+      await writeSource(
+        locations.mcpAdapterJsonPath,
+        JSON.stringify({ _piClaudeMarketplace: member }),
+      );
 
-    // act
-    await commitPreparedMcp(await prepareAcme(locations, cwd));
-    const storedDoc: unknown = JSON.parse(await readFile(locations.mcpAdapterJsonPath, "utf8"));
+      // act
+      await commitPreparedMcp(await prepareAcme(locations, cwd));
+      const storedDoc: unknown = JSON.parse(await readFile(locations.mcpAdapterJsonPath, "utf8"));
 
-    // assert
-    assert.deepStrictEqual(storedDoc, {
-      _piClaudeMarketplace: member,
-      mcpServers: {
-        plugin_acme_server_: {
-          url: "https://acme.example/mcp",
-          directTools: "search",
-          toolPrefix: "mcp",
-          _piClaudeMarketplace: { plugin: "acme", marketplace: "catalog" },
+      // assert
+      assert.deepStrictEqual(storedDoc, {
+        _piClaudeMarketplace: member,
+        mcpServers: {
+          plugin_acme_server_: {
+            url: "https://acme.example/mcp",
+            directTools: "search",
+            toolPrefix: "mcp",
+            _piClaudeMarketplace: { plugin: "acme", marketplace: "catalog" },
+          },
         },
-      },
+      });
     });
-  });
+  }
 
   test("AFILE-06: staging over a stub with env and headers reports one override-kept notice naming them", async (t) => {
     // arrange

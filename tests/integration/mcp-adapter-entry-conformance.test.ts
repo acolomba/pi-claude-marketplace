@@ -133,7 +133,11 @@ test("D-08-02: pi-mcp-adapter loads a user file holding a stored server choice a
       mcpServers: { mine: { command: "my-server" } },
       _piClaudeMarketplace: {
         serverChoices: {
-          plugin_hello_srv_: { plugin: "hello", fields: { disabled: true, openUi: true } },
+          plugin_hello_srv_: {
+            plugin: "hello",
+            marketplace: "mp",
+            fields: { disabled: true, openUi: true },
+          },
         },
       },
     });

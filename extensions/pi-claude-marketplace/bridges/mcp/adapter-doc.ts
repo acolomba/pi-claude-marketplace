@@ -15,8 +15,8 @@
 //
 // The top-level `_piClaudeMarketplace.serverChoices` member of the adapter
 // file holds a leaving server's user choices, keyed by its generated key and
-// recorded with the owning plugin's name, until that plugin stages the key
-// again (D-08-02). pi-mcp-adapter 5.2.0 ignores and keeps unknown top-level
+// recorded with the owning plugin's name and marketplace, until that plugin
+// stages the key again (D-08-02). pi-mcp-adapter 5.2.0 ignores and keeps unknown top-level
 // members. Only the adapter file holds the member; Pi's legacy `mcp.json`
 // never gains it.
 
@@ -413,9 +413,10 @@ export function withPluginServers(
 
 const SERVER_CHOICES_KEY = "serverChoices";
 
-/** One well-formed store entry: the owning plugin and its carried fields (D-08-02). */
+/** A well-formed store entry: the owning plugin, its marketplace and its fields (D-08-02). */
 interface StoredChoice {
   readonly plugin: string;
+  readonly marketplace: string;
   readonly fields: Readonly<Record<string, unknown>>;
 }
 
@@ -456,19 +457,37 @@ function storedChoiceOf(
   }
 
   const plugin = ownValue(value, "plugin");
+  const marketplace = ownValue(value, "marketplace");
   const fields = ownValue(value, "fields");
-  return typeof plugin === "string" && isPlainObject(fields) ? { plugin, fields } : undefined;
+  return typeof plugin === "string" && typeof marketplace === "string" && isPlainObject(fields)
+    ? { plugin, marketplace, fields }
+    : undefined;
+}
+
+/** The store entry under `name` when the `(pluginName, marketplaceName)` pair recorded it. */
+function ownedChoiceOf(
+  choices: Readonly<Record<string, unknown>>,
+  name: string,
+  pluginName: string,
+  marketplaceName: string,
+): StoredChoice | undefined {
+  const choice = storedChoiceOf(choices, name);
+  return choice?.plugin === pluginName && choice.marketplace === marketplaceName
+    ? choice
+    : undefined;
 }
 
 /**
- * D-08-02: for each key, the fields of the choice the store records for
- * `pluginName` under that key. A store entry another plugin recorded is not
- * returned, so a choice such as `approveTools` never reaches a different
- * plugin's server under a colliding key.
+ * D-08-02: for each key, the fields of the choice the store records for the
+ * `(pluginName, marketplaceName)` pair under that key. A store entry another
+ * plugin recorded, or a same-named plugin of another marketplace, is not
+ * returned, so a choice such as `approveTools` never reaches a server of
+ * another plugin under a colliding key.
  */
 export function storedChoicesFor(
   config: McpConfigDoc,
   pluginName: string,
+  marketplaceName: string,
   keys: readonly string[],
 ): Record<string, Readonly<Record<string, unknown>>> {
   const stored: Record<string, Readonly<Record<string, unknown>>> = {};
@@ -478,8 +497,8 @@ export function storedChoicesFor(
   }
 
   for (const key of keys) {
-    const choice = storedChoiceOf(store.choices, key);
-    if (choice?.plugin === pluginName) {
+    const choice = ownedChoiceOf(store.choices, key, pluginName, marketplaceName);
+    if (choice !== undefined) {
       safeSet(stored, key, choice.fields);
     }
   }
@@ -519,7 +538,7 @@ function capturedChoices(
   for (const [name, entry] of Object.entries(ownedServers(config, pluginName, marketplaceName))) {
     const fields = Object.hasOwn(entries, name) ? {} : leavingChoice(entry);
     if (Object.keys(fields).length > 0) {
-      safeSet(captured, name, { plugin: pluginName, fields });
+      safeSet(captured, name, { plugin: pluginName, marketplace: marketplaceName, fields });
     }
   }
 
@@ -580,9 +599,10 @@ function nextChoices(
  * in the same document, so the one atomic write that removes or writes an
  * entry also moves its choices (NFR-1). Each of the plugin's entries that
  * leaves stores its user carried fields outside the override it writes back,
- * as `{ plugin, fields }` under its name, replacing any store entry there.
- * Each name in `entries` consumes the store entry `pluginName` recorded under
- * it; another plugin's store entry stays. A document with nothing captured or
+ * as `{ plugin, marketplace, fields }` under its name, replacing any store
+ * entry there. Each name in `entries` consumes the store entry the
+ * `(pluginName, marketplaceName)` pair recorded under it; another plugin's
+ * store entry, or one without a marketplace, stays. A document with nothing captured or
  * consumed keeps its member as it is. The member is added last only when a
  * choice is captured, `serverChoices` leaves when it empties, and the member
  * leaves when it then holds nothing. A member or `serverChoices` value that is
@@ -602,7 +622,7 @@ export function withPluginServersKeepingChoices(
 
   const captured = capturedChoices(config, pluginName, marketplaceName, entries);
   const consumed = Object.keys(entries).filter(
-    (name) => storedChoiceOf(store.choices, name)?.plugin === pluginName,
+    (name) => ownedChoiceOf(store.choices, name, pluginName, marketplaceName) !== undefined,
   );
   if (Object.keys(captured).length === 0 && consumed.length === 0) {
     return next;

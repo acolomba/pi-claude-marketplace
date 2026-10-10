@@ -728,7 +728,11 @@ test("D-08-02: the adapter file stores a removed entry's user choices and the le
         mcpServers: {},
         _piClaudeMarketplace: {
           serverChoices: {
-            plugin_acme_srv_: { plugin: "acme", fields: { disabled: true, openUi: true } },
+            plugin_acme_srv_: {
+              plugin: "acme",
+              marketplace: "official",
+              fields: { disabled: true, openUi: true },
+            },
           },
         },
       },

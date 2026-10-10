@@ -528,7 +528,7 @@ export async function prepareStageMcpServers(input: StageMcpInput): Promise<Prep
   // keeps for it, below an absorbed stub's fields; the write consumes it.
   // Object spread defines own data properties, so a server named `__proto__`
   // stays an own key (WR-01).
-  const stored = storedChoicesFor(config, pluginName, newKeys);
+  const stored = storedChoicesFor(config, pluginName, marketplaceName, newKeys);
   const {
     stamped,
     warnings: stampWarnings,

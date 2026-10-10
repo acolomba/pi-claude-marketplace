@@ -1047,20 +1047,24 @@ describe("storedChoicesFor", () => {
     const config = configOf({
       _piClaudeMarketplace: {
         serverChoices: {
-          mine: { plugin: "acme", fields: { disabled: true } },
-          foreign: { plugin: "other", fields: { approveTools: true } },
-          unasked: { plugin: "acme", fields: { trace: true } },
+          mine: { plugin: "acme", marketplace: "catalog", fields: { disabled: true } },
+          foreign: { plugin: "other", marketplace: "catalog", fields: { approveTools: true } },
+          unasked: { plugin: "acme", marketplace: "catalog", fields: { trace: true } },
           scalar: "not-a-choice",
           unnamed: { plugin: 7, fields: { disabled: true } },
-          fieldless: { plugin: "acme", fields: ["disabled"] },
+          fieldless: { plugin: "acme", marketplace: "catalog", fields: ["disabled"] },
+          elsewhere: { plugin: "acme", marketplace: "community", fields: { approveTools: false } },
+          unplaced: { plugin: "acme", fields: { lifecycle: "eager" } },
         },
       },
     });
 
     // act
-    const stored = storedChoicesFor(config, "acme", [
+    const stored = storedChoicesFor(config, "acme", "catalog", [
       "mine",
       "foreign",
+      "elsewhere",
+      "unplaced",
       "scalar",
       "unnamed",
       "fieldless",
@@ -1082,7 +1086,7 @@ describe("storedChoicesFor", () => {
   ]) {
     test(`D-08-02: returns nothing for a document with ${description}`, () => {
       // act
-      const stored = storedChoicesFor(configOf(doc), "acme", ["mine"]);
+      const stored = storedChoicesFor(configOf(doc), "acme", "catalog", ["mine"]);
 
       // assert
       assert.deepStrictEqual(stored, {});
@@ -1125,7 +1129,13 @@ describe("withPluginServersKeepingChoices", () => {
           mine: { command: "mine" },
         },
         _piClaudeMarketplace: {
-          serverChoices: { srv: { plugin: "acme", fields: { disabled: true, openUi: true } } },
+          serverChoices: {
+            srv: {
+              plugin: "acme",
+              marketplace: "catalog",
+              fields: { disabled: true, openUi: true },
+            },
+          },
         },
       }),
     );
@@ -1172,7 +1182,9 @@ describe("withPluginServersKeepingChoices", () => {
       mcpServers: { kept: { command: "kept-v2" } },
       "mcp-servers": {},
       _piClaudeMarketplace: {
-        serverChoices: { dropped: { plugin: "acme", fields: { trace: true } } },
+        serverChoices: {
+          dropped: { plugin: "acme", marketplace: "catalog", fields: { trace: true } },
+        },
       },
     });
   });
@@ -1183,8 +1195,8 @@ describe("withPluginServersKeepingChoices", () => {
       _piClaudeMarketplace: {
         note: "kept",
         serverChoices: {
-          srv: { plugin: "other", fields: { approveTools: true } },
-          foreign: { plugin: "other", fields: { disabled: true } },
+          srv: { plugin: "other", marketplace: "catalog", fields: { approveTools: true } },
+          foreign: { plugin: "other", marketplace: "catalog", fields: { disabled: true } },
         },
       },
       mcpServers: {
@@ -1203,9 +1215,9 @@ describe("withPluginServersKeepingChoices", () => {
         _piClaudeMarketplace: {
           note: "kept",
           serverChoices: {
-            srv: { plugin: "acme", fields: { disabled: false } },
-            foreign: { plugin: "other", fields: { disabled: true } },
-            added: { plugin: "acme", fields: { lifecycle: "eager" } },
+            srv: { plugin: "acme", marketplace: "catalog", fields: { disabled: false } },
+            foreign: { plugin: "other", marketplace: "catalog", fields: { disabled: true } },
+            added: { plugin: "acme", marketplace: "catalog", fields: { lifecycle: "eager" } },
           },
         },
         mcpServers: {},
@@ -1229,7 +1241,9 @@ describe("withPluginServersKeepingChoices", () => {
       JSON.stringify({
         _piClaudeMarketplace: {
           note: "kept",
-          serverChoices: { srv: { plugin: "acme", fields: { trace: true } } },
+          serverChoices: {
+            srv: { plugin: "acme", marketplace: "catalog", fields: { trace: true } },
+          },
         },
         mcpServers: {},
       }),
@@ -1249,18 +1263,20 @@ describe("withPluginServersKeepingChoices", () => {
     // assert
     assert.strictEqual(
       JSON.stringify(next),
-      '{"mcpServers":{},"_piClaudeMarketplace":{"serverChoices":{"__proto__":{"plugin":"acme","fields":{"disabled":true}}}}}',
+      '{"mcpServers":{},"_piClaudeMarketplace":{"serverChoices":{"__proto__":{"plugin":"acme","marketplace":"catalog","fields":{"disabled":true}}}}}',
     );
   });
 
-  test("D-08-02: staging a key consumes only the store entry the plugin recorded", () => {
+  test("D-08-02: staging a key consumes only the store entry the plugin of the same marketplace recorded", () => {
     // arrange
     const config = configOf({
       _piClaudeMarketplace: {
         serverChoices: {
-          mine: { plugin: "acme", fields: { disabled: true } },
-          foreign: { plugin: "other", fields: { approveTools: true } },
-          later: { plugin: "acme", fields: { trace: true } },
+          mine: { plugin: "acme", marketplace: "catalog", fields: { disabled: true } },
+          foreign: { plugin: "other", marketplace: "catalog", fields: { approveTools: true } },
+          elsewhere: { plugin: "acme", marketplace: "community", fields: { approveTools: false } },
+          unplaced: { plugin: "acme", fields: { lifecycle: "eager" } },
+          later: { plugin: "acme", marketplace: "catalog", fields: { trace: true } },
         },
         note: "kept",
       },
@@ -1271,6 +1287,8 @@ describe("withPluginServersKeepingChoices", () => {
     const next = withPluginServersKeepingChoices(config, "acme", "catalog", {
       mine: { command: "mine" },
       foreign: { command: "foreign" },
+      elsewhere: { command: "elsewhere" },
+      unplaced: { command: "unplaced" },
     });
 
     // assert
@@ -1279,12 +1297,23 @@ describe("withPluginServersKeepingChoices", () => {
       JSON.stringify({
         _piClaudeMarketplace: {
           serverChoices: {
-            foreign: { plugin: "other", fields: { approveTools: true } },
-            later: { plugin: "acme", fields: { trace: true } },
+            foreign: { plugin: "other", marketplace: "catalog", fields: { approveTools: true } },
+            elsewhere: {
+              plugin: "acme",
+              marketplace: "community",
+              fields: { approveTools: false },
+            },
+            unplaced: { plugin: "acme", fields: { lifecycle: "eager" } },
+            later: { plugin: "acme", marketplace: "catalog", fields: { trace: true } },
           },
           note: "kept",
         },
-        mcpServers: { mine: { command: "mine" }, foreign: { command: "foreign" } },
+        mcpServers: {
+          mine: { command: "mine" },
+          foreign: { command: "foreign" },
+          elsewhere: { command: "elsewhere" },
+          unplaced: { command: "unplaced" },
+        },
       }),
     );
   });
@@ -1293,7 +1322,9 @@ describe("withPluginServersKeepingChoices", () => {
     // arrange
     const config = configOf({
       _piClaudeMarketplace: {
-        serverChoices: { mine: { plugin: "acme", fields: { disabled: true } } },
+        serverChoices: {
+          mine: { plugin: "acme", marketplace: "catalog", fields: { disabled: true } },
+        },
       },
       mcpServers: {},
     });
@@ -1312,7 +1343,9 @@ describe("withPluginServersKeepingChoices", () => {
     const config = configOf({
       _piClaudeMarketplace: {
         note: "kept",
-        serverChoices: { mine: { plugin: "acme", fields: { disabled: true } } },
+        serverChoices: {
+          mine: { plugin: "acme", marketplace: "catalog", fields: { disabled: true } },
+        },
       },
       mcpServers: {},
     });
@@ -1334,7 +1367,7 @@ describe("withPluginServersKeepingChoices", () => {
     const config = configOf({
       _piClaudeMarketplace: {
         serverChoices: {},
-        foreign: { plugin: "other", fields: { disabled: true } },
+        foreign: { plugin: "other", marketplace: "catalog", fields: { disabled: true } },
       },
       mcpServers: { srv: { command: "srv", _piClaudeMarketplace: ACME_MARKER } },
     });
@@ -1348,7 +1381,7 @@ describe("withPluginServersKeepingChoices", () => {
     assert.deepStrictEqual(next, {
       _piClaudeMarketplace: {
         serverChoices: {},
-        foreign: { plugin: "other", fields: { disabled: true } },
+        foreign: { plugin: "other", marketplace: "catalog", fields: { disabled: true } },
       },
       mcpServers: { other: { command: "other" } },
     });

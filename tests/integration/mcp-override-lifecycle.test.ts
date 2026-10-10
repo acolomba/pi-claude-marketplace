@@ -568,7 +568,11 @@ test("D-08-02: a project user's disabled and openUi choices survive uninstall th
           mcpServers: {},
           _piClaudeMarketplace: {
             serverChoices: {
-              plugin_hello_srv_: { plugin: "hello", fields: { disabled: true, openUi: true } },
+              plugin_hello_srv_: {
+                plugin: "hello",
+                marketplace: "mp",
+                fields: { disabled: true, openUi: true },
+              },
             },
           },
         },
@@ -670,7 +674,11 @@ test("D-08-02: a project user's disabled and trace choices survive plugin disabl
           mcpServers: {},
           _piClaudeMarketplace: {
             serverChoices: {
-              plugin_hello_srv_: { plugin: "hello", fields: { disabled: true, trace: true } },
+              plugin_hello_srv_: {
+                plugin: "hello",
+                marketplace: "mp",
+                fields: { disabled: true, trace: true },
+              },
             },
           },
         },
@@ -730,7 +738,9 @@ test("D-08-02: an update that drops the server stores its choice and one that re
         dropped: {
           mcpServers: {},
           _piClaudeMarketplace: {
-            serverChoices: { plugin_hello_srv_: { plugin: "hello", fields: { openUi: true } } },
+            serverChoices: {
+              plugin_hello_srv_: { plugin: "hello", marketplace: "mp", fields: { openUi: true } },
+            },
           },
         },
         restored: {
@@ -782,36 +792,46 @@ test("D-08-01: a reinstall keeps the user's openUi and trace on the entry", asyn
   });
 });
 
-test("D-08-02: a choice another plugin stored under the key is neither applied nor removed by an install", async () => {
-  await withHermeticEnvironment("mcp-choices-foreign-", async ({ cwd }) => {
-    // arrange
-    const pluginRoot = await seedMcpPlugin(cwd, ["project"]);
-    const locations = locationsFor("project", cwd);
-    const member = {
-      serverChoices: {
-        plugin_hello_srv_: { plugin: "other", fields: { approveTools: true } },
-      },
-    };
-    await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
-    await writeFile(locations.mcpAdapterJsonPath, JSON.stringify({ _piClaudeMarketplace: member }));
-    const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
+for (const { owner, choice } of [
+  {
+    owner: "another plugin",
+    choice: { plugin: "other", marketplace: "mp", fields: { approveTools: true } },
+  },
+  {
+    owner: "the same-named plugin of another marketplace",
+    choice: { plugin: "hello", marketplace: "elsewhere", fields: { approveTools: false } },
+  },
+]) {
+  test(`D-08-02: a choice ${owner} stored under the key is neither applied nor removed by an install`, async () => {
+    await withHermeticEnvironment("mcp-choices-foreign-", async ({ cwd }) => {
+      // arrange
+      const pluginRoot = await seedMcpPlugin(cwd, ["project"]);
+      const locations = locationsFor("project", cwd);
+      const member = { serverChoices: { plugin_hello_srv_: choice } };
+      await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+      await writeFile(
+        locations.mcpAdapterJsonPath,
+        JSON.stringify({ _piClaudeMarketplace: member }),
+      );
+      const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
 
-    // act
-    await createInstallOperation(
-      hooksRouting,
-      createCompletionCache(),
-    )({ ...makeCtx().session, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
-    const installed: unknown = JSON.parse(await readFile(locations.mcpAdapterJsonPath, "utf8"));
+      // act
+      await createInstallOperation(
+        hooksRouting,
+        createCompletionCache(),
+      )({ ...makeCtx().session, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+      const installed: unknown = JSON.parse(await readFile(locations.mcpAdapterJsonPath, "utf8"));
 
-    // assert
-    assert.deepStrictEqual(installed, {
-      _piClaudeMarketplace: member,
-      mcpServers: {
-        plugin_hello_srv_: helloEntry(pluginRoot, locations.dataRoot, ["v1.js"], {}),
-      },
+      // assert
+      assert.deepStrictEqual(installed, {
+        _piClaudeMarketplace: member,
+        mcpServers: {
+          plugin_hello_srv_: helloEntry(pluginRoot, locations.dataRoot, ["v1.js"], {}),
+        },
+      });
     });
   });
-});
+}
 
 test("AFILE-06: uninstall removes an absorbed disable stub that the user's later enable emptied", async () => {
   await withHermeticEnvironment("mcp-override-emptied-", async ({ cwd }) => {
