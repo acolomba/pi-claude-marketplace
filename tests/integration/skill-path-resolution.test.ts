@@ -81,18 +81,18 @@ function resolvePiSubagentsPackageRoot(): string | undefined {
 }
 
 /**
- * Copies the installed package's real `src/` tree into `<scratchRoot>/pi-subagents-src`
+ * Copies `packageRoot`'s real `src/` tree into `<scratchRoot>/pi-subagents-src`
  * (outside node_modules, sidestepping Node's node_modules type-stripping
  * restriction) and dynamically imports the internal skills module from
- * there by absolute file path. Returns undefined on ANY failure (package
- * not installed, internal module moved, copy failed, loader cannot strip
- * the external `.ts`) so callers can skip the test gracefully rather than
- * fail on absence.
+ * there by absolute file path. Returns undefined when `packageRoot` is
+ * undefined or when any later step fails (package not installed, internal
+ * module moved, copy failed, loader cannot strip the external `.ts`) so
+ * callers can skip the test gracefully rather than fail on absence.
  */
 async function loadPiSubagentsSkillsModule(
+  packageRoot: string | undefined,
   scratchRoot: string,
 ): Promise<PiSubagentsSkillsModule | undefined> {
-  const packageRoot = resolvePiSubagentsPackageRoot();
   if (!packageRoot) {
     return undefined;
   }
@@ -122,13 +122,16 @@ async function loadPiSubagentsSkillsModule(
 }
 
 test("SC-2 / AGSK-06: emitted skillPath resolves the staged skill via pi-subagents' resolveSkillsWithFallback and stays out of the global catalog", async (t) => {
+  // npm reads its global prefix from ~/.npmrc, so the lookup runs before the
+  // hermetic environment repoints HOME.
+  const piSubagentsRoot = resolvePiSubagentsPackageRoot();
   const originalOffline = process.env.PI_OFFLINE;
   const { root: tmpRoot } = await createHermeticEnvironment(t, "skillpath-sc2-");
   const runtimeCwd = path.join(tmpRoot, "runtime-cwd");
   const generatedName = `skillpath-sc2-${randomUUID().slice(0, 8)}`;
 
   try {
-    const skillsModule = await loadPiSubagentsSkillsModule(tmpRoot);
+    const skillsModule = await loadPiSubagentsSkillsModule(piSubagentsRoot, tmpRoot);
     if (!skillsModule) {
       t.skip("pi-subagents resolver module not reachable in this environment");
       return;
