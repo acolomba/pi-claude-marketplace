@@ -308,17 +308,26 @@ export function restoredOverrideNames(
 
 /**
  * AFILE-06: the override an owned entry writes back when it leaves the file,
- * or none when its marker keeps none.
+ * or none when its marker keeps none. An override the user's later
+ * `/mcp-adapter enable` or `disable` emptied is none too, as pi-mcp-adapter's
+ * own writer deletes an entry it empties; a kept `{}` stub comes back as `{}`.
  */
 function writtenBackOverride(entry: unknown): Record<string, unknown> | undefined {
   const kept = restorableOverride(entry);
-  return kept === undefined ? undefined : restoredOverride(kept, entry);
+  if (kept === undefined) {
+    return undefined;
+  }
+
+  const restored = restoredOverride(kept, entry);
+  const emptied = Object.keys(restored).length === 0 && Object.keys(kept).length > 0;
+  return emptied ? undefined : restored;
 }
 
 /**
  * What one existing entry leaves in its place: itself, the override its
  * marker keeps with its own carried fields taking the entry's values
- * (AFILE-06), or nothing. A name in `replaced` is restaged in this map, so the
+ * (AFILE-06), or nothing, which includes a kept override those values empty.
+ * A name in `replaced` is restaged in this map, so the
  * new entry carries the plugin's kept override and absorbs an overlay.
  */
 function survivingEntry(
@@ -364,8 +373,8 @@ function keptServers(
  * map, and `entries` follow the kept entries of the selected key, in their
  * own order. A marked entry whose name is not restaged in its map writes back
  * the override its marker keeps, with its own carried fields taking the
- * entry's values, in the entry's position; one that keeps none is removed
- * (AFILE-01, AFILE-06). An overlay under the selected key that shares a name
+ * entry's values, in the entry's position; one that keeps none, or whose
+ * kept override those values empty, is removed (AFILE-01, AFILE-06). An overlay under the selected key that shares a name
  * with an entry is dropped, so the entry replaces it and keeps it in its
  * marker (AFILE-05, AFILE-06). Every existing top-level key keeps its
  * position. The selected key is added only when it is absent and `entries` is

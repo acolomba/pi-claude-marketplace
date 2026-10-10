@@ -593,3 +593,258 @@ test("D-08-02: a project user's disabled and openUi choices survive uninstall th
     );
   });
 });
+
+/** Publishes `hello` at `version` in the seeded marketplace, declaring `servers`. */
+async function publishHello(
+  cwd: string,
+  pluginRoot: string,
+  version: string,
+  servers: Readonly<Record<string, unknown>>,
+): Promise<void> {
+  await writeFile(
+    path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "hello", version }),
+  );
+  await writeFile(path.join(pluginRoot, ".mcp.json"), JSON.stringify({ mcpServers: servers }));
+  await writeFile(
+    path.join(cwd, "mp-src", ".claude-plugin", "marketplace.json"),
+    JSON.stringify({
+      name: "mp",
+      plugins: [{ name: "hello", source: "./plugins/hello", version }],
+    }),
+  );
+}
+
+/** The `plugin_hello_srv_` entry a project install of `hello` writes, plus `carried`. */
+function helloEntry(
+  pluginRoot: string,
+  dataRoot: string,
+  args: readonly string[],
+  carried: Readonly<Record<string, unknown>>,
+): Record<string, unknown> {
+  return {
+    command: "node",
+    args,
+    env: {
+      CLAUDE_PLUGIN_ROOT: pluginRoot,
+      CLAUDE_PLUGIN_DATA: path.join(dataRoot, "mp", "hello"),
+    },
+    directTools: "search",
+    toolPrefix: "mcp",
+    ...carried,
+    _piClaudeMarketplace: { plugin: "hello", marketplace: "mp" },
+  };
+}
+
+test("D-08-02: a project user's disabled and trace choices survive plugin disable then enable", async () => {
+  await withHermeticEnvironment("mcp-choices-disable-", async ({ cwd }) => {
+    // arrange
+    const pluginRoot = await seedMcpPlugin(cwd, ["project"]);
+    const locations = locationsFor("project", cwd);
+    const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
+    const setPluginEnabled = createEnableOperation(hooksRouting);
+    const request = { scope: "project", cwd, marketplace: "mp", plugin: "hello" } as const;
+    await createInstallOperation(
+      hooksRouting,
+      createCompletionCache(),
+    )({ ...makeCtx().session, ...request });
+    await editInstalledEntry(locations.mcpAdapterJsonPath, (entry) => ({
+      ...entry,
+      disabled: true,
+      trace: true,
+    }));
+
+    // act
+    await setPluginEnabled({ ...makeCtx().session, ...request, enable: false });
+    const disabledBytes = await readFile(locations.mcpAdapterJsonPath, "utf8");
+    await setPluginEnabled({ ...makeCtx().session, ...request, enable: false });
+    const disabledAgainBytes = await readFile(locations.mcpAdapterJsonPath, "utf8");
+    await setPluginEnabled({ ...makeCtx().session, ...request, enable: true });
+    const enabled: unknown = JSON.parse(await readFile(locations.mcpAdapterJsonPath, "utf8"));
+
+    // assert
+    assert.deepStrictEqual(
+      { disabled: JSON.parse(disabledBytes) as unknown, disabledAgainBytes, enabled },
+      {
+        disabled: {
+          mcpServers: {},
+          _piClaudeMarketplace: {
+            serverChoices: {
+              plugin_hello_srv_: { plugin: "hello", fields: { disabled: true, trace: true } },
+            },
+          },
+        },
+        disabledAgainBytes: disabledBytes,
+        enabled: {
+          mcpServers: {
+            plugin_hello_srv_: helloEntry(pluginRoot, locations.dataRoot, ["v1.js"], {
+              disabled: true,
+              trace: true,
+            }),
+          },
+        },
+      },
+    );
+  });
+});
+
+test("D-08-02: an update that drops the server stores its choice and one that restores the server restores it", async () => {
+  await withHermeticEnvironment("mcp-choices-update-", async ({ cwd }) => {
+    // arrange
+    const pluginRoot = await seedMcpPlugin(cwd, ["project"]);
+    const locations = locationsFor("project", cwd);
+    const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
+    const completionCache = createCompletionCache();
+    const { updatePlugins } = createPluginUpdateOperations(hooksRouting, completionCache);
+    const request = { scope: "project", cwd, marketplace: "mp", plugin: "hello" } as const;
+    const update = async (): Promise<void> => {
+      await updatePlugins({
+        ...makeCtx().session,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+    };
+
+    await createInstallOperation(
+      hooksRouting,
+      completionCache,
+    )({ ...makeCtx().session, ...request });
+    await editInstalledEntry(locations.mcpAdapterJsonPath, (entry) => ({
+      ...entry,
+      openUi: true,
+    }));
+
+    // act
+    await publishHello(cwd, pluginRoot, "1.1.0", {});
+    await update();
+    const dropped: unknown = JSON.parse(await readFile(locations.mcpAdapterJsonPath, "utf8"));
+    await publishHello(cwd, pluginRoot, "1.2.0", { srv: { command: "node", args: ["v3.js"] } });
+    await update();
+    const restored: unknown = JSON.parse(await readFile(locations.mcpAdapterJsonPath, "utf8"));
+
+    // assert
+    assert.deepStrictEqual(
+      { dropped, restored },
+      {
+        dropped: {
+          mcpServers: {},
+          _piClaudeMarketplace: {
+            serverChoices: { plugin_hello_srv_: { plugin: "hello", fields: { openUi: true } } },
+          },
+        },
+        restored: {
+          mcpServers: {
+            plugin_hello_srv_: helloEntry(pluginRoot, locations.dataRoot, ["v3.js"], {
+              openUi: true,
+            }),
+          },
+        },
+      },
+    );
+  });
+});
+
+test("D-08-01: a reinstall keeps the user's openUi and trace on the entry", async () => {
+  await withHermeticEnvironment("mcp-choices-reinstall-carried-", async ({ cwd }) => {
+    // arrange
+    const pluginRoot = await seedMcpPlugin(cwd, ["project"]);
+    const locations = locationsFor("project", cwd);
+    const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
+    const completionCache = createCompletionCache();
+    const request = { scope: "project", cwd, marketplace: "mp", plugin: "hello" } as const;
+    await createInstallOperation(
+      hooksRouting,
+      completionCache,
+    )({ ...makeCtx().session, ...request });
+    await editInstalledEntry(locations.mcpAdapterJsonPath, (entry) => ({
+      ...entry,
+      trace: false,
+      openUi: true,
+    }));
+
+    // act
+    await createReinstallOperation(
+      hooksRouting,
+      completionCache,
+    )({ ...makeCtx().session, ...request });
+    const reinstalled: unknown = JSON.parse(await readFile(locations.mcpAdapterJsonPath, "utf8"));
+
+    // assert
+    assert.deepStrictEqual(reinstalled, {
+      mcpServers: {
+        plugin_hello_srv_: helloEntry(pluginRoot, locations.dataRoot, ["v1.js"], {
+          openUi: true,
+          trace: false,
+        }),
+      },
+    });
+  });
+});
+
+test("D-08-02: a choice another plugin stored under the key is neither applied nor removed by an install", async () => {
+  await withHermeticEnvironment("mcp-choices-foreign-", async ({ cwd }) => {
+    // arrange
+    const pluginRoot = await seedMcpPlugin(cwd, ["project"]);
+    const locations = locationsFor("project", cwd);
+    const member = {
+      serverChoices: {
+        plugin_hello_srv_: { plugin: "other", fields: { approveTools: true } },
+      },
+    };
+    await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+    await writeFile(locations.mcpAdapterJsonPath, JSON.stringify({ _piClaudeMarketplace: member }));
+    const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
+
+    // act
+    await createInstallOperation(
+      hooksRouting,
+      createCompletionCache(),
+    )({ ...makeCtx().session, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+    const installed: unknown = JSON.parse(await readFile(locations.mcpAdapterJsonPath, "utf8"));
+
+    // assert
+    assert.deepStrictEqual(installed, {
+      _piClaudeMarketplace: member,
+      mcpServers: {
+        plugin_hello_srv_: helloEntry(pluginRoot, locations.dataRoot, ["v1.js"], {}),
+      },
+    });
+  });
+});
+
+test("AFILE-06: uninstall removes an absorbed disable stub that the user's later enable emptied", async () => {
+  await withHermeticEnvironment("mcp-override-emptied-", async ({ cwd }) => {
+    // arrange
+    await seedMcpPlugin(cwd, ["project"]);
+    const locations = locationsFor("project", cwd);
+    await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+    await writeFile(
+      locations.mcpAdapterJsonPath,
+      '{"mcpServers":{"plugin_hello_srv_":{"disabled":true},"mine":{"command":"mine"}}}\n',
+    );
+    const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
+    const completionCache = createCompletionCache();
+    const request = { scope: "project", cwd, marketplace: "mp", plugin: "hello" } as const;
+    await createInstallOperation(
+      hooksRouting,
+      completionCache,
+    )({ ...makeCtx().session, ...request });
+    // pi-mcp-adapter 5.2.0's `/mcp-adapter enable plugin_hello_srv_` removes
+    // `disabled` from the entry and keeps every other member, the marker included.
+    await editInstalledEntry(locations.mcpAdapterJsonPath, (entry) => {
+      const { disabled: _disabled, ...enabledEntry } = entry;
+      return enabledEntry;
+    });
+
+    // act
+    await createUninstallOperation(
+      hooksRouting,
+      completionCache,
+    )({ ...makeCtx().session, ...request });
+    const uninstalled: unknown = JSON.parse(await readFile(locations.mcpAdapterJsonPath, "utf8"));
+
+    // assert
+    assert.deepStrictEqual(uninstalled, { mcpServers: { mine: { command: "mine" } } });
+  });
+});

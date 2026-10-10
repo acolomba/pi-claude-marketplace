@@ -843,6 +843,40 @@ describe("withPluginServers", () => {
     assert.strictEqual(JSON.stringify(next), '{"mcpServers":{"__proto__":{"disabled":true}}}');
   });
 
+  test("AFILE-06: an unstage removes an entry whose kept override the user's later enable emptied", () => {
+    // arrange
+    const config = configOf({
+      mcpServers: {
+        srv: {
+          command: "srv",
+          _piClaudeMarketplace: { ...ACME_MARKER, keptOverride: { disabled: true } },
+        },
+        mine: { command: "mine" },
+      },
+    });
+
+    // act
+    const next = withPluginServers(config, "acme", "catalog", {});
+
+    // assert
+    assert.deepStrictEqual(next, { mcpServers: { mine: { command: "mine" } } });
+  });
+
+  test("AFILE-06: an unstage writes a kept empty stub back as an empty stub", () => {
+    // arrange
+    const config = configOf({
+      mcpServers: {
+        srv: { command: "srv", _piClaudeMarketplace: { ...ACME_MARKER, keptOverride: {} } },
+      },
+    });
+
+    // act
+    const next = withPluginServers(config, "acme", "catalog", {});
+
+    // assert
+    assert.deepStrictEqual(next, { mcpServers: { srv: {} } });
+  });
+
   test("AFILE-06: a written-back override takes each carried field from the live entry and keeps every other field", () => {
     // arrange
     const servers = {
