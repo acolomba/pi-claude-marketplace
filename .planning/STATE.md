@@ -5,17 +5,17 @@ milestone_name: MCP 4
 current_phase: 8
 current_phase_name: Clear milestone debt
 status: executing
-stopped_at: Completed 08-05-PLAN.md
-last_updated: "2026-10-10T03:54:13.498Z"
+stopped_at: Completed 08-06-PLAN.md
+last_updated: "2026-10-10T04:02:52.017Z"
 last_activity: 2026-10-09
 last_activity_desc: Phase 8 execution started
-state_head: b86ad6d318f5a411f772ed73bc0b66d3c7570738
+state_head: eda89fc059637d5bfe5ca9cdf6212999e0d1e3a0
 progress:
   total_phases: 8
   completed_phases: 7
   total_plans: 73
-  completed_plans: 57
-  percent: 78
+  completed_plans: 58
+  percent: 79
 ---
 
 # Project State
@@ -35,11 +35,11 @@ sign-ins and approvals.
 ## Current Position
 
 Phase: 8 (Clear milestone debt) — EXECUTING
-Plan: 6 of 21
+Plan: 7 of 21
 Status: Ready to execute
 Last activity: 2026-10-09 — Phase 8 execution started
 
-Progress: [████████░░] 78%
+Progress: [████████░░] 79%
 
 ### workflows-replay closeout (merged from main)
 
@@ -303,6 +303,7 @@ still open with a comment explaining what landed.
 | Phase 08 P03 | 30min | 2 tasks | 9 files |
 | Phase 08 P04 | 10min | 2 tasks | 5 files |
 | Phase 08 P05 | 7min | 2 tasks | 5 files |
+| Phase 08 P06 | 7min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -727,6 +728,7 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 08]: An override the user emptied leaves the file at unstage; a kept {} stub round-trips (AFILE-06)
 - [Phase 08]: D-08-05: reinstall treats a mirror whose HEAD cannot be read as unusable and materializes the recorded-sha clone; the reload migration's presence probe makes the same choice with file reads only
 - [Phase 08]: holdsBytes takes its read through an optional readMetadata restore op, so the lstat-read race and the rethrow are testable for 100% direct coverage
+- [Phase 08]: The agents and skills rollback marker sits above the throw in the else-if arm (bridges/agents/stage.ts:517): the first span line carries an eslint-disable-next-line directive, and a fallow marker above the directive does not hide the group.
 
 ### Pending Todos
 
@@ -860,11 +862,11 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Completed 08-05-PLAN.md
+**Stopped at:** Completed 08-06-PLAN.md
 
 **Resume file:** None
 
-Last session: 2026-10-10T03:54:13.028Z
+Last session: 2026-10-10T04:02:51.610Z
 Phase 7 closed: 5/5 plans; Nyquist validated; security verified (0 open);
 review 8/8 fixed; verifier 3/3, re-running the live canary against
 pi-mcp-adapter 5.2.0. `/gsd-autonomous --from 7` ran the transition, then
