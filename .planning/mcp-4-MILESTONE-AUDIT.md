@@ -1,57 +1,30 @@
 ---
 milestone: mcp-4
-audited: 2026-10-09T23:59:00Z
-status: tech_debt
+audited: 2026-10-10T09:30:00Z
+status: passed
 scores:
-  requirements: 36/36
-  phases: 7/7
-  integration: 6/6
+  requirements: 41/41
+  phases: 8/8
+  integration: 12/12
   flows: 6/6
 gaps:
   requirements: []
   integration: []
   flows: []
 tech_debt:
+  - phase: 08-clear-milestone-debt
+    items:
+      - "ROOTKEY-01 (BACKLOG, carried): `install __proto__@<mp>` and any root plugin name outside the dependency token alphabet (for example `_x@mp`) are refused correctly, but the cause line says the plugin 'declares an unusable dependency'. Pre-existing behavior in `domain/dependency-closure.ts`; found and pinned by the 08-19 end-to-end test; WINDOWS entry 90 waived to this carrier."
   - phase: milestone (ship prep)
     items:
-      - "PR blocker: `npx fallow audit --base 369eaec3` reads verdict `warn` with 14 clone groups (dead code 0, complexity 0). The Lint `fallow-audit` job fails a pull request on `warn`. Phase 3 UAT accepted WR-05 on the condition that a ship-prep task carries it."
-      - "Version bump offer (0.20.0, D-07-11) is a PR-time act; not yet made."
-  - phase: 01-pi-1-0-floor-and-adapter-only-detection
-    items:
-      - "01-VALIDATION.md is `status: draft` (Nyquist NOT-VALIDATED); no 01-SECURITY.md."
-      - "11 info review findings open (01-REVIEW-DISPOSITION.md)."
-      - "ROADMAP criterion 4 still names adapter 5.0.0 and engine 3.13.1 with no inline amendment note (amended by D-04-12, D-07-07, quick task 261006-kr1)."
-      - "Global pi-subagents is 0.47.1: the two pi-subagents peer tests skip silently without a PI_SUBAGENTS_ROOT scratch install of 0.74.0."
-  - phase: 02-adapter-file-delivery
-    items:
-      - "8 info findings deferred and WR-06 skipped (02-REVIEW-DISPOSITION.md)."
-      - "Phase 5 (D-05-08..10) narrowed the never-lose-user-content promise: adapter-written leftovers under old names of moved servers are removed with a `leftover-removed` notice. Re-verification judged it an amendment, not a breach."
-  - phase: 03-claude-code-tool-names-and-tool-search
-    items:
-      - "WR-01..05 and IN-01..05 still read `open` in 03-REVIEW-DISPOSITION.md; the operator accepted WR-01/02/03/05 as built in 03-UAT.md (2026-10-06), so the disposition file lags the decision."
-      - "WR-03 wording: `docs/mcp-compatibility.md:27` says an install fails before it writes anything, while the refusal happens in the fifth ledger phase and rolls back."
-  - phase: 04-variable-expansion-at-claude-code-parity
-    items:
-      - "9 info findings open (04-REVIEW-DISPOSITION.md)."
-      - "MCPROW-01 (BACKLOG): review the `enable` and `import` row grammar when MCP notices follow."
-  - phase: 05-automatic-migration-on-reload
-    items:
-      - "8 info findings open (05-REVIEW-DISPOSITION.md)."
-      - "Open operator decision: whether `openUi` joins the D-02-06 carried-field set."
-  - phase: 06-live-mcp-status-in-info
-    items:
-      - "IN-01, IN-02 open (06-REVIEW-DISPOSITION.md)."
-      - "Pre-existing: `record.plugins[name]` lookups lack an own-property check (`info constructor@mp`); candidate BACKLOG item, not yet filed."
-  - phase: 07-docs-and-live-proof
-    items:
-      - "One IN-06 sub-item skipped: an absolute path appears in operator-run canary output."
-      - "MCPOVR-01 (BACKLOG): MCP server overrides do not survive plugin disable then enable."
+      - "PR-time acts: the version bump offer (0.20.0, D-07-11) and the CHANGELOG `[Unreleased]` lines for the debt-clearing changes (OAuth beside headers, choices kept across disable/uninstall, enable/import MCP notices as separate warnings, the new migration remedies)."
+      - "Commit 8578407a lacks the attribution trailers; history cannot be rewritten (recorded in 08-20-SUMMARY)."
 nyquist:
-  compliant_phases: ["02", "03", "04", "05", "06", "07"]
+  compliant_phases: ["01", "02", "03", "04", "05", "06", "07", "08"]
   partial_phases: []
-  not_validated_phases: ["01"]
+  not_validated_phases: []
   missing_phases: []
-  overall: partial
+  overall: compliant
 ---
 
 # Milestone mcp-4 (MCP 4) audit
@@ -59,76 +32,87 @@ nyquist:
 **Goal:** make Pi 1.0 the baseline and deliver plugin MCP servers through
 pi-mcp-adapter 5 at Claude Code parity, without adopting Pi's built-in MCP.
 
-**Verdict:** `tech_debt`. All 36 requirements are satisfied, all 7 phases
-are verified, cross-phase wiring is 6/6 and end-to-end flows are 6/6. No
-critical gap exists. One debt item blocks the pull request: the fallow
-audit verdict is `warn`.
+**Verdict: passed.** This re-audit follows Phase 8 (clear milestone debt),
+which the operator added after the 2026-10-09 audit (status `tech_debt`, 488bec50).
+Every item that audit listed is now fixed or closed with a recorded reason. One
+new minor item found during Phase 8, ROOTKEY-01, is carried in BACKLOG.
 
 ## Evidence base
 
-- Full gate: `npm run check` on `51ebbc07` (clean tree), Node v26.11.0,
-  `PI_MCP_ADAPTER_ROOT` = pi-mcp-adapter 5.2.0, exit 0. The next commit,
-  `1b1e39a3`, touched only `.planning` markdown.
-- Phases 1-6 read `stale` because later phases edited covered files. Each
-  got a scoped re-verification at `51ebbc07` (targeted tests re-run,
-  fingerprint refreshed through `verification.fingerprint`); all six still
-  pass. Phase 7 passed on first verification, including a verifier re-run of
-  the live canary against pi-mcp-adapter 5.2.0.
+- HEAD `f09a4e59` on `features/mcp-4`. `npm run check` with both peer roots
+  (`PI_MCP_ADAPTER_ROOT` = pi-mcp-adapter 5.2.0, `PI_SUBAGENTS_ROOT` =
+  pi-subagents 0.74.0) exited 0 after the last code commit (9ed88725 changed
+  only a comment and a test title; its hook ran `check:commit` green).
+- `npx fallow audit --base $(git merge-base origin/main HEAD)`: verdict `pass`,
+  0 introduced, 8 inherited clone groups; no `ignoredClones`, 22 reviewed
+  `fallow-ignore` markers.
+- All eight phase reports read `passed` through `verification.status`. Phases
+  1-7 were re-verified in scope on 2026-10-10 (baseline 1b1e39a3, or 51ebbc07
+  for Phase 7; head 3df6309c) because Phase 8 edited files they cover. No truth
+  lost support. Phase 2's re-verification found one hygiene gap (Phase 8 put
+  `D-02-19` back in a comment and a test title); 9ed88725 closed it.
 
 ## Phases
 
-| Phase | Verification | Score | Nyquist | Security | Review |
-|-------|--------------|-------|---------|----------|--------|
-| 1 Pi 1.0 floor and adapter-only detection | passed (re-verified) | 5/5 | draft | none | clean, 11 info open |
-| 2 Adapter-file delivery | passed (re-verified) | 5/5 | compliant | 0 open | clean, 8 info deferred |
-| 3 Claude Code tool names and tool search | passed (re-verified) | 5/7 + 2 decided | compliant | 0 open | 5 warnings accepted in UAT |
-| 4 Variable expansion at Claude Code parity | passed (re-verified) | 5/5 | compliant | 0 open | 9 info open |
-| 5 Automatic migration on /reload | passed (re-verified) | 4/4 | compliant | 0 open | clean, 8 info open |
-| 6 Live MCP status in info | passed (re-verified) | 10/10 | compliant | 0 open | 2 info open |
-| 7 Docs and live proof | passed | 3/3 | compliant | 0 open | 8/8 fixed |
+| Phase | Verification | Nyquist | Security | Review ledger |
+|-------|--------------|---------|----------|---------------|
+| 1 Pi 1.0 floor and adapter-only detection | passed 5/5 | compliant | verified, 0 open | open: 0 |
+| 2 Adapter file delivery | passed (gap 2 closed) | compliant | verified | open: 0 |
+| 3 Claude Code tool names and tool search | passed | compliant | verified | open: 0 |
+| 4 Variable expansion at Claude Code parity | passed 5/5 | compliant | verified | open: 0 |
+| 5 Automatic migration on reload | passed 4/4 | compliant | verified | open: 0 |
+| 6 Live MCP status in info | passed 10/10 | compliant | verified | open: 0 |
+| 7 Docs and live proof | passed 3/3 | compliant | verified | open: 0 |
+| 8 Clear milestone debt | passed 5/5 | compliant | verified, 41/41 closed | 7/7 fixed |
 
 ## Requirements (3-source cross-reference)
 
-Every REQ-ID is `[x]` and `Complete` in REQUIREMENTS.md, listed in at least
-one SUMMARY `requirements-completed`, and satisfied in its phase
-VERIFICATION.md. No orphans.
+41/41 satisfied. Every ID is checked off in `REQUIREMENTS.md`, listed in some
+SUMMARY's `requirements-completed`, and covered by a `passed` VERIFICATION.
+No orphans.
 
 | Group | IDs | Phase | Status |
 |-------|-----|-------|--------|
-| Pi floor | PIFL-01..07 | 1 | satisfied (PIFL-03, PIFL-07 as amended by D-04-12, D-07-07) |
-| Adapter detection | ADET-01, ADET-02 | 1 | satisfied |
-| Adapter file | AFILE-01..06 | 2 | satisfied (as amended by ANAME-01, AMIG-02) |
-| Names and search | ANAME-01..07 | 3 | satisfied (as amended by D-04-06, D-05-05) |
-| Variables | AVAR-01..05 | 4 | satisfied |
-| Migration | AMIG-01..04 | 5 | satisfied |
-| Status | ASTAT-01, ASTAT-02 | 6 | satisfied |
-| Docs | ADOC-01..03 | 7 | satisfied |
+| Pi 1.0 floor, detection | PIFL-01..07, ADET-01..02 | 1 | satisfied |
+| Adapter file delivery | AFILE-01..06 | 2 | satisfied |
+| Tool names and tool search | ANAME-01..07 | 3 | satisfied |
+| Variable expansion | AVAR-01..05 | 4 | satisfied |
+| Migration on reload | AMIG-01..04 | 5 | satisfied |
+| Live status | ASTAT-01..02 | 6 | satisfied |
+| Docs and live proof | ADOC-01..03 | 7 | satisfied |
+| Milestone debt | DEBT-01..05 | 8 | satisfied |
 
 ## Integration (gsd-integration-checker)
 
-| Seam | Verdict | Requirements |
-|------|---------|--------------|
-| Every staging path (install, cascade, enable, import, update, reinstall, reconcile) goes through `prepareStageMcpServers` and finishes the legacy move | connected | AFILE, ANAME, AVAR, AMIG |
-| Uninstall, disable and rollback remove by marker, write back user stubs, drop notices for removed servers | connected | AFILE-01/04/06, AVAR-04, ANAME-07 |
-| One key builder (`domain/name.ts`) for stage, agent `tools:`, info status and migration | connected | ANAME-01/02/04, ASTAT |
-| Adapter detection never blocks staging; `mcp` tag and status tracker wired | connected | PIFL, ADET, ASTAT |
-| NFR-10 write set names `mcp-adapter.json` for every writer | connected | AFILE-01 |
-| Docs, README, CHANGELOG and catalog match shipped behavior | connected | ADOC-01..03 |
+12/12 wirings wired, 6/6 end-to-end flows complete, no broken seam. The
+checker ran 8 integration and architecture suites (113 pass) and traced the
+rest by code reading. New Phase 8 seams checked: the per-server choice store
+(`{ plugin, marketplace, fields }`) across stage, unstage, migration, update,
+reinstall and disable/enable; the explicit staging environment from every
+entry factory; the OAuth decision against expansion and credential withholding;
+own-key reads across 33 modules; the `source-outdated` row from probe to
+catalog; docs and catalog against code.
 
-Flows checked (all complete): install with the adapter missing; install with
-an unset variable, then info and uninstall; update and reinstall; enable,
-disable and cascade rollback; `/reload` migration; info status.
+Flows: install to `mcp-adapter.json` to `info`; uninstall then reinstall;
+update that drops then restores a server; disable then enable; reload
+migration of legacy `mcp.json`; remote OAuth server with headers.
+
+## Closed since the 2026-10-09 audit
+
+- PR blocker: fallow audit `warn` -> `pass` (08-01, 08-06, 08-15).
+- Phase 1 Nyquist and security gaps -> validated, 23 threats closed.
+- All open, deferred and skipped review findings in phases 1-7 -> fixed (74)
+  or wontfix with a reason (7); `07-REVIEW-DISPOSITION.md` written.
+- ROADMAP criterion 4, PIFL-07 and STATE ADET-02 wording match the code.
+- MCPOVR-01 closed (choices survive disable/enable and uninstall/reinstall;
+  `openUi` and `trace` carried). MCPROW-01 closed (adapter-loaded enable and
+  import shapes pinned; SEV-01 kept).
+- Own-key reads (`info constructor@mp` and friends) and `__proto__` refused as
+  a name (OWNKEY-01).
 
 ## Tech debt
 
-See the `tech_debt` frontmatter. The items that need action before merge:
-
-1. Clear the fallow audit `warn` (14 clone groups), or the Lint
-   `fallow-audit` job fails the PR.
-2. Offer the 0.20.0 version bump (D-07-11, AGENTS.md "Versioning").
-
-Everything else is open info-level review findings, two BACKLOG entries
-(MCPOVR-01, MCPROW-01), two unfiled candidates (`record.plugins` own-property
-check, `openUi` carried field), Phase 1's draft validation and missing
-security review, and two stale records (03-REVIEW-DISPOSITION.md,
-ROADMAP Phase 1 criterion 4).
+- ROOTKEY-01 (minor, pre-existing, carried in BACKLOG with evidence and a
+  pinned test).
+- Ship prep: version bump offer and CHANGELOG lines at PR time; commit
+  8578407a has no attribution trailers (cannot be amended).
