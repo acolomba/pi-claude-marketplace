@@ -191,3 +191,7 @@ Mitigations: T-08-03 (cases for U+2028, U+2029, U+202E, U+200B and U+E0001 in a 
 ## Self-Check: PASSED
 
 - All seven modified files exist, and commits 14c70964, 70f91bd8 and e0187b8b are ancestors of HEAD.
+
+## Audit follow-up
+
+The phase security audit found a T-08-03 gap. The MCP config notice lines printed `notice.plugin` without escaping. Four of them (override-kept, variables-missing, credentials-blanked, tool-rules-unenforced) also printed `notice.server` without escaping. `assertSafeName` allows U+2028 and U+202E, so a hostile plugin name could end a line or reverse text in a notice. Commit 0717559f (`fix(notify): escape plugin names in MCP config notices`) sends every plugin and server name in the five lines through `printable`. Two new cases in `tests/shared/notification-dispatch.test.ts` failed before the fix and pass after it. They cover the plugin name in the leftover line, and the plugin and server names in the other four lines. The file's 271 tests pass, the catalog lock tests pass 70/70, and the hook's `check:commit` passed. The `names` and `fields` lists are still printed as they come; this fix did not change them.
