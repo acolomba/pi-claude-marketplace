@@ -37,9 +37,11 @@ const REAL_REINSTALL_CLONE_CACHE_SEAM: ReinstallCloneCacheSeam = {
 /**
  * Probes one reinstall source from a warm mirror or its recorded-sha clone.
  *
- * Unpinned sources prefer the existing mirror and read its HEAD without
- * network access. Missing mirrors fall back to the recorded-sha clone path;
- * clone and subdirectory failures retain their original classification.
+ * Unpinned sources prefer a mirror whose HEAD reads without network access.
+ * A missing mirror, or one whose HEAD cannot be read, falls back to the
+ * recorded-sha clone. A reinstall re-clones that sha on a cache miss, so a
+ * retry is safe (D-08-05, NFR-3, NFR-5). Clone and subdirectory failures
+ * retain their original classification.
  */
 export async function probeReinstallClone(
   options: ReinstallCloneProbeOptions,
@@ -50,8 +52,8 @@ export async function probeReinstallClone(
 
   if (source.sha === undefined) {
     const mirrorRoot = await locations.pluginCloneDir(pluginMirrorKey(cloneUrl));
-    if (await pathExists(mirrorRoot)) {
-      const mirrorSha = await readMirrorHeadSha(mirrorRoot);
+    const mirrorSha = await readUsableMirrorSha(mirrorRoot);
+    if (mirrorSha !== undefined) {
       if (source.kind === "git-subdir") {
         return resolveSubdir(source.path, mirrorRoot, mirrorSha);
       }
@@ -73,6 +75,18 @@ export async function probeReinstallClone(
   }
 
   return { kind: "materialized", pluginRoot: cloneRoot, resolvedSha: recordedSha };
+}
+
+async function readUsableMirrorSha(mirrorRoot: string): Promise<string | undefined> {
+  if (!(await pathExists(mirrorRoot))) {
+    return undefined;
+  }
+
+  try {
+    return await readMirrorHeadSha(mirrorRoot);
+  } catch {
+    return undefined;
+  }
 }
 
 async function resolveSubdir(
