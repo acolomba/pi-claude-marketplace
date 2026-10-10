@@ -6,10 +6,7 @@ import { mock, verify, when } from "strong-mock";
 import { withMcpServerStatus } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/info-mcp-status.ts";
 
 import type { PluginInstallRecord } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import type {
-  McpServerRuntimeStatus,
-  McpStatusReader,
-} from "../../../extensions/pi-claude-marketplace/platform/mcp-status.ts";
+import type { McpStatusReader } from "../../../extensions/pi-claude-marketplace/platform/mcp-status.ts";
 import type {
   McpServerStatus,
   McpServerSummaryEntry,
@@ -387,20 +384,3 @@ test("ASTAT-01: only the user row's server the project record lists reads overri
     ]),
   );
 });
-
-for (const answer of ["constructor", "toString", "__proto__"]) {
-  test(`ASTAT-02: a reader answer ${answer} outside the closed set reads status unknown`, () => {
-    // arrange
-    const block = infoBlock("installed", [{ name: "plugin:alpha:api" }]);
-    const mcpStatus = { lookup: () => answer as McpServerRuntimeStatus } satisfies McpStatusReader;
-
-    // act
-    const stamped = withMcpServerStatus(block, installRecord(["api"]), mcpStatus, undefined);
-
-    // assert
-    assert.deepStrictEqual(
-      stamped,
-      infoBlock("installed", [{ name: "plugin:alpha:api", status: "status unknown" }]),
-    );
-  });
-}

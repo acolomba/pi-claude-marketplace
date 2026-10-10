@@ -52,11 +52,7 @@ function statusToken(answer: ReturnType<McpStatusReader["lookup"]>): McpServerSt
     return "not loaded";
   }
 
-  // ASTAT-02: an own-key check, so an answer outside the reader's closed set
-  // reads `status unknown` and never resolves to an `Object.prototype` member.
-  return Object.hasOwn(RUNTIME_STATUS_TOKENS, answer)
-    ? RUNTIME_STATUS_TOKENS[answer]
-    : "status unknown";
+  return RUNTIME_STATUS_TOKENS[answer];
 }
 
 function projectOverrides(

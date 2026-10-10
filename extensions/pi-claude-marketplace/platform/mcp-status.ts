@@ -74,8 +74,10 @@ export interface McpStatusReader {
 //
 // ASTAT-02: Pi's bus hands every subscriber the emitter's own object, so an
 // accessor can answer the validator with a string and later answer with
-// something else. Each field is read once after the check, and only a copy
-// that is still a string is stored; any other copy voids the snapshot.
+// something else. Each server's `name` and `status` is
+// read once after the check, and each copy is checked again, so whatever a
+// later read of `servers` returns, only strings are stored; any other copy
+// voids the snapshot.
 function readSnapshot(payload: unknown): ReadonlyMap<string, string> | undefined {
   if (!MCP_STATUS_SNAPSHOT_VALIDATOR.Check(payload)) {
     return undefined;
