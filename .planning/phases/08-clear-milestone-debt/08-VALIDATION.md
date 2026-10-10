@@ -3,9 +3,9 @@ phase: "8"
 slug: "clear-milestone-debt"
 # status lifecycle: draft (seeded by plan-phase) → validated (set by validate-phase §6)
 # audit-milestone §5.5 distinguishes NOT-VALIDATED (draft) from PARTIAL (validated + nyquist_compliant: false) (#2117)
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: validated
+nyquist_compliant: true
+wave_0_complete: true
 created: "2026-10-09"
 ---
 
@@ -39,19 +39,19 @@ created: "2026-10-09"
 
 ## Per-Task Verification Map
 
-Task IDs are filled by the planner. Requirement-level checks from `08-RESEARCH.md` §Validation Architecture:
+Requirement-level checks from `08-RESEARCH.md` §Validation Architecture, mapped to the plans that own them. Each plan task also carries its own `<automated>` verify block; every executor ran those green (quoted in each `08-NN-SUMMARY.md`), and `npm run check` with both peer roots passed at every wave boundary and in 08-21.
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| TBD | TBD | TBD | DEBT-01 | — | N/A | gate | `npx fallow audit --base $(git merge-base origin/main HEAD) --format json` verdict `pass`; `npm run fallow` | ✅ | ⬜ pending |
-| TBD | TBD | TBD | DEBT-02 | — | N/A | doc check | no `open`/`deferred`/`skipped` row in `.planning/phases/0[1-7]-*/0[1-7]-REVIEW-DISPOSITION.md`; Phase 7 ledger exists | ❌ W0 (Phase 7 ledger) | ⬜ pending |
-| TBD | TBD | TBD | DEBT-03 | choice store | store holds only carried fields, never a credential | unit + integration + conformance | `node --test tests/bridges/mcp/adapter-entry.test.ts tests/bridges/mcp/adapter-doc.test.ts tests/bridges/mcp/unstage.test.ts tests/bridges/mcp/stage.test.ts tests/integration/mcp-override-lifecycle.test.ts`; adapter conformance case with `PI_MCP_ADAPTER_ROOT` | ❌ W0 (conformance case) | ⬜ pending |
-| TBD | TBD | TBD | DEBT-04 (D-08-03) | — | N/A | unit | `node --test tests/orchestrators/plugin/enable-disable.test.ts tests/orchestrators/import/execute.test.ts` | ✅ | ⬜ pending |
-| TBD | TBD | TBD | DEBT-04 (D-08-04) | OAuth headers | never write a credential; auth only for clean headers | unit | `node --test tests/domain/mcp-server-features.test.ts tests/bridges/mcp/adapter-entry.test.ts` | ✅ | ⬜ pending |
-| TBD | TBD | TBD | DEBT-04 (D-08-05) | — | N/A | unit + architecture | `node --test tests/orchestrators/plugin/reinstall-clone-probe.test.ts tests/orchestrators/plugin/git-source-probe.test.ts tests/orchestrators/reconcile/mcp-migration.test.ts tests/architecture/mcp-migration-notice.test.ts tests/shared/notification-dispatch.test.ts` | ✅ | ⬜ pending |
-| TBD | TBD | TBD | DEBT-04 (D-08-06) | env | staging reads only the passed env | unit | `node --test tests/bridges/mcp/stage.test.ts tests/orchestrators/plugin/install-outcome.test.ts tests/orchestrators/plugin/update-swap.test.ts tests/orchestrators/plugin/reinstall-replace.test.ts tests/orchestrators/reconcile/mcp-migration.test.ts` | ✅ | ⬜ pending |
-| TBD | TBD | TBD | DEBT-04 (D-08-07) | prototype keys | inherited keys never read as records; `__proto__` refused | unit + integration | `node --test tests/shared/own-key.test.ts tests/domain/name.test.ts tests/orchestrators/plugin/info.test.ts tests/orchestrators/plugin/uninstall.test.ts tests/orchestrators/plugin/enable-disable.test.ts` | ❌ W0 (`tests/shared/own-key.test.ts`) | ⬜ pending |
-| TBD | TBD | TBD | DEBT-05 | — | N/A | doc check | ROADMAP Phase 1 criterion 4 names D-04-12, D-07-07; `STATE.md` ADET-02 wording says extension command | ✅ | ⬜ pending |
+| all | 08-01, 08-06, 08-15, 08-21 | 1, 2, 5 | DEBT-01 | — | N/A | gate | `npx fallow audit --base $(git merge-base origin/main HEAD) --format json` verdict `pass`; `npm run fallow` | ✅ | ✅ green |
+| all | 08-01..08-08, 08-10..08-14, 08-16, 08-18, 08-20, 08-21 | 1-5 | DEBT-02 | — | N/A | doc check | no `open`/`deferred`/`skipped` row in `.planning/phases/0[1-7]-*/0[1-7]-REVIEW-DISPOSITION.md`; Phase 7 ledger exists | ✅ | ✅ green |
+| all | 08-03, 08-10, 08-14 | 1-3 | DEBT-03 | choice store | store holds only carried fields, never a credential | unit + integration + conformance | `node --test tests/bridges/mcp/adapter-entry.test.ts tests/bridges/mcp/adapter-doc.test.ts tests/bridges/mcp/unstage.test.ts tests/bridges/mcp/stage.test.ts tests/integration/mcp-override-lifecycle.test.ts tests/integration/mcp-adapter-entry-conformance.test.ts` with `PI_MCP_ADAPTER_ROOT` | ✅ | ✅ green |
+| all | 08-08 | 1 | DEBT-04 (D-08-03) | — | N/A | unit | `node --test tests/orchestrators/plugin/enable-disable.test.ts tests/orchestrators/import/execute.test.ts` | ✅ | ✅ green |
+| all | 08-10 | 2 | DEBT-04 (D-08-04) | OAuth headers | never write a credential; auth only for clean headers | unit | `node --test tests/domain/mcp-server-features.test.ts tests/bridges/mcp/adapter-entry.test.ts` | ✅ | ✅ green |
+| all | 08-02, 08-04 | 1 | DEBT-04 (D-08-05) | — | N/A | unit + architecture | `node --test tests/orchestrators/plugin/reinstall-clone-probe.test.ts tests/orchestrators/plugin/git-source-probe.test.ts tests/orchestrators/reconcile/mcp-migration.test.ts tests/architecture/mcp-migration-notice.test.ts tests/shared/notification-dispatch.test.ts` | ✅ | ✅ green |
+| all | 08-11, 08-12, 08-13 | 2-3 | DEBT-04 (D-08-06) | env | staging reads only the passed env | unit | `node --test tests/bridges/mcp/stage.test.ts tests/orchestrators/plugin/install-outcome.test.ts tests/orchestrators/plugin/update-swap.test.ts tests/orchestrators/plugin/reinstall-replace.test.ts tests/orchestrators/reconcile/mcp-migration.test.ts` | ✅ | ✅ green |
+| all | 08-09, 08-15..08-19 | 1-4 | DEBT-04 (D-08-07) | prototype keys | inherited keys never read as records; `__proto__` refused | unit + integration | `node --test tests/shared/own-key.test.ts tests/domain/name.test.ts tests/orchestrators/plugin/info.test.ts tests/orchestrators/plugin/uninstall.test.ts tests/orchestrators/plugin/enable-disable.test.ts tests/integration/reserved-record-keys.test.ts` | ✅ | ✅ green |
+| all | 08-21 | 5 | DEBT-05 | — | N/A | doc check | ROADMAP Phase 1 criterion 4 names D-04-12, D-07-07; `STATE.md` ADET-02 wording says extension command | ✅ | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -59,9 +59,9 @@ Task IDs are filled by the planner. Requirement-level checks from `08-RESEARCH.m
 
 ## Wave 0 Requirements
 
-- [ ] `tests/shared/own-key.test.ts` — pairs with the new `shared/own-key.ts` (pairing gate)
-- [ ] An adapter conformance case for the `_piClaudeMarketplace.serverChoices` member, through `tests/integration/pi-mcp-adapter-peer.ts`, with a hermetic HOME
-- [ ] `.planning/phases/07-docs-and-live-proof/07-REVIEW-DISPOSITION.md`
+- [x] `tests/shared/own-key.test.ts` — pairs with the new `shared/own-key.ts` (pairing gate)
+- [x] An adapter conformance case for the `_piClaudeMarketplace.serverChoices` member, through `tests/integration/pi-mcp-adapter-peer.ts`, with a hermetic HOME
+- [x] `.planning/phases/07-docs-and-live-proof/07-REVIEW-DISPOSITION.md`
 
 ---
 
@@ -73,11 +73,19 @@ All phase behaviors have automated verification.
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 60s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags
+- [x] Feedback latency < 60s
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** validated 2026-10-10
+
+## Validation Audit 2026-10-10
+
+| Metric | Count |
+|---|---|
+| Gaps found | 0 |
+| Resolved | 0 |
+| Escalated | 0 |
