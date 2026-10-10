@@ -1,7 +1,7 @@
 ---
 phase: 05-automatic-migration-on-reload
 verified: 2026-10-09T23:44:34Z
-re_verification: "scoped; baseline 6f4d2d7c; head 51ebbc07"
+re_verification: "scoped; baseline 1b1e39a3; head 3df6309c"
 status: passed
 score: 4/4 must-haves verified
 covered_files:
@@ -40,7 +40,7 @@ covered_files:
   - "tests/integration/mcp-migration.test.ts"
   - "tests/integration/mcp-tool-rules.test.ts"
   - "tests/orchestrators/reconcile/mcp-migration.test.ts"
-covered_digest: "v3:sha256:234b466f959f6166a36634853396cfe7ac9f3bd3ae2687e6f3bf49f0467559cf"
+covered_digest: "v3:sha256:df67332260a96a186aee576fdd7a9e6a7b9d1cceedeb05e1a156d310d9b0df83"
 behavior_unverified: 0
 overrides_applied: 0
 human_verification:
@@ -185,3 +185,51 @@ Full gate (cited, run by the orchestrator in this session): `npm run check` on H
 ### Result
 
 All four truths still hold at HEAD. Status stays `passed`. No gaps.
+
+## Re-verification (2026-10-10)
+
+Scoped re-verification. Baseline `1b1e39a3`, head `3df6309c`. `verification.status` had read `stale` because Phase 8 (clear milestone debt) edited files in `covered_files`. The original findings and the 2026-10-09 section above are kept unchanged. The truths below are the contract as amended: D-05-02 now names the `source-outdated` row and the reinstall fallback for an unreadable mirror HEAD (D-08-05).
+
+### Changed files in `covered_files` since the baseline
+
+| File | Commits | What changed |
+|------|---------|--------------|
+| `orchestrators/reconcile/mcp-migration.ts` | 9003e476, 954da5a4, 473f9dea, 70f91bd8, 14c70964 | New `source-outdated` miss (`missing-subdir` from the clone read) split from `marketplace-unreadable`; `readLegacyMcpOwners` added to `McpMigrationOperations` and the locked re-read now goes through `readOwnersOrReport` (an unparseable file gives a file-unreadable row, not a throw); `ownersWithStubs` turns a throwing stub probe into one removal-failure row per staged owner, which keeps their legacy entries; explicit `env: ClaudeEnv` (default `process.env` at the entry point) passed to `prepareStageMcpServers`; shared `ownValue`. |
+| `shared/notification-dispatch.ts` | 49345f38, 9003e476, 38bfcdab, 0717559f, e0187b8b, 14c70964 | `McpMigrationSourceOutdatedRow` and its row line; `marketplace-unreadable` remedy reordered (uninstall first); `printable` now escapes `\p{Cc}\p{Cf}\p{Zl}\p{Zp}` per code unit and covers plugin and server names in every MCP config-notice line; `notifyMcpMigration` with no rows still sends the config notices (orphan notices). |
+| `orchestrators/plugin/git-source-probe.ts` | 494e58c5, 5ba2752c | `makeRecordedShaPresenceProbe` tolerates a mirror whose HEAD cannot be read and falls through to the recorded-sha clone (D-08-05); any other mirror failure still propagates (NFR-10). Still fs-only. |
+| `bridges/mcp/stage.ts`, `types.ts` | 28a1bf0c, d45f5b5d, 94097beb, 84ff4aa0, fb345e31 | Required `env` (no `process.env` fallback inside the bridge, D-08-06); a rename-only spelling no longer exempts the collision walk; per-server choice store (D-08-02) and override-restored notices. |
+| `bridges/mcp/legacy.ts`, `marker.ts` | d45f5b5d, 8578407a | `isPlainObject` moved to `marker.ts`; no behavior change. |
+| `orchestrators/plugin/install-outcome.ts`, `reinstall-replace.ts`, `update-swap.ts`, `orchestrators/marketplace/shared.ts`, `orchestrators/reconcile/apply.ts` | 309f84e4, f2bde391, 76bf597f, 57a41582, aa5419ed, b7ef10e7, 954da5a4 | `env` threaded into the staging calls (D-08-06) and `ownValue`/`setOwn` for record-map reads. |
+| `domain/mcp-server-features.ts` | 3c686fca, 8cd7175f | Feature table edits from Phase 8; not on the migration path. |
+| `docs/output-catalog.md`, `docs/mcp-compatibility.md` | 49345f38, 9003e476, 28a1bf0c, 73200878, 14c70964, c2e89982, de427118 | New `source-outdated` row and remedy text in the left-in-place block, reordered `marketplace-unreadable` remedy, D-08-02/D-08-03 prose, upgrade-section edits. |
+| `tests/orchestrators/reconcile/mcp-migration.test.ts` | 9003e476, 473f9dea, 5ba2752c, 70f91bd8, 14c70964 | 225 insertions, 10 deletions. Deletions are a widened `Kind` union, a renamed fixture field and a retitled case (the headless-mirror case now expects the recorded-sha fallback). No assertion removed. |
+| `tests/architecture/mcp-migration-notice.test.ts` | 14c70964 | One added `source-outdated` row in the catalog byte-equality fixture. |
+
+### Per-truth result
+
+| # | Truth (as amended) | Touched by | Result | Evidence |
+|---|--------------------|-----------|--------|----------|
+| 1 | `/reload` moves marked entries into `mcp-adapter.json` in the fresh-install shape; a second `/reload` changes no bytes (AMIG-01). | `mcp-migration.ts` (env, locked re-read), `stage.ts` (explicit env, D-08-02 store). | HOLDS | `migrateLegacyMcpEntries` still stages through `prepareStageMcpServers` and `commitPreparedMcp`; the only stage change is the explicit `env` (defaults to `process.env` at the entry point, as before). The integration fresh-install oracle and no-byte-change reload tests pass. |
+| 2 | A failure between the adapter write and the `mcp.json` removal loses no server; the next `/reload` finishes with no duplicate; write order asserted (AMIG-01, AMIG-02). | `mcp-migration.ts` (stub-probe failure, locked re-read). | HOLDS | Write order (adapter, state, project stubs, `mcp.json`) is unchanged. The new stub-probe failure path returns `[]` from `clearProjectStubs`, so no owner reaches the legacy removal: entries and stubs stay, one row per staged owner, and the next reload retries. Unit tests "a project stub probe that throws keeps a user owner's legacy entry with an unfinished row" and the crash-once convergence tests pass; so does integration "a filesystem refusal between the two writes...". |
+| 3 | One migration notice with `old -> new` rows, the rename-cost line and the reload hint (AMIG-03); operator accepted the wording. | `notification-dispatch.ts`, `output-catalog.md`. | HOLDS (wording amended) | Moved/stopped/removed block text is unchanged. Left-in-place block gains a `source-outdated` row and a reordered `marketplace-unreadable` remedy; both are pinned byte-for-byte by `tests/architecture/mcp-migration-notice.test.ts` (passes, with the added `source-outdated` fixture row). `printable` escaping is wider (format characters, separators) and applies only to file-derived names. Phase 8 plan 08-02 recorded the new row text; the earlier operator acceptance covers the grammar, and the two added remedies follow the existing row pattern. |
+| 4 | A marked legacy entry with no owning record stays in `mcp.json` with a warning (AMIG-04). | `mcp-migration.ts` (`ownValue`, escapes routed to `marketplace-unreadable`). | HOLDS | `ownerAction`/`reportUnowned` logic is unchanged; `ownValue` moved to `shared/own-key.ts` with the same own-key rule. Unowned-entry integration and unit tests pass. A declared git-subdir path that leaves the clone now gives `marketplace-unreadable` (an update cannot clear it) while a missing path gives `source-outdated`, both with a row and no write. |
+
+No truth lost support. Test assertion weakening: none found (`git diff 1b1e39a3 HEAD --numstat` on the two migration tests: +232, -10, deletions listed above).
+
+### Commands run
+
+Environment: `TMPDIR=/var/tmp/mcp4-reverify-05`, `PI_MCP_ADAPTER_ROOT=/var/tmp/mcp4-p7-research/a520/node_modules/pi-mcp-adapter` (5.2.0), `PI_SUBAGENTS_ROOT=/var/tmp/mcp4-reverify-p1/subagents/node_modules/pi-subagents`. Repo tests use hermetic homes; no `pi`, no live canary.
+
+| Command | Exit | Result |
+|---------|------|--------|
+| `git diff --stat 1b1e39a3 HEAD -- <covered files>` | 0 | 17 files, +650 -181 |
+| `git diff 1b1e39a3 HEAD -- mcp-migration.ts notification-dispatch.ts git-source-probe.ts stage.ts output-catalog.md` and the migration tests | 0 | as summarised above |
+| `node --test tests/integration/mcp-migration.test.ts tests/integration/mcp-legacy-sweep.test.ts tests/integration/mcp-tool-rules.test.ts` | 0 | 18 pass, 0 fail |
+| `node --test tests/orchestrators/reconcile/mcp-migration.test.ts tests/bridges/mcp/legacy.test.ts tests/architecture/mcp-migration-notice.test.ts` | 0 | 138 pass, 0 fail (was 131; Phase 8 added the `source-outdated`, refused-clone, stub-probe and locked-re-read cases) |
+| `node .claude/gsd-core/bin/gsd-tools.cjs query verification.fingerprint <phase_dir> <same covered files>` | 0 | `covered_files` unchanged (35); `covered_digest` copied verbatim into the frontmatter |
+
+Full gate (cited, not re-run): the orchestrator ran `npm run check` on HEAD `6199bc53`; later commits are planning-docs only. Exit 0.
+
+### Result
+
+All four truths hold at HEAD. Status stays `passed`. No gaps. Score 4/4.

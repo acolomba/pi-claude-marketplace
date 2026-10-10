@@ -31,7 +31,8 @@ covered_files:
   - "tests/live-uat/fixtures/mcp-adapter-canary/legacy-v0.19.2.json"
   - "tests/live-uat/mcp-adapter-canary.mjs"
   - "tests/live-uat/openai-stub-server.mjs"
-covered_digest: "v3:sha256:444459513fa07c18bafab4ff3ec198916eb06127964fcec85bb4710edd286010"
+covered_digest: "v3:sha256:d80964d7157d76426cc7fe130d4ddd3587962234cc654e981e8d9312c8bd95b2"
+re_verification: "scoped; baseline 51ebbc07; head 3df6309c"
 behavior_unverified: 0
 overrides_applied: 0
 ---
@@ -104,4 +105,50 @@ No gaps. Notes for the PR step, not blockers: the version bump to 0.20.0 (`packa
 ---
 
 _Verified: 2026-10-09_
+_Verifier: Claude (gsd-verifier)_
+
+## Re-verification (2026-10-10)
+
+**Scope:** baseline `51ebbc07` (last commit that wrote this report) to head `3df6309c`. The fingerprint went stale because Phase 8 (clear milestone debt) edited covered files: `README.md`, `README.es.md`, `docs/mcp-compatibility.md`, `docs/output-catalog.md`, `scripts/pi.sh`, `tests/bridges/mcp/adapter-entry.test.ts` and `tests/live-uat/openai-stub-server.mjs`. Phase 8 also changed extension source that the docs describe (`bridges/mcp/*`, `domain/mcp-server-features.ts`, `orchestrators/reconcile/mcp-migration.ts`, `shared/notification-dispatch.ts`, `shared/session-env.ts`), so I judged each doc claim against the code at HEAD. The original findings are the contract.
+
+**Status:** passed (score 3/3, 0 behavior-unverified). No truth lost support. Two advisories below.
+
+### Changed files (covered files only)
+
+| File | Change since baseline | Bearing on the truths |
+|------|-----------------------|-----------------------|
+| `README.md`, `README.es.md` | pi-subagents 0.74.0 floor named; cross-plugin key-collision example (`plugin:a_b:c` and `plugin:a:b_c`); per-tool `mcp:` entries fail the whole launch if the name is not exact; the "needs 0.62.0" caveat removed | Truth 1; the linking sentence is still at line 132 in both |
+| `docs/mcp-compatibility.md` | New "OAuth beside headers" section and table, `auth` row, "User choices" divergence, `serverChoices` store text, `openUi`/`trace` carried fields, migration-cause rows, split-token character class, collision rollback sentence | Truth 1 (ADOC-01) |
+| `docs/output-catalog.md` | Enable/import MCP-notice sentence (D-08-03), `serverChoices` sentence, `openUi`/`trace`, migration notice rows `source-outdated` and reworded `marketplace-unreadable` | Truth 1; the `not loaded` sentence (line 2607) is unchanged |
+| `scripts/pi.sh` | Default home keeps an exported `PI_CODING_AGENT_SESSION_DIR`; usage text about login | Plan 07-01 `pi.sh` pin: still `5.2.0` and `-e builtin:tool-search`, no `-e builtin:mcp` |
+| `tests/bridges/mcp/adapter-entry.test.ts` | New OAuth header rows, `userCarriedFields` tests, `openUi`/`trace` in the carried set | Plan 07-01 citation of the 5.2.0 shasum is intact |
+| `tests/live-uat/openai-stub-server.mjs` | Request and server `error` handlers | Stub used by the canary; no change to the replayed tool-call list |
+| `CHANGELOG.md`, `package.json`, `docs/env-vars.md`, `docs/hooks-compatibility.md`, PRD, `ci.yml`, `peer-floor.test.ts`, canary, fixture, live-UAT README | Unchanged | Truths 2 and 3 rest on these, so they hold as before |
+
+### Per-truth result
+
+| # | Truth | Result | Evidence at HEAD |
+|---|-------|--------|------------------|
+| 1 | Docs describe adapter-file delivery, naming, tool search, variable rules and every documented divergence (ADOC-01) | VERIFIED (advisory 1) | I checked each Phase 8 doc claim against the code. OAuth: `domain/mcp-server-features.ts` `authField` writes `auth: "oauth"` only for non-empty `headers` with no `Authorization` key in any case, and `adapter-entry.ts` `withOAuthDecision` drops it unless every value is a non-blank string whose references are set; each row of the `mcp-compatibility.md` table follows from that and from `OAUTH_HEADER_ROWS` in the test. Carried set: `CARRIED_FIELDS` is the 11 fields the docs list. `serverChoices`: `adapter-doc.ts` stores `{plugin, marketplace, fields}` per key under the top-level `_piClaudeMarketplace.serverChoices`, as the docs say. Split-token rule: `adapter-escape.ts` `MARKER_COMPLETION = /^(?:[\w}]|:\w)/`, and `\w` is ASCII, as the docs now state. Migration rows: the `source-outdated` and `marketplace-unreadable` strings in `notification-dispatch.ts:801,803` match the catalog and the table, and `git-source-probe.ts` / `reinstall-clone-probe.ts` fall back to the recorded-sha clone when a mirror HEAD cannot be read. Collision example: `generatedMcpServerKey("a_b","c")` and `("a","b_c")` both give `plugin_a_b_c_`. `/mcp-adapter disable` writes the project file: `commands.ts:831` calls `writeProjectServerDisabledOverride` in adapter 5.2.0. `session-env.ts` matches the `env-vars.md` text. No pre-existing divergence bullet was removed or reworded away; the earlier items are still present. |
+| 2 | Live UAT proves adapter 5 loads the entries, migrates a legacy entry with the reloads counted, tool search finds the tools, `info` shows status (ADOC-02) | VERIFIED (not re-run) | The canary, its fixture, its README transcript and the pinned adapter are unchanged since the baseline run (14 PASS, exit 0, negative control recorded). I did not run it: this re-verification forbids live canaries. Phase 8 changed the entries it writes (`auth: "oauth"` beside headers, the `serverChoices` store, `openUi`/`trace`), but the canary seeds a stdio `echo` server, so none of those paths touch its assertions. The 5.2.0 loader reads `auth: "oauth"` as a plain string (`config.ts:76`) and the unit tests that vendor its entry keys pass. The first verification's live run is the evidence of record. |
+| 3 | CHANGELOG records the milestone, a bump is offered before the PR (ADOC-03) | VERIFIED (advisory 2) | `CHANGELOG.md` is byte-identical to the baseline; `[Unreleased]` heading, `package.json` 0.19.2 and `sonar.projectVersion` are unchanged, and the bump is still a PR-time offer (D-07-11). |
+
+Plan-level must-haves re-spot-checked: peer `>=5.2.0 <6` (`peer-floor.test.ts` passes), shasum citations in `adapter-entry.test.ts`, `ci.yml` pin, `pi.sh` pins, README/README.es linking sentence and `not loaded` catalog sentence.
+
+### Advisories (do not change the verdict)
+
+1. **Decision IDs in user docs, with a clash.** The original evidence noted that no `D-0N-NN` ID appeared on lines the phase added. Phase 8 now cites `D-08-01`, `D-08-02`, `D-08-03` and `D-08-04` in `docs/mcp-compatibility.md` (lines 135, 196, 382, 396) and `D-08-02`/`D-08-03` in `docs/output-catalog.md`. The `Divergences` rule asks for a recorded ID as the license, and `REQUIREMENTS.md` records these IDs, so this is defensible. But `D-08-01..03` were already used by an earlier milestone (`PROJECT.md` line 1071, and `docs/output-catalog.md` still cites `D-08-03` for the enable cascade in the same section), so the same ID now means two things. Consider the requirement IDs (`MCPOVR-01`, `MCPROW-01`, ...) in the docs instead.
+2. **CHANGELOG does not mention Phase 8 behavior.** `[Unreleased]` was not touched by Phase 8. Not covered: `auth: "oauth"` written beside headers with no `Authorization`; user choices kept in `mcp-adapter.json` across disable, uninstall and reinstall (and `openUi`/`trace` kept); enable and import reporting MCP notices as separate warnings; the new migration remedies. ADOC-03 asks that the changelog record the milestone, and the high-level bullets still do. Add these at the PR step, together with the version bump.
+
+### Commands run
+
+| Command | Result |
+|---------|--------|
+| `git diff --stat 51ebbc07 HEAD -- <covered files>` | 11 files changed: 7 covered files with edits that matter, 3 live-UAT stub/canary files (`manifest-absence-canary.mjs`, `stop-canary.mjs`, `workflow-storage-canary.mjs`, not in `covered_files`), and `07-REVIEW-DISPOSITION.md` |
+| `TMPDIR=/var/tmp/mcp4-reverify-07 PI_MCP_ADAPTER_ROOT=... PI_SUBAGENTS_ROOT=... node --test tests/architecture/peer-floor.test.ts tests/bridges/mcp/adapter-entry.test.ts tests/architecture/mcp-migration-notice.test.ts tests/architecture/mcp-config-notices.test.ts tests/architecture/catalog-uat/catalog-contract.test.ts tests/architecture/catalog-uat/catalog-parser.test.ts` | 109 tests, 109 pass, 0 fail |
+| `node -e`-style call of `generatedMcpServerKey` on `("a_b","c")` and `("a","b_c")` | both `plugin_a_b_c_` |
+| `node .claude/gsd-core/bin/gsd-tools.cjs query verification.fingerprint <phase_dir> <same covered files>` | digest `v3:sha256:d80964d7157d76426cc7fe130d4ddd3587962234cc654e981e8d9312c8bd95b2`; covered_files list unchanged |
+| `npm run check`, live canary, `pi` | not run, by the brief |
+
+_Re-verified: 2026-10-10_
 _Verifier: Claude (gsd-verifier)_

@@ -68,9 +68,9 @@ covered_files:
   - tests/bridges/mcp/legacy.test.ts
   - tests/bridges/mcp/stage.test.ts
   - tests/integration/mcp-override-lifecycle.test.ts
-covered_digest: "v3:sha256:7383976fc8a886693e1e056ed9e15cdd17b72be108ca9988a2b1e1d2a22ce847"
+covered_digest: "v3:sha256:ad2c3e0520642c7e43d03a73d4b67ed3a51c9c4bcebca02365f09283dc7c26fb"
 behavior_unverified: 0
-re_verification: "scoped; baseline bf456487; head 51ebbc07"
+re_verification: "scoped; baseline 1b1e39a3; head 3df6309c"
 overrides_applied: 0
 gap_closure_re_verification:
   previous_status: "gaps_found"
@@ -292,7 +292,65 @@ No test file failed and none needed a re-run. Nothing wrote to the real `~/.pi/a
 
 Status stays `passed`. 5/5 roadmap success criteria and both gap-closure truths hold at HEAD as amended by D-03 (ANAME-01/03/07), D-04, D-05-08..10 and D-07-07. No new gap, no new human-verification item.
 
+## Re-verification (2026-10-10)
+
+**Scope:** scoped re-verification. Baseline `1b1e39a3` (last write of this report), head `3df6309c` (branch `features/mcp-4`). The report read `stale` because Phase 8 (clear milestone debt) edited 28 files in `covered_files`. Phase 2's earlier findings and the 2026-10-09 section stay unchanged. Result: **the five roadmap truths and gap 1 still hold, as amended by Phase 8; gap 2 (no `D-02-19..22` in source) regressed**, so status is `gaps_found` (one cosmetic gap, no behavior gap).
+
+### Changed covered files since 1b1e39a3
+
+| File(s) | Phase 8 change |
+|---------|----------------|
+| `bridges/mcp/adapter-doc.ts` (+282) | `_piClaudeMarketplace.serverChoices` store: `storedChoicesFor`, `withPluginServersKeepingChoices`, `writtenBackOverride` (an override the user's later `/mcp-adapter enable` emptied is removed, not written back, and `restoredOverrideNames` agrees) (D-08-02, D-08-01) |
+| `bridges/mcp/adapter-entry.ts`, `marker.ts`, `types.ts`, `legacy.ts` | `CARRIED_FIELDS` gains `openUi` and `trace` (11 fields); `userCarriedFields`; OAuth `auth` kept only beside clean headers (D-08-04); `isPlainObject` moved to `marker.ts`; `StageMcpInput.env` required (D-08-06) |
+| `bridges/mcp/stage.ts` (+88), `unstage.ts` | Stage reads the store (`overStoredChoices`, stub wins field by field) and writes via `withPluginServersKeepingChoices`; `override-restored` notices for a dropped entry whose override comes back; collision self-replace exemption now exact-key only (rename still checked, ANAME-03); unstage composes with the store for `mcp-adapter.json` only, never for legacy `mcp.json` |
+| `orchestrators/plugin/{install-flow,update-flow,update-swap,reinstall-flow,reinstall-replace,install-outcome,install-cascade,install-disable-cascade,enable-disable}.ts`, `orchestrators/import/execute.ts` | `env` threaded from the entry point to staging (D-08-06); own-key reads (`ownValue`) on records; enable/import notices (D-08-03) |
+| `orchestrators/plugin/prune-rollback.ts` | `holdsBytes` is one guarded `lstat` + read; `ENOENT`/`ENOTDIR`/`EISDIR` read as "not this prune's write" so the occupied-path refusal stands (08-05); optional `readMetadata` op |
+| `orchestrators/marketplace/{shared,remove,update}.ts`, `orchestrators/plugin/uninstall.ts`, `orchestrators/reconcile/apply.ts` | own-key reads/writes only; no behavior change to unstage routing |
+| `shared/notification-dispatch.ts`, `docs/output-catalog.md` | notice wiring; catalog text for `override-kept` now describes the choice store and the empty-override rule |
+| `tests/bridges/mcp/{adapter-entry,stage}.test.ts`, `tests/integration/mcp-override-lifecycle.test.ts` | new cases for D-08-01/02, the emptied override, `override-restored`, rename collision, env |
+
+### Per-truth result
+
+| Truth | Result | Evidence |
+|-------|--------|----------|
+| 1. Install writes marked entries into the scope's `mcp-adapter.json`; uninstall removes exactly those (AFILE-01) | HOLDS (as amended by D-08-02) | Write target unchanged (`mcpAdapterJsonPath`). Uninstall still removes the plugin's entries; an owned entry with a kept override is replaced by it. New: the leaving entry's other carried choices go to the top-level `_piClaudeMarketplace.serverChoices` in the same single atomic write, only in `mcp-adapter.json` (`unstage.ts` picks `withPluginServersKeepingChoices` by `target.file`). Nothing foreign is touched: the store member and `serverChoices` keep any non-plain-object value as it is (`readChoiceStore`), another plugin's or marketplace's store entry is neither applied nor removed (`ownedChoiceOf`; tests `D-08-02: the stored choice of ... is neither applied nor removed`). Integration cases pass. |
+| 2. JSONC file keeps foreign keys; unparseable file refuses with typed error; comment loss warned once (AFILE-02, AFILE-04) | HOLDS | `readMcpConfigDoc` unchanged; store logic only adds/removes its own member and keeps all others. `commentsDroppedNotices` still first in `notices`; `override-restored` is inserted after `override-kept` and before the variable notices. The catalog byte lock (`mcp-config-notices.test.ts`) passes with the updated text. |
+| 3. Legacy `mcp-servers` key honored (AFILE-03) | HOLDS | `withPluginServers` still writes under `config.serverKey`; the AFILE-03 stage cases pass; the store sits at top level and is never written to `mcp.json`. |
+| 4. Full-definition collisions reported with the winning source; partial entries are overrides (AFILE-05) | HOLDS (tightened) | `assertNoMcpCollisions` now exempts only an owned entry under the exact name (`Object.hasOwn(check.ours, name)`); a rename onto a key the plugin owns only under the other spelling is still checked against other sources. New cases `ANAME-03: a rename onto a key ... still refuses` and `... restaging the exact key ... stays exempt` pass. |
+| 5. User override survives update and reinstall; closed carried set pinned against `ServerEntry` (AFILE-06) | HOLDS (set widened) | `CARRIED_FIELDS` is now 11: `openUi` and `trace` added (D-08-01). `adapter-entry.test.ts` pin against the vendored 5.2.0 `ServerEntry` passes with 0 skips; `D-08-01: a restage keeps the user's openUi and trace ...` and integration `a reinstall keeps the user's openUi and trace` pass. Credential fields are still not carried. |
+| Gap 1: marker-less stub kept verbatim in `keptOverride`, written back on every unstage (D-02-21/22/23) | HOLDS (as amended) | Stub still lands in `keptOverride` via `stampServers`; `survivingEntry` writes back `writtenBackOverride`. Amendment: a kept override the user's later `/mcp-adapter enable` or `disable` emptied is removed and not named as restored (pi-mcp-adapter's own writer deletes an entry it empties); a kept `{}` stub still comes back as `{}`. Test `AFILE-06: uninstall removes an absorbed disable stub that the user's later enable emptied` and the stage twin pass. Choices outside the written-back override move to the store, so nothing the user chose is dropped (`leavingChoice`); the store survives uninstall then reinstall, disable then enable, and an update that drops then restores the server (3 integration cases). The store entry is consumed by the same plugin and marketplace only. |
+| Notices (`override-kept`, `override-restored`) carry names only, never values; restored notice only when the override comes back | HOLDS | `overrideRestoredNotices` uses `restoredOverrideNames` minus staged keys, the same test unstage uses, so an emptied override gives no notice; `mcpOverrideKeptLine` unchanged. |
+| Prune rollback race handling | HOLDS | `holdsBytes` maps only `ENOENT`/`ENOTDIR`/`EISDIR` to false, rethrows the rest; nothing is written on the refusal path; `prune-rollback.test.ts` passes (3376-test orchestrator run). |
+| Gap 2: no `D-02-19..22` in source or test titles; 11 v1.20 `D-02-0x` lines intact | **FAILED (regression)** | `rg -n 'D-02-(19\|20\|21\|22\|23)' extensions tests` now prints `orchestrators/plugin/prune-rollback.ts:245` (comment) and `tests/orchestrators/plugin/prune-rollback.test.ts:1368` (test title), both added by `b86ad6d3` (Phase 8 plan 08-05). `D-02-1[0-9]` prints the same two lines; `D-02-0[0-9]` still prints 11 lines and no `D-02-0x` line changed. Plan 02-09 replaced these ids with NFR-3 for this very reason. The fix is a comment and a test-title rename, no code token. |
+| Prohibitions (credentials never active, no value in notices, write-back never a full definition, no foreign file touched) | HOLDS | `CARRIED_FIELDS` has no credential field (`openUi`, `trace` are display flags); the store holds carried fields only; `no-credential-leak.test.ts` and the notices tests pass; `restorableOverride` still requires a partial, marker-less value. |
+
+### Commands run (repo root, `TMPDIR=/var/tmp/mcp4-reverify-02`, `PI_MCP_ADAPTER_ROOT=/var/tmp/mcp4-p7-research/a520/node_modules/pi-mcp-adapter`)
+
+| Command | Exit | Result |
+|---------|------|--------|
+| `node --test tests/bridges/mcp/*.test.ts tests/architecture/{mcp-config-notices,mcp-migration-notice,no-credential-leak,peer-floor}.test.ts tests/shared/{notification-dispatch,errors-bridges,atomic-json}.test.ts tests/persistence/locations.test.ts` | 0 | 923 pass, 0 fail, 0 skipped |
+| `node --test tests/integration/{mcp-override-lifecycle,mcp-migration,mcp-legacy-sweep,mcp-variable-expansion,mcp-tool-rules,mcp-home-path-partial,standalone-prune,adapter-expansion-conformance,mcp-status-conformance}.test.ts` | 0 | 117 pass, 0 fail, 0 skipped (real 5.2.0 adapter) |
+| `node --test tests/orchestrators/{plugin,marketplace,reconcile,import}/*.test.ts` | 0 | 3376 pass, 0 fail, 0 skipped |
+| `rg -n 'D-02-(19\|20\|21\|22\|23)' extensions tests`; `rg -n 'D-02-1[0-9]' extensions tests` | 0, 0 | 2 lines each (prune-rollback.ts:245, prune-rollback.test.ts:1368): gap 2 regression |
+| `node .claude/gsd-core/bin/gsd-tools.cjs query verification.fingerprint .planning/phases/02-adapter-file-delivery <the 40 non-plan covered files>` | 0 | `covered_files` unchanged (64), `covered_digest` copied verbatim |
+
+`npm run check` was not re-run (the orchestrator ran it on HEAD 6199bc53+, exit 0). Nothing wrote to the real `~/.pi/agent`.
+
+### Result
+
+Status `gaps_found`: one cosmetic gap. Every behavior promise of Phase 2 (AFILE-01..06, the five success criteria, gap 1) holds at HEAD as amended by D-08-01/02/04/06 and the emptied-override rule. The only lost support is the Gap 2 hygiene truth: Phase 8 plan 08-05 re-cited `D-02-19` in `prune-rollback.ts:245` and the title of `prune-rollback.test.ts:1368`. Replacing it with `NFR-3` in both closes it with no code change. Not deferred: no later phase carries it.
+
 ---
 
 _Verified: 2026-10-04T11:05:00Z_
 _Verifier: Claude (gsd-verifier)_
+
+### Gap closed (orchestrator, 2026-10-10)
+
+The one gap above, gap 2, is closed by 9ed88725 (`docs(prune): cite NFR-3 for
+the occupied-path race rule`). The comment at `prune-rollback.ts:245` and the
+test title at `prune-rollback.test.ts:1368` now cite `NFR-3`, the ID that plan
+02-09 used for this rule; no code token changed. `rg -n 'D-02-(19|20|21|22|23)'
+extensions tests` prints nothing (exit 1), and the commit hook's
+`npm run check:commit` passed for the pair. Status returns to `passed`; the
+covered digest was recomputed over the same 64 files.

@@ -1,9 +1,9 @@
 ---
 phase: 01-pi-1-0-floor-and-adapter-only-detection
-verified: 2026-10-09T23:45:43Z
+verified: 2026-10-10T00:00:00Z
 status: passed
 score: 5/5 must-haves verified
-re_verification: "scoped; baseline 25c8c717; head 51ebbc07"
+re_verification: "scoped; baseline 1b1e39a3; head 3df6309c"
 covered_files:
   - .github/workflows/lint.yml
   - .planning/phases/01-pi-1-0-floor-and-adapter-only-detection/01-01-PLAN.md
@@ -44,7 +44,7 @@ covered_files:
   - tests/live-uat/openai-stub-server.mjs
   - tests/live-uat/stop-canary.mjs
   - tests/platform/pi-api.test.ts
-covered_digest: "v3:sha256:1b250e2e731d164811ded4fa0e6a115f5adc3c95a2e2bbf1cfa4cc66d0ceddb2"
+covered_digest: "v3:sha256:9540abdad5c113601b5edc70cd4398065d4c35ac210ddc0d17fc647b5541e415"
 behavior_unverified: 0
 overrides_applied: 0
 ---
@@ -214,4 +214,59 @@ The orchestrator ran `npm run check` on HEAD `51ebbc07` (clean tree) in this ses
 - `human_verification`: none before, none now.
 
 _Re-verified: 2026-10-09_
+_Verifier: Claude (gsd-verifier)_
+
+---
+
+## Re-verification (2026-10-10)
+
+**Scope:** scoped re-verification. Baseline `1b1e39a3` (the commit that last wrote this report), head `3df6309c` on `features/mcp-4`. The report read `stale` because Phase 8 (clear milestone debt) edited files in its `covered_files`. Earlier sections stand as written. This section judges each truth against the tree at head, as amended (ROADMAP Phase 1 criterion 4 and PIFL-07 now carry the D-04-12, D-07-07 and quick task 261006-kr1 notes).
+
+**Status:** passed, 5/5. No truth lost its support. No gap, no new human-verification item, no override.
+
+### Changed files
+
+Files in `covered_files` that changed between the baseline and head (`git diff --stat 1b1e39a3 HEAD`):
+
+| File | What changed since the baseline |
+| ---- | ------------------------------- |
+| `extensions/pi-claude-marketplace/orchestrators/plugin/info.ts` | own-key reads of install records through `ownValue` (D-08-07); `withCompanionRequirements` now counts only MCP servers that the install writes (`unsupportedFeature === undefined`), so a server a partial install leaves out no longer asks for the adapter |
+| `extensions/pi-claude-marketplace/shared/notify-context.ts` | `dispatchRow` casts the selected render arm once, to `RenderFn<PluginNotificationMessage>`, instead of casting twice; same runtime behavior |
+| `extensions/pi-claude-marketplace/platform/pi-api.ts` | comment reflow on `hasLoadedPiMcpAdapter`; code unchanged |
+| `README.md` | pi-subagents line states 0.74.0 (closes review IN-03); MCP naming and agent-conversion prose; adapter floor line (5.2.0 or a later 5.x) unchanged |
+| `scripts/pi.sh` | default-home session dir: a pre-set `PI_CODING_AGENT_SESSION_DIR` is kept when the home is the default; help text; the three pins are unchanged (adapter 5.2.0, pi-subagents 0.74.0, engine 3.14.0) |
+| `tests/e2e/adapter-detection-rpc.test.ts` | `inventoryEntries` fails on a non-array inventory field instead of returning `[]`; `readPid` rejects a non-positive or non-integer PID; the group-sentinel case registers cleanup only when the PID file exists |
+| `tests/live-uat/openai-stub-server.mjs` | request and server `error` handlers |
+| `tests/live-uat/stop-canary.mjs` | `getCommands: () => []` on the fake Pi; a comment on the repeated spawn block; assertions unchanged |
+
+Unchanged since the baseline (diff empty): `package.json`, `package-lock.json`, `AGENTS.md`, `.github/workflows/lint.yml`, `shared/concerns/soft-dep.ts`, `shared/notification-grammar.ts`, `tests/architecture/peer-floor.test.ts`, `tests/e2e/_rpc.ts`, `tests/e2e/install-soft-deps.test.ts`, `tests/integration/pi-subagents-peer.ts`, `tests/live-uat/README.md`, `tests/platform/pi-api.test.ts`, `docs/workflows-compatibility.md`.
+
+### Per-truth result
+
+| # | Truth (as amended) | Touched by | Result | Evidence |
+| - | ------------------ | ---------- | ------ | -------- |
+| 1 | Peer floor `>=1.0.0`, dev deps `^1.0.0`, FLOOR-01 pins the literal, `npm run check` passes (PIFL-01, PIFL-04) | none of its files | VERIFIED | `package.json` and the lock are byte-identical to the baseline; peers read `@earendil-works/pi-coding-agent >=1.0.0`, devDependency `^1.0.0`. `peer-floor.test.ts` passes. The orchestrator's `npm run check` on HEAD `6199bc53`+ exited 0 (later commits are planning docs). The `lint:type-members` pins clause stays superseded as recorded on 2026-10-09. |
+| 2 | devDependencies latest except TypeScript `^6.0.3`; rule fixed in code; fallow action SHA matches; `engines.node` and NFR-4 agree (PIFL-05, PIFL-06) | `notify-context.ts` (the `dispatchRow` cast) | VERIFIED | `package.json`, lock, `lint.yml` and `AGENTS.md` unchanged; `engines.node` is `^22.22.2 \|\| ^24.15.0 \|\| >=26.0.0`. The `dispatchRow` edit still reads the render map through a `Readonly<Record<string, unknown>>` view and adds one cast with a stated reason; no `eslint-disable` was added. Lint is part of the green full gate. `notify-context` tests pass. |
+| 3 | pi-subagents `>=0.74.0` and pi-mcp-adapter optional peers (amended: adapter `>=5.2.0 <6`), adapter not a devDependency, both pi-subagents peer tests run zero-skip at 0.74.0, README states the adapter floor (PIFL-02, PIFL-03) | `README.md` | VERIFIED as amended | `package.json` unchanged: `pi-subagents >=0.74.0`, `pi-mcp-adapter >=5.2.0 <6`, both optional. `README.md` still states "5.2.0 or a later 5.x release" and that Pi's built-in MCP does not satisfy it; it now also states pi-subagents 0.74.0 or newer. Own run with `PI_SUBAGENTS_ROOT` at 0.74.0: pass 2, fail 0, skipped 0. |
+| 4 | Stop canary and workflow-engine canary pass live on Pi 1.0; `scripts/pi.sh` pins the three versions (PIFL-07, amended: adapter 5.2.0, engine 3.14.0) | `scripts/pi.sh`, `stop-canary.mjs`, `openai-stub-server.mjs` | VERIFIED as amended; live canaries not re-run | The pins at `scripts/pi.sh:111-115` are unchanged. The Phase 8 edit changes only where the default home keeps its session dir; `bash -n` exits 0. The canary edits add a `getCommands` stub on the fake Pi (the factory now reads the command list) and error handlers on the stub server; `node --check` passes on both and no canary assertion changed. The recorded live evidence in `tests/live-uat/README.md` is untouched. I ran no live canary and no `pi` or `scripts/pi.sh` (the brief bans them). |
+| 5 | With only Pi's built-in MCP active, install, list and info mark MCP as needing pi-mcp-adapter, proven by a built-in-only negative test; `disableProxyTool` and fork adapters are detected through their `mcp-adapter` command (ADET-01, ADET-02) | `info.ts`, `pi-api.ts`, `adapter-detection-rpc.test.ts`, `notify-context.ts` | VERIFIED | `hasLoadedPiMcpAdapter` is code-identical (comment reflow only). In `info.ts` the `requires:` line is still stamped by `withCompanionRequirements` from the one `softDepStatus` snapshot; the new condition only drops servers that a partial install leaves out, which is correct (nothing writes them, so nothing needs the adapter) and leaves every installable server's marker intact. The e2e harness got stricter (a non-array inventory and an empty PID now fail instead of passing silently), so the 15/15 result is a stronger proof than before. Own run against the real Pi 1.0 CLI: 15/15 pass, 0 skipped, covering built-in only, built-in disabled, `disableProxyTool` command-only, fork, `mcp-adapter:1/:2`, a foreign `mcp` tool. Unit suites: 448 pass, 0 fail. |
+
+**Score:** 5/5 truths verified, 0 behavior-unverified.
+
+### Commands run
+
+All runs used `TMPDIR=/var/tmp/mcp4-reverify-p1`. The tests use hermetic homes; no `pi`, `scripts/pi.sh` or live canary ran, and the real `~/.pi/agent` was neither read nor written.
+
+| Command | Exit | Result |
+| ------- | ---- | ------ |
+| `git diff --stat 1b1e39a3 HEAD -- <covered files>` and `git diff` over the eight changed files plus `README.md` | 0 | 8 files changed (85 insertions, 39 deletions); full diffs read |
+| `node --test tests/platform/pi-api.test.ts tests/architecture/peer-floor.test.ts tests/shared/concerns/soft-dep.test.ts tests/shared/notification-grammar.test.ts tests/orchestrators/plugin/info.test.ts tests/shared/notify-context.test.ts tests/shared/own-key.test.ts` | 0 | tests 448, pass 448, fail 0, skipped 0 |
+| `PI_CM_E2E_REF=pinned node --test tests/e2e/adapter-detection-rpc.test.ts tests/e2e/install-soft-deps.test.ts` | 0 | tests 15, pass 15, fail 0, skipped 0 |
+| `PI_SUBAGENTS_ROOT=/var/tmp/mcp4-reverify-p1/subagents/node_modules/pi-subagents node --test tests/integration/provenance-invisibility.test.ts tests/integration/skill-path-resolution.test.ts` | 0 | tests 2, pass 2, fail 0, skipped 0, "pi-subagents 0.74.0" |
+| `bash -n scripts/pi.sh`; `node --check` on `stop-canary.mjs` and `openai-stub-server.mjs` | 0 | syntax ok |
+| `node .claude/gsd-core/bin/gsd-tools.cjs query verification.fingerprint <phase dir> <files>` | 0 | `covered_files` and `covered_digest` in the frontmatter copied verbatim |
+
+Full gate: the orchestrator's `npm run check` on HEAD `6199bc53`+ exited 0 (cited, not re-run).
+
+_Re-verified: 2026-10-10_
 _Verifier: Claude (gsd-verifier)_

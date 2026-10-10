@@ -41,8 +41,8 @@ covered_files:
   - tests/domain/name.test.ts
   - tests/orchestrators/plugin/info.test.ts
   - tests/orchestrators/plugin/install-flow.test.ts
-covered_digest: "v3:sha256:53b6d5970d463939a05ce4348d5c9999bb081b172d0a5748ea690d838e6733f8"
-re_verification: "scoped; baseline c492bbde; head 51ebbc07"
+covered_digest: "v3:sha256:36cf9b47e41302471a8bf5c850a76fd7630489006d3c8ff62ec2bebadb937b49"
+re_verification: "scoped; baseline 1b1e39a3; head 3df6309c"
 behavior_unverified: 0
 overrides_applied: 0
 deferred:
@@ -252,3 +252,62 @@ Status `passed`. No truth regressed. Truths 1 and 2 and their code (`name.ts`, `
 
 _Re-verified: see `verified` in the frontmatter_
 _Verifier: Claude (gsd-verifier)_
+
+---
+
+## Re-verification (2026-10-10)
+
+**Scope:** scoped re-verification after Phase 8 (clear milestone debt). Baseline `1b1e39a3` (the commit that last wrote this report), head `3df6309c`. `verification.status` read `stale` because Phase 8 edited 8 source files, 5 test files and the docs page in `covered_files`. Earlier sections stay as written. Status stays `passed`.
+
+### Changed files since the baseline
+
+| File | What changed (Phase 8) |
+| ---- | ---------------------- |
+| `bridges/mcp/stage.ts` | Collision walk now exempts only an owned entry under the exact name (D-08, folded rename walks the other sources); required `env`; per-server choice store (`storedChoicesFor`, `withPluginServersKeepingChoices`); `override-restored` notices; shared `isPlainObject` |
+| `bridges/mcp/adapter-entry.ts` | `openUi` and `trace` join the carried fields; `withOAuthDecision` keeps the table's `auth` only beside clean headers (D-08-04); `userCarriedFields` export |
+| `bridges/mcp/unstage.ts` | The adapter file write keeps the removed entries' choices (D-08-02) |
+| `domain/mcp-server-features.ts` | `authField` writes `auth: "oauth"` for a remote server whose `headers` hold no `Authorization` key (D-08-04); `authServerMetadataUrl` must parse as a URL, in both the translator and the classifier |
+| `domain/name.ts` | Adds `isReservedRecordKey` (D-08-07); the key builders are untouched |
+| `orchestrators/plugin/info.ts` | Own-key reads of records; the companion `requires` line counts only supported MCP servers |
+| `orchestrators/plugin/install-outcome.ts` | Own-key record reads and writes; passes `env` to the mcp stage (D-08-06) |
+| `docs/mcp-compatibility.md` | OAuth beside headers section, user choices, move remedies, rollback wording (line 27), pi-subagents `mcp:` entry note |
+| 5 test files | Cover the changes above |
+
+Not changed: `domain/components/hooks/matcher.ts`, `bridges/hooks/dispatch.ts`, `bridges/agents/convert.ts`, `domain/mcp-resolution.ts`.
+
+### Per-truth result
+
+| # | Truth | Result | Evidence at HEAD |
+| - | ----- | ------ | ---------------- |
+| 1 | SC1 names and key, `toolPrefix: "mcp"`, one builder | VERIFIED | Spot check: `("acme","a😀b")` gives `plugin_acme_a__b_`, `("my-tools","db.x y")` gives `plugin_my-tools_db_x_y_`, `("acme","")` gives `plugin_acme__`. `translateMcpServer` still ends every entry with `directTools` and `toolPrefix: "mcp"` and drops a plugin `toolPrefix`. The replace regex is still only at `name.ts:260` |
+| 2 | SC2 hook matcher, `if:`, agent `tools:` match delivered tools | VERIFIED | Matcher, dispatch and convert are unchanged and their tests pass inside the 755-test run |
+| 3a | SC3 same-plugin, cross-plugin and folded key clash refused; no length check | VERIFIED | The `foldedMcpServerKey` comparison is unchanged (`plugin_foo_my-db_` and `plugin_foo_my_db_` fold equal). Phase 8 tightened the walk: an owned entry that only folds equal to the new name (a rename) no longer skips the other sources (IN-01 closed). `stage.test.ts` collision cases pass. The only length check in `domain/` is the unrelated saved-workflow name gate (`name.ts:402`) |
+| 3b | SC3 wording "before any write" | VERIFIED, now consistent | `docs/mcp-compatibility.md:27` now says the install "fails ... and leaves nothing behind: the command rolls back every component that it already wrote" (option (b) of WR-03). Behavior and wording agree |
+| 4 | SC4 `directTools`, `alwaysLoad`, `lifecycle` unset, divergence documented | VERIFIED | Spot check: `alwaysLoad: true` gives `directTools: true`, else `"search"`; plugin `lifecycle`, `auth: "bearer"`, `toolPrefix`, `directTools` do not reach the entry. Docs keep the search and `lifecycle` sections. The one change: the table itself may now write `auth: "oauth"` (truth 5b); a plugin's own `auth` is still dropped |
+| 5a | SC5 `description`, `httpTransport`, timeout, OAuth port, `{unsupported mcp}` partial install | VERIFIED | Spot check: `{type:"sse", timeout:5000, oauth:{callbackPort:8080}}` gives `httpTransport:"sse"`, `requestTimeoutMs:5000`, `oauth.redirectUri:"http://localhost:8080/callback"`, `description`. Classifier: `ws`, `headersHelper`, `oauth.xaa` blocked; empty `command`, `timeout: 0`, `url` with no `type` malformed; `toolPermissions` supported. New: an `authServerMetadataUrl` that is not a URL is malformed. `install-flow` `ANAME`/`AFILE` 29, `install-outcome` 3, `update-flow` 9 pass |
+| 5b | ANAME-07 OAuth beside `headers` | VERIFIED, WR-02 now fixed in code | Spot check: `{type:"sse", headers:{"X-Key":"k"}, oauth:{callbackPort:8080}}` translates to an entry with `headers`, `auth:"oauth"` and `oauth`; with an `authorization` header (any case) no `auth`. `withOAuthDecision` drops `auth` when a header value is empty or names an unset variable, matching the adapter's OAuth-mode refusal. This closes the gap that WR-02 and the 2026-10-09 section had settled by decision |
+| - | Docs | VERIFIED | Naming, key table, folding refusal, search, length (128), lifecycle, `{unsupported mcp}` sections remain; added OAuth-beside-headers table and user-choices text do not contradict Phase 3 statements |
+| - | `info` shows `plugin:<p>:<s>` and each left-out server with its feature | VERIFIED | `info` tests (275) pass; the `requires` line now counts supported servers only, so a partial install that leaves out every server no longer names the adapter |
+| - | A partial install writes only the supported servers | VERIFIED | `mcpPhase` still passes `c.resolved.mcpServers`; the diff adds `env` and own-key reads only |
+
+No truth lost support. Score line in the frontmatter is the original one, kept unchanged.
+
+### Commands run
+
+`TMPDIR=/var/tmp/mcp4-reverify-03`, `PI_MCP_ADAPTER_ROOT` = pi-mcp-adapter 5.2.0.
+
+| Command | Exit | Result |
+| ------- | ---- | ------ |
+| `node --test` on `name`, `mcp-server-features`, `matcher`, `adapter-entry`, `stage`, `unstage`, `marker`, `adapter-doc`, `convert`, `dispatch`, `mcp-resolution` tests | 0 | 755 pass, 0 fail, 0 skipped |
+| `node --test --test-name-pattern 'ANAME\|AFILE' tests/orchestrators/plugin/install-flow.test.ts` | 0 | 29 pass |
+| `node --test --test-name-pattern 'ANAME' tests/orchestrators/plugin/install-outcome.test.ts` | 0 | 3 pass |
+| `node --test --test-name-pattern 'ANAME\|AFILE' tests/orchestrators/plugin/update-flow.test.ts` | 0 | 9 pass |
+| `node --test` on `info`, `catalog-contract`, `edge/handlers/plugin/info`, `info-mcp-status` tests | 0 | 275 pass |
+| node spot-check script (key builder, fold, `translateMcpServer`, `classifyMcpServer`) | 0 | Outputs quoted above |
+| `gsd-tools query verification.fingerprint` | 0 | `covered_digest` copied verbatim |
+
+`npm run check` was not re-run (the orchestrator ran it on HEAD 6199bc53 or later: exit 0). No live canary, `pi` or `scripts/pi.sh` was run.
+
+### Verdict
+
+Status `passed`. No regression. Phase 8 closed two earlier open points in code: WR-02 (OAuth beside headers, D-08-04) and the WR-03 wording and IN-01 rename hole.

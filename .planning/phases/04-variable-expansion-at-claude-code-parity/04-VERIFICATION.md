@@ -3,7 +3,7 @@ phase: 04-variable-expansion-at-claude-code-parity
 verified: 2026-10-09T23:45:22Z
 status: passed
 score: 5/5 must-haves verified
-re_verification: "scoped; baseline e88226fa; head 51ebbc07"
+re_verification: "scoped; baseline 1b1e39a3; head 3df6309c"
 covered_files:
   - ".github/workflows/ci.yml"
   - ".planning/phases/04-variable-expansion-at-claude-code-parity/04-01-PLAN.md"
@@ -55,7 +55,7 @@ covered_files:
   - "tests/domain/mcp-server-features.test.ts"
   - "tests/integration/adapter-expansion-conformance.test.ts"
   - "tests/integration/mcp-variable-expansion.test.ts"
-covered_digest: "v3:sha256:2fddf66528d4bf9e86678fb0938c16d8b5eded07552ecd39c5c89f30d12147a1"
+covered_digest: "v3:sha256:365386d67bc61fb86f36c4ac8b9bc50e03229a17ed4c89d3c31adff92019af42"
 behavior_unverified: 0
 overrides_applied: 0
 human_verification:
@@ -250,4 +250,72 @@ The orchestrator ran `npm run check` on HEAD `51ebbc07` (clean tree), Node v26.1
 5/5 truths hold at HEAD as amended. Amendments applied: AMIG-01 (Phase 5: tool permission rules no longer block a plugin, so `unenforcedToolRules` replaces two blocking features) and D-07-07 (adapter floor 5.2.0). Neither changes a Phase 4 criterion's text or its proof. The four operator-accepted human-verification items above stand as recorded. The `info` line now has the shape `(state; unset A, B; withheld C)` since Phase 6 (ASTAT-01, D-06-03), a superset of the line the operator accepted. The `unset` and `withheld` wording is unchanged.
 
 _Re-verified: 2026-10-09_
+_Verifier: Claude (gsd-verifier)_
+
+## Re-verification (2026-10-10)
+
+**Scope:** scoped re-verification. Baseline `1b1e39a3` (the commit that last wrote this report), head `3df6309c`. `verification.status` read `stale` because Phase 8 (clear milestone debt) edited files in `covered_files`. The original findings, the operator's human-verification result and the 2026-10-09 section stand unchanged. Result: **all 5 truths still hold, as amended. Status stays `passed`.**
+
+Phase 8 changes that touch the variable rule: D-08-06 (MCP staging takes an explicit environment: `StageMcpInput.env` is required, and the entry factories default to `process.env`), `SCAN_BUILTINS` values changed to `/`, `session-env.ts` clears `CLAUDE_PROJECT_DIR` when the cwd read fails, and D-08-04 (OAuth `auth` is written beside clean non-`Authorization` headers).
+
+### Changed covered files since 1b1e39a3
+
+| File | Change | Touches a truth? |
+|------|--------|------------------|
+| `bridges/mcp/types.ts` | `StageMcpInput.env` is required (D-08-06); override-restored notice documented | AVAR-02 data flow: the caller now names the environment |
+| `bridges/mcp/stage.ts` | `env: input.env` (no `process.env` fallback in the bridge); stored-choice carry (D-08-02); `override-restored` notices; collision exemption for an exact-name owned entry | Env source only. Expansion code is not edited |
+| `bridges/mcp/adapter-entry.ts` | `withOAuthDecision` keeps the table's `auth` only beside clean headers (D-08-04); `openUi` and `trace` carried; `userCarriedFields` | AVAR-05 adjacent: reads only whether a variable is set |
+| `bridges/mcp/substitute.ts` | `isPlainObject` imported from `marker.ts` | None (move only) |
+| `domain/claude-mcp-variables.ts` | `SCAN_BUILTINS` values `""` to `"/"`; comment on `streamable-http` | `info` scan only (AVAR-04 display) |
+| `domain/mcp-server-features.ts` | `authField` emits `auth: "oauth"`; `authServerMetadataUrl` must parse as a URL | AVAR-03 `~` classifier untouched |
+| `shared/session-env.ts` | A throw from `readCwd` removes `CLAUDE_PROJECT_DIR` and rethrows; comment on the partial-tail guard | AVAR-01, AVAR-05 (project dir) |
+| `orchestrators/plugin/install-flow.ts`, `install-cascade.ts`, `install-disable-cascade.ts`, `enable-disable.ts` | `env: ClaudeEnv` threaded to staging; entry points default to `process.env` | AVAR-02 wiring |
+| `orchestrators/marketplace/shared.ts`, `orchestrators/plugin/info.ts` | `ownValue` for own-key reads; `info` companion line ignores servers a partial install leaves out | None of the five |
+| `shared/notification-dispatch.ts` | Notice plumbing (`override-restored`); `variables-missing` and `credentials-blanked` renderers unchanged | AVAR-04 rendering |
+| `README.md`, `README.es.md`, `docs/mcp-compatibility.md`, `docs/output-catalog.md` | Docs for D-08 decisions; the catalog adds an enable and import severity note (D-08-03) | Text only. It documents the enable and import row severity (the as-found item filed as `MCPROW-01`); not verified here as closed |
+| `tests/bridges/mcp/stage.test.ts`, `tests/domain/mcp-server-features.test.ts` | New cases for the changes above | Test files |
+
+Unchanged since 1b1e39a3 among the covered files: `adapter-escape.ts`, `claude-credential-denylist.ts`, `resolver-types.ts`, `index.ts`, `notification-grammar.ts`, `notification-types.ts`, `ci.yml`, `package.json`, `package-lock.json`, `adapter-escape.test.ts`, `adapter-expansion-conformance.test.ts`, `mcp-variable-expansion.test.ts`.
+
+### Per-truth table
+
+| # | Truth | Result | Evidence |
+|---|-------|--------|----------|
+| 1 | Claude's five fields only; `CLAUDE_PLUGIN_ROOT`, `CLAUDE_PLUGIN_DATA`, project-scope `CLAUDE_PROJECT_DIR` (AVAR-01) | VERIFIED, holds | `substitute.ts` changed only by an import move. `stage.ts` still sets `projectDir: locations.scope === "project" ? cwd : undefined`. Probe: `${CLAUDE_PLUGIN_ROOT}/bin/x` gave `/p/root/bin/x`, `--a=${CLAUDE_PROJECT_DIR}` gave `--a=/proj`, `${CLAUDE_PLUGIN_DATA}` in a url gave `/p/data`. The `session-env.ts` change only adds a delete on the failure path, which is the safe direction (no stale project). `session-env.test.ts` and `mcp-variable-expansion.test.ts` pass. |
+| 2 | `${VAR:-default}` rule, plain `${VAR}` stays, no env value on disk, in fixtures or in notifications (AVAR-02) | VERIFIED, holds (as amended) | The environment now enters through `StageMcpInput.env`, required in the type (`types.ts`), and `stage.ts:520` passes it on with no fallback. The entry points (`install-flow.ts:2209`, `:2535`, `enable-disable.ts:2520`) default it to `process.env`, so production behaviour is unchanged and a test must name its environment. Probe with `SET=SECRETVAL`, `ANTHROPIC_API_KEY=sk-SENT`: the entry holds `${SET}` and `${EMPTY}` as references, `${UNSET2:-dflt}` gives `dflt`, and neither sentinel appears. `mcp-variable-expansion.test.ts` asserts the sentinels absent from `mcp-adapter.json` and from every notification, and passes. The new `withOAuthDecision` reads only whether a name is set and writes no value. |
+| 3 | Leading `!` written `!!`, adapter-only syntax escaped, real-adapter conformance, MENVX-01/ENVLIT-01 closed, `~` makes the plugin partial (AVAR-03) | VERIFIED, holds | `adapter-escape.ts` and its test are unchanged. Probe: `!cmd ${SET}` gave `!!cmd ${SET}`, header `!x` gave `!!x`. Conformance run against pi-mcp-adapter 5.2.0 gave 52 pass, 0 skip, 0 fail. `PI_MCP_ADAPTER_ROOT=/nonexistent` exits 1. The `~` classifier in `mcp-server-features.ts` is untouched; `mcp-server-features.test.ts` and `mcp-home-path-partial.test.ts` pass. |
+| 4 | Unset variable with no default warns at install (AVAR-04) | VERIFIED, holds | The `variableNotices` builder in `stage.ts` is unchanged and still precedes the tool-rule and leftover notices. The `override-restored` notices sit before it, so the earlier order of `variables-missing` then `credentials-blanked` holds. `SCAN_BUILTINS` as `/` changes `info` only, and `claude-mcp-variables.test.ts` and `info.test.ts` pass. `import/execute.test.ts:2001` and `:2034` cover import, and the reconcile and enable cases pass. |
+| 5 | Credential deny-list blanks `url` and `headers`, with a security test (AVAR-05) | VERIFIED, holds | `claude-credential-denylist.ts` is unchanged. Probe: `Bearer ${ANTHROPIC_API_KEY}` gave `Bearer `, `https://h/${ANTHROPIC_API_KEY:-d}/...` gave `https://h/` plus the data path, and the report lists `blanked: ["ANTHROPIC_API_KEY"]`. A blanked header value is empty, so `isCleanHeaderValue` is false and `withOAuthDecision` drops `auth`: the new OAuth rule cannot re-enable a withheld credential. `mcp-variable-expansion.test.ts:117` and the conformance sentinels pass. |
+
+### Threat-model claims
+
+- **No environment value on disk:** holds. Truth 2. The environment is read-only input to the rule and to the OAuth decision.
+- **Credential deny-list:** holds. File unchanged. Truth 5.
+- **No shell execution through a leading `!`:** holds. `adapter-escape.ts` is unchanged and proven against the real adapter 5.2.0 functions.
+- **`CLAUDE_PROJECT_DIR` exposure:** holds, tightened. A failed cwd read now removes the variable instead of leaving the previous value.
+
+### Notes
+
+The 2026-10-07 data-flow row ("env comes from `process.env` at `stage.ts:380`", "`input.env ?? process.env`") is out of date. Since D-08-06 the bridge has no fallback and the entry points supply the environment. No truth text depends on that row.
+
+### Commands run
+
+All with `TMPDIR=/var/tmp/mcp4-reverify-04`. The adapter runs also set `PI_MCP_ADAPTER_ROOT=/var/tmp/mcp4-p7-research/a520/node_modules/pi-mcp-adapter` (5.2.0).
+
+| Command | Exit | Result |
+|---------|------|--------|
+| `node --test --test-reporter=tap tests/integration/adapter-expansion-conformance.test.ts` | 0 | 52 pass, 0 skip, 0 fail |
+| `PI_MCP_ADAPTER_ROOT=/nonexistent node --test tests/integration/adapter-expansion-conformance.test.ts` | 1 | fails as intended |
+| `node --test` on `claude-mcp-variables`, `claude-credential-denylist`, `mcp-server-features`, `adapter-entry`, `adapter-escape`, `substitute`, `stage`, `adapter-doc`, `session-env`, `mcp-variable-expansion`, `mcp-home-path-partial` | 0 | 659 pass, 0 fail, 0 skip |
+| `node --test` on `marketplace/shared`, `plugin/info`, `plugin/enable-disable`, `import/execute`, `reconcile/apply`, `notification-dispatch`, `notification-grammar`, `architecture/mcp-config-notices`, `tests/index` | 0 | 1037 pass, 0 fail, 0 skip |
+| `node` probe of `substituteAndInject` (stdio and http cases) | 0 | Output as listed under truths 1, 2, 3 and 5 |
+| `gsd-tools query verification.fingerprint ...` (same 50 covered files) | 0 | `covered_digest` `v3:sha256:365386d6...19af42` copied into the frontmatter |
+
+`npm run check` was not re-run. The orchestrator ran it on HEAD 6199bc53 or later: exit 0. Later commits are planning docs only.
+
+### Result
+
+5/5 truths hold at HEAD as amended. Phase 8 amendments: D-08-06 (explicit staging environment), D-08-04 (OAuth `auth` beside clean headers), `SCAN_BUILTINS` as `/`, and the `CLAUDE_PROJECT_DIR` clear on a failed cwd read. None changes a Phase 4 criterion or its proof. The four operator-accepted human-verification items stand.
+
+_Re-verified: 2026-10-10_
 _Verifier: Claude (gsd-verifier)_

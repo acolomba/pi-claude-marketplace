@@ -24,8 +24,8 @@ covered_files:
   - tests/integration/pi-mcp-adapter-peer.ts
   - tests/orchestrators/plugin/info-mcp-status.test.ts
   - tests/platform/mcp-status.test.ts
-covered_digest: "v3:sha256:73cd431009d47a907fa0ce35ebd6e05dfbbaaa2f1368d12d188da866817e2c07"
-re_verification: "scoped; baseline aa25cd0b; head 51ebbc07"
+covered_digest: "v3:sha256:a43c64ea72eeae6a8e29be9ada0a087b74b5f09cd550e9dd07cfdbba3455938f"
+re_verification: "scoped; baseline 1b1e39a3; head 3df6309c"
 behavior_unverified: 0
 overrides_applied: 0
 ---
@@ -140,4 +140,61 @@ Score: 10/10 still hold. No gaps. `behavior_unverified: 0`, no overrides.
 Status stays `passed`. The only changes were an adapter-version word in a doc comment and in one catalog paragraph, plus one added catalog sentence that matches the code. The deferred-session reading is now also evidenced by the Phase 7 live canary.
 
 _Re-verified: see `verified:` in the frontmatter_
+_Verifier: Claude (gsd-verifier)_
+
+## Re-verification (2026-10-10)
+
+**Scope:** scoped re-verification. Baseline `1b1e39a3`, head `3df6309c`. The earlier findings above stand and are unchanged.
+**Trigger:** `verification.status` read `stale` because Phase 8 (clear milestone debt) edited covered files.
+
+### Changed covered files since the baseline
+
+| File | Commit | What changed (`git diff 1b1e39a3 HEAD`) |
+|------|--------|------------------------------------------|
+| `extensions/pi-claude-marketplace/orchestrators/plugin/info-mcp-status.ts` | `10d7cb26` | `statusToken` lost its `Object.hasOwn` fallback (review IN-01) and now returns `RUNTIME_STATUS_TOKENS[answer]` directly. The guard moved up: `platform/mcp-status.ts` `lookup` already returns only a member of the closed seven (`isRuntimeStatus`, an own-key check) or `"unrecognized"`, and the types rule out anything else. |
+| `extensions/pi-claude-marketplace/orchestrators/plugin/info.ts` | Phase 8 own-key sweep | Plugin-record reads use `ownValue(...)` (`buildBlock`, `readProjectInstallRecord`, both `withServerStatus` call sites). `withCompanionRequirements` now counts only MCP entries with no `unsupportedFeature` for the `pi-mcp-adapter` requirement, so a server a partial install leaves out needs no adapter. Doc comment updated to match. |
+| `extensions/pi-claude-marketplace/platform/mcp-status.ts` | `10d7cb26` | Comment only (review IN-02): now says each server's `name` and `status` is read once and re-checked. No code change. |
+| `tests/orchestrators/plugin/info-mcp-status.test.ts` | `10d7cb26` | Removed the three `constructor` / `toString` / `__proto__` reader-answer tests and the now-unused type import. The hostile-status case is still covered at the reader: `tests/platform/mcp-status.test.ts` (a status turning into `"constructor"` answers `unrecognized`). |
+| `tests/integration/pi-mcp-adapter-peer.ts` | Phase 8 | Peer loader gained `mcp-auth-fetch` and `config` modules and typed interfaces for the entry conformance tests. The status conformance test's use (`types`) is unchanged. |
+| `docs/output-catalog.md` | Phase 8 | Prose only, in enable, MCP override and migration sections. The status token table, `installed-with-mcp-not-loaded` and the status-bearing byte-locked states are untouched. |
+| `06-REVIEW-DISPOSITION.md` | `10d7cb26` | IN-01 and IN-02 moved from `open` to `fixed`. Not a covered file. |
+
+No other covered file changed (`edge/`, `index.ts`, `shared/notification-*.ts`, `mcp-status-conformance.test.ts`, `tests/platform/mcp-status.test.ts`).
+
+### Per-truth result
+
+| # | Truth | Touched by | Result | Evidence |
+|---|-------|------------|--------|----------|
+| 1 | SC1/ASTAT-01 adapter state in info, no adapter import | `info.ts` own-key reads | VERIFIED | Wiring unchanged: tracker -> `EdgeDeps.mcpStatus` -> handler -> `getPluginInfo` -> `withServerStatus`. The two call sites now pass `ownValue(record.plugins, plugin)`, the same record for a normal name. Info, index, handler and platform suites pass. |
+| 2 | SC2 lazy server shows resting state | `info-mcp-status.ts` | VERIFIED | `RUNTIME_STATUS_TOKENS` is unchanged (`cached` -> `cached, connects on first use`, `not-connected` -> `not connected`). The `answering <answer> reads <token>` matrix passes. |
+| 3 | SC3/ASTAT-02 explicit unknown | `statusToken`, `mcp-status.ts` comment | VERIFIED | `no-snapshot` and `unrecognized` still map to `status unknown`, `unlisted` to `not loaded`. The removed own-key fallback guarded an input the closed `lookup` type and `isRuntimeStatus` already exclude; the reader test with a status turning into `"constructor"` answers `unrecognized`. Conformance shutdown snapshot passes. |
+| 4 | SC4 closed-catalog amendment, gates pass | `docs/output-catalog.md` prose | VERIFIED | Token table and status-bearing blocks identical to the baseline. Catalog contract, parser, closed-set, grammar, stamp, wire-coverage, partial-vocabulary, migration and config-notice suites pass (132 tests). Full gate green (below). |
+| 5 | Shadow rule D-06-09 | `info.ts` own-key reads | VERIFIED | `projectOverrides` / `stampEntries` unchanged. `readProjectInstallRecord` still returns the project record for the shadow rule via `ownValue`. Fan-out, `--scope user`, disabled, different-server and no-snapshot cases pass in `info.test.ts`. |
+| 6 | `--scope user` read-only on the project record | `info.ts` | VERIFIED | `loadState(..., { persistMigration: false })` inside `try`/`catch` is unchanged; only the lookups after it use `ownValue`. The unparseable-`state.json` test passes. |
+| 7 | Severity unchanged, no state on disabled/not-installed rows, `(missing)` bytes kept | `withCompanionRequirements` | VERIFIED | `withMcpServerStatus` is unchanged. The companion-requirement change affects only the `requires: pi-mcp-adapter` decision (a left-out server alone no longer adds it), not severity or status stamping; the `(missing)` line bytes in the catalog are unchanged. Owner tests pass. |
+| 8 | Prohibitions: no payload text, no stale/guessed state, no publish, no persistence | `mcp-status.ts` comment | VERIFIED | Code unchanged. `index.test.ts` strict bus mock (only `on`) and platform tests pass. Tokens still come only from closed maps. |
+| 9 | Conformance with the adapter | `pi-mcp-adapter-peer.ts` | VERIFIED | Re-run against pi-mcp-adapter 5.2.0 (`PI_MCP_ADAPTER_ROOT=/var/tmp/mcp4-p7-research/a520/node_modules/pi-mcp-adapter`): 3/3 pass, 0 skipped. |
+| 10 | Drift guard on status union, channel, snapshot version | `pi-mcp-adapter-peer.ts` | VERIFIED | Third conformance case passes against 5.2.0 `dist/types.d.ts`. |
+
+Score: 10/10 still hold. No truth lost support. No gaps. `behavior_unverified: 0`, no overrides.
+
+### Commands run (all with `TMPDIR=/var/tmp/mcp4-reverify-06`)
+
+| Command | Exit | Result |
+|---------|------|--------|
+| `git diff --stat 1b1e39a3 HEAD -- <covered files>` | 0 | 6 covered files plus the disposition file, as in the table |
+| `git diff 1b1e39a3 HEAD -- <changed covered files>` | 0 | as described above |
+| `node --test tests/platform/mcp-status.test.ts tests/orchestrators/plugin/info-mcp-status.test.ts tests/orchestrators/plugin/info.test.ts tests/index.test.ts tests/edge/handlers/plugin/info.test.ts` | 0 | 329 pass, 0 fail |
+| `PI_MCP_ADAPTER_ROOT=<5.2.0> node --test tests/integration/mcp-status-conformance.test.ts` | 0 | 3 pass, 0 fail, 0 skipped |
+| `node --test tests/architecture/catalog-uat/{catalog-contract,catalog-parser}.test.ts tests/architecture/{closed-set-enrollment,notify-closed-set-locks,notify-grammar-invariant,notify-stamp-coverage,notify-producer-wire-coverage,partial-vocabulary-guard,mcp-migration-notice,mcp-config-notices}.test.ts` | 0 | 132 pass, 0 fail |
+| `gsd-tools query verification.fingerprint ...` | 0 | refreshed `covered_digest` (same 20-entry list) |
+
+### Full-gate evidence (supplied by the orchestrator, not re-run here)
+
+`npm run check` on HEAD `6199bc53` or later: exit 0. Commits after it are planning-docs only.
+
+### Re-verification verdict
+
+Status stays `passed`. Phase 8 removed one redundant own-key fallback (the guard lives in the reader), switched record reads to `ownValue`, narrowed the adapter-requirement count to supported MCP servers, and edited catalog prose. None of the ASTAT truths lost support.
+
 _Verifier: Claude (gsd-verifier)_
