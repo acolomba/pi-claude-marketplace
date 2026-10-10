@@ -11,6 +11,7 @@ import { setMarketplaceAutoupdate } from "../../../extensions/pi-claude-marketpl
 import { saveConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { expectSoftDepProbes } from "../../edge/notification-boundary.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
 import type { ScopeConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
@@ -45,9 +46,7 @@ function notificationBoundary(expectation: NotificationExpectation): {
   when(() => ctx.ui)
     .thenReturn(ui)
     .once();
-  when(() => pi.getAllTools())
-    .thenReturn([])
-    .times(3);
+  expectSoftDepProbes(pi, 1);
   if ("message" in expectation) {
     if (expectation.severity === undefined) {
       when(() => {

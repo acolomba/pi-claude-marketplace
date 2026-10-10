@@ -18,13 +18,13 @@
 //             a tree carrying the marker whose `origin` names the source is
 //             removed; every other outcome throws
 //       fs.rename(stagingDir, finalDir)                     // atomic, same-FS by D-09
-//       state.marketplaces[derivedName] = { ... }
+//       setOwn(state.marketplaces, derivedName, { ... })
 //
 //     if (path):
 //       resolve manifest path on disk per MA-3
 //       read + MARKETPLACE_VALIDATOR.Check(manifest.json)
 //       MA-8 duplicate-name check on state.marketplaces[<derivedName>]
-//       state.marketplaces[derivedName] = { ... }            // NFR-5: NO gitOps calls
+//       setOwn(state.marketplaces, derivedName, { ... })     // NFR-5: NO gitOps calls
 //   })
 //
 //   // The success notification is a single
@@ -55,6 +55,7 @@ import path from "node:path";
 
 import { networkCloneUrl, originMatchesSource } from "../../domain/clone-key.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
+import { isReservedRecordKey } from "../../domain/name.ts";
 import { parsePluginSource } from "../../domain/source.ts";
 import { loadConfig } from "../../persistence/config-io.ts";
 import { writeMarketplaceConfigEntry } from "../../persistence/config-write-back.ts";
@@ -85,6 +86,7 @@ import {
   type MarketplaceRows,
   type Single,
 } from "../../shared/notify-context.ts";
+import { ownValue, setOwn } from "../../shared/own-key.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
 import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
@@ -105,7 +107,7 @@ import type { ScopeConfig } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { CredentialOps } from "../../platform/git-credential.ts";
-import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
+import type { NotificationContext, PiInventory } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { Scope } from "../../shared/types.ts";
 
@@ -168,7 +170,7 @@ export interface AddMarketplaceOptions {
   /**
    * Required by `notify(ctx, pi, message)` for soft-dep probing.
    */
-  readonly pi: ToolInventory;
+  readonly pi: PiInventory;
   /** SC-5: the edge layer defaults this to "user"; orchestrator receives a fully resolved Scope. */
   readonly scope: Scope;
   /** Used to compute project-scope locations (`<cwd>/.pi`). Ignored when scope === "user". */
@@ -314,6 +316,31 @@ function classifyAddError(rawErr: unknown): ContentReason | undefined {
   }
 
   return undefined;
+}
+
+/**
+ * Reads the manifest at `manifestPath` and returns the marketplace name it
+ * declares. A `__proto__` name fails as `invalid manifest` (D-08-07), and a
+ * name the scope already holds fails as a duplicate (MA-8), both before any
+ * state mutation.
+ */
+async function newMarketplaceName(
+  manifestPath: string,
+  marketplaces: ExtensionState["marketplaces"],
+  scope: Scope,
+): Promise<string> {
+  const { name } = await loadMarketplaceManifest(manifestPath);
+  if (isReservedRecordKey(name)) {
+    throw new InvalidMarketplaceManifestError(
+      `marketplace.json schema invalid: name "${name}" is reserved`,
+    );
+  }
+
+  if (ownValue(marketplaces, name) !== undefined) {
+    throw new MarketplaceDuplicateNameError(name, scope);
+  }
+
+  return name;
 }
 
 /**
@@ -855,16 +882,9 @@ async function addGitClonedInGuard(args: {
     //    rename it into place.
     await writeOwnershipMarker(stagingDir);
 
-    // 3. Read + validate manifest.
+    // 3-4. Read + validate manifest; MA-8: duplicate name in this scope.
     const manifestPath = path.join(stagingDir, ".claude-plugin", "marketplace.json");
-    const parsed = await loadMarketplaceManifest(manifestPath);
-
-    const derivedName = parsed.name;
-
-    // 4. MA-8: duplicate name in this scope.
-    if (derivedName in state.marketplaces) {
-      throw new MarketplaceDuplicateNameError(derivedName, locations.scope);
-    }
+    const derivedName = await newMarketplaceName(manifestPath, state.marketplaces, locations.scope);
 
     // 5. MA-6/MA-12/MA-13: recognize-remove-rename on the final destination.
     // A leftover is the extension's own when it carries the ownership marker
@@ -896,7 +916,7 @@ async function addGitClonedInGuard(args: {
     stagedAtFinal = true;
 
     // 7. Mutate state.
-    state.marketplaces[derivedName] = {
+    setOwn(state.marketplaces, derivedName, {
       name: derivedName,
       scope: locations.scope,
       source,
@@ -905,7 +925,7 @@ async function addGitClonedInGuard(args: {
       marketplaceRoot: finalDir,
       lastUpdatedAt: new Date().toISOString(),
       plugins: {},
-    };
+    });
     return derivedName;
   } catch (err) {
     // MA-9: append leaks rather than mask original error.
@@ -1056,20 +1076,13 @@ async function addPathInGuard(args: {
     throw notUsable;
   }
 
-  // Read + validate manifest.
-  const parsed = await loadMarketplaceManifest(manifestPath);
-
-  const derivedName = parsed.name;
-
-  // MA-8: duplicate name in scope.
-  if (derivedName in state.marketplaces) {
-    throw new MarketplaceDuplicateNameError(derivedName, locations.scope);
-  }
+  // Read + validate manifest; MA-8: duplicate name in scope.
+  const derivedName = await newMarketplaceName(manifestPath, state.marketplaces, locations.scope);
 
   // MA-4: source already preserves the user-typed `~` verbatim
   // (ParsedSource.raw) via pathSource() factory. We store the parsed
   // source object directly -- ST-6 funnel re-validates on next load.
-  state.marketplaces[derivedName] = {
+  setOwn(state.marketplaces, derivedName, {
     name: derivedName,
     scope: locations.scope,
     source,
@@ -1078,7 +1091,7 @@ async function addPathInGuard(args: {
     marketplaceRoot,
     lastUpdatedAt: new Date().toISOString(),
     plugins: {},
-  };
+  });
   return derivedName;
 }
 

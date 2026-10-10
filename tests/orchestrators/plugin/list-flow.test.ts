@@ -33,7 +33,6 @@ import test from "node:test";
 
 import * as git from "isomorphic-git";
 import { mock, verify, when } from "strong-mock";
-import { Type } from "typebox";
 
 import { pluginMirrorKey } from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
@@ -50,15 +49,16 @@ import {
   mergeMarketplaceIntoState,
   seedAutoupdateConfig,
 } from "../../edge/handlers/marketplace-seed.ts";
+import { expectSoftDepProbes } from "../../edge/notification-boundary.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+import { toolInfo } from "../../platform/pi-inventory-seed.ts";
 
 import type { ListPluginsOptions } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/list-flow.ts";
 import type {
   ExtensionAPI,
   ExtensionContext,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
-import type { ToolInfo } from "@earendil-works/pi-coding-agent";
 
 type ListPluginsWithoutConnections = Omit<ListPluginsOptions, "ctx" | "pi">;
 void ({ cwd: "/workspace", scope: "user" } satisfies ListPluginsWithoutConnections);
@@ -75,20 +75,6 @@ type NotificationUi = Omit<ExtensionContext["ui"], "notify"> & {
   readonly notify: (message: string, severity?: NotificationSeverity) => void;
 };
 
-function toolInfo(name: string): ToolInfo {
-  return {
-    name,
-    description: `test tool ${name}`,
-    parameters: Type.Object({}),
-    sourceInfo: {
-      origin: "top-level",
-      path: `/test/tools/${name}.ts`,
-      scope: "temporary",
-      source: "test",
-    },
-  } satisfies ToolInfo;
-}
-
 function makeCtx(
   options: { readonly toolNames?: readonly string[]; readonly recordTally?: boolean } = {},
 ): {
@@ -104,9 +90,7 @@ function makeCtx(
   when(() => ctx.ui)
     .thenReturn(ui)
     .once();
-  when(() => pi.getAllTools())
-    .thenReturn((options.toolNames ?? []).map(toolInfo))
-    .times(3);
+  expectSoftDepProbes(pi, 1, (options.toolNames ?? []).map(toolInfo));
   when(() => ui.notify)
     .thenReturn((message, severity) => {
       // Most of this owner suite predates operation tallies and owns the list
@@ -1867,7 +1851,7 @@ test("ENBL-06 / ENBL-16: a manifest-absent disabled PARTIAL renders `(disabled) 
 // `dependencies` field and the render arm hard-codes both soft-dep arguments
 // false. `makeCtx` probes BOTH companions as UNLOADED, which is exactly the
 // condition under which a leak would render `{requires pi-subagents, requires
-// pi-mcp}` -- so a bare row here is evidence, not an accident of the harness.
+// pi-mcp-adapter}` -- so a bare row here is evidence, not an accident of the harness.
 const DISABLED_BARE_ROW = ["● mp1 [user]", "  ◍ alpha v1.0.0 (disabled)"].join("\n");
 
 /**
@@ -3624,7 +3608,7 @@ test("plugin list manifest absent: INV-02: a manifest-absent degraded record kee
       scopeRoot: userRoot,
       cwd,
       mpName: "mp1",
-      // Manifest LOADS and simply does not declare `plug`.
+      // Manifest LOADS and does not declare `plug`.
       manifest: { name: "mp1", plugins: [] },
       installed: { plug: { version: "1.0.0", unsupported: ["lspServers"] } },
     });
@@ -4318,7 +4302,8 @@ test("listPlugins renders the installed MCP dependency marker after inventory re
     // assert
     assert.deepStrictEqual(notifications, [
       {
-        message: "● mp1 [user]\n  ● mcpplug v1.0.0 (installed) {not in manifest, requires pi-mcp}",
+        message:
+          "● mp1 [user]\n  ● mcpplug v1.0.0 (installed) {not in manifest, requires pi-mcp-adapter}",
       },
     ]);
     verify(ctx);
@@ -4452,9 +4437,7 @@ test("listPlugins normalizes a non-Error notification failure before reporting i
     when(() => ctx.ui)
       .thenReturn(ui)
       .twice();
-    when(() => pi.getAllTools())
-      .thenReturn([])
-      .times(6);
+    expectSoftDepProbes(pi, 2);
     when(() => ui.notify)
       .thenReturn((message, severity) => {
         notifyCall += 1;

@@ -29,8 +29,7 @@
 //  PluginUpdatePhase3Error with RECOVERY_PLUGIN_REINSTALL_PREFIX hint.
 //  Else: success outcome carries WR-04 stagedAgentNames/stagedMcpServerNames.
 //
-// D-141-03 / D-141-05: the four bridges' staging warnings are READ (they were
-// not, so every one of them was dark on this path) and split by install's
+// D-141-03 / D-141-05: the four bridges' staging warnings are READ and split by install's
 // rule through `./shared.ts::splitStagingWarnings`. The skills and commands
 // DISCOVERY half always rides the `updated` outcome's `notes`; the agents and
 // mcp HYGIENE half joins it in cascade mode only. The direct path renders the
@@ -79,6 +78,7 @@ import {
   abortPreparedMcp,
   commitPreparedMcp,
   prepareStageMcpServers,
+  removeLegacyMcpEntries,
 } from "../../bridges/mcp/index.ts";
 import {
   abortPreparedSkills,
@@ -108,6 +108,7 @@ import { createRemovalOps, type RemovalOps } from "../../shared/fs-utils.ts";
 import { RECOVERY_PLUGIN_REINSTALL_PREFIX } from "../../shared/markers.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
+import { ownValue } from "../../shared/own-key.ts";
 import {
   withStateGuard,
   type LockedStateTransactionDeps,
@@ -128,12 +129,14 @@ import type { PreparedCommandsStaging } from "../../bridges/commands/index.ts";
 import type { PreparedMcpStaging } from "../../bridges/mcp/index.ts";
 import type { PreparedSkillsStaging } from "../../bridges/skills/index.ts";
 import type { PreparedWorkflowsStaging } from "../../bridges/workflows/index.ts";
+import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
 import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
 import type { InstalledReferenceNames } from "../../domain/skill-tokens.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
-import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
+import type { NotificationContext, PiInventory } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { HookSummaryEntry } from "../../shared/concerns/hooks.ts";
+import type { McpConfigNotice } from "../../shared/notification-dispatch.ts";
 import type { DegradeKind } from "../../shared/notify-reasons.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
@@ -154,6 +157,8 @@ export interface ThreePhaseArgsBase {
   readonly locations: ScopedLocations;
   readonly hooksRouting: UpdateHooksRouting;
   readonly completionCache: CompletionCache;
+  /** D-08-06: the environment the update stages MCP servers with. */
+  readonly env: ClaudeEnv;
   readonly mapModel?: boolean;
   readonly local?: boolean;
   readonly partial?: boolean;
@@ -187,7 +192,7 @@ export interface ThreePhaseArgsBase {
 export interface DirectThreePhaseArgs extends ThreePhaseArgsBase {
   readonly cascade: false;
   readonly ctx: NotificationContext;
-  readonly pi: ToolInventory;
+  readonly pi: PiInventory;
   readonly cardinality: "single" | "plural";
   readonly notifyPhaseFailure: (error: Error, failures: readonly UpdatePhase3Failure[]) => void;
 }
@@ -313,6 +318,8 @@ async function prepareUpdateHandles(
       // cascade entrypoint never sets `args.mapModel`, so cascade re-
       // installs always resolve to false (omit `model:`).
       mapModel: args.mapModel ?? false,
+      // ANAME-02: the servers this update writes, mapped in agent tool lists.
+      mcpServerNames: Object.keys(installable.mcpServers),
       // SUB-02: project-scope ${CLAUDE_PROJECT_DIR} resolves to the install cwd.
       cwd,
     });
@@ -325,6 +332,8 @@ async function prepareUpdateHandles(
       pluginRoot: installable.pluginRoot,
       pluginData: pluginDataDir,
       sourcePath: `${installable.pluginRoot}#mcpServers`,
+      description: installable.description,
+      env: args.env,
     });
     handles.workflows = await prepareStageWorkflows({
       locations,
@@ -569,12 +578,12 @@ async function markUpdateInProgress(
   await withStateGuard(
     locations,
     (s) => {
-      const sMp = s.marketplaces[marketplace];
+      const sMp = ownValue(s.marketplaces, marketplace);
       if (sMp === undefined) {
         throw new PluginUpdateConcurrencyError("marketplace-removed", plugin, marketplace);
       }
 
-      const sRecord = sMp.plugins[plugin];
+      const sRecord = ownValue(sMp.plugins, plugin);
       if (sRecord === undefined) {
         throw new PluginUpdateConcurrencyError("plugin-uninstalled", plugin, marketplace);
       }
@@ -749,8 +758,8 @@ function applyAllSuccessRecordFields(sRecord: PluginStateRecord, preflight: Plug
   // post-commit GC and the next update read the swapped sha. Undefined for
   // an unpinned source (no clone to protect). WR-01: also clear a STALE
   // `resolvedSha` a prior update or install left on the record -- otherwise
-  // a `path` source whose re-resolution no longer pins a tag would keep
-  // naming a commit `resolvedSource` no longer sits at.
+  // a `path` source whose re-resolution does not pin a tag would keep
+  // naming a commit `resolvedSource` does not sit at.
   if (resolvedSha === undefined) {
     delete sRecord.resolvedSha;
   } else {
@@ -853,14 +862,14 @@ async function finalizeUpdateRecord(
   await withStateGuard(
     locations,
     async (s) => {
-      const sMp = s.marketplaces[marketplace];
+      const sMp = ownValue(s.marketplaces, marketplace);
       if (sMp === undefined) {
         throw new PluginUpdateConcurrencyError("marketplace-removed", plugin, marketplace, {
           lifecycle: "finalize",
         });
       }
 
-      const sRecord = sMp.plugins[plugin];
+      const sRecord = ownValue(sMp.plugins, plugin);
       if (sRecord === undefined) {
         throw new PluginUpdateConcurrencyError("plugin-uninstalled", plugin, marketplace, {
           lifecycle: "finalize",
@@ -1059,6 +1068,11 @@ async function commitUpdateWorkflows(prepared: PreparedWorkflowsStaging): Promis
  * workflows order, matching install's PI-9 ledger order. Each commit is
  * independently atomic at the OS level (rename for skills/commands/agents/
  * workflows, atomicWriteJson for mcp, write-or-remove for hooks).
+ *
+ * AMIG-02: right after the MCP commit writes `mcp-adapter.json`, the plugin's
+ * marked entries leave the scope's `mcp.json`. Update has no rollback, so a
+ * removal that throws is an `mcp` failure that keeps the new entry and the
+ * legacy one; the next reload or a reinstall finishes the move.
  */
 async function commitUpdatePhase3a(
   ops: RemovalOps,
@@ -1071,6 +1085,12 @@ async function commitUpdatePhase3a(
   /** CR-03 / WR-01: what the workflows commit reported. The record write is
    * the only consumer. */
   readonly workflows: WorkflowsCommitReport;
+  /**
+   * AFILE-04 / AMIG-02: the MCP commit's file notices, then the legacy
+   * removal's; empty when the commit threw, the commit's alone when the
+   * removal threw.
+   */
+  readonly mcpConfigNotices: readonly McpConfigNotice[];
 }> {
   const failures: UpdatePhase3Failure[] = [];
 
@@ -1138,8 +1158,18 @@ async function commitUpdatePhase3a(
     failures.push({ phase: "hooks", msg: errorMessage(err), cause: err as Error });
   }
 
+  // AFILE-04: the notices describe a write, so they are taken only once the
+  // commit that performs it has returned.
+  let mcpConfigNotices: readonly McpConfigNotice[] = [];
   try {
     await commitPreparedMcp(handles.mcp);
+    mcpConfigNotices = handles.mcp.result.notices;
+    const legacy = await removeLegacyMcpEntries({
+      locations: args.locations,
+      pluginName: args.plugin,
+      marketplaceName: args.marketplace,
+    });
+    mcpConfigNotices = [...mcpConfigNotices, ...legacy.notices];
   } catch (err) {
     failures.push({ phase: "mcp", msg: errorMessage(err), cause: err as Error });
   }
@@ -1153,6 +1183,7 @@ async function commitUpdatePhase3a(
     failures,
     hookEntries,
     workflows: { committed: workflows.committed, placedNames: workflows.placedNames },
+    mcpConfigNotices,
   };
 }
 
@@ -1188,11 +1219,16 @@ function hasUpdatePhase3Failures(
  * 4-space cause-chain trailer beneath the failed plugin row. The cascade is
  * NOT re-rendered here -- aborting before the cascade walk means there is
  * exactly one row to surface.
+ *
+ * AFILE-04: `mcpConfigNotices` are the MCP commit's notices. A bridge after
+ * it, or the finalize, can fail once the file is already rewritten, so the
+ * failed outcome carries them for the caller to show after this row.
  */
 function composePhase3FailureOutcome(
   args: ThreePhaseArgs,
   failures: NonEmptyUpdatePhase3Failures,
   versions: { readonly fromVersion: string; readonly toVersion: string },
+  mcpConfigNotices: readonly McpConfigNotice[],
 ): UpdatePhase3FailedOutcome {
   const { plugin } = args;
   const recoveryHint = `${RECOVERY_PLUGIN_REINSTALL_PREFIX} "${plugin}".`;
@@ -1238,6 +1274,8 @@ function composePhase3FailureOutcome(
     declaresAgents: false,
     declaresMcp: false,
     declaresWorkflows: false,
+    // NREG-01: absent when the MCP commit threw or reported nothing.
+    ...(mcpConfigNotices.length > 0 && { mcpConfigNotices }),
   };
 }
 
@@ -1346,6 +1384,7 @@ export async function swapPluginUpdate(
     failures: phase3aFailures,
     hookEntries,
     workflows: workflowsCommit,
+    mcpConfigNotices,
   } = await commitUpdatePhase3a(removalOps, args, preflight, handles);
 
   // ─── Phase 2b: finalize state (TR-04) ─────────────────────────────────────
@@ -1390,7 +1429,12 @@ export async function swapPluginUpdate(
   // ─── Phase 3b: aggregate error path with recovery hint, OR success ────────
 
   if (hasUpdatePhase3Failures(phase3aFailures)) {
-    return composePhase3FailureOutcome(args, phase3aFailures, { fromVersion, toVersion });
+    return composePhase3FailureOutcome(
+      args,
+      phase3aFailures,
+      { fromVersion, toVersion },
+      mcpConfigNotices,
+    );
   }
 
   // PURL-06 / D-78-01: GC-after-swap. The finalize withStateGuard has committed
@@ -1415,7 +1459,7 @@ export async function swapPluginUpdate(
   // CMC-13: declaresAgents / declaresMcp predicate inputs
   // mirror reinstall's effective-state contract (declares iff actually
   // staged this update). The renderer probes companion-loaded state via
-  // SoftDepProbe and emits `{requires pi-subagents}` / `{requires pi-mcp}`
+  // SoftDepProbe and emits `{requires pi-subagents}` / `{requires pi-mcp-adapter}`
   // iff (declares AND unloaded).
   const stagedAgentNames = handles.agents.result.recorded.map((r) => r.generatedName);
   const stagedMcpServerNames = handles.mcp.result.recorded.map((r) => r.generatedName);
@@ -1494,6 +1538,9 @@ export async function swapPluginUpdate(
     // D-141-03 / D-141-05: same NREG-01 spread rule as `degradedKinds` -- a
     // clean update's outcome keeps the key absent.
     ...(updateWarnings.length > 0 && { notes: updateWarnings }),
+    // AFILE-04: same NREG-01 spread rule; the caller that renders the row
+    // routes these through `notifyMcpConfigNotices`.
+    ...(mcpConfigNotices.length > 0 && { mcpConfigNotices }),
   };
 }
 

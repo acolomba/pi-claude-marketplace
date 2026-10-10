@@ -1,42 +1,44 @@
 ---
 gsd_state_version: "1.0"
-milestone: any-git-host
-status: Awaiting next milestone
-stopped_at: milestone any-git-host archived (2026-09-30); awaiting next milestone
-last_updated: "2026-10-06T13:53:27.309Z"
-last_activity: 2026-10-06
-last_activity_desc: Completed quick task 261006-kr1 (adopt workflow engine 3.14.0)
-state_head: 6af2e9e97ca8bea6273a2ae13d7cba38174660d8
-milestone_name: Any Git Host
+milestone: mcp-4
+status: completed
+stopped_at: mcp-4 milestone closed and archived; PR #250 open, awaiting merge
+last_updated: "2026-10-10T13:22:09.180Z"
+last_activity: 2026-10-10
+last_activity_desc: Completed quick task 261010-cfi — Accept Node 24 and 26 EISDIR text in mcp-migration test
+state_head: e34cec12effe85649c6164b5184944da4d2e3482
 progress:
-  total_phases: 3
-  completed_phases: 3
-  total_plans: 11
-  completed_plans: 11
+  total_phases: 8
+  completed_phases: 8
+  total_plans: 73
+  completed_plans: 73
   percent: 100
+milestone_name: MCP 4
+current_phase: 08
 ---
 
 # Project State
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-09-24 after v1.20 closeout)
+See: `.planning/PROJECT.md` (updated 2026-10-10 after mcp-4 milestone close)
 
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Planning the next milestone. any-git-host closed on
-2026-09-30 with 3/3 phases and 10/10 requirements, after v1.20 closed with
-12/12 phases and 45/45 requirements. The private-repository credential
-challenge deferred in v1.20 Phase 3 UAT passed on 2026-09-30, after the merge
-of #221.
+**Current focus:** mcp-4 closed; PR #250 is open and awaits review and merge.
+All 8 phases (01/ to 08/) and 41/41 requirements are complete, and the
+re-audit passed. The archive is `.planning/milestones/mcp-4-*`; the phase
+directories stay under `.planning/phases/` until `/gsd-cleanup`. The 02/ to
+05/ work still goes out in one release, because every entry-shape change
+costs users new sign-ins and approvals.
 
 ## Current Position
 
-Phase: Milestone any-git-host complete
+Phase: Milestone mcp-4 complete
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-10-06 - Completed quick task 261006-kr1: Adopt workflow engine 3.14.0: mirror PI_CODING_AGENT_DIR storage root and bump pins
+Status: Milestone complete; UAT check, `/gsd-cleanup` and the 0.20.0 version bump done; PR #250 open, awaiting merge
+Last activity: 2026-10-10 — Completed quick task 261010-cfi: Accept Node 24 and 26 EISDIR text in mcp-migration test
 
 ### workflows-replay closeout (merged from main)
 
@@ -69,7 +71,7 @@ still open with a comment explaining what landed.
 
 **Velocity:**
 
-- Total plans completed: 206
+- Total plans completed: 247
 - Average recorded duration: 11.9 min
 - Total recorded execution time: 30 hr 1 min
 
@@ -83,14 +85,14 @@ still open with a comment explaining what landed.
 | 111. Non-Hook Component Bridges |    31 | -               | -                 |
 | 112. Hook Runtime               |    31 | 7h 58m          | 15.4 min          |
 | 113. Orchestrator Support       |    35 | 7h 46m recorded | 16.6 min recorded |
-| 1 | 4 | - | - |
-| 02 | 2 | - | - |
-| 3 | 7 | - | - |
-| 04 | 6 | - | - |
-| 5 | 3 | - | - |
-| 06 | 4 | - | - |
-| 07 | 3 | - | - |
-| 8 | 3 | - | - |
+| 01 | 9 | - | - |
+| 2 | 12 | - | - |
+| 03 | 9 | - | - |
+| 04 | 9 | - | - |
+| 5 | 5 | - | - |
+| 6 | 3 | - | - |
+| 07 | 5 | - | - |
+| 08 | 21 | - | - |
 | 09 | 4 | - | - |
 | 10 | 4 | - | - |
 | 11 | 7 | - | - |
@@ -247,17 +249,120 @@ still open with a comment explaining what landed.
 | Phase 10 P02 | 1h53m | 3 tasks | 8 files |
 | Phase 10-constraint-aware-update P03 | 56 min | 3 tasks | 26 files |
 | Phase 10 P04 | 48min | 2 tasks | 8 files |
+| Phase 01 P01 | 30min | 3 tasks | 19 files |
+| Phase 01 P02 | 37min | 2 tasks | 46 files |
+| Phase 01 P03 | 30min | 2 tasks | 3 files |
+| Phase 01 P04 | 45min | 2 tasks | 46 files |
+| Phase 01 P05 | 70min | 2 tasks | 42 files |
+| Phase 01 P06 | 35min | 2 tasks | 4 files |
+| Phase 01 P07 | 60min | 2 tasks | 15 files |
+| Phase 01 P08 | 45min | 2 tasks | 3 files |
+| Phase 01 P09 | 16 min | 3 tasks | 11 files |
+| Phase 02 P01 | 45min | 3 tasks | 34 files |
+| Phase 02 P02 | 27min | 3 tasks | 18 files |
+| Phase 02 P03 | 67min | 2 tasks | 10 files |
+| Phase 02 P04 | about 100 min | 3 tasks | 20 files |
+| Phase 02 P05 | 17min | 3 tasks | 10 files |
+| Phase 02 P06 | about 55 min | 3 tasks | 14 files |
+| Phase 02 P07 | 25min | 3 tasks | 10 files |
+| Phase 02 P08 | 30min | 3 tasks | 12 files |
+| Phase 03 P01 | 18 min | 3 tasks | 16 files |
+| Phase 03 P02 | 5 min | 2 tasks | 7 files |
+| Phase 03 P03 | 20min | 3 tasks | 17 files |
+| Phase 03 P04 | 23 min | 3 tasks | 24 files |
+| Phase 03 P05 | 11min | 2 tasks | 7 files |
+| Phase 03 P06 | 12min | 2 tasks | 12 files |
+| Phase 03 P07 | 16min | 3 tasks | 10 files |
+| Phase 03 P08 | 17min | 3 tasks | 12 files |
+| Phase 03 P09 | 7min | 2 tasks | 3 files |
+| Phase 04 P01 | 20 min | 3 tasks | 15 files |
+| Phase 04 P02 | 12 min | 2 tasks | 10 files |
+| Phase 04 P03 | 24 min | 3 tasks | 15 files |
+| Phase 04 P04 | 10 min | 2 tasks | 7 files |
+| Phase 04 P05 | 12 min | 3 tasks | 15 files |
+| Phase 04 P06 | 5 min | 2 tasks | 7 files |
+| Phase 04 P07 | 15 min | 2 tasks | 11 files |
+| Phase 04 P08 | 14 min | 3 tasks | 5 files |
+| Phase 04 P09 | 11min | 2 tasks | 5 files |
+| Phase 05 P01 | 34 min | 3 tasks | 20 files |
+| Phase 05 P02 | 16 min | 3 tasks | 16 files |
+| Phase 05 P03 | 25 min | 3 tasks | 18 files |
+| Phase 05 P04 | 27min | 3 tasks | 13 files |
+| Phase 05 P05 | 75min | 3 tasks | 7 files |
+| Phase 06 P01 | 27min | 3 tasks | 33 files |
+| Phase 06 P02 | 25min | 2 tasks | 10 files |
+| Phase 06 P03 | 6min | 2 tasks | 3 files |
+| Phase 07 P01 | 7 min | 3 tasks | 14 files |
+| Phase 07 P02 | 14 min | 2 tasks | 3 files |
+| Phase 07 P03 | 8 min | 3 tasks | 5 files |
+| Phase 07 P04 | 11 min | 2 tasks | 3 files |
+| Phase 07 P05 | 7 min | 3 tasks | 4 files |
+| Phase 08 P01 | 13min | 3 tasks | 6 files |
+| Phase 08 P02 | 17min | 3 tasks | 7 files |
+| Phase 08 P03 | 30min | 2 tasks | 9 files |
+| Phase 08 P04 | 10min | 2 tasks | 5 files |
+| Phase 08 P05 | 7min | 2 tasks | 5 files |
+| Phase 08 P06 | 7min | 2 tasks | 7 files |
+| Phase 08 P07 | 6min | 3 tasks | 5 files |
+| Phase 08 P08 | 14min | 2 tasks | 5 files |
+| Phase 08 P09 | 10min | 2 tasks | 8 files |
+| Phase 08 P10 | 13min | 3 tasks | 9 files |
+| Phase 08 P11 | 25min | 2 tasks | 7 files |
+| Phase 08 P12 | 20min | 3 tasks | 10 files |
+| Phase 08 P15 | 9min | 2 tasks | 9 files |
+| Phase 08 P13 | 16min | 2 tasks | 5 files |
+| Phase 08 P14 | 15min | 3 tasks | 5 files |
+| Phase 08 P16 | 16min | 2 tasks | 12 files |
+| Phase 08 P17 | 12min | 2 tasks | 9 files |
+| Phase 08 P18 | 11min | 3 tasks | 11 files |
+| Phase 08 P19 | 15min | 2 tasks | 1 files |
+| Phase 08 P20 | 10min | 2 tasks | 6 files |
+| Phase 08 P21 | 15min | 3 tasks | 11 files |
 
 ## Accumulated Context
 
 ### Roadmap Evolution
 
+- mcp-4 roadmap created 2026-10-02 with phase numbering reset to 1: 1 Pi 1.0
+  floor and adapter-only detection; 2 adapter-file delivery; 3 Claude Code tool
+  names and tool search; 4 variable expansion at Claude Code parity; 5 automatic
+  migration on `/reload`; 6 live MCP status in info (can run alongside 4 and 5);
+  7 docs and live proof. The research spine's translation phase was split into
+  naming (3) and variables (4) because the variables work needs its own threat
+  model. Migration follows both, and Phases 2 to 5 go out in one release.
 - Phases 6-12 added 2026-09-18 (operator decision: extend v1.20 rather than open v1.21): Load-time dependency check and allowed uninstall; Marketplace-repository tag resolution for path-source dependencies; Enablement parity for dependencies; Reload installs missing declared dependencies; Constraint-aware update; Cross-marketplace dependency allowlist; Standalone prune with dry-run. Source: `milestones/v1.20-HANDOFF-upstream-dependency-parity.md`. Order changed from the handoff's: load-time check leads.
 
 ### Decisions
 
 Decisions are logged in the PROJECT.md Key Decisions table.
 
+- [mcp-4 Phase 6] info shows the adapter's last-reported server state in
+  Claude Code words (`failed` kept distinct), `status unknown` / `not loaded`
+  when unknown, `overridden by project scope` for the user row when both
+  scopes hold the plugin; severity stays info (D-06-01..10, D-06-06a).
+- [mcp-4 Phase 5] `/reload` moves plugin MCP entries out of `mcp.json`;
+  old entries are cleanup, not input, and the marked entries are the only
+  trigger (D-05-09, D-05-16, COMPAT-01).
+- [mcp-4 Phase 5] Operator 2026-10-09: a left-in-place row names a remedy
+  per cause (reinstall only for a cold git clone); project-file disable
+  stubs go only in the reload move's user pass, written lockless when the
+  project has no extension directory; a collision source outside the scope
+  files is named by its home-relative path (D-05-02, D-05-08, D-05-10).
+- [mcp-4 Phase 5] UAT 2026-10-09: the operator accepted the migration notice
+  wording and the leftover reading as built. 8 info findings stay `open` in
+  `05-REVIEW-DISPOSITION.md`.
+- [mcp-4 Phase 3] Plugin MCP servers use Claude Code's key
+  `plugin_<plugin>_<server>_` with `toolPrefix: "mcp"` and
+  `directTools: "search"`; a closed 2.1.291 field table translates entries
+  (D-03-01, D-03-02, D-03-07).
+- [mcp-4 Phase 3] Keys that collide after normalization or the `-`/`_` fold
+  refuse at install; no tool-name length check exists (D-03-12, D-03-13,
+  D-03-17).
+- [mcp-4 Phase 3] UAT 2026-10-06: the operator accepted review warnings
+  WR-01 (TR-03 accounting with a legacy `mcp.json` entry), WR-02 (OAuth with
+  `headers`), WR-03 (the same-plugin clash refuses inside the ledger) and
+  WR-05 (fallow audit `warn` from the ADET-01 fixture clones) as they stand.
+  All 10 review findings stay `open` in `03-REVIEW-DISPOSITION.md`.
 - [Phase 12] Preview uses `(will uninstall) {dependency pruned}` and actual
   prune uses `(uninstalled) {dependency pruned}`; the preview never writes.
 - [Phase 12] Both empty modes give a scoped informational reason. The
@@ -543,25 +648,135 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 10]: Path-arm tag-listing-once behavior verified functionally (real local git marketplace fixture) rather than by call-count mocking, since isomorphic-git's package exports are non-configurable
 - [Phase 10]: Phase 10 plan 03 closed stage two (admitResolvedVersion), threaded the required-but-nullable UpdateConstraintDisclosure through PreparedPluginUpdate and both update outcome types (D-10-17a), and gave the autoupdate cascade the same held-row token/cause/warning severity the manual cascade renders (D-10-12). Catalog moved 223 -> 227 states.
 - [Phase 10]: Phase 10 closed with a green whole-tree gate apart from the pre-existing, out-of-scope .planning/config.json format:check drift; UPDT-01/UPDT-02 complete. — Four type-member contract anchors were remapped, one outside the plan's named three-file scope, because it was masking the others every run; all four validated by re-deriving positions from the tool's own reported identity rather than transcribing guesses.
+- [Phase 01]: Pi 1.0 floor: pi-coding-agent peer >=1.0.0 (dev ^1.0.0); pi-subagents >=0.74.0 and pi-mcp-adapter >=5.0.0 are optional peers only, never installed (amended by D-04-12 and D-07-07: the adapter floor is now >=5.2.0)
+- [Phase 01]: dispatchRow reads the render map through a Readonly<Record<string, unknown>> view, so no-unsafe-enum-assignment is fixed in code with no rule override
+- [Phase 01]: One shared Pi ToolInfo seed (tests/platform/pi-inventory-seed.ts) replaces the three Pi-typed copies; ToolInventoryItem-typed helpers stay local
+- [Phase 01]: Strict Pi doubles state soft-dependency snapshots through expectSoftDepProbes (tests/edge/notification-boundary.ts), the one place that turns a snapshot into Pi reads, so the getCommands() read changes one function
+- [Phase 01]: pi-subagents peer tests share tests/integration/pi-subagents-peer.ts; the floor is semver.minVersion of the declared peer range, and an explicit PI_SUBAGENTS_ROOT that names no pi-subagents package fails instead of skipping
+- [Phase 01]: The MCP soft-dependency marker is {requires pi-mcp-adapter}, at the old member's Reason position; MCP marker assertions end at `}` or `,` so neither token passes on a prefix
+- [Phase 01]: pi-mcp-adapter counts as loaded by an extension command named mcp-adapter (optional :<digits> suffix, exact case), or by the sourceInfo.source of an extension command or of a tool containing pi-mcp-adapter; a bare mcp tool and Pi's built-in MCP do not count (ADET-02)
+- [Phase 01]: Both command arms require an extension command (source === extension), the name match and the pi-mcp-adapter sourceInfo.source match; a tool counts by its sourceInfo.source (ADET-02)
+- [Phase 01]: The e2e soft-dep matrix runs one install-and-list case per detection state and compares the whole reasons block of the plugin's installed row, so a missing row or an extra reason fails the case
+- [Phase 01]: Info names each companion a resolved row needs on a requires: line, stamped by the orchestrator from one softDepStatus snapshot and only formatted by the renderer
+- [Phase 01]: Pi 1.0 starts each stdio MCP server in its own process group and stops it on shutdown, so the RPC harness proves its clean-exit group sweep with a same-group sentinel child, not the stub MCP server's PID
+- [Phase 01]: Stop canary exit contract: a proven STOP-07 regression exits 2; the expected headless cap-trip-warning result and an inconclusive drive exit 1 (PIFL-07)
+- [Phase 01]: Every canary passed on Pi 1.0.0 / engine 3.13.1, so the upstream-failure path did not fire; BACKLOG and PIFL-07 text unchanged
+- [Phase 02]: MCP servers stage into <scopeRoot>/mcp-adapter.json, read with strip-json-comments (adapter grammar); unreadable files refuse with a cause-less McpConfigFileError
+- [Phase 02]: readMcpConfigDoc server keys are a non-empty tuple; plan 02-02 PI_MCP_SERVER_KEYS should match
+- [Phase 02]: Ancestor roots follow adapter 5.0.0: only a ~/ prefix expands; a bare ~ entry is skipped
+- [Phase 02]: The MCP collision walk exempts the plugin's own marked entries in every one of the nine sources
+- [Phase 02]: Unstage reads both mcp-adapter.json and the legacy mcp.json before writing either; adapter file written first
+- [Phase 02]: AFILE-06 carry-forward input is { ...ours, ...overlays }: a marker-less stub under the selected key wins over the plugin's previous marked entry
+- [Phase 02]: Entry content (substitution, carry-forward, marker) lives in bridges/mcp/adapter-entry.ts; the carried set is module-private and pinned by a vendored 34-key ServerEntry list tied to the >=5.0.0 floor
+- [Phase 02]: Install outcomes carry mcpConfigNotices in both modes (omitted when empty); only the standalone path sends them
+- [Phase 02]: A failed install restores the exact prior bytes of mcp-adapter.json through the replacement handle; a restore that cannot write is the mcp rollback partial
+- [Phase 02]: InstallMissingDependencyOutcome.mcpConfigNotices is excepted in the unused-type-member gate until reconcile reads it (plan 02-08 drops the row)
+- [Phase 02]: Update takes MCP notices only after commitPreparedMcp returns; a later bridge or finalize failure still carries them on the failed outcome
+- [Phase 02]: Direct update shows MCP notices after the cascade, and after the failure row plus accumulated cascade on a phase-3a abort
+- [Phase 02]: Reinstall's render none arm spreads notes, discoveryWarnings and mcpConfigNotices each only when non-empty
+- [Phase 02]: cascadeUnstagePlugin carries the MCP slot's notices on both arms; a later slot can fail after the MCP slot rewrote the file
+- [Phase 02]: Uninstall, prune and marketplace remove show MCP notices once after their rows, failure rows included; orchestrated uninstall and remove return them on the outcome
+- [Phase 02]: A rolled-back prune sends no MCP notice: its rollback-partial row names the rewritten file and the recovery backup keeps the commented original
+- [Phase 02]: UninstallPluginOutcome.mcpConfigNotices is excepted in the unused-type-member gate until reconcile reads it (plan 02-08 drops both rows)
+- [Phase 02]: Enable and disable carry MCP config notices in result types to the lock-holding helper, which sets a function-local sink before its config write and save, so a later throw still reports the rewrite
+- [Phase 02]: The enable cascade's undo (member or root) reports its unstage notices; the root ledger restores its own bytes when it throws and adds none
+- [Phase 02]: McpConfigNoticesCarrier.mcpConfigNotices is excepted in the unused-type-member gate until reconcile reads it (plan 02-08 drops the row)
+- [Phase 02]: Reconcile notices ride OutcomeBase.mcpConfigNotices; one surfaceMcpConfigNotices call follows surfacePostCommitWarnings, and the empty-reconcile return keeps RECON-05 silence
+- [Phase 02]: Import keeps its notice list module-private and strips it from ClaudeImportExecutionResult; the marketplace update cascade reads notices from updated and failed outcomes
+- [Phase 03]: Plugin MCP entries are keyed plugin_<plugin>_<server>_ by generatedMcpServerKey; state.json keeps declared names and cascade unstage maps keys back
+- [Phase 03]: Stamping warnings and override-kept notices name the generated server key
+- [Phase 03]: Hook matchers accept mcp__<server>__.* as a string server prefix (toolPrefixes on the tool-set arm); every other regex matcher still drops (MATCH-02)
+- [Phase 03]: translateMcpServer in domain/mcp-server-features.ts is the closed Claude Code server table; a server with no type is stdio, and every unnamed key is dropped
+- [Phase 03]: Plugin description resolves once in preflight: plugin.json first, then the marketplace entry; the unavailable arm never carries it
+- [Phase 03]: classifyMcpServer validates every server against compiled Claude Code 2.1.291 schemas; a blocked feature adds the typed mcpServers kind ({unsupported mcp}) with no note, and a schema-invalid config adds a "malformed mcp server" note that makes the plugin unavailable
+- [Phase 03]: Remote-only fields (headersHelper, tools, toolPermissions) are not features on a stdio server, because Claude strip-mode stdio schema drops them; alwaysLoad, bareElicitationCapability and discoveryCache must be booleans
+- [Phase 03]: MCP same-plugin key collisions refuse in keyedServers before readTargetConfig; folded cross-source refusals name the other key via McpServerCollisionError.definedAs
+- [Phase 03]: info shows plugin MCP servers as plugin:<plugin>:<server> on both arms; mcpServerDisplayName builds it and generatedMcpServerKey normalizes the same string
+- [Phase 03]: McpServerSummaryEntry.unsupportedFeature is a plain string: shared/ cannot import domain/
+- [Phase 03]: Agent MCP grants use the longest written-server Claude prefix; an empty or slash-holding tool part is never mapped (ANAME-02)
+- [Phase 03]: A per-tool disallow under a surviving whole-server mcp: grant warns rather than narrowing; async: true is warned, never injected (ANAME-02)
+- [Phase 03]: Plugin-set carried fields (only requestTimeoutMs today) belong to the plugin; carry-forward skips them and the marker lists their names as pluginSetFields
+- [Phase 03]: A field the previous marker lists as plugin-set comes from that marker's kept override, so the user's stub timeout applies again once the plugin drops its timeout
+- [Phase 03]: Write-back restores the kept override's own value for a field the live marker lists as plugin-set
+- [Phase 03]: docs/mcp-compatibility.md is the home of the MCP naming, tool search, length, lifecycle and divergence records; docs cite ANAME-0N, never D-03-NN
+- [Phase 03]: README.es.md carries the same MCP name table, partial-install text and agent MCP rule as README.md (.claude/rules/readme.md)
+- [Phase 04]: Plugin MCP entries translate first, then expand only Claude's five fields; references keep names only and the adapter encoding is a separate serializer
+- [Phase 04]: variables-missing notices derive from the per-server variable reports and carry names only; the row renders after override-kept
+- [Phase 04]: the credential deny-list is a verbatim 2.1.291 snapshot pinned by set digests and differential-fuzzed against the evidence code; mode-gated sets (Gqe, Voo, Gur, tRe) are omitted
+- [Phase 04]: a plain-field deny-listed variable unset at install is written as the split-token literal, never a kept reference, so a value set later cannot reach the server
+- [Phase 04]: A leading ~, ~/, ~\ or ${NAME:-~...} default in a stdio command or args blocks the server as command ~ / args ~ ({unsupported mcp}); remote url and headers never block
+- [Phase 04]: session_start reads ctx.cwd before and outside the session id's try, so adapter variables and the session triple fail independently (AVAR-01, NFR-2)
+- [Phase 04]: The pi-mcp-adapter optional peer is >=5.1.0 <6, pinned by the PIFL-03 gate and the AFILE-06 assertion (D-04-17)
+- [Phase 04]: info lists each written plugin MCP server's unset (no :- default) and withheld (deny-listed) variable names from the environment injected into createGetPluginInfo, as plugin:<plugin>:<server> (unset A; withheld C); left-out servers and the record arm show no lists (AVAR-04, AVAR-05)
+- [Phase 04]: The adapter conformance test finds pi-mcp-adapter only through PI_MCP_ADAPTER_ROOT; CI installs exactly pi-mcp-adapter@5.1.0 with --ignore-scripts into $RUNNER_TEMP, and the install line carries a zizmor adhoc-packages suppression because PIFL-03 keeps the peer out of every lockfile (AVAR-03, AVAR-05)
+- [Phase 04]: Every staging verb (install, update, reinstall, enable, import, reconcile) has an AVAR-04 case asserting its rows then both variable warnings; the import case runs the real install path
+- [Phase 05]: MCP migration step reads the manifest through lookupDeclaredPlugin (D-99-02a drift gate)
+- [Phase 05]: An unreadable mcp-adapter.json makes a movable owner's stage refuse: stopped row, legacy entries kept
+- [Phase 05]: Servers with tool permission rules install and warn; unenforcedToolRules re-checks the remote schema so a malformed server never gets the notice
+- [Phase 05]: Update takes the MCP stage notices right after its commit and appends the legacy removal's, so a removal throw still reports the adapter rewrite (AFILE-04)
+- [Phase 05]: An unparseable mcp.json gives no legacy names at prepare: install, enable, reinstall send no left-unchanged notice for it; update does
+- [Phase 05]: The reload migration passes the recorded-sha presence probe whenever the record has resolvedSha; resolveStrict calls it only for git sources
+- [Phase 05]: An unavailable offline resolve is source-unreadable unless its notes narrow to malformed mcp
+- [Phase 05]: Left-in-place rows sort by scope, plugin key, first old name; a file-unreadable row leads its scope
+- [Phase 05]: The migration unsupported removal cause is "unsupported-feature"; the partial-vocabulary guard forbids the bare literal
+- [Phase 05]: A failed mcp.json removal is an unfinished row only for a moving owner; disabled and malformed owners keep a stopped row
+- [Phase 06]: 06-01: the MCP status lookup keeps unrecognized apart from no-snapshot (both render status unknown) so the shadow token can tell whether a usable snapshot exists
+- [Phase 06]: 06-01: hand-built Pi harnesses that run the real factory carry an events bus, because the factory subscribes to pi-mcp-adapter/status/v1
+- [Phase 06]: Info decides the user-row MCP override from the project scope's installation record; under --scope user it reads it with persistMigration false and treats a failed read as not overriding
+- [Phase 06]: The MCP status conformance test builds the snapshot by hand in pi-mcp-adapter's shape, keyed by the names a real install wrote, because the adapter ships its snapshot builder only as TypeScript source
+- [Phase 07]: [mcp-4 Phase 7] The pi-mcp-adapter optional peer is >=5.2.0 <6 (MCP SDK 2.3.1 fixes GHSA-6qxp-vccf-f47h); cited adapter files are byte-identical to 5.1.0, so citations keep their line references and PI_MCP_ADAPTER_ROOT must now name a 5.2.0 install (D-07-07).
+- [Phase 07]: [mcp-4 Phase 7] scripts/pi.sh passes -e builtin:tool-search after --no-extensions so tool_search stays available; builtin:mcp stays off (D-07-05).
+- [Phase 07]: [mcp-4 Phase 7] Live canary routing: a contradicting observation (missing migration notice, missing fresh-install row, A1 token other than status unknown) exits 2; an unobservable drive exits 1
+- [Phase 07]: [mcp-4 Phase 7] The move from mcp.json to mcp-adapter.json takes exactly 1 reload on Pi 1.0.0 with pi-mcp-adapter 5.2.0, measured live by the mcp-adapter canary
+- [Phase 07]: [mcp-4 Phase 7] CHANGELOG [Unreleased] uses D-07-10 grouped bullets with no PR numbers and no version bump; the 0.20.0 offer is recorded for the PR (D-07-11)
+- [Phase 07]: [mcp-4 Phase 7] env-vars.md gives AI_AGENT its own footnote: Pi sets it at process start, so it has no spawn-order caveat
+- [Phase 07]: [mcp-4 Phase 7] PRD PI-11 (pi-subagents only) stays stale; D-07-14 scopes the PRD update to MCP mentions
+- [Phase 07]: [mcp-4 Phase 7] Both live-canary search routes run through one route driver; the --no-extensions probes are recorded, never asserted
+- [Phase 07]: [07-05] Upgrade notes give the old Pi tool name as <old-name>_<tool> (pi-mcp-adapter default server prefix; 0.19.2 entries carried no toolPrefix), not mcp__<old-name>__<tool>
+- [Phase 08]: Plugin-info clone groups removed by hoisting one shared fixture row, never suppressed (D-08-08)
+- [Phase 08]: info requires line counts only MCP servers the install writes (ADET-01)
+- [Phase 08]: D-08-05: a warm recorded-sha clone with no plugin at the declared path gets the source-outdated migration row, whose remedy is /claude:plugin update
+- [Phase 08]: A failed project stub probe keeps every staged owner's legacy entries with an unfinished row (NFR-2, NFR-3)
+- [Phase 08]: A stored MCP server choice is { plugin, marketplace, fields } under _piClaudeMarketplace.serverChoices; only the recording plugin@marketplace consumes it (D-08-02; marketplace added by review fix WR-02, 28a1bf0c)
+- [Phase 08]: Unstage keeps choices only in mcp-adapter.json; legacy mcp.json composes with withPluginServers
+- [Phase 08]: An override the user emptied leaves the file at unstage; a kept {} stub round-trips (AFILE-06)
+- [Phase 08]: D-08-05: reinstall treats a mirror whose HEAD cannot be read as unusable and materializes the recorded-sha clone; the reload migration's presence probe makes the same choice with file reads only
+- [Phase 08]: holdsBytes takes its read through an optional readMetadata restore op, so the lstat-read race and the rethrow are testable for 100% direct coverage
+- [Phase 08]: The agents and skills rollback marker sits above the throw in the else-if arm (bridges/agents/stage.ts:517): the first span line carries an eslint-disable-next-line directive, and a fallow marker above the directive does not hide the group.
+- [Phase 08]: dispatchRow keeps an unknown-valued view of the render map and casts the looked-up arm once; a typed RenderFn view fails tsc (function parameters are contravariant)
+- [Phase 08]: D-08-03: the adapter-loaded enable and import shapes are pinned by tests; SEV-01 kept, no renderer change
+- [Phase 08]: D-08-07: shared/own-key.ts (ownValue, setOwn) is the own-key helper every zone imports; isReservedRecordKey reserves only __proto__; marketplace add checks reserved and duplicate names in one helper (newMarketplaceName)
+- [Phase 08]: D-08-04 header cleanliness is checked on written values with the adapter's own reference regex; the split token is unclean even if its variable is set
+- [Phase 08]: A non-string written header value withdraws auth (defense in depth; the resolver marks it malformed)
+- [Phase 08]: An unparseable authServerMetadataUrl is malformed before any feature blocks
+- [Phase 08]: D-08-06 enable threading: env rides a module-private SetEnabledRunOptions bound once in createSetPluginEnabled; install-flow threads env positionally and via PromotionArgs
+- [Phase 08]: update-flow bundles hooksRouting, completionCache and env into a module-private UpdateBindings to stay within max-params 7 (D-08-06)
+- [Phase 08]: Own-key target resolution: resolveCrossScopePluginTarget and resolveInstalledMarketplaceTarget share one private explicit-scope helper (resolveExplicitScope) and one two-scope loader (loadBothScopes); the audit stays pass with no marker (D-08-07, D-08-08)
+- [Phase 08]: Stage tests that drive no variable pass env {}; process-environment AVAR-02 cases set and restore the variable through t.after
+- [Phase 08]: README prerequisites name the pi-subagents 0.74.0 floor; per-scope choice storage is recorded as a User choices divergence (D-08-02)
+- [Phase 08]: Own-key install, enable, disable and uninstall: test Proxies that fake a record answer getOwnPropertyDescriptor, and ones that drop a write trap defineProperty, because ownValue and setOwn bypass get and set (D-08-07)
+- [Phase 08]: Reinstall, update and list read state records by own key; the reinstalled record is written with setOwn (D-08-07)
+- [Phase 08]: Reconcile, import, config write-back and marketplace modules read by own key and write config maps with setOwn; mcp-migration imports the shared ownValue (D-08-07)
+- [Phase 08]: End-to-end reserved-name proof runs the registered /claude:plugin handler and the real applyReconcile in a hermetic home; install __proto__@<mp> is refused at the closure root-key token rule as (failed) {invalid manifest}, and the resolver's (unavailable) {unsupported source} row surfaces through list
+- [Phase 08]: The MCP bridge keeps one isPlainObject, exported from bridges/mcp/marker.ts (a module with no sibling imports); the ENOTDIR-as-absent change in stage.ts readOptionalBytes is declined because such a stage throws before it records a prior file
+- [Phase 08]: Every Phase 1-7 review ledger is closed by hand with open: 0; fixed rows cite commits, wontfix rows carry reasons, and ledgers holding wontfix note the code-review parser reads it as open (DEBT-02)
+- [Phase 08]: Broken-windows entry 90 (misleading dependency cause for an invalid root plugin name) is carried by BACKLOG ROOTKEY-01 and waived in the ledger; code unchanged
 
 ### Pending Todos
 
-Four open decisions carried by the v1.20 roadmap, each bound to the discuss
-session that must settle it:
+The mcp-4 open decisions were settled in their discuss sessions; the list is
+in the archived roadmap, `milestones/mcp-4-ROADMAP.md`, under "Open decisions". Two prerequisites gate
+planning:
 
-1. **Version-constraint grammar (RESV-03) — Phase 3 discuss.** No semver library
-   is in the dependency tree and PL-5 compares versions as strings deliberately.
-   Add a dependency or document a constraint subset with a stated refusal.
-2. **Where a dependency-installed plugin stands relative to
-   `claude-plugins.json` — Phase 3 discuss.** `buildUninstallBucket`
-   (`orchestrators/reconcile/plan.ts:352`) uninstalls every recorded plugin the
-   merged config does not name, so a cascade install must be reconciled with that
-   config or it vanishes on the next `/reload`.
-3. **Stale-record wording and recovery command (PROV-04) — Phase 4 discuss.**
-   MIGR-01's own unresolved design question, scoped to the "stale state, absent
-   config" message. Answer that much only.
-4. **`--prune`'s value on the reconcile path — Phase 5 discuss.**
-   `applyPluginUninstalls()` carries no command line and takes the default.
+1. Done 2026-10-06: Phase 3 measured the tool-name length (Pi has no limit,
+   D-03-17) and confirmed the Claude plugin tool form.
+2. Done 2026-10-07: 04/ planned against a threat model (secrets on disk, the
+   credential deny-list, shell execution through a leading `!`); `04-SECURITY.md`
+   reads `threats_open: 0`.
+
+The four v1.20 discuss-bound decisions this list used to carry are closed:
+the archived v1.20 roadmap marks three as settled, and RESV-03, the fourth,
+is complete in the archived v1.20 requirements.
 
 ### Blockers/Concerns
 
@@ -587,8 +802,7 @@ See [task summary](./milestones/any-git-host-quick/260917-hfp-clear-the-phase-5-
 
 | #          | Description                                                                                                 | Date       | Commit   | Directory                                                                                            |
 | ---------- | ----------------------------------------------------------------------------------------------------------- | ---------- | -------- | ---------------------------------------------------------------------------------------------------- |
-| 261006-cwq | Pin workflow engine 3.13.1 and update compatibility notes after upstream PRs #233/#234 shipped | 2026-10-06 | e0b0abac | [261006-cwq-update-workflow-engine-compatibility-doc](./quick/261006-cwq-update-workflow-engine-compatibility-doc/) |
-| 261006-kr1 | Adopt workflow engine 3.14.0: mirror PI_CODING_AGENT_DIR storage root and bump pins | 2026-10-06 | 6129e7bd | [261006-kr1-adopt-workflow-engine-3-14-0-mirror-pi-c](./quick/261006-kr1-adopt-workflow-engine-3-14-0-mirror-pi-c/) |
+| 261010-cfi | Accept Node 24 and 26 EISDIR text in mcp-migration test | 2026-10-10 | e34cec12 | [261010-cfi-accept-node-24-and-26-eisdir-text-in-mcp](./quick/261010-cfi-accept-node-24-and-26-eisdir-text-in-mcp/) |
 
 ## Deferred Items
 
@@ -679,11 +893,71 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** v1.20 archived; awaiting next milestone
+**Stopped at:** Phase 08 complete — all phases complete
 
 **Resume file:** None
 
-Last session: 2026-09-24
+Last session: 2026-10-10T07:19:12.527Z
+Phase 7 closed: 5/5 plans; Nyquist validated; security verified (0 open);
+review 8/8 fixed; verifier 3/3, re-running the live canary against
+pi-mcp-adapter 5.2.0. `/gsd-autonomous --from 7` ran the transition, then
+the milestone lifecycle. Phases 1-6 read `stale` (later phases edited
+covered source files); scoped re-verification at 51ebbc07 passed all six
+(1b1e39a3). The audit (488bec50) reads `tech_debt`: 36/36 requirements,
+integration 6/6, flows 6/6. The operator stopped the lifecycle to address
+the debt first; complete-milestone, UAT and cleanup have not run. PR
+blocker: `npx fallow audit` against the main merge-base reads `warn`
+(14 clone groups). Resume: clear the debt, then
+`/gsd-complete-milestone mcp-4`.
+
+Previous session: 2026-10-09T22:57:15.140Z
+Phase 6 closed in the same `/gsd-autonomous --from 5 --interactive` run.
+Gates: discuss (4 areas + 3 post-research rulings), research, 3 plans in 3
+waves executed sequentially; Nyquist compliant; security 12/12 closed;
+review WR-01 (snapshot getter swap) fixed in 03a4104e, IN-01/02 open;
+`npm run check` green on 03c50f3a and on 3aafdfe3; verifier 10/10 passed.
+Nothing skipped. Resume: `/clear`, then `/gsd-autonomous --from 7
+--interactive` (Phase 7 discuss is next; its criterion 2 carries the
+deferred-session `status unknown` live check, D-06-06a). Out-of-scope
+note from review: `record.plugins[name]` lookups lack an own-property
+check (`info constructor@mp`), pre-existing — candidate BACKLOG item.
+
+Previous session: 2026-10-09
+Phase 5 closed in `/gsd-autonomous --from 5 --interactive`, sequential on this
+checkout. Gates: 5/5 plans; Nyquist validated; security 20/20 closed; the
+review-fix loop converged clean at iteration 3 (WR-01..04 fixed, 8 info open,
+see 05-REVIEW-DISPOSITION.md); `npm run check` green on 163921cd; verifier
+4/4, human item accepted by the operator, with one change (home-relative
+collision source, 79e71b25); `npm run check` re-run on 6f4d2d7c. Nothing
+skipped. Open operator items carried from the pause handoff (non-blocking):
+recreate the user-scope plugin record (`~/.pi/agent/pi-claude-marketplace/
+state.json` was moved aside to `state.json.broken-20261008`; run `/reload` or
+reinstall plugin-dev@claude-plugins-official in Pi), and decide whether
+`openUi` joins the D-02-06 carried-field set.
+
+Previous session: 2026-10-08T16:32:35.854Z
+Phase 4 closed in `/gsd-autonomous --from 4 --interactive`, run sequentially on
+this checkout (`~/src/pi-claude-marketplace-mcp-4`, branch `features/mcp-4`).
+Gates: 9/9 plans; `npm run check` green on 63ad2116 and again on 1629bac1
+(Node v26.10.0, PI_MCP_ADAPTER_ROOT set); Nyquist validated; security 29/29
+closed; code review fix loop closed WR-01..07 (8 info open, see
+04-REVIEW-DISPOSITION.md); verifier 5/5, human items accepted by the operator
+(row shapes filed as MCPROW-01). Nothing skipped. Environment: the
+pi-mcp-adapter 5.1.0 scratch install lives at /var/tmp/mcp4-p4-08/adapter.
+
+Previous session: 2026-10-07T20:00:03.309Z
+Phase 3 closed. Gates: Nyquist validation (23/23 green), security (20/20
+threats closed), code review (0 critical, 5 warnings, 5 info, all `open`),
+regression gate (`npm run check` green on d6029660, Node v26.10.0), verifier
+`human_needed` with four operator decisions, UAT 4/4 pass, verification
+canonicalized to `passed`. Before the PR: the fallow audit verdict is `warn`
+(WR-05), and the Lint `fallow-audit` job fails on it.
+
+Previous session: 2026-10-06T19:56:52.100Z
+The mcp-4 roadmap was created: 7 phases, 36/36 requirements mapped, phase
+numbering reset to 1. No phase directories exist yet.
+
+Previous session: 2026-09-24
 v1.20 is archived. All 12 phases and 45 requirements are complete. The clean
 committed tree passed the full gate. The Phase 3 private-repository credential
 challenge remains deferred to later UAT and acknowledged in the audit. The
@@ -817,4 +1091,8 @@ The workstream archive removed the old routing blocker.
 
 ## Operator Next Steps
 
-- Start the next milestone with $gsd-new-milestone
+- Run the mcp-4 UAT check (`/gsd-audit-uat`), then `/gsd-cleanup` to archive
+  the phase directories to `milestones/mcp-4-phases/`.
+- Offer the 0.20.0 version bump (D-07-11), add the CHANGELOG lines for the
+  debt-clearing changes, and open the mcp-4 PR.
+- After the merge, start the next milestone with `/gsd-new-milestone`.

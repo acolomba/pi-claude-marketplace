@@ -25,6 +25,7 @@ import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import { notifyWithContext, type MarketplaceRows } from "../../shared/notify-context.ts";
+import { ownValue } from "../../shared/own-key.ts";
 
 import { LIST_CONTEXT } from "./list.messaging.ts";
 
@@ -60,7 +61,7 @@ export async function listMarketplaces(opts: ListMarketplacesOptions): Promise<v
     const state = await loadState(locations.extensionRoot);
     // SPLIT-01 rewire: autoupdate lives in claude-plugins.json (config).
     // Pre-compute the merged view ONCE per scope; the inner loop reads
-    // `merged.marketplaces[name]?.entry.autoupdate` for each record.
+    // `ownValue(merged.marketplaces, name)?.entry.autoupdate` for each record.
     // eslint-disable-next-line no-await-in-loop -- at most two scopes, one config read each
     const { merged } = await loadMergedScopeConfig(locations);
     for (const record of Object.values(state.marketplaces)) {
@@ -79,7 +80,7 @@ export async function listMarketplaces(opts: ListMarketplacesOptions): Promise<v
       //   Reload-hint is computed by notify (list surface emits none).
       // - Reference: catalog UAT `mixed-scopes` fixture (binding
       //   `<autoupdate>` + `<last-updated <iso>>` tokens).
-      const autoupdate = merged.marketplaces[record.name]?.entry.autoupdate ?? false;
+      const autoupdate = ownValue(merged.marketplaces, record.name)?.entry.autoupdate ?? false;
       marketplaces.push({
         name: record.name,
         scope: record.scope,

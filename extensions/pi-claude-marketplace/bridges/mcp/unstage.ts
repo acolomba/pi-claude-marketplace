@@ -1,106 +1,228 @@
 // bridges/mcp/unstage.ts
 //
-// MC-7 unstage for the MCP bridge. Reads the scope's `mcp.json`, drops
-// every entry whose `_piClaudeMarketplace` marker matches the supplied
-// `(plugin, marketplace)` tuple, atomic-writes the reduced doc, and
-// returns the names that were removed.
+// MC-7 unstage for the MCP bridge. Reads the scope's `mcp-adapter.json`
+// with pi-mcp-adapter's grammar, drops every entry whose
+// `_piClaudeMarketplace` marker matches the supplied `(plugin, marketplace)`
+// tuple under either server key, atomic-writes the reduced doc, and returns
+// the names that were removed (AFILE-01). A marker-less entry under one of
+// the plugin's names stays: it is user-authored. An owned entry whose marker
+// keeps a user override is replaced by that override, marker-less, in place.
+// Each carried field the override holds takes the entry's value, so a later
+// `/mcp-adapter enable` or `disable` wins. A carried field the override lacks
+// is not added, so a value the plugin's entry declares stays out of it
+// (AFILE-01, AFILE-06). In the adapter file, the same write stores each
+// removed entry's other user choices under the top-level
+// `_piClaudeMarketplace.serverChoices` member, for the plugin's next stage of
+// that key (D-08-02).
 //
-// MC-7 tolerances:
-//   - Missing `mcp.json` (ENOENT/ENOTDIR) -> noop. Must NOT materialize
-//     the file just to write an empty one back.
-//   - Missing `mcpServers` field on an otherwise-valid scoped doc ->
-//     noop. The doc keeps its other top-level fields.
-//   - Nothing to remove (no entries match the tuple) -> noop. We do NOT
-//     re-write the file in that case (PRD §5.7 quiet-on-noop).
+// The scope's legacy `mcp.json` holds entries written before the bridge moved
+// to `mcp-adapter.json`. Unstage removes the plugin's entries there too, by
+// marker and under `mcpServers` only, the key Pi's `mcp.json` holds. Both
+// files are read before either is written, so a refusal on either file
+// leaves both unchanged. The adapter file is written first. A crash between
+// the two writes leaves the legacy entries for the next unstage to remove
+// (NFR-3). The writer drops JSONC comments, so each rewritten file whose
+// bytes held comments yields a `comments-dropped` notice (AFILE-04), followed
+// by one `override-restored` notice per kept override the file gets back
+// (AFILE-06). Each rewritten file is returned with the exact bytes written to
+// it, so a prune rollback can tell its own rewrite from a later edit (NFR-3).
+// When the legacy write fails after the adapter file was rewritten, a typed
+// `McpUnstagePartialError` carries the adapter file's notices and written
+// bytes, so the caller can still report and recognize them. Its removed names
+// leave out any name the legacy file still holds (TR-03).
 //
-// A present non-object `mcpServers` field is refused through stage.ts's
-// shared classifier before enumeration or mutation.
+// MC-7 tolerances, per file (no write):
+//   - Missing file (ENOENT/ENOTDIR). Must NOT materialize the file just to
+//     write an empty one back.
+//   - No server key on an otherwise-valid doc.
+//   - Nothing to remove (no entries match the tuple). We do NOT re-write
+//     the file in that case (PRD §5.7 quiet-on-noop).
+//   - A non-object top level: no server in it can be ours, and the user's
+//     structure is none of the unstage path's business.
 //
-// Malformed scoped JSON propagates as a parse error rather than being
-// silently overwritten, mirroring the conservative behavior we want for
-// destructive-shaped operations: when the user-visible file is broken,
-// surface the breakage rather than mask it.
-
-import { readFile } from "node:fs/promises";
+// Refusals (typed `McpConfigFileError`, no write to either file): invalid
+// JSONC, and a present server key whose value is not an object. When the
+// user-visible file is broken, unstage surfaces the breakage rather than mask
+// it (AFILE-02).
 
 import { atomicWriteJson } from "../../shared/atomic-json.ts";
-import { errorMessage } from "../../shared/errors.ts";
+import {
+  McpConfigFileError,
+  McpUnstagePartialError,
+  type McpWrittenFile,
+} from "../../shared/errors-bridges.ts";
 
-import { isOwnedBy } from "./marker.ts";
-import { safeSet } from "./safe-set.ts";
-import { classifyMcpServers } from "./stage.ts";
+import {
+  ADAPTER_SERVER_KEYS,
+  PI_MCP_SERVER_KEYS,
+  partitionServers,
+  readMcpConfigDoc,
+  restoredOverrideNames,
+  withPluginServers,
+  withPluginServersKeepingChoices,
+  type McpConfigDoc,
+  type McpServerKey,
+} from "./adapter-doc.ts";
 
-import type { RawMcpDoc, UnstageMcpInput, UnstageMcpResult } from "./types.ts";
+import type { UnstageMcpInput, UnstageMcpResult } from "./types.ts";
+import type {
+  McpConfigFileNotice,
+  McpConfigNotice,
+  McpOverrideRestoredNotice,
+} from "../../shared/notification-dispatch.ts";
+import type { Scope } from "../../shared/types.ts";
 
-const EMPTY_RESULT: UnstageMcpResult = {
-  removedNames: Object.freeze<string[]>([]),
-  warnings: Object.freeze<string[]>([]),
-};
+/** One config file and the plugin's entries in it. */
+interface UnstageTarget {
+  readonly file: McpConfigNotice["file"];
+  readonly filePath: string;
+  readonly config: McpConfigDoc;
+  readonly ownedNames: readonly string[];
+}
 
-export async function unstageMcpServers(input: UnstageMcpInput): Promise<UnstageMcpResult> {
-  const { locations, marketplaceName, pluginName } = input;
-
-  let text: string;
+async function readUnstageTarget(
+  file: McpConfigNotice["file"],
+  filePath: string,
+  serverKeys: readonly [McpServerKey, ...McpServerKey[]],
+  pluginName: string,
+  marketplaceName: string,
+): Promise<UnstageTarget | undefined> {
+  let config: McpConfigDoc;
   try {
-    text = await readFile(locations.mcpJsonPath, "utf8");
+    config = await readMcpConfigDoc(filePath, serverKeys);
   } catch (err) {
-    const code = (err as NodeJS.ErrnoException).code;
-    if (code === "ENOENT" || code === "ENOTDIR") {
-      // MC-7: missing file is a clean noop -- nothing to remove, nothing
-      // to materialize.
-      return EMPTY_RESULT;
+    if (err instanceof McpConfigFileError && err.defect === "top-level-not-object") {
+      return undefined;
     }
 
     throw err;
   }
 
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(text);
-  } catch (err) {
-    throw new Error(`malformed JSON at ${locations.mcpJsonPath}: ${errorMessage(err)}`, {
-      cause: err,
-    });
-  }
+  // `ours` lists the selected key's entries first, each map in file order.
+  const ownedNames = Object.keys(partitionServers(config, pluginName, marketplaceName).ours);
+  return ownedNames.length === 0 ? undefined : { file, filePath, config, ownedNames };
+}
 
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    // Top-level non-object: treat as having no servers to unstage. We do
-    // NOT rewrite the file here because the user's existing structure --
-    // even if non-conforming -- is none of the unstage path's business.
-    return EMPTY_RESULT;
-  }
+function removedNamesOf(targets: readonly UnstageTarget[]): readonly string[] {
+  return Object.freeze([...new Set(targets.flatMap((target) => target.ownedNames))]);
+}
 
-  const doc = parsed as RawMcpDoc;
-  const classification = classifyMcpServers(doc, locations.mcpJsonPath);
-  if (classification.kind === "missing") {
-    return EMPTY_RESULT;
-  }
+/** The owner of the entries an unstage removes, and the scope it writes. */
+interface UnstageOwner {
+  readonly pluginName: string;
+  readonly marketplaceName: string;
+  readonly scope: Scope;
+}
 
-  const existing = classification.servers;
+/**
+ * The notices for one rewritten file: its `comments-dropped` notice when the
+ * read bytes held comments (AFILE-04), then one `override-restored` notice per
+ * kept override it gets back (AFILE-06).
+ */
+function targetNotices(target: UnstageTarget, owner: UnstageOwner): McpConfigNotice[] {
+  const { scope } = owner;
+  const commentsDropped: McpConfigFileNotice[] = target.config.hadComments
+    ? [{ kind: "comments-dropped", scope, file: target.file }]
+    : [];
+  const restored = restoredOverrideNames(
+    target.config,
+    owner.pluginName,
+    owner.marketplaceName,
+  ).map((server): McpOverrideRestoredNotice => ({
+    kind: "override-restored",
+    scope,
+    file: target.file,
+    server,
+  }));
+  return [...commentsDropped, ...restored];
+}
 
-  const removed: string[] = [];
-  const kept: Record<string, unknown> = {};
-  for (const [name, value] of Object.entries(existing)) {
-    if (isOwnedBy(value, pluginName, marketplaceName)) {
-      removed.push(name);
-    } else {
-      // safeSet copies a foreign server literally named `__proto__` as an own
-      // data property rather than routing it through the inherited setter (which
-      // would silently drop the user's entry) -- WR-01.
-      safeSet(kept, name, value);
+function noticesOf(
+  targets: readonly UnstageTarget[],
+  owner: UnstageOwner,
+): readonly McpConfigNotice[] {
+  return Object.freeze(targets.flatMap((target) => targetNotices(target, owner)));
+}
+
+/**
+ * Writes each target in order and returns the bytes written to each file. A
+ * failure after an earlier write succeeded throws `McpUnstagePartialError`
+ * describing the rewritten files (AFILE-04, NFR-3).
+ */
+async function writeUnstageTargets(
+  targets: readonly UnstageTarget[],
+  owner: UnstageOwner,
+): Promise<readonly McpWrittenFile[]> {
+  const writtenTargets: UnstageTarget[] = [];
+  const writtenFiles: McpWrittenFile[] = [];
+  for (const target of targets) {
+    let bytes: Buffer;
+    try {
+      // D-08-02: only the adapter file keeps the removed entries' choices.
+      const compose =
+        target.file === "mcp-adapter.json" ? withPluginServersKeepingChoices : withPluginServers;
+      // eslint-disable-next-line no-await-in-loop -- a failed write reports only the files written before it
+      bytes = await atomicWriteJson(
+        target.filePath,
+        compose(target.config, owner.pluginName, owner.marketplaceName, {}),
+      );
+    } catch (err) {
+      if (writtenTargets.length === 0) {
+        throw err;
+      }
+
+      // TR-03: a name the plugin also owns in a file not rewritten is still
+      // live there, so it is not reported as removed.
+      const stillOwned = new Set(
+        targets.slice(writtenTargets.length).flatMap((unwritten) => unwritten.ownedNames),
+      );
+      throw new McpUnstagePartialError(
+        removedNamesOf(writtenTargets).filter((name) => !stillOwned.has(name)),
+        noticesOf(writtenTargets, owner),
+        writtenFiles,
+        { cause: err },
+      );
     }
+
+    writtenTargets.push(target);
+    writtenFiles.push({ path: target.filePath, bytes });
   }
 
-  if (removed.length === 0) {
-    // PRD §5.7 / D-04: don't rewrite the file when there's nothing to
-    // remove. The mtime-stable invariant is what tests rely on.
-    return EMPTY_RESULT;
-  }
+  return Object.freeze(writtenFiles);
+}
 
-  await atomicWriteJson(locations.mcpJsonPath, { ...doc, mcpServers: kept });
+/**
+ * Removes the plugin's entries from the scope's `mcp-adapter.json` and legacy
+ * `mcp.json`, and returns the removed names with the notices and bytes written.
+ */
+export async function unstageMcpServers(input: UnstageMcpInput): Promise<UnstageMcpResult> {
+  const { locations, marketplaceName, pluginName } = input;
+
+  const adapterTarget = await readUnstageTarget(
+    "mcp-adapter.json",
+    locations.mcpAdapterJsonPath,
+    ADAPTER_SERVER_KEYS,
+    pluginName,
+    marketplaceName,
+  );
+  const legacyTarget = await readUnstageTarget(
+    "mcp.json",
+    locations.mcpJsonPath,
+    PI_MCP_SERVER_KEYS,
+    pluginName,
+    marketplaceName,
+  );
+
+  // PRD §5.7 / D-04: a file with nothing to remove is not rewritten. The
+  // mtime-stable invariant is what tests rely on.
+  const targets = [adapterTarget, legacyTarget].filter((target) => target !== undefined);
+  const owner: UnstageOwner = { pluginName, marketplaceName, scope: locations.scope };
+  const written = await writeUnstageTargets(targets, owner);
 
   return {
-    removedNames: Object.freeze([...removed]),
+    removedNames: removedNamesOf(targets),
     warnings: Object.freeze<string[]>([]),
+    notices: noticesOf(targets, owner),
+    written,
   };
 }

@@ -76,13 +76,14 @@ const COMMAND_DESCRIPTION =
   "uninstall, prune, list, import, update, and reinstall plugins from configured marketplaces.";
 
 /**
- * Wire the `/claude:plugin` slash command + the TC-7 autocomplete
+ * Wires the `/claude:plugin` slash command + the TC-7 autocomplete
  * normalization onto `pi`. Idempotency: Pi's extension API does NOT
  * dedupe; callers MUST invoke this exactly once per session lifecycle
  * (`index.ts` is the single call site).
  *
  * `deps.gitOps` and `deps.beginPluginUpdateRun` are threaded into the marketplace
- * add/update/remove handlers per D-04 EdgeDeps.
+ * add/update/remove handlers per D-04 EdgeDeps. `deps.mcpStatus` is threaded
+ * into the plugin info handler (ASTAT-01).
  */
 export function registerClaudePluginCommand(
   pi: ExtensionAPI,
@@ -94,7 +95,7 @@ export function registerClaudePluginCommand(
   const install = makeInstallHandler(pi, hooksRouting, deps.completionCache);
   const uninstall = makeUninstallHandler(pi, hooksRouting, deps.completionCache);
   const prune = makePruneHandler(pi, hooksRouting, deps.completionCache);
-  const pluginInfo = makePluginInfoHandler(pi);
+  const pluginInfo = makePluginInfoHandler(pi, deps.mcpStatus);
   const enable = makeEnableDisableHandler(pi, true, hooksRouting);
   const disable = makeEnableDisableHandler(pi, false, hooksRouting);
   const list = makeListHandler(pi);
@@ -168,7 +169,7 @@ export function registerClaudePluginCommand(
 }
 
 /**
- * Wire the two read-only LLM tools (`pi_claude_marketplace_list` +
+ * Wires the two read-only LLM tools (`pi_claude_marketplace_list` +
  * `pi_claude_marketplace_plugin_list`) onto `pi`. Same idempotency
  * contract as the slash command -- called exactly once.
  */

@@ -100,9 +100,10 @@ import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { parsePluginSource } from "../../domain/source.ts";
 import { isRecordedButDisabled, toDisabledRecord } from "../../persistence/state-io.ts";
+import { ownValue, setOwn } from "../../shared/own-key.ts";
 import { runPhases } from "../../transaction/phase-ledger.ts";
 import { DEFAULT_CREDENTIAL_OPS } from "../auth-host.ts";
-import { cascadeUnstagePlugin } from "../marketplace/shared.ts";
+import { cascadeUnstagePlugin, foldUnstageNotices } from "../marketplace/shared.ts";
 
 import { probeDependencyTags } from "./dependency-tag-probe.ts";
 import { runInstallLedger } from "./install-outcome.ts";
@@ -132,6 +133,7 @@ import type { GitBackedSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState, PluginInstallRecord } from "../../persistence/state-io.ts";
 import type { RemoteTag } from "../../platform/git.ts";
+import type { McpConfigNotice } from "../../shared/notification-dispatch.ts";
 import type { Phase, RollbackPartial, RunPhasesResult } from "../../transaction/phase-ledger.ts";
 
 /** Materialization operations the cascade drives, injectable for fault tests. */
@@ -499,6 +501,8 @@ export type InstallCascadeResult =
        * to make.
        */
       readonly alreadyInstalled: readonly CascadeSkippedMember[];
+      /** AFILE-04: every member's MCP config file notices, in member order. */
+      readonly mcpConfigNotices: readonly McpConfigNotice[];
     }
   | { readonly kind: "marketplace-absent" }
   | {
@@ -511,6 +515,13 @@ export type InstallCascadeResult =
       readonly key: string;
       readonly error: Error;
       readonly rollbackPartials: readonly RollbackPartial[];
+      /**
+       * AFILE-04: the notices of the members that committed before the
+       * failure, then those of their undo. The undo unstages from the
+       * rewritten file rather than restoring its bytes, so removed comments
+       * stay removed.
+       */
+      readonly mcpConfigNotices: readonly McpConfigNotice[];
     };
 
 /** Mutable ledger context: what the phases record as they run. */
@@ -521,6 +532,8 @@ interface CascadeRun {
   readonly members: CascadeMemberOutcome[];
   /** Keys THIS run materialized, and the only keys an `undo` may touch. */
   readonly materialized: Set<string>;
+  /** AFILE-04: each materialized member's MCP config file notices. */
+  readonly mcpConfigNotices: McpConfigNotice[];
 }
 
 /**
@@ -580,7 +593,7 @@ async function resolveMemberTagSource(
 ): Promise<MemberTagSource> {
   const lookup =
     options.marketplaceRecordFor ??
-    ((marketplace: string) => Promise.resolve(options.state.marketplaces[marketplace]));
+    ((marketplace: string) => Promise.resolve(ownValue(options.state.marketplaces, marketplace)));
   const record = await lookup(member.marketplace);
   if (record === undefined) {
     return { kind: "absent" };
@@ -763,7 +776,7 @@ async function resolveOneMember(
  * version the check never saw would be the worst of both.
  */
 function recordedVersionOf(state: ExtensionState, member: ClosureMember): string | undefined {
-  return state.marketplaces[member.marketplace]?.plugins[member.name]?.version;
+  return ownValue(ownValue(state.marketplaces, member.marketplace)?.plugins, member.name)?.version;
 }
 
 /**
@@ -786,7 +799,7 @@ function disabledRecordOf(
     return undefined;
   }
 
-  const record = state.marketplaces[member.marketplace]?.plugins[member.name];
+  const record = ownValue(ownValue(state.marketplaces, member.marketplace)?.plugins, member.name);
   return record !== undefined && isRecordedButDisabled(record) ? record : undefined;
 }
 
@@ -919,6 +932,34 @@ async function resolveMemberConstraints(
 }
 
 /**
+ * Records a member whose ledger just materialized it: the key an `undo` may
+ * touch, its MCP config notices (AFILE-04), and its outcome as its own ledger
+ * summary reports it. `origin` holds the two facts the summary cannot know.
+ */
+function recordMaterializedMember(
+  run: CascadeRun,
+  member: ClosureMember,
+  summary: InstallLedgerSummary,
+  origin: Pick<CascadeMemberOutcome, "fellBackToCurrentCopy" | "reEnabledFromRecord">,
+): void {
+  run.materialized.add(member.key);
+  run.mcpConfigNotices.push(...summary.mcpConfigNotices);
+  run.members.push({
+    key: member.key,
+    name: member.name,
+    marketplace: member.marketplace,
+    requiredBy: member.requiredBy,
+    version: summary.version,
+    declaresAgents: summary.stagedAgentNames.length > 0,
+    declaresMcp: summary.stagedMcpServerNames.length > 0,
+    declaresWorkflows: summary.stagedWorkflowNames.length > 0,
+    pluginRoot: summary.resolved.pluginRoot,
+    hooksConfigPath: summary.resolved.hooksConfigPath,
+    ...origin,
+  });
+}
+
+/**
  * One member's phase.
  *
  * `undo` is gated on `run.materialized` so it can only reach an install THIS
@@ -957,18 +998,7 @@ function buildMemberPhase(
         throw new Error(`Marketplace "${member.marketplace}" is not added.`);
       }
 
-      run.materialized.add(member.key);
-      run.members.push({
-        key: member.key,
-        name: member.name,
-        marketplace: member.marketplace,
-        requiredBy: member.requiredBy,
-        version: result.summary.version,
-        declaresAgents: result.summary.stagedAgentNames.length > 0,
-        declaresMcp: result.summary.stagedMcpServerNames.length > 0,
-        declaresWorkflows: result.summary.stagedWorkflowNames.length > 0,
-        pluginRoot: result.summary.resolved.pluginRoot,
-        hooksConfigPath: result.summary.resolved.hooksConfigPath,
+      recordMaterializedMember(run, member, result.summary, {
         fellBackToCurrentCopy: member.fellBackToCurrentCopy ?? false,
         reEnabledFromRecord: false,
       });
@@ -977,38 +1007,74 @@ function buildMemberPhase(
       }
     },
     undo: async (run) => {
-      if (!run.materialized.has(member.key)) {
+      const unstaged = await unstageMaterializedMember(options, seam, run, member);
+      if (unstaged === undefined) {
         return;
-      }
-
-      const marketplaceRecord = options.state.marketplaces[member.marketplace];
-      const installed = marketplaceRecord?.plugins[member.name];
-      if (marketplaceRecord === undefined || installed === undefined) {
-        return;
-      }
-
-      const outcome = await seam.cascadeUnstagePlugin(
-        member.name,
-        member.marketplace,
-        options.locations,
-        installed,
-      );
-      if (!outcome.ok) {
-        // The primitive REPORTS rather than throws -- its whole body is a
-        // try/catch returning `{ok: false, dropped, cause}` -- and the ledger's
-        // only partial-rollback channel is a throw. Discarding this outcome
-        // reports a cascade that unwound cleanly while the member's artifacts
-        // are still on disk, so convert it. Subtracting what DID drop first
-        // keeps the record honest about what remains (NFR-3), and the record is
-        // deliberately NOT deleted: it is what still owns those artifacts.
-        applyPartialCascadeFold(installed, outcome.dropped);
-        throw outcome.cause ?? new Error(`Rollback of "${member.key}" did not complete.`);
       }
 
       // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- `plugins` is a Record<string, ...> keyed by the member's own token-checked plugin name.
-      delete marketplaceRecord.plugins[member.name];
+      delete unstaged.marketplaceRecord.plugins[member.name];
     },
   };
+}
+
+/**
+ * The unstage both member undos share. Returns the member's marketplace slot
+ * and record once its artifacts are off disk, or `undefined` when this run
+ * did not materialize the member or the snapshot no longer records it.
+ *
+ * AFILE-04: the unstage rewrites the MCP config files again, and its notices
+ * join the run's even when a later slot then fails. AVAR-04: the variable
+ * notices of the servers it removed leave the run's list.
+ *
+ * The primitive REPORTS rather than throws -- its whole body is a try/catch
+ * returning `{ok: false, dropped, cause}` -- and the ledger's only
+ * partial-rollback channel is a throw. Discarding a failed outcome reports a
+ * cascade that unwound cleanly while the member's artifacts are still on
+ * disk, so convert it. Subtracting what DID drop first keeps the record honest
+ * about what remains (NFR-3), and the record is deliberately NOT deleted or
+ * disabled: it is what still owns those artifacts.
+ */
+async function unstageMaterializedMember(
+  options: InstallCascadeOptions,
+  seam: InstallCascadeLedgerSeam,
+  run: CascadeRun,
+  member: Pick<ClosureMember, "key" | "name" | "marketplace">,
+): Promise<
+  | {
+      readonly marketplaceRecord: ExtensionState["marketplaces"][string];
+      readonly installed: PluginInstallRecord;
+    }
+  | undefined
+> {
+  if (!run.materialized.has(member.key)) {
+    return undefined;
+  }
+
+  const marketplaceRecord = ownValue(options.state.marketplaces, member.marketplace);
+  const installed = ownValue(marketplaceRecord?.plugins, member.name);
+  if (marketplaceRecord === undefined || installed === undefined) {
+    return undefined;
+  }
+
+  const outcome = await seam.cascadeUnstagePlugin(
+    member.name,
+    member.marketplace,
+    options.locations,
+    installed,
+  );
+  foldUnstageNotices(run.mcpConfigNotices, {
+    scope: options.locations.scope,
+    plugin: member.name,
+    droppedServers: outcome.dropped.mcpServers,
+    notices: outcome.mcpConfigNotices ?? [],
+  });
+  if (!outcome.ok) {
+    applyPartialCascadeFold(installed, outcome.dropped);
+    throw outcome.cause ?? new Error(`Rollback of "${member.key}" did not complete.`);
+  }
+
+  return { marketplaceRecord, installed };
 }
 
 type InstalledLedgerResult = Extract<InstallLedgerResult, { readonly kind: "installed" }>;
@@ -1083,47 +1149,21 @@ function buildReEnableMemberPhase(
       );
       assertReEnableLedgerInstalled(result);
 
-      run.materialized.add(member.key);
-      run.members.push({
-        key: member.key,
-        name: member.name,
-        marketplace: member.marketplace,
-        requiredBy: member.requiredBy,
-        version: result.summary.version,
-        declaresAgents: result.summary.stagedAgentNames.length > 0,
-        declaresMcp: result.summary.stagedMcpServerNames.length > 0,
-        declaresWorkflows: result.summary.stagedWorkflowNames.length > 0,
-        pluginRoot: result.summary.resolved.pluginRoot,
-        hooksConfigPath: result.summary.resolved.hooksConfigPath,
+      recordMaterializedMember(run, member, result.summary, {
         fellBackToCurrentCopy: false,
         reEnabledFromRecord: true,
       });
     },
     undo: async (run) => {
-      if (!run.materialized.has(member.key)) {
+      const unstaged = await unstageMaterializedMember(options, seam, run, member);
+      if (unstaged === undefined) {
         return;
       }
 
-      const marketplaceRecord = options.state.marketplaces[member.marketplace];
-      const installed = marketplaceRecord?.plugins[member.name];
-      if (marketplaceRecord === undefined || installed === undefined) {
-        return;
-      }
-
-      const outcome = await seam.cascadeUnstagePlugin(
+      setOwn(
+        unstaged.marketplaceRecord.plugins,
         member.name,
-        member.marketplace,
-        options.locations,
-        installed,
-      );
-      if (!outcome.ok) {
-        applyPartialCascadeFold(installed, outcome.dropped);
-        throw outcome.cause ?? new Error(`Rollback of "${member.key}" did not complete.`);
-      }
-
-      marketplaceRecord.plugins[member.name] = toDisabledRecord(
-        installed,
-        new Date().toISOString(),
+        toDisabledRecord(unstaged.installed, new Date().toISOString()),
       );
     },
   };
@@ -1145,7 +1185,13 @@ function toCascadeResult(
       throw new Error("Install cascade reported success without materializing the root plugin.");
     }
 
-    return { kind: "installed", root, members: run.members, alreadyInstalled };
+    return {
+      kind: "installed",
+      root,
+      members: run.members,
+      alreadyInstalled,
+      mcpConfigNotices: run.mcpConfigNotices,
+    };
   }
 
   if (run.marketplaceAbsent) {
@@ -1157,6 +1203,7 @@ function toCascadeResult(
     key: run.attempting ?? options.rootKey,
     error: result.error ?? new Error("Install cascade failed."),
     rollbackPartials: result.rollbackPartials,
+    mcpConfigNotices: run.mcpConfigNotices,
   };
 }
 
@@ -1228,6 +1275,7 @@ export async function runInstallCascade(
     attempting: undefined,
     members: [],
     materialized: new Set<string>(),
+    mcpConfigNotices: [],
   };
   // One phase per closure member, in the walk's post order: a dependency is
   // live -- installed or re-enabled -- before the member that needs it runs.

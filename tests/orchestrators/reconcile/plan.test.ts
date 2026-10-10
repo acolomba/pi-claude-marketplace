@@ -151,10 +151,10 @@ describe("planReconcile", () => {
     });
 
     // act
-    const result = planReconcile(merged, state, "project");
+    const plan = planReconcile(merged, state, "project");
 
     // assert
-    assert.deepStrictEqual(result, {
+    assert.deepStrictEqual(plan, {
       scope: "project",
       marketplacesToAdd: [],
       marketplacesToRemove: [],
@@ -183,10 +183,10 @@ describe("planReconcile", () => {
     );
 
     // act
-    const result = planReconcile(merged, stateWith(), "project");
+    const plan = planReconcile(merged, stateWith(), "project");
 
     // assert
-    assert.deepStrictEqual(result, {
+    assert.deepStrictEqual(plan, {
       scope: "project",
       marketplacesToAdd: [
         {
@@ -227,10 +227,10 @@ describe("planReconcile", () => {
     });
 
     // act
-    const result = planReconcile(merged, state, "project");
+    const plan = planReconcile(merged, state, "project");
 
     // assert
-    assert.deepStrictEqual(result, {
+    assert.deepStrictEqual(plan, {
       scope: "project",
       marketplacesToAdd: [],
       marketplacesToRemove: [{ scope: "project", marketplace: "unmatched", plugins: [] }],
@@ -253,10 +253,10 @@ describe("planReconcile", () => {
     });
 
     // act
-    const result = planReconcile(merged, state, "project");
+    const plan = planReconcile(merged, state, "project");
 
     // assert
-    assert.deepStrictEqual(result, {
+    assert.deepStrictEqual(plan, {
       scope: "project",
       marketplacesToAdd: [],
       marketplacesToRemove: [],
@@ -341,10 +341,10 @@ describe("planReconcile", () => {
     });
 
     // act
-    const result = planReconcile(merged, state, "project");
+    const plan = planReconcile(merged, state, "project");
 
     // assert
-    assert.deepStrictEqual(result, {
+    assert.deepStrictEqual(plan, {
       scope: "project",
       marketplacesToAdd: [],
       marketplacesToRemove: [],
@@ -374,10 +374,10 @@ describe("planReconcile", () => {
     const state = stateWith();
 
     // act
-    const result = planReconcile(merged, state, "user");
+    const plan = planReconcile(merged, state, "user");
 
     // assert
-    assert.deepStrictEqual(result, {
+    assert.deepStrictEqual(plan, {
       scope: "user",
       marketplacesToAdd: [
         {
@@ -431,10 +431,10 @@ describe("planReconcile", () => {
     });
 
     // act
-    const result = planReconcile(merged, state, "project");
+    const plan = planReconcile(merged, state, "project");
 
     // assert
-    assert.deepStrictEqual(result, {
+    assert.deepStrictEqual(plan, {
       scope: "project",
       marketplacesToAdd: [],
       marketplacesToRemove: [],
@@ -469,10 +469,10 @@ describe("planReconcile", () => {
     const state = stateWith();
 
     // act
-    const result = planReconcile(merged, state, "user");
+    const plan = planReconcile(merged, state, "user");
 
     // assert
-    assert.deepStrictEqual(result, {
+    assert.deepStrictEqual(plan, {
       scope: "user",
       marketplacesToAdd: [],
       marketplacesToRemove: [],
@@ -551,10 +551,10 @@ describe("planReconcile", () => {
     });
 
     // act
-    const result = planReconcile(merged, state, "project");
+    const plan = planReconcile(merged, state, "project");
 
     // assert
-    assert.deepStrictEqual(result, {
+    assert.deepStrictEqual(plan, {
       scope: "project",
       marketplacesToAdd: [],
       marketplacesToRemove: [
@@ -607,12 +607,12 @@ describe("planReconcile", () => {
     });
 
     // act
-    const result = planReconcile(merged, state, "project");
+    const plan = planReconcile(merged, state, "project");
 
     // assert -- every bucket, not just the install and enable ones. A record
     // reaching `pluginsToUninstall` or `pluginsToDisable` would take the
     // envelope off disk on a plain reload, which is the opposite failure.
-    assert.deepStrictEqual(result, {
+    assert.deepStrictEqual(plan, {
       scope: "project",
       marketplacesToAdd: [],
       marketplacesToRemove: [],
@@ -647,10 +647,10 @@ describe("planReconcile", () => {
     });
 
     // act
-    const result = planReconcile(merged, state, "project");
+    const plan = planReconcile(merged, state, "project");
 
     // assert
-    assert.deepStrictEqual(result, {
+    assert.deepStrictEqual(plan, {
       scope: "project",
       marketplacesToAdd: [],
       marketplacesToRemove: [],
@@ -680,10 +680,10 @@ describe("planReconcile", () => {
     });
 
     // act
-    const result = planReconcile(merged, state, "project");
+    const plan = planReconcile(merged, state, "project");
 
     // assert
-    assert.deepStrictEqual(result, {
+    assert.deepStrictEqual(plan, {
       scope: "project",
       marketplacesToAdd: [],
       marketplacesToRemove: [],
@@ -726,10 +726,10 @@ describe("planReconcile", () => {
     });
 
     // act
-    const result = planReconcile(merged, state, "project");
+    const plan = planReconcile(merged, state, "project");
 
     // assert
-    assert.deepStrictEqual(result, {
+    assert.deepStrictEqual(plan, {
       scope: "project",
       marketplacesToAdd: [],
       marketplacesToRemove: [],
@@ -786,10 +786,10 @@ describe("planReconcile", () => {
     });
 
     // act
-    const result = planReconcile(merged, state, "project");
+    const plan = planReconcile(merged, state, "project");
 
     // assert
-    assert.deepStrictEqual(result, {
+    assert.deepStrictEqual(plan, {
       scope: "project",
       marketplacesToAdd: [
         {
@@ -851,10 +851,10 @@ describe("planReconcile", () => {
     });
 
     // act
-    const result = planReconcile(merged, state, "project");
+    const plan = planReconcile(merged, state, "project");
 
     // assert
-    assert.deepStrictEqual(result, {
+    assert.deepStrictEqual(plan, {
       scope: "project",
       marketplacesToAdd: [],
       marketplacesToRemove: [],
@@ -1850,5 +1850,131 @@ describe("planReconcile", () => {
       pluginsToDependencyInstall: [],
       sourceMismatches: [],
     });
+  });
+
+  test("D-08-07: a declared plugin named constructor with no record is planned for install", () => {
+    // arrange
+    const merged = mergedConfig({ mp: { source: "acme/mp" } }, { "constructor@mp": {} });
+    const state = stateWith({ mp: marketplaceRecord("mp", githubSource("acme/mp")) });
+
+    // act
+    const plan = planReconcile(merged, state, "project");
+
+    // assert
+    assert.deepStrictEqual(plan, {
+      scope: "project",
+      marketplacesToAdd: [],
+      marketplacesToRemove: [],
+      pluginsToInstall: [
+        { scope: "project", plugin: "constructor", marketplace: "mp", configSource: "base" },
+      ],
+      pluginsToUninstall: [],
+      pluginsToEnable: [],
+      pluginsToDisable: [],
+      pluginsToDependencyDisable: [],
+      pluginsToDependencyInstall: [],
+      sourceMismatches: [],
+    });
+  });
+
+  test("D-08-07: a recorded enabled plugin named constructor plans no action", () => {
+    // arrange
+    const merged = mergedConfig({ mp: { source: "acme/mp" } }, { "constructor@mp": {} });
+    const state = stateWith({
+      mp: marketplaceRecord("mp", githubSource("acme/mp"), { constructor: pluginRecord(true) }),
+    });
+
+    // act
+    const plan = planReconcile(merged, state, "project");
+
+    // assert
+    assert.deepStrictEqual(plan, emptyReconcilePlan("project"));
+  });
+
+  test("D-08-07: a declared marketplace named constructor with no record is planned for add", () => {
+    // arrange
+    const merged = mergedConfig({ constructor: { source: "acme/constructor" } });
+
+    // act
+    const plan = planReconcile(merged, stateWith(), "project");
+
+    // assert
+    assert.deepStrictEqual(plan, {
+      scope: "project",
+      marketplacesToAdd: [
+        {
+          scope: "project",
+          marketplace: "constructor",
+          source: "acme/constructor",
+          configSource: "base",
+        },
+      ],
+      marketplacesToRemove: [],
+      pluginsToInstall: [],
+      pluginsToUninstall: [],
+      pluginsToEnable: [],
+      pluginsToDisable: [],
+      pluginsToDependencyDisable: [],
+      pluginsToDependencyInstall: [],
+      sourceMismatches: [],
+    });
+  });
+
+  test("D-08-07: a recorded marketplace named toString can be claimed by a declared alias", () => {
+    // arrange
+    const merged = mergedConfig({ alias: { source: "acme/actual" } });
+    const state = stateWith({
+      toString: marketplaceRecord("toString", githubSource("acme/actual")),
+    });
+
+    // act
+    const plan = planReconcile(merged, state, "project");
+
+    // assert
+    assert.deepStrictEqual(plan, emptyReconcilePlan("project"));
+  });
+
+  test("D-08-07: a plugin under an undeclared marketplace named toString is a dangling reference", () => {
+    // arrange
+    const merged = mergedConfig({}, { "x@toString": {} });
+
+    // act
+    const plan = planReconcile(merged, stateWith(), "project");
+
+    // assert
+    assert.deepStrictEqual(plan, {
+      scope: "project",
+      marketplacesToAdd: [],
+      marketplacesToRemove: [],
+      pluginsToInstall: [],
+      pluginsToUninstall: [],
+      pluginsToEnable: [],
+      pluginsToDisable: [],
+      pluginsToDependencyDisable: [],
+      pluginsToDependencyInstall: [],
+      sourceMismatches: [
+        { scope: "project", cause: "dangling-reference", marketplace: "toString", plugin: "x" },
+      ],
+    });
+  });
+
+  test("D-08-07: a verdict naming a dependent constructor with no record plans nothing", () => {
+    // arrange
+    const merged = mergedConfig({ keep: { source: "acme/keep" } }, { "steady@keep": {} });
+    const state = stateWith({
+      keep: marketplaceRecord("keep", githubSource("acme/keep"), { steady: pluginRecord(true) }),
+    });
+    const verdict: ScopeSatisfactionVerdict = {
+      ok: true,
+      unsatisfied: [
+        { dependent: "constructor@keep", dependency: "secrets-vault@keep", kind: "missing" },
+      ],
+    };
+
+    // act
+    const plan = planReconcile(merged, state, "project", verdict);
+
+    // assert
+    assert.deepStrictEqual(plan, emptyReconcilePlan("project"));
   });
 });

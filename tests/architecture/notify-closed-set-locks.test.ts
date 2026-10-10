@@ -2,8 +2,8 @@
  * tests/architecture/notify-closed-set-locks.test.ts -- closed-set length
  * tripwires for the notification vocabulary (OUT-08 / SNM-02).
  *
- * `Reason`, `StatusToken`, `PluginStatus`, and `MarketplaceStatus` are the
- * closed sets the renderer, the catalog, and the per-command
+ * `Reason`, `StatusToken`, `PluginStatus`, `MarketplaceStatus`, and
+ * `McpServerStatus` are the closed sets the renderer, the catalog, and the per-command
  * `satisfies CommandContext` checks are written against. The compile-time proofs
  * (`notify-reasons.ts`'s partition gate, the renderer's exhaustive switches) catch
  * a member that is REMOVED or RENAMED, but an ADDITIVE drift -- a new literal
@@ -31,6 +31,7 @@ import test from "node:test";
 import type {
   ContentReason,
   MarketplaceStatus,
+  McpServerStatus,
   NotificationMessage,
   PluginStatus,
   PluginWillUninstallMessage,
@@ -51,7 +52,7 @@ const REASON_ENROLLMENT: Record<Reason, true> = {
   "unsupported hooks": true,
   lsp: true,
   "requires pi-subagents": true,
-  "requires pi-mcp": true,
+  "requires pi-mcp-adapter": true,
   "rollback partial": true,
   unreadable: true,
   unparseable: true,
@@ -104,6 +105,7 @@ const REASON_ENROLLMENT: Record<Reason, true> = {
   "stale workflow command": true,
   "requires pi-dynamic-workflows": true,
   "components now supported": true,
+  "unsupported mcp": true,
 };
 
 const STATUS_TOKEN_ENROLLMENT: Record<StatusToken, true> = {
@@ -165,6 +167,19 @@ const MARKETPLACE_STATUS_ENROLLMENT: Record<MarketplaceStatus, true> = {
   skipped: true,
 };
 
+const MCP_SERVER_STATUS_ENROLLMENT: Record<McpServerStatus, true> = {
+  connected: true,
+  "cached, connects on first use": true,
+  "needs authentication": true,
+  "pending approval": true,
+  disabled: true,
+  "not connected": true,
+  failed: true,
+  "status unknown": true,
+  "not loaded": true,
+  "overridden by project scope": true,
+};
+
 // Standalone notifications have their own discriminator set. Scoped prune
 // results and committed warnings are members; the cascade's absent kind remains optional.
 const NOTIFICATION_KIND_ENROLLMENT: Record<
@@ -183,7 +198,7 @@ const NOTIFICATION_KIND_ENROLLMENT: Record<
   "reconcile-applied-cascade": true,
 };
 
-test("OUT-08: Reason is the closed 65-entry reason set", () => {
+test("OUT-08: Reason is the closed 66-entry reason set", () => {
   // The set is append-only and its declared order is catalog-stable, so this
   // length is a tripwire: an additive drift has to be a deliberate bump made
   // here, in the same edit as the member. The MEMBERSHIP is pinned separately by
@@ -193,35 +208,43 @@ test("OUT-08: Reason is the closed 65-entry reason set", () => {
   // No changelog of past counts lives here. Git holds that history, a comment is
   // not a gate, and a count restated far from this assertion is a claim nothing
   // turns red for.
-  assert.strictEqual(Object.keys(REASON_ENROLLMENT).length, 65);
+  // act & assert
+  assert.strictEqual(Object.keys(REASON_ENROLLMENT).length, 66);
 });
 
 test("SNM-02: StatusToken is the closed 24-entry token set", () => {
-  // FSTAT-02 / FSTAT-04 / D-66-05: +2 for the derived `partially-installed` /
-  // `partially-upgradable` realized tokens. `will partially install` is a render
-  // modifier on `will install`, NOT a token, so the set grows by exactly 2.
-  // USTAT-02 / D-64-01: +1 for the de-collapsed not-installed `partially-available`
-  // render token (22 -> 23).
-  // RSTA-01 / D-80-06: +1 for the not-installed git-source `remote` token (23 -> 24).
+  // FSTAT-02 / FSTAT-04 / D-66-05: `partially-installed` and `partially-upgradable`
+  // are derived realized tokens. `will partially install` is a render modifier on
+  // `will install`, not a token.
+  // USTAT-02 / D-64-01: `partially-available` is the not-installed render token.
+  // RSTA-01 / D-80-06: `remote` is the not-installed git-source token.
+  // act & assert
   assert.strictEqual(Object.keys(STATUS_TOKEN_ENROLLMENT).length, 24);
 });
 
 test("SNM-02: PluginStatus is the closed 19-entry plugin-status set", () => {
-  // FSTAT-02 / FSTAT-04 / D-66-05: +2 for `partially-installed` / `partially-upgradable`.
-  // USTAT-02 / D-64-01: +1 for `partially-available` (17 -> 18). Both sets gain the
-  // member; `PluginStatus` MUST because `PluginInfoRowBase.status` derives via
-  // `Extract<PluginStatus, "partially-available">`.
-  // RSTA-01 / D-80-06: +1 for `remote` (18 -> 19) -- likewise required in
-  // `PluginStatus` because the info surface renders `(remote)` via
-  // `Extract<PluginStatus, "remote">`.
+  // FSTAT-02 / FSTAT-04 / D-66-05: `partially-installed` and `partially-upgradable`
+  // belong to the set.
+  // USTAT-02 / D-64-01: `partially-available` belongs to both token sets because
+  // `PluginInfoRowBase.status` derives via `Extract<PluginStatus, "partially-available">`.
+  // RSTA-01 / D-80-06: `remote` belongs to `PluginStatus` because the info surface
+  // renders `(remote)` via `Extract<PluginStatus, "remote">`.
+  // act & assert
   assert.strictEqual(Object.keys(PLUGIN_STATUS_ENROLLMENT).length, 19);
 });
 
 test("SNM-02: MarketplaceStatus is the closed 7-entry marketplace-status set", () => {
+  // act & assert
   assert.strictEqual(Object.keys(MARKETPLACE_STATUS_ENROLLMENT).length, 7);
 });
 
+test("ASTAT-02: McpServerStatus is the closed 10-entry MCP server status set", () => {
+  // act & assert
+  assert.strictEqual(Object.keys(MCP_SERVER_STATUS_ENROLLMENT).length, 10);
+});
+
 test("standalone notification kinds include scoped prune outcomes exactly", () => {
+  // act & assert
   assert.strictEqual(Object.keys(NOTIFICATION_KIND_ENROLLMENT).length, 10);
 });
 
@@ -241,6 +264,7 @@ void (true satisfies IsExact<keyof typeof REASON_ENROLLMENT, Reason>);
 void (true satisfies IsExact<keyof typeof STATUS_TOKEN_ENROLLMENT, StatusToken>);
 void (true satisfies IsExact<keyof typeof PLUGIN_STATUS_ENROLLMENT, PluginStatus>);
 void (true satisfies IsExact<keyof typeof MARKETPLACE_STATUS_ENROLLMENT, MarketplaceStatus>);
+void (true satisfies IsExact<keyof typeof MCP_SERVER_STATUS_ENROLLMENT, McpServerStatus>);
 void (true satisfies IsExact<
   keyof typeof NOTIFICATION_KIND_ENROLLMENT,
   Exclude<NotificationMessage["kind"], undefined>

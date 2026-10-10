@@ -35,10 +35,12 @@ import { removeHookConfig } from "../../bridges/hooks/index.ts";
 import { unstageMcpServers } from "../../bridges/mcp/index.ts";
 import { unstagePluginSkills } from "../../bridges/skills/index.ts";
 import { unstagePluginWorkflows } from "../../bridges/workflows/index.ts";
+import { generatedMcpServerKey } from "../../domain/name.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import * as defaultGit from "../../platform/git.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
+import { McpUnstagePartialError, type McpWrittenFile } from "../../shared/errors-bridges.ts";
 import {
   errorMessage,
   InvalidMarketplaceManifestError,
@@ -48,6 +50,7 @@ import {
 } from "../../shared/errors.ts";
 import { notify } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
+import { ownValue } from "../../shared/own-key.ts";
 
 import type { UnstageAgentFailure } from "../../bridges/agents/types.ts";
 import type { UnstageWorkflowFailure } from "../../bridges/workflows/types.ts";
@@ -55,7 +58,8 @@ import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { BuildAuthCallbacksOpts } from "../../platform/git-auth-callbacks.ts";
 import type { ListRemotesResult } from "../../platform/git.ts";
-import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
+import type { NotificationContext, PiInventory } from "../../platform/pi-api.ts";
+import type { McpConfigNotice } from "../../shared/notification-dispatch.ts";
 import type { Scope } from "../../shared/types.ts";
 
 /**
@@ -333,6 +337,88 @@ export interface UnstageOutcome {
   };
   /** Set on failure: the FIRST throw, wrapped to Error if needed (D-03 fail-fast). */
   readonly cause?: Error;
+  /**
+   * AFILE-04: the MCP slot's config notices, carried for the caller to show
+   * after its rows instead of being dropped with the bridge's hygiene
+   * warnings. Set only when non-empty, on success and on failure: a later
+   * slot can fail after the MCP slot rewrote the file.
+   */
+  readonly mcpConfigNotices?: readonly McpConfigNotice[];
+  /**
+   * NFR-3: each MCP config file the MCP slot rewrote and the exact bytes it
+   * wrote, so a prune rollback can recognize its own rewrite. Set only when
+   * non-empty, on success and on failure, like `mcpConfigNotices`.
+   */
+  readonly writtenMcpFiles?: readonly McpWrittenFile[];
+}
+
+/**
+ * AFILE-04: spreads `mcpConfigNotices` onto an outcome only when there is at
+ * least one notice, so an empty list never appears on the outcome.
+ */
+export function mcpConfigNoticesMember(notices: readonly McpConfigNotice[]): {
+  readonly mcpConfigNotices?: readonly McpConfigNotice[];
+} {
+  return notices.length === 0 ? {} : { mcpConfigNotices: notices };
+}
+
+/**
+ * AVAR-04 / ANAME-07: appends an unstage's MCP config notices to a command's
+ * notices, in place. It first drops the `variables-missing`,
+ * `credentials-blanked` and `tool-rules-unenforced` notices of the servers the
+ * unstage removed, because they describe entries that the scope's
+ * mcp-adapter.json no longer holds. `droppedServers` holds
+ * declared names, as `UnstageOutcome.dropped.mcpServers` does. File notices
+ * stay, because the files were still rewritten.
+ */
+export function foldUnstageNotices(
+  notices: McpConfigNotice[],
+  unstaged: {
+    readonly scope: Scope;
+    readonly plugin: string;
+    readonly droppedServers: readonly string[];
+    readonly notices: readonly McpConfigNotice[];
+  },
+): void {
+  const removed = new Set(
+    unstaged.droppedServers.map((name) => generatedMcpServerKey(unstaged.plugin, name)),
+  );
+  const standing = notices.filter(
+    (notice) =>
+      !(
+        (notice.kind === "variables-missing" ||
+          notice.kind === "credentials-blanked" ||
+          notice.kind === "tool-rules-unenforced") &&
+        notice.scope === unstaged.scope &&
+        removed.has(notice.server)
+      ),
+  );
+  notices.splice(0, notices.length, ...standing, ...unstaged.notices);
+}
+
+/** NFR-3: spreads `writtenMcpFiles` onto an outcome only when a file was rewritten. */
+function writtenMcpFilesMember(files: readonly McpWrittenFile[]): {
+  readonly writtenMcpFiles?: readonly McpWrittenFile[];
+} {
+  return files.length === 0 ? {} : { writtenMcpFiles: files };
+}
+
+/**
+ * TR-03 / ANAME-01: the record's declared server names whose entry the MCP
+ * unstage removed, in record order. An entry sits under
+ * `generatedMcpServerKey(plugin, name)`, or under the declared name itself
+ * when it was written under that name (the legacy mcp.json, or an adapter
+ * entry staged under its declared name).
+ */
+function droppedMcpServers(
+  plugin: string,
+  declaredNames: readonly string[],
+  removedNames: readonly string[],
+): string[] {
+  const removed = new Set(removedNames);
+  return declaredNames.filter(
+    (name) => removed.has(generatedMcpServerKey(plugin, name)) || removed.has(name),
+  );
 }
 
 /**
@@ -366,6 +452,8 @@ export async function cascadeUnstagePlugin(
     mcpServers: [] as string[],
     workflows: [] as string[],
   };
+  let mcpConfigNotices: readonly McpConfigNotice[] = [];
+  let writtenMcpFiles: readonly McpWrittenFile[] = [];
 
   try {
     const skillsResult = await unstagePluginSkills({
@@ -415,7 +503,13 @@ export async function cascadeUnstagePlugin(
       marketplaceName: marketplace,
       pluginName: plugin,
     });
-    dropped.mcpServers = [...mcpResult.removedNames];
+    dropped.mcpServers = droppedMcpServers(
+      plugin,
+      installedPlugin.resources.mcpServers,
+      mcpResult.removedNames,
+    );
+    mcpConfigNotices = mcpResult.notices;
+    writtenMcpFiles = mcpResult.written;
 
     // WLIF-03: 6th cascade slot, after mcp so no existing ordering shifts. The
     // names come from the RECORD, never from a re-derivation off the plugin
@@ -450,8 +544,26 @@ export async function cascadeUnstagePlugin(
         mcpServers: Object.freeze([...dropped.mcpServers]),
         workflows: Object.freeze([...dropped.workflows]),
       }),
+      ...mcpConfigNoticesMember(mcpConfigNotices),
+      ...writtenMcpFilesMember(writtenMcpFiles),
     });
   } catch (err) {
+    // AFILE-04: an MCP unstage that rewrote the adapter file before its legacy
+    // write failed still reports the comments it dropped there, the servers no
+    // file still holds (TR-03), and the bytes it wrote (NFR-3). The write
+    // failure is the plugin's cause.
+    let failure: unknown = err;
+    if (err instanceof McpUnstagePartialError) {
+      dropped.mcpServers = droppedMcpServers(
+        plugin,
+        installedPlugin.resources.mcpServers,
+        err.removedNames,
+      );
+      mcpConfigNotices = err.notices;
+      writtenMcpFiles = err.written;
+      failure = err.cause;
+    }
+
     return Object.freeze({
       ok: false,
       dropped: Object.freeze({
@@ -462,7 +574,9 @@ export async function cascadeUnstagePlugin(
         mcpServers: Object.freeze([...dropped.mcpServers]),
         workflows: Object.freeze([...dropped.workflows]),
       }),
-      cause: err instanceof Error ? err : new Error(String(err)),
+      cause: failure instanceof Error ? failure : new Error(String(failure)),
+      ...mcpConfigNoticesMember(mcpConfigNotices),
+      ...writtenMcpFilesMember(writtenMcpFiles),
     });
   }
 }
@@ -510,7 +624,7 @@ export function classifyAutoupdateFlip(
   // D-04: undefined === false. Read through `Record<string, unknown>` cast
   // (legacy field; not on MARKETPLACE_RECORD_SCHEMA since SPLIT-01).
   if (name !== undefined) {
-    const record = state.marketplaces[name];
+    const record = ownValue(state.marketplaces, name);
     if (record === undefined) {
       throw new MarketplaceNotFoundError(name, []);
     }
@@ -558,11 +672,11 @@ async function resolveScopeFromState(
     loadState(projectLocations.extensionRoot),
   ]);
 
-  if (mpName in projectState.marketplaces) {
+  if (ownValue(projectState.marketplaces, mpName) !== undefined) {
     return { scope: "project", locations: projectLocations };
   }
 
-  if (mpName in userState.marketplaces) {
+  if (ownValue(userState.marketplaces, mpName) !== undefined) {
     return { scope: "user", locations: userLocations };
   }
 
@@ -595,7 +709,7 @@ async function resolveScopeFromState(
  * so both UpdateMarketplaceOptions and RemoveMarketplaceOptions satisfy it.
  */
 export async function resolveScopeOrNotifyNotAdded(
-  opts: { ctx: NotificationContext; pi: ToolInventory; name: string; scope?: Scope },
+  opts: { ctx: NotificationContext; pi: PiInventory; name: string; scope?: Scope },
   userLocations: ScopedLocations,
   projectLocations: ScopedLocations,
 ): Promise<{ scope: Scope; locations: ScopedLocations } | undefined> {
@@ -618,7 +732,7 @@ export async function resolveScopeOrNotifyNotAdded(
   // MarketplaceNotFoundError(name, [scope]) raw past the orchestrator).
   const locations = opts.scope === "user" ? userLocations : projectLocations;
   const preState = await loadState(locations.extensionRoot);
-  if (preState.marketplaces[opts.name] === undefined) {
+  if (ownValue(preState.marketplaces, opts.name) === undefined) {
     const otherLocations = opts.scope === "user" ? projectLocations : userLocations;
     const elsewhere = await marketplaceRecordedIn(
       otherLocations.scope,
@@ -798,7 +912,7 @@ async function marketplaceRecordedIn(
 ): Promise<boolean> {
   try {
     const state = await loadState(resolveLocations().extensionRoot);
-    return state.marketplaces[name] !== undefined;
+    return ownValue(state.marketplaces, name) !== undefined;
   } catch (err) {
     hookDebugLog(
       `cross-scope probe for "${name}" in ${scope} scope failed: ${errorMessage(err)}`,

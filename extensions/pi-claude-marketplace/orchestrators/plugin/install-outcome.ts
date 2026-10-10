@@ -83,9 +83,9 @@ import {
 import { compileIfPredicate } from "../../bridges/hooks/if-field/index.ts";
 import { removeHookConfig, writeHookConfig } from "../../bridges/hooks/index.ts";
 import {
-  commitPreparedMcp,
   prepareStageMcpServers,
-  unstageMcpServers,
+  replacePreparedMcp,
+  rollbackMcpReplacement,
 } from "../../bridges/mcp/index.ts";
 import {
   commitPreparedSkills,
@@ -109,6 +109,7 @@ import { shaVersion } from "../../domain/version.ts";
 import { ConcurrentInstallError, PluginShapeError } from "../../shared/errors.ts";
 import { type RemovalOps } from "../../shared/fs-utils.ts";
 import { type DegradeKind } from "../../shared/notify-reasons.ts";
+import { ownValue, setOwn } from "../../shared/own-key.ts";
 import {
   runPhases,
   type Phase,
@@ -138,9 +139,10 @@ import {
 
 import type { PreparedAgentsStaging } from "../../bridges/agents/index.ts";
 import type { PreparedCommandsStaging } from "../../bridges/commands/index.ts";
-import type { PreparedMcpStaging } from "../../bridges/mcp/index.ts";
+import type { McpReplacement } from "../../bridges/mcp/index.ts";
 import type { PreparedSkillsStaging } from "../../bridges/skills/index.ts";
 import type { PreparedWorkflowsStaging } from "../../bridges/workflows/index.ts";
+import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
 import type { PluginEntry } from "../../domain/components/plugin.ts";
 import type { MarketplaceManifest } from "../../domain/manifest.ts";
 import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
@@ -148,6 +150,7 @@ import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState, PluginInstallRecord } from "../../persistence/state-io.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { HookSummaryEntry } from "../../shared/concerns/hooks.ts";
+import type { McpConfigNotice } from "../../shared/notification-dispatch.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { InstallPluginOutcome } from "../types.ts";
 
@@ -201,6 +204,11 @@ export interface InstallLedgerOptions {
    * one phase's cleanup and observe the leak the commit path returns.
    */
   readonly removalOps: RemovalOps;
+  /**
+   * D-08-06 / AVAR-02: the environment Claude's variable rule reads when the
+   * mcp phase stages servers. The operation's entry point binds it.
+   */
+  readonly env: ClaudeEnv;
   readonly credentialOps?: CredentialOps;
   readonly deviceFlowHttp?: DeviceFlowHttp;
   readonly authMemo?: Map<string, AuthAttemptResult>;
@@ -272,6 +280,11 @@ export interface InstallLedgerSummary {
   readonly bridgeWarnings: readonly string[];
   readonly discoveryWarnings: readonly string[];
   readonly agentForeignFailures: readonly AgentForeignFailureRow[];
+  /**
+   * AFILE-04 / AFILE-02: the MCP config file facts the mcp phase reported,
+   * for the caller to route to `notifyMcpConfigNotices` after its own row.
+   */
+  readonly mcpConfigNotices: readonly McpConfigNotice[];
 }
 
 /** Caller-facing result of the guard-free install ledger. */
@@ -314,7 +327,9 @@ interface InstallLedgerContext {
   skillsPrep?: PreparedSkillsStaging;
   commandsPrep?: PreparedCommandsStaging;
   agentsPrep?: PreparedAgentsStaging;
-  mcpPrep?: PreparedMcpStaging;
+  // AFILE-04 / NFR-3: the mcp phase holds a replacement handle rather than a
+  // prep handle, so its undo restores the file's prior bytes.
+  mcpReplacement?: McpReplacement;
   workflowsPrep?: PreparedWorkflowsStaging;
   // LIFE-01 / D-63-02: hooks bridge has no staging dir (writeHookConfig is
   // the atomic write). Track whether the file was written so the phase undo
@@ -350,6 +365,8 @@ interface InstallLedgerContext {
   discoveryWarnings: string[];
   // Bridge-side per-record AG-5 foreign-content rows -- routed to notifyWarning post-success.
   agentForeignFailures: AgentForeignFailureRow[];
+  // AFILE-04 / AFILE-02: MCP config file facts from the mcp phase.
+  mcpConfigNotices: McpConfigNotice[];
   // SKILL-01 / CMD-01 / WARN-01: per-component frontmatter-parse degrade records
   // collected from the skills + commands bridges. Feed the one-per-plugin
   // `{malformed skill}` / `{malformed command}` reason token (standalone row),
@@ -457,10 +474,10 @@ async function preflightInstallResolve(
 
   // Target container: same scope record when present, or a cloned
   // project-scope container when CMP-3 fell back to user marketplace.
-  let targetMp = state.marketplaces[marketplace];
+  let targetMp = ownValue(state.marketplaces, marketplace);
   if (targetMp === undefined) {
     targetMp = cloneMarketplaceRecordForTargetScope(source.sourceRecord, scope);
-    state.marketplaces[marketplace] = targetMp;
+    setOwn(state.marketplaces, marketplace, targetMp);
   }
 
   // PI-15 early-sanity check: an existing record in the target scope throws
@@ -469,7 +486,7 @@ async function preflightInstallResolve(
   // other-scope installs do not block this target. D-54-01 / ENBL-02:
   // `allowExistingRecord` skips the throw so the enable path can
   // re-materialize a KEPT disabled record in place.
-  if (targetMp.plugins[plugin] !== undefined && opts.allowExistingRecord !== true) {
+  if (ownValue(targetMp.plugins, plugin) !== undefined && opts.allowExistingRecord !== true) {
     // PI-5 (already-installed) and PI-15 (race-at-commit) collapse here;
     // this site surfaces the PI-5 wording and the state-commit phase's
     // defensive throw surfaces PI-15.
@@ -649,6 +666,7 @@ function toInstallLedgerSummary(context: InstallLedgerContext): InstallLedgerSum
     bridgeWarnings: context.bridgeWarnings,
     discoveryWarnings: context.discoveryWarnings,
     agentForeignFailures: context.agentForeignFailures,
+    mcpConfigNotices: context.mcpConfigNotices,
   };
 }
 
@@ -742,6 +760,7 @@ async function runInstallLedgerBody(
     bridgeWarnings: [],
     discoveryWarnings: [],
     agentForeignFailures: [],
+    mcpConfigNotices: [],
     frontmatterDegradations: [],
     stateSnapshot: state,
   };
@@ -854,6 +873,9 @@ async function runInstallLedgerBody(
         // we explicitly default to false so generated agents omit
         // `model:` (the default behavior).
         mapModel: opts.mapModel ?? false,
+        // ANAME-02: the servers this install writes. The mcp phase runs
+        // later, so the set comes from the resolver, not the mcp stage.
+        mcpServerNames: Object.keys(c.resolved.mcpServers),
         // SUB-02: project-scope ${CLAUDE_PROJECT_DIR} resolves to the install cwd.
         cwd: c.cwd,
       });
@@ -957,25 +979,40 @@ async function runInstallLedgerBody(
         pluginRoot: c.resolved.pluginRoot,
         pluginData: c.pluginDataDir,
         sourcePath: `${c.resolved.pluginRoot}#mcpServers`,
+        description: c.resolved.description,
+        env: opts.env,
       });
-      c.mcpPrep = prep;
-      const result = await commitPreparedMcp(prep);
+      c.mcpReplacement = await replacePreparedMcp(prep);
+      const result = prep.result;
       c.stagedMcpServerNames = result.recorded.map((r) => r.generatedName);
-      // MCP staging soft warnings (malformed declared env, non-object entry,
-      // malformed pre-existing mcp.json) ride the same bridgeWarnings channel
-      // as the other bridges' leak strings instead of being dropped.
+      // MCP staging soft warnings (malformed declared env, non-object entry)
+      // ride the same bridgeWarnings channel as the other bridges' leak
+      // strings instead of being dropped.
       c.bridgeWarnings.push(...result.warnings);
+      c.mcpConfigNotices.push(...result.notices);
+      // AMIG-02: the replace removed the plugin's marked entries from the
+      // scope's mcp.json after writing mcp-adapter.json; its notices describe
+      // that later write. This phase serves install, enable, the install
+      // cascade, the reconcile install and import.
+      if (c.mcpReplacement.kind === "replaced") {
+        c.mcpConfigNotices.push(...c.mcpReplacement.legacy.notices);
+      }
     },
+    // AFILE-04 / AMIG-02 / NFR-3: a failed install restores every file the mcp
+    // phase rewrote to its prior bytes, comments included, `mcp.json` first,
+    // instead of unstaging from the rewritten files. A restore that cannot
+    // write throws, so the ledger records the mcp rollback partial rather than
+    // reporting a clean unwind over a changed file. The handle needs no
+    // finalize on success; it is dropped with the context.
     undo: async (c) => {
-      if (c.mcpPrep === undefined) {
+      if (c.mcpReplacement === undefined) {
         return;
       }
 
-      await unstageMcpServers({
-        locations: c.locations,
-        marketplaceName: c.marketplace,
-        pluginName: c.plugin,
-      });
+      const leaks = await rollbackMcpReplacement(c.mcpReplacement);
+      if (leaks.length > 0) {
+        throw new Error(leaks.join("; "));
+      }
     },
   };
 
@@ -990,8 +1027,10 @@ async function runInstallLedgerBody(
       // what lets the commit displace the plugin's own envelopes aside
       // instead of hitting the occupancy refusal. Spread conditionally --
       // `exactOptionalPropertyTypes` rejects an explicit `undefined`.
-      const previousWorkflowNames =
-        c.stateSnapshot.marketplaces[c.marketplace]?.plugins[c.plugin]?.resources.workflows;
+      const previousWorkflowNames = ownValue(
+        ownValue(c.stateSnapshot.marketplaces, c.marketplace)?.plugins,
+        c.plugin,
+      )?.resources.workflows;
       const prep = await prepareStageWorkflows({
         locations: c.locations,
         pluginName: c.plugin,
@@ -1083,8 +1122,8 @@ async function runInstallLedgerBody(
       // so the ledger unwinds the staged bridges. D-54-01 / ENBL-02:
       // `allowExistingRecord` skips the throw -- the enable path
       // re-materializes the KEPT disabled record in place.
-      const mpInner = c.stateSnapshot.marketplaces[c.marketplace];
-      const existing = mpInner?.plugins[c.plugin];
+      const mpInner = ownValue(c.stateSnapshot.marketplaces, c.marketplace);
+      const existing = ownValue(mpInner?.plugins, c.plugin);
       if (existing !== undefined && opts.allowExistingRecord !== true) {
         throw new ConcurrentInstallError(c.plugin, c.marketplace);
       }
@@ -1099,7 +1138,7 @@ async function runInstallLedgerBody(
       }
 
       const nowIso = new Date().toISOString();
-      mpInner.plugins[c.plugin] = {
+      setOwn(mpInner.plugins, c.plugin, {
         version: c.version,
         resolvedSource: c.resolved.pluginRoot,
         // D-77-02 / PURL-09: persist the full 40-hex resolved commit sha for
@@ -1177,7 +1216,7 @@ async function runInstallLedgerBody(
         // uninstalled, only disabled. Fresh installs stamp now.
         installedAt: existing?.installedAt ?? nowIso,
         updatedAt: nowIso,
-      };
+      });
     },
     // undo intentionally absent: at state-commit phase time the guard
     // has not flushed yet, and on throw the guard does NOT save the

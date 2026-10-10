@@ -23,8 +23,10 @@ import { createCompletionCache } from "../../../extensions/pi-claude-marketplace
 import { withLockedStateTransaction } from "../../../extensions/pi-claude-marketplace/transaction/with-state-guard.ts";
 import { makeCtx } from "../../e2e/_helpers.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+import { emptyPiInventory } from "../../platform/pi-inventory-seed.ts";
 
 import type { UninstallTransaction } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
+import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 
@@ -179,6 +181,7 @@ async function seedRecord(scope: Scope, cwd: string, manifestText: string): Prom
 
 test("removes an orphan from the default user scope and reports it", async () => {
   await withHermeticEnvironment("prune-owner-user-", async ({ cwd }) => {
+    // arrange
     await seedRecord(
       "user",
       cwd,
@@ -187,8 +190,10 @@ test("removes an orphan from the default user scope and reports it", async () =>
     const { ctx, notifications } = makeCtx(cwd);
     const locations = locationsFor("user", cwd);
 
-    await prune()({ ctx, pi: { getAllTools: () => [] }, cwd });
+    // act
+    await prune()({ ctx, pi: emptyPiInventory(), cwd });
 
+    // assert
     assert.deepStrictEqual((await loadState(locations.extensionRoot)).marketplaces.mp?.plugins, {});
     assert.deepStrictEqual(notifications, [
       {
@@ -239,7 +244,7 @@ test("prunes legacy state with one durable save", async () => {
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
-    await prune(transaction)({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project" });
+    await prune(transaction)({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
 
     // assert
     assert.deepStrictEqual((await loadState(locations.extensionRoot)).marketplaces.mp?.plugins, {});
@@ -255,6 +260,7 @@ test("prunes legacy state with one durable save", async () => {
 
 test("previews an orphan without writing state or taking a lock", async () => {
   await withHermeticEnvironment("prune-owner-preview-", async ({ cwd }) => {
+    // arrange
     await seedRecord(
       "user",
       cwd,
@@ -264,8 +270,10 @@ test("previews an orphan without writing state or taking a lock", async () => {
     const before = await readFile(locations.stateJsonPath);
     const { ctx, notifications } = makeCtx(cwd);
 
-    await prune()({ ctx, pi: { getAllTools: () => [] }, cwd, dryRun: true });
+    // act
+    await prune()({ ctx, pi: emptyPiInventory(), cwd, dryRun: true });
 
+    // assert
     assert.deepStrictEqual(await readFile(locations.stateJsonPath), before);
     await assert.rejects(stat(locations.stateLockFile), { code: "ENOENT" });
     assert.deepStrictEqual(notifications, [
@@ -276,13 +284,16 @@ test("previews an orphan without writing state or taking a lock", async () => {
 
 test("preview refuses an unreadable declarer without a write", async () => {
   await withHermeticEnvironment("prune-owner-preview-unreadable-", async ({ cwd }) => {
+    // arrange
     await seedRecord("user", cwd, "{");
     const locations = locationsFor("user", cwd);
     const before = await readFile(locations.stateJsonPath);
     const { ctx, notifications } = makeCtx(cwd);
 
-    await prune()({ ctx, pi: { getAllTools: () => [] }, cwd, dryRun: true });
+    // act
+    await prune()({ ctx, pi: emptyPiInventory(), cwd, dryRun: true });
 
+    // assert
     assert.deepStrictEqual(await readFile(locations.stateJsonPath), before);
     await assert.rejects(stat(locations.stateLockFile), { code: "ENOENT" });
     assert.match(notifications[0]?.message ?? "", /orphan.*failed.*unreadable/);
@@ -292,12 +303,15 @@ test("preview refuses an unreadable declarer without a write", async () => {
 
 test("preview without orphans leaves the selected scope absent", async () => {
   await withHermeticEnvironment("prune-owner-preview-empty-", async ({ cwd }) => {
+    // arrange
     const locations = locationsFor("project", cwd);
     const { ctx, notifications } = makeCtx(cwd);
 
-    await prune()({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project", dryRun: true });
-    await prune()({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project", dryRun: true });
+    // act
+    await prune()({ ctx, pi: emptyPiInventory(), cwd, scope: "project", dryRun: true });
+    await prune()({ ctx, pi: emptyPiInventory(), cwd, scope: "project", dryRun: true });
 
+    // assert
     await assert.rejects(stat(locations.extensionRoot), { code: "ENOENT" });
     assert.deepStrictEqual(notifications, [
       { message: "Nothing to prune in project scope: no orphaned dependency installs were found." },
@@ -308,13 +322,16 @@ test("preview without orphans leaves the selected scope absent", async () => {
 
 test("reports an empty project sweep without saving state", async () => {
   await withHermeticEnvironment("prune-owner-empty-", async ({ cwd }) => {
+    // arrange
     const locations = locationsFor("project", cwd);
     await saveState(locations.extensionRoot, { schemaVersion: 3, marketplaces: {} });
     const before = await readFile(locations.stateJsonPath);
     const { ctx, notifications } = makeCtx(cwd);
 
-    await prune()({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project" });
+    // act
+    await prune()({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
 
+    // assert
     assert.deepStrictEqual(await readFile(locations.stateJsonPath), before);
     assert.deepStrictEqual(notifications, [
       { message: "Nothing to prune in project scope: no orphaned dependency installs were found." },
@@ -340,7 +357,7 @@ test("actual prune with a missing state skips snapshot and save", async () => {
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
-    await prune(transaction)({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project" });
+    await prune(transaction)({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
 
     // assert
     assert.equal(saves, 0);
@@ -358,13 +375,16 @@ test("actual prune with a missing state skips snapshot and save", async () => {
 
 test("refuses an unreadable declarer before saving or removing it", async () => {
   await withHermeticEnvironment("prune-owner-unreadable-", async ({ cwd }) => {
+    // arrange
     await seedRecord("user", cwd, "{");
     const locations = locationsFor("user", cwd);
     const before = await readFile(locations.stateJsonPath);
     const { ctx, notifications } = makeCtx(cwd);
 
-    await prune()({ ctx, pi: { getAllTools: () => [] }, cwd });
+    // act
+    await prune()({ ctx, pi: emptyPiInventory(), cwd });
 
+    // assert
     assert.deepStrictEqual(await readFile(locations.stateJsonPath), before);
     assert.deepStrictEqual(
       Object.keys((await loadState(locations.extensionRoot)).marketplaces.mp?.plugins ?? {}),
@@ -402,7 +422,7 @@ test("removes the whole project-scope fixpoint in literal order and leaves held 
 
     await prune()({
       ctx: preview.ctx,
-      pi: { getAllTools: () => [] },
+      pi: emptyPiInventory(),
       cwd,
       scope: "project",
       dryRun: true,
@@ -418,7 +438,7 @@ test("removes the whole project-scope fixpoint in literal order and leaves held 
       },
     ]);
 
-    await prune()({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project" });
+    await prune()({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
 
     assert.deepStrictEqual(installedKeys(await loadState(project.extensionRoot)), [
       "disabled@alpha",
@@ -458,7 +478,7 @@ test("removes the whole project-scope fixpoint in literal order and leaves held 
       },
     ]);
     const after = await readFile(project.stateJsonPath);
-    await prune()({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project" });
+    await prune()({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
     assert.deepStrictEqual(await readFile(project.stateJsonPath), after);
     assert.deepStrictEqual(notifications[1], {
       message: "Nothing to prune in project scope: no orphaned dependency installs were found.",
@@ -468,6 +488,7 @@ test("removes the whole project-scope fixpoint in literal order and leaves held 
 
 test("reports only explicit and held user installs as an empty sweep without saving", async () => {
   await withHermeticEnvironment("prune-owner-held-empty-", async ({ cwd }) => {
+    // arrange
     const locations = locationsFor("user", cwd);
     await seedScope("user", cwd, {
       mp: {
@@ -479,8 +500,10 @@ test("reports only explicit and held user installs as an empty sweep without sav
     const beforeStat = await stat(locations.stateJsonPath);
     const { ctx, notifications } = makeCtx(cwd);
 
-    await prune()({ ctx, pi: { getAllTools: () => [] }, cwd });
+    // act
+    await prune()({ ctx, pi: emptyPiInventory(), cwd });
 
+    // assert
     assert.deepStrictEqual(await readFile(locations.stateJsonPath), before);
     assert.equal((await stat(locations.stateJsonPath)).ino, beforeStat.ino);
     assert.deepStrictEqual(installedKeys(await loadState(locations.extensionRoot)), [
@@ -495,6 +518,7 @@ test("reports only explicit and held user installs as an empty sweep without sav
 
 test("a failed member keeps its dependent chain while an independent orphan commits", async () => {
   await withHermeticEnvironment("prune-owner-failed-", async ({ cwd }) => {
+    // arrange
     const locations = locationsFor("project", cwd);
     const fixture = await seedScope("project", cwd, {
       alpha: {
@@ -526,8 +550,10 @@ test("a failed member keeps its dependent chain while an independent orphan comm
     };
     const { ctx, notifications } = makeCtx(cwd);
 
-    await prune(transaction)({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project" });
+    // act
+    await prune(transaction)({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
 
+    // assert
     assert.deepStrictEqual(installedKeys(await loadState(locations.extensionRoot)), [
       "a@alpha",
       "b@beta",
@@ -568,7 +594,7 @@ for (const dryRun of [true, false] as const) {
       const { ctx, notifications } = makeCtx(cwd);
 
       // act
-      await prune()({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project", dryRun });
+      await prune()({ ctx, pi: emptyPiInventory(), cwd, scope: "project", dryRun });
 
       // assert
       assert.deepStrictEqual(await readFile(locations.stateJsonPath, "utf8"), "{");
@@ -596,7 +622,7 @@ test("actual prune reports a held lock without changing state", async () => {
 
     try {
       // act
-      await prune()({ ctx, pi: { getAllTools: () => [] }, cwd });
+      await prune()({ ctx, pi: emptyPiInventory(), cwd });
 
       // assert
       assert.deepStrictEqual(await readFile(locations.stateJsonPath), stateBefore);
@@ -622,7 +648,7 @@ test("actual prune reports a non-Error transaction rejection", async () => {
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
-    await prune(transaction)({ ctx, pi: { getAllTools: () => [] }, cwd });
+    await prune(transaction)({ ctx, pi: emptyPiInventory(), cwd });
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -655,7 +681,7 @@ test("a failed state save retains a missing skill directory and restores state",
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
-    await prune(transaction)({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project" });
+    await prune(transaction)({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
 
     // assert
     assert.deepStrictEqual(await readFile(locations.stateJsonPath), stateBefore);
@@ -686,6 +712,7 @@ test("a failed state save retains a missing skill directory and restores state",
 
 test("a failed save without directory artifacts completes rollback", async () => {
   await withHermeticEnvironment("prune-owner-save-no-directory-", async ({ cwd }) => {
+    // arrange
     const locations = locationsFor("project", cwd);
     await seedRecord(
       "project",
@@ -702,8 +729,10 @@ test("a failed save without directory artifacts completes rollback", async () =>
     };
     const { ctx, notifications } = makeCtx(cwd);
 
-    await prune(transaction)({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project" });
+    // act
+    await prune(transaction)({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
 
+    // assert
     assert.deepStrictEqual(await readFile(locations.stateJsonPath), originalState);
     assert.deepStrictEqual(
       (await readdir(locations.extensionRoot)).filter((name) => name.startsWith("prune-backup-")),
@@ -742,7 +771,7 @@ test("a save that writes then rejects restores state and retains the skill backu
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
-    await prune(transaction)({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project" });
+    await prune(transaction)({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
 
     // assert
     assert.deepStrictEqual(await readFile(locations.stateJsonPath), stateBefore);
@@ -795,7 +824,7 @@ test("a failed save removes newly created state and retains the skill backup", a
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
-    await prune(transaction)({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project" });
+    await prune(transaction)({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
 
     // assert
     await assert.rejects(stat(locations.stateJsonPath), { code: "ENOENT" });
@@ -849,7 +878,7 @@ test("an occupied restore target reports rollback partial and retains the backup
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
-    await prune(transaction)({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project" });
+    await prune(transaction)({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
 
     // assert
     assert.deepStrictEqual(await readFile(locations.stateJsonPath), stateBefore);
@@ -888,6 +917,7 @@ test("an occupied restore target reports rollback partial and retains the backup
 
 test("a missing skill directory reports manual recovery and restores state", async () => {
   await withHermeticEnvironment("prune-owner-restore-directory-", async ({ cwd }) => {
+    // arrange
     const locations = locationsFor("project", cwd);
     const fixture = await seedScope("project", cwd, {
       mp: { orphan: { provenance: "dependency" } },
@@ -904,8 +934,10 @@ test("a missing skill directory reports manual recovery and restores state", asy
     };
     const { ctx, notifications } = makeCtx(cwd);
 
-    await prune(transaction)({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project" });
+    // act
+    await prune(transaction)({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
 
+    // assert
     await assert.rejects(stat(path.dirname(skill)), { code: "ENOENT" });
     assert.deepStrictEqual(await readFile(locations.stateJsonPath), originalState);
     const [backupName] = (await readdir(locations.extensionRoot)).filter((name) =>
@@ -951,7 +983,7 @@ test("a concurrent MCP edit survives failed save with its original in recovery b
     });
     const originalMcp = Buffer.from('{ "mcpServers": { "original": 1 } }\n');
     const currentMcp = Buffer.from('{ "mcpServers": { "original": 1, "independent": 2 } }\n');
-    await writeFile(locations.mcpJsonPath, originalMcp);
+    await writeFile(locations.mcpAdapterJsonPath, originalMcp);
     const stateBefore = await readFile(locations.stateJsonPath);
     const skillBefore = await readFile(fixture.skills["orphan@mp"] ?? "");
     const transaction: UninstallTransaction = {
@@ -959,7 +991,7 @@ test("a concurrent MCP edit survives failed save with its original in recovery b
       withLockedStateTransaction: (target, run) =>
         withLockedStateTransaction(target, run, {
           saveState: async () => {
-            await writeFile(locations.mcpJsonPath, currentMcp);
+            await writeFile(locations.mcpAdapterJsonPath, currentMcp);
             throw new Error("state save failed");
           },
         }),
@@ -967,10 +999,10 @@ test("a concurrent MCP edit survives failed save with its original in recovery b
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
-    await prune(transaction)({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project" });
+    await prune(transaction)({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
 
     // assert
-    assert.deepStrictEqual(await readFile(locations.mcpJsonPath), currentMcp);
+    assert.deepStrictEqual(await readFile(locations.mcpAdapterJsonPath), currentMcp);
     assert.deepStrictEqual(await readFile(locations.stateJsonPath), stateBefore);
     await assert.rejects(stat(path.dirname(fixture.skills["orphan@mp"] ?? "")), {
       code: "ENOENT",
@@ -984,11 +1016,11 @@ test("a concurrent MCP edit survives failed save with its original in recovery b
       await readFile(path.join(locations.extensionRoot, backupName ?? "", "manifest.json"), "utf8"),
     ) as { entries: Array<{ phase: string; root: string; target: string; backup: string | null }> };
     assert.deepStrictEqual(
-      manifest.entries.filter((entry) => entry.phase === "mcp"),
-      [{ phase: "mcp", root: ".", target: "mcp.json", backup: "3" }],
+      manifest.entries.filter((entry) => entry.phase === "mcp adapter"),
+      [{ phase: "mcp adapter", root: ".", target: "mcp-adapter.json", backup: "4" }],
     );
     assert.deepStrictEqual(
-      await readFile(path.join(locations.extensionRoot, backupName ?? "", "3")),
+      await readFile(path.join(locations.extensionRoot, backupName ?? "", "4")),
       originalMcp,
     );
     assert.deepStrictEqual(
@@ -1003,8 +1035,8 @@ test("a concurrent MCP edit survives failed save with its original in recovery b
           `    cause: Prune rollback was incomplete. Inspect ${backupName}/manifest.json under this scope's pi-claude-marketplace directory before retrying. -> state save failed\n` +
           "    [skills] (rollback failed)\n" +
           "      cause: Prune rollback requires manual directory restore at mp-orphan-skill.\n" +
-          "    [mcp] (rollback failed)\n" +
-          "      cause: Prune rollback found an occupied metadata path at mcp.json.",
+          "    [mcp adapter] (rollback failed)\n" +
+          "      cause: Prune rollback found an occupied metadata path at mcp-adapter.json.",
         severity: "error",
       },
     ]);
@@ -1013,16 +1045,17 @@ test("a concurrent MCP edit survives failed save with its original in recovery b
 
 test("an MCP edit after a cascade with no MCP resources survives failed persistence", async () => {
   await withHermeticEnvironment("prune-owner-mcp-after-cascade-", async ({ cwd }) => {
+    // arrange
     const locations = locationsFor("project", cwd);
     await seedScope("project", cwd, { mp: { orphan: { provenance: "dependency" } } });
     const original = Buffer.from('{ "mcpServers": { "original": 1 } }\n');
     const independent = Buffer.from('{ "mcpServers": { "original": 1, "independent": 2 } }\n');
-    await writeFile(locations.mcpJsonPath, original);
+    await writeFile(locations.mcpAdapterJsonPath, original);
     const transaction: UninstallTransaction = {
       ...REAL_UNINSTALL_TRANSACTION,
       cascadeUnstagePlugin: async (...args) => {
         const outcome = await REAL_UNINSTALL_TRANSACTION.cascadeUnstagePlugin(...args);
-        await writeFile(locations.mcpJsonPath, independent);
+        await writeFile(locations.mcpAdapterJsonPath, independent);
         return outcome;
       },
       withLockedStateTransaction: (target, run) =>
@@ -1032,11 +1065,13 @@ test("an MCP edit after a cascade with no MCP resources survives failed persiste
     };
     const { ctx, notifications } = makeCtx(cwd);
 
-    await prune(transaction)({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project" });
+    // act
+    await prune(transaction)({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
 
-    assert.deepStrictEqual(await readFile(locations.mcpJsonPath), independent);
+    // assert
+    assert.deepStrictEqual(await readFile(locations.mcpAdapterJsonPath), independent);
     assert.match(notifications[0]?.message ?? "", /\{rollback partial\}/);
-    assert.match(notifications[0]?.message ?? "", /\[mcp\] \(rollback failed\)/);
+    assert.match(notifications[0]?.message ?? "", /\[mcp adapter\] \(rollback failed\)/);
     const [backupName] = (await readdir(locations.extensionRoot)).filter((name) =>
       name.startsWith("prune-backup-"),
     );
@@ -1044,7 +1079,7 @@ test("an MCP edit after a cascade with no MCP resources survives failed persiste
     const manifest = JSON.parse(
       await readFile(path.join(locations.extensionRoot, backupName, "manifest.json"), "utf8"),
     ) as { entries: Array<{ phase: string; backup: string | null }> };
-    const entry = manifest.entries.find(({ phase }) => phase === "mcp");
+    const entry = manifest.entries.find(({ phase }) => phase === "mcp adapter");
     assert.ok(entry?.backup);
     assert.deepStrictEqual(
       await readFile(path.join(locations.extensionRoot, backupName, entry.backup)),
@@ -1055,9 +1090,10 @@ test("an MCP edit after a cascade with no MCP resources survives failed persiste
 
 test("rollback details survive a simultaneous lock-release failure", async (t) => {
   await withHermeticEnvironment("prune-owner-rollback-release-", async ({ cwd }) => {
+    // arrange
     const locations = locationsFor("project", cwd);
     await seedScope("project", cwd, { mp: { orphan: { provenance: "dependency" } } });
-    await writeFile(locations.mcpJsonPath, '{ "mcpServers": { "original": 1 } }\n');
+    await writeFile(locations.mcpAdapterJsonPath, '{ "mcpServers": { "original": 1 } }\n');
     const originalLock = lockfile.lock;
     t.mock.method(lockfile, "lock", async (...args: Parameters<typeof lockfile.lock>) => {
       const release = await originalLock(...args);
@@ -1072,7 +1108,7 @@ test("rollback details survive a simultaneous lock-release failure", async (t) =
         withLockedStateTransaction(target, run, {
           saveState: async () => {
             await writeFile(
-              locations.mcpJsonPath,
+              locations.mcpAdapterJsonPath,
               '{ "mcpServers": { "original": 1, "independent": 2 } }\n',
             );
             throw new Error("state save failed");
@@ -1081,18 +1117,20 @@ test("rollback details survive a simultaneous lock-release failure", async (t) =
     };
     const { ctx, notifications } = makeCtx(cwd);
 
-    await prune(transaction)({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project" });
+    // act
+    await prune(transaction)({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
 
+    // assert
     const message = notifications[0]?.message ?? "";
     assert.equal(notifications[0]?.severity, "error");
     assert.match(message, /\{rollback partial\}/);
-    assert.match(message, /\[mcp\] \(rollback failed\)/);
+    assert.match(message, /\[mcp adapter\] \(rollback failed\)/);
     assert.match(message, /prune-backup-[\w-]+\/manifest\.json/);
     assert.match(message, /state save failed/);
     assert.match(message, /lock release also failed: lock release failed/);
     assert.doesNotMatch(message, /\/tmp\//);
     assert.equal(
-      await readFile(locations.mcpJsonPath, "utf8"),
+      await readFile(locations.mcpAdapterJsonPath, "utf8"),
       '{ "mcpServers": { "original": 1, "independent": 2 } }\n',
     );
   });
@@ -1128,7 +1166,7 @@ test("a lock-release rejection reports committed removal and completes cleanup",
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
-    await pruneWithRoutes({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project" });
+    await pruneWithRoutes({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
 
     // assert
     assert.deepStrictEqual(installedKeys(await loadState(locations.extensionRoot)), []);
@@ -1172,7 +1210,7 @@ test("an undefined release rejection still reports the committed scope", async (
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
-    await prune(transaction)({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project" });
+    await prune(transaction)({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
 
     // assert
     assert.deepStrictEqual(installedKeys(await loadState(locations.extensionRoot)), []);
@@ -1221,7 +1259,7 @@ test("post-commit cleanup failure reports committed members and continues cleanu
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
-    await prune(transaction)({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project" });
+    await prune(transaction)({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
 
     // assert
     assert.deepStrictEqual(cleaned, ["a", "b"]);
@@ -1269,7 +1307,7 @@ test("cleanup failure on the second member warns only that member and keeps its 
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
-    await prune(transaction)({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project" });
+    await prune(transaction)({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
 
     // assert
     assert.deepStrictEqual(cleaned, ["a", "b"]);
@@ -1319,7 +1357,7 @@ test("lock-release and second-member cleanup failures keep separate causes", asy
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
-    await prune(transaction)({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project" });
+    await prune(transaction)({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
 
     // assert
     assert.deepStrictEqual(installedKeys(await loadState(locations.extensionRoot)), []);
@@ -1382,7 +1420,7 @@ test("a post-save failure preserves the original cause when every member failed"
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
-    await prune(transaction)({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project" });
+    await prune(transaction)({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
 
     // assert
     assert.deepStrictEqual(installedKeys(await loadState(locations.extensionRoot)), ["orphan@mp"]);
@@ -1408,5 +1446,302 @@ test("a post-save failure preserves the original cause when every member failed"
         severity: "warning",
       },
     ]);
+  });
+});
+
+// AFILE-04: a committed sweep that rewrote a commented MCP config file shows
+// the comments-removed notice after its rows.
+
+const COMMENTED_ORPHAN_ADAPTER =
+  '// user note\n{"mcpServers":{"orphan-server":{"command":"orphan","_piClaudeMarketplace":{"plugin":"orphan","marketplace":"mp"}}}}\n';
+
+test("AFILE-04: prune over a commented mcp-adapter.json shows the comments-removed notice after its rows", async () => {
+  await withHermeticEnvironment("prune-owner-afile04-", async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    await seedScope("project", cwd, { mp: { orphan: { provenance: "dependency" } } });
+    await writeFile(locations.mcpAdapterJsonPath, COMMENTED_ORPHAN_ADAPTER);
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await prune()({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [project]\n  ○ orphan v1.0.0 (uninstalled) {dependency pruned}\n\n/reload to pick up changes",
+      },
+      {
+        message:
+          "MCP config comments removed.\n\n" +
+          "The project-scope mcp-adapter.json was rewritten to update plugin MCP servers; its JSONC comments were removed and everything else in it was kept.",
+        severity: "warning",
+      },
+    ]);
+    assert.strictEqual(
+      await readFile(locations.mcpAdapterJsonPath, "utf8"),
+      '{\n  "mcpServers": {}\n}\n',
+    );
+  });
+});
+
+test("AFILE-04: a dry-run prune sends no notice", async () => {
+  await withHermeticEnvironment("prune-owner-afile04-preview-", async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    await seedScope("project", cwd, { mp: { orphan: { provenance: "dependency" } } });
+    await writeFile(locations.mcpAdapterJsonPath, COMMENTED_ORPHAN_ADAPTER);
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await prune()({ ctx, pi: emptyPiInventory(), cwd, scope: "project", dryRun: true });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      { message: "● mp [project]\n  ○ orphan (will uninstall) {dependency pruned}" },
+    ]);
+    assert.strictEqual(
+      await readFile(locations.mcpAdapterJsonPath, "utf8"),
+      COMMENTED_ORPHAN_ADAPTER,
+    );
+  });
+});
+
+test("AFILE-04: a rolled-back prune restores the commented original, keeps it in its backup, and sends no notice", async () => {
+  await withHermeticEnvironment("prune-owner-afile04-rollback-", async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    await seedScope("project", cwd, { mp: { orphan: { provenance: "dependency" } } });
+    await writeFile(locations.mcpAdapterJsonPath, COMMENTED_ORPHAN_ADAPTER);
+    const transaction: UninstallTransaction = {
+      ...REAL_UNINSTALL_TRANSACTION,
+      withLockedStateTransaction: (target, run) =>
+        withLockedStateTransaction(target, run, {
+          saveState: () => Promise.reject(new Error("state save failed")),
+        }),
+    };
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await prune(transaction)({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
+
+    // assert
+    const [backupName] = (await readdir(locations.extensionRoot)).filter((name) =>
+      name.startsWith("prune-backup-"),
+    );
+    assert.ok(backupName);
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n\n" +
+          "● (prune) [project]\n  ⊘ (prune) (failed) {rollback partial}\n" +
+          `    cause: Prune rollback was incomplete. Inspect ${backupName}/manifest.json under this scope's pi-claude-marketplace directory before retrying. -> state save failed\n` +
+          "    [skills] (rollback failed)\n" +
+          "      cause: Prune rollback requires manual directory restore at mp-orphan-skill.",
+        severity: "error",
+      },
+    ]);
+    assert.strictEqual(
+      await readFile(locations.mcpAdapterJsonPath, "utf8"),
+      COMMENTED_ORPHAN_ADAPTER,
+    );
+    const manifest = JSON.parse(
+      await readFile(path.join(locations.extensionRoot, backupName, "manifest.json"), "utf8"),
+    ) as { entries: Array<{ phase: string; backup: string | null }> };
+    const entry = manifest.entries.find(({ phase }) => phase === "mcp adapter");
+    assert.ok(entry?.backup);
+    assert.strictEqual(
+      await readFile(path.join(locations.extensionRoot, backupName, entry.backup), "utf8"),
+      COMMENTED_ORPHAN_ADAPTER,
+    );
+  });
+});
+
+/**
+ * Seeds dependency orphan `orphan@mp` at project scope whose only recorded
+ * resource is MCP server `orphan-server`, with `adapter` as the project
+ * mcp-adapter.json bytes.
+ */
+async function seedMcpOrphan(cwd: string, adapter: string | Buffer): Promise<ScopedLocations> {
+  const locations = locationsFor("project", cwd);
+  const fixture = await seedScope("project", cwd, {
+    mp: { orphan: { provenance: "dependency" } },
+  });
+  await rm(path.dirname(fixture.skills["orphan@mp"] ?? ""), { recursive: true });
+  const seeded = await loadState(locations.extensionRoot, { persistMigration: false });
+  const marketplace = seeded.marketplaces["mp"];
+  const orphan = marketplace?.plugins["orphan"];
+  assert.ok(marketplace && orphan);
+  await saveState(locations.extensionRoot, {
+    ...seeded,
+    marketplaces: {
+      mp: {
+        ...marketplace,
+        plugins: {
+          orphan: {
+            ...orphan,
+            resources: { ...orphan.resources, skills: [], mcpServers: ["orphan-server"] },
+          },
+        },
+      },
+    },
+  });
+  await writeFile(locations.mcpAdapterJsonPath, adapter);
+  return locations;
+}
+
+/** The real uninstall transaction with its state save refused. */
+const REFUSED_SAVE_TRANSACTION: UninstallTransaction = {
+  ...REAL_UNINSTALL_TRANSACTION,
+  withLockedStateTransaction: (target, run) =>
+    withLockedStateTransaction(target, run, {
+      saveState: () => Promise.reject(new Error("state save failed")),
+    }),
+};
+
+test("NFR-3: a rolled-back prune restores its own mcp-adapter.json rewrite byte-for-byte", async () => {
+  await withHermeticEnvironment("prune-owner-mcp-own-write-", async ({ cwd }) => {
+    // arrange
+    const originalAdapter = Buffer.from(
+      '// user note\n{"mcpServers":{"orphan-server":{"command":"orphan","_piClaudeMarketplace":{"plugin":"orphan","marketplace":"mp"}},"user-server":{"command":"user"}}}\n',
+    );
+    const locations = await seedMcpOrphan(cwd, originalAdapter);
+    const originalState = await readFile(locations.stateJsonPath);
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await prune(REFUSED_SAVE_TRANSACTION)({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        adapter: await readFile(locations.mcpAdapterJsonPath),
+        state: await readFile(locations.stateJsonPath),
+        backups: (await readdir(locations.extensionRoot)).filter((name) =>
+          name.startsWith("prune-backup-"),
+        ),
+        recordedServers: (await loadState(locations.extensionRoot, { persistMigration: false }))
+          .marketplaces["mp"]?.plugins["orphan"]?.resources.mcpServers,
+      },
+      {
+        adapter: originalAdapter,
+        state: originalState,
+        backups: [],
+        recordedServers: ["orphan-server"],
+      },
+    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n\n" +
+          "● (prune) [project]\n  ⊘ (prune) (failed) {unreadable}\n" +
+          "    cause: state save failed",
+        severity: "error",
+      },
+    ]);
+  });
+});
+
+// NFR-3 / AFILE-01: an orphan entry that keeps a user override.
+const KEPT_OVERRIDE_ORPHAN_SERVER = {
+  command: "orphan",
+  disabled: true,
+  _piClaudeMarketplace: {
+    plugin: "orphan",
+    marketplace: "mp",
+    keptOverride: { disabled: true, env: { STUB_TOKEN: "stub-secret" } },
+  },
+};
+
+/** Serializes `config` in the two-space form the writer produces. */
+function writerBytes(config: object): string {
+  return `${JSON.stringify(config, null, 2)}\n`;
+}
+
+test("NFR-3: a rolled-back prune restores the plugin entry that keeps a user override byte-for-byte", async () => {
+  await withHermeticEnvironment("prune-owner-mcp-kept-override-", async ({ cwd }) => {
+    // arrange
+    const originalAdapter = writerBytes({
+      mcpServers: {
+        "orphan-server": KEPT_OVERRIDE_ORPHAN_SERVER,
+        "user-server": { command: "user" },
+      },
+    });
+    const locations = await seedMcpOrphan(cwd, originalAdapter);
+    const originalState = await readFile(locations.stateJsonPath, "utf8");
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await prune(REFUSED_SAVE_TRANSACTION)({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        adapter: await readFile(locations.mcpAdapterJsonPath, "utf8"),
+        state: await readFile(locations.stateJsonPath, "utf8"),
+        backups: (await readdir(locations.extensionRoot)).filter((name) =>
+          name.startsWith("prune-backup-"),
+        ),
+        recordedServers: (await loadState(locations.extensionRoot, { persistMigration: false }))
+          .marketplaces["mp"]?.plugins["orphan"]?.resources.mcpServers,
+      },
+      {
+        adapter: originalAdapter,
+        state: originalState,
+        backups: [],
+        recordedServers: ["orphan-server"],
+      },
+    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n\n" +
+          "● (prune) [project]\n  ⊘ (prune) (failed) {unreadable}\n" +
+          "    cause: state save failed",
+        severity: "error",
+      },
+    ]);
+  });
+});
+
+test("AFILE-01: a committed prune writes the pruned plugin's kept override back", async () => {
+  await withHermeticEnvironment("prune-owner-mcp-kept-commit-", async ({ cwd }) => {
+    // arrange
+    const locations = await seedMcpOrphan(
+      cwd,
+      writerBytes({ mcpServers: { "orphan-server": KEPT_OVERRIDE_ORPHAN_SERVER } }),
+    );
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await prune()({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        adapter: await readFile(locations.mcpAdapterJsonPath, "utf8"),
+        notifications,
+      },
+      {
+        adapter: `{
+  "mcpServers": {
+    "orphan-server": {
+      "disabled": true,
+      "env": {
+        "STUB_TOKEN": "stub-secret"
+      }
+    }
+  }
+}
+`,
+        notifications: [
+          {
+            message:
+              "● mp [project]\n  ○ orphan v1.0.0 (uninstalled) {dependency pruned}\n\n/reload to pick up changes",
+          },
+        ],
+      },
+    );
   });
 });

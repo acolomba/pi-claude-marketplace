@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { mock, verify, when } from "strong-mock";
-import { Type } from "typebox";
 
 import {
   narrowReasons,
@@ -10,6 +9,8 @@ import {
   reinstalledRowFromOutcome,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts";
 import { type Severity } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
+import { expectSoftDepProbes } from "../../edge/notification-boundary.ts";
+import { toolInfo } from "../../platform/pi-inventory-seed.ts";
 
 import type {
   ReinstallFailedOutcome,
@@ -20,7 +21,6 @@ import type {
   ExtensionAPI,
   ExtensionContext,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
-import type { ToolInfo } from "@earendil-works/pi-coding-agent";
 
 // reinstall's row union is module-private; the public carrier of its
 // `reinstalled` arm is the row composer's own return type.
@@ -59,20 +59,6 @@ interface NotifyHarness {
   readonly ui: ExtensionContext["ui"];
 }
 
-function toolInfo(name: string): ToolInfo {
-  return {
-    name,
-    description: `test tool ${name}`,
-    parameters: Type.Object({}),
-    sourceInfo: {
-      path: `/test/tools/${name}.ts`,
-      source: "test",
-      scope: "temporary",
-      origin: "top-level",
-    },
-  } satisfies ToolInfo;
-}
-
 function createNotifyHarness(
   expected: ExpectedNotification,
   toolNames: readonly string[] = [],
@@ -83,9 +69,7 @@ function createNotifyHarness(
   when(() => ctx.ui)
     .thenReturn(ui)
     .once();
-  when(() => pi.getAllTools())
-    .thenReturn(toolNames.map(toolInfo))
-    .times(3);
+  expectSoftDepProbes(pi, 1, toolNames.map(toolInfo));
   if (expected.severity === undefined) {
     when(() => {
       ui.notify(expected.message);
@@ -628,7 +612,7 @@ test("renderReinstallPartitionAndNotify sorts case-insensitive names and scopes 
       "A plugin operation has failed.",
       "",
       "● acme [project]",
-      "  ● p-first v2.0.0 (reinstalled) {requires pi-subagents, requires pi-mcp}",
+      "  ● p-first v2.0.0 (reinstalled) {requires pi-subagents, requires pi-mcp-adapter}",
       "  ⊘ p-second (skipped) {already installed}",
       "",
       "● Acme [user]",

@@ -70,6 +70,7 @@ describe("parseMatcher", () => {
     "mcp__server__tool",
     "mcp__my-server-1__some_tool",
     "mcp__server__nested__tool",
+    "mcp__plugin_acme_db__query",
   ]) {
     test(`keeps the MCP tool name ${literal} as a matcher member`, () => {
       // arrange
@@ -133,6 +134,83 @@ describe("parseMatcher", () => {
       toolNames: new Set(["mcp__server__tool"]),
     });
   });
+
+  for (const { matcherText, prefix } of [
+    { matcherText: "mcp__plugin_acme_db__.*", prefix: "mcp__plugin_acme_db__" },
+    {
+      matcherText: "mcp__plugin_my-plugin_database-tools__.*",
+      prefix: "mcp__plugin_my-plugin_database-tools__",
+    },
+  ]) {
+    test(`ANAME-02: parses ${matcherText} as the server prefix ${prefix}`, () => {
+      // arrange
+
+      // act
+      const matcher = parseMatcher(matcherText);
+
+      // assert
+      assert.deepStrictEqual(matcher, {
+        kind: "tool-set",
+        toolNames: new Set(),
+        toolPrefixes: [prefix],
+      });
+    });
+  }
+
+  test("ANAME-02: keeps a server-prefix alternative beside a mapped tool in a pipe matcher", () => {
+    // arrange
+
+    // act
+    const matcher = parseMatcher("mcp__plugin_acme_db__.*|Write");
+
+    // assert
+    assert.deepStrictEqual(matcher, {
+      kind: "tool-set",
+      toolNames: new Set(["write"]),
+      toolPrefixes: ["mcp__plugin_acme_db__"],
+    });
+  });
+
+  test("ANAME-02: omits toolPrefixes when no alternative is a server prefix", () => {
+    // arrange
+
+    // act
+    const matcher = parseMatcher("Write|Edit");
+
+    // assert
+    assert.deepStrictEqual(matcher, {
+      kind: "tool-set",
+      toolNames: new Set(["write", "edit"]),
+    });
+  });
+
+  test("ANAME-02: reports mcp__acme__ without the .* wildcard as unmapped", () => {
+    // arrange
+
+    // act
+    const matcher = parseMatcher("mcp__acme__");
+
+    // assert
+    assert.deepStrictEqual(matcher, { kind: "unmapped", token: "mcp__acme__" });
+  });
+
+  for (const expression of [
+    "mcp__*",
+    "mcp__acme__get_.*",
+    "mcp__a.b__.*",
+    "mcp____.*",
+    "mcp__plugin_acme_db__.*|.*",
+  ]) {
+    test(`MATCH-02: rejects the MCP regex matcher ${expression}`, () => {
+      // arrange
+
+      // act
+      const matcher = parseMatcher(expression);
+
+      // assert
+      assert.deepStrictEqual(matcher, { kind: "regex" });
+    });
+  }
 
   test("reports the first discarded alternative when no alternative survives", () => {
     // arrange

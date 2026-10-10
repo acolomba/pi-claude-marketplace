@@ -59,6 +59,15 @@ export function assertSafeName(name: string, label?: string): void {
 }
 
 /**
+ * D-08-07: whether `name` is a state map key that a bracket write turns into a
+ * prototype change. Every state read and write uses own keys, so `constructor`,
+ * `toString` and the other `Object.prototype` names stay valid names.
+ */
+export function isReservedRecordKey(name: string): boolean {
+  return name === "__proto__";
+}
+
+/**
  * Skill name generator (RN-1 / SK-2).
  *
  * Format: `<plugin>-<skill>` on every platform. Elides a matching plugin
@@ -216,6 +225,50 @@ export function declaredAgentName(plugin: string, source: string): string {
   const declared = `${plugin}:${source}`;
   assertSafeName(declared);
   return declared;
+}
+
+/**
+ * ANAME-01: the name Claude Code registers a plugin MCP server under,
+ * `plugin:<plugin>:<server>`. The declared server name is kept verbatim;
+ * `generatedMcpServerKey` normalizes this same string, so the name `info`
+ * shows and the key install writes cannot drift apart.
+ */
+export function mcpServerDisplayName(plugin: string, server: string): string {
+  return `plugin:${plugin}:${server}`;
+}
+
+/**
+ * MCP server key generator (ANAME-01).
+ *
+ * Format: `plugin_<plugin>_<server>_`. Claude Code names a plugin server
+ * `plugin:<plugin>:<server>` and replaces every character outside
+ * `[A-Za-z0-9_-]` with `_` when it builds a tool name. This builder applies
+ * the same rule to `mcpServerDisplayName`'s string, then appends one `_`. pi-mcp-adapter
+ * names a tool `<toolPrefix>__<key>_<tool>`, so the trailing `_` and the
+ * entry's `toolPrefix: "mcp"` give Claude Code's `mcp__plugin_<p>_<s>__<tool>`.
+ *
+ * The pattern has no `u` flag, so it replaces each UTF-16 code unit as Claude
+ * Code does: an astral character becomes two `_`. This is the only copy of the
+ * pattern; every generated MCP server key comes from here.
+ *
+ * Only `plugin` is screened. A declared server name is a JSON key that may
+ * hold any character, and the replacement makes every key safe.
+ */
+export function generatedMcpServerKey(plugin: string, server: string): string {
+  assertSafeName(plugin);
+  const claudeServerName = mcpServerDisplayName(plugin, server);
+  return `${claudeServerName.replaceAll(/[^A-Za-z0-9_-]/g, "_")}_`;
+}
+
+/**
+ * ANAME-03: a server key with every `-` folded to `_`. pi-mcp-adapter names a
+ * server's deferred-tool namespace `mcp__` plus the key with `-` folded, so
+ * two keys equal after the fold share one namespace in Pi. Claude Code keeps
+ * `-`, so refusing such a pair is a Pi capability gap. This is the only fold
+ * of a server key.
+ */
+export function foldedMcpServerKey(key: string): string {
+  return key.replaceAll("-", "_");
 }
 
 /**

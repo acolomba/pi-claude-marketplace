@@ -71,9 +71,11 @@ import {
   PluginUpdatePhase3Error,
 } from "../../shared/errors.ts";
 import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
+import { notifyMcpConfigNotices } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import { type PluginFailedMessage } from "../../shared/notification-types.ts";
 import { notifyUpdateNoOpWithContext, notifyWithContext } from "../../shared/notify-context.ts";
+import { ownValue } from "../../shared/own-key.ts";
 import { DEFAULT_GIT_OPS, refreshGitHubClone, type GitOps } from "../marketplace/shared.ts";
 import { marketplaceInOtherScope } from "../marketplace/shared.ts";
 
@@ -95,15 +97,17 @@ import type { UpdatePluginsOptions, UpdatePluginsTarget } from "./update-preflig
 import type {
   DirectThreePhaseArgs,
   ThreePhaseArgs,
+  ThreePhaseArgsBase,
   UpdatePhase3Failure,
   UpdatePhase3FailedOutcome,
   UpdateRunOutcome,
 } from "./update-swap.ts";
+import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
 import type { ReleaseTagCandidate } from "../../domain/release-tag.ts";
 import type { ParsedSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { RemoteTag } from "../../platform/git.ts";
-import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
+import type { NotificationContext, PiInventory } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { LockedStateTransactionDeps } from "../../transaction/with-state-guard.ts";
@@ -115,7 +119,7 @@ type UpdatePluginRunner = (args: ThreePhaseArgs) => Promise<UpdateRunOutcome>;
 /** Folds flow outcomes through the extracted cascade owner. */
 type UpdateCascadeComposer = (
   ctx: NotificationContext,
-  pi: ToolInventory,
+  pi: PiInventory,
   outcomes: readonly UpdateCascadeOutcome[],
   cardinality: "single" | "plural",
   abortedByFailure?: boolean,
@@ -139,7 +143,7 @@ function makeSyncCloneOnce(
     synced.add(key);
 
     const state = await loadState(locations.extensionRoot);
-    const mp = state.marketplaces[mpName];
+    const mp = ownValue(state.marketplaces, mpName);
     if (mp === undefined) {
       throw new MarketplaceNotFoundError(mpName, [scope]);
     }
@@ -153,6 +157,9 @@ function makeSyncCloneOnce(
   };
 }
 
+/** The collaborators `createPluginUpdateOperations` binds into every target's arguments. */
+type UpdateBindings = Pick<ThreePhaseArgsBase, "hooksRouting" | "completionCache" | "env">;
+
 /**
  * Build the per-target `runThreePhaseUpdate` argument bag for the DIRECT
  * update path. Every optional seam is spread only when set, so the cascade
@@ -163,8 +170,7 @@ function buildDirectThreePhaseArgs(
   opts: UpdatePluginsOptions,
   target: ResolvedTarget,
   cardinality: "single" | "plural",
-  hooksRouting: UpdateHooksRouting,
-  completionCache: CompletionCache,
+  bindings: UpdateBindings,
   constraintTagMemo: Map<string, readonly RemoteTag[]>,
   constraintMarketplaceTagMemo: Map<string, readonly ReleaseTagCandidate[]>,
 ): DirectThreePhaseArgs {
@@ -174,8 +180,7 @@ function buildDirectThreePhaseArgs(
     scope: target.scope,
     cwd: opts.cwd,
     locations: target.locations,
-    hooksRouting,
-    completionCache,
+    ...bindings,
     cascade: false,
     ctx: opts.ctx,
     // `pi` threads the phase-3a aggregate direct-path notify inside
@@ -239,8 +244,7 @@ function buildDirectThreePhaseArgs(
  */
 async function updatePluginsWith(
   opts: UpdatePluginsOptions,
-  hooksRouting: UpdateHooksRouting,
-  completionCache: CompletionCache,
+  bindings: UpdateBindings,
   runPluginUpdate: UpdatePluginRunner,
   composeCascade: UpdateCascadeComposer,
 ): Promise<void> {
@@ -303,6 +307,8 @@ async function updatePluginsWith(
         pluginName: t.marketplace,
         err,
       });
+      // AFILE-04: earlier targets already rewrote mcp-adapter.json.
+      surfaceUpdateMcpConfigNotices(ctx, outcomes);
       return;
     }
 
@@ -314,8 +320,7 @@ async function updatePluginsWith(
           opts,
           t,
           cardinality,
-          hooksRouting,
-          completionCache,
+          bindings,
           constraintTagMemo,
           constraintMarketplaceTagMemo,
         ),
@@ -337,6 +342,8 @@ async function updatePluginsWith(
         pluginName: t.plugin,
         err,
       });
+      // AFILE-04: earlier targets already rewrote mcp-adapter.json.
+      surfaceUpdateMcpConfigNotices(ctx, outcomes);
       return;
     }
 
@@ -367,6 +374,7 @@ async function updatePluginsWith(
       // headline would otherwise emit a contradictory `nothing to update` line
       // directly after the failure notification.
       renderUpdateCascadeIfAny(ctx, pi, outcomes, cardinality, composeCascade, true);
+      surfaceUpdateMcpConfigNotices(ctx, outcomes, outcome);
       return;
     }
 
@@ -375,6 +383,7 @@ async function updatePluginsWith(
 
   composeCascade(ctx, pi, outcomes, cardinality);
   surfaceUpdateDiscoveryWarnings(ctx, outcomes);
+  surfaceUpdateMcpConfigNotices(ctx, outcomes);
 }
 
 /**
@@ -405,6 +414,26 @@ function surfaceUpdateDiscoveryWarnings(
       warnings: outcome.notes,
     });
   }
+}
+
+/**
+ * AFILE-04: show the MCP config file notices of every updated plugin, in
+ * outcome order, after the rows they qualify. On a phase-3a abort the failing
+ * plugin's own notices follow, because its MCP commit may have rewritten the
+ * file before a later bridge or the finalize failed.
+ *
+ * Unlike `surfaceUpdateDiscoveryWarnings`, this also runs on every abort path,
+ * because the rewrite has already happened to the user's file.
+ */
+function surfaceUpdateMcpConfigNotices(
+  ctx: NotificationContext,
+  outcomes: readonly { readonly outcome: PluginUpdateOutcome }[],
+  failed?: UpdatePhase3FailedOutcome,
+): void {
+  const notices = outcomes.flatMap(({ outcome }) =>
+    outcome.partition === "updated" ? (outcome.mcpConfigNotices ?? []) : [],
+  );
+  notifyMcpConfigNotices(ctx, [...notices, ...(failed?.mcpConfigNotices ?? [])]);
 }
 
 /**
@@ -501,7 +530,7 @@ function isPhase3aAggregateFailure(
  */
 function renderUpdateCascadeIfAny(
   ctx: NotificationContext,
-  pi: ToolInventory,
+  pi: PiInventory,
   outcomes: readonly UpdateCascadeOutcome[],
   cardinality: "single" | "plural",
   composeCascade: UpdateCascadeComposer,
@@ -527,8 +556,7 @@ function renderUpdateCascadeIfAny(
  * failures) are captured into `partition='failed'` outcomes. PUP-9.
  */
 async function updateSinglePluginWith(
-  hooksRouting: UpdateHooksRouting,
-  completionCache: CompletionCache,
+  bindings: UpdateBindings,
   runPluginUpdate: UpdatePluginRunner,
   plugin: string,
   marketplace: string,
@@ -552,8 +580,7 @@ async function updateSinglePluginWith(
       scope,
       cwd,
       locations,
-      hooksRouting,
-      completionCache,
+      ...bindings,
       cascade: true,
       // SEV-03 / D-69-01: the autoupdate cascade TAKES the partial path
       // automatically. A partially-upgradable candidate (re-resolves `partially-available`)
@@ -643,7 +670,7 @@ function reasonsFromTypedError(err: unknown): readonly ContentReason[] {
 
 interface NotifyDirectFailureArgs {
   readonly ctx: NotificationContext;
-  readonly pi: ToolInventory;
+  readonly pi: PiInventory;
   readonly cardinality: "single" | "plural";
   readonly marketplace: string;
   readonly scope: Scope;
@@ -780,7 +807,7 @@ function narrowDirectFailReason(err: Error): ContentReason {
  */
 function notifyBareFormEnumerateFailure(args: {
   readonly ctx: NotificationContext;
-  readonly pi: ToolInventory;
+  readonly pi: PiInventory;
   readonly scope: Scope | undefined;
   readonly err: Error;
   readonly cardinality: "single" | "plural";
@@ -884,7 +911,7 @@ async function enumerateMarketplaceTarget(
   // misattributed to `{not found}` (M10/M11).
   const resolved = await resolveUpdateMarketplaceScope(cwd, mpName, target, explicitScope);
   const state = await loadState(resolved.locations.extensionRoot);
-  const mp = state.marketplaces[mpName];
+  const mp = ownValue(state.marketplaces, mpName);
   if (mp === undefined) {
     // `resolveUpdateMarketplaceScope` can hand back the REQUESTED scope without
     // a container there, so this arm carries the ordinary explicit-scope miss
@@ -1027,18 +1054,24 @@ async function runPluginUpdate(args: ThreePhaseArgs): Promise<UpdateRunOutcome> 
  * Binds update enumeration, preflight, swap, cascade, and lifecycle routing once.
  * `stateTransaction` replaces the state I/O of every locked save the update
  * makes; production callers omit it.
+ *
+ * D-08-06: `env` is the environment the update stages MCP servers with. It
+ * defaults to Pi's process environment here, at the entry point, the way
+ * `createGetPluginInfo` binds it.
  */
 export function createPluginUpdateOperations(
   hooksRouting: UpdateHooksRouting,
   completionCache: CompletionCache,
   stateTransaction?: LockedStateTransactionDeps,
+  env: ClaudeEnv = process.env,
 ): PluginUpdateOperations {
+  const bindings: UpdateBindings = { hooksRouting, completionCache, env };
   const run: typeof runPluginUpdate =
     stateTransaction === undefined
       ? runPluginUpdate
       : (args) => runPluginUpdate({ ...args, stateTransaction });
   const updatePlugins: UpdatePluginsFn = (options) =>
-    updatePluginsWith(options, hooksRouting, completionCache, run, composeUpdateCascade);
+    updatePluginsWith(options, bindings, run, composeUpdateCascade);
   // D-10-18: ONE memo pair per autoupdate run. `beginPluginUpdateRun`
   // allocates the pair, so the pair's lifetime is the run's and a release tag
   // pushed between two runs is visible to the second. The pair spans every
@@ -1048,7 +1081,7 @@ export function createPluginUpdateOperations(
     const constraintTagMemo = new Map<string, readonly RemoteTag[]>();
     const constraintMarketplaceTagMemo = new Map<string, readonly ReleaseTagCandidate[]>();
     return (plugin, marketplace, scope) =>
-      updateSinglePluginWith(hooksRouting, completionCache, run, plugin, marketplace, scope, {
+      updateSinglePluginWith(bindings, run, plugin, marketplace, scope, {
         tagMemo: constraintTagMemo,
         marketplaceTagMemo: constraintMarketplaceTagMemo,
       });

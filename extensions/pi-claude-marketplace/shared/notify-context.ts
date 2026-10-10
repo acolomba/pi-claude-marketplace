@@ -13,7 +13,7 @@ import {
 } from "./notification-types.ts";
 
 import type { Scope } from "./types.ts";
-import type { NotificationContext, SoftDepStatus, ToolInventory } from "../platform/pi-api.ts";
+import type { NotificationContext, SoftDepStatus, PiInventory } from "../platform/pi-api.ts";
 
 /**
  * shared/notify-context.ts -- the horizontal command-context spine every
@@ -154,7 +154,7 @@ export function notifyWithContext<
   Msg extends PluginNotificationMessage & { status: Status },
 >(
   ctx: NotificationContext,
-  pi: ToolInventory,
+  pi: PiInventory,
   context: CommandContext<Status, Msg>,
   rows: readonly MarketplaceRows<Msg>[],
   kind: "cascade" | undefined,
@@ -211,7 +211,7 @@ export function notifyUpdateWithContext<
   Msg extends PluginNotificationMessage & { status: Status },
 >(
   ctx: NotificationContext,
-  pi: ToolInventory,
+  pi: PiInventory,
   context: CommandContext<Status, Msg>,
   rows: readonly MarketplaceRows<Msg>[],
   cardinality: "single" | "plural",
@@ -249,7 +249,7 @@ export function notifyUpdateNoOpWithContext<
   Msg extends PluginNotificationMessage & { status: Status },
 >(
   ctx: NotificationContext,
-  pi: ToolInventory,
+  pi: PiInventory,
   context: CommandContext<Status, Msg>,
   rows: readonly MarketplaceRows<Msg>[],
   cardinality: "single" | "plural",
@@ -283,7 +283,7 @@ export function notifyReconcileAppliedWithContext<
   Msg extends Extract<PluginNotificationMessage, { status: Status }>,
 >(
   ctx: NotificationContext,
-  pi: ToolInventory,
+  pi: PiInventory,
   context: CommandContext<Status, Msg>,
   message: ReconcileAppliedCascadeMessage,
 ): void {
@@ -316,11 +316,11 @@ type WritableRowSeverity = { -readonly [K in "severity"]?: PluginNotificationMes
 /**
  * Dispatch a single plugin row through the command's render map. The row's
  * `status` selects the arm; the arm reproduces the verbatim bytes of the
- * central switch arm it lifted, so the output is byte-identical. The cast
- * bridges the broad `PluginNotificationMessage` the cascade seam threads to the
- * command's own narrower `Status` / `Msg`; `notifyWithContext` constrains its
- * rows to `Msg` (WR-01), so a command only ever supplies rows whose statuses
- * its render map covers and the lookup is total at the call site.
+ * central switch arm it lifted, so the output is byte-identical. The render
+ * map is read through a string-keyed view, and the selected arm is cast once
+ * to a renderer of the broad `PluginNotificationMessage` the cascade seam
+ * threads; `notifyWithContext` constrains its rows to `Msg` (WR-01), so a
+ * command only supplies rows whose statuses its render map covers.
  *
  * WR-02: the lookup is read as possibly-`undefined`. Because the producers are
  * now typed to their command's `Msg` (the `MarketplaceRows<Msg>` distributive
@@ -342,9 +342,10 @@ function dispatchRow<Status extends string, Msg extends PluginNotificationMessag
   probe: SoftDepStatus,
   mpScope: Scope,
 ): string {
-  const { render } = context;
-  const arm = render[row.status as Status] as
-    RenderFn<Extract<Msg, { status: Status }>> | undefined;
+  const render: Readonly<Record<string, unknown>> = context.render;
+  // The row's own status selected this arm, so the row is the arm's message.
+  // A typed view cannot express that: function parameters are contravariant.
+  const arm = render[row.status] as RenderFn<PluginNotificationMessage> | undefined;
   if (arm === undefined) {
     // WR-02 / SEV-02: the fallback is an internal-drift error condition, so it
     // must not surface as a quiet `info`. `cascadeSeverity` MAX-reduces the
@@ -364,5 +365,5 @@ function dispatchRow<Status extends string, Msg extends PluginNotificationMessag
     return `${"name" in row ? row.name : "?"} (failed) {internal: no render arm for "${row.status}"}`;
   }
 
-  return (arm as unknown as RenderFn<PluginNotificationMessage>)(row, probe, mpScope);
+  return arm(row, probe, mpScope);
 }

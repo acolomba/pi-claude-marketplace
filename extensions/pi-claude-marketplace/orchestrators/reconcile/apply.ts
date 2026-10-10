@@ -47,6 +47,12 @@
 //     and toggle loops need it as defense-in-depth even though their three
 //     entrypoints are documented to handle every throw internally and always
 //     answer with a typed outcome -- see the note above each loop.
+//   - AMIG-01 MCP MOVE per scope, after the read pass and before the apply
+//     pass, also when the config is invalid and never after a read pass that
+//     threw (`mcp-migration.ts`). It takes its own scope lock; a throw out of
+//     it becomes a stopped row (NFR-2). One migration notice for both scopes
+//     (`notifyMcpMigration`) precedes the cascade and is sent even when
+//     reconcile has no outcome (AMIG-03).
 //   - SINGLE notify() emission per applyReconcile invocation (IL-2 /
 //     RECON-04). Empty-and-clean reconciles are SILENT (NFR-2 / A4) -- the
 //     orchestrator skips the notify() call when no outcomes accumulated AND
@@ -69,13 +75,18 @@ import { migrateFirstRunConfig } from "../../persistence/migrate-config.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { DependencyCascadeError, errorMessage } from "../../shared/errors.ts";
 import { pathExists } from "../../shared/fs-utils.ts";
-import { notifyDiagnostic } from "../../shared/notification-dispatch.ts";
+import {
+  notifyDiagnostic,
+  notifyMcpConfigNotices,
+  notifyMcpMigration,
+} from "../../shared/notification-dispatch.ts";
 import { type Reason } from "../../shared/notification-types.ts";
 import { notifyReconcileAppliedWithContext } from "../../shared/notify-context.ts";
+import { ownValue } from "../../shared/own-key.ts";
 import { redactAbsolutePaths, redactCauseChain } from "../../shared/redact-absolute-paths.ts";
 import { withLockedStateTransaction, withStateGuard } from "../../transaction/with-state-guard.ts";
 import { addMarketplace } from "../marketplace/add.ts";
-import { removeMarketplace } from "../marketplace/remove.ts";
+import { MarketplaceRemoveFailureError, removeMarketplace } from "../marketplace/remove.ts";
 import {
   createDependencyInstallOperation,
   createEnableOperation,
@@ -85,6 +96,7 @@ import {
 import { UninstallRefusedError } from "../plugin/uninstall.ts";
 
 import {
+  carriedMcpConfigNotices,
   classifyOrchestratorThrow,
   classifyReadPassThrow,
   dependenciesFromInstall,
@@ -93,6 +105,7 @@ import {
 } from "./apply-outcomes.ts";
 import { applyBackfillForScopeIsolated, runScopeIsolated } from "./backfill.ts";
 import { buildScopeSatisfactionVerdict } from "./dependency-verdict.ts";
+import { migrateLegacyMcpEntries } from "./mcp-migration.ts";
 import { buildReconcileAppliedCascade } from "./notify.ts";
 import { planReconcile } from "./plan.ts";
 import { RECONCILE_APPLIED_CONTEXT } from "./reconcile.messaging.ts";
@@ -106,6 +119,7 @@ import type {
   ScopeReadResult,
 } from "./types.ts";
 import type { loadState } from "../../persistence/state-io.ts";
+import type { McpConfigNotice, McpMigrationRow } from "../../shared/notification-dispatch.ts";
 import type { Scope } from "../../shared/types.ts";
 import type {
   EnableDegradationSignals,
@@ -275,18 +289,23 @@ async function applyMarketplaceRemoves(
       });
       foldRemoveOutcome(result, op.scope, op.marketplace, outcomes);
     } catch (err) {
+      // AFILE-04: a removal that threw after its plugin cascades rewrote MCP
+      // config files carries their notices; its cause is the original throw.
+      const carrier = err instanceof MarketplaceRemoveFailureError ? err : undefined;
+      const failure = carrier === undefined ? err : carrier.cause;
       // The row carries only the closed-set `reason` (T-55-02-02); trace the
       // original error so an unrecognized throw isn't discarded with zero
       // record anywhere.
       hookDebugLog(
-        `applyMarketplaceRemoves: unexpected throw for ${op.marketplace}: ${errorMessage(err)}`,
+        `applyMarketplaceRemoves: unexpected throw for ${op.marketplace}: ${errorMessage(failure)}`,
         "reconcile",
       );
       outcomes.push({
         kind: "mp-remove-failed",
         scope: op.scope,
         marketplace: op.marketplace,
-        reason: classifyOrchestratorThrow(err),
+        reason: classifyOrchestratorThrow(failure),
+        ...carriedMcpConfigNotices(carrier ?? {}),
       });
     }
   }
@@ -320,7 +339,7 @@ function foldRemoveOutcome(
       outcomes.push({ kind: "plugin-uninstalled", scope, marketplace, plugin });
     }
 
-    outcomes.push({ kind: "mp-removed", scope, marketplace });
+    outcomes.push({ kind: "mp-removed", scope, marketplace, ...carriedMcpConfigNotices(result) });
     return;
   }
 
@@ -346,7 +365,12 @@ function foldRemoveOutcome(
     // brace) because the per-plugin children carry the granular reasons.
     // Mirrors the standalone CMC-31 PARTIAL byte form
     // (docs/output-catalog.md `marketplace remove` `partial` fixture).
-    outcomes.push({ kind: "mp-remove-partial", scope, marketplace });
+    outcomes.push({
+      kind: "mp-remove-partial",
+      scope,
+      marketplace,
+      ...carriedMcpConfigNotices(result),
+    });
     return;
   }
 
@@ -429,6 +453,7 @@ async function applyOnePluginUninstall(
         marketplace: op.marketplace,
         plugin: op.plugin,
         ...(result.version !== undefined && { version: result.version }),
+        ...carriedMcpConfigNotices(result),
       };
     }
 
@@ -442,6 +467,8 @@ async function applyOnePluginUninstall(
       // Every other failed uninstall keeps the cause-less row, so no errno
       // message ever reaches this surface.
       ...(result.error instanceof UninstallRefusedError && { cause: result.error }),
+      // AFILE-04: a failed uninstall can still have rewritten the MCP config.
+      ...carriedMcpConfigNotices(result),
     };
   } catch (err) {
     // The row carries only the closed-set `reason` (T-55-02-02); trace the
@@ -619,6 +646,9 @@ async function applyPluginInstalls(
           result.postCommitWarnings.length > 0 && {
             postCommitWarnings: result.postCommitWarnings,
           }),
+        // AFILE-04: the install rewrote the MCP config before its disable
+        // cascade unstaged it again, so the notices ride this row too.
+        ...carriedMcpConfigNotices(result),
       });
     } else if (result.status === "installed") {
       outcomes.push({
@@ -636,6 +666,7 @@ async function applyPluginInstalls(
             postCommitWarnings: result.postCommitWarnings,
           }),
         ...installedRowDegradation(result),
+        ...carriedMcpConfigNotices(result),
       });
     } else {
       outcomes.push({
@@ -655,6 +686,9 @@ async function applyPluginInstalls(
         ...(result.error instanceof DependencyCascadeError && {
           cause: redactedDependencyCascadeError(result.error),
         }),
+        // AFILE-04: dependencies that committed before the failure rewrote
+        // the MCP config, so their notices ride the failed row.
+        ...carriedMcpConfigNotices(result),
       });
     }
   }
@@ -738,6 +772,9 @@ async function applyDependencyInstalls(
           // `InstallMissingDependencyOutcome` carries them only for the root's
           // own ledger run, never per member.
           ...(member.key === rootKey && installedRowDegradation(result)),
+          // AFILE-04: the cascade's notices ride the root's row, like the
+          // warnings above; the root is always a materialized member.
+          ...(member.key === rootKey && carriedMcpConfigNotices(result)),
           // TAGS-02: `fellBackToCurrentCopy` is a REQUIRED member fact
           // (`CascadeMemberOutcome`); every member, not only the root, can
           // have fallen back to its current copy.
@@ -757,6 +794,7 @@ async function applyDependencyInstalls(
       ...(result.error instanceof DependencyCascadeError && {
         cause: redactedDependencyCascadeError(result.error),
       }),
+      ...carriedMcpConfigNotices(result),
     });
   }
 
@@ -833,7 +871,7 @@ interface PluginToggleAxes {
 /**
  * Lift the enable arm's degradation signals off the orchestrated outcome. Each
  * field is omitted when empty (`exactOptionalPropertyTypes`), so a clean enable
- * yields `{}` and its projected row is byte-identical (NREG-01).
+ * yields `{}` and its projected row gains no markers (NREG-01).
  *
  * SEV-01 / D-98-02: the staged-count verdicts ride here too -- they drive the
  * projected row's dependency list, mirroring the install arm's
@@ -917,24 +955,28 @@ async function applyPluginToggles(
       // variable, so the guard above does not narrow on its own.
       const degradation: EnableDegradationSignals =
         result.status === "enabled" ? degradationFromEnable(result) : {};
-      outcomes.push(
-        axes.buildSuccess({
+      outcomes.push({
+        ...axes.buildSuccess({
           scope: op.scope,
           marketplace: op.marketplace,
           plugin: op.plugin,
           ...(result.version !== undefined && { version: result.version }),
           ...(Object.keys(degradation).length > 0 && { degradation }),
         }),
-      );
+        ...carriedMcpConfigNotices(result),
+      });
     } else if (result.status === "failed") {
-      outcomes.push(
-        axes.buildFailed({
+      outcomes.push({
+        ...axes.buildFailed({
           scope: op.scope,
           marketplace: op.marketplace,
           plugin: op.plugin,
           reason: result.reason,
         }),
-      );
+        // AFILE-04: a toggle that failed after its cascade rewrote the MCP
+        // config still reports the rewrite.
+        ...carriedMcpConfigNotices(result),
+      });
     }
     // skipped (idempotent) -> intentionally drop; the steady state isn't a
     // user-visible action.
@@ -966,7 +1008,7 @@ async function stampDependencyDisabled(
   const loc = locationsFor(scope, opts.cwd);
   await withStateGuard(loc, (fresh) => {
     for (const op of transitioned) {
-      const record = fresh.marketplaces[op.marketplace]?.plugins[op.plugin];
+      const record = ownValue(ownValue(fresh.marketplaces, op.marketplace)?.plugins, op.plugin);
       if (record !== undefined) {
         record.dependencyDisabled = true;
       }
@@ -1036,7 +1078,10 @@ async function applyDependencyDisables(
 
     if (result.status === "disabled") {
       transitioned.push(op);
-      outcomes.push(dependencyDisabledOutcome(op, result.version));
+      outcomes.push({
+        ...dependencyDisabledOutcome(op, result.version),
+        ...carriedMcpConfigNotices(result),
+      });
     } else if (result.status === "failed") {
       outcomes.push({
         kind: "plugin-disable-failed",
@@ -1044,6 +1089,7 @@ async function applyDependencyDisables(
         marketplace: op.marketplace,
         plugin: op.plugin,
         reason: result.reason,
+        ...carriedMcpConfigNotices(result),
       });
     }
   }
@@ -1067,7 +1113,7 @@ function applySourceMismatches(plan: ReconcilePlan, outcomes: PerEntryOutcome[])
   for (const m of plan.sourceMismatches) {
     // Per-cause propagation: each variant lifts its renderable fields onto
     // the corresponding SourceMismatchOutcome arm. The renderer derives
-    // byte-identical output from the new variants via
+    // the subject from the variants via
     // `sourceMismatchOutcomeSubject` (mp-name for the first three causes;
     // rawKey for malformed-plugin-key).
     switch (m.cause) {
@@ -1261,6 +1307,32 @@ function reportUnreadableDeclarer(
 }
 
 /**
+ * AMIG-01 / NFR-2: runs one scope's MCP move and turns any throw out of it
+ * into a stopped row, never an `invalid-block` reconcile row, so the move
+ * cannot abort the reconcile of either scope.
+ */
+async function migrateScopeIsolated(
+  opts: ApplyReconcileOptions,
+  scope: Scope,
+  readResult: ScopeReadResult,
+  rows: McpMigrationRow[],
+  notices: McpConfigNotice[],
+): Promise<void> {
+  try {
+    await (opts.migrateMcpEntries ?? migrateLegacyMcpEntries)({
+      scope,
+      cwd: opts.cwd,
+      plan: readResult.plan,
+      reason: opts.reason,
+      rows,
+      notices,
+    });
+  } catch (err) {
+    rows.push({ kind: "stopped", scope, detail: redactAbsolutePaths(errorMessage(err)) });
+  }
+}
+
+/**
  * RECON-01..05: the load-time apply orchestrator. Fans out across both
  * scopes project-first (or just the explicit scope when `opts.scope` is
  * set), per-scope read pass under withLockedStateTransaction (migrate ->
@@ -1281,6 +1353,8 @@ async function applyReconcileWithReader(
   // compareByNameThenScope (project-before-user per MSG-GR-3) so the final
   // cascade emits in canonical order regardless of which scope ran first.
   const outcomes: PerEntryOutcome[] = [];
+  const migrationRows: McpMigrationRow[] = [];
+  const migrationNotices: McpConfigNotice[] = [];
 
   for (const scope of scopes) {
     // WR-01: per-scope failure isolation. A read-pass
@@ -1319,6 +1393,11 @@ async function applyReconcileWithReader(
       continue;
     }
 
+    // AMIG-01: the MCP move runs before the plan is applied, also when the
+    // config is invalid. A scope whose read pass threw skips it above.
+    // eslint-disable-next-line no-await-in-loop -- each scope's move takes that scope's lock
+    await migrateScopeIsolated(opts, scope, readResult, migrationRows, migrationNotices);
+
     // CFG-03 / state-load invalid rows surfaced first; the plan is undefined
     // for that scope so we skip the apply pass.
     if (readResult.invalidOutcomes.length > 0) {
@@ -1351,6 +1430,10 @@ async function applyReconcileWithReader(
     await rebuildScopeRoutingTableIsolated(scope, opts.cwd, opts.hooksRouting, outcomes);
   }
 
+  // AMIG-03: the one migration notice for both scopes comes before the
+  // reconcile cascade and speaks even when reconcile has no outcome.
+  notifyMcpMigration(opts.ctx, { rows: migrationRows, notices: migrationNotices });
+
   // Empty-and-clean reconcile -> SILENT (NFR-2 / A4 / RECON-05). The load-
   // time invariant is that a no-op reconcile produces zero notifications;
   // the operator only hears from the extension when something happened.
@@ -1366,7 +1449,7 @@ async function applyReconcileWithReader(
   // rows render through reconcile's own render map, never the central
   // renderPluginRow switch. The `reconcile-applied-cascade` standalone envelope
   // (its content-derived severity + the load-time silence contract) stays
-  // central and byte-identical via emitReconcileAppliedContextCascade.
+  // central via emitReconcileAppliedContextCascade.
   const message = buildReconcileAppliedCascade(outcomes);
   notifyReconcileAppliedWithContext(opts.ctx, opts.pi, RECONCILE_APPLIED_CONTEXT, message);
 
@@ -1384,6 +1467,11 @@ async function applyReconcileWithReader(
   // `install-flow.ts::installPlugin` owns the orchestrated-mode collection
   // path that feeds it.
   surfacePostCommitWarnings(opts, outcomes);
+
+  // AFILE-04: the MCP config notices every orchestrated operation returned,
+  // shown after the cascade rows they explain. The empty-reconcile return
+  // above keeps a reconcile with no outcomes silent (RECON-05).
+  surfaceMcpConfigNotices(opts, outcomes);
 }
 
 /**
@@ -1487,4 +1575,25 @@ function surfacePostCommitWarnings(
       ? "1 post-install warning surfaced from reconcile installs."
       : `${lines.length.toString()} post-install warnings surfaced from reconcile installs.`;
   notifyDiagnostic(opts.ctx, header, lines);
+}
+
+/**
+ * AFILE-04: one `notifyMcpConfigNotices` call over every outcome's notices, in
+ * outcome order. The seam collapses repeats of one `(kind, scope, file)`, so
+ * several operations rewriting the same file produce one line. The read-pass
+ * rows (invalid blocks, source mismatches) come from no orchestrated
+ * operation and carry none.
+ */
+function surfaceMcpConfigNotices(
+  opts: ApplyReconcileOptions,
+  outcomes: readonly PerEntryOutcome[],
+): void {
+  notifyMcpConfigNotices(
+    opts.ctx,
+    outcomes.flatMap((outcome) =>
+      outcome.kind === "invalid-block" || outcome.kind === "source-mismatch"
+        ? []
+        : (outcome.mcpConfigNotices ?? []),
+    ),
+  );
 }

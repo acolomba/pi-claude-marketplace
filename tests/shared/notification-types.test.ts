@@ -47,7 +47,7 @@ const EXPECTED_REASONS = [
   "unsupported hooks",
   "lsp",
   "requires pi-subagents",
-  "requires pi-mcp",
+  "requires pi-mcp-adapter",
   "rollback partial",
   "unreadable",
   "unparseable",
@@ -100,6 +100,7 @@ const EXPECTED_REASONS = [
   "stale workflow command",
   "requires pi-dynamic-workflows",
   "components now supported",
+  "unsupported mcp",
 ] as const;
 
 const EXPECTED_STATUS_TOKENS = [
@@ -375,6 +376,7 @@ for (const { name, row, expected } of [
 }
 
 test("pluginScopeOrFallback returns row scope when present on scope-bearing row", () => {
+  // arrange
   const row = {
     status: "installed",
     name: "alpha",
@@ -384,10 +386,16 @@ test("pluginScopeOrFallback returns row scope when present on scope-bearing row"
     needsReload: false,
     scope: "project",
   } satisfies PluginNotificationMessage;
-  assert.equal(pluginScopeOrFallback(row, "user"), "project");
+
+  // act
+  const scope = pluginScopeOrFallback(row, "user");
+
+  // assert
+  assert.equal(scope, "project");
 });
 
 test("pluginScopeOrFallback falls back to marketplace scope when scope absent on scope-bearing row", () => {
+  // arrange
   const row = {
     status: "installed",
     name: "alpha",
@@ -396,18 +404,30 @@ test("pluginScopeOrFallback falls back to marketplace scope when scope absent on
     severity: "info",
     needsReload: false,
   } satisfies PluginNotificationMessage;
-  assert.equal(pluginScopeOrFallback(row, "user"), "user");
+
+  // act
+  const scope = pluginScopeOrFallback(row, "user");
+
+  // assert
+  assert.equal(scope, "user");
 });
 
 test("pluginScopeOrFallback falls back to marketplace scope for non-scope-bearing row", () => {
+  // arrange
   const row = {
     status: "available",
     name: "alpha",
   } satisfies PluginNotificationMessage;
-  assert.equal(pluginScopeOrFallback(row, "project"), "project");
+
+  // act
+  const scope = pluginScopeOrFallback(row, "project");
+
+  // assert
+  assert.equal(scope, "project");
 });
 
 test("pluginVersion returns version when present on supported row", () => {
+  // arrange
   const row = {
     status: "installed",
     name: "alpha",
@@ -416,10 +436,16 @@ test("pluginVersion returns version when present on supported row", () => {
     severity: "info",
     needsReload: false,
   } satisfies PluginNotificationMessage;
-  assert.equal(pluginVersion(row), "1.2.3");
+
+  // act
+  const version = pluginVersion(row);
+
+  // assert
+  assert.equal(version, "1.2.3");
 });
 
 test("pluginVersion returns target version on updated row", () => {
+  // arrange
   const row = {
     status: "updated",
     name: "alpha",
@@ -429,7 +455,12 @@ test("pluginVersion returns target version on updated row", () => {
     severity: "info",
     needsReload: false,
   } satisfies PluginNotificationMessage;
-  assert.equal(pluginVersion(row), "2.0.0");
+
+  // act
+  const version = pluginVersion(row);
+
+  // assert
+  assert.equal(version, "2.0.0");
 });
 
 const pluginVersionCases: readonly {
@@ -574,17 +605,29 @@ for (const { title, row, expectedVersion } of pluginVersionCases) {
 }
 
 test("pluginVersion returns undefined when version omitted on supported row", () => {
+  // arrange
   const row = {
     status: "available",
     name: "alpha",
   } satisfies PluginNotificationMessage;
-  assert.equal(pluginVersion(row), undefined);
+
+  // act
+  const version = pluginVersion(row);
+
+  // assert
+  assert.equal(version, undefined);
 });
 
 test("pluginVersion returns undefined for non-versioned row statuses", () => {
+  // arrange
   const row = {
     status: "will install",
     name: "alpha",
   } satisfies PluginNotificationMessage;
-  assert.equal(pluginVersion(row), undefined);
+
+  // act
+  const version = pluginVersion(row);
+
+  // assert
+  assert.equal(version, undefined);
 });

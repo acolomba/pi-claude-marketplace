@@ -5,26 +5,10 @@
 // graph is its intended shape, not a defect.
 // fallow-ignore-file unused-file -- standalone operator-run UAT driver: an engineer invokes it from the command line and no module ever imports it, so being unreachable from the import graph is its intended shape, not a defect.
 //
-// One `duplicates.ignoredClones` entry in `.fallowrc.json` is retained
-// against this file and `manifest-absence-canary.mjs`. Fallow types
-// `ignoredClones` as `string[]`, so the per-clone justification the
-// conventions require cannot live in the JSON and lives here instead:
-//   - `dup:cc950b18:2` -- the `main().then(exit 0, exit 1)` process epilogue
-//     at the foot of both drivers.
-// It is retained because each driver must stay independently runnable as
-// `node tests/live-uat/<file>.mjs` with nothing imported from a sibling.
-// Extracting a shared helper module would create exactly the import edge
-// that the standalone-driver shape exists to avoid, and would make the two
-// canaries fail together on one bad edit. The duplicated text is 13 lines of
-// boilerplate -- a process-exit epilogue -- with no assertion logic in it, so
-// the copies cannot drift in a way that changes what either canary proves.
-// Line numbers are deliberately omitted; run `fallow dupes --trace
-// dup:<fingerprint>` with the entry temporarily cleared to locate it.
-//
-// Both drivers import `../pi-runtime.ts` on purpose, because every Pi launch
-// in the repository resolves the CLI through that one module. The
-// no-sibling-import rule above covers `tests/live-uat/` siblings and still
-// holds.
+// This driver imports `../pi-runtime.ts` on purpose, because every Pi launch
+// in the repository resolves the CLI through that one module. It imports
+// nothing from a `tests/live-uat/` sibling, so it stays runnable on its own as
+// `node tests/live-uat/<file>.mjs`, and one bad edit cannot fail two canaries.
 //
 // Live runtime UAT (D-88-03b item 4): a scripted "ralph-wiggum" canary that
 // drives a REAL Pi session against an always-blocking Stop hook to prove, on
@@ -39,22 +23,28 @@
 //      `turn_start` for a single user prompt (the documented extra-turn-boundary
 //      divergence).
 //
-// What headless pi CANNOT sustain (routed to human_needed, README item 4):
-//   3. STOP-07 -- the full 8-consecutive-block override cap loop. A one-shot
-//      `pi -p` STARTS the first hook-driven re-entry turn, then tears down its
-//      non-interactive lifecycle before that turn settles again, so it never
-//      runs the settle->block->re-enter loop to the cap. Driving the loop to
-//      the 8th block (bounded terminate + one-shot warning, the T-88-02 DoS
-//      mitigation) needs a live interactive TTY session; this harness exits
-//      NON-ZERO routing human_needed for it.
+// What headless pi CANNOT observe (routed to human_needed, README item 4):
+//   3. STOP-07 -- the one-shot cap-trip warning. Since Pi 0.87 a headless
+//      `pi -p` drives the settle->block->re-enter loop itself: a run requested
+//      from an `agent_settled` handler is deferred until the settle handlers
+//      finish and is then awaited. The loop therefore reaches the
+//      8-consecutive-block cap headless, and the block count is checked
+//      against it (the T-88-02 DoS mitigation). The cap-trip warning goes
+//      through `ctx.ui.notify`, which does nothing in print/json mode, so this
+//      harness cannot see it. It exits NON-ZERO routing human_needed, and the
+//      warning half of STOP-07 is confirmed interactively.
 //
 // The hook appends one marker line per invocation to an absolute marker file,
 // so the marker count is the direct observable.
 //
-// Honesty contract: this harness NEVER fakes a live result. Unmet preconditions
-// OR the un-sustainable cap loop exit NON-ZERO with a "live runtime required" /
-// "cap -> human_needed" message so the verifier routes `human_needed` rather
-// than a false pass. It is standalone (NOT part of `npm run check`).
+// Honesty contract: this harness NEVER fakes a live result. Exit codes:
+//   - 0: every STOP-07 observable was seen, including the cap-trip warning.
+//   - 1: an unmet precondition or an inconclusive drive (`LIVE RUNTIME
+//     REQUIRED`), or the expected headless result (`cap-trip warning ->
+//     human_needed`). The verifier routes `human_needed`, never a false pass.
+//   - 2: a proven STOP-07 regression (`STOP-07 REGRESSION`), so a script that
+//     keys on the exit code tells a broken bound from the expected result.
+// It is standalone (NOT part of `npm run check`).
 //
 // Containment (T-88-08): refuses to run unless PI_CODING_AGENT_DIR points at
 // the tmp/pi-uat sandbox, so the UAT never touches a developer's real Pi dir.
@@ -85,16 +75,31 @@ const MARKETPLACE_NAME = "stop-canary-mkt";
 const PLUGIN_NAME = "ralph-loop";
 const PI_DRIVE_TIMEOUT_MS = 120_000;
 
+// The exit code of a `pi -p` run that ended on its own. A drive counts as
+// terminated normally only when the child exits with this code and no signal.
+const PI_NORMAL_EXIT_CODE = 0;
+
 // T-88-08: the only agent-state root this canary will churn installs against.
 // Anchored on the repository rather than on `process.cwd()`, so which directory
 // the refusal below protects does not depend on where the driver was invoked.
 const SANDBOX_ROOT = path.resolve(REPO_ROOT, "tmp", "pi-uat");
 
+// Exit codes the top-level handler uses (see the honesty contract above).
+const EXIT_HUMAN_NEEDED = 1;
+const EXIT_STOP_REGRESSION = 2;
+
 // Thrown (not process.exit) by the routing helpers so main()'s `finally`
 // always uninstalls the canary from the shared sandbox before the process
-// exits non-zero. The top-level handler recognises this tag and exits 1
-// without re-printing (the human-readable message is already on stderr).
-class UatExit extends Error {}
+// exits non-zero. The top-level handler recognises this class and exits with
+// the code it carries, without re-printing (the human-readable message is
+// already on stderr).
+class UatExit extends Error {
+  constructor(message, exitCode) {
+    super(message);
+    this.name = "UatExit";
+    this.exitCode = exitCode;
+  }
+}
 
 /** Print + throw to route `human_needed`, never a false pass. Cleanup runs via finally. */
 function liveRuntimeRequired(reason, detail) {
@@ -106,32 +111,110 @@ function liveRuntimeRequired(reason, detail) {
   console.error(
     `\nSee tests/live-uat/README.md for the human-driven repro of the re-entry + cap observables.`,
   );
-  throw new UatExit(reason);
+  throw new UatExit(reason, EXIT_HUMAN_NEEDED);
+}
+
+/**
+ * Print + throw for a proven STOP-07 regression. It exits with a code distinct
+ * from the expected headless result, so a script that keys on the exit code
+ * cannot read a broken bound as the normal `human_needed` outcome.
+ */
+function stopRegression(reason, detail) {
+  console.error(`\n[stop-canary] STOP-07 REGRESSION -- failed:`);
+  console.error(`  ${reason}`);
+  if (detail) {
+    console.error(`\n${detail}`);
+  }
+  throw new UatExit(reason, EXIT_STOP_REGRESSION);
 }
 
 /**
  * Exit non-zero AFTER the scriptable observables are proven, routing the
- * 8-block cap loop to `human_needed`. A one-shot `pi -p` (or piped-stdin)
- * invocation processes the initial prompt and STARTS the first hook-driven
- * re-entry turn, then tears down its non-interactive lifecycle before that
- * turn settles again -- so it never sustains the settle->block->re-enter loop
- * to the 8-consecutive-block cap. Driving that loop needs a live interactive
- * TTY session, which this environment cannot allocate (no PTY tooling). This
- * is NOT a false pass: the re-entry START is proven end-to-end above; only the
- * loop-to-cap residue is deferred to the human checklist (README item 4).
+ * cap-trip warning to `human_needed`. Since Pi 0.87 a one-shot `pi -p` drives
+ * the settle->block->re-enter loop itself: a run requested from an
+ * `agent_settled` handler is deferred until the settle handlers finish and is
+ * then awaited, so the loop reaches the 8-consecutive-block cap headless. The
+ * cap-trip warning goes through `ctx.ui.notify`, which does nothing in
+ * print/json mode, so this harness cannot see it. The warning half of STOP-07
+ * is confirmed interactively (README item 4). main() routes here only after a
+ * run that terminated normally reached the cap exactly, with one
+ * `agent_settled` per block, so this is NOT a false pass.
  */
-function capNeedsHumanDrive(blockCount) {
+function capWarningNeedsHuman(blockCount) {
   console.error(
-    `\n[stop-canary] SCRIPTABLE HALF PROVEN, CAP LOOP -> human_needed:` +
+    `\n[stop-canary] SCRIPTABLE HALF PROVEN, cap-trip warning -> human_needed:` +
       `\n  agent_settled dispatched the Stop bucket and block re-entry started a new turn (proven above).` +
-      `\n  The 8-consecutive-block override cap could NOT be driven autonomously: headless \`pi\`` +
-      `\n  observed ${blockCount} block(s) then exited its non-interactive lifecycle after starting the` +
-      `\n  re-entry turn. The full loop-to-cap requires a live interactive session pi -p/stdin cannot sustain.`,
+      `\n  Headless \`pi\` observed ${blockCount} block(s) against the ${STOP_OVERRIDE_CAP}-block override cap.` +
+      `\n  Since Pi 0.87 a headless run drives the settle->block->re-enter loop itself, because runs` +
+      `\n  requested from agent_settled handlers are deferred and then awaited.` +
+      `\n  The cap-trip warning goes through ctx.ui.notify, which does nothing in print/json mode, so` +
+      `\n  this harness cannot see it.`,
   );
   console.error(
-    `\nDrive the cap interactively per tests/live-uat/README.md (Human verification, item 4).`,
+    `\nConfirm the cap-trip warning interactively per tests/live-uat/README.md (Human verification, item 4).`,
   );
-  throw new UatExit("cap loop requires interactive drive");
+  throw new UatExit("cap-trip warning requires a human", EXIT_HUMAN_NEEDED);
+}
+
+/** Describe how the drive ended, for the cap routing messages. */
+function describeTermination(run) {
+  if (run.spawnError !== undefined) {
+    return `pi failed to start (${run.spawnError})`;
+  }
+  if (run.timedOut) {
+    return `the drive was still running at the ${PI_DRIVE_TIMEOUT_MS / 1000} s timeout`;
+  }
+  if (run.signal !== null) {
+    return `pi ended on signal ${run.signal}`;
+  }
+  return `pi exited with code ${run.code}`;
+}
+
+/**
+ * STOP-07: route the drive's block count and termination against the cap.
+ * Returns `{ kind, reason }`, or `undefined` for the one outcome that proves
+ * the bound (T-88-02): a run that terminated normally at exactly the cap.
+ * `kind` is `"regression"` for a proven STOP-07 failure and `"inconclusive"`
+ * when the observation says nothing about the bound. The checks run in this
+ * order and together cover every count/termination combination:
+ * - Above the cap: the bound failed, whether or not the run terminated. An
+ *   unbounded livelock usually ends in the harness timeout.
+ * - At the cap without a normal termination: the cap was reached, and the run
+ *   was still going or ended abnormally. The reason states what was observed,
+ *   not a cause, because the count alone cannot tell the cap failing to end
+ *   the run from re-entry continuing past it.
+ * - Below the cap without a normal termination: the drive stopped counting
+ *   early, so the count says nothing about the bound.
+ * - Below the cap after a normal termination: the settle->block->re-enter
+ *   drive or the cap constant regressed.
+ */
+function capBoundFailure(blockCount, run) {
+  const termination = describeTermination(run);
+  if (blockCount > STOP_OVERRIDE_CAP) {
+    return {
+      kind: "regression",
+      reason: `the always-block canary spun to ${blockCount} blocks, past the ${STOP_OVERRIDE_CAP} cap (${termination}).`,
+    };
+  }
+  if (!run.settled && blockCount === STOP_OVERRIDE_CAP) {
+    return {
+      kind: "regression",
+      reason: `${termination} after ${STOP_OVERRIDE_CAP} blocks: the run reached the cap and did not terminate normally.`,
+    };
+  }
+  if (!run.settled) {
+    return {
+      kind: "inconclusive",
+      reason: `STOP-07: ${termination} after ${blockCount} block(s), before the run terminated normally.`,
+    };
+  }
+  if (blockCount < STOP_OVERRIDE_CAP) {
+    return {
+      kind: "regression",
+      reason: `headless pi stopped at ${blockCount} block(s), short of the ${STOP_OVERRIDE_CAP} cap.`,
+    };
+  }
+  return undefined;
 }
 
 /** Parse the `--mode json` NDJSON event stream into a type->count map. */
@@ -160,7 +243,7 @@ function pass(msg) {
   console.log(`[stop-canary] PASS: ${msg}`);
 }
 
-/** Parse a package version string like "0.86.1" into [major, minor, patch]. */
+/** Parse a package version string like "1.0.0" into [major, minor, patch]. */
 function parseVersion(raw) {
   const m = raw.trim().match(/(\d+)\.(\d+)\.(\d+)/);
   if (m === null) {
@@ -222,10 +305,10 @@ async function assertPreconditions() {
     );
   }
   const version = parseVersion(pi.version);
-  if (version === undefined || !meetsFloor(version, [0, 86, 1])) {
-    liveRuntimeRequired(`pi ${pi.version} is below the required >= 0.86.1 package peer floor.`);
+  if (version === undefined || !meetsFloor(version, [1, 0, 0])) {
+    liveRuntimeRequired(`pi ${pi.version} is below the required >= 1.0.0 package peer floor.`);
   }
-  pass(`live pi ${pi.version} (${pi.cliPath}) >= 0.86.1, sandbox ${resolved}`);
+  pass(`live pi ${pi.version} (${pi.cliPath}) >= 1.0.0, sandbox ${resolved}`);
   return pi;
 }
 
@@ -314,6 +397,9 @@ async function installCanary(root) {
     registerTool: () => {},
     on: () => {},
     getAllTools: () => [],
+    getCommands: () => [],
+    // ASTAT-01: the factory subscribes to pi-mcp-adapter's status channel.
+    events: { on: () => () => {} },
   };
   const notifications = [];
   const ctx = {
@@ -389,10 +475,19 @@ async function drivePiTurn(pi) {
   ];
   // Use spawn with stdin "ignore" (NOT execFile, which leaves stdin an OPEN
   // pipe): a non-interactive `pi -p` that sees an open stdin waits for input
-  // after the hook-driven re-entry turn instead of hitting EOF and exiting.
-  // "ignore" gives the child /dev/null on stdin -> EOF -> pi tears down its
-  // non-interactive lifecycle once the initial request (plus the started
-  // re-entry turn) is drained.
+  // instead of hitting EOF and exiting. "ignore" gives the child /dev/null on
+  // stdin -> EOF -> pi exits once the run, including its hook-driven re-entry
+  // turns, has settled.
+  //
+  // The drive resolves the child's own `{ code, signal }` from `close`, so
+  // "terminated normally" is read off the exit status rather than inferred
+  // from the harness timer not firing. A spawn `error` is printed and the
+  // drive resolves without an exit status.
+  //
+  // This spawn-and-timeout block repeats in `manifest-absence-canary.mjs` on
+  // purpose. Each driver is a standalone operator-run script that imports
+  // nothing from a sibling (see the file header). A shared helper would add an
+  // import to a drop-in script and a second unused-file suppression.
   return await new Promise((resolve) => {
     const child = spawn(process.execPath, [pi.cliPath, ...args], {
       cwd: REPO_ROOT,
@@ -415,11 +510,14 @@ async function drivePiTurn(pi) {
     });
     child.on("error", (err) => {
       clearTimeout(timer);
-      resolve({ stdout, stderr, timedOut, message: String(err?.message ?? err) });
+      const spawnError = String(err?.message ?? err);
+      console.error(`[stop-canary] pi spawn error: ${spawnError}`);
+      resolve({ stdout, stderr, timedOut, code: null, signal: null, spawnError, settled: false });
     });
-    child.on("close", () => {
+    child.on("close", (code, signal) => {
       clearTimeout(timer);
-      resolve({ stdout, stderr, timedOut });
+      const settled = !timedOut && signal === null && code === PI_NORMAL_EXIT_CODE;
+      resolve({ stdout, stderr, timedOut, code, signal, settled });
     });
   });
 }
@@ -455,6 +553,7 @@ async function main() {
       `[stop-canary] observed: Stop-hook blocks=${blockCount}, agent_settled=${settleCount}, ` +
         `turn_start=${turnStartCount}, cap=${STOP_OVERRIDE_CAP}, capWarning=${capWarningSeen}.`,
     );
+    console.log(`[stop-canary] drive: ${describeTermination(run)}.`);
 
     // STOP-01: agent_settled must fire and dispatch the Stop bucket end-to-end.
     if (blockCount === 0 || settleCount === 0) {
@@ -484,16 +583,29 @@ async function main() {
         `(${turnStartCount} turns for one prompt; the expected extra-turn-boundary divergence).`,
     );
 
-    // STOP-07 regression guard: if headless pi ever DID sustain the loop, the
-    // count must never exceed the cap (an unbounded livelock).
-    if (blockCount > STOP_OVERRIDE_CAP) {
-      liveRuntimeRequired(
-        `STOP-07 regression: the always-block canary spun to ${blockCount} blocks, past the ${STOP_OVERRIDE_CAP} cap.`,
+    // STOP-07: only a run that terminated normally at exactly the cap gets
+    // past this check.
+    const capFailure = capBoundFailure(blockCount, run);
+    const stderrDetail = run.stderr.trim() === "" ? undefined : `pi stderr:\n${run.stderr}`;
+    if (capFailure?.kind === "regression") {
+      stopRegression(capFailure.reason, stderrDetail);
+    }
+    if (capFailure !== undefined) {
+      liveRuntimeRequired(capFailure.reason, stderrDetail);
+    }
+
+    // Each settle of the capped run dispatches the Stop bucket exactly once,
+    // so a clean run shows one `agent_settled` per block.
+    if (settleCount !== blockCount) {
+      stopRegression(
+        `agent_settled fired ${settleCount} time(s) for ${blockCount} Stop-hook block(s); a run capped at ` +
+          `${STOP_OVERRIDE_CAP} settles once per block.`,
       );
     }
 
-    if (blockCount === STOP_OVERRIDE_CAP && capWarningSeen) {
-      // The loop ran to the cap end-to-end (an interactive/PTY-capable runner).
+    if (capWarningSeen) {
+      // The loop ran to the cap and the cap-trip warning was visible (a runner
+      // whose mode forwards ctx.ui.notify).
       pass(
         `STOP-07: 8-block override cap tripped exactly once with the cap-trip warning ` +
           `(bounded at ${STOP_OVERRIDE_CAP}, run terminated -- T-88-02 mitigation proven).`,
@@ -502,9 +614,10 @@ async function main() {
       return;
     }
 
-    // Expected in a headless environment: the re-entry START is proven, but the
-    // loop-to-cap is not autonomously driveable. Route the cap to human_needed.
-    capNeedsHumanDrive(blockCount);
+    // Expected in a headless environment: re-entry and the cap bound are
+    // proven, because the run terminated normally at exactly the cap. The
+    // cap-trip warning is not visible. Route it to human_needed.
+    capWarningNeedsHuman(blockCount);
   } finally {
     await uninstallCanary(command, ctx);
     await rm(root, { recursive: true, force: true });
@@ -515,9 +628,9 @@ main().then(
   () => process.exit(0),
   (err) => {
     if (err instanceof UatExit) {
-      // Human-readable routing message already printed; exit non-zero so the
-      // verifier records human_needed rather than a silent pass.
-      process.exit(1);
+      // Human-readable routing message already printed; exit with the code the
+      // routing helper chose, so a regression stays distinct from human_needed.
+      process.exit(err.exitCode);
     }
     console.error(`\n[stop-canary] LIVE RUNTIME REQUIRED -- unexpected harness error:`);
     console.error(String(err?.stack ?? err));

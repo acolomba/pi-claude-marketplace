@@ -36,6 +36,7 @@ import { shouldEmitReloadHint } from "../../extensions/pi-claude-marketplace/sha
 
 import type {
   MarketplaceNotificationMessage,
+  McpServerSummaryEntry,
   PluginInfoMessage,
   PluginNotificationMessage,
   Reason,
@@ -303,6 +304,7 @@ for (const { plugin, expected } of ROW_CASES) {
 }
 
 test("pending uninstall stays bare while prune preview adds its reason without a reload", () => {
+  // arrange
   const bare: MarketplaceNotificationMessage = {
     name: "official",
     scope: "user",
@@ -314,6 +316,7 @@ test("pending uninstall stays bare while prune preview adds its reason without a
     plugins: [{ status: "will uninstall", name: "shared-lib", reasons: ["dependency pruned"] }],
   };
 
+  // act & assert
   assert.equal(
     composeMarketplaceBlock(bare, bothLoadedProbe()),
     "● official [user]\n  ○ shared-lib (will uninstall)",
@@ -666,6 +669,190 @@ test("renders no dependencies line for an unresolved row whose list is empty", (
   );
 });
 
+test("ADET-01: renders the stamped requires line after the components and before dependencies and notes", () => {
+  // arrange
+  const message: PluginInfoMessage = {
+    kind: "plugin-info",
+    marketplaceName: "official",
+    marketplaceScope: "user",
+    marketplaceDetails: { autoupdate: false },
+    plugin: {
+      status: "installed",
+      name: "alpha",
+      componentsResolved: true,
+      components: { agents: ["a"], mcp: [{ name: "plugin:alpha:m" }] },
+      requires: [
+        { companion: "pi-mcp-adapter", missing: true },
+        { companion: "pi-subagents", missing: false },
+      ],
+      dependencies: ["dep@mp"],
+      notes: ["a note"],
+    },
+  };
+
+  // act
+  const rendered = renderPluginInfo(message, bothLoadedProbe());
+
+  // assert
+  assert.equal(
+    rendered,
+    [
+      "● official [user] <no autoupdate>",
+      "  ● alpha (installed)",
+      "    agents: a",
+      "    mcp: plugin:alpha:m",
+      "    requires: pi-mcp-adapter (missing), pi-subagents",
+      "    dependencies: dep@mp",
+      "    note: a note",
+    ].join("\n"),
+  );
+});
+
+for (const { requirement, label, mcp, mcpLines } of [
+  {
+    requirement: "ANAME-07",
+    label: "tags a left-out server with its blocking feature beside a plain one",
+    mcp: [{ name: "plugin:a:x" }, { name: "plugin:a:y", unsupportedFeature: "headersHelper" }],
+    mcpLines: ["    mcp: plugin:a:x, plugin:a:y (unsupported headersHelper)"],
+  },
+  { requirement: "ANAME-07", label: "prints no mcp line for an empty list", mcp: [], mcpLines: [] },
+  {
+    requirement: "ANAME-07",
+    label: "prints no mcp line for an absent list",
+    mcp: undefined,
+    mcpLines: [],
+  },
+  {
+    requirement: "AVAR-04",
+    label: "renders each server's variable lists, its unsupported feature, or its bare name",
+    mcp: [
+      { name: "plugin:a:p", unsetVariables: ["A", "B"] },
+      { name: "plugin:a:q", withheldVariables: ["C"] },
+      { name: "plugin:a:r", unsetVariables: ["A"], withheldVariables: ["C"] },
+      { name: "plugin:a:s", unsupportedFeature: "ws" },
+      { name: "plugin:a:t" },
+    ],
+    mcpLines: [
+      "    mcp: plugin:a:p (unset A, B), plugin:a:q (withheld C), " +
+        "plugin:a:r (unset A; withheld C), plugin:a:s (unsupported ws), plugin:a:t",
+    ],
+  },
+  {
+    requirement: "AVAR-04",
+    label: "renders the bare name for two empty variable lists",
+    mcp: [{ name: "plugin:a:p", unsetVariables: [], withheldVariables: [] }],
+    mcpLines: ["    mcp: plugin:a:p"],
+  },
+  {
+    requirement: "ASTAT-01",
+    label: "renders a server's state alone inside its parentheses",
+    mcp: [{ name: "plugin:a:p", status: "connected" } satisfies McpServerSummaryEntry],
+    mcpLines: ["    mcp: plugin:a:p (connected)"],
+  },
+  {
+    requirement: "ASTAT-01",
+    label: "renders a server's state first, then its unset and withheld lists",
+    mcp: [
+      {
+        name: "plugin:a:p",
+        status: "needs authentication",
+        unsetVariables: ["A"],
+        withheldVariables: ["C"],
+      } satisfies McpServerSummaryEntry,
+    ],
+    mcpLines: ["    mcp: plugin:a:p (needs authentication; unset A; withheld C)"],
+  },
+]) {
+  test(`${requirement}: ${label}`, () => {
+    // arrange
+    const message: PluginInfoMessage = {
+      kind: "plugin-info",
+      marketplaceName: "official",
+      marketplaceScope: "user",
+      marketplaceDetails: { autoupdate: false },
+      plugin: {
+        status: "installed",
+        name: "a",
+        componentsResolved: true,
+        components: { agents: ["b"], ...(mcp !== undefined && { mcp }) },
+      },
+    };
+
+    // act
+    const rendered = renderPluginInfo(message, bothLoadedProbe());
+
+    // assert
+    assert.equal(
+      rendered,
+      ["● official [user] <no autoupdate>", "  ● a (installed)", "    agents: b", ...mcpLines].join(
+        "\n",
+      ),
+    );
+  });
+}
+
+test("ADET-01: formats the requires entries as stamped, whatever the probe it is handed reports", () => {
+  // arrange
+  const message: PluginInfoMessage = {
+    kind: "plugin-info",
+    marketplaceName: "official",
+    marketplaceScope: "user",
+    marketplaceDetails: { autoupdate: false },
+    plugin: {
+      status: "installed",
+      name: "alpha",
+      componentsResolved: true,
+      components: { workflows: ["alpha:w"] },
+      requires: [{ companion: "pi-dynamic-workflows", missing: false }],
+    },
+  };
+
+  // act
+  const rendered = renderPluginInfo(message, neitherLoadedProbe());
+
+  // assert
+  assert.equal(
+    rendered,
+    [
+      "● official [user] <no autoupdate>",
+      "  ● alpha (installed)",
+      "    workflows: alpha:w",
+      "    requires: pi-dynamic-workflows",
+    ].join("\n"),
+  );
+});
+
+for (const { label, stamp } of [
+  { label: "absent", stamp: {} },
+  { label: "empty", stamp: { requires: [] } },
+]) {
+  test(`ADET-01: renders no requires line when the stamped list is ${label}`, () => {
+    // arrange
+    const message: PluginInfoMessage = {
+      kind: "plugin-info",
+      marketplaceName: "official",
+      marketplaceScope: "user",
+      marketplaceDetails: { autoupdate: false },
+      plugin: {
+        status: "installed",
+        name: "alpha",
+        componentsResolved: true,
+        components: { skills: ["s"] },
+        ...stamp,
+      },
+    };
+
+    // act
+    const rendered = renderPluginInfo(message, neitherLoadedProbe());
+
+    // assert
+    assert.equal(
+      rendered,
+      "● official [user] <no autoupdate>\n  ● alpha (installed)\n    skills: s",
+    );
+  });
+}
+
 test("renders resolved plugin components and wraps descriptions without ellipsis", () => {
   // arrange
   const description = `${"word ".repeat(20)}supercalifragilisticexpialidocious`.trim();
@@ -681,7 +868,13 @@ test("renders resolved plugin components and wraps descriptions without ellipsis
       reasons: ["not in manifest"],
       description,
       componentsResolved: true,
-      components: { agents: ["a"], commands: ["c"], hooks: undefined, mcp: ["m"], skills: ["s"] },
+      components: {
+        agents: ["a"],
+        commands: ["c"],
+        hooks: undefined,
+        mcp: [{ name: "plugin:alpha:m" }],
+        skills: ["s"],
+      },
       dependencies: ["dep"],
     },
   };
@@ -700,7 +893,7 @@ test("renders resolved plugin components and wraps descriptions without ellipsis
       "    supercalifragilisticexpialidocious",
       "    agents: a",
       "    commands: c",
-      "    mcp: m",
+      "    mcp: plugin:alpha:m",
       "    skills: s",
       "    dependencies: dep",
     ].join("\n"),
@@ -1062,7 +1255,7 @@ for (const { name, reasons, agents, mcp, workflows, probe, expected } of [
     mcp: true,
     workflows: false,
     probe: neitherLoadedProbe(),
-    expected: "{not found, requires pi-subagents, requires pi-mcp}",
+    expected: "{not found, requires pi-subagents, requires pi-mcp-adapter}",
   },
 ] as const) {
   test(name, () => {

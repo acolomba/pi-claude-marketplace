@@ -9,7 +9,7 @@
 // `edge/register.ts` (which legally imports from `orchestrators/`) can
 // reach all four underlying modules without violating BLOCK C's
 // edge/ -> persistence/ restriction (edge/ -> domain/ has been allowed
-// directly since Phase 21 / D-21-02; the domain/manifest read still routes
+// directly (D-21-02); the domain/manifest read still routes
 // through here because it's paired with the persistence/ read in the same
 // resolver interface).
 //
@@ -40,6 +40,7 @@ import { loadState } from "../persistence/state-io.ts";
 import { ManifestSoftFailError } from "../shared/completion-cache.ts";
 import { hookDebugLog } from "../shared/debug-log.ts";
 import { errorMessage } from "../shared/errors.ts";
+import { ownValue, setOwn } from "../shared/own-key.ts";
 
 import { probeManifestEntry, probeUpgradeCandidate } from "./plugin/git-source-probe.ts";
 import { classifyInstalledRecord } from "./plugin/plugin-state-classifier.ts";
@@ -196,7 +197,7 @@ export function makeLocationsResolver(cwd: string): LocationsResolverLike {
       // exists to document the contract surface explicitly.
       const projected: Record<string, MarketplaceStateRecordLike> = {};
       for (const [name, record] of Object.entries(state.marketplaces)) {
-        projected[name] = { plugins: record.plugins };
+        setOwn(projected, name, { plugins: record.plugins });
       }
 
       return { marketplaces: projected };
@@ -209,7 +210,7 @@ export function makeLocationsResolver(cwd: string): LocationsResolverLike {
       try {
         const locations = locationsFor(scope, cwd);
         const state = await loadState(locations.extensionRoot);
-        const mp = state.marketplaces[marketplace];
+        const mp = ownValue(state.marketplaces, marketplace);
         if (mp === undefined) {
           // No state record for the requested marketplace in this scope.
           // The cache layer treats ManifestSoftFailError as the TC-8 poison

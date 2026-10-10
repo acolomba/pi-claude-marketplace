@@ -25,22 +25,22 @@
  */
 
 import assert from "node:assert/strict";
-import test, { mock } from "node:test";
+import test, { type TestContext } from "node:test";
 
 import { notify } from "../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
 import { type NotificationMessage } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
+import { adapterCommand } from "../platform/pi-inventory-seed.ts";
+
+import type {
+  CommandInventoryItem,
+  NotificationContext,
+} from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
 // ---------------------------------------------------------------------------
-// Mock helpers -- mirror the catalog-uat harness (makeCtx + piWith*Loaded).
+// Mock helpers -- mirror the catalog-uat harness (emitOnce + piWith*Loaded).
 // ---------------------------------------------------------------------------
 
-interface MockCtx {
-  ui: { notify: ReturnType<typeof mock.fn> };
-}
-
-function makeCtx(): MockCtx {
-  return { ui: { notify: mock.fn() } };
-}
+type NotifyArguments = [message: string, severity?: string];
 
 interface MockTool {
   name?: string;
@@ -49,6 +49,28 @@ interface MockTool {
 
 interface MockPi {
   getAllTools: () => MockTool[];
+  getCommands: () => CommandInventoryItem[];
+}
+
+/**
+ * Drives `notify()` over the fixture and returns the arguments of its one
+ * `ctx.ui.notify` call (IL-2).
+ */
+function emitOnce(
+  t: TestContext,
+  fixture: { readonly label: string; readonly pi: MockPi; readonly message: NotificationMessage },
+): NotifyArguments {
+  const uiNotify = t.mock.fn<(...args: NotifyArguments) => void>();
+  const ctx: NotificationContext = { ui: { notify: uiNotify } };
+  notify(ctx, fixture.pi, fixture.message);
+  assert.equal(
+    uiNotify.mock.calls.length,
+    1,
+    `notify() must call ctx.ui.notify exactly once (IL-2) for: ${fixture.label}`,
+  );
+  const [call] = uiNotify.mock.calls;
+  assert.ok(call);
+  return call.arguments;
 }
 
 /**
@@ -57,7 +79,8 @@ interface MockPi {
  */
 function piWithAllLoaded(): MockPi {
   return {
-    getAllTools: () => [{ name: "subagent" }, { name: "mcp" }, { name: "workflow_control" }],
+    getAllTools: () => [{ name: "subagent" }, { name: "workflow_control" }],
+    getCommands: () => [adapterCommand()],
   };
 }
 
@@ -438,16 +461,9 @@ const DISABLED_VARIANT_FIXTURES: readonly DisabledRowFixture[] = [
   },
 ];
 
-test("DIFF-02: every will-* row renders subject-first `<glyph> <name> [<scope>] (will ...)` with the status token AFTER the subject", () => {
-  for (const fixture of WILL_VARIANT_FIXTURES) {
-    const ctx = makeCtx();
-    notify(ctx as never, fixture.pi, fixture.message);
-    assert.equal(
-      ctx.ui.notify.mock.calls.length,
-      1,
-      `notify() must call ctx.ui.notify exactly once for: ${fixture.label}`,
-    );
-    const args = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
+for (const fixture of WILL_VARIANT_FIXTURES) {
+  test(`DIFF-02: a will-* row renders subject-first \`<glyph> <name> [<scope>] (will ...)\` with the status token AFTER the subject: ${fixture.label}`, (t) => {
+    const args = emitOnce(t, fixture);
     // will-* tokens are info severity -> no 2nd arg.
     assert.equal(
       args.length,
@@ -475,19 +491,12 @@ test("DIFF-02: every will-* row renders subject-first `<glyph> <name> [<scope>] 
       !emitted.includes("/reload to pick up changes"),
       `${fixture.label}: will-* pending rows must NOT emit the reload-hint trailer`,
     );
-  }
-});
+  });
+}
 
-test("D-54-01 / ENBL-04: every (disabled) row renders subject-first `◍ <name> [<scope>] v<version> (disabled)` with the status token AFTER the subject", () => {
-  for (const fixture of DISABLED_VARIANT_FIXTURES) {
-    const ctx = makeCtx();
-    notify(ctx as never, fixture.pi, fixture.message);
-    assert.equal(
-      ctx.ui.notify.mock.calls.length,
-      1,
-      `notify() must call ctx.ui.notify exactly once for: ${fixture.label}`,
-    );
-    const args = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
+for (const fixture of DISABLED_VARIANT_FIXTURES) {
+  test(`D-54-01 / ENBL-04: a (disabled) row renders subject-first \`◍ <name> [<scope>] v<version> (disabled)\` with the status token AFTER the subject: ${fixture.label}`, (t) => {
+    const args = emitOnce(t, fixture);
     // An inventory (disabled) row routes to info severity (no 2nd arg); the
     // load-time dependency disable routes to warning and carries one.
     assert.equal(
@@ -524,8 +533,8 @@ test("D-54-01 / ENBL-04: every (disabled) row renders subject-first `◍ <name> 
       !emitted.includes("/reload to pick up changes"),
       `${fixture.label}: (disabled) inventory rows must NOT emit the reload-hint trailer`,
     );
-  }
-});
+  });
+}
 
 // ---------------------------------------------------------------------------
 // RECON-04: subject-first row grammar for the
@@ -620,16 +629,9 @@ const RECONCILE_APPLIED_FIXTURES: readonly GrammarFixture[] = [
   },
 ];
 
-test("RECON-04: reconcile-applied-cascade NEVER emits `/reload to pick up changes` even on cascades with realized transition tokens", () => {
-  for (const fixture of RECONCILE_APPLIED_FIXTURES) {
-    const ctx = makeCtx();
-    notify(ctx as never, fixture.pi, fixture.message);
-    assert.equal(
-      ctx.ui.notify.mock.calls.length,
-      1,
-      `notify() must call ctx.ui.notify exactly once (IL-2) for: ${fixture.label}`,
-    );
-    const args = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
+for (const fixture of RECONCILE_APPLIED_FIXTURES) {
+  test(`RECON-04: reconcile-applied-cascade NEVER emits \`/reload to pick up changes\` even on cascades with realized transition tokens: ${fixture.label}`, (t) => {
+    const args = emitOnce(t, fixture);
     const emitted = args[0];
 
     // RECON-04: the trailer is structurally excluded -- the
@@ -638,23 +640,21 @@ test("RECON-04: reconcile-applied-cascade NEVER emits `/reload to pick up change
       !emitted.includes("/reload to pick up changes"),
       `${fixture.label}: reconcile-applied-cascade MUST NOT emit the reload-hint trailer`,
     );
-  }
-});
+  });
+}
 
-test("RECON-04: every reconcile-applied-cascade row renders subject-first `<glyph> <name> [<scope>] (<token>)` with the status token AFTER the subject", () => {
-  // Mirrors the WILL_TOKEN_RE / DISABLED_TOKEN_RE invariant but for the
-  // realized-token row grammar (added / removed / installed / uninstalled /
-  // disabled / failed; optional reasons brace; optional 4-space cause-chain
-  // indent on failed rows). The load-bearing assertion is that no line
-  // starts with a `(<token>)` discriminator -- the subject (glyph + name)
-  // always precedes the token.
-  // LOAD-01 added `◍`: the load-time dependency disable renders a `(disabled)`
-  // row, whose glyph the three transition icons do not cover.
-  const ROW_ICONS_AT_START = ["●", "○", "⊘", "◍"];
-  for (const fixture of RECONCILE_APPLIED_FIXTURES) {
-    const ctx = makeCtx();
-    notify(ctx as never, fixture.pi, fixture.message);
-    const args = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
+// Mirrors the WILL_TOKEN_RE / DISABLED_TOKEN_RE invariant but for the
+// realized-token row grammar (added / removed / installed / uninstalled /
+// disabled / failed; optional reasons brace; optional 4-space cause-chain
+// indent on failed rows). The load-bearing assertion is that no line
+// starts with a `(<token>)` discriminator -- the subject (glyph + name)
+// always precedes the token.
+// LOAD-01 added `◍`: the load-time dependency disable renders a `(disabled)`
+// row, whose glyph the three transition icons do not cover.
+const ROW_ICONS_AT_START = ["●", "○", "⊘", "◍"];
+for (const fixture of RECONCILE_APPLIED_FIXTURES) {
+  test(`RECON-04: a reconcile-applied-cascade row renders subject-first \`<glyph> <name> [<scope>] (<token>)\` with the status token AFTER the subject: ${fixture.label}`, (t) => {
+    const args = emitOnce(t, fixture);
     const emitted = args[0];
 
     // Drop the summary line (if present) -- the cascade body starts AFTER the
@@ -685,27 +685,18 @@ test("RECON-04: every reconcile-applied-cascade row renders subject-first `<glyp
         );
       }
     }
-  }
-});
+  });
+}
 
-test("GRAM-01/04/05: every error/warning emission has a non-empty summary first line distinct from the detail block", () => {
-  for (const fixture of FIXTURES) {
-    const ctx = makeCtx();
-    notify(ctx as never, fixture.pi, fixture.message);
-
-    assert.equal(
-      ctx.ui.notify.mock.calls.length,
-      1,
-      `notify() must call ctx.ui.notify exactly once (IL-2) for: ${fixture.label}`,
-    );
-
-    const args = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
+for (const fixture of FIXTURES) {
+  test(`GRAM-01/04/05: an error/warning emission has a non-empty summary first line distinct from the detail block: ${fixture.label}`, (t) => {
+    const args = emitOnce(t, fixture);
     const severity = args[1];
 
     // Info-severity emissions (no 2nd arg) are exempt from the summary
     // invariant -- the count semantics do not apply to read-only results.
     if (severity !== "error" && severity !== "warning") {
-      continue;
+      return;
     }
 
     const emitted = args[0];
@@ -749,8 +740,8 @@ test("GRAM-01/04/05: every error/warning emission has a non-empty summary first 
       firstLine,
       `${fixture.label}: the detail block must be distinct from the summary first line`,
     );
-  }
-});
+  });
+}
 
 // CMP-4 / SCOPE-01: the scope word BAKED INTO the reason token names the scope
 // that missed, which is the same scope the `[bracket]` beside it renders. The
@@ -759,11 +750,9 @@ test("GRAM-01/04/05: every error/warning emission has a non-empty summary first 
 // `⊘ mp [user] (failed) {marketplace not added to project scope}` and every
 // shape-level assertion in this file would stay green. This is the assertion
 // that catches it.
-test("CMP-4 / SCOPE-01: the scope word inside the reason brace equals the scope inside the row bracket", () => {
-  for (const fixture of CROSS_SCOPE_FIXTURES) {
-    const ctx = makeCtx();
-    notify(ctx as never, fixture.pi, fixture.message);
-    const args = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
+for (const fixture of CROSS_SCOPE_FIXTURES) {
+  test(`CMP-4 / SCOPE-01: the scope word inside the reason brace equals the scope inside the row bracket: ${fixture.label}`, (t) => {
+    const args = emitOnce(t, fixture);
     const emitted = args[0];
     const row = emitted.slice(emitted.indexOf("\n\n") + 2);
 
@@ -778,8 +767,8 @@ test("CMP-4 / SCOPE-01: the scope word inside the reason brace equals the scope 
       bracket[1],
       `${fixture.label}: the baked-in scope word must track the bracket, never contradict it; got '${row}'`,
     );
-  }
-});
+  });
+}
 
 // SCOPE-01 / D-01: the cross-scope CONTENT token names where the marketplace
 // container IS, so its scope word is the OPPOSITE of the scope the command
@@ -792,11 +781,9 @@ test("CMP-4 / SCOPE-01: the scope word inside the reason brace equals the scope 
 // is the assertion that catches it, and it is deliberately the INVERSE of the
 // `marketplace not added to <scope>` agreement test above: that token names the
 // scope that MISSED, this one names the scope that HAS it.
-test("SCOPE-01: the scope word inside the cross-scope reason brace is the OPPOSITE of the scope in the marketplace header bracket", () => {
-  for (const fixture of CROSS_SCOPE_ROW_FIXTURES) {
-    const ctx = makeCtx();
-    notify(ctx as never, fixture.pi, fixture.message);
-    const args = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
+for (const fixture of CROSS_SCOPE_ROW_FIXTURES) {
+  test(`SCOPE-01: the scope word inside the cross-scope reason brace is the OPPOSITE of the scope in the marketplace header bracket: ${fixture.label}`, (t) => {
+    const args = emitOnce(t, fixture);
     const emitted = args[0];
     const body = emitted.slice(emitted.indexOf("\n\n") + 2);
 
@@ -818,5 +805,5 @@ test("SCOPE-01: the scope word inside the cross-scope reason brace is the OPPOSI
       token[0].startsWith("{not installed, "),
       `${fixture.label}: the cross-scope token must JOIN 'not installed' in the same brace; got '${token[0]}'`,
     );
-  }
-});
+  });
+}

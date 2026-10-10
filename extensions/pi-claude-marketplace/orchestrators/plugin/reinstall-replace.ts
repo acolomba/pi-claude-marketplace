@@ -50,12 +50,14 @@ import type { CommandsReplacement, PreparedCommandsStaging } from "../../bridges
 import type { McpReplacement, PreparedMcpStaging } from "../../bridges/mcp/index.ts";
 import type { PreparedSkillsStaging, SkillsReplacement } from "../../bridges/skills/index.ts";
 import type { PreparedWorkflowsStaging } from "../../bridges/workflows/index.ts";
+import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
 import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
 import type { InstalledReferenceNames } from "../../domain/skill-tokens.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { PluginInstallRecord } from "../../persistence/state-io.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { HookSummaryEntry } from "../../shared/concerns/hooks.ts";
+import type { McpConfigNotice } from "../../shared/notification-dispatch.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { RmOptions } from "node:fs";
 
@@ -108,6 +110,13 @@ export interface ReinstallReplacement {
   readonly hookEntries: readonly HookSummaryEntry[] | undefined;
   readonly discoveryWarnings: readonly string[];
   readonly bridgeWarnings: readonly string[];
+  /**
+   * AFILE-04 / AMIG-02: the MCP replace's file notices: the stage's, then those
+   * of the replace's removal of the plugin's marked `mcp.json` entries. Only a
+   * completed replace returns a replacement; a failed one restores the files'
+   * exact bytes and throws.
+   */
+  readonly mcpConfigNotices: readonly McpConfigNotice[];
   /** Operations retained so compensation uses the same transaction owner. */
   readonly operations: ReinstallReplaceOperations;
   /**
@@ -139,6 +148,8 @@ export interface ReplaceReinstalledPluginInput {
   readonly agentsDirs: readonly string[];
   /** SKTK-01: the workflow names the skills bridge retargets sibling references onto. */
   readonly workflowNames: readonly string[];
+  /** D-08-06: the environment the reinstall stages MCP servers with. */
+  readonly env: ClaudeEnv;
 }
 
 /** Physical bridge operations consumed by the atomic replacement schedule. */
@@ -264,17 +275,18 @@ async function replaceReinstalledPlugin(
   // step below performs its cleanup through that one collaborator.
   const removalOps = createRemovalOps();
   const handles = await prepareAllHandles(removalOps, input, operations);
-  const { replacements, hookEntries, placedWorkflowNames, workflowsCommitLeaks } = await replaceAll(
-    removalOps,
-    handles,
-    {
-      locations: input.locations,
-      cwd: input.cwd,
-      plugin: input.plugin,
-      installable: input.installable,
-    },
-    operations,
-  );
+  const { replacements, mcp, hookEntries, placedWorkflowNames, workflowsCommitLeaks } =
+    await replaceAll(
+      removalOps,
+      handles,
+      {
+        locations: input.locations,
+        cwd: input.cwd,
+        plugin: input.plugin,
+        installable: input.installable,
+      },
+      operations,
+    );
   const warnings = splitHandleWarnings(handles);
   return {
     handles,
@@ -282,6 +294,10 @@ async function replaceReinstalledPlugin(
     hookEntries,
     discoveryWarnings: warnings.discovery,
     bridgeWarnings: [...warnings.bridge, ...workflowsCommitLeaks],
+    mcpConfigNotices: [
+      ...handles.mcp.result.notices,
+      ...(mcp.kind === "replaced" ? mcp.legacy.notices : []),
+    ],
     operations,
     removalOps,
     locations: input.locations,
@@ -430,6 +446,8 @@ async function prepareAllHandles(
       agentsDirs: input.agentsDirs,
       knownSkills: handles.skills.result.recorded.map((record) => record.generatedName),
       referenceNames: input.referenceNames,
+      // ANAME-02: the servers this reinstall writes, mapped in agent tool lists.
+      mcpServerNames: Object.keys(input.installable.mcpServers),
       cwd: input.cwd,
     });
     handles.mcp = await operations.prepareStageMcpServers({
@@ -441,6 +459,8 @@ async function prepareAllHandles(
       pluginRoot: input.installable.pluginRoot,
       pluginData: input.pluginDataDir,
       sourcePath: `${input.installable.pluginRoot}#mcpServers`,
+      description: input.installable.description,
+      env: input.env,
     });
     // WLIF-01: fifth and LAST, mirroring the install ledger's ordering. The
     // previous names come from the OLD record's inventory -- the same slot the
@@ -467,12 +487,15 @@ async function replaceAll(
   operations: ReinstallReplaceOperations,
 ): Promise<{
   readonly replacements: readonly ReplacementEntry[];
+  /** The MCP replacement, also pushed onto `replacements`. */
+  readonly mcp: McpReplacement;
   readonly hookEntries: readonly HookSummaryEntry[] | undefined;
   readonly placedWorkflowNames: readonly string[];
   /** The workflows commit's staging-cleanup leak, empty when it cleaned up. */
   readonly workflowsCommitLeaks: readonly string[];
 }> {
   const replacements: ReplacementEntry[] = [];
+  let mcp: McpReplacement;
   let hookEntries: readonly HookSummaryEntry[] | undefined;
   let placedWorkflowNames: readonly string[] = [];
   let workflowsCommitEntered = false;
@@ -485,7 +508,7 @@ async function replaceAll(
     const agents = await operations.replacePreparedAgents(ops, handles.agents, { force: true });
     replacements.push({ phase: "agents", handle: agents });
     hookEntries = await commitHooks(hooks, operations);
-    const mcp = await operations.replacePreparedMcp(handles.mcp);
+    mcp = await operations.replacePreparedMcp(handles.mcp);
     replacements.push({ phase: "mcp", handle: mcp });
     // WLIF-01: the LAST step, mirroring the install ledger's ordering. The
     // workflows bridge has no `replacePrepared*` twin and needs none -- the
@@ -534,6 +557,7 @@ async function replaceAll(
 
   return {
     replacements: Object.freeze(replacements),
+    mcp,
     hookEntries,
     placedWorkflowNames,
     workflowsCommitLeaks: Object.freeze(workflowsCommitLeaks),

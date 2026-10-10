@@ -375,7 +375,7 @@ test("rejects a first-scope state failure before reading user scope", async (t) 
   );
   await seedState(user, { alpha: marketplaceRecord("user", "alpha", root) });
 
-  // act and assert
+  // act & assert
   await assert.rejects(
     collectMarketplaceRecordsByScope({
       cwd,
@@ -402,7 +402,7 @@ test("rejects a later user-scope state failure after reading project scope", asy
     JSON.stringify({ schemaVersion: 99, marketplaces: {} }),
   );
 
-  // act and assert
+  // act & assert
   await assert.rejects(
     collectMarketplaceRecordsByScope({
       cwd,

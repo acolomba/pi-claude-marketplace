@@ -84,6 +84,12 @@ export interface StageAgentsInput {
    */
   readonly mapModel?: boolean;
   /**
+   * ANAME-02: the declared names of the MCP servers this install writes.
+   * `convertAgent` maps an agent's `mcp__` tool names that name one of these
+   * servers to pi-subagents `mcp:` entries.
+   */
+  readonly mcpServerNames?: readonly string[] | undefined;
+  /**
    * Install cwd (the project root for project-scope installs), substituted for
    * `${CLAUDE_PROJECT_DIR}` in agent bodies (SUB-02). Required so a
    * project-scope caller cannot silently omit it and ship the token literal.
@@ -142,15 +148,15 @@ export interface PreparedAgentsStaged {
   readonly result: StageAgentsCommitResult;
   // Internals -- opaque to orchestrators (NOT re-exported from index.ts).
   /** Previous index entries safe to overwrite (foreign-content excluded). */
-  readonly _previousEntries: readonly AgentsIndexEntry[];
+  readonly previousEntries: readonly AgentsIndexEntry[];
   /** W-08: AG-5 foreign-content rows kept in index, NOT rm'd. */
-  readonly _foreignPreservedEntries: readonly AgentsIndexEntry[];
+  readonly foreignPreservedEntries: readonly AgentsIndexEntry[];
   /** Other (mp,plugin) rows preserved across the stage. */
-  readonly _otherEntries: readonly AgentsIndexEntry[];
+  readonly otherEntries: readonly AgentsIndexEntry[];
   /** New rows produced by this stage. */
-  readonly _newEntries: readonly AgentsIndexEntry[];
+  readonly newEntries: readonly AgentsIndexEntry[];
   /** Pre-staged file paths -- {from: stagingDir/<name>.md, to: agentsDir/<name>.md}. */
-  readonly _stagedFilePaths: readonly { readonly from: string; readonly to: string }[];
+  readonly stagedFilePaths: readonly { readonly from: string; readonly to: string }[];
 }
 
 export interface ReplacePreparedAgentsOptions {

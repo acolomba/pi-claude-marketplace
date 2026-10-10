@@ -15,11 +15,12 @@ import { recomputePluginPath } from "./orchestrators/plugin-path.ts";
 import { createApplyReconcile } from "./orchestrators/reconcile/apply.ts";
 import { locationsFor } from "./persistence/locations.ts";
 import { loadState } from "./persistence/state-io.ts";
+import { createMcpStatusTracker } from "./platform/mcp-status.ts";
 import { createCompletionCache } from "./shared/completion-cache.ts";
 import { hookDebugLog } from "./shared/debug-log.ts";
 import { errorMessage } from "./shared/errors.ts";
 import { makeRawNotifyFn } from "./shared/notification-dispatch.ts";
-import { applySessionEnv } from "./shared/session-env.ts";
+import { applyMcpAdapterEnv, applySessionEnv } from "./shared/session-env.ts";
 
 import type {
   ExtensionAPI,
@@ -27,6 +28,23 @@ import type {
   ResourcesDiscoverEvent,
   ResourcesDiscoverResult,
 } from "./platform/pi-api.ts";
+
+/**
+ * AVAR-01 / AVAR-03: sets pi-mcp-adapter's variables from the given working
+ * directory. A throw from `readCwd` is debug-logged and never escapes (NFR-2).
+ */
+function applyMcpAdapterEnvFrom(readCwd: () => string): void {
+  try {
+    if (!applyMcpAdapterEnv(readCwd)) {
+      hookDebugLog(
+        "CLAUDE_PROJECT_DIR removed: the working directory holds a pi-mcp-adapter variable marker or ends in the start of one",
+        "env",
+      );
+    }
+  } catch (err) {
+    hookDebugLog(`MCP adapter env apply skipped: ${errorMessage(err)}`, "env");
+  }
+}
 
 /**
  * Registers the extension's Pi hooks, tools, and slash command surface.
@@ -47,9 +65,16 @@ import type {
 // still reported, and an unrelated default elsewhere is still reported.
 // fallow-ignore-next-line unused-export -- package.json `pi.extensions` loads this default.
 export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Promise<void> {
+  // AVAR-03 / NFR-2: pi-mcp-adapter may load first and connect servers from its
+  // own `session_start`, so the values must exist before this extension's
+  // handlers run.
+  applyMcpAdapterEnvFrom(() => process.cwd());
   const hooksRuntime = createHooksRuntime();
   const hooksRouting = createHooksRouting(hooksRuntime, { readHooksJson });
   const completionCache = createCompletionCache();
+  // ASTAT-01: one status tracker per extension load. Pi drops its subscription
+  // when it invalidates this runtime, and the next load starts empty.
+  const mcpStatus = createMcpStatusTracker(pi.events);
   const pluginUpdateOperations = createPluginUpdateOperations(hooksRouting, completionCache);
   const hooksHydration = createHooksHydration(hooksRuntime, { loadState, readHooksJson });
   // RECON-01..05: one reconcile operation per extension load, bound to the
@@ -188,6 +213,9 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
     },
   );
 
+  // AVAR-01: refresh pi-mcp-adapter's variables from the session's cwd first,
+  // outside the session id's try, so a session id failure cannot skip them.
+  //
   // SENV-01/02/03: reset the Claude-Code session env on every session_start
   // (startup/reload/new/resume/fork). Overwrite is unconditional -- that IS the
   // SENV-02 freshness contract -- so re-registration is harmless (idempotent).
@@ -198,6 +226,7 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
   // `ctx.sessionManager` be undefined); wrap so a throw never propagates past
   // session_start, matching the NFR-2 boundary discipline of the handlers above.
   pi.on("session_start", (_event, ctx) => {
+    applyMcpAdapterEnvFrom(() => ctx.cwd);
     try {
       applySessionEnv(ctx.sessionManager.getSessionId());
     } catch (err) {
@@ -209,6 +238,7 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
     pi,
     {
       completionCache,
+      mcpStatus,
       gitOps: DEFAULT_GIT_OPS,
       beginPluginUpdateRun: pluginUpdateOperations.beginPluginUpdateRun,
     },

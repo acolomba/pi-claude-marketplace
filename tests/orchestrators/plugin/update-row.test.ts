@@ -28,10 +28,10 @@ test("composes agent and MCP dependencies in declared display order", () => {
   const severity = { partiallyInstalled: "info" as const, updated: "info" as const };
 
   // act
-  const result = updatedRowFromOutcome(outcome, "user", severity);
+  const row = updatedRowFromOutcome(outcome, "user", severity);
 
   // assert
-  assert.deepStrictEqual(result, {
+  assert.deepStrictEqual(row, {
     dependencies: ["agents", "mcp"],
     from: "1.0.0",
     name: "alpha",
@@ -60,10 +60,10 @@ test("composes agent-only dependencies without an MCP marker", () => {
   const severity = { partiallyInstalled: "warning" as const, updated: "warning" as const };
 
   // act
-  const result = updatedRowFromOutcome(outcome, "project", severity);
+  const row = updatedRowFromOutcome(outcome, "project", severity);
 
   // assert
-  assert.deepStrictEqual(result, {
+  assert.deepStrictEqual(row, {
     dependencies: ["agents"],
     from: "2.0.0",
     name: "beta",
@@ -92,10 +92,10 @@ test("composes MCP-only dependencies without an agent marker", () => {
   const severity = { partiallyInstalled: "info" as const, updated: "info" as const };
 
   // act
-  const result = updatedRowFromOutcome(outcome, "project", severity);
+  const row = updatedRowFromOutcome(outcome, "project", severity);
 
   // assert
-  assert.deepStrictEqual(result, {
+  assert.deepStrictEqual(row, {
     dependencies: ["mcp"],
     from: "3.0.0",
     name: "gamma",
@@ -124,10 +124,10 @@ test("composes no dependencies and truly omits clean optional reasons", () => {
   const severity = { partiallyInstalled: "warning" as const, updated: "info" as const };
 
   // act
-  const result = updatedRowFromOutcome(outcome, "user", severity);
+  const row = updatedRowFromOutcome(outcome, "user", severity);
 
   // assert
-  assert.deepStrictEqual(result, {
+  assert.deepStrictEqual(row, {
     dependencies: [],
     from: "4.0.0",
     name: "delta",
@@ -137,7 +137,7 @@ test("composes no dependencies and truly omits clean optional reasons", () => {
     status: "updated",
     to: "4.1.0",
   });
-  assert.strictEqual(Object.hasOwn(result, "reasons"), false);
+  assert.strictEqual(Object.hasOwn(row, "reasons"), false);
 });
 
 test("WDEP-02: composes the workflows dependency LAST behind agents and MCP", () => {
@@ -157,10 +157,10 @@ test("WDEP-02: composes the workflows dependency LAST behind agents and MCP", ()
   const severity = { partiallyInstalled: "info" as const, updated: "info" as const };
 
   // act
-  const result = updatedRowFromOutcome(outcome, "user", severity);
+  const row = updatedRowFromOutcome(outcome, "user", severity);
 
   // assert
-  assert.deepStrictEqual(result.dependencies, ["agents", "mcp", "workflows"]);
+  assert.deepStrictEqual(row.dependencies, ["agents", "mcp", "workflows"]);
 });
 
 test("WDEP-02: an update that declares no workflow carries no host-engine dependency", () => {
@@ -180,10 +180,10 @@ test("WDEP-02: an update that declares no workflow carries no host-engine depend
   const severity = { partiallyInstalled: "info" as const, updated: "info" as const };
 
   // act
-  const result = updatedRowFromOutcome(outcome, "user", severity);
+  const row = updatedRowFromOutcome(outcome, "user", severity);
 
   // assert
-  assert.deepStrictEqual(result.dependencies, []);
+  assert.deepStrictEqual(row.dependencies, []);
 });
 
 test("keeps an empty partial degradation on the updated row", () => {
@@ -204,10 +204,10 @@ test("keeps an empty partial degradation on the updated row", () => {
   const severity = { partiallyInstalled: "warning" as const, updated: "info" as const };
 
   // act
-  const result = updatedRowFromOutcome(outcome, "user", severity);
+  const row = updatedRowFromOutcome(outcome, "user", severity);
 
   // assert
-  assert.deepStrictEqual(result, {
+  assert.deepStrictEqual(row, {
     dependencies: [],
     from: "5.0.0",
     name: "epsilon",
@@ -217,7 +217,7 @@ test("keeps an empty partial degradation on the updated row", () => {
     status: "updated",
     to: "5.1.0",
   });
-  assert.strictEqual(Object.hasOwn(result, "reasons"), false);
+  assert.strictEqual(Object.hasOwn(row, "reasons"), false);
 });
 
 test("preserves orphan, malformed, and dropped reason order on a partial row", () => {
@@ -243,10 +243,10 @@ test("preserves orphan, malformed, and dropped reason order on a partial row", (
   const severity = { partiallyInstalled: "info" as const, updated: "info" as const };
 
   // act
-  const result = updatedRowFromOutcome(outcome, "project", severity);
+  const row = updatedRowFromOutcome(outcome, "project", severity);
 
   // assert
-  assert.deepStrictEqual(result, {
+  assert.deepStrictEqual(row, {
     dependencies: ["agents", "mcp"],
     name: "zeta",
     needsReload: true,
@@ -283,10 +283,10 @@ test("raises a clean updated row only for malformed written content", () => {
   const severity = { partiallyInstalled: "info" as const, updated: "info" as const };
 
   // act
-  const result = updatedRowFromOutcome(outcome, "user", severity);
+  const row = updatedRowFromOutcome(outcome, "user", severity);
 
   // assert
-  assert.deepStrictEqual(result, {
+  assert.deepStrictEqual(row, {
     dependencies: [],
     from: "7.0.0",
     name: "eta",
@@ -317,10 +317,10 @@ test("retains base info severity for an already degraded partial update", () => 
   const severity = { partiallyInstalled: "info" as const, updated: "info" as const };
 
   // act
-  const result = updatedRowFromOutcome(outcome, "project", severity);
+  const row = updatedRowFromOutcome(outcome, "project", severity);
 
   // assert
-  assert.deepStrictEqual(result, {
+  assert.deepStrictEqual(row, {
     dependencies: [],
     name: "theta",
     needsReload: true,
@@ -350,10 +350,10 @@ test("retains base warning severity for a newly degraded partial update", () => 
   const severity = { partiallyInstalled: "warning" as const, updated: "info" as const };
 
   // act
-  const result = updatedRowFromOutcome(outcome, "user", severity);
+  const row = updatedRowFromOutcome(outcome, "user", severity);
 
   // assert
-  assert.deepStrictEqual(result, {
+  assert.deepStrictEqual(row, {
     dependencies: [],
     name: "iota",
     needsReload: true,
@@ -383,10 +383,10 @@ test("reports orphan rewake without overriding clean base severity", () => {
   const severity = { partiallyInstalled: "info" as const, updated: "info" as const };
 
   // act
-  const result = updatedRowFromOutcome(outcome, "project", severity);
+  const row = updatedRowFromOutcome(outcome, "project", severity);
 
   // assert
-  assert.deepStrictEqual(result, {
+  assert.deepStrictEqual(row, {
     dependencies: [],
     from: "10.0.0",
     name: "kappa",
@@ -419,10 +419,10 @@ test("D-10-15: an in-range current-copy fallback names itself on the success row
   const severity = { partiallyInstalled: "warning" as const, updated: "warning" as const };
 
   // act
-  const result = updatedRowFromOutcome(outcome, "user", severity);
+  const row = updatedRowFromOutcome(outcome, "user", severity);
 
   // assert
-  assert.deepStrictEqual(result, {
+  assert.deepStrictEqual(row, {
     dependencies: [],
     from: "1.0.0",
     name: "shared-lib",
@@ -459,10 +459,10 @@ test("D-10-15: all four written axes emit in the documented order on one row", (
   const severity = { partiallyInstalled: "info" as const, updated: "info" as const };
 
   // act
-  const result = updatedRowFromOutcome(outcome, "project", severity);
+  const row = updatedRowFromOutcome(outcome, "project", severity);
 
   // assert
-  assert.deepStrictEqual(result, {
+  assert.deepStrictEqual(row, {
     dependencies: ["agents", "mcp"],
     name: "shared-lib",
     needsReload: true,
@@ -498,10 +498,10 @@ test("an outcome with no constraint produces a message with no reasons key at al
   const severity = { partiallyInstalled: "info" as const, updated: "info" as const };
 
   // act
-  const result = updatedRowFromOutcome(outcome, "user", severity);
+  const row = updatedRowFromOutcome(outcome, "user", severity);
 
   // assert
-  assert.strictEqual(Object.hasOwn(result, "reasons"), false);
+  assert.strictEqual(Object.hasOwn(row, "reasons"), false);
 });
 
 function skippedOutcome(
@@ -625,10 +625,10 @@ test("WLIF-06: a retired workflow command takes the tail token and raises the ro
   const severity = { partiallyInstalled: "info" as const, updated: "info" as const };
 
   // act
-  const result = updatedRowFromOutcome(outcome, "user", severity);
+  const row = updatedRowFromOutcome(outcome, "user", severity);
 
   // assert
-  assert.deepStrictEqual(result, {
+  assert.deepStrictEqual(row, {
     dependencies: [],
     from: "1.0.0",
     name: "alpha",
@@ -663,10 +663,10 @@ test("WLIF-06: an update that retired nothing renders the row it always rendered
   const severity = { partiallyInstalled: "info" as const, updated: "info" as const };
 
   // act
-  const result = updatedRowFromOutcome(outcome, "user", severity);
+  const row = updatedRowFromOutcome(outcome, "user", severity);
 
   // assert
-  assert.deepStrictEqual(result, {
+  assert.deepStrictEqual(row, {
     dependencies: [],
     from: "1.0.0",
     name: "alpha",
@@ -676,7 +676,7 @@ test("WLIF-06: an update that retired nothing renders the row it always rendered
     status: "updated",
     to: "1.0.1",
   });
-  assert.equal(Object.hasOwn(result, "reasons"), false, "no present-and-empty reasons key");
+  assert.equal(Object.hasOwn(row, "reasons"), false, "no present-and-empty reasons key");
 });
 
 test("WLIF-06: all four axes at once emit in one brace in the established order", () => {
@@ -700,12 +700,12 @@ test("WLIF-06: all four axes at once emit in one brace in the established order"
   const severity = { partiallyInstalled: "info" as const, updated: "info" as const };
 
   // act
-  const result = updatedRowFromOutcome(outcome, "user", severity);
+  const row = updatedRowFromOutcome(outcome, "user", severity);
 
   // assert -- orphan rewake, then the malformed kinds, then the dropped kinds,
   // then the stale-command token at the tail. A reader scanning a column of
   // rows meets each token in the same position on every surface.
-  assert.deepStrictEqual(result, {
+  assert.deepStrictEqual(row, {
     dependencies: [],
     name: "alpha",
     needsReload: true,
@@ -742,9 +742,9 @@ test("WLIF-06: the dropped-kind row raises on the stale token alone", () => {
   const severity = { partiallyInstalled: "info" as const, updated: "info" as const };
 
   // act
-  const result = updatedRowFromOutcome(outcome, "user", severity);
+  const row = updatedRowFromOutcome(outcome, "user", severity);
 
   // assert
-  assert.equal(result.severity, "warning");
-  assert.deepStrictEqual(result.reasons, ["unsupported component", "stale workflow command"]);
+  assert.equal(row.severity, "warning");
+  assert.deepStrictEqual(row.reasons, ["unsupported component", "stale workflow command"]);
 });

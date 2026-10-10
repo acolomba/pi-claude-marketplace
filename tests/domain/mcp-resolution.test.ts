@@ -15,7 +15,11 @@ function preserveDirectOwnerType(owner: OwnerShape): void {
 }
 
 function emptyResolution() {
-  return { notes: [] as string[], mcpServers: {} as Record<string, unknown> };
+  return {
+    notes: [] as string[],
+    unsupported: [] as string[],
+    mcpServers: {} as Record<string, unknown>,
+  };
 }
 
 function mcpFiles(files: Readonly<Record<string, FileValue>>): {
@@ -80,9 +84,13 @@ test("resolves a strict string reference at inline parity", async () => {
     { referencedDirty, referencedResolution, inlineDirty, inlineResolution },
     {
       referencedDirty: false,
-      referencedResolution: { notes: [], mcpServers: { alpha: { command: "node" } } },
+      referencedResolution: {
+        notes: [],
+        unsupported: [],
+        mcpServers: { alpha: { command: "node" } },
+      },
       inlineDirty: false,
-      inlineResolution: { notes: [], mcpServers: { alpha: { command: "node" } } },
+      inlineResolution: { notes: [], unsupported: [], mcpServers: { alpha: { command: "node" } } },
     },
   );
 });
@@ -123,6 +131,7 @@ test("prefers entry MCP and falls back to manifest MCP when the entry is absent"
       manifestDirty: false,
       manifestResolution: {
         notes: [],
+        unsupported: [],
         mcpServers: { manifest: { command: "python" } },
       },
     },
@@ -139,10 +148,10 @@ test("accepts wrapped and unwrapped standalone documents", async () => {
   const unwrappedResolution = emptyResolution();
   const deps = mcpFiles({
     [path.join(wrappedRoot, ".mcp.json")]: {
-      contents: JSON.stringify({ mcpServers: { wrapped: {} } }),
+      contents: JSON.stringify({ mcpServers: { wrapped: { command: "node" } } }),
     },
     [path.join(unwrappedRoot, ".mcp.json")]: {
-      contents: JSON.stringify({ unwrapped: {} }),
+      contents: JSON.stringify({ unwrapped: { command: "node" } }),
     },
   });
 
@@ -161,9 +170,17 @@ test("accepts wrapped and unwrapped standalone documents", async () => {
     { wrappedDirty, wrappedResolution, unwrappedDirty, unwrappedResolution },
     {
       wrappedDirty: false,
-      wrappedResolution: { notes: [], mcpServers: { wrapped: {} } },
+      wrappedResolution: {
+        notes: [],
+        unsupported: [],
+        mcpServers: { wrapped: { command: "node" } },
+      },
       unwrappedDirty: false,
-      unwrappedResolution: { notes: [], mcpServers: { unwrapped: {} } },
+      unwrappedResolution: {
+        notes: [],
+        unsupported: [],
+        mcpServers: { unwrapped: { command: "node" } },
+      },
     },
   );
 });
@@ -224,7 +241,7 @@ for (const { title, reference, expectedNote } of [
       { dirty, resolution },
       {
         dirty: true,
-        resolution: { notes: [expectedNote], mcpServers: {} },
+        resolution: { notes: [expectedNote], unsupported: [], mcpServers: {} },
       },
     );
   });
@@ -238,7 +255,7 @@ for (const { title, contents, expectedNote } of [
   },
   {
     title: "rejects an unwrapped string reference",
-    contents: JSON.stringify({ alpha: {} }),
+    contents: JSON.stringify({ alpha: { command: "node" } }),
     expectedNote: 'malformed mcp reference: missing top-level "mcpServers": "servers.json"',
   },
 ] as const) {
@@ -307,6 +324,7 @@ test("rejects a string reference that crosses a symlink without reading it", asy
       read: false,
       resolution: {
         notes: ['malformed mcp reference: escapes plugin root: "linked/servers.json"'],
+        unsupported: [],
         mcpServers: {},
       },
     },
@@ -442,10 +460,15 @@ test("classifies a wrapped malformed map like an inline malformed map", async ()
       referencedDirty: true,
       referencedResolution: {
         notes: ["malformed mcpServers: must be object"],
+        unsupported: [],
         mcpServers: {},
       },
       inlineDirty: true,
-      inlineResolution: { notes: ["malformed mcpServers: must be object"], mcpServers: {} },
+      inlineResolution: {
+        notes: ["malformed mcpServers: must be object"],
+        unsupported: [],
+        mcpServers: {},
+      },
     },
   );
 });
@@ -459,7 +482,7 @@ test("resolves valid inline entry MCP without filesystem access", async () => {
   // act
   const dirty = await resolveStrictMcp(
     {
-      entry: { mcpServers: { alpha: {} } },
+      entry: { mcpServers: { alpha: { command: "node" } } },
       manifest: null,
       pluginRoot: "/plugins/alpha",
       resolution,
@@ -475,7 +498,7 @@ test("resolves valid inline entry MCP without filesystem access", async () => {
     { dirty, resolution },
     {
       dirty: false,
-      resolution: { notes: [], mcpServers: { alpha: {} } },
+      resolution: { notes: [], unsupported: [], mcpServers: { alpha: { command: "node" } } },
     },
   );
 });
@@ -494,4 +517,136 @@ test("treats fully absent strict MCP as empty", async () => {
 
   // assert
   assert.deepStrictEqual({ dirty, resolution }, { dirty: false, resolution: emptyResolution() });
+});
+
+test("ANAME-07: leaves a blocked server out and records it with its feature", async () => {
+  // arrange
+  const { resolveStrictMcp } =
+    await import("../../extensions/pi-claude-marketplace/domain/mcp-resolution.ts");
+  const resolution = emptyResolution();
+
+  // act
+  const dirty = await resolveStrictMcp(
+    {
+      entry: {
+        mcpServers: {
+          live: { type: "ws", url: "wss://mcp.example.com/ws" },
+          local: { command: "node" },
+        },
+      },
+      manifest: null,
+      pluginRoot: "/plugins/alpha",
+      resolution,
+    },
+    mcpFiles({}),
+  );
+
+  // assert
+  assert.deepStrictEqual(
+    { dirty, resolution },
+    {
+      dirty: false,
+      resolution: {
+        notes: [],
+        unsupported: ["mcpServers"],
+        mcpServers: { local: { command: "node" } },
+        droppedMcpServers: [{ server: "live", feature: "ws" }],
+      },
+    },
+  );
+});
+
+test("ANAME-07: records the mcpServers kind once for several blocked servers", async () => {
+  // arrange
+  const { resolveStrictMcp } =
+    await import("../../extensions/pi-claude-marketplace/domain/mcp-resolution.ts");
+  const resolution = emptyResolution();
+
+  // act
+  const dirty = await resolveStrictMcp(
+    {
+      entry: {
+        mcpServers: {
+          live: { type: "ws", url: "wss://mcp.example.com/ws" },
+          ide: { type: "sdk" },
+        },
+      },
+      manifest: null,
+      pluginRoot: "/plugins/alpha",
+      resolution,
+    },
+    mcpFiles({}),
+  );
+
+  // assert
+  assert.deepStrictEqual(
+    { dirty, resolution },
+    {
+      dirty: false,
+      resolution: {
+        notes: [],
+        unsupported: ["mcpServers"],
+        mcpServers: {},
+        droppedMcpServers: [
+          { server: "live", feature: "ws" },
+          { server: "ide", feature: "sdk" },
+        ],
+      },
+    },
+  );
+});
+
+test("ANAME-07: a malformed server adds a note and reports a structural defect", async () => {
+  // arrange
+  const { resolveStrictMcp } =
+    await import("../../extensions/pi-claude-marketplace/domain/mcp-resolution.ts");
+  const resolution = emptyResolution();
+
+  // act
+  const dirty = await resolveStrictMcp(
+    {
+      entry: {
+        mcpServers: {
+          db: { command: "node", timeout: 1.5 },
+          local: { command: "node" },
+        },
+      },
+      manifest: null,
+      pluginRoot: "/plugins/alpha",
+      resolution,
+    },
+    mcpFiles({}),
+  );
+
+  // assert
+  assert.deepStrictEqual(
+    { dirty, resolution },
+    {
+      dirty: true,
+      resolution: {
+        notes: ['malformed mcp server "db": /timeout: must be integer'],
+        unsupported: [],
+        mcpServers: { local: { command: "node" } },
+      },
+    },
+  );
+});
+
+test("ANAME-07: keeps a server named __proto__ as an own server", async () => {
+  // arrange
+  const { resolveStrictMcp } =
+    await import("../../extensions/pi-claude-marketplace/domain/mcp-resolution.ts");
+  const resolution = emptyResolution();
+  const servers: unknown = JSON.parse('{"__proto__":{"command":"node"}}');
+
+  // act
+  await resolveStrictMcp(
+    { entry: { mcpServers: servers }, manifest: null, pluginRoot: "/plugins/alpha", resolution },
+    mcpFiles({}),
+  );
+
+  // assert
+  assert.deepStrictEqual(Object.entries(resolution.mcpServers), [
+    ["__proto__", { command: "node" }],
+  ]);
 });

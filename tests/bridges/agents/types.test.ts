@@ -104,11 +104,11 @@ const preparedAgentsStaged: PreparedAgentsStaged = {
   locations: undefined!,
   stagingDir: "/scope/pi-claude-marketplace/agents-staging/acme",
   result: stageAgentsCommitResult,
-  _previousEntries: [],
-  _foreignPreservedEntries: [],
-  _otherEntries: [],
-  _newEntries: [],
-  _stagedFilePaths: [
+  previousEntries: [],
+  foreignPreservedEntries: [],
+  otherEntries: [],
+  newEntries: [],
+  stagedFilePaths: [
     {
       from: "/scope/pi-claude-marketplace/agents-staging/acme/reviewer.md",
       to: "/scope/agents/pi-claude-marketplace-acme-reviewer.md",

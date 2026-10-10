@@ -11,6 +11,7 @@ import { isRecordedButDisabled, loadState } from "../../persistence/state-io.ts"
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage, PluginShapeError } from "../../shared/errors.ts";
 import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
+import { ownValue } from "../../shared/own-key.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 import {
   withLockedStateTransaction,
@@ -42,7 +43,7 @@ import type { GitBackedSource, PathSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { RemoteTag } from "../../platform/git.ts";
-import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
+import type { NotificationContext, PiInventory } from "../../platform/pi-api.ts";
 import type { ContentReason } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
@@ -75,7 +76,7 @@ export interface UpdateCloneCacheSeam {
 /** Direct update request validated and classified by the update flow. */
 export interface UpdatePluginsOptions {
   readonly ctx: NotificationContext;
-  readonly pi: ToolInventory;
+  readonly pi: PiInventory;
   readonly scope?: Scope;
   readonly cwd: string;
   readonly target: UpdatePluginsTarget;
@@ -603,7 +604,10 @@ async function refreshDisabledRecord(
   return withLockedStateTransaction(
     options.locations,
     async (transaction) => {
-      const record = transaction.state.marketplaces[options.marketplace]?.plugins[options.plugin];
+      const record = ownValue(
+        ownValue(transaction.state.marketplaces, options.marketplace)?.plugins,
+        options.plugin,
+      );
       if (record === undefined) {
         return false;
       }
@@ -818,7 +822,7 @@ export async function preparePluginUpdate(
   options: PreparePluginUpdateOptions,
 ): Promise<PreparedPluginUpdate | UpdatePreflightOutcome> {
   const state = await loadState(options.locations.extensionRoot);
-  const marketplace = state.marketplaces[options.marketplace];
+  const marketplace = ownValue(state.marketplaces, options.marketplace);
   if (marketplace === undefined) {
     return staticPreflightRow({
       partition: "skipped",
@@ -831,7 +835,7 @@ export async function preparePluginUpdate(
   const manifest = await loadMarketplaceManifest(marketplace.manifestPath);
   const triaged = triageUpdateMembership(
     options.plugin,
-    marketplace.plugins[options.plugin],
+    ownValue(marketplace.plugins, options.plugin),
     lookupDeclaredPlugin(manifest, options.plugin),
   );
   if ("partition" in triaged) {

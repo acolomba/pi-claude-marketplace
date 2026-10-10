@@ -5,8 +5,9 @@ usage() {
   cat <<'USAGE'
 Usage: scripts/pi.sh [--clear] [--home PATH] [--cd PATH] [--] [pi args...]
 
-Runs Pi with only this project, pi-mcp-adapter, pi-subagents, and
-@quintinshaw/pi-dynamic-workflows loaded as extensions.
+Runs Pi with only this project, pi-mcp-adapter, pi-subagents,
+@quintinshaw/pi-dynamic-workflows and Pi's built-in tool search loaded as
+extensions.
 
 Pi is the version package-lock.json pins, run from node_modules -- run
 `npm install` first. This never launches a `pi` found on PATH.
@@ -17,11 +18,22 @@ ${XDG_CACHE_HOME:-$HOME/.cache}/pi-claude-marketplace/pi-runtime.
 PI_CM_RUNTIME_PREFIX overrides the prefix, which must be outside the
 checkout.
 
+pi-mcp-adapter writes to <agent dir>/settings.json when it starts (adapter
+5 adds "-builtin:mcp", which turns off Pi's built-in MCP). To keep that
+write out of ~/.pi/agent, the Pi home defaults to <prefix>/home when
+neither --home nor PI_CODING_AGENT_DIR is set. Set PI_CODING_AGENT_DIR to
+run against another agent directory, ~/.pi/agent included.
+
+The default home starts without auth.json and models.json, so log in once
+with /login or set your provider's environment variables. With the default
+home, a PI_CODING_AGENT_SESSION_DIR that is already set is kept.
+
 Options:
   --cd PATH    Run Pi from PATH instead of the current directory.
   --clear      Clear the terminal before preparing and launching Pi.
   -h, --help   Show this help.
-  --home PATH  Use PATH as the Pi home for this run.
+  --home PATH  Use PATH as the Pi home for this run (PATH/agent and
+               PATH/sessions). The default is <prefix>/home.
 
 All remaining arguments are forwarded to pi.
 USAGE
@@ -29,6 +41,7 @@ USAGE
 
 clear_screen=0
 pi_home=""
+default_home=0
 pi_cd=""
 pi_args=()
 
@@ -91,16 +104,18 @@ try {
 }
 ' "$repo_root/tests/pi-runtime.ts" "$repo_root")
 
-# Companion extensions, pinned here only -- never in package.json or
-# package-lock.json (NFR-5, D-98-10). Engine 3.14.0 is the newest release
-# that docs/workflows-compatibility.md grades. It includes engine PR #232,
-# which fixes result delivery under the --no-extensions -e launch below.
-# It stores workflows under PI_CODING_AGENT_DIR when that variable is set,
-# as the bridge does (WPTH-04). --home sets the variable, so an engine
-# before 3.14.0 does not find the workflows the bridge installs.
+# Companion extensions, pinned here only (PIFL-07): never as dependencies,
+# devDependencies or package-lock.json entries (NFR-5, D-98-10). package.json
+# declares pi-mcp-adapter and pi-subagents as optional peers. Engine 3.14.0
+# is the newest release that docs/workflows-compatibility.md grades. It
+# includes engine PR #232, which fixes result delivery under the
+# --no-extensions -e launch below. It stores workflows under
+# PI_CODING_AGENT_DIR when that variable is set, as the bridge does
+# (WPTH-04). --home sets the variable, so an engine before 3.14.0 does not
+# find the workflows the bridge installs.
 pi_cm_pins=(
-  "pi-mcp-adapter@2.37.0"
-  "pi-subagents@0.71.0"
+  "pi-mcp-adapter@5.2.0"
+  "pi-subagents@0.74.0"
   "@quintinshaw/pi-dynamic-workflows@3.14.0"
 )
 
@@ -195,12 +210,30 @@ for extension_path in "$project_extension" "$mcp_adapter_extension" "$subagents_
   fi
 done
 
+# pi-mcp-adapter 5 writes "-builtin:mcp" into <agent dir>/settings.json on
+# its first start. Without --home or an explicit PI_CODING_AGENT_DIR, Pi
+# would use ~/.pi/agent, so the edit would turn off the built-in MCP in the
+# operator's normal Pi sessions. Default to a Pi home inside the prefix.
+if [[ -z "$pi_home" && -z "${PI_CODING_AGENT_DIR:-}" ]]; then
+  pi_home="$prefix/home"
+  default_home=1
+fi
+
 if [[ -n "$pi_home" ]]; then
   export PI_CODING_AGENT_DIR="$pi_home/agent"
-  export PI_CODING_AGENT_SESSION_DIR="$pi_home/sessions"
+  if ((default_home)); then
+    # The operator chose no home, so a session dir they exported still wins.
+    export PI_CODING_AGENT_SESSION_DIR="${PI_CODING_AGENT_SESSION_DIR:-$pi_home/sessions}"
+  else
+    export PI_CODING_AGENT_SESSION_DIR="$pi_home/sessions"
+  fi
   mkdir -p "$PI_CODING_AGENT_DIR" "$PI_CODING_AGENT_SESSION_DIR"
 fi
 
+# On Pi 1.0.0, --no-extensions also drops Pi's built-in tool-search
+# extension. -e builtin:tool-search keeps tool_search available for a
+# "defaultTools": ["+tool_search"] setting. Pi's builtin:mcp stays off,
+# because pi-mcp-adapter replaces it.
 exec node "$pi_cli" \
   --no-extensions \
   --no-skills \
@@ -209,4 +242,5 @@ exec node "$pi_cli" \
   -e "$mcp_adapter_extension" \
   -e "$subagents_extension" \
   -e "$workflows_extension" \
+  -e builtin:tool-search \
   "${pi_args[@]}"

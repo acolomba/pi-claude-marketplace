@@ -1,288 +1,211 @@
 # Feature Research
 
-**Domain:** Methodical brownfield unit-test refactor for an existing TypeScript extension
-**Milestone:** v1.19 Unit Test Refactor
-**Researched:** 2026-08-28
-**Confidence:** HIGH for repository scope and inventory. MEDIUM for external tool behavior.
+**Domain:** Claude plugin MCP servers delivered through pi-mcp-adapter 5 on Pi 1.0 (milestone `mcp-4`)
+**Researched:** 2026-10-01
+**Confidence:** HIGH for upstream and adapter facts (read first-hand from shipped code). MEDIUM for the ordering race and the design recommendations.
 
-## Scope Summary
+## Evidence base
 
-This milestone changes test ownership and production testability. It does not add a product feature. Public behavior and stored data must stay compatible.
+Each fact below comes from one of these sources. I read the code myself; the release notes alone were not taken as proof.
 
-The repository has 204 production TypeScript modules at HEAD. All 204 source-test pairs remain open for a new compliance review.
+| Source | What it settles | Confidence |
+|--------|-----------------|------------|
+| Claude Code **2.1.287** binary (`/home/linuxbrew/.linuxbrew/Caskroom/claude-code@latest/2.1.287/claude`, `strings -n 20` then grep, 2026-10-01) | Server key, name normalization, tool-name format, the expansion pipeline, the variable grammar, handling of unset variables, the server schema | HIGH (primary source) |
+| `code.claude.com/docs/en/mcp` and `/plugins-reference` (WebFetch, 2026-10-01) | Tool-search default, the documented field list for expansion, the "uses the unexpanded `${VAR}` text as-is" rule, the tool-name example | The research seam rates WebFetch LOW. Every claim used here also matches the binary, so treat them as corroborated |
+| `pi-mcp-adapter@5.0.0` tarball (`docs/*.md`, `types.ts`, `config.ts`, `utils.ts`, `server-manager.ts`, `direct-tool-surface.ts`, `index.ts`, `mcp-status.ts`) | `ServerEntry` schema, what the adapter expands, tool naming, precedence and merge rules, the status snapshot, its own config writers, JSONC parsing | HIGH (primary source) |
+| `@earendil-works/pi-coding-agent@1.0.0` tarball (`dist/core/agent-session.js`, `dist/core/mcp-servers.js`, `dist/extensions/mcp/*`) | Built-in MCP tool names, built-in validation, the order of `session_start` and `resources_discover` | HIGH (primary source) |
+| Repo: `bridges/mcp/*`, `domain/mcp-resolution.ts`, `shared/vars.ts`, `platform/pi-api.ts`, `bridges/hooks/*`, `.planning/BACKLOG.md` (MCPSRC-01, ENVLIT-01, MENVX-01) | Dependencies on existing code | HIGH |
 
-The direct pair audit gives these triage signals:
+## Upstream contract: Claude Code 2.1.287
 
-| Audit result | Pairs | Meaning |
-| --- | ---: | --- |
-| Direct coverage passes | 59 | The focused coverage command passes. The pair has no completion credit. |
-| Direct coverage is incomplete | 83 | A mirrored test exists, but direct function, line, or branch coverage is incomplete. |
-| Mirrored test is missing | 60 | The required `tests/<path>.test.ts` file does not exist. |
-| Focused test fails | 2 | The pair needs diagnosis before coverage work. |
+| # | Behavior | Evidence |
+|---|----------|----------|
+| U1 | **Server key.** Each plugin server registers as `plugin:<pluginName>:<serverKey>`. In `VCr()` this is ``H=`plugin:${h}:${S}` `` with `h = wx(name, source)`, which returns the plugin name unchanged except for the `@builtin` alias case. | binary `VCr`, `wx`; docs |
+| U2 | **Normalization.** `Tn(name) = name.replace(/[^a-zA-Z0-9_-]/g, "_")`. Only `claude.ai ` servers also collapse runs of `_`. So `plugin:my-plugin:db` becomes `plugin_my-plugin_db`. Hyphens are kept. | binary `Tn` |
+| U3 | **Tool name.** `qa(server, tool) = "mcp__" + Tn(server) + "__" + Tn(tool)`, giving `mcp__plugin_<p>_<s>__<tool>`. The separator before the tool is a **double** underscore. This name is what hook matchers, permission rules, agent `tools:`, and skill `allowed-tools` use. | binary `qa`, `Hs`, `us` (parser splits on `__`); docs |
+| U4 | **Tool search on by default.** `ENABLE_TOOL_SEARCH` takes `true`, `false`, `auto` (the default), or `auto:N`. MCP tools are deferred behind ToolSearch unless the server sets `alwaysLoad: true`, or a tool sets `_meta["anthropic/alwaysLoad"]`. A server-level `alwaysLoad: false` defers every tool. Search is off for a custom `ANTHROPIC_BASE_URL` and for older Vertex models. | docs; binary schema has `alwaysLoad` on stdio, http, sse, and ws |
+| U5 | **Expansion pipeline.** `NAn()` runs once per string: first `Vne` replaces `${CLAUDE_PLUGIN_ROOT}`, `${CLAUDE_PROJECT_DIR}` (always, with the project root or cwd, **for any install scope**), and `${CLAUDE_PLUGIN_DATA}`. Next, `opt` replaces `${user_config.KEY}` and throws if the key is unset. Last, `cG` expands environment variables. It runs at **load time on every session**, against the live environment. | binary `NAn`, `Vne`, `opt`, `cG` |
+| U6 | **Variable grammar.** The pattern is `/\$\{([A-Za-z_][A-Za-z0-9_]*(?::-[^}]*)?)\}/g`. Only `${NAME}` and `${NAME:-default}` are recognized. There is no `$NAME`, no `${NAME-default}`, no `$env:`, no `!`, no `~`, and no escape. A set variable expands to its value, and **an empty string counts as set**, so `:-` does not fall back on empty, unlike POSIX. An unset variable with a default expands to the default text verbatim. An unset variable without a default **stays literal**: `${VAR}` is kept, and the name goes into `missingVars`. | binary `cG` |
+| U7 | **Fields.** stdio: `command`, `args`, and every `env` value, except the keys `CLAUDE_PLUGIN_ROOT` and `CLAUDE_PLUGIN_DATA` (`LAn = new Set(["CLAUDE_PLUGIN_ROOT","CLAUDE_PLUGIN_DATA"])`). The env is built as `{CLAUDE_PLUGIN_ROOT, CLAUDE_PLUGIN_DATA, ...declared}`, so declared keys win. http/sse/ws: `url` and `headers` (the "remote sink" mode), plus `headersHelper` (special rules, and `${user_config}` is rejected). Nothing else is expanded. The stdio schema has **no `cwd`**. | binary `NAn`, `qSe`; plugins-reference table |
+| U8 | **Missing variables.** Claude Code logs ``Missing environment variables in plugin MCP config: X`` and records an `mcp-config-invalid` error that `/plugin` Errors shows. **The server still loads** with the literal text. A remote `url` that is invalid after expansion becomes `configError` with reason `env_missing`, `url_invalid`, or `user_config_missing`, and that server fails. | binary `NAn` tail; docs ("uses the unexpanded `${VAR}` text as-is") |
+| U9 | **Credential blanking.** Claude Code's own credentials (`ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`, and so on) always expand to `""`. Toward a remote sink, git/cargo token patterns and `*_BASE_URL` values pointing at Anthropic hosts are blanked too, with a warning. This guard protects Claude's own secrets. | binary `cG`, `Hq`, `J_e`, `eke`, `tke` |
+| U10 | **Server schema (2.1.287).** stdio: `{type?, command, args, env, timeout, alwaysLoad, bareElicitationCapability, role}`. http: `{url, headers, headersHelper, oauth{clientId, callbackPort, ...}, timeout, request_timeout_ms, tools, alwaysLoad, discoveryCache, toolPermissions}`. `sse`, `ws`, and the IDE types also exist. | binary zod schemas |
 
-The corresponding-test gate reports 107 structural violations at HEAD:
+**ENVLIT-01 is now settled:** Claude Code *does* interpolate `${VAR}` in stdio `env` values (U7). By ENVLIT-01's own rule, `literalEnv` stays unused.
 
-- 60 missing mirrored tests.
-- 4 mirrored tests that do not import their source module.
-- 43 extra tests in corresponding-test directories without a matching source path.
+## Adapter contract: pi-mcp-adapter 5.0.0
 
-The test tree has 241 `.test.ts` files. Only 19 files contain a `// arrange` marker. Only two files import `strong-mock`.
-
-These counts show the size of the review. They do not prove that a file violates every related rule.
+| # | Behavior | Evidence |
+|---|----------|----------|
+| A1 | **Nine file sources, later wins:** `~/.config/mcp/mcp.json` → `~/.agents/mcp.json` → `~/.agents/mcp/mcp.json` → `<agentDir>/mcp.json` → `<agentDir>/mcp-adapter.json` → opted-in ancestors → `.mcp.json` → `.pi/mcp.json` → `.pi/mcp-adapter.json`. Lower-precedence non-file sources also exist: `pi.mcp` package manifests, `settings.agentPluginPaths`, `claudePlugins`, `imports`, and runtime registrations. `PI_MCP_CONFIG_MODE=exclusive` reads only the global `mcp-adapter.json`, and `--mcp-config` replaces that path. | `docs/configuration.md`; `config.ts::getConfigSources`, `isExclusiveConfigMode` |
+| A2 | **Merge is a shallow per-field merge** (`mergeServerMaps`), not "first declarer owns the name". When a later source switches the transport, the earlier transport's fields are dropped. When the `url` changes, inherited auth is dropped. A later partial entry such as `{ "x": { "directTools": true } }` acts as an **override**. | `config.ts:902-960` |
+| A3 | **`mcp-adapter.json` is parsed as JSONC** (comments and trailing commas allowed) by `parseJsonWithComments`. Entries pass through untouched, unknown keys included, so the `_piClaudeMarketplace` marker survives and server names are not checked. | `config.ts::readValidatedConfig`, `toServerEntries` |
+| A4 | **Pi-format `mcp.json` is translated**, not passed through. The name must match `[A-Za-z0-9_-]+`, `type:"sse"` is skipped, only Pi's fields survive (no `directTools` or `lifecycle`), and every unknown key, **our marker included**, is reported as "ignored" at every startup. | `config.ts::translatePiMcpServer` |
+| A5 | **`ServerEntry` fields:** `description`, `command`, `args`, `socket`, `env`, `inheritEnv`, `cwd`, `url`, `caFile`, `headers`, `requestHeadersCommand{command,args,env,timeoutMs}`, `auth` (`oauth`, `bearer`, `false`, or `{provider}`), `bearerToken`, `bearerTokenEnv`, `bearerTokenStore`, `oauth{grantType, clientId, clientSecret, clientMetadataUrl, scope, redirectUri, clientName, clientUri, logoUri, authServerMetadataUrl, skipIssuerMetadataValidation, authorizationParams}`, `lifecycle` (`lazy`, `eager`, `keep-alive`, `lazy-keep-alive`), `idleTimeout`, `requestTimeoutMs`, `exposeResources`, `directTools` (`boolean`, `string[]`, or `"search"`), `toolPrefix` (`server`, `short`, `none`, `mcp`), `includeTools`, `excludeTools`, `searchKeywords`, `approveTools` (`boolean`, `"destructive"`, or `string[]`), `debug`, `trace`, `httpTransport` (`streamable-http` or `sse`), `pluginDataDir`, `literalEnv`, `protocolVersion`, `tasks`, `disabled`. | `types.ts:438-525`; `docs/servers.md` |
+| A6 | **What the adapter expands at connect time.** `interpolateEnvVars` replaces `${\w+}`, `$env:\w+`, and `{env:\w+}`; **an unset variable becomes `""`**. There is **no `:-` support**: `${A:-b}` does not match `\w+` and passes through literally. There is **no escape for `${`**. By field: `command` gets env and `~/`. `args` get env and `~/`. `cwd` gets env and `~/`. Each `env` value runs a shell command when it starts with `!`; `!!` stands for a literal `!` (and still interpolates); `literalEnv: true` turns off both behaviors. `headers` support `!` and `!!` plus env. `bearerToken` supports `!` plus env. `url` gets env, and an unset variable **throws** before connecting. `caFile`, `socket`, and `requestHeadersCommand.*` get env. | `utils.ts:136-275`; `server-manager.ts:1115-1145, 1575-1600, 2140-2160` |
+| A7 | **Tool name.** `formatToolName(tool, server, mode)` returns `prefix + "_" + tool.replace(/\./g, "_")`. The prefix depends on the mode: `server` (default) uses the sanitized server name, `short` strips `-mcp`, `none` uses no prefix, and `mcp` uses **`mcp__` + server**. So `mcp` mode yields `mcp__<server>_<tool>` with a **single** underscore. Sanitizing keeps `[A-Za-z0-9_-]` and encodes anything else as `_<hex>_`. A per-server `toolPrefix` overrides the global `settings.toolPrefix`. Direct tool names have **no length cap** (Pi's built-in MCP hashes names to fit). | `types.ts:864-905` |
+| A8 | **`directTools: "search"`** on Pi ≥0.99 registers Pi **deferred** tools. They are grouped in a namespace named ``mcp__${server.replace(/-/g,"_")}`` (this is the raw name, not `formatServerNamespace`, so a `:` would leak into it). Pi's `tool_search` and `mcp({search})` activate them, and the activation lasts across resume. A per-server value overrides the global `settings.directTools`. | `index.ts:436-460`; `docs/tools.md` |
+| A9 | **Status snapshot.** `pi.events.on("pi-mcp-adapter/status/v1", ...)` delivers `{version:1, servers[], totalTools, totalResources, connectedCount, disabledCount}`. Each server has `{name, status: connected/cached/failed/needs-auth/not-connected/blocked/disabled, toolCount, directToolCount, resourceCount?, failedAgoSeconds?, disabled, listenState, catalogStale?, blockedReason?}`. It is **push-only**, with no pull API. The first snapshot comes after initialization and after direct tools are reconciled; an empty snapshot comes at shutdown. Building it never connects a server. `MCP_STATUS_EVENT` is exported from the root, and `./types` is a dist subpath. | `docs/extension-api.md`; `mcp-status.ts`; `types.ts:18-60` |
+| A10 | **The adapter writes into the file that owns a server.** A direct-tools toggle in the `/mcp-adapter` panel rewrites `directTools` **in place** in the owning file (`writeDirectToolsConfig`). `/mcp-adapter disable` writes `disabled: true` into the project `.pi/mcp-adapter.json`, editing an existing entry when there is one. Both use tmp+rename and do not lock. | `config.ts:1715-1766, 1961-2000, 1624-1650` |
+| A11 | **Project trust.** Servers from project files, `.pi/mcp-adapter.json` included, are blocked in untrusted projects. In trusted interactive sessions they wait for an approval prompt that defaults to "Don't allow". The approval covers the **complete effective definition**, so a changed definition asks again. Headless sessions skip unapproved servers. | `docs/configuration.md#project-server-trust` |
+| A12 | **Adapter detection.** The adapter registers a tool named `mcp` at factory time; `disableProxyTool` is ignored while any server uses `"search"`. Pi 1.0's built-in MCP registers `mcp__<server>__<tool>` and the `list_mcp_resources`, `list_mcp_resource_templates`, and `read_mcp_resource` tools with `builtin:` source info, and **never a tool named `mcp`**. The adapter takes over `/mcp` and turns the built-in off (`-builtin:mcp`). | adapter `index.ts:2058`, `pi-builtin-mcp.ts`; Pi `dist/extensions/mcp/index.js`, `tools.js:49` |
+| A13 | **Ordering.** Pi 1.0 emits `session_start` **before** `resources_discover`, both at startup and on `/reload` (`agent-session.js:2582-2584, 2928-2930`). The adapter loads its config at factory load (`index.ts:370`) and in the init it starts from `session_start` (`init.ts:149`). Our reconcile runs in `resources_discover`, so whatever it writes reaches the adapter **one reload late**. Confidence is MEDIUM: initialization is asynchronous, but it starts before our handler runs. | Pi and adapter source |
 
 ## Feature Landscape
 
 ### Table Stakes (Users Expect These)
 
-These features define a completed v1.19 milestone. A partial subset is not a valid milestone release.
-
-| Feature | Why Expected | Complexity | Concrete Acceptance Signal |
-| --- | --- | --- | --- |
-| **Complete pair inventory** | The milestone goal applies to every production TypeScript module. | MEDIUM | Each of the 204 HEAD modules has a reviewed disposition. Every production module in the final tree has one test owner. |
-| **One mirrored test per source module** | A clear owner prevents aggregate suites from hiding gaps. | HIGH | Each source has one `tests/<mirrored-path>.test.ts`. The test imports its source directly. |
-| **Type-only and barrel ownership** | The guidelines have no small-module exemptions. | MEDIUM | Type-only tests prove compile-time shapes. Barrel tests prove each runtime re-export has the source binding. |
-| **Public-behavior cases** | Tests must fail when the named public behavior changes. | HIGH | Cases call exports only. Expected values are independent. Whole values and typed errors are asserted. |
-| **Complete direct coverage** | Aggregate coverage can hide ownership gaps. | HIGH | Each focused pair reaches 100% functions, lines, and branches. No coverage ignore directive exists. |
-| **Independent case state** | Shared state makes focused and reordered runs unreliable. | HIGH | Each case owns mutable doubles, temporary paths, timers, environment changes, and cleanup. |
-| **Role-correct test doubles** | Interaction checks must prove promises without coupling tests to incidental calls. | HIGH | Cases use fakes, stubs, spies, or strict mocks by role. Each strict mock uses exact parameters and explicit verification. |
-| **Production design for testability** | Some modules cannot meet the rules through their current exports. | HIGH | A resistant module gets one coherent extraction, one explicit dependency, one narrow port, or factory-owned state. |
-| **No test-only production surface** | A test back door weakens the public API and hides poor boundaries. | MEDIUM | Tests do not require private constants, reset hooks, state readers, global mutators, or exports used only by tests. |
-| **Boolean resolver safety discriminant** | Project NFR-7 requires safe narrowing before a consumer reads `pluginRoot`. | HIGH | Both materializable arms have `installable: true`. The unavailable arm has `installable: false` and no `pluginRoot`. |
-| **Three-way resolver meaning retained** | Full and partial materialization remain distinct product states. | MEDIUM | The existing `state` field keeps `installable`, `partially-available`, and `unavailable` meanings. |
-| **Product contract preservation** | This is a brownfield refactor of a shipped extension. | HIGH | Public commands, output grammar, errors, persistence, atomic writes, network rules, containment, scopes, and retry behavior remain unchanged. |
-| **Named correction preservation** | The handoff records product defects found during the abandoned refactor. | HIGH | Each named correction has a public-behavior case. A retained commit alone gives no credit. |
-| **Adapter parity** | Production adapters and their test doubles must implement the same contract. | HIGH | Git, credential, and device-flow implementations pass shared contracts with fresh state and a proven negative control. |
-| **Fail-closed structural enforcement** | Missing or ambiguous ownership must stop the quality gate. | MEDIUM | Pair mapping, direct coverage, and related structural gates reject planted violations, then pass on the clean fixture. |
-| **One pair per plan and commit** | Small atomic changes limit behavior drift and make review evidence precise. | HIGH | Each executable plan and implementation commit owns exactly one production source-test pair. |
-| **Project-wide closure gate** | A focused pass can still break another module or integration. | HIGH | Focused tests and coverage pass first. Then `npm run check` passes on the completed tree. |
-
-### Guideline Compliance for Each Pair
-
-Each pair must meet all relevant rules. Direct coverage is only one rule.
-
-| Area | Required Behavior |
-| --- | --- |
-| Pair mapping | Mirror the production path under `tests/`. Use one primary test module. |
-| Case layout | Use independent `test()` cases with lowercase Arrange, Act, and Assert markers. |
-| Grouping | Use top-level `describe()` blocks only for exported entrypoints. Do not nest them. |
-| Naming | Name cases by public behavior. Do not put plan, phase, or ticket labels in titles. |
-| Assertions | Assert the public result and state before interactions. Compare complete values. |
-| Errors | Assert stable error classes and fields. Do not depend on unrelated message fragments. |
-| Expected values | Build expected values without production formatters, serializers, snapshots, or harness calculations. |
-| Isolation | Use a fresh stateful fake and a fresh temporary directory for each case. |
-| Time and globals | Use injected clocks or case timers. Restore environment and global changes with the test context. |
-| External boundaries | Use fakes, case-owned local resources, or loopback-only resources. Do not use live services or credentials. |
-| Strict interactions | Use `strong-mock` with `exactParams: true`. State all promised calls and call `verify()` in the case. |
-| Support layout | Keep fakes, seeds, contracts, and fixtures beside their concern. Do not create a generic helper root. |
-| Coverage | Run the mirrored test alone. Require 100% direct functions, lines, and branches for its source. |
-
-### Preserved Product Corrections
-
-The replacement tests must prove these corrections through public behavior:
-
-1. Plugin update keeps agent skill preloads.
-2. Plugin update carries bridge staging warnings.
-3. Hook exhaustiveness markers survive refactoring.
-4. Hook supportability debug details survive refactoring.
-5. One reconcile entry failure does not stop other entries.
-6. Marketplace reconcile applies every required arm.
-7. Plugin and toggle reconcile apply every required arm.
-8. Device-flow HTTP remains an explicit production-reachable port.
+| Feature | Why Expected | Complexity | Notes / dependency on existing code |
+|---------|--------------|------------|--------------------------------------|
+| **TS-1 Deliver entries to `<scopeRoot>/mcp-adapter.json`** | Pi-format `mcp.json` drops every adapter field (A4) and warns about our marker at every start. Only the adapter-native file can carry `directTools`, `toolPrefix`, `httpTransport`, and `description`. | MEDIUM | Retarget `persistence/locations.ts` (`mcpJsonPath`, line 203) and the stage/commit/replace/rollback/unstage set in `bridges/mcp/stage.ts` and `unstage.ts`. Change the NFR-10 write set to match (and keep `mcp.json` for the migration window). The read path **must accept JSONC** (A3). Today `readScopedDoc` sees a commented file as malformed and **overwrites it**, and `unstage` throws on it. Keep the top-level `settings`, `imports`, and `claudePlugins` (the current code already spreads `...doc`). |
+| **TS-2 Upstream naming `plugin_<plugin>_<server>`** | Claude users see `plugin:<p>:<s>` and `mcp__plugin_<p>_<s>__*` (U1-U3). Today's raw server keys collide easily, which is the MCPSRC-01 failure. | MEDIUM | `generatedName = Tn("plugin:"+plugin+":"+key)`. `StagedMcpRecord.generatedName` stops being the input key (the `types.ts` comment "no rename today" has to change). Detect normalization collisions inside our own namespace: `plugin:a_b:c` and `plugin:a:b_c` both become `plugin_a_b_c`. Fail closed with `McpServerCollisionError`. `info` should list the Claude key, and the generated name is what state stores. Marker-based ownership is unaffected. |
+| **TS-3 Tool-search exposure `directTools: "search"`** | This is Claude Code's default (U4), and on Pi ≥0.99 the adapter maps it to Pi deferred tools found by Pi's `tool_search` (A8). | LOW | Stamp it in `stampServers`. Map `alwaysLoad: true` to `directTools: true`, the only per-server opt-out upstream has. Remove `alwaysLoad` and the other Claude-only keys from the written entry, or leave them as harmless extras: the adapter passes unknown keys through. |
+| **TS-4 Explicit per-server `toolPrefix: "mcp"`** | Without it, a user's global `settings.toolPrefix: "none"` or `"short"` silently renames our tools (A7). `mcp` is the closest available form to U3. | LOW | Comes with TS-2. See gap G-1: it still produces `mcp__<s>_<tool>`, not `mcp__<s>__<tool>`. |
+| **TS-5 Automatic migration on `/reload`** | Existing users have marked entries in `<agentDir>/mcp.json` and `<cwd>/.pi/mcp.json` under the old raw names. NFR-2 means `/reload` has to fix this without a reinstall. | HIGH | Do it in the reconcile path under the state lock, one scope at a time. Write `mcp-adapter.json`, then `state.json` (new `generatedName`/`targetPath`), then remove the entries from `mcp.json`. Each step must be idempotent so a crash in between converges on the next try (NFR-3). Project scope migrates only for the cwd's project; other projects migrate when they are opened. **Ordering (A13):** writes made in `resources_discover` are seen by the adapter only on the next reload. Servers keep working through the old `mcp.json` translation in the meantime, but search exposure arrives one reload later. Either accept that and document it, or run the migration in the extension factory. That needs a phase-level spike. Users who rely only on Pi's built-in MCP lose these servers after migration (see Anti-Features). |
+| **TS-6 Variable expansion parity, plus escaping what the adapter would expand again** | Plugins use `${VAR}` and `${VAR:-default}` in `command`, `args`, `env`, `url`, and `headers` (U5-U7). The adapter has no `:-` and expands `!`, `$env:`, `{env:}`, and `~/`, which Claude does not (A6). This closes MENVX-01 and ENVLIT-01. | HIGH | Extend `bridges/mcp/substitute.ts`; leave `shared/vars.ts` alone, since D-92-01 keeps it separate. **Recommended rules (decision needed, see G-2/G-3):** (a) keep install-time `${CLAUDE_PLUGIN_ROOT}`, `${CLAUDE_PLUGIN_DATA}`, and project-scope `${CLAUDE_PROJECT_DIR}` substitution. (b) Leave plain `${VAR}` for the adapter to expand at runtime: Claude also expands at load time against the live environment, and this keeps secrets off disk. (c) Rewrite `${VAR:-d}` at install time: if `VAR` is set, write `${VAR}`; if not, write `d`. (d) In `env` and `headers` values, turn a leading `!` into `!!`, which closes MENVX-01 by escaping. (e) Restrict the expansion fields to Claude's set (U7). Today's deep walk also rewrites `cwd`, `oauth`, and other keys Claude never touches. (f) Do not expand the values of `env.CLAUDE_PLUGIN_ROOT` or `env.CLAUDE_PLUGIN_DATA` (`LAn`). |
+| **TS-7 Missing-variable warnings at install** | Claude warns `Missing environment variables in plugin MCP config: X` (U8). The adapter silently swaps in `""`, except in `url`, where it throws at connect. | LOW | Report through the existing warning channel used for the malformed-`env` warning in `stampServers`. Check against `process.env` at install time and count a name as missing only when it has no `:-`. |
+| **TS-8 Collision walk that follows adapter 5** | Required by MCPSRC-01: nine sources, later wins (A1). A partial entry is an override, not a collision (A2). | MEDIUM | Rewrite `collision-slots.ts`: reorder the frozen tuple, add the two `.agents` paths and both `mcp-adapter.json` files, read with JSONC, and change "first declarer wins" to last-wins attribution. Count a name as a collision only when another source has a **full** definition (`command`, `url`, or `socket`) that we do not own. Our own entries in the other scope's file are not a collision: user plus project scope means one effective server, like upstream. Update the snapshot test and the MC-4/RN-5 contract text in the same change. With TS-2 names, real collisions become rare. |
+| **TS-9 Keep user adapter overrides when re-staging** | Writing the adapter-native file means the panel's direct-tools toggle and `/mcp-adapter disable` now edit **our** entries in place (A10). Re-staging on update, reinstall, or enable would silently undo them. | MEDIUM | In `prepareStageMcpServers`, when an owned entry is replaced, carry over a closed set of user-owned fields (`disabled`, `includeTools`, `excludeTools`, `approveTools`, `lifecycle`, `idleTimeout`, `requestTimeoutMs`, `searchKeywords`). Carry `directTools` and `toolPrefix` only if they differ from what we last wrote, which means recording our stamped values, for example in the marker. This rule only works if the field set stays closed; see the optional-field silent-omission class. |
+| **TS-10 Detection that only the adapter satisfies** | Entries in `mcp-adapter.json` are invisible to Pi's built-in MCP, so the `{pi-mcp-adapter}` soft-dependency marker must stay accurate when only the built-in is active. | LOW | `platform/pi-api.ts::hasLoadedPiMcpAdapter` already qualifies (A12). Add a test that plants built-in-only tools (`mcp__x__y` and `read_mcp_resource` with `builtin:` source) and asserts "not loaded". |
+| **TS-11 Dependency floors** | Pi `>=1.0.0`, pi-subagents `>=0.74.0`, pi-mcp-adapter `>=5.0.0`. On Pi 0.84-0.87, adapter 5 does not read Pi's `mcp.json`. The adapter's `pi-ai` peer range stops at `^0.99.0`; record this as an upstream gap. | MEDIUM | Re-apply the typing and canary fixes from features/mcp. These are package and peer-test changes, not bridge logic. |
 
 ### Differentiators (Competitive Advantage)
 
-These practices make the refactor safer than a normal coverage campaign.
-
 | Feature | Value Proposition | Complexity | Notes |
-| --- | --- | --- | --- |
-| **All-open accounting** | Existing green tests cannot hide a guideline defect. | LOW | The 59 passing audit rows are ordering signals only. All 204 pairs need new review evidence. |
-| **Contract-first replacement** | The team can change module boundaries without losing product behavior. | HIGH | Public, persistence, adapter, and oracle contracts outrank historical call graphs. |
-| **Production improvements through public seams** | Tests improve dependency design instead of adding test access. | HIGH | Use coherent modules, explicit dependencies, narrow ports, and instance-owned state. |
-| **Negative-control enforcement** | A green structural gate proves that it can reject the defect it claims to detect. | MEDIUM | Plant one small violation, observe failure, remove it, and observe success. |
-| **Explicit legacy-test disposition** | Useful assertions survive while obsolete test ownership disappears. | HIGH | Move behavior into its pair, move true cross-module behavior to a designated suite, or remove proven duplication. |
-| **Pair-atomic delivery** | Reviewers can connect every production change to one owner test and one coverage result. | MEDIUM | One plan and one commit own one pair. Shared support changes trigger the full direct-coverage run. |
-| **Environment-aware failure triage** | The team does not change product code for a sandbox limitation. | LOW | Re-run the Unix-socket case with the required permission before changing behavior. |
+|---------|-------------------|------------|-------|
+| **D-1 Live adapter status in `/claude:plugin info`** | One view of each plugin MCP server's runtime state (`connected`, `cached`, `failed` with age, `needs-auth`, `blocked` with reason, `disabled`) plus tool counts. No upstream analog was found: Claude shows status in `/mcp`, and `claude plugin details` reports an "inventory and projected token cost". The adapter's own `claudePlugins` loader has nothing like it either. | MEDIUM | Subscribe once in `index.ts` at factory time (A9 is push-only) and cache the latest snapshot in a leaf module with process lifetime, like `shared/completion-cache.ts`. The `info` orchestrator looks up each record's `generatedName` and stamps the status; notify stays a dumb renderer. New status tokens are amendments to the closed catalog. States to render: no snapshot yet (adapter absent or still initializing), snapshot without our server (needs `/reload`, or shadowed), and `blocked` (project trust, A11). Reading the snapshot never touches the network or connects a server, so `info` stays inside the NFR-5 `FORBIDDEN_TARGETS` gate. |
+| **D-2 Claude-form tool names in the hooks bridge** | The plugin's own hooks with `mcp__plugin_p_s__tool` matchers fire, and the payload `tool_name` matches upstream, even though the adapter emits `mcp__plugin_p_s_tool` (G-1). | MEDIUM | `domain/components/hook-tool-names.ts::mapPiToClaudeToolName` currently passes MCP names through unchanged. Use the known generated server names from state to map the `mcp__<key>_` prefix to `mcp__<key>__` exactly. This is not a regression, because tool names do not match today either, but TS-2 makes the fix deterministic. |
+| **D-3 `description` on each entry** | The adapter ranks `mcp({search})` by server description and shows it in the panel (5.0.0). Using the plugin's manifest description, or "Claude plugin `<p>@<mp>`", improves tool discovery and shows provenance, like Claude's plugin indicator in `/mcp`. | LOW | The resolver already has the manifest. |
+| **D-4 Field translation to adapter-native form** | Claude fields the adapter would otherwise ignore start working: `type:"sse"` → `httpTransport:"sse"` (Pi-format files skip SSE entirely, A4); `request_timeout_ms` → `requestTimeoutMs`; `oauth.callbackPort` → `oauth.redirectUri: http://127.0.0.1:<port>/callback`, as the adapter's Pi translation does. `ws` and `headersHelper` have no equivalent and should produce a warning (G-7, G-8). | MEDIUM | A new pure translation step in the bridge. |
+| **D-5 PreToolUse parity for proxied MCP calls (future)** | Pi's `tool_call` sees only `mcp` for proxied calls. The adapter's approval broker (`pi-mcp-adapter:tool-approval-request`, with `serverName`, `originalToolName`, `args`, and `origin`) sees every MCP call and can be claimed synchronously. | HIGH | Out of scope for mcp-4. Record it in the backlog. |
 
 ### Anti-Features (Commonly Requested, Often Problematic)
 
 | Feature | Why Requested | Why Problematic | Alternative |
-| --- | --- | --- | --- |
-| **Completion credit from a retained commit** | The code already passed once. | A retained commit does not prove current guideline compliance. | Review the pair at HEAD and record fresh focused evidence. |
-| **Completion credit from direct coverage alone** | The number is objective and easy to collect. | Coverage does not prove assertion quality, isolation, public ownership, or correct doubles. | Apply the complete pair checklist after coverage passes. |
-| **Several pairs in one plan or commit** | Bulk edits look faster. | Failures become hard to attribute and rollback. Review evidence becomes ambiguous. | Keep one source-test pair per executable plan and commit. |
-| **Replay of retired Phase 106 or 107 plans** | The archived work appears to contain a ready sequence. | Those artifacts describe abandoned milestone state. They give no completion credit. | Start future work at Phase 108 from the new roadmap. |
-| **Automatic application of `DIRTY-CHECKPOINT.patch`** | The patch contains plausible cleanup. | It is unverified evidence against another tree. | Re-evaluate each candidate against HEAD and public callers. |
-| **Historical module reconstruction** | The handoff lists many former moves. | Old partitions can restore obsolete responsibilities and comments. | Use `TRANSFORMATIONS.yaml` only as a search index. Decide boundaries from current responsibilities. |
-| **Migration-history comments** | They explain how an old layout evolved. | They preserve an abandoned design inside the new source. | Document the current invariant and public reason only. |
-| **Old exemption and ownership systems** | They appear to solve the inventory problem. | The handoff explicitly drops them. They also preserve old exceptions. | Use small fail-closed gates without baseline counts or exemptions. |
-| **Old sharded LCOV protocol** | It handled a large test tree. | The handoff drops its runner, reconcile protocol, and coverage matrix. | Run a focused pair and inspect exactly one source LCOV record. |
-| **Generic `tests/helpers/` expansion** | Shared helpers reduce repeated setup. | Generic ownership hides the concern and can share mutable state. | Put support beside the tests of its production concern. |
-| **Test-only exports or private assertions** | They make difficult branches easy to reach. | They test implementation details and widen the production API. | Change the production boundary or assert through the public export. |
-| **Module replacement or process-wide mocks** | They avoid changing production dependencies. | They hide dependencies and leak state between cases. | Inject a narrow production port and use case-owned doubles. |
-| **Snapshots or implementation-built expectations** | They reduce assertion code. | They can approve the same defect on both sides of the assertion. | Build exact expected values independently. |
-| **Coverage ignore directives** | They make a hard branch pass quickly. | They hide dead or unowned behavior. | Remove dead code or cover the branch through public behavior. |
-| **Live network, credentials, or shared fixtures** | They appear more realistic. | They make tests slow, unsafe, and environment-dependent. | Use a fake, a temporary local boundary, or a case-owned loopback service. |
-| **Incidental product changes** | A refactor exposes nearby feature ideas. | New behavior makes preservation results ambiguous. | Record the idea outside v1.19 and keep the pair behavior stable. |
-| **Blind expectation updates for current failures** | Changing expected text makes the test green. | The difference can expose a real product regression. | Decide the public contract first, then change code or the case. |
+|---------|---------------|-----------------|-------------|
+| Deliver through Pi's built-in `pi.registerMcpServer()` | It is native and needs no adapter. | The abandoned `builtin-mcp` milestone. The adapter treats runtime registrations as **proxy-only**: `direct` and `deferred` exposure are ignored, so search exposure is lost. Moving off the adapter regresses its users. | Write `mcp-adapter.json`. |
+| Write to both `mcp.json` and `mcp-adapter.json` | It keeps Pi-built-in-only users working. | Two sources for the same name get merged (A2), every startup warns about the marker (A4), and unstage has to clean up twice. It also contradicts the "without adopting Pi's built-in MCP" goal. | Adapter only, with an accurate `{pi-mcp-adapter}` soft-dependency row (TS-10). Document that built-in-only users lose plugin servers after migration. |
+| Resolve every `${VAR}` at install time with Claude's rules | It looks like the most literal reading of "expand with Claude Code's rules". | It **writes secrets to disk** (`Authorization: Bearer ${API_KEY}` would land in plain text in `mcp-adapter.json`). It freezes values Claude reads fresh every session, and setting a variable after install does nothing until reinstall. It also needs `literalEnv: true` to keep `env` literal, and `args`, `headers`, and `url` have no escape for `${` anyway (G-3). | Hand plain `${VAR}` to the adapter's runtime expansion, and resolve at install time only the `${VAR:-default}` form the adapter cannot express (TS-6). |
+| `literalEnv: true` on every entry | It looks like an easy fix for the adapter's `!` execution. | Claude does interpolate `env` (U7). This would stop `${VAR}` expansion in `env`, the exact regression ENVLIT-01 warns about. | Escape `!` as `!!` (TS-6d) and close ENVLIT-01 with no change. |
+| Emulate `:-` at runtime with `!printf '%s' "${VAR:-d}"` | It gives true runtime default semantics. | It is shell-dependent, breaks on Windows, runs a process per connection, works only in `env` and `headers`, and has a 10-second timeout. | Rewrite at install time (TS-6c). |
+| Name servers `plugin_<p>_<s>_` (trailing underscore) so that `mcp` mode yields `mcp__plugin_p_s__tool` exactly | It gives exact upstream tool names today with no upstream change. | It depends on an undocumented `formatToolName` quirk the adapter could change. The trailing `_` shows up on every adapter surface (panel, `/mcp-adapter enable`, status names, the `mcp:` references in pi-subagents, the `mcp__plugin_p_s_` namespace). | D-2 now, plus an upstream adapter request for a `__` separator mode. **This is a user decision**; see G-1. |
+| Pre-approve project servers (write adapter approvals, or set `projectServers: "allow"`) | It avoids the trust prompt after each update. | It bypasses a security gate the adapter owns, writes outside the NFR-10 set, and only user-global config may set `projectServers`. | Document the prompt (G-10). |
+| Poll or connect servers to get status for `info` | It gives fresher data. | It breaks the network-free `info` guarantee (NFR-5) and the adapter's lazy model. | Use only the cached push snapshot (D-1). |
+| Import the adapter's `./config` (`getServerProvenance`) at runtime for collision provenance | It removes path drift for good (an idea from MCPSRC-01). | It turns an optional peer into a real runtime dependency. Packaging a dist subpath is a scope decision. | Keep our own walk (TS-8). Revisit only if the precedence list drifts again. |
+
+## Parity Gaps: where the adapter cannot express Claude Code behavior
+
+| ID | Gap | Impact | Disposition |
+|----|-----|--------|-------------|
+| **G-1** | **Tool-name separator.** In `mcp` mode the adapter produces `mcp__<server>_<tool>`; Claude produces `mcp__<server>__<tool>` (A7 vs U3). No adapter mode yields `__` from a clean server name. | **High.** Plugin hook matchers on their own MCP tools never fire. `tool_name` in hook payloads differs. Skill and agent text that names `mcp__plugin_x_y__tool` refers to a tool that does not exist under that name: the model has to find it through search, and the adapter's fuzzy proxy lookup may or may not resolve it (unverified). Agent `tools:` entries in that form are dropped by the agents bridge. | **Decision needed.** Recommended: clean key + D-2 + an upstream request (`toolPrefix` mode or a `__` separator). Alternative: the trailing-underscore key (see Anti-Features). |
+| G-2 | **No `${VAR:-default}`** at adapter runtime (A6). | The default is picked at install time and kept until reinstall or update. If `VAR` is set at install but unset at runtime, the result is `""`, not the default. | Install-time rewrite (TS-6c). Document it. |
+| G-3 | **Unset `${VAR}` becomes `""`, not literal**, and nothing can escape `${` in `command`, `args`, `cwd`, `url`, or `headers`. Only `env` can opt out, through `literalEnv`. | A literal `${X}` argument differs; that is almost always an authoring bug upstream too. For `url`, both sides fail the server. | Install-time warning (TS-7). Document it. |
+| G-4 | **Syntax the adapter adds:** `$env:VAR`, `{env:VAR}`, `~/` in `command`, `args`, and `cwd`, and a leading `!` in `env`, `headers`, and `bearerToken`. | Rare in plugin manifests, but the values differ from Claude's. | Escape `!` as `!!`. The others cannot be escaped; document them. |
+| G-5 | **No credential blanking** (U9). | A Pi provider key in `process.env` could be expanded into a plugin server's `url` or `headers`. Claude blanks its own keys. | Document it. Mirroring Pi provider keys is a possible follow-up. |
+| G-6 | **Per-tool `_meta["anthropic/alwaysLoad"]`** | No per-tool equivalent of "always load" exists in config; `directTools: string[]` needs the tool names ahead of time. | Those tools stay deferred. Document it. |
+| G-7 | **`headersHelper` ≠ `requestHeadersCommand`.** Claude runs a shell helper that returns headers per connection; the adapter runs an executable per request with a JSON envelope on stdin. | Plugins using `headersHelper` lose dynamic auth. | Warn, and do not translate (D-4). |
+| G-8 | **No `ws` transport.** `sse` works only through `httpTransport`. | `ws` servers cannot run. | Warn (D-4). |
+| G-9 | **Lifecycle.** Claude connects plugin servers at session start and keeps them for the session. The adapter defaults to `lazy` with a 10-minute idle shutdown, which loses server-side state. | Stateful servers (browsers, database sessions) reset after idle time. | **Ask the user.** `keep-alive` is closest to upstream (it reconnects remote servers, as Claude does); the adapter's default favors memory. Leaving `lifecycle` unset diverges silently. |
+| G-10 | **Project trust re-prompts** (A11). The approval is tied to the full definition, and `pluginRoot` paths change on every update. | Each project-scope plugin update prompts again ("Don't allow" is the default), and headless sessions skip the server. | This already happens with `.pi/mcp.json`. Document it. |
+| G-11 | **Tool names over 64 characters** are not truncated by the adapter (A7). | Long `mcp__plugin_<long>_<long>_<tool>` names may be rejected by providers. Claude Code's truncation behavior is unknown. | Warn at stage time when name length plus the known prefix is over 64? Research during the phase. |
+| G-12 | **User-scope `${CLAUDE_PROJECT_DIR}`.** Claude resolves it for every scope (U5). We leave it literal (MENV-03/T-92-06), and the adapter then expands the literal to `""`, because `CLAUDE_PROJECT_DIR` is not in `process.env`. | The value is empty, not literal. The decision record assumed it stays literal. | Re-check T-92-06 against A6. Either note it or set the variable for MCP spawns only, which the adapter's `env` allows through the declared-wins merge. |
+| G-13 | **Same-reload visibility** (A13). | Entries that migration or reconcile installs are seen by the adapter on the second reload. | Spike during the phase. Document if accepted. |
 
 ## Feature Dependencies
 
-```text
-[HEAD inventory and stable contract set]
-    ├──requires──> [Resolver discriminant decision]
-    ├──requires──> [Fail-closed pair and coverage gates]
-    └──enables──> [Pair-by-pair implementation from Phase 108]
-                       ├──for each pair──> [Trace exported behavior and callers]
-                       ├──then───────────> [Refactor one production boundary if required]
-                       ├──then───────────> [Write or repair the mirrored test]
-                       ├──then───────────> [Focused test and 100% direct coverage]
-                       └──then───────────> [Pair review against the full guideline]
+```
+TS-11 Dependency floors (Pi 1.0 / adapter 5)
+    └──enables──> TS-3 search = Pi deferred tools (Pi ≥0.99 only)
+                  TS-10 detection test (Pi 1.0 built-in shape)
 
-[Narrow adapter ports]
-    └──enable──> [Shared real-and-fake contracts]
-                     └──require──> [Independent negative controls]
+TS-1 mcp-adapter.json delivery (JSONC-safe read, new NFR-10 write set)
+    ├──requires──> TS-8 collision walk (must include mcp-adapter.json files)
+    ├──requires──> TS-2 naming (+ TS-4 toolPrefix)
+    │                  └──enables──> D-2 hooks Claude-form mapping
+    │                  └──enables──> D-1 info status (snapshot keyed by generated name)
+    ├──requires──> TS-6 expansion/escaping (+ TS-7 warnings)
+    ├──requires──> TS-3 directTools search
+    └──requires──> TS-9 override preservation (panel now edits our file)
 
-[All current and new pairs complete]
-    └──requires──> [Named correction and oracle coverage]
-    └──requires──> [Zero corresponding-test violations]
-    └──requires──> [npm run check passes]
+TS-5 Auto migration ──requires──> TS-1, TS-2, TS-6 (re-stage under new rules)
+
+D-3 description, D-4 field translation ──enhance──> TS-1
 ```
 
 ### Dependency Notes
 
-- **Lock the resolver shape before its pair.** The current source still uses only the three-way `state` discriminant.
-- **Keep the three-way meaning.** Add the boolean safety field. Do not collapse partial availability into full availability.
-- **Keep `pluginRoot` off the unavailable arm.** This requirement applies to runtime schemas and TypeScript narrowing.
-- **Establish gates before broad pair work.** The gate must reject missing, ambiguous, and uncovered pairs.
-- **Trace callers before a production change.** A production split can add a new pair and change the closure inventory.
-- **Preserve assertions during test moves.** Remove an assertion only when the public contract changed or another independent case owns it.
-- **Run the full direct gate after shared support changes.** One support change can affect several pairs even when one plan owns it.
-- **Run the project gate after focused evidence.** A pair is not complete while typecheck, lint, Fallow, formatting, unit, or integration tests fail.
-
-## Pair Completion Contract
-
-A pair receives completion credit only when all signals pass:
-
-1. The plan and commit own exactly one production source-test pair.
-2. The mirrored test imports the source module directly.
-3. The test uses only exported production behavior.
-4. Every applicable guideline rule passes review.
-5. `node --test <test-path>` passes.
-6. `npm run test:coverage:direct -- <source-or-test-path>` reports 100% functions, lines, and branches.
-7. Relevant public contracts and oracle scenarios pass.
-8. The pair introduces no coverage exception or test-only export.
-9. The work does not resurrect a dropped handoff mechanism.
-10. `npm run check` passes before the implementation commit is accepted.
-
-For type-only modules, the compile-time contract replaces runtime coverage. The direct gate must identify this case explicitly.
-
-## Current Failure Triage
-
-The two focused failures need different treatment:
-
-| Pair | Observed Failure | Required Planning Treatment |
-| --- | --- | --- |
-| `orchestrators/marketplace/add.ts` | One Unix-domain-socket case gets `EPERM` in the current sandbox. | Re-run with listener permission. Do not change product behavior before that run. |
-| `orchestrators/plugin/update.ts` | Three cases expect `{no longer installable}` but receive `{network unreachable}`. | Decide the stable reason contract from public behavior and product rules. Do not update expectations blindly. |
-
-These failures do not reduce the 204-pair scope. They only affect ordering and diagnosis.
+- **TS-1 requires TS-8:** a stage into `mcp-adapter.json` that skips the adapter-file sources in its collision walk would miss the highest-precedence slots: `.pi/mcp-adapter.json` and the global `mcp-adapter.json`.
+- **TS-5 requires TS-1, TS-2, and TS-6:** migration has to write the final shape once. Re-staging from the recorded plugin root (offline, NFR-5-safe for cached sources) reuses one code path. Fall back to transforming the entry in place when the source is gone.
+- **TS-9 conflicts with naive re-stage:** `prepareStageMcpServers` replaces every owned entry outright ("replace ours with stamped"), so that branch has to merge the carried fields.
+- **D-1 depends on the factory-time subscription:** the snapshot is push-only, so subscribing late means waiting for the next status change.
+- **The ENVDOC-01 doc drift is now worse:** `docs/env-vars.md` §"MCP runtime env inheritance" says the adapter does not interpolate `command` or `args`. In 5.0.0 it does both, and it expands `~/` (A6). Rewrite that section together with TS-6.
 
 ## MVP Definition
 
-### Launch With (v1.19)
+### Launch With (mcp-4)
 
-- [ ] A fresh compliance decision for every current and newly added production TypeScript module.
-- [ ] One mirrored owner test for every source, including type-only modules and barrels.
-- [ ] Complete direct function, line, and branch coverage for each executable pair.
-- [ ] Full guideline compliance for cases, doubles, data, assertions, cleanup, and support layout.
-- [ ] The boolean `installable` discriminant with the unavailable `pluginRoot` exclusion.
-- [ ] Public, persistence, adapter, and named correction contracts preserved.
-- [ ] Zero missing, wrong-import, or unexpected corresponding-test violations.
-- [ ] Fail-closed gates with negative controls.
-- [ ] One pair per executable plan and implementation commit.
-- [ ] A green `npm run check` result.
+- [ ] TS-11 Floors: every later step depends on the Pi 1.0 deferred-tool path
+- [ ] TS-1 + TS-8: delivery and a correct collision walk, including the JSONC-safe read
+- [ ] TS-2 + TS-4 + TS-3: upstream naming and tool-search exposure, the core of the milestone
+- [ ] TS-6 + TS-7: expansion parity, escaping, and warnings (closes MENVX-01 and ENVLIT-01)
+- [ ] TS-9: otherwise the panel's own controls stop holding
+- [ ] TS-5: existing installs converge on `/reload` (NFR-2)
+- [ ] TS-10: pin the detection behavior
+- [ ] D-1: live status in `info`, a stated milestone target
 
-The roadmap starts at Phase 108. Retired Phase 106 and 107 artifacts remain historical evidence only.
+### Add After Validation
 
-### Add After Validation (v1.x)
+- [ ] D-2 Hooks Claude-form mapping: add it once G-1 is decided. It is cheap if the clean-key option wins.
+- [ ] D-3 Server `description`: a trivial ranking improvement
+- [ ] D-4 Field translation (`sse`, timeouts, oauth callback): add it when a real plugin needs it
 
-- [ ] Faster direct-coverage execution only after measurements show a problem.
-- [ ] More static style enforcement only after the pair review exposes repeated misses.
-- [ ] Additional shared contracts only when two real implementations promise the same behavior.
+### Future Consideration
 
-These additions must not weaken the focused pair result or add a baseline exemption.
-
-### Future Consideration (v2+)
-
-- [ ] Product features discovered during the refactor.
-- [ ] New adapters or component types.
-- [ ] Test tooling that changes the approved runner, assertion, or mock stack.
+- [ ] D-5 PreToolUse via the approval broker: a separate hooks milestone
+- [ ] An upstream adapter request for a `__` tool separator mode (G-1), and for `:-` support (G-2)
+- [ ] Mirroring credential blanking for Pi provider keys (G-5)
 
 ## Feature Prioritization Matrix
 
 | Feature | User Value | Implementation Cost | Priority |
-| --- | --- | --- | --- |
-| Contract and inventory lock | HIGH | MEDIUM | P1 |
-| Boolean resolver discriminant | HIGH | MEDIUM | P1 |
-| Mirrored test ownership | HIGH | HIGH | P1 |
-| Full guideline compliance | HIGH | HIGH | P1 |
-| Complete direct coverage | HIGH | HIGH | P1 |
-| Public-only production testability | HIGH | HIGH | P1 |
-| Named correction preservation | HIGH | HIGH | P1 |
-| Adapter parity and negative controls | HIGH | MEDIUM | P1 |
-| Fail-closed structural gates | HIGH | MEDIUM | P1 |
-| Pair-atomic plans and commits | HIGH | MEDIUM | P1 |
-| Full project quality gate | HIGH | MEDIUM | P1 |
-| Gate performance optimization | LOW | MEDIUM | P2 |
-| Extra static style rules | LOW | MEDIUM | P2 |
-| New product behavior | OUT OF SCOPE | HIGH | P3 |
+|---------|------------|---------------------|----------|
+| TS-1 adapter-file delivery | HIGH | MEDIUM | P1 |
+| TS-2/TS-4 naming + prefix | HIGH | MEDIUM | P1 |
+| TS-3 search exposure | HIGH | LOW | P1 |
+| TS-5 auto migration | HIGH | HIGH | P1 |
+| TS-6/TS-7 expansion + warnings | HIGH | HIGH | P1 |
+| TS-8 collision walk | MEDIUM | MEDIUM | P1 |
+| TS-9 override preservation | MEDIUM | MEDIUM | P1 |
+| TS-10 detection pin | MEDIUM | LOW | P1 |
+| TS-11 floors | HIGH | MEDIUM | P1 |
+| D-1 live status in info | MEDIUM | MEDIUM | P1 (stated target) |
+| D-2 hooks name mapping | MEDIUM | MEDIUM | P2 |
+| D-3 description | LOW | LOW | P2 |
+| D-4 field translation | LOW | MEDIUM | P3 |
+| D-5 broker PreToolUse | MEDIUM | HIGH | P3 |
 
-**Priority key:**
+## Competitor Feature Analysis
 
-- P1: Required for v1.19 completion.
-- P2: Add only after measured need.
-- P3: Keep outside v1.19.
+| Feature | pi-mcp-adapter `claudePlugins` loader (5.0.0) | Pi 1.0 built-in MCP | `@nklisch/pi-plugins` | Our approach (mcp-4) |
+|---------|-----------------------------------------------|---------------------|-----------------------|----------------------|
+| Plugin discovery | Explicit local paths only; reads only the root `.mcp.json` | None | Marketplaces, with a forked adapter | Marketplace install with lifecycle |
+| Server names | As written (no plugin namespace) | n/a | Not verified | `plugin_<p>_<s>` (U1/U2) |
+| Tool names | `<server>_<tool>` (default prefix) | `mcp__<server>__<tool>` (Claude form) | Not verified | `mcp__plugin_<p>_<s>_<tool>`, plus D-2 mapping |
+| Variables | `${CLAUDE_PLUGIN_ROOT}` only | Pi's own | Has `${user_config}` | ROOT/DATA/PROJECT_DIR plus `${VAR}`/`:-` parity (TS-6) |
+| Tool search | Global setting | `exposure: deferred` | Not verified | `directTools: "search"` per server |
+| Runtime status | `/mcp-adapter` panel | `/mcp` | `doctor`/`status` | Per-plugin rows in `info` (D-1) |
 
-## Approach Comparison
-
-| Characteristic | Aggregate Test Cleanup | Retained-Pass Campaign | v1.19 Pair Method |
-| --- | --- | --- | --- |
-| Ownership unit | Test suite or concern | Existing green file | One source-test pair |
-| Coverage evidence | Aggregate percentage | Prior focused result | Fresh direct result for one source |
-| Existing passes | Usually accepted | Treated as completed | Triage signal only |
-| Production design | Usually unchanged or broadly rewritten | Usually unchanged | One permitted boundary improvement when necessary |
-| Contract safety | Regression suite inference | Historical commit inference | Explicit public, persistence, adapter, and oracle contracts |
-| Structural enforcement | Often count-based | Often baseline-based | Fail-closed mapping and coverage with negative controls |
-| Review size | Large mixed batches | Mixed historical batches | One pair per plan and commit |
-| Legacy tests | Left in place | Assumed valid | Moved, reclassified, or removed after behavior preservation |
-
-## Research Gaps for Planning
-
-- The three update reason mismatches need a product-contract decision before that pair starts.
-- The Unix-socket case needs a permitted environment run before the team classifies it as a code defect.
-- Each of the 43 unexpected tests needs a disposition. Some can contain unique public behavior.
-- Each retained direct pass still needs a full guideline review. The audit measured coverage, not case quality.
-- A coherent production split changes the pair count. Closure must use the final source inventory, not the initial count alone.
+The built-in MCP is the only one that reaches Claude-form tool names. It loses on lazy start, proxy, and UI features, and leaving the adapter would regress users. So G-1 stays open, and the fix belongs on the adapter side.
 
 ## Sources
 
-### Repository Evidence (HIGH confidence)
-
-- `.planning/PROJECT.md` — current v1.19 goal, constraints, active requirements, and Phase 108 boundary.
-- `docs/guidelines/typescript-unit-testing-guidelines.md` — complete unit-test contract.
-- `.claude/rules/typescript-unit-testing.md` — enforced short-form test rules.
-- `.planning/inputs/unit-test-refactor-handoff/` — imported decisions, contracts, oracles, and replay evidence.
-- `/tmp/pi-cm-pair-audit.CJWiph/results.tsv` — 204-pair HEAD audit with 59 pass, 83 coverage-fail, 60 missing, and 2 test-fail rows.
-- `scripts/check-corresponding-tests.mjs` — current fail-closed ownership gate. It reports 107 violations at HEAD.
-- `scripts/test-coverage-direct.mjs` — focused direct-coverage behavior and explicit type-only handling.
-- `package.json` — Node test runner, `strong-mock` 9.2.2, Fallow, direct coverage, and full quality commands.
-- Repository HEAD `96adc467cda9429947e72e224a473f65bb82f234` — inspected production and test inventory.
-
-### External Tool Evidence (MEDIUM confidence)
-
-- [Node.js 20 test runner documentation](https://nodejs.org/docs/latest-v20.x/api/test.html) — explicit file execution, per-file child processes, case-context restoration, and LCOV coverage output.
-- [`strong-mock` documentation](https://github.com/NiGhTTraX/strong-mock) — exact-parameter behavior, once-by-default expectations, and explicit verification.
+- Claude Code 2.1.287 binary, functions grepped on 2026-10-01: `VCr`, `wx`, `Tn`, `qa`, `Hs`, `us`, `NAn`, `Vne`, `opt`, `cG`, `Hq`, `qSe`/`LAn`, and the stdio/http zod schemas
+- https://code.claude.com/docs/en/mcp (tool search, expansion fields, the unset-variable rule, plugin tool naming)
+- https://code.claude.com/docs/en/plugins-reference (the "Where each variable resolves" table, `mcpServers` shapes, `userConfig`)
+- pi-mcp-adapter 5.0.0: `docs/configuration.md`, `docs/servers.md`, `docs/tools.md`, `docs/extension-api.md`, `CHANGELOG.md` [5.0.0], `types.ts`, `config.ts`, `utils.ts`, `server-manager.ts`, `direct-tool-surface.ts`, `index.ts`, `mcp-status.ts`, `claude-plugin-loader.ts`, `pi-builtin-mcp.ts`, `package.json`
+- @earendil-works/pi-coding-agent 1.0.0: `dist/core/agent-session.js` (event order), `dist/core/mcp-servers.js` (validation), `dist/extensions/mcp/{index,tools,resources}.js`
+- Repo: `.planning/BACKLOG.md` MCPSRC-01, ENVLIT-01, MENVX-01, ENVDOC-01; `bridges/mcp/*`; `platform/pi-api.ts`; `domain/components/hook-tool-names.ts`; `docs/env-vars.md`
 
 ---
-*Feature research for: v1.19 Unit Test Refactor*
-*Researched: 2026-08-28*
+*Feature research for: Claude plugin MCP delivery via pi-mcp-adapter 5 (mcp-4)*
+*Researched: 2026-10-01*

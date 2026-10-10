@@ -1,5 +1,47 @@
 # Milestones: pi-claude-marketplace
 
+## mcp-4 -- MCP 4 (Completed: 2026-10-10; on features/mcp-4, PR #250 open, not yet merged or released)
+
+**Phases completed:** 8 phases (1-8), 73 plans, 176 tasks; 41/41 requirements.
+
+**Driver:** Pi 1.0 shipped, and pi-mcp-adapter 5 reads plugin servers from its
+own `mcp-adapter.json`. The goal was to make Pi 1.0 the baseline and deliver
+plugin MCP servers through that file at Claude Code parity: Claude Code tool
+names, tool search, variable expansion and live status, without adopting Pi's
+built-in MCP. Phase numbering restarted at 1.
+
+**Key accomplishments:**
+
+- Pi 1.0, pi-subagents 0.74.0 and pi-mcp-adapter 5.2.0 (which fixes advisory GHSA-6qxp-vccf-f47h) are the floors. Only pi-mcp-adapter itself satisfies the MCP soft dependency, never Pi's built-in MCP, and the live canaries pass on Pi 1.0.
+- Plugin MCP servers are written to the adapter's own `<scopeRoot>/mcp-adapter.json`. The file is read as JSONC the way the adapter reads it, refused rather than replaced when it does not parse, and checked for collisions across the adapter's nine config sources. A user's own per-server choices, such as `/mcp-adapter disable`, survive update, reinstall, disable and uninstall.
+- The model sees plugin tools under Claude Code's exact names, `mcp__plugin_<plugin>_<server>__<tool>`, and loads them on demand through tool search. Claude Code's transport, timeout and OAuth fields are translated by a closed table, and a server that needs a feature the adapter cannot honor makes the plugin partially available.
+- Variables expand by Claude Code's rules. Path variables and `${VAR:-default}` resolve at install time, plain `${VAR}` is left for the adapter at runtime with its second expansion escaped, and Claude's credential deny-list holds for `url` and `headers`. No environment value is written to disk; unset variables and withheld credentials show as warnings and in `info`.
+- One `/reload` moves each installed plugin's old `mcp.json` entries into `mcp-adapter.json`, adding before removing. One notice lists the renames, what they cost the user, and any entry it had to leave in place with its remedy.
+- `/claude:plugin info` shows each plugin MCP server's live state as the adapter reports it, or `status unknown`. `docs/mcp-compatibility.md` documents the names, the upgrade costs and 26 divergences, and an operator-run canary proves the whole path on a real Pi 1.0 with adapter 5.2.0.
+
+**Closeout:** verified close. The first audit (2026-10-09) read `tech_debt`
+with no blockers: open review findings in every phase, a fallow audit verdict
+of `warn`, MCPOVR-01 and MCPROW-01 open in `BACKLOG.md`, and records that no
+longer matched the code. Phase 8 cleared it in 21 plans. Every review ledger
+now reads `open: 0`, the fallow audit reads `pass` with 0 introduced groups,
+and every command reads state records by own key, so plugin and marketplace
+names such as `constructor` and `__proto__` behave like any other name. Phases
+1-7 were re-verified in scope against the final tree. The re-audit passed:
+41/41 requirements, 8/8 phases, 12/12 integration seams, 6/6 flows; Nyquist
+compliant on all 8 phases; `threats_open: 0`. One minor item, ROOTKEY-01 (a
+misleading cause line for a root plugin name outside the dependency token
+alphabet), is carried in `BACKLOG.md`.
+
+**Release state:** the work is on `features/mcp-4` as PR #250, not yet merged.
+The 0.20.0 version bump (D-07-11) and the CHANGELOG lines for the debt-clearing
+changes are on the branch. Phases 2 to 5 must go out in one release.
+
+**Archive:** `.planning/milestones/mcp-4-{ROADMAP,REQUIREMENTS,MILESTONE-AUDIT}.md`;
+phase and quick-task records are under `.planning/milestones/mcp-4-phases/` and
+`.planning/milestones/mcp-4-quick/`.
+
+---
+
 ## any-git-host -- Any Git Host (Completed: 2026-09-30; merged to main 2026-09-30 via PR #221, not yet in an npm release)
 
 **Phases completed:** 3 phases (1-3), 11 plans, 29 tasks

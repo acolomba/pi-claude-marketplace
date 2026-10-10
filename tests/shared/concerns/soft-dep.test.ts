@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  companionRequirements,
   softDepMarkers,
   type Dependency,
 } from "../../../extensions/pi-claude-marketplace/shared/concerns/soft-dep.ts";
@@ -48,7 +49,7 @@ const markerCases = [
       piMcpAdapterLoaded: false,
       workflowEngineLoaded: true,
     },
-    expectedMarkers: ["requires pi-mcp"],
+    expectedMarkers: ["requires pi-mcp-adapter"],
   },
   {
     title: "returns agents before MCP when both dependencies are declared and unavailable",
@@ -60,7 +61,7 @@ const markerCases = [
       piMcpAdapterLoaded: false,
       workflowEngineLoaded: true,
     },
-    expectedMarkers: ["requires pi-subagents", "requires pi-mcp"],
+    expectedMarkers: ["requires pi-subagents", "requires pi-mcp-adapter"],
   },
   {
     title: "returns no markers when neither dependency is declared and only MCP is loaded",
@@ -144,7 +145,7 @@ const markerCases = [
       piMcpAdapterLoaded: false,
       workflowEngineLoaded: true,
     },
-    expectedMarkers: ["requires pi-mcp"],
+    expectedMarkers: ["requires pi-mcp-adapter"],
   },
   {
     title: "returns the MCP marker when both dependencies are declared and only agents are loaded",
@@ -156,7 +157,7 @@ const markerCases = [
       piMcpAdapterLoaded: false,
       workflowEngineLoaded: true,
     },
-    expectedMarkers: ["requires pi-mcp"],
+    expectedMarkers: ["requires pi-mcp-adapter"],
   },
   {
     title: "returns no markers when neither dependency is declared and both companions are loaded",
@@ -257,7 +258,11 @@ const markerCases = [
       piMcpAdapterLoaded: false,
       workflowEngineLoaded: false,
     },
-    expectedMarkers: ["requires pi-subagents", "requires pi-mcp", "requires pi-dynamic-workflows"],
+    expectedMarkers: [
+      "requires pi-subagents",
+      "requires pi-mcp-adapter",
+      "requires pi-dynamic-workflows",
+    ],
   },
 ] as const;
 
@@ -283,5 +288,124 @@ for (const {
 
     // assert
     assert.deepStrictEqual(softDependencyMarkers, expectedSoftDepMarkers);
+  });
+}
+
+const requirementCases = [
+  {
+    title: "returns no companion requirement when no companion kind is declared",
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+    probe: {
+      piSubagentsLoaded: false,
+      piMcpAdapterLoaded: false,
+      workflowEngineLoaded: false,
+    },
+    expectedRequirements: [],
+  },
+  {
+    title:
+      "tags pi-mcp-adapter missing when MCP is declared and the adapter is not loaded (ADET-01)",
+    declaresAgents: false,
+    declaresMcp: true,
+    declaresWorkflows: false,
+    probe: {
+      piSubagentsLoaded: true,
+      piMcpAdapterLoaded: false,
+      workflowEngineLoaded: true,
+    },
+    expectedRequirements: [{ companion: "pi-mcp-adapter", missing: true }],
+  },
+  {
+    title: "orders every declared companion by name and tags each from the probe (ADET-01)",
+    declaresAgents: true,
+    declaresMcp: true,
+    declaresWorkflows: true,
+    probe: {
+      piSubagentsLoaded: false,
+      piMcpAdapterLoaded: true,
+      workflowEngineLoaded: false,
+    },
+    expectedRequirements: [
+      { companion: "pi-dynamic-workflows", missing: true },
+      { companion: "pi-mcp-adapter", missing: false },
+      { companion: "pi-subagents", missing: true },
+    ],
+  },
+] as const;
+
+for (const {
+  title,
+  declaresAgents,
+  declaresMcp,
+  declaresWorkflows,
+  probe,
+  expectedRequirements,
+} of requirementCases) {
+  test(title, () => {
+    // arrange
+    const expectedCompanionRequirements = [...expectedRequirements];
+
+    // act
+    const requirements = companionRequirements(
+      declaresAgents,
+      declaresMcp,
+      declaresWorkflows,
+      probe,
+    );
+
+    // assert
+    assert.deepStrictEqual(requirements, expectedCompanionRequirements);
+  });
+}
+
+const NOTHING_LOADED = {
+  piSubagentsLoaded: false,
+  piMcpAdapterLoaded: false,
+  workflowEngineLoaded: false,
+} as const;
+
+for (const { kind, declaresAgents, declaresMcp, declaresWorkflows, companion } of [
+  {
+    kind: "agents",
+    declaresAgents: true,
+    declaresMcp: false,
+    declaresWorkflows: false,
+    companion: "pi-subagents",
+  },
+  {
+    kind: "mcp",
+    declaresAgents: false,
+    declaresMcp: true,
+    declaresWorkflows: false,
+    companion: "pi-mcp-adapter",
+  },
+  {
+    kind: "workflows",
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: true,
+    companion: "pi-dynamic-workflows",
+  },
+] as const) {
+  test(`names the same ${companion} companion in the ${kind} marker and the requires entry (ADET-01)`, () => {
+    // arrange
+    const expectedNames = {
+      markers: [`requires ${companion}`],
+      requirements: [{ companion, missing: true }],
+    };
+
+    // act
+    const markers = softDepMarkers(declaresAgents, declaresMcp, declaresWorkflows, NOTHING_LOADED);
+    const requirements = companionRequirements(
+      declaresAgents,
+      declaresMcp,
+      declaresWorkflows,
+      NOTHING_LOADED,
+    );
+
+    // assert
+    assert.deepStrictEqual({ markers, requirements }, expectedNames);
   });
 }

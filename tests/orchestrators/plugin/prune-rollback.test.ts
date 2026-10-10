@@ -208,6 +208,7 @@ test("occupied artifact remains untouched and keeps its recovery backup", async 
 
 test("artifact publication refuses a replacement created at the write boundary", async () => {
   await withHermeticEnvironment("prune-rollback-publish-race-", async ({ cwd }) => {
+    // arrange
     const locations = locationsFor("project", cwd);
     const fixture = await seed(locations);
     const original = await readFile(fixture.command);
@@ -226,8 +227,10 @@ test("artifact publication refuses a replacement created at the write boundary",
     });
     await rm(fixture.command);
 
+    // act
     const failures = await rollback.rollback();
 
+    // assert
     assert.equal(published, true);
     assert.deepStrictEqual(
       failures.map(({ phase }) => phase),
@@ -278,6 +281,7 @@ test("publication failure keeps the backup and reports an artifact restore failu
 
 test("nested directory backup stays complete across repeated partial rollbacks", async () => {
   await withHermeticEnvironment("prune-rollback-directory-retry-", async ({ cwd }) => {
+    // arrange
     const locations = locationsFor("project", cwd);
     const fixture = await seed(locations);
     const skillDir = path.dirname(fixture.skill);
@@ -288,6 +292,7 @@ test("nested directory backup stays complete across repeated partial rollbacks",
     });
     await rm(skillDir, { recursive: true });
 
+    // act & assert
     const firstFailures = await rollback.rollback();
     assert.deepStrictEqual(
       firstFailures.map(({ phase }) => phase),
@@ -310,6 +315,7 @@ test("nested directory backup stays complete across repeated partial rollbacks",
 
 test("an in-place edit to a restored file cannot change its retained backup", async () => {
   await withHermeticEnvironment("prune-rollback-file-alias-", async ({ cwd }) => {
+    // arrange
     const locations = locationsFor("project", cwd);
     const fixture = await seed(locations);
     const original = await readFile(fixture.command);
@@ -326,8 +332,10 @@ test("an in-place edit to a restored file cannot change its retained backup", as
     await rm(fixture.command);
     await writeFile(locations.mcpJsonPath, "independent metadata\n");
 
+    // act
     const failures = await rollback.rollback();
 
+    // assert
     assert.deepStrictEqual(
       failures.map(({ phase }) => phase),
       ["mcp"],
@@ -342,6 +350,7 @@ test("an in-place edit to a restored file cannot change its retained backup", as
 
 test("restored file mode survives the process umask", async () => {
   await withHermeticEnvironment("prune-rollback-file-mode-", async ({ cwd }) => {
+    // arrange
     const locations = locationsFor("project", cwd);
     const fixture = await seed(locations);
     await chmod(fixture.command, 0o764);
@@ -350,12 +359,15 @@ test("restored file mode survives the process umask", async () => {
     });
     await rm(fixture.command);
     const priorUmask = process.umask(0o077);
+
+    // act & assert
     try {
       assert.deepStrictEqual(await rollback.rollback(), []);
     } finally {
       process.umask(priorUmask);
     }
 
+    // assert
     assert.equal((await lstat(fixture.command)).mode & 0o777, 0o764);
   });
 });
@@ -706,6 +718,7 @@ test("nested symlink content is compared without following its target", async ()
 
 test("missing directory retains a nested symlink in its backup", async () => {
   await withHermeticEnvironment("prune-rollback-symlink-publish-", async ({ cwd }) => {
+    // arrange
     const locations = locationsFor("project", cwd);
     const fixture = await seed(locations);
     const linked = path.join(path.dirname(fixture.skill), "linked.md");
@@ -717,8 +730,10 @@ test("missing directory retains a nested symlink in its backup", async () => {
     });
     await rm(path.dirname(fixture.skill), { recursive: true });
 
+    // act
     const failures = await rollback.rollback();
 
+    // assert
     assert.deepStrictEqual(
       failures.map(({ phase }) => phase),
       ["skills"],
@@ -734,6 +749,7 @@ test("missing directory retains a nested symlink in its backup", async () => {
 
 test("rollback rejects a symlink substituted into an artifact backup", async () => {
   await withHermeticEnvironment("prune-rollback-symlink-artifact-", async ({ cwd }) => {
+    // arrange
     const locations = locationsFor("project", cwd);
     const fixture = await seed(locations);
     const outside = path.join(cwd, "outside.md");
@@ -746,8 +762,10 @@ test("rollback rejects a symlink substituted into an artifact backup", async () 
     await symlink(outside, backup);
     await rm(fixture.command);
 
+    // act
     const failures = await rollback.rollback();
 
+    // assert
     assert.deepStrictEqual(
       failures.map(({ phase }) => phase),
       ["commands"],
@@ -760,6 +778,7 @@ test("rollback rejects a symlink substituted into an artifact backup", async () 
 
 test("unsupported backup artifact kind retains the recovery snapshot", async () => {
   await withHermeticEnvironment("prune-rollback-unsupported-backup-", async ({ cwd }) => {
+    // arrange
     const locations = locationsFor("project", cwd);
     const fixture = await seed(locations);
     const rollback = await preparePruneRollback(locations, [fixture.member], {
@@ -780,8 +799,10 @@ test("unsupported backup artifact kind retains the recovery snapshot", async () 
     const unsupportedBackup = path.join(locations.extensionRoot, rollback.backupName, "1");
     await rm(fixture.command);
 
+    // act
     const failures = await rollback.rollback();
 
+    // assert
     assert.deepStrictEqual(
       failures.map(({ phase }) => phase),
       ["commands"],
@@ -890,6 +911,7 @@ test("shared MCP edit after unstage stays current and retains its original backu
 
 test("MCP edit before unstage observation stays current and retains its backup", async () => {
   await withHermeticEnvironment("prune-rollback-mcp-before-mark-", async ({ cwd }) => {
+    // arrange
     const locations = locationsFor("project", cwd);
     const fixture = await seed(locations);
     const original = await readFile(locations.mcpJsonPath);
@@ -899,8 +921,10 @@ test("MCP edit before unstage observation stays current and retains its backup",
     const independent = Buffer.from('{ "mcpServers": { "orphan": 1, "independent": 2 } }\n');
     await writeFile(locations.mcpJsonPath, independent);
 
+    // act
     const failures = await rollback.rollback();
 
+    // assert
     assert.deepStrictEqual(
       failures.map(({ phase }) => phase),
       ["mcp"],
@@ -915,6 +939,7 @@ test("MCP edit before unstage observation stays current and retains its backup",
 
 test("MCP edit during rollback observation remains current with recovery backup", async () => {
   await withHermeticEnvironment("prune-rollback-mcp-read-race-", async ({ cwd }) => {
+    // arrange
     const locations = locationsFor("project", cwd);
     const fixture = await seed(locations);
     const original = await readFile(locations.mcpJsonPath);
@@ -932,8 +957,10 @@ test("MCP edit during rollback observation remains current with recovery backup"
     const rollback = await preparePruneRollback(locations, [fixture.member], ops);
     await writeFile(locations.mcpJsonPath, '{ "mcpServers": {} }\n');
 
+    // act
     const failures = await rollback.rollback();
 
+    // assert
     assert.equal(injected, true);
     assert.deepStrictEqual(
       failures.map(({ phase }) => phase),
@@ -1008,6 +1035,7 @@ test("metadata directory collision leaves the directory and its backup intact", 
 
 test("missing shared metadata keeps its original recovery backup", async () => {
   await withHermeticEnvironment("prune-rollback-metadata-missing-", async ({ cwd }) => {
+    // arrange
     const locations = locationsFor("project", cwd);
     const fixture = await seed(locations);
     const original = await readFile(locations.mcpJsonPath);
@@ -1016,8 +1044,10 @@ test("missing shared metadata keeps its original recovery backup", async () => {
     });
     await rm(locations.mcpJsonPath);
 
+    // act
     const failures = await rollback.rollback();
 
+    // assert
     assert.deepStrictEqual(
       failures.map(({ phase }) => phase),
       ["mcp"],
@@ -1032,6 +1062,7 @@ test("missing shared metadata keeps its original recovery backup", async () => {
 
 test("a damaged metadata backup is reported without replacing the live document", async () => {
   await withHermeticEnvironment("prune-rollback-metadata-backup-damaged-", async ({ cwd }) => {
+    // arrange
     const locations = locationsFor("project", cwd);
     const fixture = await seed(locations);
     const original = await readFile(locations.mcpJsonPath);
@@ -1042,14 +1073,447 @@ test("a damaged metadata backup is reported without replacing the live document"
     await rm(backup);
     await mkdir(backup);
 
+    // act
     const failures = await rollback.rollback();
 
+    // assert
     assert.deepStrictEqual(
       failures.map(({ phase }) => phase),
       ["mcp"],
     );
     assert.deepStrictEqual(await readFile(locations.mcpJsonPath), original);
     assert.equal((await stat(backup)).isDirectory(), true);
+  });
+});
+
+test("AFILE-01: a missing adapter file stays absent after rollback", async () => {
+  await withHermeticEnvironment("prune-rollback-adapter-absent-", async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    const fixture = await seed(locations);
+    const rollback = await preparePruneRollback(locations, [fixture.member], {
+      removeBackup: rm,
+    });
+
+    // act
+    const failures = await rollback.rollback();
+
+    // assert
+    assert.deepStrictEqual(failures, []);
+    await assert.rejects(stat(locations.mcpAdapterJsonPath), { code: "ENOENT" });
+  });
+});
+
+test("AFILE-01: an adapter edit during rollback stays current with its original in the backup", async () => {
+  await withHermeticEnvironment("prune-rollback-adapter-edit-", async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    const fixture = await seed(locations);
+    const original = Buffer.from('{ "mcpServers": { "orphan": 1 } }\n');
+    await writeFile(locations.mcpAdapterJsonPath, original);
+    const rollback = await preparePruneRollback(locations, [fixture.member], {
+      removeBackup: rm,
+    });
+    const independent = Buffer.from('{ "mcpServers": { "orphan": { "disabled": true } } }\n');
+    await writeFile(locations.mcpAdapterJsonPath, independent);
+
+    // act
+    const failures = await rollback.rollback();
+
+    // assert
+    assert.deepStrictEqual(
+      failures.map(({ phase }) => phase),
+      ["mcp adapter"],
+    );
+    assert.deepStrictEqual(await readFile(locations.mcpAdapterJsonPath), independent);
+    assert.deepStrictEqual(
+      await readFile(path.join(locations.extensionRoot, rollback.backupName, "6")),
+      original,
+    );
+  });
+});
+
+test("AFILE-01: a byte-identical adapter file restores cleanly", async () => {
+  await withHermeticEnvironment("prune-rollback-adapter-same-", async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    const fixture = await seed(locations);
+    const original = Buffer.from('{ "mcpServers": { "orphan": 1 } }\n');
+    await writeFile(locations.mcpAdapterJsonPath, original);
+    const rollback = await preparePruneRollback(locations, [fixture.member], {
+      removeBackup: rm,
+    });
+
+    // act
+    const failures = await rollback.rollback();
+
+    // assert
+    assert.deepStrictEqual(failures, []);
+    assert.deepStrictEqual(await readFile(locations.mcpAdapterJsonPath), original);
+    assert.deepStrictEqual(
+      (await readdir(locations.extensionRoot)).filter((name) => name.startsWith("prune-backup-")),
+      [],
+    );
+  });
+});
+
+test("NFR-3: MCP config files holding the recorded unstage bytes restore from their backups", async () => {
+  await withHermeticEnvironment("prune-rollback-own-write-", async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    const fixture = await seed(locations);
+    const originalAdapter = Buffer.from('// user note\n{ "mcpServers": { "orphan": 1 } }\n');
+    await writeFile(locations.mcpAdapterJsonPath, originalAdapter);
+    const originalLegacy = await readFile(locations.mcpJsonPath);
+    const rollback = await preparePruneRollback(locations, [fixture.member], {
+      removeBackup: rm,
+    });
+    const ownBytes = Buffer.from('{\n  "mcpServers": {}\n}\n');
+    await writeFile(locations.mcpAdapterJsonPath, ownBytes);
+    await writeFile(locations.mcpJsonPath, ownBytes);
+    rollback.recordMcpWrites([
+      { path: locations.mcpAdapterJsonPath, bytes: ownBytes },
+      { path: locations.mcpJsonPath, bytes: ownBytes },
+    ]);
+
+    // act
+    const failures = await rollback.rollback();
+
+    // assert
+    assert.deepStrictEqual(failures, []);
+    assert.deepStrictEqual(
+      {
+        adapter: await readFile(locations.mcpAdapterJsonPath),
+        legacy: await readFile(locations.mcpJsonPath),
+      },
+      { adapter: originalAdapter, legacy: originalLegacy },
+    );
+    assert.deepStrictEqual(
+      (await readdir(locations.extensionRoot)).filter((name) => name.startsWith("prune-backup-")),
+      [],
+    );
+  });
+});
+
+test("NFR-3: an adapter edit after the recorded unstage write stays current with its backup", async () => {
+  await withHermeticEnvironment("prune-rollback-own-write-edited-", async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    const fixture = await seed(locations);
+    const original = Buffer.from('{ "mcpServers": { "orphan": 1 } }\n');
+    await writeFile(locations.mcpAdapterJsonPath, original);
+    const rollback = await preparePruneRollback(locations, [fixture.member], {
+      removeBackup: rm,
+    });
+    rollback.recordMcpWrites([
+      { path: locations.mcpAdapterJsonPath, bytes: Buffer.from('{\n  "mcpServers": {}\n}\n') },
+    ]);
+    const independent = Buffer.from('{\n  "mcpServers": { "independent": 2 }\n}\n');
+    await writeFile(locations.mcpAdapterJsonPath, independent);
+
+    // act
+    const failures = await rollback.rollback();
+
+    // assert
+    assert.deepStrictEqual(
+      failures.map(({ phase, cause }) => ({ phase, message: cause.message })),
+      [
+        {
+          phase: "mcp adapter",
+          message: `Prune rollback found an occupied metadata path at ${locations.mcpAdapterJsonPath}.`,
+        },
+      ],
+    );
+    assert.deepStrictEqual(await readFile(locations.mcpAdapterJsonPath), independent);
+    assert.deepStrictEqual(
+      await readFile(path.join(locations.extensionRoot, rollback.backupName, "6")),
+      original,
+    );
+  });
+});
+
+test("NFR-3: the last recorded write to a path is the one the rollback compares", async () => {
+  await withHermeticEnvironment("prune-rollback-own-write-last-", async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    const fixture = await seed(locations);
+    const original = Buffer.from('{ "mcpServers": { "orphan": 1, "other": 2 } }\n');
+    await writeFile(locations.mcpAdapterJsonPath, original);
+    const rollback = await preparePruneRollback(locations, [fixture.member], {
+      removeBackup: rm,
+    });
+    const lastBytes = Buffer.from('{\n  "mcpServers": {}\n}\n');
+    rollback.recordMcpWrites([
+      {
+        path: locations.mcpAdapterJsonPath,
+        bytes: Buffer.from('{\n  "mcpServers": {\n    "other": 2\n  }\n}\n'),
+      },
+    ]);
+    rollback.recordMcpWrites([{ path: locations.mcpAdapterJsonPath, bytes: lastBytes }]);
+    await writeFile(locations.mcpAdapterJsonPath, lastBytes);
+
+    // act
+    const failures = await rollback.rollback();
+
+    // assert
+    assert.deepStrictEqual(failures, []);
+    assert.deepStrictEqual(await readFile(locations.mcpAdapterJsonPath), original);
+  });
+});
+
+test("NFR-3: an adapter edit after the rollback reads the recorded unstage write stays current with its backup", async () => {
+  await withHermeticEnvironment("prune-rollback-own-write-read-race-", async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    const fixture = await seed(locations);
+    const original = Buffer.from('// user note\n{ "mcpServers": { "orphan": 1 } }\n');
+    await writeFile(locations.mcpAdapterJsonPath, original);
+    const independent = Buffer.from('{\n  "mcpServers": { "independent": 2 }\n}\n');
+    let injected = false;
+    const rollback = await preparePruneRollback(locations, [fixture.member], {
+      removeBackup: rm,
+      afterMetadataRead: async (target: string): Promise<void> => {
+        if (target === locations.mcpAdapterJsonPath && !injected) {
+          injected = true;
+          await writeFile(target, independent);
+        }
+      },
+    });
+    const ownBytes = Buffer.from('{\n  "mcpServers": {}\n}\n');
+    await writeFile(locations.mcpAdapterJsonPath, ownBytes);
+    rollback.recordMcpWrites([{ path: locations.mcpAdapterJsonPath, bytes: ownBytes }]);
+
+    // act
+    const failures = await rollback.rollback();
+
+    // assert
+    assert.equal(injected, true);
+    assert.deepStrictEqual(
+      failures.map(({ phase, cause }) => ({ phase, message: cause.message })),
+      [
+        {
+          phase: "mcp adapter",
+          message: `Prune rollback found an occupied metadata path at ${locations.mcpAdapterJsonPath}.`,
+        },
+      ],
+    );
+    assert.deepStrictEqual(await readFile(locations.mcpAdapterJsonPath), independent);
+    assert.deepStrictEqual(
+      await readFile(path.join(locations.extensionRoot, rollback.backupName, "6")),
+      original,
+    );
+    assert.deepStrictEqual(
+      (await readdir(path.dirname(locations.mcpAdapterJsonPath))).filter((name) =>
+        name.startsWith(".prune-restore-"),
+      ),
+      [],
+    );
+  });
+});
+
+test("NFR-3: a failed restore write leaves the adapter file in place and keeps its backup", async () => {
+  await withHermeticEnvironment("prune-rollback-own-write-failed-write-", async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    const fixture = await seed(locations);
+    const original = Buffer.from('{ "mcpServers": { "orphan": 1 } }\n');
+    await writeFile(locations.mcpAdapterJsonPath, original);
+    const configDirectory = path.dirname(locations.mcpAdapterJsonPath);
+    let entriesAtWrite: readonly string[] = [];
+    const rollback = await preparePruneRollback(locations, [fixture.member], {
+      removeBackup: rm,
+      writeMetadata: async (target) => {
+        entriesAtWrite = await readdir(configDirectory);
+        throw new Error(`write refused at ${target}`);
+      },
+    });
+    const ownBytes = Buffer.from('{\n  "mcpServers": {}\n}\n');
+    await writeFile(locations.mcpAdapterJsonPath, ownBytes);
+    rollback.recordMcpWrites([{ path: locations.mcpAdapterJsonPath, bytes: ownBytes }]);
+
+    // act
+    const failures = await rollback.rollback();
+
+    // assert
+    assert.deepStrictEqual(
+      failures.map(({ phase, cause }) => ({ phase, message: cause.message })),
+      [{ phase: "mcp adapter", message: `write refused at ${locations.mcpAdapterJsonPath}` }],
+    );
+    assert.deepStrictEqual(
+      {
+        live: await readFile(locations.mcpAdapterJsonPath),
+        backup: await readFile(path.join(locations.extensionRoot, rollback.backupName, "6")),
+        entriesAtWrite: [...entriesAtWrite].sort(),
+        entriesAfter: (await readdir(configDirectory)).sort(),
+      },
+      {
+        live: ownBytes,
+        backup: original,
+        entriesAtWrite: ["agents", "mcp-adapter.json", "mcp.json", "pi-claude-marketplace"],
+        entriesAfter: ["agents", "mcp-adapter.json", "mcp.json", "pi-claude-marketplace"],
+      },
+    );
+  });
+});
+
+test("NFR-3: an adapter removed after the rollback reads the recorded unstage write stays absent with its backup", async () => {
+  await withHermeticEnvironment("prune-rollback-own-write-removed-", async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    const fixture = await seed(locations);
+    const original = Buffer.from('{ "mcpServers": { "orphan": 1 } }\n');
+    await writeFile(locations.mcpAdapterJsonPath, original);
+    const rollback = await preparePruneRollback(locations, [fixture.member], {
+      removeBackup: rm,
+      afterMetadataRead: async (target: string): Promise<void> => {
+        if (target === locations.mcpAdapterJsonPath) {
+          await rm(target);
+        }
+      },
+    });
+    const ownBytes = Buffer.from('{\n  "mcpServers": {}\n}\n');
+    await writeFile(locations.mcpAdapterJsonPath, ownBytes);
+    rollback.recordMcpWrites([{ path: locations.mcpAdapterJsonPath, bytes: ownBytes }]);
+
+    // act
+    const failures = await rollback.rollback();
+
+    // assert
+    assert.deepStrictEqual(
+      failures.map(({ phase, cause }) => ({ phase, message: cause.message })),
+      [
+        {
+          phase: "mcp adapter",
+          message: `Prune rollback found an occupied metadata path at ${locations.mcpAdapterJsonPath}.`,
+        },
+      ],
+    );
+    assert.deepStrictEqual(
+      {
+        entries: (await readdir(path.dirname(locations.mcpAdapterJsonPath))).sort(),
+        backup: await readFile(path.join(locations.extensionRoot, rollback.backupName, "6")),
+      },
+      { entries: ["agents", "mcp.json", "pi-claude-marketplace"], backup: original },
+    );
+  });
+});
+
+test("NFR-3: an adapter replaced by a directory during the last byte check is refused without a raw EISDIR", async () => {
+  await withHermeticEnvironment("prune-rollback-own-write-directory-", async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    const fixture = await seed(locations);
+    const original = Buffer.from('{ "mcpServers": { "orphan": 1 } }\n');
+    await writeFile(locations.mcpAdapterJsonPath, original);
+    const rollback = await preparePruneRollback(locations, [fixture.member], {
+      removeBackup: rm,
+      readMetadata: async (target) => {
+        await rm(target);
+        await mkdir(target);
+        return readFile(target);
+      },
+    });
+    const ownBytes = Buffer.from('{\n  "mcpServers": {}\n}\n');
+    await writeFile(locations.mcpAdapterJsonPath, ownBytes);
+    rollback.recordMcpWrites([{ path: locations.mcpAdapterJsonPath, bytes: ownBytes }]);
+
+    // act
+    const failures = await rollback.rollback();
+
+    // assert
+    assert.deepStrictEqual(
+      failures.map(({ phase, cause }) => ({ phase, message: cause.message })),
+      [
+        {
+          phase: "mcp adapter",
+          message: `Prune rollback found an occupied metadata path at ${locations.mcpAdapterJsonPath}.`,
+        },
+      ],
+    );
+    assert.deepStrictEqual(
+      {
+        adapterIsDirectory: (await lstat(locations.mcpAdapterJsonPath)).isDirectory(),
+        adapterEntries: await readdir(locations.mcpAdapterJsonPath),
+        backup: await readFile(path.join(locations.extensionRoot, rollback.backupName, "6")),
+      },
+      { adapterIsDirectory: true, adapterEntries: [], backup: original },
+    );
+  });
+});
+
+test("NFR-3: a read error other than a vanished or replaced adapter propagates from the last byte check", async () => {
+  await withHermeticEnvironment("prune-rollback-own-write-read-error-", async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    const fixture = await seed(locations);
+    const original = Buffer.from('{ "mcpServers": { "orphan": 1 } }\n');
+    await writeFile(locations.mcpAdapterJsonPath, original);
+    const denied = Object.assign(new Error("adapter read denied"), { code: "EACCES" });
+    const rollback = await preparePruneRollback(locations, [fixture.member], {
+      removeBackup: rm,
+      readMetadata: () => Promise.reject(denied),
+    });
+    const ownBytes = Buffer.from('{\n  "mcpServers": {}\n}\n');
+    await writeFile(locations.mcpAdapterJsonPath, ownBytes);
+    rollback.recordMcpWrites([{ path: locations.mcpAdapterJsonPath, bytes: ownBytes }]);
+
+    // act
+    const failures = await rollback.rollback();
+
+    // assert
+    assert.deepStrictEqual(failures, [{ phase: "mcp adapter", cause: denied }]);
+    assert.deepStrictEqual(
+      {
+        live: await readFile(locations.mcpAdapterJsonPath),
+        backup: await readFile(path.join(locations.extensionRoot, rollback.backupName, "6")),
+      },
+      { live: ownBytes, backup: original },
+    );
+  });
+});
+
+test("NFR-3: a symlink swapped in after the rollback reads the recorded unstage write is refused", async () => {
+  await withHermeticEnvironment("prune-rollback-own-write-symlink-", async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    const fixture = await seed(locations);
+    const original = Buffer.from('{ "mcpServers": { "orphan": 1 } }\n');
+    await writeFile(locations.mcpAdapterJsonPath, original);
+    const ownBytes = Buffer.from('{\n  "mcpServers": {}\n}\n');
+    const outside = path.join(cwd, "outside.json");
+    const rollback = await preparePruneRollback(locations, [fixture.member], {
+      removeBackup: rm,
+      afterMetadataRead: async (target: string): Promise<void> => {
+        if (target === locations.mcpAdapterJsonPath) {
+          await writeFile(outside, ownBytes);
+          await rm(target);
+          await symlink(outside, target);
+        }
+      },
+    });
+    await writeFile(locations.mcpAdapterJsonPath, ownBytes);
+    rollback.recordMcpWrites([{ path: locations.mcpAdapterJsonPath, bytes: ownBytes }]);
+
+    // act
+    const failures = await rollback.rollback();
+
+    // assert
+    assert.deepStrictEqual(
+      failures.map(({ phase, cause }) => ({ phase, message: cause.message })),
+      [
+        {
+          phase: "mcp adapter",
+          message: `Prune rollback found an occupied metadata path at ${locations.mcpAdapterJsonPath}.`,
+        },
+      ],
+    );
+    assert.deepStrictEqual(
+      {
+        outside: await readFile(outside),
+        backup: await readFile(path.join(locations.extensionRoot, rollback.backupName, "6")),
+      },
+      { outside: ownBytes, backup: original },
+    );
   });
 });
 

@@ -45,6 +45,7 @@ import { MarketplaceNotFoundError } from "../../../extensions/pi-claude-marketpl
 import { notify } from "../../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
 import { withLockedStateTransaction } from "../../../extensions/pi-claude-marketplace/transaction/with-state-guard.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+import { adapterCommand, toolInventoryItem } from "../../platform/pi-inventory-seed.ts";
 
 import type { HooksRouting } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import type { HooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
@@ -54,9 +55,9 @@ import type {
   EnableDisablePluginOutcome,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts";
 import type {
+  CommandInventoryItem,
   NotificationContext,
-  ToolInventory,
-  ToolInventoryItem,
+  PiInventory,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
 /**
@@ -113,15 +114,11 @@ function makeCtx(cwd: string): { ctx: NotificationContext; notifications: Notify
   return { ctx, notifications };
 }
 
-function toolInfo(name: string): ToolInventoryItem {
-  return {
-    name,
-    sourceInfo: { source: "test" },
-  };
-}
-
-function makePi(toolNames: readonly string[] = []): ToolInventory {
-  return { getAllTools: () => toolNames.map(toolInfo) };
+function makePi(
+  toolNames: readonly string[] = [],
+  commands: readonly CommandInventoryItem[] = [],
+): PiInventory {
+  return { getAllTools: () => toolNames.map(toolInventoryItem), getCommands: () => commands };
 }
 
 function createUpdatePlugins() {
@@ -195,7 +192,7 @@ test("enable-disable exposes its required transaction factory", () => {
  * default `makePi()` above reports BOTH companions unloaded, which is what
  * makes a row with a staged agent take the soft-dep marker.
  */
-function makePiWithSubagents(): ToolInventory {
+function makePiWithSubagents(): PiInventory {
   return makePi(["subagent"]);
 }
 
@@ -1411,7 +1408,7 @@ async function seedWorkflowRoundTrip(
   cwd: string,
   scripts: readonly { sourceName: string; metaName?: string }[],
 ): Promise<{
-  args: { pi: ToolInventory; cwd: string; marketplace: string; plugin: string; scope: "user" };
+  args: { pi: PiInventory; cwd: string; marketplace: string; plugin: string; scope: "user" };
   statePath: string;
   mpRoot: string;
   savedDir: string;
@@ -2840,6 +2837,119 @@ test("Marketplace not added: explicit --scope emits standalone marketplace-not-a
   });
 });
 
+test("D-08-07: enable of a plugin named constructor reports it as not installed and changes no file", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { statePath } = await writeUserState(home, {
+      marketplaceName: "mp",
+      pluginName: "other-plugin",
+      disabled: false,
+    });
+    const stateBefore = await readFile(statePath, "utf8");
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "mp",
+      plugin: "constructor",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert
+    assert.deepEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n\n● mp [user]\n  ⊘ constructor (skipped) {not installed}",
+        severity: "error",
+      },
+    ]);
+    assert.equal(await readFile(statePath, "utf8"), stateBefore);
+  });
+});
+
+test("D-08-07: disable in a marketplace named toString reports the marketplace as not added", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { statePath } = await writeUserState(home, {
+      marketplaceName: "mp",
+      pluginName: "x",
+      disabled: false,
+    });
+    const stateBefore = await readFile(statePath, "utf8");
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "toString",
+      plugin: "x",
+      enable: false,
+      scope: "user",
+    });
+
+    // assert
+    assert.deepEqual(notifications, [
+      {
+        message:
+          "A marketplace operation has failed.\n\n⊘ toString [user] (failed) {marketplace not added}",
+        severity: "error",
+      },
+    ]);
+    assert.equal(await readFile(statePath, "utf8"), stateBefore);
+  });
+});
+
+test("D-08-07: a plugin named constructor enables, disables and enables through its own record", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { statePath } = await seedRealDisabledMarketplace(home, {
+      marketplaceName: "mp",
+      pluginName: "constructor",
+      version: "1.2.3",
+    });
+    const args = {
+      pi: makePi(),
+      cwd,
+      marketplace: "mp",
+      plugin: "constructor",
+      scope: "user" as const,
+    };
+    const recordedEnabled = async (): Promise<boolean | undefined> => {
+      const state = await loadState(path.dirname(statePath));
+      const plugins = state.marketplaces["mp"]?.plugins ?? {};
+      return Object.hasOwn(plugins, "constructor") ? plugins["constructor"]?.enabled : undefined;
+    };
+
+    // act
+    await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: true });
+    const afterFirstEnable = await recordedEnabled();
+    await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: false });
+    const afterDisable = await recordedEnabled();
+    const { ctx, notifications } = makeCtx(cwd);
+    await setPluginEnabled({ ...args, ctx, enable: true });
+    const afterSecondEnable = await recordedEnabled();
+
+    // assert
+    assert.deepEqual([afterFirstEnable, afterDisable, afterSecondEnable], [true, false, true]);
+    assert.deepEqual(notifications, [
+      {
+        message: [
+          "● mp [user]",
+          "  ● constructor v1.2.3 (installed)",
+          "",
+          "/reload to pick up changes",
+        ].join("\n"),
+      },
+    ]);
+  });
+});
+
 // ──────────────────────────────────────────────────────────────────────────
 // RECON-03: orchestrated-mode coverage
 // ──────────────────────────────────────────────────────────────────────────
@@ -3483,7 +3593,7 @@ test("orchestrated enable returns every live degradation and companion signal wi
       enable: true,
       marketplace: "mp",
       notifications: { mode: "orchestrated" },
-      pi: makePi(["mcp", "subagent"]),
+      pi: makePi(["subagent"], [adapterCommand()]),
       plugin: "foo",
       scope: "user",
     });
@@ -4112,7 +4222,7 @@ test("orchestrated partial disable folds a removed hook after MCP cleanup fails"
       }),
     );
     await writeFile(
-      locations.mcpJsonPath,
+      locations.mcpAdapterJsonPath,
       JSON.stringify({ mcpServers: { server: { command: "node" } } }),
     );
     const runtime = createHooksRuntime();
@@ -4210,7 +4320,7 @@ test("a partial disable preserves its committed fold when route publication fail
       }),
     );
     await writeFile(
-      locations.mcpJsonPath,
+      locations.mcpAdapterJsonPath,
       JSON.stringify({ mcpServers: { server: { command: "node" } } }),
     );
     const runtime = createHooksRuntime();
@@ -4391,7 +4501,7 @@ test("standalone enable exposes ordered rollback partials and retries without du
       cwd,
       enable: true,
       marketplace: "mp",
-      pi: makePi(["mcp"]),
+      pi: makePi([], [adapterCommand()]),
       plugin: "foo",
       scope: "user",
     });
@@ -6707,5 +6817,725 @@ test("EDEP-02: an unreadable declarer refuses the disable with no absolute path 
     assert.equal(saveCalls, 0);
     assert.equal((await stat(statePath)).mtimeMs, mtimeBefore);
     assert.ok(!notifications[0]!.message.includes(state.marketplaces.official.marketplaceRoot));
+  });
+});
+
+// AFILE-04 / AFILE-02: MCP config file notices on enable and disable.
+
+/** AFILE-04: the exact comments-dropped notice for the user-scope adapter file. */
+const USER_COMMENTS_DROPPED_NOTICE: NotifyRecord = {
+  severity: "warning",
+  message:
+    "MCP config comments removed.\n\nThe user-scope mcp-adapter.json was rewritten to update plugin MCP servers; its JSONC comments were removed and everything else in it was kept.",
+};
+
+/** AFILE-04: the user-scope adapter file every case below reads and writes. */
+function userAdapterPath(home: string): string {
+  return path.join(home, ".pi", "agent", "mcp-adapter.json");
+}
+
+/** AFILE-04: write a user-scope mcp-adapter.json that holds a `//` comment. */
+async function writeCommentedUserAdapterFile(home: string): Promise<void> {
+  await mkdir(path.dirname(userAdapterPath(home)), { recursive: true });
+  await writeFile(
+    userAdapterPath(home),
+    '{\n  // mine\n  "mcpServers": { "mine": { "command": "my-server" } }\n}\n',
+  );
+}
+
+/** AFILE-04: put a `//` comment at the top of the adapter file as it stands. */
+async function prependAdapterComment(home: string): Promise<void> {
+  const current = await readFile(userAdapterPath(home), "utf8");
+  await writeFile(userAdapterPath(home), `// mine\n${current}`);
+}
+
+/** AFILE-04: give an `seedEdepGraph` plugin one MCP server. */
+async function writeEdepMcpServer(mpRoot: string, name: string): Promise<void> {
+  await writeFile(
+    path.join(mpRoot, "plugins", name, ".mcp.json"),
+    JSON.stringify({ mcpServers: { [`${name}-server`]: { command: "node" } } }),
+  );
+}
+
+/**
+ * AFILE-04: an enabled `foo@mp` whose MCP server sits in a commented user-scope
+ * mcp-adapter.json, so the next disable rewrites a commented file.
+ */
+async function seedEnabledMcpPluginUnderComment(cwd: string, home: string): Promise<void> {
+  await seedRealDisabledMarketplace(home, {
+    marketplaceName: "mp",
+    pluginName: "foo",
+    version: "1.2.3",
+    mcpServers: { server1: { command: "node" } },
+  });
+  const { ctx } = makeCtx(cwd);
+  await setPluginEnabled({
+    ctx,
+    pi: makePi([], [adapterCommand()]),
+    cwd,
+    marketplace: "mp",
+    plugin: "foo",
+    enable: true,
+    scope: "user",
+  });
+  await prependAdapterComment(home);
+}
+
+/** AFILE-04: a cascade that removed the MCP server, then failed on a later slot. */
+function transactionFailingAfterMcpSlot(cause: Error): EnableDisableTransaction {
+  return {
+    ...REAL_ENABLE_DISABLE_TRANSACTION,
+    cascadeUnstagePlugin() {
+      return Promise.resolve({
+        ok: false,
+        dropped: {
+          agents: [],
+          commands: [],
+          hooks: [],
+          mcpServers: [],
+          skills: ["s1"],
+          workflows: [],
+        },
+        cause,
+        mcpConfigNotices: [{ kind: "comments-dropped", scope: "user", file: "mcp-adapter.json" }],
+      });
+    },
+  };
+}
+
+test("AFILE-04: disable over a commented mcp-adapter.json shows the comments-removed notice", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    await seedEnabledMcpPluginUnderComment(cwd, home);
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({
+      ctx,
+      pi: makePi([], [adapterCommand()]),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo",
+      enable: false,
+      scope: "user",
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      { message: "● mp [user]\n  ◍ foo v1.2.3 (disabled)\n\n/reload to pick up changes" },
+      USER_COMMENTS_DROPPED_NOTICE,
+    ]);
+    assert.equal(await readFile(userAdapterPath(home), "utf8"), '{\n  "mcpServers": {}\n}\n');
+  });
+});
+
+test("AFILE-04: a disable whose cascade fails after the MCP slot still shows the notice", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    await writeUserState(home, { marketplaceName: "mp", pluginName: "foo", disabled: false });
+    const setPluginEnabledForOwner = createSetPluginEnabled(
+      transactionFailingAfterMcpSlot(new Error("workflows could not be removed")),
+      createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    );
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabledForOwner({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo",
+      enable: false,
+      scope: "user",
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        severity: "error",
+        message:
+          "A plugin operation has failed.\n\n● mp [user]\n  ⊘ foo v1.2.3 (failed) {unreadable}\n    cause: workflows could not be removed",
+      },
+      USER_COMMENTS_DROPPED_NOTICE,
+    ]);
+  });
+});
+
+test("AFILE-04: a disable whose config write fails after the cascade still shows the notice", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    await seedEnabledMcpPluginUnderComment(cwd, home);
+    const setPluginEnabledForOwner = createSetPluginEnabled(
+      {
+        ...REAL_ENABLE_DISABLE_TRANSACTION,
+        writeConfigEntries() {
+          return rejectUnknown(new Error("config write denied"));
+        },
+      },
+      createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    );
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabledForOwner({
+      ctx,
+      pi: makePi([], [adapterCommand()]),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo",
+      enable: false,
+      scope: "user",
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        severity: "error",
+        message:
+          "A plugin operation has failed.\n\n● mp [user]\n  ⊘ foo (failed)\n    cause: config write denied",
+      },
+      USER_COMMENTS_DROPPED_NOTICE,
+    ]);
+  });
+});
+
+test("AFILE-04: an orchestrated disable returns the notice on its outcome and sends nothing", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    await seedEnabledMcpPluginUnderComment(cwd, home);
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    const outcome = await setPluginEnabled({
+      ctx,
+      pi: makePi([], [adapterCommand()]),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo",
+      enable: false,
+      scope: "user",
+      notifications: { mode: "orchestrated" },
+    });
+
+    // assert
+    assert.deepStrictEqual(outcome, {
+      status: "disabled",
+      name: "foo",
+      version: "1.2.3",
+      mcpConfigNotices: [{ kind: "comments-dropped", scope: "user", file: "mcp-adapter.json" }],
+    });
+    assert.deepStrictEqual(notifications, []);
+  });
+});
+
+test("AFILE-04: an orchestrated disable whose cascade fails after the MCP slot returns the notice", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    await writeUserState(home, { marketplaceName: "mp", pluginName: "foo", disabled: false });
+    const cause = new Error("workflows could not be removed");
+    const setPluginEnabledForOwner = createSetPluginEnabled(
+      transactionFailingAfterMcpSlot(cause),
+      createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    );
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    const outcome = await setPluginEnabledForOwner({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo",
+      enable: false,
+      scope: "user",
+      notifications: { mode: "orchestrated" },
+    });
+
+    // assert
+    assert.deepStrictEqual(outcome, {
+      status: "failed",
+      reason: "unreadable",
+      error: cause,
+      cause: "workflows could not be removed",
+      mcpConfigNotices: [{ kind: "comments-dropped", scope: "user", file: "mcp-adapter.json" }],
+    });
+    assert.deepStrictEqual(notifications, []);
+  });
+});
+
+test("AFILE-04: enable over a commented mcp-adapter.json shows the comments-removed notice", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    await seedRealDisabledMarketplace(home, {
+      marketplaceName: "mp",
+      pluginName: "foo",
+      version: "1.2.3",
+      mcpServers: { server1: { command: "node" } },
+    });
+    await writeCommentedUserAdapterFile(home);
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({
+      ctx,
+      pi: makePi([], [adapterCommand()]),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      { message: "● mp [user]\n  ● foo v1.2.3 (installed)\n\n/reload to pick up changes" },
+      USER_COMMENTS_DROPPED_NOTICE,
+    ]);
+  });
+});
+
+test("AFILE-06: disable writes a kept override back and enable keeps it again with the override notice", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    await seedRealDisabledMarketplace(home, {
+      marketplaceName: "mp",
+      pluginName: "foo",
+      version: "1.2.3",
+      mcpServers: { server1: { command: "node" } },
+    });
+    const overrideBytes = `{
+  "mcpServers": {
+    "plugin_foo_server1_": {
+      "disabled": true,
+      "env": {
+        "STUB_TOKEN": "stub-secret"
+      }
+    }
+  }
+}
+`;
+    await mkdir(path.dirname(userAdapterPath(home)), { recursive: true });
+    await writeFile(userAdapterPath(home), overrideBytes);
+    const setEnabled = async (enable: boolean): Promise<NotifyRecord[]> => {
+      const { ctx, notifications } = makeCtx(cwd);
+      await setPluginEnabled({
+        ctx,
+        pi: makePi([], [adapterCommand()]),
+        cwd,
+        marketplace: "mp",
+        plugin: "foo",
+        enable,
+        scope: "user",
+      });
+      return notifications;
+    };
+
+    // act
+    const enabled = await setEnabled(true);
+    const disabled = await setEnabled(false);
+    const disabledBytes = await readFile(userAdapterPath(home), "utf8");
+    const enabledAgain = await setEnabled(true);
+
+    // assert
+    const overrideNotice: NotifyRecord = {
+      severity: "warning",
+      message:
+        'MCP server override kept.\n\nfoo now provides "plugin_foo_server1_" in the user-scope mcp-adapter.json. Your override for "plugin_foo_server1_" is kept, but these fields of it stop applying: env. It comes back when you uninstall or disable foo.',
+    };
+    const enabledRow: NotifyRecord = {
+      message: "● mp [user]\n  ● foo v1.2.3 (installed)\n\n/reload to pick up changes",
+    };
+    assert.deepStrictEqual(
+      { enabled, disabled, disabledBytes, enabledAgain },
+      {
+        enabled: [enabledRow, overrideNotice],
+        disabled: [
+          { message: "● mp [user]\n  ◍ foo v1.2.3 (disabled)\n\n/reload to pick up changes" },
+        ],
+        disabledBytes: overrideBytes,
+        enabledAgain: [enabledRow, overrideNotice],
+      },
+    );
+  });
+});
+
+test("AFILE-04: an enable cascade reports the notice once for the root and its re-enabled dependencies", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange -- the dependency stages first and removes the comments, so the
+    // root's own stage meets a comment-free file.
+    const { mpRoot } = await seedEdepGraph(home, [
+      { name: "a", version: "1.0.0", dependencies: [{ name: "b" }], enabled: false },
+      { name: "b", version: "1.0.0", enabled: false },
+    ]);
+    await writeEdepMcpServer(mpRoot, "a");
+    await writeEdepMcpServer(mpRoot, "b");
+    await writeCommentedUserAdapterFile(home);
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({
+      ctx,
+      pi: makePi([], [adapterCommand()]),
+      cwd,
+      marketplace: "official",
+      plugin: "a",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● official [user]",
+          "  ● a v1.0.0 (installed)",
+          "  ● b@official v1.0.0 (installed) {dependency enabled}",
+          "",
+          "/reload to pick up changes",
+        ].join("\n"),
+      },
+      USER_COMMENTS_DROPPED_NOTICE,
+    ]);
+  });
+});
+
+/** AFILE-04: `a` declares `b`, both disabled, and `b` carries one MCP server. */
+async function seedMcpEnableCascade(home: string): Promise<void> {
+  const { mpRoot } = await seedEdepGraph(home, [
+    { name: "a", version: "1.0.0", dependencies: [{ name: "b" }], enabled: false },
+    { name: "b", version: "1.0.0", enabled: false },
+  ]);
+  await writeEdepMcpServer(mpRoot, "b");
+}
+
+/** AFILE-04: the row an enable cascade whose root ledger threw renders. */
+const ROOT_LEDGER_FAILED_ROW: NotifyRecord = {
+  severity: "error",
+  message: [
+    "A plugin operation has failed.",
+    "",
+    "● official [user]",
+    "  ⊘ a v1.0.0 (failed)",
+    "    cause: a's own ledger failed",
+  ].join("\n"),
+};
+
+test("AFILE-04: an enable cascade that unwinds after a member rewrote the file still shows the notice", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    await seedMcpEnableCascade(home);
+    await writeCommentedUserAdapterFile(home);
+    const transaction: EnableDisableTransaction = {
+      ...REAL_ENABLE_DISABLE_TRANSACTION,
+      async runInstallLedger(state, locations, options, capture) {
+        if (options.plugin === "a") {
+          return rejectUnknown(new Error("a's own ledger failed"));
+        }
+
+        return REAL_ENABLE_DISABLE_TRANSACTION.runInstallLedger(state, locations, options, capture);
+      },
+    };
+    const setPluginEnabledForOwner = createSetPluginEnabled(
+      transaction,
+      createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    );
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabledForOwner({
+      ctx,
+      pi: makePi([], [adapterCommand()]),
+      cwd,
+      marketplace: "official",
+      plugin: "a",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [ROOT_LEDGER_FAILED_ROW, USER_COMMENTS_DROPPED_NOTICE]);
+    assert.equal(
+      await readFile(userAdapterPath(home), "utf8"),
+      '{\n  "mcpServers": {\n    "mine": {\n      "command": "my-server"\n    }\n  }\n}\n',
+    );
+  });
+});
+
+test("AFILE-04: an enable cascade undo that unstages from a commented mcp-adapter.json shows the notice", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange -- the member stages into a comment-free file, and the user's
+    // comment lands before the root's ledger throws, so only the member's
+    // undo rewrites a commented file.
+    await seedMcpEnableCascade(home);
+    const transaction: EnableDisableTransaction = {
+      ...REAL_ENABLE_DISABLE_TRANSACTION,
+      async runInstallLedger(state, locations, options, capture) {
+        if (options.plugin === "a") {
+          await prependAdapterComment(home);
+          return rejectUnknown(new Error("a's own ledger failed"));
+        }
+
+        return REAL_ENABLE_DISABLE_TRANSACTION.runInstallLedger(state, locations, options, capture);
+      },
+    };
+    const setPluginEnabledForOwner = createSetPluginEnabled(
+      transaction,
+      createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    );
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabledForOwner({
+      ctx,
+      pi: makePi([], [adapterCommand()]),
+      cwd,
+      marketplace: "official",
+      plugin: "a",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [ROOT_LEDGER_FAILED_ROW, USER_COMMENTS_DROPPED_NOTICE]);
+    assert.equal(await readFile(userAdapterPath(home), "utf8"), '{\n  "mcpServers": {}\n}\n');
+  });
+});
+
+test("AVAR-04: an enable cascade undo shows no variable notice for the member server it removed", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange -- the member's server references a variable the empty staging
+    // environment lacks, and the root's ledger throws after the member staged it.
+    const { mpRoot } = await seedEdepGraph(home, [
+      { name: "a", version: "1.0.0", dependencies: [{ name: "b" }], enabled: false },
+      { name: "b", version: "1.0.0", enabled: false },
+    ]);
+    await writeFile(
+      path.join(mpRoot, "plugins", "b", ".mcp.json"),
+      JSON.stringify({
+        mcpServers: { "b-server": { command: "node", args: ["${B_SERVER_SITE}"] } },
+      }),
+    );
+    const transaction: EnableDisableTransaction = {
+      ...REAL_ENABLE_DISABLE_TRANSACTION,
+      async runInstallLedger(state, locations, options, capture) {
+        if (options.plugin === "a") {
+          return rejectUnknown(new Error("a's own ledger failed"));
+        }
+
+        return REAL_ENABLE_DISABLE_TRANSACTION.runInstallLedger(state, locations, options, capture);
+      },
+    };
+    const setPluginEnabledForOwner = createSetPluginEnabled(
+      transaction,
+      createHooksRouting(createHooksRuntime(), { readHooksJson }),
+      {},
+    );
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabledForOwner({
+      ctx,
+      pi: makePi([], [adapterCommand()]),
+      cwd,
+      marketplace: "official",
+      plugin: "a",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [ROOT_LEDGER_FAILED_ROW]);
+  });
+});
+
+const STAGING_ENABLED_ROW = {
+  message: "● mp [user]\n  ● foo v1.2.3 (installed)\n\n/reload to pick up changes",
+};
+
+for (const { title, env, expectedNotifications } of [
+  {
+    title: "reports no missing variable that its environment sets",
+    env: { PI_CM_SET_FOR_STAGING: "1" },
+    expectedNotifications: [STAGING_ENABLED_ROW],
+  },
+  {
+    title: "reports a variable its environment lacks as not set",
+    env: {},
+    expectedNotifications: [
+      STAGING_ENABLED_ROW,
+      {
+        severity: "warning",
+        message:
+          'MCP server variables not set.\n\nServer "plugin_foo_local_" from foo in the user-scope mcp-adapter.json uses environment variables that were not set at install: PI_CM_SET_FOR_STAGING.',
+      },
+    ],
+  },
+]) {
+  test(`D-08-06: an enable built with an explicit environment ${title}`, async () => {
+    await withHermeticHome(async ({ cwd, home }) => {
+      // arrange
+      await seedRealDisabledMarketplace(home, {
+        marketplaceName: "mp",
+        pluginName: "foo",
+        version: "1.2.3",
+        mcpServers: { local: { command: "node", args: ["${PI_CM_SET_FOR_STAGING}"] } },
+      });
+      const setPluginEnabledForOwner = createSetPluginEnabled(
+        REAL_ENABLE_DISABLE_TRANSACTION,
+        createHooksRouting(createHooksRuntime(), { readHooksJson }),
+        env,
+      );
+      const { ctx, notifications } = makeCtx(cwd);
+
+      // act
+      await setPluginEnabledForOwner({
+        ctx,
+        pi: makePi([], [adapterCommand()]),
+        cwd,
+        marketplace: "mp",
+        plugin: "foo",
+        enable: true,
+        scope: "user",
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, expectedNotifications);
+    });
+  });
+}
+
+test("AVAR-04 / AVAR-05: with pi-mcp-adapter loaded, enable reports an info success row and the MCP notices as separate warnings (D-08-03)", async (t) => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const savedSite = process.env.PI_CM_AVAR_SITE;
+    const savedCredential = process.env.ANTHROPIC_API_KEY;
+    t.after(() => {
+      if (savedSite === undefined) {
+        delete process.env.PI_CM_AVAR_SITE;
+      } else {
+        process.env.PI_CM_AVAR_SITE = savedSite;
+      }
+
+      if (savedCredential === undefined) {
+        delete process.env.ANTHROPIC_API_KEY;
+      } else {
+        process.env.ANTHROPIC_API_KEY = savedCredential;
+      }
+    });
+    delete process.env.PI_CM_AVAR_SITE;
+    process.env.ANTHROPIC_API_KEY = "avar-sentinel-enable";
+    await seedRealDisabledMarketplace(home, {
+      marketplaceName: "mp",
+      pluginName: "foo",
+      version: "1.2.3",
+      mcpServers: {
+        local: { command: "node", args: ["--site", "${PI_CM_AVAR_SITE}"] },
+        api: {
+          type: "http",
+          url: "https://mcp.example.test/mcp",
+          headers: { Authorization: "Bearer ${ANTHROPIC_API_KEY}" },
+        },
+      },
+    });
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({
+      ctx,
+      pi: makePi([], [adapterCommand()]),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      { message: "● mp [user]\n  ● foo v1.2.3 (installed)\n\n/reload to pick up changes" },
+      {
+        severity: "warning",
+        message:
+          'MCP server variables not set.\n\nServer "plugin_foo_local_" from foo in the user-scope mcp-adapter.json uses environment variables that were not set at install: PI_CM_AVAR_SITE.',
+      },
+      {
+        severity: "warning",
+        message:
+          'MCP server credentials withheld.\n\nServer "plugin_foo_api_" from foo in the user-scope mcp-adapter.json references credential variables that Claude Code never sends to a remote server: ANTHROPIC_API_KEY. They were written as empty values.',
+      },
+    ]);
+  });
+});
+
+test("AFILE-02: enabling a plugin with no MCP servers over an unparseable mcp-adapter.json leaves it unchanged and says so", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    await seedRealDisabledMarketplace(home, {
+      marketplaceName: "mp",
+      pluginName: "foo",
+      version: "1.2.3",
+    });
+    await mkdir(path.dirname(userAdapterPath(home)), { recursive: true });
+    await writeFile(userAdapterPath(home), "{");
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert
+    assert.equal(await readFile(userAdapterPath(home), "utf8"), "{");
+    assert.deepStrictEqual(notifications, [
+      { message: "● mp [user]\n  ● foo v1.2.3 (installed)\n\n/reload to pick up changes" },
+      {
+        severity: "warning",
+        message:
+          "MCP config left unchanged.\n\nThe user-scope mcp-adapter.json is not a valid MCP config, so it was left unchanged. Fix it before you install or update a plugin that has MCP servers.",
+      },
+    ]);
+  });
+});
+
+test("AFILE-04: an orchestrated enable returns the notice on its outcome and sends nothing", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    await seedRealDisabledMarketplace(home, {
+      marketplaceName: "mp",
+      pluginName: "foo",
+      version: "1.2.3",
+      mcpServers: { server1: { command: "node" } },
+    });
+    await writeCommentedUserAdapterFile(home);
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    const outcome = await setPluginEnabled({
+      ctx,
+      pi: makePi([], [adapterCommand()]),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo",
+      enable: true,
+      scope: "user",
+      notifications: { mode: "orchestrated" },
+    });
+
+    // assert
+    assert.deepStrictEqual(outcome, {
+      status: "enabled",
+      name: "foo",
+      version: "1.2.3",
+      stagedMcpServers: true,
+      mcpConfigNotices: [{ kind: "comments-dropped", scope: "user", file: "mcp-adapter.json" }],
+    });
+    assert.deepStrictEqual(notifications, []);
   });
 });

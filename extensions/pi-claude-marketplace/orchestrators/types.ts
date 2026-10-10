@@ -10,6 +10,7 @@
 import { type ContentReason } from "../shared/notification-types.ts";
 
 import type { CleanupFailure } from "../shared/errors.ts";
+import type { McpConfigNotice } from "../shared/notification-dispatch.ts";
 import type { DegradeKind } from "../shared/notify-reasons.ts";
 import type { Scope } from "../shared/types.ts";
 import type { LedgerDegradationSignals } from "./plugin/shared.ts";
@@ -110,6 +111,14 @@ export interface ReinstallReinstalledOutcome extends ReinstallOutcomeBase {
    * (NREG-01).
    */
   readonly discoveryWarnings?: readonly string[];
+  /**
+   * AFILE-04 / AFILE-02: the MCP config file notices from this reinstall's
+   * MCP replace. The outcome carries them because the rows render after the
+   * locked ledger finishes. A consumer routes them through
+   * `notifyMcpConfigNotices`. Populated only on the `render: "none"` arm, and
+   * omitted when there are none (NREG-01).
+   */
+  readonly mcpConfigNotices?: readonly McpConfigNotice[];
 }
 
 export interface ReinstallSkippedOutcome extends ReinstallOutcomeBase {
@@ -341,6 +350,13 @@ export interface PluginUpdateUpdatedOutcome extends PluginUpdateBase, LedgerDegr
    * row (D-10-15).
    */
   readonly constraint: UpdateConstraintDisclosure | undefined;
+  /**
+   * AFILE-04 / AFILE-02: the MCP config file notices from this update's MCP
+   * commit. The outcome carries them because the rows render after the
+   * three-phase runner finishes. A consumer routes them through
+   * `notifyMcpConfigNotices`. Omitted when there are none (NREG-01).
+   */
+  readonly mcpConfigNotices?: readonly McpConfigNotice[];
 }
 
 /**
@@ -418,6 +434,13 @@ export interface PluginUpdateFailedOutcome extends PluginUpdateBase {
   readonly phaseFailures?: readonly UpdatePhaseFailure[];
   readonly cleanupFailures?: readonly CleanupFailure[];
   readonly cause?: Error;
+  /**
+   * AFILE-04 / AFILE-02: the MCP config file notices from an MCP commit that
+   * succeeded before a later bridge or the finalize failed. A consumer routes
+   * them through `notifyMcpConfigNotices` after the failure row. Omitted when
+   * there are none (NREG-01).
+   */
+  readonly mcpConfigNotices?: readonly McpConfigNotice[];
 }
 
 /**
@@ -464,7 +487,7 @@ export type PluginUpdateFn = (
  *
  * `pi` is REQUIRED -- `notify(ctx, pi, message)` consumes it for the
  * single `softDepStatus(pi)` probe per call. The renderer
- * injects per-row `{requires pi-subagents}` / `{requires pi-mcp}`
+ * injects per-row `{requires pi-subagents}` / `{requires pi-mcp-adapter}`
  * markers from the per-row `dependencies: readonly Dependency[]`
  * declaration combined with the threaded probe. Making `pi`
  * optional would force a runtime branch the type checker cannot reason
@@ -550,6 +573,14 @@ export type InstallPluginOutcome =
        * the COMPAT-01 key-set pin is undisturbed.
        */
       readonly promoted?: true;
+      /**
+       * AFILE-04 / AFILE-02: the MCP config file notices this install raised.
+       * A standalone install has already shown them; an orchestrated caller
+       * routes them through `notifyMcpConfigNotices`. Omitted when there are
+       * none (NREG-01). Not a `LedgerDegradationSignals` member, so the
+       * COMPAT-01 key-set pin is undisturbed.
+       */
+      readonly mcpConfigNotices?: readonly McpConfigNotice[];
     } & Omit<LedgerDegradationSignals, "stagedAgents" | "stagedMcpServers" | "stagedWorkflows">)
   | {
       /**
@@ -563,4 +594,10 @@ export type InstallPluginOutcome =
       readonly status: "failed";
       readonly error: Error;
       readonly cause: string;
+      /**
+       * AFILE-04: the MCP config file notices of the dependencies that
+       * committed before a later cascade member failed. Omitted when there
+       * are none (NREG-01).
+       */
+      readonly mcpConfigNotices?: readonly McpConfigNotice[];
     };

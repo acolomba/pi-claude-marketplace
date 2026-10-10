@@ -68,6 +68,12 @@ for (const { note, reason } of [
     note: 'malformed mcp reference: invalid JSON in "x.mcp.json": Unexpected token n',
     reason: "malformed mcp",
   },
+  { note: 'malformed mcp server "db": /timeout: must be integer', reason: "malformed mcp" },
+  {
+    note: 'malformed mcp server "lspServers": /timeout: must be integer',
+    reason: "malformed mcp",
+  },
+  { note: 'malformed mcp server "source": /url: must be string', reason: "malformed mcp" },
   { note: "some other unsupported source detail", reason: "unsupported source" },
 ] as const) {
   test(`keeps the install and read-only note surfaces equal for ${reason}: ${note}`, () => {
@@ -135,6 +141,20 @@ test("keeps multi-component install, list, and info markers in the same order", 
   assert.deepStrictEqual(installReasons, listAndInfoReasons);
 });
 
+test("ANAME-07: keeps a typed mcpServers marker equal on install, list, and info surfaces", () => {
+  // arrange
+  const kinds = ["mcpServers"];
+
+  // act
+  const installReasons = installSurfaceReasons([], kinds, true);
+  const listAndInfoReasons = narrowUnsupportedKinds(kinds);
+
+  // assert
+  assert.deepStrictEqual(installReasons, ["unsupported mcp"]);
+  assert.deepStrictEqual(listAndInfoReasons, ["unsupported mcp"]);
+  assert.deepStrictEqual(installReasons, listAndInfoReasons);
+});
+
 test("keeps a typed hooks marker equal on install, list, and info surfaces", () => {
   // arrange
   const kinds = ["hooks"];
@@ -189,10 +209,10 @@ function renderPartiallyUpgradableBrace(message: NotificationMessage): string {
   verifyPi(pi);
   const body = boundary.notifications[0]?.message;
   assert.ok(body !== undefined, "the strict boundary must capture one notification");
-  const matched = PARTIALLY_UPGRADABLE_BRACE.exec(body);
-  assert.ok(matched, `expected a (partially-upgradable) {…} brace in:\n${body}`);
+  const brace = PARTIALLY_UPGRADABLE_BRACE.exec(body)?.[1];
+  assert.ok(brace !== undefined, `expected a (partially-upgradable) {…} brace in:\n${body}`);
 
-  return matched[1]!;
+  return brace;
 }
 
 test("keeps the update-decline and list partially-upgradable reason braces byte-identical", () => {

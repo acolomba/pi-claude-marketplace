@@ -677,6 +677,32 @@ export const PLUGIN_LIST_FIXTURES: FixtureMap = {
       },
     },
 
+    // ANAME-07: list-surface inventory row for a recorded-installed plugin
+    // whose `--partial` install left out a server with a Claude Code MCP
+    // feature pi-mcp-adapter cannot honor. The typed `mcpServers` kind rides
+    // the single aggregate `{unsupported mcp}` brace, however many servers
+    // were left out.
+    "partially-installed-inventory-mcp": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            details: { autoupdate: true },
+            plugins: [
+              {
+                status: "partially-installed",
+                name: "mcp-plugin",
+                version: "1.0.0",
+                reasons: ["unsupported mcp"],
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     // FSTAT-04 / D-66-02 / D-66-03: list-surface inventory row for a
     // currently-clean installed plugin whose newer no-network candidate would
     // newly degrade it. The derived `partially-upgradable` token REUSES the `●`

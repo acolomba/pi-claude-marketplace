@@ -132,7 +132,7 @@ test("SCN-F025: softDepMarkers emits the agents and mcp markers in canonical age
   const markers = softDepMarkers(true, true, false, probe);
 
   // assert
-  assert.deepStrictEqual(markers, ["requires pi-subagents", "requires pi-mcp"]);
+  assert.deepStrictEqual(markers, ["requires pi-subagents", "requires pi-mcp-adapter"]);
 });
 
 test("SCN-F025: softDepMarkers emits only the agents marker for an agents-only declaration", () => {
@@ -162,7 +162,7 @@ test("SCN-F025: softDepMarkers emits only the mcp marker for an mcp-only declara
   const markers = softDepMarkers(false, true, false, probe);
 
   // assert
-  assert.deepStrictEqual(markers, ["requires pi-mcp"]);
+  assert.deepStrictEqual(markers, ["requires pi-mcp-adapter"]);
 });
 
 test("SCN-F025: softDepMarkers emits nothing when the row declares neither dependency", () => {
@@ -206,7 +206,7 @@ test("SCN-F025: softDepMarkers emits nothing when both companions are loaded", (
  */
 const EMITTABLE_SOFT_DEP_MARKERS: readonly Reason[] = [
   "requires pi-subagents",
-  "requires pi-mcp",
+  "requires pi-mcp-adapter",
   "requires pi-dynamic-workflows",
 ];
 

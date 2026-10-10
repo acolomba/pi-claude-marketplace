@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -14,6 +14,7 @@ import {
 } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { StateLockHeldError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 import {
+  withExistingScopeLock,
   withLockedStateTransaction,
   withStateGuard,
   type LockedStateTransactionDeps,
@@ -924,4 +925,35 @@ test("chains non-Error callback and release failures without losing either messa
     }),
   );
   assert.strictEqual(releaseAttempts, 1);
+});
+
+test("holds the existing scope lock around a body without reading state, and creates no missing root", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "state-guard-existing-lock-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const present = locationsFor("project", path.join(directory, "present"));
+  await mkdir(present.extensionRoot, { recursive: true });
+  await writeFile(present.stateJsonPath, "{ not json");
+  const absent = locationsFor("project", path.join(directory, "absent"));
+
+  // act
+  const heldInside = await withExistingScopeLock(present, () =>
+    lockfile.check(present.extensionRoot, {
+      lockfilePath: present.stateLockFile,
+      realpath: false,
+    }),
+  );
+  const missingRoot = await captureThrown(() =>
+    withExistingScopeLock(absent, () => Promise.resolve("ran")),
+  );
+
+  // assert
+  assert.deepStrictEqual(
+    {
+      heldInside,
+      missingRoot: (missingRoot as NodeJS.ErrnoException).code,
+      entries: await readdir(directory),
+    },
+    { heldInside: true, missingRoot: "ENOENT", entries: ["present"] },
+  );
 });

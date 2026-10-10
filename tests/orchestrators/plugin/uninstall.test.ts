@@ -309,9 +309,9 @@ async function seedFullPlugin(
   await mkdir(path.dirname(hooksFile), { recursive: true });
   await writeFile(hooksFile, JSON.stringify({ hooks: {} }));
 
-  // mcp: <scopeRoot>/mcp.json with one owned server
+  // mcp: <scopeRoot>/mcp-adapter.json with one owned server
   const mcpServerName = "uni-server";
-  const mcpJson = locations.mcpJsonPath;
+  const mcpJson = locations.mcpAdapterJsonPath;
   await mkdir(path.dirname(mcpJson), { recursive: true });
   await writeFile(
     mcpJson,
@@ -404,6 +404,128 @@ test("PU-1: cascade order observable end-state -- all four bridges' resources re
         "A plugin operation needs attention.\n\n● mp [project]\n  ○ hello v0.0.1 (uninstalled) {stale workflow command}\n\n/reload to pick up changes",
       );
       assert.doesNotMatch(notifications[0]?.message ?? "", /Plugin uninstall:/);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("AFILE-01: uninstall removes only the plugin's marked entries from mcp-adapter.json", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-afile01-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedFullPlugin(locations, "mp", "hello", cwd);
+      const adapterPath = path.join(cwd, ".pi", "mcp-adapter.json");
+      await writeFile(
+        adapterPath,
+        JSON.stringify({
+          settings: { toolPrefix: "short" },
+          "mcp-servers": {
+            "uni-server": {
+              command: "node",
+              _piClaudeMarketplace: { plugin: "hello", marketplace: "mp" },
+            },
+          },
+          mcpServers: {
+            mine: { command: "my-server" },
+            "uni-server": { disabled: true },
+            "other-server": {
+              command: "other",
+              _piClaudeMarketplace: { plugin: "other", marketplace: "mp" },
+            },
+          },
+        }),
+      );
+      const { ctx, pi } = makeCtx();
+
+      await uninstallWithFreshOwner({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      assert.equal(
+        await readFile(adapterPath, "utf8"),
+        `{
+  "settings": {
+    "toolPrefix": "short"
+  },
+  "mcp-servers": {},
+  "mcpServers": {
+    "mine": {
+      "command": "my-server"
+    },
+    "uni-server": {
+      "disabled": true
+    },
+    "other-server": {
+      "command": "other",
+      "_piClaudeMarketplace": {
+        "plugin": "other",
+        "marketplace": "mp"
+      }
+    }
+  }
+}
+`,
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("AFILE-01: uninstall also removes the plugin's legacy mcp.json entries", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-afile01-legacy-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedFullPlugin(locations, "mp", "hello", cwd);
+      await writeFile(
+        locations.mcpJsonPath,
+        JSON.stringify({
+          mcpServers: {
+            "uni-server": {
+              command: "node",
+              _piClaudeMarketplace: { plugin: "hello", marketplace: "mp" },
+            },
+            mine: { command: "my-server" },
+          },
+        }),
+      );
+      const { ctx, pi } = makeCtx();
+
+      await uninstallWithFreshOwner({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      assert.equal(
+        await readFile(locations.mcpJsonPath, "utf8"),
+        `{
+  "mcpServers": {
+    "mine": {
+      "command": "my-server"
+    }
+  }
+}
+`,
+      );
+      assert.equal(
+        await readFile(locations.mcpAdapterJsonPath, "utf8"),
+        `{
+  "mcpServers": {}
+}
+`,
+      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -1014,6 +1136,54 @@ test("ATTR-04 / M4: marketplace record itself absent -> LOUD {marketplace not ad
   });
 });
 
+test("D-08-07: uninstall of a plugin named constructor reports it as not installed and changes no file", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-own-key-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedState(locations.extensionRoot, {
+        schemaVersion: 1,
+        marketplaces: {
+          mp: {
+            name: "mp",
+            scope: "project",
+            source: pathSource("./src"),
+            addedFromCwd: cwd,
+            manifestPath: path.join(cwd, "marketplace.json"),
+            marketplaceRoot: cwd,
+            plugins: {},
+          },
+        },
+      });
+      const stateBefore = await readFile(locations.stateJsonPath, "utf8");
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      await uninstallWithFreshOwner({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "constructor",
+      });
+
+      // assert
+      assert.deepEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ constructor (failed) {not installed}",
+          severity: "error",
+        },
+      ]);
+      assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("SCOPE-01: explicit-scope uninstall of an other-scope-only target names the scope the container sits in", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-scope01-"));
@@ -1256,9 +1426,9 @@ test("MSG-SD-3: uninstall NEVER emits soft-dep markers (structural via V2 Plugin
       const locations = locationsFor("project", cwd);
       await seedFullPlugin(locations, "mp", "hello", cwd);
 
-      // ctx + pi without the "subagent" or "mcp" tools -> companion deps
-      // both unloaded. In the install / reinstall / update path this would
-      // trigger per-row `{requires pi-subagents}` + `{requires pi-mcp}`
+      // ctx + pi without the "subagent" tool or the `mcp-adapter` command ->
+      // companion deps both unloaded. In the install / reinstall / update path this would
+      // trigger per-row `{requires pi-subagents}` + `{requires pi-mcp-adapter}`
       // markers; on the uninstall path the marker is structurally
       // impossible because PluginUninstalledMessage has no `dependencies`
       // field (D-15-02 / MSG-SD-3) so renderPluginRow's
@@ -1281,9 +1451,9 @@ test("MSG-SD-3: uninstall NEVER emits soft-dep markers (structural via V2 Plugin
         "MSG-SD-3: per-row {requires pi-subagents} marker must NOT appear on (uninstalled) rows",
       );
       assert.equal(
-        message.includes("{requires pi-mcp"),
+        message.includes("requires pi-mcp-adapter"),
         false,
-        "MSG-SD-3: per-row {requires pi-mcp} marker must NOT appear on (uninstalled) rows",
+        "MSG-SD-3: per-row {requires pi-mcp-adapter} marker must NOT appear on (uninstalled) rows",
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -3411,7 +3581,7 @@ test("LIFE-04: manifest-absent uninstall of a record with no resources still con
 // Schedule observation: uninstall's cascade and cleanup removals are
 // `node:fs/promises` primitives with unambiguous target paths, so the forward
 // ledger below is read straight off them. The state, config, agents-index, and
-// mcp.json commits all route through `write-file-atomic`, which uses the
+// mcp-adapter.json commits all route through `write-file-atomic`, which uses the
 // callback `node:fs` surface and therefore leaves NO `node:fs/promises`
 // signature; those commits are proved by authoritative bytes and complete tree
 // inventory rather than by a schedule entry.
@@ -3722,7 +3892,7 @@ test("retry proof: uninstall: a hooks cascade refusal persists the shrunken reco
       assert.deepStrictEqual(firstTree, [
         "agents/",
         "claude-plugins.json",
-        "mcp.json",
+        "mcp-adapter.json",
         "pi-claude-marketplace/",
         "pi-claude-marketplace/agents-index.json",
         "pi-claude-marketplace/data/",
@@ -3741,7 +3911,7 @@ test("retry proof: uninstall: a hooks cascade refusal persists the shrunken reco
       assert.deepStrictEqual(await retryTree(locations.scopeRoot), [
         "agents/",
         "claude-plugins.json",
-        "mcp.json",
+        "mcp-adapter.json",
         "pi-claude-marketplace/",
         "pi-claude-marketplace/agents-index.json",
         "pi-claude-marketplace/data/",
@@ -3753,7 +3923,7 @@ test("retry proof: uninstall: a hooks cascade refusal persists the shrunken reco
         "pi-claude-marketplace/state.json",
       ]);
       assert.equal(await readFile(locations.configJsonPath, "utf8"), configBytes);
-      assert.deepStrictEqual(JSON.parse(await readFile(locations.mcpJsonPath, "utf8")), {
+      assert.deepStrictEqual(JSON.parse(await readFile(locations.mcpAdapterJsonPath, "utf8")), {
         mcpServers: {},
       });
       assert.deepStrictEqual((await loadAgentsIndex(locations)).agents, []);
@@ -3871,7 +4041,7 @@ test("retry proof: uninstall: foreign agent content preserves the whole record a
         "agents/",
         "agents/pi-claude-marketplace-hello-uni-agent.md",
         "claude-plugins.json",
-        "mcp.json",
+        "mcp-adapter.json",
         "pi-claude-marketplace/",
         "pi-claude-marketplace/agents-index.json",
         "pi-claude-marketplace/hooks/",
@@ -3885,7 +4055,7 @@ test("retry proof: uninstall: foreign agent content preserves the whole record a
       assert.deepStrictEqual(await retryTree(locations.scopeRoot), [
         "agents/",
         "claude-plugins.json",
-        "mcp.json",
+        "mcp-adapter.json",
         "pi-claude-marketplace/",
         "pi-claude-marketplace/agents-index.json",
         "pi-claude-marketplace/hooks/",
@@ -3915,7 +4085,7 @@ test("retry proof: uninstall: a normalized cascade rejection mutates nothing and
       const locations = locationsFor("project", cwd);
       await seedFullPlugin(locations, "mp", "hello", cwd);
       const stateBytes = await readFile(locations.stateJsonPath, "utf8");
-      const mcpBytes = await readFile(locations.mcpJsonPath, "utf8");
+      const mcpBytes = await readFile(locations.mcpAdapterJsonPath, "utf8");
       const rejectNonError = Promise.reject.bind(Promise);
       const cascadeReject = { enabled: true };
       const cascade: typeof cascadeUnstagePlugin = (
@@ -3950,7 +4120,7 @@ test("retry proof: uninstall: a normalized cascade rejection mutates nothing and
       });
       const firstTree = await retryTree(locations.scopeRoot);
       const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
-      const firstMcpBytes = await readFile(locations.mcpJsonPath, "utf8");
+      const firstMcpBytes = await readFile(locations.mcpAdapterJsonPath, "utf8");
       cascadeReject.enabled = false;
       activeSchedule.current = secondSchedule;
       const second = await uninstallWithFreshOwner({
@@ -3991,7 +4161,7 @@ test("retry proof: uninstall: a normalized cascade rejection mutates nothing and
       assert.deepStrictEqual(firstTree, [
         "agents/",
         "agents/pi-claude-marketplace-hello-uni-agent.md",
-        "mcp.json",
+        "mcp-adapter.json",
         "pi-claude-marketplace/",
         "pi-claude-marketplace/agents-index.json",
         "pi-claude-marketplace/hooks/",
@@ -4007,7 +4177,7 @@ test("retry proof: uninstall: a normalized cascade rejection mutates nothing and
       ]);
       assert.deepStrictEqual(await retryTree(locations.scopeRoot), [
         "agents/",
-        "mcp.json",
+        "mcp-adapter.json",
         "pi-claude-marketplace/",
         "pi-claude-marketplace/agents-index.json",
         "pi-claude-marketplace/hooks/",
@@ -4016,7 +4186,7 @@ test("retry proof: uninstall: a normalized cascade rejection mutates nothing and
         "pi-claude-marketplace/resources/skills/",
         "pi-claude-marketplace/state.json",
       ]);
-      assert.deepStrictEqual(JSON.parse(await readFile(locations.mcpJsonPath, "utf8")), {
+      assert.deepStrictEqual(JSON.parse(await readFile(locations.mcpAdapterJsonPath, "utf8")), {
         mcpServers: {},
       });
     } finally {
@@ -4107,7 +4277,7 @@ test("retry proof: uninstall: an invalid config aborts before any mutation and t
         "agents/",
         "agents/pi-claude-marketplace-hello-uni-agent.md",
         "claude-plugins.json",
-        "mcp.json",
+        "mcp-adapter.json",
         "pi-claude-marketplace/",
         "pi-claude-marketplace/agents-index.json",
         "pi-claude-marketplace/hooks/",
@@ -4123,7 +4293,7 @@ test("retry proof: uninstall: an invalid config aborts before any mutation and t
       ]);
       assert.deepStrictEqual(await retryTree(locations.scopeRoot), [
         "agents/",
-        "mcp.json",
+        "mcp-adapter.json",
         "pi-claude-marketplace/",
         "pi-claude-marketplace/agents-index.json",
         "pi-claude-marketplace/hooks/",
@@ -4530,7 +4700,7 @@ test("retry proof: uninstall: a refused cache drop leaves the cache file and the
       assert.deepStrictEqual(secondSchedule, []);
       assert.deepStrictEqual(firstTree, [
         "agents/",
-        "mcp.json",
+        "mcp-adapter.json",
         "pi-claude-marketplace/",
         "pi-claude-marketplace/agents-index.json",
         "pi-claude-marketplace/cache/",
@@ -4612,7 +4782,7 @@ test("retry proof: uninstall: a refused data-dir removal keeps the directory and
       assert.deepStrictEqual(secondSchedule, []);
       assert.deepStrictEqual(firstTree, [
         "agents/",
-        "mcp.json",
+        "mcp-adapter.json",
         "pi-claude-marketplace/",
         "pi-claude-marketplace/agents-index.json",
         "pi-claude-marketplace/data/",
@@ -5022,7 +5192,7 @@ test("retry proof: uninstall: a refused data-dir path escape propagates after th
       assert.deepStrictEqual(secondSchedule, []);
       assert.deepStrictEqual(firstTree, [
         "agents/",
-        "mcp.json",
+        "mcp-adapter.json",
         "pi-claude-marketplace/",
         "pi-claude-marketplace/agents-index.json",
         "pi-claude-marketplace/data/",
@@ -5036,7 +5206,7 @@ test("retry proof: uninstall: a refused data-dir path escape propagates after th
       ]);
       assert.deepStrictEqual(await retryTree(locations.scopeRoot), [
         "agents/",
-        "mcp.json",
+        "mcp-adapter.json",
         "pi-claude-marketplace/",
         "pi-claude-marketplace/agents-index.json",
         "pi-claude-marketplace/data/",
@@ -5119,7 +5289,7 @@ test("retry proof: uninstall: a refused cache path escape is swallowed and later
       assert.deepStrictEqual(secondSchedule, []);
       assert.deepStrictEqual(firstTree, [
         "agents/",
-        "mcp.json",
+        "mcp-adapter.json",
         "pi-claude-marketplace/",
         "pi-claude-marketplace/agents-index.json",
         "pi-claude-marketplace/cache/",
@@ -5134,7 +5304,7 @@ test("retry proof: uninstall: a refused cache path escape is swallowed and later
       ]);
       assert.deepStrictEqual(await retryTree(locations.scopeRoot), [
         "agents/",
-        "mcp.json",
+        "mcp-adapter.json",
         "pi-claude-marketplace/",
         "pi-claude-marketplace/agents-index.json",
         "pi-claude-marketplace/cache/",
@@ -5163,7 +5333,7 @@ test("retry proof: uninstall: a refused cache path escape is swallowed and later
 // severity with its reload stamp -- the command was carried out in full -- and
 // the dependent keys ride the cause line as sorted `name@marketplace` keys.
 //
-// Who counts as a declarer is unchanged from Phase 5: a disabled declarer
+// Who counts as a declarer: a disabled declarer
 // still holds (D-05-04), only the target scope's own state is consulted
 // (D-05-05), and every declaration is read offline (D-05-06). The
 // fail-closed refusal survives too (D-05-07): a declarer whose declarations
@@ -6631,6 +6801,302 @@ test("WLIF-01: uninstall debug-logs a leak when the staging sweep cannot remove 
       assert.deepStrictEqual(logged, [
         `[hooks] uninstall: workflows staging GC left 1 tree(s) for hello@mp: abandoned: EACCES: permission denied, rmdir '${abandoned}'`,
       ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// AFILE-04: an uninstall that rewrites a commented MCP config file shows the
+// comments-removed notice after its rows in standalone mode and returns it on
+// the outcome in orchestrated mode.
+
+const COMMENTS_REMOVED_NOTICE: NotifyRecord = {
+  message:
+    "MCP config comments removed.\n\n" +
+    "The project-scope mcp-adapter.json was rewritten to update plugin MCP servers; its JSONC comments were removed and everything else in it was kept.",
+  severity: "warning",
+};
+
+/**
+ * AFILE-04: uninstalls a full `hello@mp` at project scope over an
+ * mcp-adapter.json holding `adapterBytes`, and returns the standalone outcome,
+ * the notifications and the file as uninstall left it.
+ */
+async function uninstallOverAdapterFile(adapterBytes: string): Promise<{
+  readonly outcome: unknown;
+  readonly notifications: NotifyRecord[];
+  readonly adapter: string;
+}> {
+  return withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-afile04-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedFullPlugin(locations, "mp", "hello", cwd);
+      await writeFile(locations.mcpAdapterJsonPath, adapterBytes);
+      const { ctx, pi, notifications } = makeCtx();
+      const outcome = await uninstallWithFreshOwner({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+      const adapter = await readFile(locations.mcpAdapterJsonPath, "utf8");
+      return { outcome, notifications, adapter };
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+}
+
+/** AFILE-04: the uninstalled row a full `hello@mp` shows at project scope. */
+const HELLO_UNINSTALLED_ROW: NotifyRecord = {
+  message:
+    "A plugin operation needs attention.\n\n● mp [project]\n  ○ hello v0.0.1 (uninstalled) {stale workflow command}\n\n/reload to pick up changes",
+  severity: "warning",
+};
+
+test("AFILE-04: uninstall over a commented mcp-adapter.json shows the comments-removed notice", async () => {
+  // arrange
+  const adapterBytes =
+    '// user note\n{"mcpServers":{"uni-server":{"command":"node","_piClaudeMarketplace":{"plugin":"hello","marketplace":"mp"}}}}\n';
+
+  // act
+  const observed = await uninstallOverAdapterFile(adapterBytes);
+
+  // assert
+  assert.deepStrictEqual(observed, {
+    outcome: undefined,
+    notifications: [HELLO_UNINSTALLED_ROW, COMMENTS_REMOVED_NOTICE],
+    adapter: '{\n  "mcpServers": {}\n}\n',
+  });
+});
+
+test("AFILE-04: uninstall over a commented mcp-adapter.json writes the kept override back and shows only the comments notice", async () => {
+  // arrange
+  const adapterBytes =
+    '// user note\n{"mcpServers":{"uni-server":{"command":"node","disabled":true,"_piClaudeMarketplace":{"plugin":"hello","marketplace":"mp","keptOverride":{"disabled":true}}}}}\n';
+
+  // act
+  const observed = await uninstallOverAdapterFile(adapterBytes);
+
+  // assert
+  assert.deepStrictEqual(observed, {
+    outcome: undefined,
+    notifications: [HELLO_UNINSTALLED_ROW, COMMENTS_REMOVED_NOTICE],
+    adapter: `{
+  "mcpServers": {
+    "uni-server": {
+      "disabled": true
+    }
+  }
+}
+`,
+  });
+});
+
+test("AFILE-04: uninstall --prune reports the notice once for the primary and its pruned dependencies", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-afile04-prune-"));
+    try {
+      // arrange -- the primary's entry sits in a commented legacy mcp.json and
+      // the pruned dependency's in a commented mcp-adapter.json, so each file
+      // is rewritten by a different cascade.
+      const locations = locationsFor("project", cwd);
+      await seedDeclaringMarketplace(
+        locations,
+        "mp",
+        { x: { dependencies: ["d1"] }, d1: { provenance: "dependency" } },
+        cwd,
+      );
+      await writeFile(
+        locations.mcpJsonPath,
+        '// legacy note\n{"mcpServers":{"x-server":{"command":"x","_piClaudeMarketplace":{"plugin":"x","marketplace":"mp"}}}}\n',
+      );
+      await writeFile(
+        locations.mcpAdapterJsonPath,
+        '// adapter note\n{"mcpServers":{"d1-server":{"command":"d1","_piClaudeMarketplace":{"plugin":"d1","marketplace":"mp"}}}}\n',
+      );
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      await uninstallWithFreshOwner({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "x",
+        prune: true,
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "● mp [project]\n" +
+            "  ○ x v0.0.1 (uninstalled)\n" +
+            "  ○ d1 v0.0.1 (uninstalled) {dependency pruned}\n" +
+            "\n" +
+            "/reload to pick up changes",
+        },
+        {
+          message:
+            "MCP config comments removed.\n\n" +
+            "The project-scope mcp.json was rewritten to update plugin MCP servers; its JSONC comments were removed and everything else in it was kept.\n" +
+            "The project-scope mcp-adapter.json was rewritten to update plugin MCP servers; its JSONC comments were removed and everything else in it was kept.",
+          severity: "warning",
+        },
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("AFILE-04: orchestrated uninstall returns the notice on its outcome and sends nothing", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-afile04-orch-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedFullPlugin(locations, "mp", "hello", cwd);
+      await writeFile(
+        locations.mcpAdapterJsonPath,
+        '/* user note */ {"mcpServers":{"uni-server":{"command":"node","_piClaudeMarketplace":{"plugin":"hello","marketplace":"mp"}}}}\n',
+      );
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      const outcome = await uninstallWithFreshOwner({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        notifications: { mode: "orchestrated" },
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        status: "uninstalled",
+        name: "hello",
+        version: "0.0.1",
+        mcpConfigNotices: [
+          { kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" },
+        ],
+      });
+      assert.deepStrictEqual(notifications, []);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("AFILE-04: a partial uninstall shows the cascade's notice after the failed row", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-afile04-partial-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedFullPlugin(locations, "mp", "hello", cwd);
+      const cause = Object.assign(new Error("EACCES on workflow unlink"), { code: "EACCES" });
+      const stubCascade: typeof cascadeUnstagePlugin = () =>
+        Promise.resolve({
+          ok: false,
+          dropped: {
+            skills: [],
+            commands: [],
+            agents: [],
+            hooks: [],
+            mcpServers: ["uni-server"],
+            workflows: [],
+          },
+          cause,
+          mcpConfigNotices: [
+            { kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" },
+          ],
+        });
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      await uninstallWithFreshOwner({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        cascade: stubCascade,
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello v0.0.1 (failed) {permission denied}\n    cause: EACCES on workflow unlink",
+          severity: "error",
+        },
+        COMMENTS_REMOVED_NOTICE,
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("AFILE-04: an orchestrated partial uninstall returns the notice on its failed outcome", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-afile04-orch-partial-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedFullPlugin(locations, "mp", "hello", cwd);
+      const cause = Object.assign(new Error("EACCES on workflow unlink"), { code: "EACCES" });
+      const stubCascade: typeof cascadeUnstagePlugin = () =>
+        Promise.resolve({
+          ok: false,
+          dropped: {
+            skills: [],
+            commands: [],
+            agents: [],
+            hooks: [],
+            mcpServers: ["uni-server"],
+            workflows: [],
+          },
+          cause,
+          mcpConfigNotices: [
+            { kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" },
+          ],
+        });
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      const outcome = await uninstallWithFreshOwner({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        cascade: stubCascade,
+        notifications: { mode: "orchestrated" },
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        status: "failed",
+        reason: "permission denied",
+        error: cause,
+        cause: "EACCES on workflow unlink",
+        mcpConfigNotices: [
+          { kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" },
+        ],
+      });
+      assert.deepStrictEqual(notifications, []);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

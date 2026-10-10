@@ -95,6 +95,36 @@ test("resolveStrict lets a valid dependencies declaration fall through to ordina
   );
 });
 
+test("D-08-07: an entry named __proto__ resolves unavailable as a malformed entry", async () => {
+  // arrange
+  const context = resolveContext(marketplaceRoot, { [pathUnderMarketplace("./local")]: "dir" });
+
+  // act
+  const resolved = await resolveStrict(pluginEntry({ name: "__proto__" }), context);
+
+  // assert
+  assert.deepStrictEqual(resolved, {
+    state: "unavailable",
+    installable: false,
+    name: "__proto__",
+    notes: ['malformed marketplace entry: plugin name "__proto__" is reserved'],
+  });
+});
+
+test("D-08-07: an entry named constructor resolves installable", async () => {
+  // arrange
+  const context = resolveContext(marketplaceRoot, { [pathUnderMarketplace("./local")]: "dir" });
+
+  // act
+  const resolved = await resolveStrict(pluginEntry({ name: "constructor" }), context);
+
+  // assert
+  assert.deepStrictEqual(
+    { state: resolved.state, name: resolved.name, notes: resolved.notes },
+    { state: "installable", name: "constructor", notes: [] },
+  );
+});
+
 /**
  * Build an in-memory ResolveContext. `files` maps absolute paths to either:
  *   - "dir"           -> directory exists
@@ -1194,6 +1224,186 @@ test("PR-2(6) malformed mcpServers (array form) -> notInstallable", async () => 
     resolvedPlugin.notes.some((n) => n.includes("malformed mcpServers")),
     `notes: ${resolvedPlugin.notes.join(" / ")}`,
   );
+});
+
+function installableLocal(localRoot: string, description?: string): ResolvedPlugin {
+  return {
+    state: "installable",
+    installable: true,
+    name: "p1",
+    pluginRoot: localRoot,
+    supported: [],
+    unsupported: [],
+    notes: [],
+    componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
+    mcpServers: {},
+    defaultEnabled: true,
+    ...(description !== undefined && { description }),
+  };
+}
+
+for (const { title, manifestJson, entryFields, description } of [
+  {
+    title: "ANAME-06: the plugin.json description wins over the entry's",
+    manifestJson: { name: "p1", description: "From manifest" },
+    entryFields: { description: "From entry" },
+    description: "From manifest",
+  },
+  {
+    title: "ANAME-06: the entry's description is the fallback when plugin.json has none",
+    manifestJson: { name: "p1" },
+    entryFields: { description: "From entry" },
+    description: "From entry",
+  },
+  {
+    title: "ANAME-06: an empty plugin.json description falls back to the entry's",
+    manifestJson: { name: "p1", description: "" },
+    entryFields: { description: "From entry" },
+    description: "From entry",
+  },
+  {
+    title: "ANAME-06: no description at either site leaves the member out",
+    manifestJson: { name: "p1" },
+    entryFields: {},
+    description: undefined,
+  },
+  {
+    title: "ANAME-06: empty descriptions at both sites leave the member out",
+    manifestJson: { name: "p1", description: "" },
+    entryFields: { description: "" },
+    description: undefined,
+  },
+]) {
+  test(title, async () => {
+    // arrange
+    const localRoot = pathUnderMarketplace("./local");
+    const context = resolveContext(marketplaceRoot, {
+      [localRoot]: "dir",
+      [path.join(localRoot, ".claude-plugin", "plugin.json")]: {
+        contents: JSON.stringify(manifestJson),
+      },
+    });
+
+    // act
+    const resolvedPlugin = await resolveStrict(
+      pluginEntry({ source: "./local", ...entryFields }),
+      context,
+    );
+
+    // assert
+    assert.deepStrictEqual(resolvedPlugin, installableLocal(localRoot, description));
+  });
+}
+
+test("ANAME-06: the unavailable arm never carries the description", async () => {
+  // arrange
+  const context = resolveContext(marketplaceRoot, { [pathUnderMarketplace("./local")]: "dir" });
+
+  // act
+  const resolvedPlugin = await resolveStrict(
+    pluginEntry({ source: "./local", description: "From entry", mcpServers: [1, 2, 3] }),
+    context,
+  );
+
+  // assert
+  assert.deepStrictEqual(resolvedPlugin, {
+    state: "unavailable",
+    installable: false,
+    name: "p1",
+    notes: ["malformed mcpServers: must be object"],
+  });
+});
+
+test("ANAME-07: a ws server makes the plugin partially available with the server left out", async () => {
+  // arrange
+  const localRoot = pathUnderMarketplace("./local");
+  const context = resolveContext(marketplaceRoot, { [localRoot]: "dir" });
+
+  // act
+  const resolvedPlugin = await resolveStrict(
+    pluginEntry({
+      source: "./local",
+      mcpServers: {
+        live: { type: "ws", url: "wss://mcp.example.com/ws" },
+        local: { command: "node" },
+      },
+    }),
+    context,
+  );
+
+  // assert
+  assert.deepStrictEqual(resolvedPlugin, {
+    state: "partially-available",
+    installable: true,
+    name: "p1",
+    pluginRoot: localRoot,
+    supported: [],
+    unsupported: ["mcpServers"],
+    notes: [],
+    componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
+    mcpServers: { local: { command: "node" } },
+    droppedMcpServers: [{ server: "live", feature: "ws" }],
+    defaultEnabled: true,
+  });
+});
+
+test("AVAR-03: a stdio server whose args start with ~/ makes the plugin partially available with the server left out", async () => {
+  // arrange
+  const localRoot = pathUnderMarketplace("./local");
+  const context = resolveContext(marketplaceRoot, { [localRoot]: "dir" });
+
+  // act
+  const resolvedPlugin = await resolveStrict(
+    pluginEntry({
+      source: "./local",
+      mcpServers: {
+        home: { command: "node", args: ["~/bin/server.js"] },
+        local: { command: "node", args: ["server.js"] },
+      },
+    }),
+    context,
+  );
+
+  // assert
+  assert.deepStrictEqual(resolvedPlugin, {
+    state: "partially-available",
+    installable: true,
+    name: "p1",
+    pluginRoot: localRoot,
+    supported: [],
+    unsupported: ["mcpServers"],
+    notes: [],
+    componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
+    mcpServers: { local: { command: "node", args: ["server.js"] } },
+    droppedMcpServers: [{ server: "home", feature: "args ~" }],
+    defaultEnabled: true,
+  });
+});
+
+test("ANAME-07: a malformed server wins over a blocked one and makes the plugin unavailable", async () => {
+  // arrange
+  const context = resolveContext(marketplaceRoot, { [pathUnderMarketplace("./local")]: "dir" });
+
+  // act
+  const resolvedPlugin = await resolveStrict(
+    pluginEntry({
+      source: "./local",
+      mcpServers: {
+        live: { type: "ws", url: "wss://mcp.example.com/ws" },
+        local: { command: "node" },
+        db: { type: "http", url: "https://mcp.example.com", oauth: { callbackPort: 70_000 } },
+      },
+    }),
+    context,
+  );
+
+  // assert
+  assert.deepStrictEqual(resolvedPlugin, {
+    state: "unavailable",
+    installable: false,
+    name: "p1",
+    notes: ['malformed mcp server "db": /oauth/callbackPort: must be <= 65535'],
+  });
 });
 
 // ──────────────────────────────────────────────────────────────────────────

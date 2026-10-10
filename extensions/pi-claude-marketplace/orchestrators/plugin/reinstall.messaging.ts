@@ -16,7 +16,7 @@ import {
 import { notifyWithContext } from "../../shared/notify-context.ts";
 import { malformedReasonsForKinds, skipSeverity } from "../../shared/notify-reasons.ts";
 
-import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
+import type { NotificationContext, PiInventory } from "../../platform/pi-api.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type {
   CommandContext,
@@ -150,7 +150,7 @@ export const REINSTALL_CONTEXT = {
 // - Reference: catalog UAT plugin-reinstall fixtures.
 export function renderReinstallPartitionAndNotify(
   ctx: NotificationContext,
-  pi: ToolInventory,
+  pi: PiInventory,
   outcomes: readonly ReinstallPluginOutcome[],
   cardinality: "single" | "plural",
 ): void {
@@ -223,7 +223,7 @@ function isManualRecoveryOutcome(
  *
  * CMC-13: `declaresAgents` / `declaresMcp` are required booleans, mapped to the
  * `dependencies: Dependency[]` tuple per SNM-06. The renderer's per-row soft-dep
- * probe fires `{requires pi-subagents}` / `{requires pi-mcp}` when the companion
+ * probe fires `{requires pi-subagents}` / `{requires pi-mcp-adapter}` when the companion
  * extension is unloaded.
  *
  * WARN-01 / WR-09 / D-86-03: a component this ledger degraded names its kind and
@@ -357,7 +357,7 @@ function outcomeToPluginMessage(outcome: ReinstallPluginOutcome): ReinstallMsg {
  * `declaresWorkflows` predicate flags to the `Dependency[]` tuple consumed by
  * `PluginReinstalledMessage.dependencies` per SNM-06. The
  * renderer's per-row soft-dep probe iterates this array to emit
- * `{requires pi-subagents}` / `{requires pi-mcp}` /
+ * `{requires pi-subagents}` / `{requires pi-mcp-adapter}` /
  * `{requires pi-dynamic-workflows}` markers when the companion extension is
  * unloaded (MSG-SD-1..2).
  *

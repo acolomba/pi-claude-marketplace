@@ -60,12 +60,12 @@
 //
 // Measured boundary counts, taken through a counting context before a case was
 // written, because the three paths disagree:
-//   * a rejection reads `ctx.ui` once, `ctx.cwd` never, and `pi.getAllTools()`
-//     never -- `notifyUsageError` writes straight to the channel;
+//   * a rejection reads `ctx.ui` once, `ctx.cwd` never, and takes no
+//     soft-dependency probe -- `notifyUsageError` writes straight to the channel;
 //   * a delegating command that MATERIALISES reads `ctx.ui` once, `ctx.cwd`
-//     once, and `pi.getAllTools()` SIX times;
+//     once, and takes TWO soft-dependency probes;
 //   * a delegating command that is refused by the install gate, or that lands
-//     disabled, reads `pi.getAllTools()` THREE times.
+//     disabled, takes ONE soft-dependency probe.
 // The count is a property of the emission the workflow reaches, not of the
 // module, so it is stated per row rather than shared.
 //
@@ -280,8 +280,8 @@ interface Footprint {
 
 /** The declarative layer at one path, or undefined when no file was written. */
 async function readConfigLayer(filePath: string): Promise<ScopeConfig | undefined> {
-  const result = await loadConfig(filePath);
-  return result.status === "valid" ? result.config : undefined;
+  const loaded = await loadConfig(filePath);
+  return loaded.status === "valid" ? loaded.config : undefined;
 }
 
 async function readGeneratedAgents(scopeRoot: string): Promise<GeneratedAgentProjection[]> {
@@ -393,26 +393,26 @@ const DEGRADED_USER_DECLARATION: ScopeConfig = {
 // The flag matrix: all four combinations of the two downstream booleans.
 // ---------------------------------------------------------------------------
 
-for (const { args, expectedFootprint, label, summary, toolProbes } of [
+for (const { args, expectedFootprint, label, probes, summary } of [
   {
     args: "degraded@mp",
     label: "matrix-neither",
     summary: "neither downstream flag",
-    toolProbes: 3,
+    probes: 1,
     expectedFootprint: NOTHING_MATERIALIZED,
   },
   {
     args: `degraded@mp ${MAP_MODEL_FLAG}`,
     label: "matrix-map-model",
     summary: "the model-mapping flag alone",
-    toolProbes: 3,
+    probes: 1,
     expectedFootprint: NOTHING_MATERIALIZED,
   },
   {
     args: `degraded@mp ${PARTIAL_FLAG}`,
     label: "matrix-partial",
     summary: "the gate-widening flag alone",
-    toolProbes: 6,
+    probes: 2,
     expectedFootprint: {
       project: EMPTY_SCOPE,
       user: {
@@ -427,7 +427,7 @@ for (const { args, expectedFootprint, label, summary, toolProbes } of [
     args: `degraded@mp ${PARTIAL_FLAG} ${MAP_MODEL_FLAG}`,
     label: "matrix-both",
     summary: "both downstream flags",
-    toolProbes: 6,
+    probes: 2,
     expectedFootprint: {
       project: EMPTY_SCOPE,
       user: {
@@ -442,14 +442,14 @@ for (const { args, expectedFootprint, label, summary, toolProbes } of [
   args: string;
   expectedFootprint: Footprint;
   label: string;
+  probes: number;
   summary: string;
-  toolProbes: number;
 }[]) {
   test(`forwards ${summary} to the install workflow, leaving the unsupplied one off (D-65-05)`, async (t) => {
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, toolProbes, {
+    const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, probes, {
       value: workspace.cwd,
       reads: 1,
     });
@@ -522,7 +522,7 @@ for (const { args, expectedFootprint, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 6, {
+    const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
       value: workspace.cwd,
       reads: 1,
     });
@@ -570,7 +570,7 @@ for (const { args, expectedAgents, label, position } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 6, {
+    const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
       value: workspace.cwd,
       reads: 1,
     });
@@ -597,7 +597,7 @@ test("honors a scope flag and the scope-target flag supplied together, narrowing
   // arrange
   const workspace = await createHermeticWorkspace(t, "both-selectors");
   await seedBothScopes(workspace);
-  const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 6, {
+  const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
     value: workspace.cwd,
     reads: 1,
   });
@@ -630,10 +630,9 @@ test("records a plugin declaring itself off by default as disabled, because the 
   // RESV-06: 2 companion probes, the count every other standalone install
   // states. The install block takes one probe of its own before it composes its
   // rows through the cascade composer, whichever arm produced the requesting
-  // plugin's row, and the renderer takes the second. WDEP-02: each probe now
-  // reads three times -- `pi-subagents`, `pi-mcp-adapter` and the workflow
-  // engine -- so the boundary expects 6.
-  const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 6, {
+  // plugin's row, and the renderer takes the second. The boundary states the
+  // two probes, and `expectSoftDepProbes` states the Pi reads each one makes.
+  const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
     value: workspace.cwd,
     reads: 1,
   });

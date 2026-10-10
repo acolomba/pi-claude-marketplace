@@ -5,6 +5,8 @@
 // refusal categories via instanceof and so user-visible error messages are
 // uniform.
 
+import type { McpConfigNotice } from "./notification-dispatch.ts";
+
 /**
  * The (marketplace, plugin) tuple an agent name belongs to. Declared once so
  * the conflict's owner, the error's public `stagingFor` field and the
@@ -48,19 +50,125 @@ export class AgentOwnershipConflictError extends Error {
 }
 
 /**
- * MC-4 / RN-5 refusal: a server name being staged collides with an
- * entry owned by a different scope or different plugin in the current
- * scope. Carries the colliding server name and the file path of the
- * owning entry so the user-visible message can surface both.
+ * AFILE-05 / MC-4 refusal: a server name being staged is already defined in
+ * full by another of pi-mcp-adapter's config sources. `owningPath` is the
+ * highest-precedence other source that defines it. `winningPath` is the source
+ * the adapter loads under its later-wins precedence: the owner when it ranks
+ * above the target file, else the target file itself.
+ *
+ * ANAME-03: `definedAs` is the owner's own key when it differs from
+ * `serverName` only by `-` versus `_`, so the user can find the entry.
  */
 export class McpServerCollisionError extends Error {
   readonly serverName: string;
   readonly owningPath: string;
-  constructor(serverName: string, owningPath: string) {
-    super(`Refusing to stage MCP server "${serverName}": already exists in ${owningPath}.`);
+  readonly winningPath: string;
+  readonly definedAs?: string;
+  constructor(serverName: string, owningPath: string, winningPath: string, otherKey?: string) {
+    const folded = otherKey !== undefined && otherKey !== serverName;
+    super(
+      folded
+        ? `Refusing to stage MCP server "${serverName}": ${owningPath} already defines "${otherKey}", which Pi treats as the same tool namespace because it does not tell "-" from "_".`
+        : `Refusing to stage MCP server "${serverName}": ${owningPath} already defines it, and pi-mcp-adapter would load the definition in ${winningPath}.`,
+    );
     this.name = "McpServerCollisionError";
     this.serverName = serverName;
     this.owningPath = owningPath;
+    this.winningPath = winningPath;
+    if (folded) {
+      this.definedAs = otherKey;
+    }
+  }
+}
+
+/**
+ * ANAME-03 refusal: two servers of one plugin map to one server key, or to
+ * keys that differ only by `-` versus `_`, which Pi gives one tool namespace.
+ * Either way one server would shadow the other. `servers` holds both declared
+ * names and `keys` their keys, in declared order.
+ */
+export class McpServerKeyCollisionError extends Error {
+  readonly pluginName: string;
+  readonly servers: readonly [string, string];
+  readonly keys: readonly [string, string];
+  constructor(
+    pluginName: string,
+    servers: readonly [string, string],
+    keys: readonly [string, string],
+  ) {
+    const subject = `Refusing to stage MCP servers "${servers[0]}" and "${servers[1]}" of plugin "${pluginName}"`;
+    super(
+      keys[0] === keys[1]
+        ? `${subject}: both map to the server key "${keys[0]}".`
+        : `${subject}: their server keys "${keys[0]}" and "${keys[1]}" differ only by "-" and "_", which Pi treats as one tool namespace.`,
+    );
+    this.name = "McpServerKeyCollisionError";
+    this.pluginName = pluginName;
+    this.servers = Object.freeze([servers[0], servers[1]] as const);
+    this.keys = Object.freeze([keys[0], keys[1]] as const);
+  }
+}
+
+const MCP_CONFIG_DEFECT_TEXT: Readonly<Record<McpConfigFileError["defect"], string>> = {
+  "invalid-jsonc": "is not valid JSONC",
+  "top-level-not-object": "does not hold a JSON object",
+  "mcpServers-not-object": 'has an "mcpServers" value that is not an object',
+  "mcp-servers-not-object": 'has an "mcp-servers" value that is not an object',
+};
+
+/**
+ * AFILE-02 refusal: an MCP config file the bridge cannot read safely. The
+ * operation stops before any write, so the file keeps its exact bytes.
+ *
+ * The message names the file and the defect only, and the error carries no
+ * `cause`: Node's `JSON.parse` message can quote file content, and MCP
+ * configs hold tokens.
+ */
+export class McpConfigFileError extends Error {
+  readonly filePath: string;
+  readonly defect:
+    "invalid-jsonc" | "top-level-not-object" | "mcpServers-not-object" | "mcp-servers-not-object";
+
+  constructor(filePath: string, defect: McpConfigFileError["defect"]) {
+    super(`MCP config ${filePath} ${MCP_CONFIG_DEFECT_TEXT[defect]}; it was left unchanged.`);
+    this.name = "McpConfigFileError";
+    this.filePath = filePath;
+    this.defect = defect;
+  }
+}
+
+/**
+ * NFR-3: one MCP config file an unstage rewrote and the exact bytes it
+ * wrote there. A prune rollback restores the file only while it still holds
+ * these bytes.
+ */
+export interface McpWrittenFile {
+  readonly path: string;
+  readonly bytes: Buffer;
+}
+
+/**
+ * AFILE-04: an MCP unstage that rewrote at least one config file and then
+ * failed to write a later one. `notices` and `written` describe only the
+ * files already rewritten, so the caller can report the dropped comments and
+ * a rollback can recognize its own write (NFR-3). `removedNames` lists the
+ * names no file still holds (TR-03). The write failure rides `Error.cause`.
+ */
+export class McpUnstagePartialError extends Error {
+  readonly removedNames: readonly string[];
+  readonly notices: readonly McpConfigNotice[];
+  readonly written: readonly McpWrittenFile[];
+  constructor(
+    removedNames: readonly string[],
+    notices: readonly McpConfigNotice[],
+    written: readonly McpWrittenFile[],
+    options: ErrorOptions,
+  ) {
+    super("MCP unstage stopped after rewriting part of its config files.", options);
+    this.name = "McpUnstagePartialError";
+    this.removedNames = Object.freeze([...removedNames]);
+    this.notices = Object.freeze([...notices]);
+    this.written = Object.freeze([...written]);
   }
 }
 

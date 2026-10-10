@@ -129,6 +129,36 @@ describe("prepareStagePluginAgents", () => {
     });
   });
 
+  test("ANAME-02: passes the written MCP server names to conversion and reports the async warning", async (t) => {
+    // arrange
+    const { pluginRoot, agentsSourceDir, locations, pluginDataDir } = await createStageTree(
+      t,
+      "agents-stage-mcp-",
+    );
+    await writeFile(
+      path.join(agentsSourceDir, "bot.md"),
+      "---\nname: bot\ndescription: Bot\ntools: Read, mcp__plugin_acme_db__query, mcp__plugin_acme_web__get\n---\n\nBody.\n",
+    );
+
+    // act
+    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
+      locations,
+      cwd: locations.scopeRoot,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      agentsDirs: [agentsSourceDir],
+      mcpServerNames: ["db"],
+    });
+
+    // assert
+    assert.deepStrictEqual(prepared.result.warnings, [
+      "[bot] tools include MCP tools, which pi-subagents runs only in background launches -- launch this agent with `async: true`; a foreground launch fails, and so does a launch before pi-mcp-adapter has cached the server's tools",
+      "[bot] dropped tools: mcp__plugin_acme_web__get",
+    ]);
+  });
+
   test("returns a frozen no-op result when no agents component is declared", async (t) => {
     // arrange
     const { pluginRoot, locations, pluginDataDir } = await createStageTree(
@@ -1511,7 +1541,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
     const zuluTarget = path.join(locations.agentsDir, "pi-claude-marketplace-acme-zulu.md");
     const alphaStaged = path.join(prepared.stagingDir, path.basename(alphaTarget));
     const zuluStaged = path.join(prepared.stagingDir, path.basename(zuluTarget));
-    const stagedFilePaths = [...prepared._stagedFilePaths];
+    const stagedFilePaths = [...prepared.stagedFilePaths];
     const zuluPair = stagedFilePaths[1];
     assert.ok(zuluPair);
     Object.defineProperty(stagedFilePaths, 1, {
@@ -1522,7 +1552,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
         return zuluPair;
       },
     });
-    const vanishingPrepared = { ...prepared, _stagedFilePaths: stagedFilePaths };
+    const vanishingPrepared = { ...prepared, stagedFilePaths: stagedFilePaths };
 
     // act
     const error = await commitPreparedAgents(createRemovalOps(), vanishingPrepared).then(

@@ -108,6 +108,7 @@ import {
   errorMessage,
 } from "../../shared/errors.ts";
 import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
+import { notifyMcpConfigNotices } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import { type PluginFailedMessage } from "../../shared/notification-types.ts";
 import {
@@ -116,6 +117,7 @@ import {
   type Plural,
   type Single,
 } from "../../shared/notify-context.ts";
+import { ownValue } from "../../shared/own-key.ts";
 import {
   withLockedStateTransaction,
   type LockedStateTransactionDeps,
@@ -149,7 +151,7 @@ import type { ParsedSource, UrlSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { CredentialOps } from "../../platform/git-credential.ts";
-import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
+import type { NotificationContext, PiInventory } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { PluginUpdateFn, PluginUpdateOutcome } from "../types.ts";
@@ -168,12 +170,13 @@ export interface UpdateMarketplaceOptions {
    */
   readonly pluginUpdate?: PluginUpdateFn;
   /**
-   * Soft-dep probe target. `pi.getAllTools` is the source of truth for
-   * whether `pi-subagents` / `pi-mcp-adapter` are loaded. Required (not
-   * optional) so every `notify(ctx, pi, ...)` call has a non-null reference;
-   * the renderer threads `softDepStatus(pi)` internally at notify-time.
+   * Soft-dep probe target. `pi.getAllTools()` and `pi.getCommands()` are the
+   * source of truth for whether `pi-subagents` / `pi-mcp-adapter` are loaded.
+   * Required (not optional) so every `notify(ctx, pi, ...)` call has a
+   * non-null reference; the renderer threads `softDepStatus(pi)` internally at
+   * notify-time.
    */
-  readonly pi: ToolInventory;
+  readonly pi: PiInventory;
   /**
    * AUTH-02 injection seam. Defaults to DEFAULT_CREDENTIAL_OPS which
    * wraps `git credential fill/approve/reject` via subprocess. Tests
@@ -206,7 +209,7 @@ export interface UpdateAllMarketplacesOptions {
   readonly gitOps?: GitOps;
   readonly pluginUpdate?: PluginUpdateFn;
   /** See `UpdateMarketplaceOptions.pi`. */
-  readonly pi: ToolInventory;
+  readonly pi: PiInventory;
   /**
    * AUTH-02 injection seam. Defaults to DEFAULT_CREDENTIAL_OPS which
    * wraps `git credential fill/approve/reject` via subprocess. Tests
@@ -314,7 +317,7 @@ interface RefreshOneArgs {
   readonly locations: ScopedLocations;
   readonly gitOps: GitOps;
   readonly pluginUpdate?: PluginUpdateFn;
-  readonly pi: ToolInventory;
+  readonly pi: PiInventory;
   readonly credentialOps: CredentialOps;
   readonly deviceFlowHttp?: DeviceFlowHttp;
   readonly stateTransaction?: LockedStateTransactionDeps;
@@ -526,11 +529,11 @@ async function snapshotAfterRefresh(args: RefreshOneArgs): Promise<RefreshSnapsh
   // state. Read it OUTSIDE the lock (read-only seam; mergeScopeConfigs is a
   // pure reducer over loadConfig, which never throws).
   const { merged } = await loadMergedScopeConfig(locations);
-  const autoupdate = merged.marketplaces[name]?.entry.autoupdate ?? false;
+  const autoupdate = ownValue(merged.marketplaces, name)?.entry.autoupdate ?? false;
   return withLockedStateTransaction(
     locations,
     async (tx) => {
-      const record = tx.state.marketplaces[name];
+      const record = ownValue(tx.state.marketplaces, name);
       if (record === undefined) {
         // TOCTOU race: the marketplace was removed between
         // `resolveScopeOrNotifyNotAdded`'s pre-guard `loadState` and this guard's
@@ -875,6 +878,16 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
     },
   ];
   notifyWithContext(ctx, pi, UPDATE_CONTEXT, cascadeRows, undefined, cardinality);
+  // AFILE-04: the notices of the cascade's updates, shown after the rows they
+  // explain. A failed update can carry them too: its MCP commit succeeded
+  // before a later bridge or the finalize failed. The no-op paths above have
+  // only `unchanged` outcomes, which carry none.
+  notifyMcpConfigNotices(
+    ctx,
+    outcomes.flatMap((o) =>
+      o.partition === "updated" || o.partition === "failed" ? (o.mcpConfigNotices ?? []) : [],
+    ),
+  );
 }
 
 /**

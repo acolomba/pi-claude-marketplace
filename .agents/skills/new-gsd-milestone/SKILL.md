@@ -92,14 +92,18 @@ the milestone name.
 
   > Label this milestone `<slug>` (title: `<title>`); never assign a version
   > number. Write the current milestone as a plain heading
-  > `### In progress <slug> (<title>)`, not inside `<details>`, with its phases
-  > numbered from 1 below it. In STATE.md keep `milestone: <slug>` and
-  > `milestone_name: <title>`.
+  > `### In progress <slug> -- <title>`, not inside `<details>`, with its
+  > phases numbered from 1 below it. Do not put the title in parentheses. In
+  > STATE.md keep `milestone: <slug>` and `milestone_name: <title>`.
 
   The heading matters because GSD finds the active milestone by matching a
   heading against STATE.md's `milestone:` value. With no match, it strips every
   `<details>` block, and the new phases drop out of `roadmap.analyze` and
-  `progress`.
+  `progress`. GSD reads the milestone name as the heading text after the slug,
+  with only a leading `--`, `—`, `–` or `:` stripped. In the form
+  `<slug> (<title>)`, it keeps the parentheses, so the name becomes
+  `(<title>)`, and `state.planned-phase` writes that into STATE.md's
+  `milestone_name`.
 
   With `--ws`, also pass `roadmap_path`, `state_path`, and `requirements_path`
   from `init.new-milestone` and tell the roadmapper to write those files. By
@@ -114,6 +118,9 @@ the milestone name.
   heading matched the slug. `roadmap.get-phase` can't catch this, because it
   falls back to searching the whole document.
 - `query roadmap.get-phase 1` reports `"found": true`.
+- `query init.progress` reports `"milestone_name"` as the title, with no
+  parentheses or leading delimiter. That name comes from the roadmap heading,
+  not from STATE.md.
 - The `phases_dir` from `init.new-milestone` holds no directories from the
   previous milestone.
 - With `--ws`: `git status` shows the root `.planning/ROADMAP.md` and

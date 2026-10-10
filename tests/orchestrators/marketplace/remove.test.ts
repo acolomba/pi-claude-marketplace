@@ -21,6 +21,7 @@ import {
   pathSource,
 } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
+  MarketplaceRemoveFailureError,
   removeMarketplace,
   type RemoveMarketplaceOutcome,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts";
@@ -43,6 +44,7 @@ import {
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { MarketplaceNotFoundError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
+import { expectSoftDepProbes } from "../../edge/notification-boundary.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
@@ -98,7 +100,11 @@ function recordingCompletionCache(calls: InvalidationCall[]): CompletionCache {
   };
 }
 
-function notificationBoundary(expectedCalls: 0 | 1): NotificationBoundary {
+/**
+ * `noticeCalls` counts the MCP config notifications sent after the row. Each
+ * one reads `ctx.ui` and calls `notify` once and probes no soft dependency.
+ */
+function notificationBoundary(expectedCalls: 0 | 1, noticeCalls: 0 | 1 = 0): NotificationBoundary {
   const calls: NotificationCall[] = [];
   const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
   const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
@@ -106,15 +112,13 @@ function notificationBoundary(expectedCalls: 0 | 1): NotificationBoundary {
   if (expectedCalls === 1) {
     when(() => ctx.ui)
       .thenReturn(ui)
-      .once();
-    when(() => pi.getAllTools())
-      .thenReturn([])
-      .times(3);
+      .times(1 + noticeCalls);
+    expectSoftDepProbes(pi, 1);
     when(() => ui.notify)
       .thenReturn((message, severity) => {
         calls.push(severity === undefined ? { message } : { message, severity });
       })
-      .once();
+      .times(1 + noticeCalls);
   }
 
   return {
@@ -1694,5 +1698,306 @@ test("reports a concurrent in-lock disappearance as an empty successful removal"
     schemaVersion: 3,
     marketplaces: {},
   });
+  notification.verifyInteractions();
+});
+
+// AFILE-04: a removal whose plugin cascades rewrite a commented MCP config
+// file shows the comments-removed notice after its rows in standalone mode and
+// returns it on the outcome in orchestrated mode.
+
+const COMMENTED_ALPHA_ADAPTER =
+  '// user note\n{"mcpServers":{"alpha-server":{"command":"alpha","_piClaudeMarketplace":{"plugin":"alpha","marketplace":"commented"}}}}\n';
+
+const ADAPTER_COMMENTS_REMOVED_LINE =
+  "The project-scope mcp-adapter.json was rewritten to update plugin MCP servers; its JSONC comments were removed and everything else in it was kept.";
+
+async function seedCommentedMarketplace(
+  testContext: TestContext,
+  plugins: Record<string, PluginRecord>,
+): Promise<{ cwd: string; locations: ScopedLocations }> {
+  const { cwd, locations } = await projectCase(testContext);
+  await seedMarketplace(locations, {
+    cwd,
+    name: "commented",
+    source: pathSource("./commented"),
+    plugins,
+  });
+  await writeFile(locations.mcpAdapterJsonPath, COMMENTED_ALPHA_ADAPTER);
+  return { cwd, locations };
+}
+
+/** Alpha runs the real cascade; beta fails with a notice of its own. */
+const alphaRealBetaFailing: typeof cascadeUnstagePlugin = (plugin, ...rest) =>
+  plugin === "beta"
+    ? Promise.resolve({
+        ok: false,
+        dropped: emptyDropped(),
+        cause: Object.assign(new Error("beta denied"), { code: "EACCES" }),
+        mcpConfigNotices: [{ kind: "comments-dropped", scope: "project", file: "mcp.json" }],
+      })
+    : cascadeUnstagePlugin(plugin, ...rest);
+
+test("AFILE-04: marketplace remove over a commented mcp-adapter.json shows the comments-removed notice", async (testContext) => {
+  // arrange
+  const { cwd, locations } = await seedCommentedMarketplace(testContext, {
+    alpha: pluginRecord({ mcpServers: ["alpha-server"] }),
+  });
+  const notification = notificationBoundary(1, 1);
+
+  // act
+  const outcome = await removeMarketplace({
+    completionCache: createCompletionCache(),
+    ctx: notification.ctx,
+    pi: notification.pi,
+    name: "commented",
+    scope: "project",
+    cwd,
+  });
+
+  // assert
+  assert.strictEqual(outcome, undefined);
+  assert.deepStrictEqual(notification.calls, [
+    {
+      message:
+        "● commented [project] (removed)\n  ○ alpha (uninstalled)\n\n/reload to pick up changes",
+    },
+    {
+      message: `MCP config comments removed.\n\n${ADAPTER_COMMENTS_REMOVED_LINE}`,
+      severity: "warning",
+    },
+  ]);
+  assert.strictEqual(
+    await readFile(locations.mcpAdapterJsonPath, "utf8"),
+    '{\n  "mcpServers": {}\n}\n',
+  );
+  notification.verifyInteractions();
+});
+
+test("AFILE-04: a partial marketplace remove still shows the notice", async (testContext) => {
+  // arrange
+  const { cwd } = await seedCommentedMarketplace(testContext, {
+    alpha: pluginRecord({ mcpServers: ["alpha-server"] }),
+    beta: pluginRecord(),
+  });
+  const notification = notificationBoundary(1, 1);
+
+  // act
+  await removeMarketplace({
+    completionCache: createCompletionCache(),
+    ctx: notification.ctx,
+    pi: notification.pi,
+    name: "commented",
+    scope: "project",
+    cwd,
+    cascade: alphaRealBetaFailing,
+  });
+
+  // assert
+  assert.deepStrictEqual(notification.calls, [
+    {
+      message:
+        "Some operations have failed.\n\n⊘ commented [project] (failed)\n  ○ alpha (uninstalled)\n  ⊘ beta (failed) {permission denied}\n    cause: beta denied\n\n/reload to pick up changes",
+      severity: "error",
+    },
+    {
+      message:
+        "MCP config comments removed.\n\n" +
+        `${ADAPTER_COMMENTS_REMOVED_LINE}\n` +
+        "The project-scope mcp.json was rewritten to update plugin MCP servers; its JSONC comments were removed and everything else in it was kept.",
+      severity: "warning",
+    },
+  ]);
+  notification.verifyInteractions();
+});
+
+test("AFILE-04: an orchestrated marketplace remove returns the notice and sends nothing", async (testContext) => {
+  // arrange
+  const { cwd } = await seedCommentedMarketplace(testContext, {
+    alpha: pluginRecord({ mcpServers: ["alpha-server"] }),
+  });
+  const notification = notificationBoundary(0);
+
+  // act
+  const outcome = await removeMarketplace({
+    completionCache: createCompletionCache(),
+    ctx: notification.ctx,
+    pi: notification.pi,
+    name: "commented",
+    scope: "project",
+    cwd,
+    notifications: { mode: "orchestrated" },
+  });
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    status: "removed",
+    name: "commented",
+    unstaged: ["alpha"],
+    mcpConfigNotices: [{ kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" }],
+  });
+  assert.deepStrictEqual(notification.calls, []);
+  notification.verifyInteractions();
+});
+
+test("AFILE-04: an orchestrated partial marketplace remove returns every cascade's notice", async (testContext) => {
+  // arrange
+  const { cwd } = await seedCommentedMarketplace(testContext, {
+    alpha: pluginRecord({ mcpServers: ["alpha-server"] }),
+    beta: pluginRecord(),
+  });
+  const notification = notificationBoundary(0);
+
+  // act
+  const outcome = await removeMarketplace({
+    completionCache: createCompletionCache(),
+    ctx: notification.ctx,
+    pi: notification.pi,
+    name: "commented",
+    scope: "project",
+    cwd,
+    cascade: alphaRealBetaFailing,
+    notifications: { mode: "orchestrated" },
+  });
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    status: "partial",
+    name: "commented",
+    unstaged: ["alpha"],
+    failed: [{ name: "beta", reason: "permission denied" }],
+    mcpConfigNotices: [
+      { kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" },
+      { kind: "comments-dropped", scope: "project", file: "mcp.json" },
+    ],
+  });
+  assert.deepStrictEqual(notification.calls, []);
+  notification.verifyInteractions();
+});
+
+/** AFILE-04: a state transaction whose save fails after the plugin cascades ran. */
+function failingSave(saveFailure: Error): { saveState: () => Promise<void> } {
+  return {
+    saveState: async () => {
+      await Promise.resolve();
+      throw saveFailure;
+    },
+  };
+}
+
+test("AFILE-04: a standalone marketplace remove whose state save fails still shows the notice", async (testContext) => {
+  // arrange
+  const { cwd } = await seedCommentedMarketplace(testContext, {
+    alpha: pluginRecord({ mcpServers: ["alpha-server"] }),
+  });
+  const saveFailure = new Error("state save failed");
+  const calls: NotificationCall[] = [];
+  const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
+  const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
+  const ui = mock<NotificationUi>({ exactParams: true, name: "notification UI" });
+  when(() => ctx.ui).thenReturn(ui);
+  when(() => ui.notify).thenReturn((message, severity) => {
+    calls.push(severity === undefined ? { message } : { message, severity });
+  });
+
+  // act
+  const failure = await removeMarketplace({
+    completionCache: createCompletionCache(),
+    ctx,
+    pi,
+    name: "commented",
+    scope: "project",
+    cwd,
+    stateTransaction: failingSave(saveFailure),
+  }).then(
+    () => undefined,
+    (error: unknown) => error,
+  );
+
+  // assert
+  assert.strictEqual(failure, saveFailure);
+  assert.deepStrictEqual(calls, [
+    {
+      message: `MCP config comments removed.\n\n${ADAPTER_COMMENTS_REMOVED_LINE}`,
+      severity: "warning",
+    },
+  ]);
+  verify(ctx);
+  verify(pi);
+  verify(ui);
+});
+
+test("AFILE-04: an orchestrated marketplace remove whose state save fails carries the notice on a typed error", async (testContext) => {
+  // arrange
+  const { cwd } = await seedCommentedMarketplace(testContext, {
+    alpha: pluginRecord({ mcpServers: ["alpha-server"] }),
+  });
+  const saveFailure = new Error("state save failed");
+  const notification = notificationBoundary(0);
+
+  // act
+  const failure = await removeMarketplace({
+    completionCache: createCompletionCache(),
+    ctx: notification.ctx,
+    pi: notification.pi,
+    name: "commented",
+    scope: "project",
+    cwd,
+    notifications: { mode: "orchestrated" },
+    stateTransaction: failingSave(saveFailure),
+  }).then(
+    () => undefined,
+    (error: unknown) => error,
+  );
+
+  // assert
+  assert.ok(failure instanceof MarketplaceRemoveFailureError);
+  assert.deepStrictEqual(
+    {
+      name: failure.name,
+      message: failure.message,
+      mcpConfigNotices: failure.mcpConfigNotices,
+      cause: failure.cause,
+    },
+    {
+      name: "MarketplaceRemoveFailureError",
+      message: "Marketplace remove failed after its plugin cascades rewrote MCP config files.",
+      mcpConfigNotices: [{ kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" }],
+      cause: saveFailure,
+    },
+  );
+  assert.deepStrictEqual(notification.calls, []);
+  notification.verifyInteractions();
+});
+
+test("rethrows a state save failure unchanged when no cascade rewrote an MCP config file", async (testContext) => {
+  // arrange
+  const { cwd, locations } = await projectCase(testContext);
+  await seedMarketplace(locations, {
+    cwd,
+    name: "plain",
+    source: pathSource("./plain"),
+    plugins: { alpha: pluginRecord() },
+  });
+  const saveFailure = new Error("state save failed");
+  const notification = notificationBoundary(0);
+
+  // act
+  const failure = await removeMarketplace({
+    completionCache: createCompletionCache(),
+    ctx: notification.ctx,
+    pi: notification.pi,
+    name: "plain",
+    scope: "project",
+    cwd,
+    notifications: { mode: "orchestrated" },
+    stateTransaction: failingSave(saveFailure),
+  }).then(
+    () => undefined,
+    (error: unknown) => error,
+  );
+
+  // assert
+  assert.strictEqual(failure, saveFailure);
+  assert.deepStrictEqual(notification.calls, []);
   notification.verifyInteractions();
 });

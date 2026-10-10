@@ -11,6 +11,7 @@ import type {
   MarketplaceInfoMessage,
   MarketplaceNotAddedMessage,
   MarketplaceNotificationMessage,
+  McpServerSummaryEntry,
   PluginAvailableMessage,
   PluginDisabledMessage,
   PluginInfoCascadeMessage,
@@ -266,7 +267,7 @@ export function renderMpHeader(mp: MarketplaceNotificationMessage, probe: SoftDe
       // reasons brace is composed via composeReasons reusing the helper that
       // backs plugin-level skipped rows. CRITICAL: pass (false, false, false)
       // for the three soft-dep declares flags -- mp-level skipped never emits
-      // {requires pi-subagents} / {requires pi-mcp} markers; those are
+      // {requires pi-subagents} / {requires pi-mcp-adapter} markers; those are
       // plugin-row-only. composeReasons returns "" when mp.reasons is undefined
       // or empty, so the conditional join collapses cleanly with no trailing
       // space.
@@ -316,22 +317,22 @@ export function renderMpHeader(mp: MarketplaceNotificationMessage, probe: SoftDe
 // ---------------------------------------------------------------------------
 // File-private renderPluginRow + supporting helpers.
 //
-// MOD-03 / D-02 / D-10: this central switch is NO LONGER the per-row dispatch
-// path for any command's cascade rows. Every state-change producer routes its
-// rows through `notifyWithContext` / `notifyReconcileAppliedWithContext`, which
-// dispatch each per-plugin body via the command's OWN `context.render[status]`
+// MOD-03 / D-02 / D-10: this central switch is not the per-row dispatch path
+// for any command's cascade rows. Every state-change producer routes its rows
+// through `notifyWithContext` / `notifyReconcileAppliedWithContext`, which
+// dispatch each per-plugin body via the command's own `context.render[status]`
 // map (`emitContextCascade` / `emitReconcileAppliedContextCascade`). A missing
-// or extra arm is now a per-command compile error, not a central concern.
-// This switch survives only as a STATICALLY-REFERENCED seam on the central
-// envelope: the legacy `notify(ctx, pi, message)` cascade arm (reached today
-// only by the `{ marketplaces: [] }` empty sentinel, which short-circuits to
+// or extra arm is a per-command compile error, not a central concern.
+// This switch remains as a statically referenced seam on the central
+// envelope: the `notify(ctx, pi, message)` cascade arm (reached only by the
+// `{ marketplaces: [] }` empty sentinel, which short-circuits to
 // `(no marketplaces)` before the plugin loop runs) and the
 // `composeReconcileAppliedBody` arm of `dispatchInfoMessage` (kept for the
 // `reconcile-applied-cascade` StandaloneKind exhaustiveness; its live emitter
 // goes through `emitReconcileAppliedContextCascade`, not this body). Removing
 // it would either break that exhaustiveness switch or require rewriting the
-// legacy envelope the deferred-central standalone surfaces still depend on, so
-// it stays until those surfaces relocate.
+// envelope the deferred-central standalone surfaces still depend on, so it
+// stays until those surfaces relocate.
 //
 // SNM-16: soft-dep markers are injected at render time from the per-row
 // `dependencies?` declaration + the threaded `SoftDepStatus` probe. The
@@ -561,7 +562,7 @@ export function pluginRow(
  * "call, never duplicate"). Uses the dedicated `ICON_PARTIALLY_INSTALLED` (`◉`) glyph; the
  * reasons brace carries the dropped-component detail. Unlike `pluginRow` it
  * threads the optional `dependencies` so the `{requires pi-subagents}` /
- * `{requires pi-mcp}` / `{requires pi-dynamic-workflows}` soft-dep markers
+ * `{requires pi-mcp-adapter}` / `{requires pi-dynamic-workflows}` soft-dep markers
  * compose into the SAME brace AFTER the
  * dropped-component reasons (MSG-GR-4) -- exactly like the `installed` arm. The
  * partially-available arm still stages the SUPPORTED components, so a
@@ -616,7 +617,7 @@ export function partiallyInstalledRow(
  * `versionToken` is the already-rendered version slot (the caller passes
  * `renderVersion(...)` or `composeVersionArrow(...)`); `reasons` is the optional
  * reason set; `dependencies` drives the `{requires pi-subagents}` /
- * `{requires pi-mcp}` / `{requires pi-dynamic-workflows}` markers via
+ * `{requires pi-mcp-adapter}` / `{requires pi-dynamic-workflows}` markers via
  * `composeReasons`.
  *
  * WR-13 / WR-12: which callers thread `reasons`, over the seven command arms
@@ -1337,8 +1338,9 @@ const COMPONENT_KINDS = COMPONENT_KIND_NAMES satisfies readonly Exclude<
 >[];
 
 /**
- * Append the per-kind component lines + optional dependencies line
- * for a resolved `PluginInfoRow`. Per-kind order is alphabetical
+ * Append the per-kind component lines, the optional `requires:` line and the
+ * optional dependencies line for a resolved `PluginInfoRow`, in that order.
+ * Per-kind order is alphabetical
  * (`agents`, `commands`, `hooks`, `mcp`, `skills`, `workflows`); within each
  * kind, names render in the caller-supplied order. The orchestrator pre-sorts;
  * the renderer does not.
@@ -1351,11 +1353,17 @@ const COMPONENT_KINDS = COMPONENT_KIND_NAMES satisfies readonly Exclude<
 function appendResolvedComponentLines(
   lines: string[],
   components: PluginInfoComponentsResolved["components"],
+  requires: PluginInfoComponentsResolved["requires"],
   dependencies: readonly string[] | undefined,
 ): void {
   for (const kind of COMPONENT_KINDS) {
     if (kind === "hooks") {
       appendHooksBlock(lines, components.hooks);
+      continue;
+    }
+
+    if (kind === "mcp") {
+      appendMcpLine(lines, components.mcp);
       continue;
     }
 
@@ -1365,14 +1373,67 @@ function appendResolvedComponentLines(
     }
   }
 
+  appendRequiresLine(lines, requires);
   appendDependenciesLine(lines, dependencies);
 }
 
 /**
+ * ANAME-07 / AVAR-04 / AVAR-05 / ASTAT-01: appends the optional
+ * `    mcp: <list>` line. Each entry is the server's Claude name. A left-out
+ * server adds ` (unsupported <feature>)` and never a state. A written server
+ * adds its state first, then its unset and withheld variable names, as
+ * ` (state; unset A, B; withheld C)`, each part only when present or
+ * non-empty. The entries arrive stamped and sorted.
+ */
+function appendMcpLine(
+  lines: string[],
+  entries: PluginInfoComponentsResolved["components"]["mcp"],
+): void {
+  if (entries !== undefined && entries.length > 0) {
+    lines.push(`    mcp: ${entries.map((entry) => mcpEntryText(entry)).join(", ")}`);
+  }
+}
+
+function mcpEntryText(entry: McpServerSummaryEntry): string {
+  if (entry.unsupportedFeature !== undefined) {
+    return `${entry.name} (unsupported ${entry.unsupportedFeature})`;
+  }
+
+  const parts = [
+    ...(entry.status === undefined ? [] : [entry.status]),
+    ...variablePart("unset", entry.unsetVariables),
+    ...variablePart("withheld", entry.withheldVariables),
+  ];
+  return parts.length === 0 ? entry.name : `${entry.name} (${parts.join("; ")})`;
+}
+
+function variablePart(label: string, names: readonly string[] | undefined): string[] {
+  return names === undefined || names.length === 0 ? [] : [`${label} ${names.join(", ")}`];
+}
+
+/**
+ * ADET-01: appends the optional `    requires: <list>` line. Each entry is the
+ * companion name, followed by ` (missing)` when the orchestrator tagged it
+ * missing. The orchestrator stamps and sorts the entries; the renderer only
+ * formats them and takes no probe of its own.
+ */
+function appendRequiresLine(
+  lines: string[],
+  requires: PluginInfoComponentsResolved["requires"],
+): void {
+  if (requires !== undefined && requires.length > 0) {
+    const entries = requires.map(({ companion, missing }) =>
+      missing ? `${companion} (missing)` : companion,
+    );
+    lines.push(`    requires: ${entries.join(", ")}`);
+  }
+}
+
+/**
  * Appends the optional `    dependencies: <list>` line. Both `renderPluginInfo`
- * arms end with this line, so it is LAST: after every per-kind line on the
- * resolved arm and after the `components: not resolved` marker on the
- * unresolved arm (INFO-02 / D-01-32).
+ * arms end with this line, so it is LAST: after every per-kind line and the
+ * optional `requires:` line on the resolved arm, and after the
+ * `components: not resolved` marker on the unresolved arm (INFO-02 / D-01-32).
  */
 function appendDependenciesLine(
   lines: string[],
@@ -1446,18 +1507,22 @@ function notAddedReasonFor(message: MarketplaceNotAddedMessage): Reason {
  * bracket + version + (status) + optional reasons brace); optional
  * description block wrapped via `wrapDescription(text, 4, 66)`; then
  * either per-kind component lists at 4-space indent + optional
- * `dependencies:` line (componentsResolved: true), or the single
- * marker line `    components: not resolved` followed by the same
- * optional `dependencies:` line (componentsResolved: false, D-01-32).
+ * `requires:` line + optional `dependencies:` line
+ * (componentsResolved: true), or the single marker line
+ * `    components: not resolved` followed by the same optional
+ * `dependencies:` line (componentsResolved: false, D-01-32). The resolved
+ * line order is components, `requires:`, `dependencies:`, then `note:`.
  *
  * Reasons brace via `composeReasons` with all declares-flags FALSE
- * -- info messages NEVER emit soft-dep markers.
+ * -- info messages NEVER emit soft-dep markers. ADET-01: the companions a
+ * resolved row needs render once, on the `requires:` line the orchestrator
+ * stamped.
  *
  * WR-09: `notes` renders LAST -- after the component block and after any
  * `dependencies:` line -- as one `    note: <text>` line per entry. A row that
  * carries none is byte-unchanged.
  *
- * SORT PRECONDITION: per-kind arrays and `dependencies` MUST be
+ * SORT PRECONDITION: per-kind arrays, `requires` and `dependencies` MUST be
  * pre-sorted at message construction. The renderer does not sort.
  *
  * `probe` is accepted for signature parity with
@@ -1493,7 +1558,7 @@ export function renderPluginInfo(message: PluginInfoMessage, probe: SoftDepStatu
   // INFO-02 / INFO-05: per-kind components OR the unresolved marker.
   switch (plugin.componentsResolved) {
     case true:
-      appendResolvedComponentLines(lines, plugin.components, plugin.dependencies);
+      appendResolvedComponentLines(lines, plugin.components, plugin.requires, plugin.dependencies);
       break;
 
     case false:

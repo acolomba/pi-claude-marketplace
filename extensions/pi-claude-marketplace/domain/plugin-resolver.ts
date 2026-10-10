@@ -40,7 +40,7 @@ import { parseDeclaredDependencies } from "./dependencies.ts";
 import { resolveHooks, type HooksResolution } from "./hooks-resolution.ts";
 import { MANIFEST_CANDIDATES } from "./manifest-path.ts";
 import { resolveStrictMcp, type McpResolution } from "./mcp-resolution.ts";
-import { assertSafeName } from "./name.ts";
+import { assertSafeName, isReservedRecordKey } from "./name.ts";
 import {
   parsePluginSource,
   type GitHubSource,
@@ -122,6 +122,15 @@ function unavailable(name: string, notes: string[]): ResolvedPluginUnavailable {
   };
 }
 
+/**
+ * The plugin metadata each materializable arm carries, resolved once in the
+ * preflight stage: `defaultEnabled` (DFEN-03) and `description` (ANAME-06).
+ */
+interface PluginMetadata {
+  readonly defaultEnabled: boolean;
+  readonly description: string | undefined;
+}
+
 // The non-discriminant payload shared by the two materializable arms.
 // Because `ResolvedPluginInstallable` and `ResolvedPluginPartiallyAvailable` differ
 // only in `state`, `Omit<..., "state">` is the same structural type for both.
@@ -131,7 +140,7 @@ function materializableFields(
   name: string,
   pluginRoot: string,
   partial: PartialResolution,
-  defaultEnabled: boolean,
+  metadata: PluginMetadata,
 ): Omit<ResolvedPluginInstallable, "state"> {
   return {
     installable: true,
@@ -145,7 +154,11 @@ function materializableFields(
     ...(partial.hooksConfigPath !== undefined && { hooksConfigPath: partial.hooksConfigPath }),
     ...(partial.orphanRewake !== undefined && { orphanRewake: partial.orphanRewake }),
     ...(partial.droppedHooks !== undefined && { droppedHooks: partial.droppedHooks }),
-    defaultEnabled,
+    ...(partial.droppedMcpServers !== undefined && {
+      droppedMcpServers: partial.droppedMcpServers,
+    }),
+    defaultEnabled: metadata.defaultEnabled,
+    ...(metadata.description !== undefined && { description: metadata.description }),
   };
 }
 
@@ -153,11 +166,11 @@ function installable(
   name: string,
   pluginRoot: string,
   partial: PartialResolution,
-  defaultEnabled: boolean,
+  metadata: PluginMetadata,
 ): ResolvedPluginInstallable {
   return {
     state: "installable",
-    ...materializableFields(name, pluginRoot, partial, defaultEnabled),
+    ...materializableFields(name, pluginRoot, partial, metadata),
   };
 }
 
@@ -167,11 +180,11 @@ function partiallyAvailable(
   name: string,
   pluginRoot: string,
   partial: PartialResolution,
-  defaultEnabled: boolean,
+  metadata: PluginMetadata,
 ): ResolvedPluginPartiallyAvailable {
   return {
     state: "partially-available",
-    ...materializableFields(name, pluginRoot, partial, defaultEnabled),
+    ...materializableFields(name, pluginRoot, partial, metadata),
   };
 }
 
@@ -358,6 +371,25 @@ function resolveDefaultEnabled(
 }
 
 /**
+ * ANAME-06: the description written on every MCP server entry of the plugin.
+ * The plugin's `plugin.json` value wins over the marketplace entry's, the
+ * reverse of DFEN-02's order, because Claude Code names the plugin manifest
+ * first. An empty string counts as absent at either site. Resolved once, here,
+ * beside `defaultEnabled` (DFEN-03). The `typeof` narrow is needed because the
+ * manifest side is typed `unknown`.
+ */
+function resolveDescription(
+  entry: PluginEntry,
+  manifest: Record<string, unknown> | null,
+): string | undefined {
+  if (typeof manifest?.description === "string" && manifest.description !== "") {
+    return manifest.description;
+  }
+
+  return entry.description === "" ? undefined : entry.description;
+}
+
+/**
  * PURL-01 / PURL-03: derive the pluginRoot for an already-supported source kind.
  *
  * - `path`, pinned (`ctx.resolvePathPluginRoot` AND `ctx.pathPluginPin` both
@@ -472,14 +504,25 @@ async function preflightStages(
       pluginRoot: string;
       manifest: Record<string, unknown> | null;
       partial: PartialResolution;
-      // DFEN-03: resolved here, in the preflight stage before component resolution.
-      defaultEnabled: boolean;
+      // DFEN-03 / ANAME-06: resolved here, in the preflight stage before
+      // component resolution.
+      metadata: PluginMetadata;
     }
   | { kind: "unavailable"; result: ResolvedPluginUnavailable }
 > {
   const partial = emptyResolution();
   // Caller bug if name validation throws -- entry came through PLUGIN_ENTRY_VALIDATOR.
   assertSafeName(entry.name);
+
+  if (isReservedRecordKey(entry.name)) {
+    return {
+      kind: "unavailable",
+      result: unavailable(entry.name, [
+        ...partial.notes,
+        `malformed marketplace entry: plugin name "${entry.name}" is reserved`,
+      ]),
+    };
+  }
 
   // domain/manifest.ts::normalizeDependencyEntries isolates a marketplace
   // entry whose declared `dependencies` failed to parse before this resolver
@@ -548,7 +591,10 @@ async function preflightStages(
     pluginRoot,
     manifest: manifestResult.manifest,
     partial,
-    defaultEnabled: resolveDefaultEnabled(entry, manifestResult.manifest),
+    metadata: {
+      defaultEnabled: resolveDefaultEnabled(entry, manifestResult.manifest),
+      description: resolveDescription(entry, manifestResult.manifest),
+    },
   };
 }
 
@@ -593,7 +639,7 @@ export async function resolveStrict(
     return pre.result;
   }
 
-  const { pluginRoot, manifest, partial, defaultEnabled } = pre;
+  const { pluginRoot, manifest, partial, metadata } = pre;
   const dirty = await runStructuralStages({ entry, ctx, pluginRoot, manifest, partial });
 
   // Step 9 (PR-3 / PR-4): unsupported components declared explicitly or via
@@ -605,7 +651,7 @@ export async function resolveStrict(
   // in the decision below.
   await addUnsupportedKindNotes(entry, manifest, pluginRoot, ctx, partial);
 
-  return decideResolution(entry.name, pluginRoot, partial, dirty, defaultEnabled);
+  return decideResolution(entry.name, pluginRoot, partial, dirty, metadata);
 }
 
 /**
@@ -662,17 +708,17 @@ function decideResolution(
   pluginRoot: string,
   partial: PartialResolution,
   structuralDirty: boolean,
-  defaultEnabled: boolean,
+  metadata: PluginMetadata,
 ): ResolvedPlugin {
   if (structuralDirty) {
     return unavailable(name, partial.notes);
   }
 
   if (partial.unsupported.length > 0) {
-    return partiallyAvailable(name, pluginRoot, partial, defaultEnabled);
+    return partiallyAvailable(name, pluginRoot, partial, metadata);
   }
 
-  return installable(name, pluginRoot, partial, defaultEnabled);
+  return installable(name, pluginRoot, partial, metadata);
 }
 
 /**

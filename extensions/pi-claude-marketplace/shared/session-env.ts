@@ -3,9 +3,12 @@
  * mutate Pi's live `process.env` so every bash child spawned through Pi's bash
  * tool sees Claude-Code-parity environment (SENV-01/02/03, PENV-01).
  *
- * Two disjoint concerns on disjoint key sets (D-90-03):
+ * Three disjoint concerns on disjoint key sets (D-90-03):
  *   1. Session vars (`applySessionEnv`) -- refreshed on every `session_start`.
  *   2. Plugin PATH ledger core (`applyPathLedger`) -- pure PATH transform.
+ *   3. pi-mcp-adapter vars (`applyMcpAdapterEnv`) -- the reserved empty
+ *      variable and `CLAUDE_PROJECT_DIR`, set at load and on every
+ *      `session_start` (AVAR-01, AVAR-03).
  *
  * Pure-leaf posture (mirrors `shared/debug-log.ts`): no module-level state,
  * no fs, and -- per the D-v1.0-01-11 import-direction rule -- no imports outside
@@ -68,6 +71,68 @@ export function applySessionEnv(sessionId: string): void {
  * It is visible to child processes; a documented pi-only bookkeeping var.
  */
 export const PATH_LEDGER_ENV = "PI_CLAUDE_MARKETPLACE_PATH";
+
+/**
+ * AVAR-03: the pi-only env var this extension keeps set to the empty string
+ * in Pi's process. Written MCP entries split adapter syntax in literal text
+ * with `{env:PI_CLAUDE_MARKETPLACE_EMPTY}`, which pi-mcp-adapter expands to
+ * nothing, so the text reaches the server unchanged (name mirrors the
+ * `PI_CLAUDE_MARKETPLACE_PATH` convention).
+ */
+export const ADAPTER_EMPTY_ENV = "PI_CLAUDE_MARKETPLACE_EMPTY";
+
+// pi-mcp-adapter's two variable markers. The adapter re-scans a value it
+// inserts, so a marker inside an exported value would expand a variable.
+const ADAPTER_MARKER = /\$env:|\{env:/;
+
+// A tail that the entry text after a kept `${CLAUDE_PROJECT_DIR}` can complete
+// into a marker. New entries escape that text (AVAR-03,
+// `bridges/mcp/adapter-escape.ts`), so this guards entries written before the
+// escape: legacy `mcp.json` entries that the reload migration has not moved yet,
+// until a reinstall, an update or the migration rewrites them.
+const PARTIAL_MARKER_TAIL = /[${](?:e(?:nv?)?)?$/;
+
+/**
+ * AVAR-01 / AVAR-03: give pi-mcp-adapter the two variables written MCP entries
+ * read from Pi's process. Claude Code expands `${CLAUDE_PROJECT_DIR}` in every
+ * scope, so a user-scope entry keeps the reference and the adapter reads the
+ * current project from Pi's process.
+ *
+ * The reserved variable is set to the empty string before `readCwd` runs, so
+ * it is set even when `readCwd` throws: the split tokens in written entries
+ * need it set, and the adapter refuses a `url` that names an unset variable.
+ * A throw from `readCwd` propagates after `CLAUDE_PROJECT_DIR` is removed, so
+ * no server reads a stale or inherited project.
+ *
+ * A working directory that holds `$env:` or `{env:`, or ends in `$`, `{` or a
+ * longer prefix of either marker, is not exported (AVAR-05). The adapter would
+ * expand the marker. The tail check guards entries written before text after a
+ * kept reference was escaped: in those, plugin text after the reference can
+ * complete such a tail into a reference to a withheld credential. Those are the
+ * legacy `mcp.json` entries the reload migration has not moved yet, until a
+ * reinstall, an update or the migration rewrites them. The skip also removes any
+ * previous `CLAUDE_PROJECT_DIR`, so no server reads a stale or inherited
+ * project. Returns `false` for that skip so the caller can log it; this module
+ * does not log. Bash and MCP children inherit both values.
+ */
+export function applyMcpAdapterEnv(readCwd: () => string): boolean {
+  process.env[ADAPTER_EMPTY_ENV] = "";
+  let cwd: string;
+  try {
+    cwd = readCwd();
+  } catch (error: unknown) {
+    Reflect.deleteProperty(process.env, "CLAUDE_PROJECT_DIR");
+    throw error;
+  }
+
+  if (ADAPTER_MARKER.test(cwd) || PARTIAL_MARKER_TAIL.test(cwd)) {
+    Reflect.deleteProperty(process.env, "CLAUDE_PROJECT_DIR");
+    return false;
+  }
+
+  process.env.CLAUDE_PROJECT_DIR = cwd;
+  return true;
+}
 
 /**
  * PENV-01 ledger core (pure): given the current PATH, the prior ledger (the

@@ -14,7 +14,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { createRequire, syncBuiltinESMExports } from "node:module";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
@@ -49,6 +49,7 @@ import {
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import { McpServerCollisionError } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 import {
   DependencyCascadeError,
   InvalidMarketplaceManifestError,
@@ -70,6 +71,7 @@ import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { captureDebugLog } from "../../platform/debug-log-capture.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+import { adapterCommand, toolInventoryItem } from "../../platform/pi-inventory-seed.ts";
 
 import { retryTree } from "./scope-tree-inventory.ts";
 
@@ -85,9 +87,9 @@ import type { InstallFailureCapture } from "../../../extensions/pi-claude-market
 import type { MarketplaceTagProbeOptions } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/marketplace-tag-probe.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type {
+  CommandInventoryItem,
   NotificationContext,
-  ToolInventory,
-  ToolInventoryItem,
+  PiInventory,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { CompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
@@ -272,7 +274,7 @@ function retryStagingMkdirPrefix(stagingDir: string): string {
 //   PI-9: 7-phase ordering + rollback on phase-N failure (end-state assertion).
 //   PI-10: ${CLAUDE_PLUGIN_ROOT} substitution observable in staged skill body.
 //   PI-11: subagents warning -- pi.getAllTools returns no "subagent" -> warning.
-//   PI-12: mcp-adapter warning -- pi.getAllTools returns no "mcp" -> warning.
+//   PI-12: mcp-adapter warning -- no `mcp-adapter` command (ADET-02) -> warning.
 //   PI-13: dependencies declaration -> manual-install note appended to body.
 //   PI-14: PathContainmentError bypass -- verbatim message, NO rollback partial.
 //   PI-15: concurrent install (state pre-seeded) -> ConcurrentInstallError path
@@ -287,16 +289,12 @@ interface NotifyRecord {
   severity?: string;
 }
 
-function toolInfo(name: string): ToolInventoryItem {
-  return {
-    name,
-    sourceInfo: { source: "test" },
-  };
-}
-
-function makeCtx(piOverrides?: { readonly toolNames?: readonly string[] }): {
+function makeCtx(piOverrides?: {
+  readonly toolNames?: readonly string[];
+  readonly commands?: readonly CommandInventoryItem[];
+}): {
   ctx: NotificationContext;
-  pi: ToolInventory;
+  pi: PiInventory;
   notifications: NotifyRecord[];
 } {
   const notifications: NotifyRecord[] = [];
@@ -307,8 +305,9 @@ function makeCtx(piOverrides?: { readonly toolNames?: readonly string[] }): {
       },
     },
   };
-  const pi: ToolInventory = {
-    getAllTools: () => (piOverrides?.toolNames ?? []).map(toolInfo),
+  const pi: PiInventory = {
+    getAllTools: () => (piOverrides?.toolNames ?? []).map(toolInventoryItem),
+    getCommands: () => piOverrides?.commands ?? [],
   };
   return { ctx, pi, notifications };
 }
@@ -555,6 +554,7 @@ function buildSeededPluginManifest(
     pluginJsonVersion?: string | null;
     experimental?: object;
     pluginJsonDefaultEnabled?: boolean;
+    pluginJsonDescription?: string;
     declareDependencies?: boolean;
     dependencyVersion?: string;
     dependencyMarketplace?: string;
@@ -562,6 +562,7 @@ function buildSeededPluginManifest(
 ): Record<string, unknown> {
   return {
     name: pluginName,
+    ...(opts.pluginJsonDescription !== undefined && { description: opts.pluginJsonDescription }),
     ...(opts.pluginJsonVersion === undefined
       ? { version: "0.0.1" }
       : opts.pluginJsonVersion !== null && { version: opts.pluginJsonVersion }),
@@ -594,10 +595,12 @@ function buildSeededMarketplaceEntry(
     dependencyVersion?: string;
     dependencyMarketplace?: string;
     entryDefaultEnabled?: boolean;
+    entryDescription?: string;
   },
 ): Record<string, unknown> {
   return {
     name: pluginName,
+    ...(opts.entryDescription !== undefined && { description: opts.entryDescription }),
     source: opts.rawSourceOverride ?? `./plugins/${pluginName}`,
     ...(opts.agentDirectories !== undefined && { agents: [...opts.agentDirectories] }),
     ...(opts.pluginVersion !== undefined && { version: opts.pluginVersion }),
@@ -628,6 +631,8 @@ async function seedSiblingPlugins(
       hooksJson?: object;
       /** D-64-06: unsupported kinds on a DEPENDENCY, so its record is partially installed. */
       experimental?: object;
+      /** AFILE-04: MCP servers on a DEPENDENCY, written to its `.mcp.json`. */
+      mcpServers?: Record<string, unknown>;
     }[];
   },
 ): Promise<Record<string, unknown>[]> {
@@ -650,6 +655,13 @@ async function seedSiblingPlugins(
       const siblingHooksDir = path.join(siblingRoot, "hooks");
       await mkdir(siblingHooksDir, { recursive: true });
       await writeFile(path.join(siblingHooksDir, "hooks.json"), JSON.stringify(sibling.hooksJson));
+    }
+
+    if (sibling.mcpServers !== undefined) {
+      await writeFile(
+        path.join(siblingRoot, ".mcp.json"),
+        JSON.stringify({ mcpServers: sibling.mcpServers }),
+      );
     }
 
     entries.push({
@@ -698,6 +710,10 @@ async function seedPathMarketplaceWithPlugin(opts: {
    * Absent -> plugin.json is written exactly as it is without this knob.
    */
   pluginJsonDefaultEnabled?: boolean;
+  /** ANAME-06: the plugin.json `description`, which wins over `entryDescription`. */
+  pluginJsonDescription?: string;
+  /** ANAME-06: the marketplace entry's `description`, the fallback. */
+  entryDescription?: string;
   /**
    * D-64-06: declare unsupported component kinds in the plugin's own
    * plugin.json so `resolveStrict` returns `state: "partially-available"` with NO
@@ -768,6 +784,8 @@ async function seedPathMarketplaceWithPlugin(opts: {
     hooksJson?: object;
     /** D-64-06: unsupported kinds on a DEPENDENCY, so its record is partially installed. */
     experimental?: object;
+    /** AFILE-04: MCP servers on a DEPENDENCY, written to its `.mcp.json`. */
+    mcpServers?: Record<string, unknown>;
   }[];
 }): Promise<SeededPlugin> {
   const { cwd, marketplaceRoot, marketplaceName, pluginName } = opts;
@@ -1647,7 +1665,7 @@ test("OUT-04 / D-102-07 / ENBL-15: the install-disabled row is ONE info emission
       // ENBL-15 / D-100-06: BOTH companion extensions report UNLOADED. If the
       // `disabled` render arm ever threaded the real soft-dep flags instead of
       // hard-coding them false, this fixture is the one that would emit
-      // `{requires pi-subagents, requires pi-mcp}` and fail below.
+      // `{requires pi-subagents, requires pi-mcp-adapter}` and fail below.
       const { ctx, pi, notifications } = makeCtx();
       await installPlugin({
         ctx,
@@ -1967,7 +1985,7 @@ const DFEN_PRECEDENCE_CASES: readonly DfenPrecedenceCase[] = [
   },
   {
     // The trivially-enabled control: both sides agree on `true`, so a gate that
-    // was simply inverted would still have to fail somewhere, and this is where.
+    // was inverted would still have to fail somewhere, and this is where.
     label:
       "an explicit `enabled: true` under a manifest declaring defaultEnabled true is an ordinary install",
     tmpPrefix: "install-dfen05-both-true-",
@@ -2819,11 +2837,11 @@ test("D-102-02 / NFR-3: a disable cascade that throws reports failure and leaves
         stat(path.join(locations.promptsTargetDir, "hello:deploy.md")),
         "the commands bridge ran, so its artifact must be gone",
       );
-      const mcp = JSON.parse(await readFile(locations.mcpJsonPath, "utf8")) as {
+      const mcp = JSON.parse(await readFile(locations.mcpAdapterJsonPath, "utf8")) as {
         mcpServers?: Record<string, unknown>;
       };
       assert.ok(
-        "server1" in (mcp.mcpServers ?? {}),
+        "plugin_hello_server1_" in (mcp.mcpServers ?? {}),
         "the mcp bridge never ran, so its artifact must still be there",
       );
 
@@ -2900,11 +2918,14 @@ test("PI-9: happy-path install lands skills + commands + agents + mcp + state in
       const agentTarget = path.join(locations.agentsDir, "pi-claude-marketplace-hello-bot.md");
       assert.ok((await readFile(agentTarget, "utf8")).length > 0, "agent .md must exist");
 
-      const mcp = JSON.parse(await readFile(locations.mcpJsonPath, "utf8")) as {
+      const mcp = JSON.parse(await readFile(locations.mcpAdapterJsonPath, "utf8")) as {
         mcpServers?: Record<string, unknown>;
       };
-      assert.ok(mcp.mcpServers !== undefined, "mcp.json must have mcpServers");
-      assert.ok("server1" in (mcp.mcpServers ?? {}), "server1 must be present");
+      assert.ok(mcp.mcpServers !== undefined, "mcp-adapter.json must have mcpServers");
+      assert.ok(
+        "plugin_hello_server1_" in (mcp.mcpServers ?? {}),
+        "plugin_hello_server1_ must be present",
+      );
 
       // State commit: plugin record has all four resource arrays populated.
       const after = await loadState(locations.extensionRoot);
@@ -2930,10 +2951,1608 @@ test("PI-9: happy-path install lands skills + commands + agents + mcp + state in
         "A plugin operation needs attention.\n" +
           "\n" +
           "● mp [project]\n" +
-          "  ● hello v1.0.0 (installed) {requires pi-subagents, requires pi-mcp}\n" +
+          "  ● hello v1.0.0 (installed) {requires pi-subagents, requires pi-mcp-adapter}\n" +
           "\n" +
           "/reload to pick up changes",
       );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("AFILE-01: install writes the plugin's marked entries into project mcp-adapter.json and keeps foreign keys", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-afile01-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        mcpServers: { server1: { command: "node", args: ["server.js"] } },
+      });
+      const adapterPath = path.join(cwd, ".pi", "mcp-adapter.json");
+      await mkdir(path.dirname(adapterPath), { recursive: true });
+      await writeFile(
+        adapterPath,
+        '﻿{\n  // user settings\n  "settings": { "toolPrefix": "short" },\n  "mcpServers": {\n    "mine": { "command": "my-server" },\n  },\n}\n',
+      );
+      const dataDir = path.join(locations.dataRoot, "mp", "hello");
+      const { ctx, pi } = makeCtx();
+
+      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+
+      assert.equal(
+        await readFile(adapterPath, "utf8"),
+        `{
+  "settings": {
+    "toolPrefix": "short"
+  },
+  "mcpServers": {
+    "mine": {
+      "command": "my-server"
+    },
+    "plugin_hello_server1_": {
+      "command": "node",
+      "args": [
+        "server.js"
+      ],
+      "env": {
+        "CLAUDE_PLUGIN_ROOT": "${seeded.pluginRoot}",
+        "CLAUDE_PLUGIN_DATA": "${dataDir}"
+      },
+      "directTools": "search",
+      "toolPrefix": "mcp",
+      "_piClaudeMarketplace": {
+        "plugin": "hello",
+        "marketplace": "mp"
+      }
+    }
+  }
+}
+`,
+      );
+      assert.equal(await pathExists(path.join(cwd, ".pi", "mcp.json")), false);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("ANAME-01: install writes Claude Code server keys that the global toolPrefix cannot rename", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-aname01-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "my.plugin",
+        mcpServers: {
+          db: { command: "db-server" },
+          live: {
+            command: "live-server",
+            alwaysLoad: true,
+            directTools: false,
+            toolPrefix: "short",
+          },
+        },
+      });
+      const adapterPath = path.join(cwd, ".pi", "mcp-adapter.json");
+      await mkdir(path.dirname(adapterPath), { recursive: true });
+      await writeFile(adapterPath, '{"settings":{"toolPrefix":"short"}}\n');
+      const dataDir = path.join(locations.dataRoot, "mp", "my.plugin");
+      const { ctx, pi } = makeCtx();
+
+      // act
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "my.plugin",
+      });
+
+      // assert
+      assert.equal(
+        await readFile(adapterPath, "utf8"),
+        `{
+  "settings": {
+    "toolPrefix": "short"
+  },
+  "mcpServers": {
+    "plugin_my_plugin_db_": {
+      "command": "db-server",
+      "env": {
+        "CLAUDE_PLUGIN_ROOT": "${seeded.pluginRoot}",
+        "CLAUDE_PLUGIN_DATA": "${dataDir}"
+      },
+      "directTools": "search",
+      "toolPrefix": "mcp",
+      "_piClaudeMarketplace": {
+        "plugin": "my.plugin",
+        "marketplace": "mp"
+      }
+    },
+    "plugin_my_plugin_live_": {
+      "command": "live-server",
+      "env": {
+        "CLAUDE_PLUGIN_ROOT": "${seeded.pluginRoot}",
+        "CLAUDE_PLUGIN_DATA": "${dataDir}"
+      },
+      "directTools": true,
+      "toolPrefix": "mcp",
+      "_piClaudeMarketplace": {
+        "plugin": "my.plugin",
+        "marketplace": "mp"
+      }
+    }
+  }
+}
+`,
+      );
+      const record = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
+        "my.plugin"
+      ];
+      assert.deepStrictEqual([...(record?.resources.mcpServers ?? [])], ["db", "live"]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("ANAME-07 / D-08-04: install writes Claude servers through the closed adapter table", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-aname07-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        mcpServers: {
+          remote: {
+            type: "sse",
+            url: "https://mcp.example.com/sse",
+            headers: { "X-Team": "core" },
+            timeout: 90000,
+            alwaysLoad: true,
+            oauth: {
+              clientId: "pi-client",
+              callbackPort: 8765,
+              scopes: "read write",
+              clientSecret: "s3cret",
+              skipIssuerMetadataValidation: true,
+              redirectUri: "https://evil.example/cb",
+            },
+            approveTools: false,
+            auth: { provider: "anthropic" },
+            bearerTokenEnv: "ANTHROPIC_API_KEY",
+            requestHeadersCommand: { command: "sign" },
+            cwd: "/",
+            lifecycle: "eager",
+          },
+          local: {
+            type: "stdio",
+            command: "node",
+            args: ["server.js"],
+            env: { LOG: "1" },
+            timeout: 500,
+            lifecycle: "keep-alive",
+            inheritEnv: false,
+          },
+        },
+      });
+      const adapterPath = path.join(cwd, ".pi", "mcp-adapter.json");
+      const dataDir = path.join(locations.dataRoot, "mp", "hello");
+      const { ctx, pi } = makeCtx();
+
+      // act
+      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+
+      // assert
+      assert.equal(
+        await readFile(adapterPath, "utf8"),
+        `{
+  "mcpServers": {
+    "plugin_hello_remote_": {
+      "url": "https://mcp.example.com/sse",
+      "headers": {
+        "X-Team": "core"
+      },
+      "httpTransport": "sse",
+      "auth": "oauth",
+      "oauth": {
+        "clientId": "pi-client",
+        "redirectUri": "http://localhost:8765/callback",
+        "scope": "read write"
+      },
+      "requestTimeoutMs": 90000,
+      "directTools": true,
+      "toolPrefix": "mcp",
+      "_piClaudeMarketplace": {
+        "plugin": "hello",
+        "marketplace": "mp",
+        "pluginSetFields": [
+          "requestTimeoutMs"
+        ]
+      }
+    },
+    "plugin_hello_local_": {
+      "command": "node",
+      "args": [
+        "server.js"
+      ],
+      "env": {
+        "CLAUDE_PLUGIN_ROOT": "${seeded.pluginRoot}",
+        "CLAUDE_PLUGIN_DATA": "${dataDir}",
+        "LOG": "1"
+      },
+      "directTools": "search",
+      "toolPrefix": "mcp",
+      "_piClaudeMarketplace": {
+        "plugin": "hello",
+        "marketplace": "mp"
+      }
+    }
+  }
+}
+`,
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("ANAME-07: a normal install of a plugin with a ws server refuses with {unsupported mcp} and the --partial hint", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-aname07-ws-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        mcpServers: {
+          live: { type: "ws", url: "wss://mcp.example.com/ws" },
+          local: { command: "node" },
+        },
+      });
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+
+      // assert
+      assert.deepStrictEqual(
+        notifications.map(({ message, severity }) => ({ message, severity })),
+        [
+          {
+            severity: "error",
+            message:
+              "A plugin operation has failed.\n\n" +
+              "● mp [project]\n" +
+              "  ⊖ hello (partially-available) {unsupported mcp}\n" +
+              "    Re-run with --partial to install the supported components.",
+          },
+        ],
+      );
+      assert.equal(await pathExists(path.join(cwd, ".pi", "mcp-adapter.json")), false);
+      const state = await loadState(locations.extensionRoot);
+      assert.equal("hello" in (state.marketplaces["mp"]?.plugins ?? {}), false);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("ANAME-07: --partial installs every server except the blocked one", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-aname07-partial-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        mcpServers: {
+          live: { type: "ws", url: "wss://mcp.example.com/ws" },
+          local: { command: "node" },
+        },
+      });
+      const adapterPath = path.join(cwd, ".pi", "mcp-adapter.json");
+      const dataDir = path.join(locations.dataRoot, "mp", "hello");
+      const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
+
+      // act
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        partial: true,
+      });
+
+      // assert
+      assert.deepStrictEqual(
+        notifications.map(({ message, severity }) => ({ message, severity })),
+        [
+          {
+            severity: undefined,
+            message:
+              "● mp [project]\n" +
+              "  ◉ hello v0.0.1 (partially-installed) {unsupported mcp}\n\n" +
+              "/reload to pick up changes",
+          },
+        ],
+      );
+      assert.equal(
+        await readFile(adapterPath, "utf8"),
+        `{
+  "mcpServers": {
+    "plugin_hello_local_": {
+      "command": "node",
+      "env": {
+        "CLAUDE_PLUGIN_ROOT": "${seeded.pluginRoot}",
+        "CLAUDE_PLUGIN_DATA": "${dataDir}"
+      },
+      "directTools": "search",
+      "toolPrefix": "mcp",
+      "_piClaudeMarketplace": {
+        "plugin": "hello",
+        "marketplace": "mp"
+      }
+    }
+  }
+}
+`,
+      );
+      const record = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
+        "hello"
+      ];
+      assert.deepStrictEqual(
+        {
+          mcpServers: record?.resources.mcpServers,
+          unsupported: record?.compatibility.unsupported,
+        },
+        { mcpServers: ["local"], unsupported: ["mcpServers"] },
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("ANAME-03: a plugin tool-name prefix past 128 characters installs with no length check", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-aname03-"));
+    try {
+      // arrange
+      const pluginName = "p".repeat(40);
+      const serverName = "s".repeat(80);
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName,
+        mcpServers: { [serverName]: { command: "node" } },
+      });
+      const adapterPath = path.join(cwd, ".pi", "mcp-adapter.json");
+      const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
+
+      // act
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: pluginName,
+      });
+
+      // assert
+      assert.deepStrictEqual(
+        notifications.map(({ message, severity }) => ({ message, severity })),
+        [
+          {
+            severity: undefined,
+            message:
+              "● mp [project]\n" +
+              `  ● ${pluginName} v0.0.1 (installed)\n\n` +
+              "/reload to pick up changes",
+          },
+        ],
+      );
+      const adapter = JSON.parse(await readFile(adapterPath, "utf8")) as {
+        mcpServers: Record<string, unknown>;
+      };
+      assert.deepStrictEqual(Object.keys(adapter.mcpServers), [
+        `plugin_${pluginName}_${serverName}_`,
+      ]);
+      const record = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
+        pluginName
+      ];
+      assert.deepStrictEqual(record?.resources.mcpServers, [serverName]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("ANAME-07: a server Claude Code's schema rejects makes the plugin unavailable with {malformed mcp}", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-aname07-malformed-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        mcpServers: {
+          db: { command: "node", timeout: 1.5 },
+          live: { type: "ws", url: "wss://mcp.example.com/ws" },
+        },
+      });
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        partial: true,
+      });
+
+      // assert
+      assert.deepStrictEqual(
+        notifications.map(({ message, severity }) => ({ message, severity })),
+        [
+          {
+            severity: "error",
+            message:
+              "A plugin operation has failed.\n\n" +
+              "● mp [project]\n" +
+              "  ⊘ hello (unavailable) {malformed mcp}",
+          },
+        ],
+      );
+      assert.equal(await pathExists(path.join(cwd, ".pi", "mcp-adapter.json")), false);
+      const state = await loadState(locations.extensionRoot);
+      assert.equal("hello" in (state.marketplaces["mp"]?.plugins ?? {}), false);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+for (const { title, descriptions, description } of [
+  {
+    title: "ANAME-06: every entry carries the plugin's description",
+    descriptions: { pluginJsonDescription: "Hello tools", entryDescription: "Entry tools" },
+    description: "Hello tools",
+  },
+  {
+    title: "ANAME-06: the marketplace entry's description is the fallback",
+    descriptions: { entryDescription: "Entry tools" },
+    description: "Entry tools",
+  },
+]) {
+  test(title, async () => {
+    await withHermeticHome(async ({ installPlugin }) => {
+      const cwd = await mkdtemp(path.join(tmpdir(), "install-aname06-"));
+      try {
+        // arrange
+        await seedPathMarketplaceWithPlugin({
+          cwd,
+          marketplaceRoot: path.join(cwd, "mp-src"),
+          marketplaceName: "mp",
+          pluginName: "hello",
+          ...descriptions,
+          mcpServers: {
+            api: { type: "http", url: "https://api.example.com/mcp", description: "Server text" },
+            docs: { type: "http", url: "https://docs.example.com/mcp" },
+          },
+        });
+        const adapterPath = path.join(cwd, ".pi", "mcp-adapter.json");
+        const { ctx, pi } = makeCtx();
+
+        // act
+        await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+
+        // assert
+        assert.equal(
+          await readFile(adapterPath, "utf8"),
+          `{
+  "mcpServers": {
+    "plugin_hello_api_": {
+      "url": "https://api.example.com/mcp",
+      "description": "${description}",
+      "directTools": "search",
+      "toolPrefix": "mcp",
+      "_piClaudeMarketplace": {
+        "plugin": "hello",
+        "marketplace": "mp"
+      }
+    },
+    "plugin_hello_docs_": {
+      "url": "https://docs.example.com/mcp",
+      "description": "${description}",
+      "directTools": "search",
+      "toolPrefix": "mcp",
+      "_piClaudeMarketplace": {
+        "plugin": "hello",
+        "marketplace": "mp"
+      }
+    }
+  }
+}
+`,
+        );
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
+
+test("AFILE-02: an MCP install over an unparseable mcp-adapter.json fails and keeps its bytes", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-afile02-"));
+    try {
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        mcpServers: { server1: { command: "node", args: ["server.js"] } },
+      });
+      const adapterPath = path.join(cwd, ".pi", "mcp-adapter.json");
+      const storedBytes = '{"a": sk-secret-abc}\n';
+      await mkdir(path.dirname(adapterPath), { recursive: true });
+      await writeFile(adapterPath, storedBytes);
+      const { ctx, pi, notifications } = makeCtx();
+
+      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+
+      assert.equal(await readFile(adapterPath, "utf8"), storedBytes);
+      assert.deepEqual(notifications, [
+        {
+          severity: "error",
+          message:
+            "A plugin operation has failed.\n\n" +
+            "● mp [project]\n" +
+            "  ⊘ hello v0.0.1 (failed)\n" +
+            `    cause: MCP config ${adapterPath} is not valid JSONC; it was left unchanged.`,
+        },
+      ]);
+      assert.equal(notifications[0]?.message.includes("sk-secret-abc"), false);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+/** AFILE-04: the exact comments-dropped notice for the project-scope adapter file. */
+const PROJECT_COMMENTS_DROPPED_NOTICE: NotifyRecord = {
+  severity: "warning",
+  message:
+    "MCP config comments removed.\n\nThe project-scope mcp-adapter.json was rewritten to update plugin MCP servers; its JSONC comments were removed and everything else in it was kept.",
+};
+
+/** AFILE-04: write a project-scope mcp-adapter.json that holds a `//` comment. */
+async function writeCommentedProjectAdapterFile(cwd: string): Promise<void> {
+  const adapterPath = path.join(cwd, ".pi", "mcp-adapter.json");
+  await mkdir(path.dirname(adapterPath), { recursive: true });
+  await writeFile(
+    adapterPath,
+    '{\n  // mine\n  "mcpServers": { "mine": { "command": "my-server" } }\n}\n',
+  );
+}
+
+test("AFILE-04: install over a commented mcp-adapter.json shows the comments-removed notice once", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-afile04-"));
+    try {
+      // arrange
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        mcpServers: { server1: { command: "node", args: ["server.js"] } },
+        siblingPlugins: [{ name: "other", mcpServers: { server2: { command: "node" } } }],
+      });
+      await writeCommentedProjectAdapterFile(cwd);
+      const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
+
+      // act
+      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+      const firstInstall = notifications.splice(0);
+      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "other" });
+
+      // assert
+      assert.deepStrictEqual(firstInstall, [
+        {
+          message: "● mp [project]\n  ● hello v0.0.1 (installed)\n\n/reload to pick up changes",
+        },
+        PROJECT_COMMENTS_DROPPED_NOTICE,
+      ]);
+      assert.deepStrictEqual(notifications, [
+        {
+          message: "● mp [project]\n  ● other v0.0.1 (installed)\n\n/reload to pick up changes",
+        },
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+/** AFILE-04: a plugin with one MCP server that declares a dependency carrying another. */
+async function seedMcpDependencyCascade(cwd: string): Promise<void> {
+  await seedPathMarketplaceWithPlugin({
+    cwd,
+    marketplaceRoot: path.join(cwd, "mp-src"),
+    marketplaceName: "mp",
+    pluginName: "hello",
+    mcpServers: { server1: { command: "node", args: ["server.js"] } },
+    declareDependencies: true,
+    siblingPlugins: [{ name: "some-other-plugin", mcpServers: { server2: { command: "node" } } }],
+  });
+}
+
+/**
+ * AFILE-04: `~/.agents/mcp.json` already defines hello's `server1` key, so
+ * hello's own mcp phase refuses.
+ */
+async function seedForeignServer1(): Promise<string> {
+  const agentsPath = path.join(homedir(), ".agents", "mcp.json");
+  await mkdir(path.dirname(agentsPath), { recursive: true });
+  await writeFile(agentsPath, '{"mcpServers":{"plugin_hello_server1_":{"command":"user-server"}}}');
+  return agentsPath;
+}
+
+test("AFILE-04: a dependency cascade over a commented mcp-adapter.json shows the notice once", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-afile04-cascade-"));
+    try {
+      // arrange
+      await seedMcpDependencyCascade(cwd);
+      await writeCommentedProjectAdapterFile(cwd);
+      const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
+
+      // act
+      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message: [
+            "● mp [project]",
+            "  ● hello v0.0.1 (installed)",
+            "  ● some-other-plugin@mp v0.0.1 (installed)",
+            "",
+            "/reload to pick up changes",
+          ].join("\n"),
+        },
+        PROJECT_COMMENTS_DROPPED_NOTICE,
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("AFILE-04: a failed dependency cascade still reports the removed comments after its failed row", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-afile04-cascade-failed-"));
+    try {
+      // arrange
+      await seedMcpDependencyCascade(cwd);
+      await writeCommentedProjectAdapterFile(cwd);
+      const agentsPath = await seedForeignServer1();
+      const adapterPath = path.join(cwd, ".pi", "mcp-adapter.json");
+      const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
+
+      // act
+      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          severity: "error",
+          message:
+            "A plugin operation has failed.\n\n" +
+            "● mp [project]\n" +
+            "  ⊘ hello v0.0.1 (failed)\n" +
+            `    cause: Refusing to stage MCP server "plugin_hello_server1_": ${agentsPath} already defines it, and pi-mcp-adapter would load the definition in ${adapterPath}.`,
+        },
+        PROJECT_COMMENTS_DROPPED_NOTICE,
+      ]);
+      assert.equal(
+        await readFile(adapterPath, "utf8"),
+        '{\n  "mcpServers": {\n    "mine": {\n      "command": "my-server"\n    }\n  }\n}\n',
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// AVAR-04: a variable the cases' empty staging environment lacks, so every
+// stage of a server that references it reports the variable as missing.
+const UNSET_VARIABLE_ARGS = ["${SERVER_SITE}"];
+
+const STAGING_INSTALLED_ROW = {
+  message: "● mp [project]\n  ● hello v0.0.1 (installed)\n\n/reload to pick up changes",
+};
+
+for (const { title, env, expectedNotifications } of [
+  {
+    title: "reports no missing variable that its environment sets",
+    env: { PI_CM_SET_FOR_STAGING: "1" },
+    expectedNotifications: [STAGING_INSTALLED_ROW],
+  },
+  {
+    title: "reports a variable its environment lacks as not set",
+    env: {},
+    expectedNotifications: [
+      STAGING_INSTALLED_ROW,
+      {
+        severity: "warning",
+        message:
+          'MCP server variables not set.\n\nServer "plugin_hello_server1_" from hello in the project-scope mcp-adapter.json uses environment variables that were not set at install: PI_CM_SET_FOR_STAGING.',
+      },
+    ],
+  },
+]) {
+  test(`D-08-06: an install built with an explicit environment ${title}`, async () => {
+    await withHermeticHome(async ({ completionCache, hooksRouting, transaction }) => {
+      const cwd = await mkdtemp(path.join(tmpdir(), "install-staging-env-"));
+      try {
+        // arrange
+        await seedPathMarketplaceWithPlugin({
+          cwd,
+          marketplaceRoot: path.join(cwd, "mp-src"),
+          marketplaceName: "mp",
+          pluginName: "hello",
+          mcpServers: { server1: { command: "node", args: ["${PI_CM_SET_FOR_STAGING}"] } },
+        });
+        const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
+        const installPlugin = createInstallPlugin(transaction, hooksRouting, completionCache, env);
+
+        // act
+        await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+
+        // assert
+        assert.deepStrictEqual(notifications, expectedNotifications);
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
+
+test("AVAR-04: a failed dependency cascade shows no variable notice for the dependency server its undo removed", async () => {
+  await withHermeticHome(async ({ completionCache, hooksRouting, transaction }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-avar04-cascade-failed-"));
+    try {
+      // arrange
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        mcpServers: { server1: { command: "node", args: ["server.js"] } },
+        declareDependencies: true,
+        siblingPlugins: [
+          {
+            name: "some-other-plugin",
+            mcpServers: { server2: { command: "node", args: UNSET_VARIABLE_ARGS } },
+          },
+        ],
+      });
+      const agentsPath = await seedForeignServer1();
+      const adapterPath = path.join(cwd, ".pi", "mcp-adapter.json");
+      const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
+      const installPlugin = createInstallPlugin(transaction, hooksRouting, completionCache, {});
+
+      // act
+      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          severity: "error",
+          message:
+            "A plugin operation has failed.\n\n" +
+            "● mp [project]\n" +
+            "  ⊘ hello v0.0.1 (failed)\n" +
+            `    cause: Refusing to stage MCP server "plugin_hello_server1_": ${agentsPath} already defines it, and pi-mcp-adapter would load the definition in ${adapterPath}.`,
+        },
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("AVAR-04: an install that lands disabled shows no variable notice for the server the disable removed", async () => {
+  await withHermeticHome(async ({ completionCache, hooksRouting, transaction }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-avar04-landed-disabled-"));
+    try {
+      // arrange
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        entryDefaultEnabled: false,
+        mcpServers: { server1: { command: "node", args: UNSET_VARIABLE_ARGS } },
+      });
+      const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
+      const installPlugin = createInstallPlugin(transaction, hooksRouting, completionCache, {});
+
+      // act
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        applyDefaultEnabled: true,
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "● mp [project]\n" +
+            "  ◍ hello v0.0.1 (disabled) {installs disabled}\n" +
+            "    Run enable on this plugin to use its components.",
+        },
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("AFILE-04: promoting a disabled dependency that re-materializes MCP servers shows the notice", async () => {
+  await withHermeticHome(async ({ hooksRouting, installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-afile04-promotion-"));
+    try {
+      // arrange
+      await seedMcpDependencyCascade(cwd);
+      const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
+      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+      await disableSeededDependency(cwd, hooksRouting, { ctx, pi });
+      await writeCommentedProjectAdapterFile(cwd);
+      notifications.length = 0;
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "some-other-plugin",
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "● mp [project]\n" +
+            "  ● some-other-plugin v0.0.1 (installed) {already installed, dependency promoted}\n\n" +
+            "/reload to pick up changes",
+        },
+        PROJECT_COMMENTS_DROPPED_NOTICE,
+      ]);
+      assert.deepStrictEqual(outcome, {
+        status: "installed",
+        version: "0.0.1",
+        resourcesChanged: true,
+        declaresAgents: false,
+        declaresMcp: true,
+        declaresWorkflows: false,
+        promoted: true,
+        mcpConfigNotices: [
+          { kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" },
+        ],
+      });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("AFILE-04: an orchestrated install returns its MCP config notices and sends nothing", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-afile04-orchestrated-"));
+    try {
+      // arrange
+      await seedMcpDependencyCascade(cwd);
+      await writeCommentedProjectAdapterFile(cwd);
+      const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        notifications: { mode: "orchestrated" },
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        status: "installed",
+        version: "0.0.1",
+        resourcesChanged: true,
+        declaresAgents: false,
+        declaresMcp: true,
+        declaresWorkflows: false,
+        mcpConfigNotices: [
+          { kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" },
+        ],
+      });
+      assert.deepStrictEqual(notifications, []);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("AFILE-04: an orchestrated install over a comment-free mcp-adapter.json carries no notices", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-afile04-orchestrated-clean-"));
+    try {
+      // arrange
+      await seedMcpDependencyCascade(cwd);
+      const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        notifications: { mode: "orchestrated" },
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        status: "installed",
+        version: "0.0.1",
+        resourcesChanged: true,
+        declaresAgents: false,
+        declaresMcp: true,
+        declaresWorkflows: false,
+      });
+      assert.deepStrictEqual(notifications, []);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("AFILE-04: an orchestrated failed cascade returns the removed comments on its failed outcome", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-afile04-orchestrated-failed-"));
+    try {
+      // arrange
+      await seedMcpDependencyCascade(cwd);
+      await writeCommentedProjectAdapterFile(cwd);
+      await seedForeignServer1();
+      const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        notifications: { mode: "orchestrated" },
+      });
+
+      // assert
+      assert.ok(outcome.status === "failed");
+      assert.ok(outcome.error instanceof McpServerCollisionError);
+      assert.deepStrictEqual(outcome.mcpConfigNotices, [
+        { kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" },
+      ]);
+      assert.deepStrictEqual(notifications, []);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("AFILE-04: the reload missing-dependency install returns its MCP config notices and sends nothing", async () => {
+  await withHermeticHome(async ({ installMissingDependency }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-afile04-missing-dep-"));
+    try {
+      // arrange
+      await seedMcpDependencyCascade(cwd);
+      await writeCommentedProjectAdapterFile(cwd);
+      const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
+
+      // act
+      const outcome = await installMissingDependency({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        ranges: [],
+        requiredBy: "deploy-kit@mp",
+      });
+
+      // assert
+      assert.ok(outcome.status === "installed");
+      assert.deepStrictEqual(outcome.mcpConfigNotices, [
+        { kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" },
+      ]);
+      assert.deepStrictEqual(notifications, []);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("AFILE-02: installing a plugin with no MCP servers over an unparseable mcp-adapter.json leaves it unchanged and says so", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-afile02-left-unchanged-"));
+    try {
+      // arrange
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        skills: [{ sourceName: "tool" }],
+      });
+      const adapterPath = path.join(cwd, ".pi", "mcp-adapter.json");
+      await mkdir(path.dirname(adapterPath), { recursive: true });
+      await writeFile(adapterPath, "{");
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+
+      // assert
+      assert.equal(await readFile(adapterPath, "utf8"), "{");
+      assert.deepStrictEqual(notifications, [
+        {
+          message: "● mp [project]\n  ● hello v0.0.1 (installed)\n\n/reload to pick up changes",
+        },
+        {
+          severity: "warning",
+          message:
+            "MCP config left unchanged.\n\nThe project-scope mcp-adapter.json is not a valid MCP config, so it was left unchanged. Fix it before you install or update a plugin that has MCP servers.",
+        },
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("AFILE-04: an install that lands disabled reports the notices of both its stage and its disable cascade", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-afile04-landed-disabled-"));
+    try {
+      // arrange -- the stage rewrites the commented mcp-adapter.json, and the
+      // disable cascade then removes the plugin's own entry from the commented
+      // legacy mcp.json, which the stage leaves alone.
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        mcpServers: { server1: { command: "node", args: ["server.js"] } },
+        entryDefaultEnabled: false,
+      });
+      await writeCommentedProjectAdapterFile(cwd);
+      const legacyPath = path.join(cwd, ".pi", "mcp.json");
+      await writeFile(
+        legacyPath,
+        '// legacy note\n{"mcpServers":{"server1":{"command":"node","_piClaudeMarketplace":{"plugin":"hello","marketplace":"mp"}}}}\n',
+      );
+      const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
+
+      // act
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        applyDefaultEnabled: true,
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "● mp [project]\n" +
+            "  ◍ hello v0.0.1 (disabled) {installs disabled}\n" +
+            "    Run enable on this plugin to use its components.",
+        },
+        {
+          severity: "warning",
+          message:
+            "MCP config comments removed.\n\n" +
+            "The project-scope mcp-adapter.json was rewritten to update plugin MCP servers; its JSONC comments were removed and everything else in it was kept.\n" +
+            "The project-scope mcp.json was rewritten to update plugin MCP servers; its JSONC comments were removed and everything else in it was kept.",
+        },
+      ]);
+      assert.equal(await readFile(legacyPath, "utf8"), '{\n  "mcpServers": {}\n}\n');
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+/** AFILE-06: the exact override-kept notice for hello's `server1` key in the project adapter file. */
+const PROJECT_OVERRIDE_KEPT_NOTICE: NotifyRecord = {
+  severity: "warning",
+  message:
+    "MCP server override kept.\n\n" +
+    'hello now provides "plugin_hello_server1_" in the project-scope mcp-adapter.json. Your override for "plugin_hello_server1_" is kept, but these fields of it stop applying: env. It comes back when you uninstall or disable hello.',
+};
+
+/**
+ * AFILE-06: writes a comment-free project mcp-adapter.json, in the two-space
+ * form the bridge writes, holding a user override with an env field under
+ * `server`. Returns the path and the bytes written.
+ */
+async function writeProjectOverrideFile(
+  cwd: string,
+  server: string,
+): Promise<{ readonly adapterPath: string; readonly overrideBytes: string }> {
+  const adapterPath = path.join(cwd, ".pi", "mcp-adapter.json");
+  const overrideBytes = `{
+  "mcpServers": {
+    "${server}": {
+      "disabled": true,
+      "env": {
+        "STUB_TOKEN": "stub-secret"
+      }
+    }
+  }
+}
+`;
+  await mkdir(path.dirname(adapterPath), { recursive: true });
+  await writeFile(adapterPath, overrideBytes);
+  return { adapterPath, overrideBytes };
+}
+
+test("AFILE-06: install over a project override with an env field shows the override notice after its row", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-afile06-override-"));
+    try {
+      // arrange
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        mcpServers: { server1: { command: "node", args: ["server.js"] } },
+      });
+      await writeProjectOverrideFile(cwd, "plugin_hello_server1_");
+      const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
+
+      // act
+      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message: "● mp [project]\n  ● hello v0.0.1 (installed)\n\n/reload to pick up changes",
+        },
+        PROJECT_OVERRIDE_KEPT_NOTICE,
+      ]);
+      assert.deepStrictEqual(
+        notifications.filter((notification) => notification.message.includes("stub-secret")),
+        [],
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("AFILE-06: an install that lands disabled writes the override back and shows no override notice", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-afile06-landed-disabled-"));
+    try {
+      // arrange
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        mcpServers: { server1: { command: "node", args: ["server.js"] } },
+        entryDefaultEnabled: false,
+      });
+      const { adapterPath, overrideBytes } = await writeProjectOverrideFile(
+        cwd,
+        "plugin_hello_server1_",
+      );
+      const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
+
+      // act
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        applyDefaultEnabled: true,
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "● mp [project]\n" +
+            "  ◍ hello v0.0.1 (disabled) {installs disabled}\n" +
+            "    Run enable on this plugin to use its components.",
+        },
+      ]);
+      assert.equal(await readFile(adapterPath, "utf8"), overrideBytes);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("AFILE-06: a failed dependency cascade writes its dependency's override back and shows no override notice", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-afile06-cascade-failed-"));
+    try {
+      // arrange
+      await seedMcpDependencyCascade(cwd);
+      const { adapterPath, overrideBytes } = await writeProjectOverrideFile(
+        cwd,
+        "plugin_some-other-plugin_server2_",
+      );
+      const agentsPath = await seedForeignServer1();
+      const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
+
+      // act
+      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          severity: "error",
+          message:
+            "A plugin operation has failed.\n\n" +
+            "● mp [project]\n" +
+            "  ⊘ hello v0.0.1 (failed)\n" +
+            `    cause: Refusing to stage MCP server "plugin_hello_server1_": ${agentsPath} already defines it, and pi-mcp-adapter would load the definition in ${adapterPath}.`,
+        },
+      ]);
+      assert.equal(await readFile(adapterPath, "utf8"), overrideBytes);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("AFILE-04: install over a commented file holding an override shows the comments notice, then the override notice", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-afile04-override-comments-"));
+    try {
+      // arrange
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        mcpServers: { server1: { command: "node", args: ["server.js"] } },
+      });
+      const adapterPath = path.join(cwd, ".pi", "mcp-adapter.json");
+      await mkdir(path.dirname(adapterPath), { recursive: true });
+      await writeFile(
+        adapterPath,
+        '{\n  // mine\n  "mcpServers": { "plugin_hello_server1_": { "disabled": true, "env": { "STUB_TOKEN": "stub-secret" } } }\n}\n',
+      );
+      const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
+
+      // act
+      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message: "● mp [project]\n  ● hello v0.0.1 (installed)\n\n/reload to pick up changes",
+        },
+        PROJECT_COMMENTS_DROPPED_NOTICE,
+        PROJECT_OVERRIDE_KEPT_NOTICE,
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+/**
+ * AFILE-04: an install transaction whose state save is refused. Every MCP
+ * config rewrite before the save still runs for real.
+ */
+function refusingSaveTransaction(owner: InstallTestOwner): InstallTransaction {
+  return {
+    runPhases: owner.transaction.runPhases,
+    withLockedStateTransaction: (locations, run, deps) =>
+      withLockedStateTransaction(
+        locations,
+        (tx) =>
+          run({
+            state: tx.state,
+            save: () => Promise.reject(new Error("state save refused")),
+          }),
+        deps,
+      ),
+  };
+}
+
+/** AFILE-04: the standalone install entry point over `refusingSaveTransaction`. */
+function refusingSaveInstall(owner: InstallTestOwner): InstallOperation {
+  return createInstallPlugin(
+    refusingSaveTransaction(owner),
+    owner.hooksRouting,
+    owner.completionCache,
+  );
+}
+
+test("AFILE-04: an install whose state save fails still reports the removed comments after its failed row", async () => {
+  await withHermeticHome(async (owner) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-afile04-save-failed-"));
+    try {
+      // arrange
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        mcpServers: { server1: { command: "node", args: ["server.js"] } },
+      });
+      await writeCommentedProjectAdapterFile(cwd);
+      const installPlugin = refusingSaveInstall(owner);
+      const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
+
+      // act
+      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          severity: "error",
+          message:
+            "A plugin operation has failed.\n\n" +
+            "● mp [project]\n" +
+            "  ⊘ hello (failed)\n" +
+            "    cause: state save refused",
+        },
+        PROJECT_COMMENTS_DROPPED_NOTICE,
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("AFILE-04: an install that lands disabled and whose state save fails reports both rewrites' notices", async () => {
+  await withHermeticHome(async (owner) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-afile04-disabled-save-failed-"));
+    try {
+      // arrange
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        mcpServers: { server1: { command: "node", args: ["server.js"] } },
+        entryDefaultEnabled: false,
+      });
+      await writeCommentedProjectAdapterFile(cwd);
+      await writeFile(
+        path.join(cwd, ".pi", "mcp.json"),
+        '// legacy note\n{"mcpServers":{"server1":{"command":"node","_piClaudeMarketplace":{"plugin":"hello","marketplace":"mp"}}}}\n',
+      );
+      const installPlugin = refusingSaveInstall(owner);
+      const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
+
+      // act
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        applyDefaultEnabled: true,
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          severity: "error",
+          message:
+            "A plugin operation has failed.\n\n" +
+            "● mp [project]\n" +
+            "  ⊘ hello (failed)\n" +
+            "    cause: state save refused",
+        },
+        {
+          severity: "warning",
+          message:
+            "MCP config comments removed.\n\n" +
+            "The project-scope mcp-adapter.json was rewritten to update plugin MCP servers; its JSONC comments were removed and everything else in it was kept.\n" +
+            "The project-scope mcp.json was rewritten to update plugin MCP servers; its JSONC comments were removed and everything else in it was kept.",
+        },
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("AFILE-04: a promotion whose state save fails still reports the removed comments after its failed row", async () => {
+  await withHermeticHome(async (owner) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-afile04-promotion-save-failed-"));
+    try {
+      // arrange
+      await seedMcpDependencyCascade(cwd);
+      const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
+      await owner.installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+      await disableSeededDependency(cwd, owner.hooksRouting, { ctx, pi });
+      await writeCommentedProjectAdapterFile(cwd);
+      notifications.length = 0;
+      const installPlugin = refusingSaveInstall(owner);
+
+      // act
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "some-other-plugin",
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          severity: "error",
+          message:
+            "A plugin operation has failed.\n\n" +
+            "● mp [project]\n" +
+            "  ⊘ some-other-plugin (failed)\n" +
+            "    cause: state save refused",
+        },
+        PROJECT_COMMENTS_DROPPED_NOTICE,
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("AFILE-04: a missing-dependency install whose state save fails returns the removed comments on its failed outcome", async () => {
+  await withHermeticHome(async (owner) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-afile04-missing-dep-save-failed-"));
+    try {
+      // arrange
+      await seedMcpDependencyCascade(cwd);
+      await writeCommentedProjectAdapterFile(cwd);
+      const installMissingDependency = createInstallMissingDependency(
+        refusingSaveTransaction(owner),
+        owner.hooksRouting,
+        owner.completionCache,
+      );
+      const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
+
+      // act
+      const outcome = await installMissingDependency({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        ranges: [],
+        requiredBy: "deploy-kit@mp",
+      });
+
+      // assert
+      assert.ok(outcome.status === "failed");
+      assert.deepStrictEqual(
+        { message: outcome.error.message, mcpConfigNotices: outcome.mcpConfigNotices },
+        {
+          message: "state save refused",
+          mcpConfigNotices: [
+            { kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" },
+          ],
+        },
+      );
+      assert.deepStrictEqual(notifications, []);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("AFILE-05: install refuses a server ~/.agents/mcp.json already defines and names the file the adapter would load", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-afile05-"));
+    try {
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        mcpServers: { server1: { command: "node", args: ["server.js"] } },
+      });
+      const agentsPath = await seedForeignServer1();
+      const adapterPath = path.join(cwd, ".pi", "mcp-adapter.json");
+      const { ctx, pi, notifications } = makeCtx();
+
+      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+
+      assert.deepEqual(notifications, [
+        {
+          severity: "error",
+          message:
+            "A plugin operation has failed.\n\n" +
+            "● mp [project]\n" +
+            "  ⊘ hello v0.0.1 (failed)\n" +
+            `    cause: Refusing to stage MCP server "plugin_hello_server1_": ${agentsPath} already defines it, and pi-mcp-adapter would load the definition in ${adapterPath}.`,
+        },
+      ]);
+      assert.equal(await pathExists(adapterPath), false);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -3056,10 +4675,10 @@ test("PI-11 / RH-3: staged agents + pi.getAllTools has no 'subagent' -> the succ
 });
 
 // ───────────────────────────────────────────────────────────────────────────
-// PI-12 / RH-4 -- mcp-adapter not loaded warning
+// PI-12 / ADET-02 -- mcp-adapter not loaded warning
 // ───────────────────────────────────────────────────────────────────────────
 
-test("PI-12 / RH-4: staged mcp + pi.getAllTools has no 'mcp' -> the success row carries the {requires pi-mcp} marker", async () => {
+test("PI-12 / ADET-02: staged MCP servers with no mcp-adapter command or adapter source -> the success row carries the {requires pi-mcp-adapter} marker", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-pi12-"));
     try {
@@ -3081,7 +4700,7 @@ test("PI-12 / RH-4: staged mcp + pi.getAllTools has no 'mcp' -> the success row 
         plugin: "hello",
       });
 
-      // CMC-13 / MSG-SD-2: per-row soft-dep marker `{requires pi-mcp}`
+      // CMC-13 / MSG-SD-2: per-row soft-dep marker `{requires pi-mcp-adapter}`
       // fires when (declaresMcp AND !piMcpAdapterLoaded) per D-13-07.
       // SEV-01: the declared `pi-mcp-adapter` companion is unloaded, so the
       // success row stamps warning (silent degradation of a clean install).
@@ -3089,8 +4708,8 @@ test("PI-12 / RH-4: staged mcp + pi.getAllTools has no 'mcp' -> the success row 
       assert.equal(notifications[0]?.severity, "warning");
       assert.match(
         notifications[0]?.message ?? "",
-        /\{requires pi-mcp\}/,
-        "must include per-row {requires pi-mcp} marker",
+        /\{requires pi-mcp-adapter\}/,
+        "must include per-row {requires pi-mcp-adapter} marker",
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -4615,7 +6234,7 @@ test("Rollback-commands-undo: commands committed then agents phase fails -> comm
 
 test("Rollback-agents-undo: agents committed then mcp phase fails -> agent target removed", async () => {
   // Gap: agentsPhase.undo body -- unstagePluginAgents called when agents
-  // committed but the mcp phase fails (mcp.json is a directory, so
+  // committed but the mcp phase fails (mcp-adapter.json is a directory, so
   // readFile on it gets EISDIR -- a non-PathContainmentError that causes
   // the mcp phase to throw and triggers rollback of agents).
   await withHermeticHome(async ({ installPlugin }) => {
@@ -4631,11 +6250,11 @@ test("Rollback-agents-undo: agents committed then mcp phase fails -> agent targe
         mcpServers: { server1: { command: "node" } },
       });
 
-      // Pre-create a DIRECTORY at mcpJsonPath so readScopedDoc gets
+      // Pre-create a DIRECTORY at mcpAdapterJsonPath so readMcpConfigDoc gets
       // EISDIR (which is not silenced) -- making prepareStageMcpServers
       // throw a non-PathContainmentError.
-      await mkdir(path.dirname(locations.mcpJsonPath), { recursive: true });
-      await mkdir(locations.mcpJsonPath, { recursive: true });
+      await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+      await mkdir(locations.mcpAdapterJsonPath, { recursive: true });
 
       const { ctx, pi, notifications } = makeCtx();
       await installPlugin({
@@ -5735,7 +7354,7 @@ async function seedDependencyInstalled(
 ): Promise<{
   readonly before: ExtensionState;
   readonly ctx: NotificationContext;
-  readonly pi: ToolInventory;
+  readonly pi: PiInventory;
   readonly notifications: NotifyRecord[];
 }> {
   const locations = locationsFor("project", cwd);
@@ -5935,7 +7554,7 @@ async function assertPromotionRefused(args: {
   readonly installPlugin: InstallOperation;
   readonly seeded: {
     readonly ctx: NotificationContext;
-    readonly pi: ToolInventory;
+    readonly pi: PiInventory;
     readonly notifications: NotifyRecord[];
   };
   readonly flags: { readonly pinVersionOverride?: string; readonly partial?: boolean };
@@ -6079,7 +7698,7 @@ test("D-04-07: --partial is the consent that promotes a partially installed depe
 async function disableSeededDependency(
   cwd: string,
   hooksRouting: InstallHooksRouting,
-  seeded: { readonly ctx: NotificationContext; readonly pi: ToolInventory },
+  seeded: { readonly ctx: NotificationContext; readonly pi: PiInventory },
 ): Promise<void> {
   const { createEnableOperation } =
     await import("../../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts");
@@ -9048,7 +10667,7 @@ test("PI-15: an mcp phase that cannot run unwinds the hooks bridge and leaves no
   // The hooks bridge writes its config atomically -- there is no staging dir,
   // so its undo is a real removal rather than the discard the other bridges
   // do. Failing the mcp phase (the slot after hooks) is what makes that
-  // removal run; occupying <scopeRoot>/mcp.json with a directory fails the
+  // removal run; occupying <scopeRoot>/mcp-adapter.json with a directory fails the
   // phase without touching any earlier one.
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-hooks-unwind-"));
@@ -9064,7 +10683,7 @@ test("PI-15: an mcp phase that cannot run unwinds the hooks bridge and leaves no
         mcpServers: { server1: { command: "node", args: ["s.js"] } },
       });
 
-      await mkdir(locations.mcpJsonPath, { recursive: true });
+      await mkdir(locations.mcpAdapterJsonPath, { recursive: true });
 
       const { ctx, pi, notifications } = makeCtx();
       await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
@@ -9133,7 +10752,7 @@ test("D-141-03: a standalone install surfaces a command discovery warning as a s
       });
       await seedCollidingNestedCommands(path.join(marketplaceRoot, "plugins", "hello"));
 
-      const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(2, 6);
+      const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(2, 2);
       await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
 
       assert.deepStrictEqual(notifications, [
@@ -10175,24 +11794,24 @@ test("retry proof: install: disabled cascade failure preserves shrunken record a
       let mcpFault = true;
       let mcpError: Error | undefined;
       transactionControl.runPhases = async <C>(phases: readonly Phase<C>[], ctx: C) => {
-        const result = await runPhases(phases, ctx);
+        const phasesResult = await runPhases(phases, ctx);
         // RESV-01: install schedules TWO ledgers -- the outer cascade, one
         // phase per closure member, and the six-phase bridge ledger inside each
         // of those phases. The fault arms after the BRIDGE ledger commits, so
         // the arming gate names that ledger by a phase it owns rather than
         // firing on whichever `runPhases` call returns first.
-        if (result.ok && mcpFault && phases.some((phase) => phase.name === "mcp")) {
+        if (phasesResult.ok && mcpFault && phases.some((phase) => phase.name === "mcp")) {
           activeSchedule.push("commit:mcp", "disable:mcp:armed");
-          await chmod(locations.mcpJsonPath, 0o000);
+          await chmod(locations.mcpAdapterJsonPath, 0o000);
           try {
-            await readFile(locations.mcpJsonPath, "utf8");
+            await readFile(locations.mcpAdapterJsonPath, "utf8");
             assert.fail("expected the permission fixture to refuse the MCP read");
           } catch (error) {
             mcpError = error as Error;
           }
         }
 
-        return result;
+        return phasesResult;
       };
 
       const stateBytes = await readFile(locations.stateJsonPath, "utf8");
@@ -10214,7 +11833,7 @@ test("retry proof: install: disabled cascade failure preserves shrunken record a
       const firstConfigBytes = await readFile(locations.configJsonPath, "utf8");
       const firstTree = await retryTree(locations.scopeRoot);
       mcpFault = false;
-      await chmod(locations.mcpJsonPath, 0o600);
+      await chmod(locations.mcpAdapterJsonPath, 0o600);
       activeSchedule = secondSchedule;
       const second = await installPlugin({
         applyDefaultEnabled: true,
@@ -10246,7 +11865,7 @@ test("retry proof: install: disabled cascade failure preserves shrunken record a
       assert.deepStrictEqual(await retryTree(locations.scopeRoot), firstTree);
       assert.deepStrictEqual(firstTree, [
         "claude-plugins.json",
-        "mcp.json",
+        "mcp-adapter.json",
         "pi-claude-marketplace/",
         "pi-claude-marketplace/hooks/",
         "pi-claude-marketplace/state.json",
@@ -10258,7 +11877,7 @@ test("retry proof: install: disabled cascade failure preserves shrunken record a
       await assert.rejects(stat(path.join(locations.hooksDir, "hooky", "hooks.json")), /ENOENT/);
     } finally {
       const locations = locationsFor("project", cwd);
-      await chmod(locations.mcpJsonPath, 0o600).catch(() => undefined);
+      await chmod(locations.mcpAdapterJsonPath, 0o600).catch(() => undefined);
       await rm(cwd, { force: true, recursive: true });
     }
   });
@@ -10333,10 +11952,10 @@ test("orchestrated install reports when the state write does not retain its fres
           const marketplace = parsed.marketplaces.mp;
           if (marketplace !== undefined) {
             marketplace.plugins = new Proxy(marketplace.plugins, {
-              set(target, property, value, receiver) {
+              defineProperty(target, property, descriptor) {
                 return property === "vanishing"
                   ? true
-                  : Reflect.set(target, property, value, receiver);
+                  : Reflect.defineProperty(target, property, descriptor);
               },
             });
           }
@@ -10588,7 +12207,10 @@ test("retry proof: install: commands prepare failure after a committed skill con
         },
         activeSchedule,
       );
-      const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
+      const { ctx, notifications, pi } = makeCtx({
+        toolNames: ["subagent"],
+        commands: [adapterCommand()],
+      });
 
       // act
       const first = await installPlugin({
@@ -10722,7 +12344,10 @@ test("retry proof: install: skills prepare failure with no committed phases conv
         },
         activeSchedule,
       );
-      const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
+      const { ctx, notifications, pi } = makeCtx({
+        toolNames: ["subagent"],
+        commands: [adapterCommand()],
+      });
 
       // act
       const first = await installPlugin({
@@ -10844,7 +12469,10 @@ test("retry proof: install: agents prepare failure after committed commands unwi
         },
         activeSchedule,
       );
-      const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
+      const { ctx, notifications, pi } = makeCtx({
+        toolNames: ["subagent"],
+        commands: [adapterCommand()],
+      });
 
       // act
       const first = await installPlugin({
@@ -10997,7 +12625,10 @@ test("retry proof: install: hooks reparse failure after three bridges retries wi
         },
         activeSchedule,
       );
-      const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
+      const { ctx, notifications, pi } = makeCtx({
+        toolNames: ["subagent"],
+        commands: [adapterCommand()],
+      });
 
       // act
       const first = await installPlugin({
@@ -11123,20 +12754,22 @@ test("retry proof: install: MCP prepare failure after hooks compensates every co
       );
       const stateBytes = await readFile(locations.stateJsonPath, "utf8");
       const manifestBytes = await readFile(manifestPath, "utf8");
-      await mkdir(locations.mcpJsonPath, { recursive: true });
+      await mkdir(locations.mcpAdapterJsonPath, { recursive: true });
       // Read back the runtime's own errno wording: later majors append the offending path to it.
       // The failure's IDENTITY is not runtime-owned, so it is pinned here rather than left to the
       // composition: the probe is the same read production makes, so it moves with whatever is on
       // disk. A fixture that drifted to a missing file would report ENOENT on both sides and leave
       // this case green against a different failure entirely.
-      const readFailure = await readFile(locations.mcpJsonPath, "utf8").catch((error: unknown) => {
-        const errno = error as NodeJS.ErrnoException;
-        assert.deepStrictEqual(
-          { code: errno.code, syscall: errno.syscall },
-          { code: "EISDIR", syscall: "read" },
-        );
-        return errno.message;
-      });
+      const readFailure = await readFile(locations.mcpAdapterJsonPath, "utf8").catch(
+        (error: unknown) => {
+          const errno = error as NodeJS.ErrnoException;
+          assert.deepStrictEqual(
+            { code: errno.code, syscall: errno.syscall },
+            { code: "EISDIR", syscall: "read" },
+          );
+          return errno.message;
+        },
+      );
       const firstSchedule: string[] = [];
       const secondSchedule: string[] = [];
       const activeSchedule = { current: firstSchedule };
@@ -11155,7 +12788,10 @@ test("retry proof: install: MCP prepare failure after hooks compensates every co
         },
         activeSchedule,
       );
-      const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
+      const { ctx, notifications, pi } = makeCtx({
+        toolNames: ["subagent"],
+        commands: [adapterCommand()],
+      });
 
       // act
       const first = await installPlugin({
@@ -11169,7 +12805,7 @@ test("retry proof: install: MCP prepare failure after hooks compensates every co
       });
       const firstTree = await retryTree(locations.scopeRoot);
       const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
-      await rm(locations.mcpJsonPath, { recursive: true });
+      await rm(locations.mcpAdapterJsonPath, { recursive: true });
       activeSchedule.current = secondSchedule;
       const second = await installPlugin({
         ctx,
@@ -11213,7 +12849,7 @@ test("retry proof: install: MCP prepare failure after hooks compensates every co
         "prepare:agents",
         "commit:agents",
       ]);
-      assert.strictEqual(firstTree.includes("mcp.json/"), true);
+      assert.strictEqual(firstTree.includes("mcp-adapter.json/"), true);
       assert.strictEqual(
         firstTree.some((entry) => entry.endsWith("hooks.json")),
         false,
@@ -11234,7 +12870,7 @@ test("retry proof: install: MCP prepare failure after hooks compensates every co
         },
       );
       const finalTree = await retryTree(locations.scopeRoot);
-      assert.strictEqual(finalTree.filter((entry) => entry === "mcp.json").length, 1);
+      assert.strictEqual(finalTree.filter((entry) => entry === "mcp-adapter.json").length, 1);
       assert.strictEqual(
         finalTree.some((entry) => /[0-9a-f-]{36}/.test(entry)),
         false,
@@ -11282,7 +12918,10 @@ test("retry proof: install: non-containment undo failure reports ordered rollbac
         },
         activeSchedule,
       );
-      const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
+      const { ctx, notifications, pi } = makeCtx({
+        toolNames: ["subagent"],
+        commands: [adapterCommand()],
+      });
 
       // act
       const first = await installPlugin({
@@ -11420,7 +13059,10 @@ test("retry proof: install: containment failure preserves the refused residue an
         },
         activeSchedule,
       );
-      const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
+      const { ctx, notifications, pi } = makeCtx({
+        toolNames: ["subagent"],
+        commands: [adapterCommand()],
+      });
 
       // act
       const first = await installPlugin({
@@ -11536,10 +13178,10 @@ test("retry proof: install: state commit race after staged work retries from unc
           const marketplace = parsed.marketplaces.mp;
           if (marketplace !== undefined) {
             marketplace.plugins = new Proxy(marketplace.plugins, {
-              set(target, property, value, receiver) {
+              defineProperty(target, property, descriptor) {
                 return property === "retryable"
                   ? true
-                  : Reflect.set(target, property, value, receiver);
+                  : Reflect.defineProperty(target, property, descriptor);
               },
             });
           }
@@ -11561,7 +13203,10 @@ test("retry proof: install: state commit race after staged work retries from unc
         activeSchedule,
       );
       const cacheDrops = observeCompletionDrops(t, completionCache);
-      const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
+      const { ctx, notifications, pi } = makeCtx({
+        toolNames: ["subagent"],
+        commands: [adapterCommand()],
+      });
 
       // act
       const first = await installPlugin({
@@ -13005,10 +14650,11 @@ async function entriesOf(directory: string): Promise<string[]> {
 
 /**
  * Make `statePhase` throw `ConcurrentInstallError` by revealing a raced record
- * only on the LAST read of `marketplaces[mp].plugins[plugin]`.
+ * only on the LAST own-key read of `marketplaces[mp].plugins[plugin]`.
  *
  * Reads, in order: the early-sanity check, the workflows phase's
- * previous-names lookup, then the state commit.
+ * previous-names lookup, then the state commit. Each one asks for the own
+ * property first (D-08-07), so the trap counts those requests.
  */
 function raceRecordAtStateCommit(
   state: ExtensionState,
@@ -13029,13 +14675,19 @@ function raceRecordAtStateCommit(
   };
   let reads = 0;
   marketplace.plugins = new Proxy(marketplace.plugins, {
-    get(target, property, receiver): unknown {
+    getOwnPropertyDescriptor(target, property): PropertyDescriptor | undefined {
       if (property === plugin) {
         reads += 1;
-        return reads >= 3 ? racedRecord : undefined;
+        return reads >= 3
+          ? { configurable: true, enumerable: true, value: racedRecord, writable: true }
+          : undefined;
       }
 
-      const value: unknown = Reflect.get(target, property, receiver);
+      return Reflect.getOwnPropertyDescriptor(target, property);
+    },
+    get(target, property, receiver): unknown {
+      const value: unknown =
+        property === plugin && reads >= 3 ? racedRecord : Reflect.get(target, property, receiver);
       return value;
     },
   });
@@ -13274,24 +14926,25 @@ test("WLIF-01: a re-stage over a kept record displaces the plugin's own envelope
       const { ctx } = makeCtx();
 
       // act
-      const result = await runInstallLedger(kept, locations, {
+      const ledgerOutcome = await runInstallLedger(kept, locations, {
         ctx,
         cwd,
         marketplace: "mp",
         plugin: "hello",
         scope: "project",
         removalOps: createRemovalOps(),
+        env: {},
         allowExistingRecord: true,
       });
 
       // assert
-      assert.strictEqual(result.kind, "installed");
+      assert.strictEqual(ledgerOutcome.kind, "installed");
       // WLIF-05: the projection reports the name the re-stage placed, and the
       // state snapshot the ledger mutated in place agrees with it. Both are
       // asserted because they answer different questions -- the projection is
       // what a caller OUTSIDE the ledger can see, and the enable verb has no
       // other channel to it.
-      assert.deepStrictEqual(result.summary.stagedWorkflowNames, ["hello:greet"]);
+      assert.deepStrictEqual(ledgerOutcome.summary.stagedWorkflowNames, ["hello:greet"]);
       assert.deepStrictEqual(kept.marketplaces.mp?.plugins.hello?.resources.workflows, [
         "hello:greet",
       ]);
@@ -13344,19 +14997,23 @@ test("WLIF-05: the projection reports the placed names in discovery order, stabl
       // act -- re-run the ledger over the UNCHANGED tree through the enable
       // seam, so the second run displaces the plugin's own envelopes aside
       // rather than refusing on occupancy.
-      const result = await runInstallLedger(kept, locations, {
+      const ledgerOutcome = await runInstallLedger(kept, locations, {
         ctx,
         cwd,
         marketplace: "mp",
         plugin: "hello",
         scope: "project",
         removalOps: createRemovalOps(),
+        env: {},
         allowExistingRecord: true,
       });
 
       // assert
-      assert.strictEqual(result.kind, "installed");
-      assert.deepStrictEqual(result.summary.stagedWorkflowNames, ["hello:zulu", "hello:alpha"]);
+      assert.strictEqual(ledgerOutcome.kind, "installed");
+      assert.deepStrictEqual(ledgerOutcome.summary.stagedWorkflowNames, [
+        "hello:zulu",
+        "hello:alpha",
+      ]);
       assert.deepStrictEqual(kept.marketplaces.mp?.plugins.hello?.resources.workflows, [
         "hello:zulu",
         "hello:alpha",
@@ -13413,6 +15070,7 @@ test("WLIF-05: a refused re-stage places nothing and leaves the foreign envelope
           plugin: "hello",
           scope: "project",
           removalOps: createRemovalOps(),
+          env: {},
           allowExistingRecord: true,
         }),
         { name: "WorkflowTargetOccupiedError" },
@@ -13459,6 +15117,7 @@ test("WLIF-01: a statePhase failure takes the envelope and the staging tree back
           plugin: "hello",
           scope: "project",
           removalOps: createRemovalOps(),
+          env: {},
         }),
         { name: "ConcurrentInstallError" },
       );
@@ -13668,6 +15327,7 @@ test("WLIF-03: an undo that cannot remove a placed envelope raises the typed fai
             marketplace: "mp",
             plugin: "hello",
             removalOps: createRemovalOps(),
+            env: {},
             scope: "project",
           },
           capture,
@@ -13727,6 +15387,7 @@ test("T-112-01: an envelope this install did not place survives the undo byte-un
           plugin: "hello",
           scope: "project",
           removalOps: createRemovalOps(),
+          env: {},
         }),
         { name: "ConcurrentInstallError" },
       );
@@ -13793,6 +15454,7 @@ test("WLIF-03: an unremovable envelope does not abort the rest of the removal", 
             marketplace: "mp",
             plugin: "hello",
             removalOps: createRemovalOps(),
+            env: {},
             scope: "project",
           },
           capture,

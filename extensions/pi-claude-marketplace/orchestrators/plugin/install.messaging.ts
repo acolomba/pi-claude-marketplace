@@ -131,7 +131,7 @@ const INSTALL_RENDER: { [K in InstallStatus]: RenderFn<Extract<InstallMsg, { sta
   // `disable` verb's own arm so an install that landed disabled and an install
   // followed by a disable render byte-identically. ENBL-15 / D-100-06: both
   // soft-dep flags stay hard-coded false, so the row cannot emit a
-  // `{requires pi-subagents}` / `{requires pi-mcp}` marker whatever inventory
+  // `{requires pi-subagents}` / `{requires pi-mcp-adapter}` marker whatever inventory
   // the record retained (ENBL-18). The enable-hint trailer is composed
   // centrally by the renderer, not here.
   disabled: (p, probe, mpScope) => pluginRow(ICON_DISABLED, p, mpScope, "(disabled)", probe),
@@ -598,12 +598,14 @@ function classifyResolverReason(reason: string, partialable: boolean): readonly 
       : ["unsupported source"];
   }
 
-  // MCPR-03 / D-02: mirror the shared `classifyResolverNote` arm so a broken
-  // `mcpServers` string reference renders `{malformed mcp}` here too. Placed
-  // BEFORE the `Unexpected token` arm so a JSON-parse-error reference maps to
-  // `malformed mcp` rather than `{unparseable}`, and before the
-  // `includes("source")` catch-all.
-  if (reason.startsWith("malformed mcp reference")) {
+  // MCPR-03 / D-02 / ANAME-07: mirror the shared `classifyResolverNote` arms
+  // so a broken `mcpServers` string reference and a server config Claude's
+  // schema rejects render `{malformed mcp}` here too. Placed BEFORE the
+  // `Unexpected token` arm so a JSON-parse-error reference maps to `malformed
+  // mcp` rather than `{unparseable}`, and before the `includes("source")`
+  // catch-all, because the server name in a `malformed mcp server ` note is
+  // author-controlled.
+  if (reason.startsWith("malformed mcp reference") || reason.startsWith("malformed mcp server ")) {
     return ["malformed mcp"];
   }
 

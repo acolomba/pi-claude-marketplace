@@ -2,6 +2,7 @@ import { toDisabledRecord } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { malformedReasonsForKinds } from "../../shared/notify-reasons.ts";
+import { ownValue, setOwn } from "../../shared/own-key.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 
 import { applyPartialCascadeFold } from "./shared.ts";
@@ -10,6 +11,7 @@ import type { InstallMsg } from "./install.messaging.ts";
 import type { HooksRouting } from "../../bridges/hooks/index.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
+import type { McpConfigNotice } from "../../shared/notification-dispatch.ts";
 import type { DegradeKind } from "../../shared/notify-reasons.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { UnstageOutcome } from "../marketplace/shared.ts";
@@ -28,10 +30,27 @@ export interface FreshInstallDisableOptions {
   readonly plugin: string;
 }
 
-/** Result of the materialize-then-disable cascade. */
+/**
+ * Result of the materialize-then-disable cascade. AFILE-04: both arms carry
+ * the unstage's MCP config notices, because a later cascade slot can fail
+ * after the MCP slot rewrote a commented file. AVAR-04: both arms also carry
+ * the declared names of the MCP servers the unstage removed, so the caller can
+ * drop the install's variable notices for them.
+ */
 export type FreshInstallDisableResult =
-  | { readonly ok: true; readonly removeRoutes: true }
-  | { readonly ok: false; readonly cause: Error; readonly removeRoutes: boolean };
+  | {
+      readonly ok: true;
+      readonly removeRoutes: true;
+      readonly mcpConfigNotices: readonly McpConfigNotice[];
+      readonly droppedMcpServers: readonly string[];
+    }
+  | {
+      readonly ok: false;
+      readonly cause: Error;
+      readonly removeRoutes: boolean;
+      readonly mcpConfigNotices: readonly McpConfigNotice[];
+      readonly droppedMcpServers: readonly string[];
+    };
 
 /** Facts used to compose the exact install-disabled notification row. */
 export interface InstallDisabledRowOptions {
@@ -74,8 +93,8 @@ function locateFreshlyInstalledRecord(
       readonly installed: InstallDisableCascadePluginRecord;
     }
   | undefined {
-  const marketplaceRecord = state.marketplaces[marketplace];
-  const installed = marketplaceRecord?.plugins[plugin];
+  const marketplaceRecord = ownValue(state.marketplaces, marketplace);
+  const installed = ownValue(marketplaceRecord?.plugins, plugin);
   if (marketplaceRecord === undefined || installed === undefined) {
     return undefined;
   }
@@ -94,6 +113,8 @@ function foldFailedDisableCascade(
     ok: false,
     cause: cascade.cause,
     removeRoutes: cascade.dropped.hooks.length > 0,
+    mcpConfigNotices: cascade.mcpConfigNotices ?? [],
+    droppedMcpServers: cascade.dropped.mcpServers,
   };
 }
 
@@ -147,6 +168,8 @@ export function composeInstallDisableCascade(dependencies: {
             `installPlugin: internal error -- the state phase left no record for plugin "${options.plugin}" to disable.`,
           ),
           removeRoutes: false,
+          mcpConfigNotices: [],
+          droppedMcpServers: [],
         };
       }
 
@@ -160,11 +183,17 @@ export function composeInstallDisableCascade(dependencies: {
         return foldFailedDisableCascade(target.installed, cascade, dependencies.now);
       }
 
-      target.marketplace.plugins[options.plugin] = toDisabledRecord(
-        target.installed,
-        dependencies.now(),
+      setOwn(
+        target.marketplace.plugins,
+        options.plugin,
+        toDisabledRecord(target.installed, dependencies.now()),
       );
-      return { ok: true, removeRoutes: true };
+      return {
+        ok: true,
+        removeRoutes: true,
+        mcpConfigNotices: cascade.mcpConfigNotices ?? [],
+        droppedMcpServers: cascade.dropped.mcpServers,
+      };
     },
 
     dropRoutesAfterSave(scope, marketplace, plugin): void {

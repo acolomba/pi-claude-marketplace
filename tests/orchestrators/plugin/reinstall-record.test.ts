@@ -388,6 +388,77 @@ test("rejects record mutation after concurrent removal", () => {
   );
 });
 
+test("D-08-07: rejects record mutation for a plugin named __proto__ without an own record", () => {
+  // arrange
+  const previous = oldRecord();
+  const state = stateWith(previous);
+
+  // act & assert
+  assert.throws(
+    () =>
+      recordReinstallOutcome({
+        partition: "reinstalled",
+        name: "__proto__",
+        marketplace: "market",
+        scope: "project",
+        state,
+        oldRecord: previous,
+        installable: installable(),
+        handles: handles(),
+        hookEntries: undefined,
+        isGitSource: true,
+        placedWorkflowNames: [],
+      }),
+    /concurrently removed/u,
+  );
+});
+
+test("D-08-07: writes the reinstalled record of a plugin named __proto__ as an own key", () => {
+  // arrange
+  const previous = oldRecord();
+  const state = stateWith(previous);
+  const plugins = state.marketplaces.market?.plugins ?? {};
+  Object.defineProperty(plugins, "__proto__", {
+    value: previous,
+    enumerable: true,
+    writable: true,
+    configurable: true,
+  });
+
+  // act
+  recordReinstallOutcome({
+    partition: "reinstalled",
+    name: "__proto__",
+    marketplace: "market",
+    scope: "project",
+    state,
+    oldRecord: previous,
+    installable: installable(),
+    handles: handles(),
+    hookEntries: undefined,
+    isGitSource: false,
+    placedWorkflowNames: [],
+  });
+
+  // assert
+  const recorded = Object.getOwnPropertyDescriptor(plugins, "__proto__")?.value as
+    PluginInstallRecord | undefined;
+  assert.deepStrictEqual(
+    {
+      keys: Object.keys(plugins),
+      plainPrototype: Object.getPrototypeOf(plugins) === Object.prototype,
+      resolvedSource: recorded?.resolvedSource,
+      installedAt: recorded?.installedAt,
+    },
+    {
+      keys: ["plugin", "__proto__"],
+      plainPrototype: true,
+      resolvedSource: "/new/plugin",
+      installedAt: "2026-01-01T00:00:00.000Z",
+    },
+  );
+});
+
 test("composes ordinary, typed, errno, and manual-recovery failures", () => {
   // arrange
   const ordinary = new Error("broken");

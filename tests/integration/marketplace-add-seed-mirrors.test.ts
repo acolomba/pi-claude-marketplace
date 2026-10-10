@@ -23,6 +23,7 @@ import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence
 import { loadState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { pathExists } from "../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
+import { expectSoftDepProbes } from "../edge/notification-boundary.ts";
 import { createCredentialOpsFake } from "../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../platform/git-ops-fake.ts";
 
@@ -62,9 +63,7 @@ function notificationBoundary(name: string): NotificationBoundary {
   const ui = mock<NotificationUi>({ exactParams: true, name: `${name} UI` });
   const notifications: NotificationBoundary["notifications"] = [];
   when(() => ctx.ui).thenReturn(ui);
-  when(() => pi.getAllTools())
-    .thenReturn([])
-    .times(3);
+  expectSoftDepProbes(pi, 1);
   when(() => ui.notify).thenReturn((message, severity) => {
     notifications.push({ message, ...(severity === undefined ? {} : { severity }) });
   });

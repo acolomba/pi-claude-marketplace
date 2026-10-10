@@ -168,7 +168,7 @@ export async function pathExists(p: string): Promise<boolean> {
  * unconditionally when the kind matches. The caller is responsible for
  * checking that `basename(target)` represents a name this install owns
  * (i.e. basename ∈ `_previousNames` for skills/commands, or
- * basename ∈ `_previousEntries.map(e => e.generatedName)` for agents).
+ * basename ∈ `previousEntries.map(e => e.generatedName)` for agents).
  * Skipping the ownership pre-check would silently enable cross-plugin
  * overwrite -- exactly the PI-6 vector the existing
  * `Cannot replace ... with non-previous content` rejection prevents.

@@ -2,6 +2,40 @@
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-10-10
+
+- Pi Coding Agent 1.0.0 or newer is now required.
+
+  - Plugin agents now need pi-subagents 0.74.0 or newer.
+
+- Plugin MCP servers now need pi-mcp-adapter 5.2.0 or newer, which fixes the security advisory GHSA-6qxp-vccf-f47h.
+
+  - pi-mcp-adapter 5.2.0 no longer follows a server URL that redirects to another host (a redirect from `http` to `https` on the same host still works).
+  - Only pi-mcp-adapter now clears the `{requires pi-mcp-adapter}` marker, which replaces `{requires pi-mcp}`, and Pi's built-in MCP client does not.
+  - `/claude:plugin info` lists the companion extensions that a plugin needs on a `requires:` line and tags a missing one `(missing)`.
+
+- Plugin MCP servers now go into pi-mcp-adapter's `mcp-adapter.json`, and your own servers, settings and overrides in that file stay as they are.
+
+  - Each plugin MCP tool keeps its Claude Code name, `mcp__plugin_<plugin>_<server>__<tool>`, in Pi, in hook matchers and in agent tool lists.
+  - Plugin MCP tools load on demand through tool search, and the tools of an `alwaysLoad` server stay in every request.
+  - `${VAR:-default}` resolves at install, plain `${VAR}` stays for pi-mcp-adapter, and install warns about unset variables and about credentials that Claude Code's deny-list withholds.
+  - A server that uses an MCP feature Pi cannot run makes its plugin partially available with `{unsupported mcp}`. Pass `--partial` to install the rest.
+  - A server with per-tool permission rules installs with the warning `MCP server tool rules not enforced.`
+  - `/reload` moves the servers that earlier releases wrote to `mcp.json` and shows one notice that lists each `old -> new` name.
+  - Your own choices for a plugin MCP server in `mcp-adapter.json`, such as `disabled` or `approveTools`, survive an update, a reinstall, a plugin disable then enable, and an uninstall then reinstall. `openUi` and `trace` are now kept too.
+  - A remote server whose headers hold no `Authorization` key keeps OAuth, as in Claude Code, when every header value is set.
+  - When a plugin moved in its source, the `/reload` notice now tells you to run `/claude:plugin update`. `/claude:plugin reinstall` now works when the cached git mirror cannot be read.
+
+- `/claude:plugin info` now shows the state that pi-mcp-adapter reports for each plugin MCP server, such as `connected` or `status unknown`.
+
+- Plugins and marketplaces named like built-in JavaScript properties, such as `constructor`, now work in every command. `__proto__` is refused as a name.
+
+- Action needed after upgrading: sign in to OAuth servers again, approve project servers again, and run `/reload` once more to see the new names. Edit pi-subagents `mcp:` overrides and agent files that name old servers by hand. See [Upgrading](docs/mcp-compatibility.md#upgrading).
+
+- Internal: CI checks the MCP entries against pi-mcp-adapter 5.2.0, and an operator-run canary proves that a real adapter loads them.
+
+  - `scripts/pi.sh` keeps its Pi home out of `~/.pi/agent` and keeps Pi's `tool_search`.
+
 - More plugins with components that Pi cannot install are now partially available. Pass `--partial` to install the components that Pi supports. (#246)
 
   - A hooks module (a non-empty `modules` array in a hooks file) makes its plugin partially available. A `hooks.json` with only a module no longer makes its plugin unavailable.

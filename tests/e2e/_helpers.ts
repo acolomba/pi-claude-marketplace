@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 
+import { createEventBus } from "@earendil-works/pi-coding-agent";
+
 import claudeMarketplaceExtension from "../../extensions/pi-claude-marketplace/index.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { loadState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
@@ -54,7 +56,17 @@ export interface MockPiHarness {
   >;
 }
 
-export function makeMockPi(tools: readonly unknown[]): MockPiHarness {
+/**
+ * Builds a mock Pi whose soft-dependency probes read `tools` and
+ * `slashCommands`. `getCommands` is always defined: an absent method would
+ * throw inside the pi-mcp-adapter command arm, which reads a throw as "not
+ * loaded" (ADET-02). `events` is Pi's own event bus, because the factory
+ * subscribes to pi-mcp-adapter's status channel through it (ASTAT-01).
+ */
+export function makeMockPi(
+  tools: readonly unknown[],
+  slashCommands: readonly unknown[] = [],
+): MockPiHarness {
   const commands = new Map<string, RegisteredCommand>();
   const events = new Map<
     string,
@@ -77,6 +89,8 @@ export function makeMockPi(tools: readonly unknown[]): MockPiHarness {
       events.set(event, list);
     },
     getAllTools: (): readonly unknown[] => tools,
+    getCommands: (): readonly unknown[] => slashCommands,
+    events: createEventBus(),
   } as unknown as ExtensionAPI;
 
   return { pi, commands, events };
@@ -131,6 +145,7 @@ export async function installTargetWithMockPi(
   env: E2EEnvironment,
   plugin: string,
   tools: readonly unknown[],
+  slashCommands: readonly unknown[] = [],
 ): Promise<{
   readonly mock: MockPiHarness;
   readonly ctx: ExtensionContext;
@@ -138,7 +153,7 @@ export async function installTargetWithMockPi(
   readonly state: ExtensionState;
 }> {
   const target = targetByPlugin(plugin);
-  const mock = makeMockPi(tools);
+  const mock = makeMockPi(tools, slashCommands);
   const { ctx, notifications } = makeCtx(env.cwd);
   await claudeMarketplaceExtension(mock.pi);
   const command = mock.commands.get("claude:plugin");

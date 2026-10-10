@@ -20,6 +20,7 @@ import { UNINSTALL_CONTEXT } from "../../extensions/pi-claude-marketplace/orches
 import { UPDATE_CONTEXT } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/update.messaging.ts";
 import { type Severity } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 import { notifyWithContext } from "../../extensions/pi-claude-marketplace/shared/notify-context.ts";
+import { expectSoftDepProbes } from "../edge/notification-boundary.ts";
 
 import type {
   ExtensionAPI,
@@ -55,9 +56,7 @@ function createWireHarness(name: string): WireHarness {
   const ui = mock<WireUi>({ exactParams: true, name: `${name} UI` });
   const notifications: CapturedNotification[] = [];
   when(() => ctx.ui).thenReturn(ui);
-  when(() => pi.getAllTools())
-    .thenReturn([])
-    .times(3);
+  expectSoftDepProbes(pi, 1);
   when(() => ui.notify).thenReturn((message, severity) => {
     notifications.push({ message, ...(severity === undefined ? {} : { severity }) });
   });

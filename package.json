@@ -10,22 +10,23 @@
     "isomorphic-git": "^1.42.3",
     "proper-lockfile": "^4.1.2",
     "semver": "^7.8.5",
+    "strip-json-comments": "^5.0.3",
     "write-file-atomic": "^8.0.0"
   },
   "description": "Access Claude plugin marketplaces from Pi Coding Agent. Supports Claude commands, skills, agents, hooks, MCP servers, and workflows.",
   "devDependencies": {
-    "@earendil-works/pi-coding-agent": "^0.87.1",
-    "@earendil-works/pi-tui": "^0.87.0",
+    "@earendil-works/pi-coding-agent": "^1.0.0",
+    "@earendil-works/pi-tui": "^1.0.0",
     "@eslint/js": "^10.0.1",
     "@stylistic/eslint-plugin": "^5.10.0",
     "@types/proper-lockfile": "^4.1.4",
     "@types/semver": "^7.8.0",
     "@types/write-file-atomic": "^4.0.3",
     "eslint": "^10.11.0",
-    "eslint-plugin-import-x": "^4.16.2",
+    "eslint-plugin-import-x": "^4.17.1",
     "eslint-plugin-sonarjs": "^4.2.2",
-    "fallow": "^3.30.0",
-    "globals": "^17.6.0",
+    "fallow": "^3.31.0",
+    "globals": "^17.13.0",
     "prettier": "^3.9.9",
     "strong-mock": "^9.2.2",
     "typebox": "^1.3.34",
@@ -55,12 +56,16 @@
   "license": "MIT",
   "name": "pi-claude-marketplace",
   "peerDependencies": {
-    "@earendil-works/pi-coding-agent": ">=0.86.1",
+    "@earendil-works/pi-coding-agent": ">=1.0.0",
     "@earendil-works/pi-tui": "*",
-    "pi-subagents": ">=0.35.0",
+    "pi-mcp-adapter": ">=5.2.0 <6",
+    "pi-subagents": ">=0.74.0",
     "typebox": "*"
   },
   "peerDependenciesMeta": {
+    "pi-mcp-adapter": {
+      "optional": true
+    },
     "pi-subagents": {
       "optional": true
     }
@@ -102,5 +107,5 @@
     "typecheck": "tsc --noEmit --incremental --tsBuildInfoFile node_modules/.cache/typescript/tsconfig.tsbuildinfo"
   },
   "type": "module",
-  "version": "0.19.2"
+  "version": "0.20.0"
 }

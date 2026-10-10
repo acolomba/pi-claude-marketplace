@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
-import { mkdir, readFile, readdir, stat, symlink, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, readdir, stat, symlink, writeFile } from "node:fs/promises";
 import { createRequire, syncBuiltinESMExports } from "node:module";
 import path from "node:path";
 import test from "node:test";
@@ -19,9 +19,14 @@ import {
   loadState,
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import {
+  McpConfigFileError,
+  McpServerKeyCollisionError,
+} from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 import { PluginShapeError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { createRemovalOps } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { PathContainmentError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
+import { runPhases } from "../../../extensions/pi-claude-marketplace/transaction/phase-ledger.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { createRemovalOpsFake } from "../../platform/removal-ops-fake.ts";
@@ -34,6 +39,7 @@ import type {
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { NotificationContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { Phase } from "../../../extensions/pi-claude-marketplace/transaction/phase-ledger.ts";
 import type { TestContext } from "node:test";
 
 function notificationContext(): NotificationContext {
@@ -236,6 +242,7 @@ test("returns the marketplace-absent discriminant without mutating state", async
     plugin: "empty",
     scope: "project",
     removalOps: createRemovalOps(),
+    env: {},
   });
 
   // assert
@@ -258,6 +265,7 @@ test("projects the complete empty-plugin summary and preserves a caller pin", as
     plugin: "empty",
     scope: "project",
     removalOps: createRemovalOps(),
+    env: {},
   });
 
   // assert
@@ -271,6 +279,7 @@ test("projects the complete empty-plugin summary and preserves a caller pin", as
       frontmatterDegradations: [],
       locations,
       marketplace: "marketplace",
+      mcpConfigNotices: [],
       plugin: "empty",
       pluginDataDir: path.join(locations.dataRoot, "marketplace", "empty"),
       resolved: {
@@ -368,18 +377,25 @@ test("captures the resolved version when a concurrent record aborts state commit
   };
   let pluginReads = 0;
   marketplace.plugins = new Proxy(marketplace.plugins, {
-    get(target, property, receiver): unknown {
+    getOwnPropertyDescriptor(target, property): PropertyDescriptor | undefined {
       if (property === "empty") {
         pluginReads += 1;
-        // Reads, in order: the early-sanity check, the workflows phase's
-        // previous-names lookup, then the state commit. The raced record must
-        // appear at the LAST of the three so the failure is driven from
-        // `statePhase` -- the only phase that can fail after the workflows
-        // phase, which is the last bridge slot.
-        return pluginReads >= 3 ? racedRecord : undefined;
+        // Own-key reads (D-08-07), in order: the early-sanity check, the
+        // workflows phase's previous-names lookup, then the state commit. The
+        // raced record must appear at the LAST of the three so the failure is
+        // driven from `statePhase` -- the only phase that can fail after the
+        // workflows phase, which is the last bridge slot.
+        return pluginReads >= 3
+          ? { configurable: true, enumerable: true, value: racedRecord, writable: true }
+          : undefined;
       }
 
-      return Reflect.get(target, property, receiver) as unknown;
+      return Reflect.getOwnPropertyDescriptor(target, property);
+    },
+    get(target, property, receiver): unknown {
+      return property === "empty" && pluginReads >= 3
+        ? racedRecord
+        : (Reflect.get(target, property, receiver) as unknown);
     },
   });
   const capture = { rollbackPartials: [], version: undefined };
@@ -395,6 +411,7 @@ test("captures the resolved version when a concurrent record aborts state commit
       plugin: "empty",
       scope: "project",
       removalOps: createRemovalOps(),
+      env: {},
     },
     capture,
   );
@@ -442,6 +459,7 @@ test("unwinds when the marketplace disappears before state commit", async (t) =>
       plugin: "empty",
       scope: "project",
       removalOps: createRemovalOps(),
+      env: {},
     },
     capture,
   );
@@ -470,6 +488,7 @@ test("preserves installedAt while replacing an existing disabled record", async 
     plugin: "empty",
     scope: "project",
     removalOps: createRemovalOps(),
+    env: {},
   });
 
   // assert
@@ -508,6 +527,7 @@ test("LOAD-02: re-materializing a held-down record drops the dependency marker",
     plugin: "empty",
     scope: "project",
     removalOps: createRemovalOps(),
+    env: {},
   });
 
   // assert -- a key-presence check, because the contract is that the state
@@ -583,6 +603,7 @@ async function installWithFaultedStagingCleanup(
     plugin: "empty",
     scope: "project",
     removalOps: removal.removalOps,
+    env: {},
   });
 
   assert.ok(ledgerOutcome.kind === "installed");
@@ -657,6 +678,7 @@ test("surfaces the workflows staging cleanup leak and still lands the install", 
     plugin: "empty",
     scope: "project",
     removalOps: createRemovalOps(),
+    env: {},
   });
 
   // assert
@@ -689,13 +711,20 @@ test("a failed workflows removal during rollback surfaces as its own partial rat
   };
   let pluginReads = 0;
   marketplace.plugins = new Proxy(marketplace.plugins, {
-    get(target, property, receiver): unknown {
+    getOwnPropertyDescriptor(target, property): PropertyDescriptor | undefined {
       if (property === "empty") {
         pluginReads += 1;
-        return pluginReads >= 3 ? racedRecord : undefined;
+        return pluginReads >= 3
+          ? { configurable: true, enumerable: true, value: racedRecord, writable: true }
+          : undefined;
       }
 
-      return Reflect.get(target, property, receiver) as unknown;
+      return Reflect.getOwnPropertyDescriptor(target, property);
+    },
+    get(target, property, receiver): unknown {
+      return property === "empty" && pluginReads >= 3
+        ? racedRecord
+        : (Reflect.get(target, property, receiver) as unknown);
     },
   });
   const stuckPath = path.join(locations.workflowsSavedDir, "empty:delta.json");
@@ -729,6 +758,7 @@ test("a failed workflows removal during rollback surfaces as its own partial rat
       plugin: "empty",
       scope: "project",
       removalOps: createRemovalOps(),
+      env: {},
     },
     capture,
   );
@@ -785,6 +815,7 @@ test("throws already-installed when a target-scope record exists and the caller 
     plugin: "empty",
     scope: "project",
     removalOps: createRemovalOps(),
+    env: {},
   });
 
   // assert
@@ -820,6 +851,7 @@ test("throws not-in-manifest for a plugin the cached manifest does not carry", a
     plugin: "ghost",
     scope: "project",
     removalOps: createRemovalOps(),
+    env: {},
   });
 
   // assert
@@ -851,6 +883,7 @@ test("CMP-3: a project-target install adopts a clone of the user-scope marketpla
     plugin: "empty",
     scope: "project",
     removalOps: createRemovalOps(),
+    env: {},
   });
 
   // assert
@@ -881,6 +914,7 @@ test("flags binaries as unsupported when the marketplace is an official one", as
     plugin: "empty",
     scope: "project",
     removalOps: createRemovalOps(),
+    env: {},
     partial: true,
   });
 
@@ -911,6 +945,7 @@ test("--partial admits the partially-available arm the default gate refuses", as
     plugin: "empty",
     scope: "project" as const,
     removalOps: createRemovalOps(),
+    env: {},
   };
 
   // act
@@ -956,6 +991,7 @@ test("collects the per-source frontmatter degrade records from the skills and co
     plugin: "empty",
     scope: "project",
     removalOps: createRemovalOps(),
+    env: {},
   });
 
   // assert
@@ -1012,6 +1048,7 @@ test("AS-7: a retired foreign agent target is preserved while a distinct agent i
     plugin: "empty",
     scope: "project",
     removalOps: createRemovalOps(),
+    env: {},
   });
 
   // assert
@@ -1052,6 +1089,7 @@ test("writes the hooks config and records the plugin's hooks slug on the state r
     plugin: "empty",
     scope: "project",
     removalOps: createRemovalOps(),
+    env: {},
   });
 
   // assert
@@ -1082,10 +1120,10 @@ test("an mcp phase that cannot even prepare unwinds the hooks config the phase b
     mcpServers: { server1: { command: "node", args: ["s.js"] } },
   });
   const locations = locationsFor("project", environment.cwd);
-  // Occupying `<scopeRoot>/mcp.json` with a DIRECTORY fails the mcp phase
+  // Occupying `<scopeRoot>/mcp-adapter.json` with a DIRECTORY fails the mcp phase
   // before it prepares anything, which is what makes the hooks phase's undo --
   // a real removal, not a staging discard -- run.
-  await mkdir(locations.mcpJsonPath, { recursive: true });
+  await mkdir(locations.mcpAdapterJsonPath, { recursive: true });
   const capture = { rollbackPartials: [], version: undefined };
 
   // act
@@ -1099,6 +1137,7 @@ test("an mcp phase that cannot even prepare unwinds the hooks config the phase b
       plugin: "empty",
       scope: "project",
       removalOps: createRemovalOps(),
+      env: {},
     },
     capture,
   );
@@ -1151,6 +1190,7 @@ test("a hooks.json that turns malformed after resolution unwinds the ledger", as
       plugin: "empty",
       scope: "project",
       removalOps,
+      env: {},
     },
     capture,
   );
@@ -1209,6 +1249,7 @@ async function assertFailingPhaseUndoIsInert(
       plugin: "empty",
       scope: "project",
       removalOps: createRemovalOps(),
+      env: {},
     },
     capture,
   );
@@ -1277,15 +1318,439 @@ test("stages the declared mcp servers and records their generated names", async 
     plugin: "empty",
     scope: "project",
     removalOps: createRemovalOps(),
+    env: {},
   });
 
   // assert
   assert.ok(ledgerOutcome.kind === "installed");
   assert.deepStrictEqual(ledgerOutcome.summary.stagedMcpServerNames, ["server1"]);
+  assert.deepStrictEqual(ledgerOutcome.summary.mcpConfigNotices, []);
   assert.deepStrictEqual(
     seeded.state.marketplaces.marketplace?.plugins.empty?.resources.mcpServers,
     ["server1"],
   );
+});
+
+async function writeAgent(pluginRoot: string, name: string, tools: string): Promise<void> {
+  await mkdir(path.join(pluginRoot, "agents"), { recursive: true });
+  await writeFile(
+    path.join(pluginRoot, "agents", `${name}.md`),
+    `---\nname: ${name}\ndescription: ${name} agent\ntools: ${tools}\n---\n\nBody.\n`,
+  );
+}
+
+async function generatedAgentToolLines(
+  locations: ScopedLocations,
+  name: string,
+): Promise<string[]> {
+  const content = await readFile(
+    path.join(locations.agentsDir, `pi-claude-marketplace-empty-${name}.md`),
+    "utf8",
+  );
+  return content.split("\n").filter((line) => line.startsWith("tools:"));
+}
+
+test("ANAME-02: an agent's Claude-form MCP tool name installs as a pi-subagents mcp: entry", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-agent-mcp-");
+  const seeded = await seedPlugin(environment.cwd, {
+    mcpServers: { db: { command: "node", args: ["s.js"] } },
+  });
+  await writeAgent(seeded.pluginRoot, "bot", "Read, mcp__plugin_empty_db__query");
+  const locations = locationsFor("project", environment.cwd);
+
+  // act
+  const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
+    ctx: notificationContext(),
+    cwd: environment.cwd,
+    marketplace: "marketplace",
+    plugin: "empty",
+    scope: "project",
+    removalOps: createRemovalOps(),
+    env: {},
+  });
+
+  // assert
+  assert.ok(ledgerOutcome.kind === "installed");
+  assert.deepStrictEqual(await generatedAgentToolLines(locations, "bot"), [
+    "tools: read,mcp:plugin_empty_db_/query",
+  ]);
+});
+
+test("ANAME-02: a server left out by a partial install is not granted to the plugin's agents", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-agent-mcp-partial-");
+  const seeded = await seedPlugin(environment.cwd, {
+    mcpServers: {
+      db: { command: "node", args: ["s.js"] },
+      live: { type: "ws", url: "wss://example.test/live" },
+    },
+  });
+  await writeAgent(
+    seeded.pluginRoot,
+    "bot",
+    "mcp__plugin_empty_db__query, mcp__plugin_empty_live__stream",
+  );
+  const locations = locationsFor("project", environment.cwd);
+
+  // act
+  const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
+    ctx: notificationContext(),
+    cwd: environment.cwd,
+    marketplace: "marketplace",
+    plugin: "empty",
+    scope: "project",
+    removalOps: createRemovalOps(),
+    env: {},
+    partial: true,
+  });
+
+  // assert
+  assert.ok(ledgerOutcome.kind === "installed");
+  assert.deepStrictEqual(ledgerOutcome.summary.stagedMcpServerNames, ["db"]);
+  assert.deepStrictEqual(await generatedAgentToolLines(locations, "bot"), [
+    "tools: mcp:plugin_empty_db_/query",
+  ]);
+  assert.deepStrictEqual(ledgerOutcome.summary.bridgeWarnings, [
+    "[bot] tools include MCP tools, which pi-subagents runs only in background launches -- launch this agent with `async: true`; a foreground launch fails, and so does a launch before pi-mcp-adapter has cached the server's tools",
+    "[bot] dropped tools: mcp__plugin_empty_live__stream",
+  ]);
+});
+
+test("AFILE-04: staging over a commented mcp-adapter.json reports the comments-dropped notice", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-mcp-comments-");
+  const seeded = await seedPlugin(environment.cwd, {
+    mcpServers: { server1: { command: "node", args: ["s.js"] } },
+  });
+  const locations = locationsFor("project", environment.cwd);
+  await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+  await writeFile(locations.mcpAdapterJsonPath, '// mine\n{"mcpServers":{}}\n');
+
+  // act
+  const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
+    ctx: notificationContext(),
+    cwd: environment.cwd,
+    marketplace: "marketplace",
+    plugin: "empty",
+    scope: "project",
+    removalOps: createRemovalOps(),
+    env: {},
+  });
+
+  // assert
+  assert.ok(ledgerOutcome.kind === "installed");
+  assert.deepStrictEqual(ledgerOutcome.summary.mcpConfigNotices, [
+    { kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" },
+  ]);
+});
+
+/** AFILE-04: a commented adapter file whose exact bytes a failed install must restore. */
+const COMMENTED_ADAPTER_BYTES =
+  '\uFEFF{\n  // mine\n  "mcpServers": { "mine": { "command": "my-server" } },\n}\n';
+
+test("AFILE-04: a later-phase failure restores the commented mcp-adapter.json byte for byte", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-mcp-restore-");
+  const seeded = await seedPlugin(environment.cwd, {
+    components: { workflows: ["delta"] },
+    mcpServers: { server1: { command: "node", args: ["s.js"] } },
+  });
+  const locations = locationsFor("project", environment.cwd);
+  await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+  await writeFile(locations.mcpAdapterJsonPath, COMMENTED_ADAPTER_BYTES);
+  const storedBytes = await readFile(locations.mcpAdapterJsonPath);
+  await mkdir(locations.workflowsSavedDir, { recursive: true });
+  await symlink("/nonexistent-decoy", path.join(locations.workflowsSavedDir, "empty:delta.json"));
+  const capture: InstallFailureCapture = { rollbackPartials: [], version: undefined };
+
+  // act
+  const operation = runInstallLedger(
+    seeded.state,
+    locations,
+    {
+      ctx: notificationContext(),
+      cwd: environment.cwd,
+      marketplace: "marketplace",
+      plugin: "empty",
+      scope: "project",
+      removalOps: createRemovalOps(),
+      env: {},
+    },
+    capture,
+  );
+
+  // assert
+  await assert.rejects(operation, (error: unknown) => {
+    assert.ok(error instanceof PathContainmentError);
+    return true;
+  });
+  assert.deepStrictEqual(await readFile(locations.mcpAdapterJsonPath), storedBytes);
+  assert.deepStrictEqual(capture.rollbackPartials, []);
+  assert.equal(seeded.state.marketplaces.marketplace?.plugins.empty, undefined);
+});
+
+/** AMIG-02: a commented legacy mcp.json holding the plugin's marked entry and a foreign one. */
+const COMMENTED_LEGACY_MCP_BYTES = `{
+  // released build
+  "mcpServers": {
+    "server1": { "command": "old", "_piClaudeMarketplace": { "plugin": "empty", "marketplace": "marketplace" } },
+    "other": { "command": "y" }
+  }
+}
+`;
+
+test("AMIG-02: a plugin with a commented legacy entry installs, and its MCP notices end with the mcp.json comments-dropped notice", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-mcp-legacy-");
+  const seeded = await seedPlugin(environment.cwd, {
+    mcpServers: { server1: { command: "node", args: ["s.js"] } },
+  });
+  const locations = locationsFor("project", environment.cwd);
+  await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+  await writeFile(locations.mcpAdapterJsonPath, '// mine\n{"mcpServers":{}}\n');
+  await writeFile(locations.mcpJsonPath, COMMENTED_LEGACY_MCP_BYTES);
+
+  // act
+  const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
+    ctx: notificationContext(),
+    cwd: environment.cwd,
+    marketplace: "marketplace",
+    plugin: "empty",
+    scope: "project",
+    removalOps: createRemovalOps(),
+    env: {},
+  });
+
+  // assert
+  assert.ok(ledgerOutcome.kind === "installed");
+  assert.deepStrictEqual(ledgerOutcome.summary.mcpConfigNotices, [
+    { kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" },
+    { kind: "comments-dropped", scope: "project", file: "mcp.json" },
+  ]);
+  assert.strictEqual(
+    await readFile(locations.mcpJsonPath, "utf8"),
+    '{\n  "mcpServers": {\n    "other": {\n      "command": "y"\n    }\n  }\n}\n',
+  );
+});
+
+test("AMIG-02: a later-phase failure restores mcp.json and mcp-adapter.json byte for byte", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-mcp-legacy-restore-");
+  const seeded = await seedPlugin(environment.cwd, {
+    components: { workflows: ["delta"] },
+    mcpServers: { server1: { command: "node", args: ["s.js"] } },
+  });
+  const locations = locationsFor("project", environment.cwd);
+  await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+  await writeFile(locations.mcpAdapterJsonPath, COMMENTED_ADAPTER_BYTES);
+  await writeFile(locations.mcpJsonPath, COMMENTED_LEGACY_MCP_BYTES);
+  await mkdir(locations.workflowsSavedDir, { recursive: true });
+  await symlink("/nonexistent-decoy", path.join(locations.workflowsSavedDir, "empty:delta.json"));
+  const capture: InstallFailureCapture = { rollbackPartials: [], version: undefined };
+
+  // act
+  const operation = runInstallLedger(
+    seeded.state,
+    locations,
+    {
+      ctx: notificationContext(),
+      cwd: environment.cwd,
+      marketplace: "marketplace",
+      plugin: "empty",
+      scope: "project",
+      removalOps: createRemovalOps(),
+      env: {},
+    },
+    capture,
+  );
+
+  // assert
+  await assert.rejects(operation, (error: unknown) => {
+    assert.ok(error instanceof PathContainmentError);
+    return true;
+  });
+  assert.strictEqual(await readFile(locations.mcpJsonPath, "utf8"), COMMENTED_LEGACY_MCP_BYTES);
+  assert.strictEqual(await readFile(locations.mcpAdapterJsonPath, "utf8"), COMMENTED_ADAPTER_BYTES);
+  assert.deepStrictEqual(capture.rollbackPartials, []);
+});
+
+test("AFILE-04 / NFR-3: an mcp restore that cannot write is reported as the mcp rollback partial", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-mcp-restore-fails-");
+  const seeded = await seedPlugin(environment.cwd, {
+    mcpServers: { server1: { command: "node", args: ["s.js"] } },
+  });
+  const locations = locationsFor("project", environment.cwd);
+  const adapterDir = path.dirname(locations.mcpAdapterJsonPath);
+  await mkdir(adapterDir, { recursive: true });
+  await writeFile(locations.mcpAdapterJsonPath, COMMENTED_ADAPTER_BYTES);
+  const capture: InstallFailureCapture = { rollbackPartials: [], version: undefined };
+  // After the mcp phase commits, the adapter file's directory turns read-only
+  // and the next phase throws, so the mcp undo cannot write the old bytes.
+  const transaction = {
+    runPhases: <C>(phases: readonly Phase<C>[], ctx: C) =>
+      runPhases(
+        phases.map((phase): Phase<C> => {
+          if (phase.name === "mcp") {
+            return {
+              ...phase,
+              do: async (c) => {
+                await phase.do(c);
+                await chmod(adapterDir, 0o555);
+              },
+            };
+          }
+
+          return phase.name === "workflows"
+            ? {
+                ...phase,
+                do: () => Promise.reject(new Error("workflows phase failed")),
+              }
+            : phase;
+        }),
+        ctx,
+      ),
+  };
+
+  // act
+  try {
+    await assert.rejects(
+      runInstallLedger(
+        seeded.state,
+        locations,
+        {
+          ctx: notificationContext(),
+          cwd: environment.cwd,
+          marketplace: "marketplace",
+          plugin: "empty",
+          scope: "project",
+          removalOps: createRemovalOps(),
+          env: {},
+        },
+        capture,
+        transaction,
+      ),
+    );
+  } finally {
+    await chmod(adapterDir, 0o755);
+  }
+
+  // assert
+  assert.deepStrictEqual(
+    capture.rollbackPartials.map((partial) => partial.phase),
+    ["mcp"],
+  );
+  const expectedPrefix = `failed to restore mcp-adapter.json at ${locations.mcpAdapterJsonPath}: EACCES: `;
+  assert.strictEqual(
+    capture.rollbackPartials[0]?.msg.slice(0, expectedPrefix.length),
+    expectedPrefix,
+  );
+});
+
+test("AFILE-02: a plugin with no MCP servers installs over an unparseable mcp-adapter.json and reports it", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-mcp-left-unchanged-");
+  const seeded = await seedPlugin(environment.cwd, { components: { skills: ["alpha"] } });
+  const locations = locationsFor("project", environment.cwd);
+  await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+  await writeFile(locations.mcpAdapterJsonPath, "{");
+
+  // act
+  const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
+    ctx: notificationContext(),
+    cwd: environment.cwd,
+    marketplace: "marketplace",
+    plugin: "empty",
+    scope: "project",
+    removalOps: createRemovalOps(),
+    env: {},
+  });
+
+  // assert
+  assert.ok(ledgerOutcome.kind === "installed");
+  assert.deepStrictEqual(ledgerOutcome.summary.mcpConfigNotices, [
+    { kind: "left-unchanged", scope: "project", file: "mcp-adapter.json" },
+  ]);
+  assert.deepStrictEqual(ledgerOutcome.summary.bridgeWarnings, []);
+  assert.equal(await readFile(locations.mcpAdapterJsonPath, "utf8"), "{");
+});
+
+test("AFILE-02: a plugin with MCP servers refuses an unparseable mcp-adapter.json and keeps its bytes", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-mcp-refuses-");
+  const seeded = await seedPlugin(environment.cwd, {
+    mcpServers: { server1: { command: "node", args: ["s.js"] } },
+  });
+  const locations = locationsFor("project", environment.cwd);
+  await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+  await writeFile(locations.mcpAdapterJsonPath, "{");
+  const capture: InstallFailureCapture = { rollbackPartials: [], version: undefined };
+
+  // act & assert
+  await assert.rejects(
+    runInstallLedger(
+      seeded.state,
+      locations,
+      {
+        ctx: notificationContext(),
+        cwd: environment.cwd,
+        marketplace: "marketplace",
+        plugin: "empty",
+        scope: "project",
+        removalOps: createRemovalOps(),
+        env: {},
+      },
+      capture,
+    ),
+    (error: unknown) => {
+      assert.ok(error instanceof McpConfigFileError);
+      assert.equal(error.filePath, locations.mcpAdapterJsonPath);
+      assert.equal(error.defect, "invalid-jsonc");
+      return true;
+    },
+  );
+  assert.equal(await readFile(locations.mcpAdapterJsonPath, "utf8"), "{");
+  assert.deepStrictEqual(capture.rollbackPartials, []);
+});
+
+test("ANAME-03: an install whose two servers share one key refuses before any write", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-mcp-same-key-");
+  const seeded = await seedPlugin(environment.cwd, {
+    mcpServers: {
+      "a.b": { command: "node", args: ["a.js"] },
+      a_b: { command: "node", args: ["b.js"] },
+    },
+  });
+  const locations = locationsFor("project", environment.cwd);
+
+  // act & assert
+  await assert.rejects(
+    runInstallLedger(seeded.state, locations, {
+      ctx: notificationContext(),
+      cwd: environment.cwd,
+      marketplace: "marketplace",
+      plugin: "empty",
+      scope: "project",
+      removalOps: createRemovalOps(),
+      env: {},
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof McpServerKeyCollisionError);
+      assert.deepStrictEqual(
+        { pluginName: error.pluginName, servers: error.servers, keys: error.keys },
+        {
+          pluginName: "empty",
+          servers: ["a.b", "a_b"],
+          keys: ["plugin_empty_a_b_", "plugin_empty_a_b_"],
+        },
+      );
+      return true;
+    },
+  );
+  await assert.rejects(stat(locations.mcpAdapterJsonPath), { code: "ENOENT" });
+  assert.equal(seeded.state.marketplaces.marketplace?.plugins.empty, undefined);
 });
 
 /** A full 40-hex commit id, so the `sha-<12hex>` derivation has real bytes to cut. */
@@ -1309,6 +1774,7 @@ test("PURL-09 / D-77-01 / D-77-02: a git-source install takes its root and its v
     plugin: "empty",
     scope: "project",
     removalOps: createRemovalOps(),
+    env: {},
     // The ledger injects THIS policy into the resolver, which stays
     // network-free: the resolver hands the parsed git source back and the
     // callback answers with the clone-anchored plugin root plus the sha it
@@ -1360,6 +1826,7 @@ test("RESV-03: a source pin override materializes the pinned commit, not the ent
     plugin: "empty",
     scope: "project",
     removalOps: createRemovalOps(),
+    env: {},
     sourcePinOverride: RESOLVED_SHA,
     cloneProbe: async (options) => {
       probed.push(options.source);
@@ -1418,6 +1885,7 @@ test("the callback reaches the real clone probe through the ledger's own cache, 
     plugin: "empty",
     scope: "project",
     removalOps: createRemovalOps(),
+    env: {},
     authMemo,
     deviceFlowHttp: deviceFlow.http,
     cloneCacheSeam: {
@@ -1464,6 +1932,7 @@ test("TAGS-01/03 (D-07-06/07): a pinned path-source install records the tag's ow
     plugin: "empty",
     scope: "project",
     removalOps: createRemovalOps(),
+    env: {},
     sourcePinOverride: RESOLVED_SHA,
     pinVersionOverride: "2.1.0",
     pathPinProbe: (options) => {
@@ -1512,6 +1981,7 @@ test("an unpinned path-source install threads neither pathPluginPin nor resolveP
     plugin: "empty",
     scope: "project",
     removalOps: createRemovalOps(),
+    env: {},
     pathPinProbe: () =>
       Promise.reject(new Error("an unpinned path install must never probe a tag")),
   });
@@ -1549,6 +2019,7 @@ test("D-07-06: with no pathPinProbe override, a pinned path-source install falls
     plugin: "empty",
     scope: "project",
     removalOps: createRemovalOps(),
+    env: {},
     sourcePinOverride: tagOid,
     pinVersionOverride: "1.0.0",
   });
@@ -1581,6 +2052,7 @@ test("D-07-06: a pinned path-source install whose callback does not materialize 
     plugin: "empty",
     scope: "project",
     removalOps: createRemovalOps(),
+    env: {},
     sourcePinOverride: RESOLVED_SHA,
     pinVersionOverride: "2.1.0",
     pathPinProbe: () =>

@@ -1,5 +1,5 @@
 import type { HookSummaryEntry } from "./concerns/hooks.ts";
-import type { Dependency } from "./concerns/soft-dep.ts";
+import type { CompanionRequirement, Dependency } from "./concerns/soft-dep.ts";
 import type { Scope } from "./types.ts";
 
 /**
@@ -24,7 +24,7 @@ export type Reason =
   | "unsupported hooks"
   | "lsp"
   | "requires pi-subagents"
-  | "requires pi-mcp"
+  | "requires pi-mcp-adapter"
   | "rollback partial"
   | "unreadable"
   | "unparseable"
@@ -182,7 +182,7 @@ export type Reason =
   // constraining plugins. `version conflict` cannot carry it: nothing here
   // contradicts anything. `no matching version` cannot carry it either: that
   // token claims the source advertised no tag in range, which is false on
-  // the arm where a version WAS found and simply falls outside what the
+  // the arm where a version WAS found and falls outside what the
   // dependents allow.
   | "dependents constrain"
   // D-11-06: the root marketplace disallows a new cross-marketplace edge.
@@ -231,7 +231,13 @@ export type Reason =
   // It names no component kind on purpose: the load-time scan promotes ANY
   // record whose supported set strictly grew, so a token reading "workflows
   // arrived" would be a false statement about most of the rows it rides.
-  | "components now supported";
+  | "components now supported"
+  // ANAME-07: a server of the plugin uses a Claude Code MCP feature
+  // pi-mcp-adapter cannot honor, so `--partial` leaves that server out whole.
+  // A typed kind, not a note, as `unsupported hooks` is: the aggregate token
+  // rides the row, and each server with its blocking feature rides the info
+  // breakdown.
+  | "unsupported mcp";
 
 /** Reasons that describe a content row rather than marketplace absence. */
 export type ContentReason = Exclude<
@@ -394,7 +400,7 @@ export interface PluginUninstalledMessage extends TransitionMessageBase {
    *
    * MSG-SD-3 is untouched -- the render arm still passes all three
    * soft-dependency arguments hard-coded `false`, so an `(uninstalled)` row
-   * cannot emit `{requires pi-subagents}` / `{requires pi-mcp}` /
+   * cannot emit `{requires pi-subagents}` / `{requires pi-mcp-adapter}` /
    * `{requires pi-dynamic-workflows}` whatever the removed record declared.
    */
   readonly reasons?: readonly ContentReason[];
@@ -859,6 +865,55 @@ export interface PluginInfoRowBase {
 }
 
 /**
+ * ASTAT-01 / ASTAT-02: the states info shows for a plugin MCP server. The
+ * first seven are Claude Code's words for pi-mcp-adapter's seven statuses.
+ * `failed` stays apart from `not connected` because the adapter separates a
+ * failure backoff from a server it never discovered. The cached state uses a
+ * comma because it sits inside the server's parentheses. `status unknown`
+ * means there is no usable snapshot, or the snapshot holds a status this
+ * release does not know. `not loaded` means a usable snapshot does not list
+ * the server. `overridden by project scope` covers the same plugin installed
+ * in both scopes: both scopes' adapter files hold one key, pi-mcp-adapter
+ * loads the project file last and runs the project entry, so the user row's
+ * server reads this token. The wording follows Claude Code's "overridden by".
+ * A bare literal union like the other closed sets, not a `StatusToken`.
+ */
+export type McpServerStatus =
+  | "connected"
+  | "cached, connects on first use"
+  | "needs authentication"
+  | "pending approval"
+  | "disabled"
+  | "not connected"
+  | "failed"
+  | "status unknown"
+  | "not loaded"
+  | "overridden by project scope";
+
+/**
+ * ANAME-01 / ANAME-07: one plugin MCP server on the info surface, stamped by
+ * the info command. `name` is the name Claude Code gives the server,
+ * `plugin:<plugin>:<server>`. `unsupportedFeature` is present only on a server
+ * a partial install leaves out, and names the Claude feature that blocks it.
+ *
+ * AVAR-04 / AVAR-05: `unsetVariables` and `withheldVariables` are present only
+ * on a server the plugin writes, and only when non-empty. The info command
+ * computes them from the current environment. They hold variable names, never
+ * values.
+ *
+ * ASTAT-01: `status` is present only on a server an installed or partially
+ * installed record lists as written. The info command stamps it from
+ * pi-mcp-adapter's last snapshot.
+ */
+export interface McpServerSummaryEntry {
+  readonly name: string;
+  readonly unsupportedFeature?: string;
+  readonly unsetVariables?: readonly string[];
+  readonly withheldVariables?: readonly string[];
+  readonly status?: McpServerStatus;
+}
+
+/**
  * Component details sorted alphabetically, with dependencies pre-rendered as
  * plugin addresses and optional version/SHA constraints, sorted by dependency name.
  */
@@ -868,7 +923,7 @@ export interface PluginInfoComponentsResolved {
     readonly agents?: readonly string[];
     readonly commands?: readonly string[];
     readonly hooks?: readonly HookSummaryEntry[];
-    readonly mcp?: readonly string[];
+    readonly mcp?: readonly McpServerSummaryEntry[];
     readonly skills?: readonly string[];
     /**
      * WFLW-04: carries the generated `<plugin>:<name>` of every ADMITTED
@@ -877,6 +932,12 @@ export interface PluginInfoComponentsResolved {
      */
     readonly workflows?: readonly string[];
   };
+  /**
+   * ADET-01: the companions the resolved components need, pre-sorted by the
+   * composer on the companion name. Each entry is tagged missing per the probe
+   * snapshot the orchestrator took. Absent when no companion is needed.
+   */
+  readonly requires?: readonly CompanionRequirement[];
   readonly dependencies?: readonly string[];
 }
 

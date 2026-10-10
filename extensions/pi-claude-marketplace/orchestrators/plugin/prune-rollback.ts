@@ -25,6 +25,7 @@ import { assertPathInside } from "../../shared/path-safety.ts";
 
 import type { IndexedRecord } from "./dependency-index.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
+import type { McpWrittenFile } from "../../shared/errors-bridges.ts";
 import type { Stats } from "node:fs";
 
 interface SavedPath {
@@ -46,11 +47,19 @@ export interface PruneRestoreOps {
   readonly removeBackup: typeof rm;
   readonly afterMetadataRead?: (target: string) => Promise<void>;
   readonly inspectBackup?: (target: string) => Promise<Stats>;
+  readonly writeMetadata?: (target: string, bytes: Buffer) => Promise<void>;
+  /** Reads the live metadata file for the byte check just before the write. */
+  readonly readMetadata?: (target: string) => Promise<Buffer>;
 }
 
 /** Snapshot held until state persistence succeeds or every restore completes. */
 export interface PruneRollback {
   readonly backupName: string;
+  /**
+   * NFR-3: records the bytes a member's unstage wrote to an MCP config file.
+   * The last write to a path wins.
+   */
+  readonly recordMcpWrites: (files: readonly McpWrittenFile[]) => void;
   readonly rollback: () => Promise<readonly PruneRestoreFailure[]>;
   readonly discard: () => Promise<void>;
 }
@@ -192,14 +201,22 @@ async function restoreArtifact(saved: SavedPath, ops: PruneRestoreOps): Promise<
   }
 }
 
-async function metadataMatchesBackup(saved: SavedPath): Promise<boolean> {
+/** What the live metadata file holds relative to its backup. */
+type MetadataVerdict =
+  | { readonly kind: "matches-backup" | "occupied" }
+  | { readonly kind: "own-write"; readonly ownWrite: Buffer; readonly original: Buffer };
+
+async function metadataVerdict(
+  saved: SavedPath,
+  ownWrite: Buffer | undefined,
+): Promise<MetadataVerdict> {
   await assertPathInside(saved.root, saved.target, `prune ${saved.phase} restore`);
   if (saved.backup === undefined) {
-    return !(await pathExists(saved.target));
+    return { kind: (await pathExists(saved.target)) ? "occupied" : "matches-backup" };
   }
 
   if (!(await pathExists(saved.target))) {
-    return false;
+    return { kind: "occupied" };
   }
 
   const stat = await lstat(saved.target);
@@ -212,16 +229,58 @@ async function metadataMatchesBackup(saved: SavedPath): Promise<boolean> {
     throw new Error(`Prune rollback found an occupied metadata backup at ${saved.backup}.`);
   }
 
-  return (
-    stat.mode === backupStat.mode &&
-    (await readFile(saved.target)).equals(await readFile(saved.backup))
-  );
+  const [live, original] = await Promise.all([readFile(saved.target), readFile(saved.backup)]);
+  if (stat.mode === backupStat.mode && live.equals(original)) {
+    return { kind: "matches-backup" };
+  }
+
+  // NFR-3: live bytes equal to this prune's own last write mean no other
+  // writer changed the file after the unstage rewrote it. Any other content
+  // is another writer's change.
+  return ownWrite?.equals(live) === true
+    ? { kind: "own-write", ownWrite, original }
+    : { kind: "occupied" };
 }
 
-async function restoreMetadata(saved: SavedPath, ops: PruneRestoreOps): Promise<void> {
-  const matchesBackup = await metadataMatchesBackup(saved);
+// NFR-3: a path removed or replaced by a directory while it is read does not
+// hold this prune's write, so the caller reports the occupied-path refusal.
+async function holdsBytes(
+  file: string,
+  bytes: Buffer,
+  read: (target: string) => Promise<Buffer>,
+): Promise<boolean> {
+  try {
+    return (await lstat(file)).isFile() && (await read(file)).equals(bytes);
+  } catch (error: unknown) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === "ENOENT" || code === "ENOTDIR" || code === "EISDIR") {
+      return false;
+    }
+
+    throw error;
+  }
+}
+
+async function restoreMetadata(
+  saved: SavedPath,
+  ops: PruneRestoreOps,
+  ownWrite: Buffer | undefined,
+): Promise<void> {
+  const verdict = await metadataVerdict(saved, ownWrite);
   await ops.afterMetadataRead?.(saved.target);
-  if (matchesBackup) {
+  if (verdict.kind === "matches-backup") {
+    return;
+  }
+
+  // NFR-3: the last byte check runs just before the atomic write, and the
+  // restore never moves or deletes the live file. An edit that lands between
+  // this check and the write's rename is overwritten; the state.json restore
+  // accepts the same window.
+  if (
+    verdict.kind === "own-write" &&
+    (await holdsBytes(saved.target, verdict.ownWrite, ops.readMetadata ?? readFile))
+  ) {
+    await (ops.writeMetadata ?? writeFileAtomic)(saved.target, verdict.original);
     return;
   }
 
@@ -299,6 +358,7 @@ export async function preparePruneRollback(
   const artifacts: SavedPath[] = [];
   let agentsIndex: SavedPath;
   let mcp: SavedPath;
+  let mcpAdapter: SavedPath;
   let state: SavedPath;
   try {
     for (const [index, { root, target, phase }] of targets.entries()) {
@@ -320,14 +380,23 @@ export async function preparePruneRollback(
       backupRoot,
       targets.length + 1,
     );
+    // AFILE-01: prune's unstage rewrites the adapter file; the legacy
+    // `mcp.json` snapshot stays because the file stays in the write set.
+    mcpAdapter = await snapshotPath(
+      locations.scopeRoot,
+      locations.mcpAdapterJsonPath,
+      "mcp adapter",
+      backupRoot,
+      targets.length + 2,
+    );
     state = await snapshotPath(
       locations.extensionRoot,
       locations.stateJsonPath,
       "state",
       backupRoot,
-      targets.length + 2,
+      targets.length + 3,
     );
-    const entries = [...artifacts, agentsIndex, mcp, state].map((saved) =>
+    const entries = [...artifacts, agentsIndex, mcp, mcpAdapter, state].map((saved) =>
       recoveryEntry(locations, saved),
     );
     await writeFileAtomic(
@@ -339,8 +408,14 @@ export async function preparePruneRollback(
     throw error;
   }
 
+  const ownMcpWrites = new Map<string, Buffer>();
   return {
     backupName: path.basename(backupRoot),
+    recordMcpWrites: (files): void => {
+      for (const file of files) {
+        ownMcpWrites.set(file.path, file.bytes);
+      }
+    },
     rollback: async (): Promise<readonly PruneRestoreFailure[]> => {
       const failures: PruneRestoreFailure[] = [];
       for (const saved of artifacts) {
@@ -352,10 +427,10 @@ export async function preparePruneRollback(
         }
       }
 
-      for (const saved of [agentsIndex, mcp]) {
+      for (const saved of [agentsIndex, mcp, mcpAdapter]) {
         try {
           // eslint-disable-next-line no-await-in-loop -- restores run in order; each failure kept
-          await restoreMetadata(saved, ops);
+          await restoreMetadata(saved, ops, ownMcpWrites.get(saved.target));
         } catch (error: unknown) {
           failures.push({ phase: saved.phase, cause: asError(error) });
         }

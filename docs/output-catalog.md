@@ -60,13 +60,13 @@ This 0 / 2 / 4 / 6 ladder is the byte-exact contract `notify()` emits at the `ct
 
 ### Reasons rendering
 
-Reasons render inside a single `{}` block, comma-space separated. Each reason is 1-3 words lowercase, hyphenated where natural (`{up-to-date}`, `{rollback partial}`, `{not in manifest}`). Typed-kind carve-outs render `{lsp}` for `lspServers`. HOOK-04 / D-58-02: `{unsupported hooks}` is a normal 2-word reason (no longer a manifest-field carve-out -- under v1.13 the `hooks` component kind is supported, and the reason is sourced through `shared/probe-classifiers.ts::narrowResolverNotes` against `parseHooksConfig` prefix tokens). The 46-member `extensions/pi-claude-marketplace/shared/notification-types.ts::REASONS` tuple defines the closed set; its length is pinned by `tests/architecture/notify-closed-set-locks.test.ts` and its membership by `tests/architecture/compat-01-no-expansion.test.ts`. `workflows` carries no unsupported-kind carve-out: the kind is a fully supported bridge, not a probed carve-out like `lspServers`.
+Reasons render inside a single `{}` block, comma-space separated. Each reason is 1-3 words lowercase, hyphenated where natural (`{up-to-date}`, `{rollback partial}`, `{not in manifest}`). Typed-kind carve-outs render `{lsp}` for `lspServers`. HOOK-04 / D-58-02: `{unsupported hooks}` is a normal 2-word reason (no longer a manifest-field carve-out -- under v1.13 the `hooks` component kind is supported, and the reason is sourced through `shared/probe-classifiers.ts::narrowResolverNotes` against `parseHooksConfig` prefix tokens). The `Reason` union in `extensions/pi-claude-marketplace/shared/notification-types.ts` defines the closed set. `tests/architecture/notify-closed-set-locks.test.ts` pins its size, and `tests/architecture/compat-01-no-expansion.test.ts` pins its membership. `{unsupported mcp}` (ANAME-07) is the one aggregate reason for a plugin whose MCP server uses a Claude Code feature that pi-mcp-adapter cannot honor. Like `{unsupported hooks}`, it comes from a typed kind (`mcpServers`), not from a resolver note. `workflows` carries no unsupported-kind carve-out: the kind is a fully supported bridge, not a probed carve-out like `lspServers`.
 
 Structural `unavailable` rows derive reasons from resolver notes through `narrowResolverNotes`. Partial rows derive typed unsupported kinds through `narrowUnsupportedKinds`.
 
 Multi-reason emit order is contractual. `composeReasons` joins in ARRAY order, so the order the orchestrator writes into `reasons[]` is the order the brace shows, and the soft-dependency markers append AFTER every typed reason (MSG-GR-4). The orchestrators write the record's relationship to its marketplace first and the facts about the install itself after it, which is why an absent-and-degraded row reads `{not in manifest, lsp}` and never the reverse (INV-02). The DECLARED order of the `REASONS` tuple must also stay byte-stable: the fenced blocks below are byte contracts, so reordering the tuple would move the rendered bytes of every multi-reason row even though no member changed.
 
-The soft-dep markers `requires pi-subagents`, `requires pi-mcp` and `requires pi-dynamic-workflows` live INSIDE the same brace block as the variant's typed reasons (D-16-15 injection). They are emitted by the renderer at render time from the plugin's `dependencies` field and the Pi-host probe; callers do not place them in `reasons` directly. Marker order inside the brace is `agents`, `mcp`, `workflows` -- appended, never interleaved, so adding a companion leaves every existing brace byte-unchanged. The 4 dep-bearing variants (`installed | updated | reinstalled | partially-installed`) declare the `dependencies` field per D-15-02 and WR-03; the remaining 15 of the 19 plugin statuses cannot emit soft-dep markers structurally. `partially-installed` is the one variant whose `dependencies` field is OPTIONAL: the install / update / enable success rows thread the staged counts, while the list / info inventory rows omit it so they carry no marker.
+The soft-dep markers `requires pi-subagents`, `requires pi-mcp-adapter` and `requires pi-dynamic-workflows` live INSIDE the same brace block as the variant's typed reasons (D-16-15 injection). They are emitted by the renderer at render time from the plugin's `dependencies` field and the Pi-host probe; callers do not place them in `reasons` directly. Marker order inside the brace is `agents`, `mcp`, `workflows` -- appended, never interleaved, so adding a companion leaves every existing brace byte-unchanged. The 4 dep-bearing variants (`installed | updated | reinstalled | partially-installed`) declare the `dependencies` field per D-15-02 and WR-03; the remaining 15 of the 19 plugin statuses cannot emit soft-dep markers structurally. `partially-installed` is the one variant whose `dependencies` field is OPTIONAL: the install / update / enable success rows thread the staged counts, while the list / info inventory rows omit it so they carry no marker.
 
 ### Reload-hint trailer
 
@@ -144,8 +144,8 @@ The table below holds ONE row per member of the 19-member `PLUGIN_STATUSES` tupl
 | `(uninstalled)`          | ○    | Plugin row -- uninstall single-plugin, marketplace-remove partial success rows. It admits up to two tokens: the data-disposition marker `{data kept}`, stamped by `uninstall --keep-data` (DATA-01 / WR-06) on any `(uninstalled)` row; and `{dependency pruned}` (D-05-11 / PRUNE-04), stamped only on a dependency record `uninstall --prune` swept out after the named plugin, ordered before `{data kept}` when both apply (`{dependency pruned, data kept}`). A bare row means the plugin's data directory went with it and, for the named plugin's own row, that no pruning happened. `marketplace remove` has no such opt-out, so its rows are always bare. |
 | `(available)`            | ○    | Plugin row -- `marketplace list` / plugin-list surface (no scope bracket per MSG-PL-6 / SNM-11). It admits exactly one entry-derived token, the author-declared `{installs disabled}` install-time-state marker, answered from the marketplace entry in the cached manifest and never from the plugin's own `plugin.json`, which this path declines to fetch (OUT-02 / OUT-05).                                                                                                                                                                                                                                                                                    |
 | `(remote)`               | ◌    | Plugin row -- list / info / install-completion surfaces for a not-installed git-source plugin whose clone/mirror is not yet materialized locally (RSTA-01 / D-80-03). No scope bracket (SNM-11), and no probe-derived or soft-dependency-derived reason brace -- no materialized tree exists to derive one from. It admits exactly one entry-derived token, the author-declared `{installs disabled}` install-time-state marker, which needs no tree because the marketplace entry is readable from the cached manifest (OUT-05 / RSTA-01).                                                                                                                        |
-| `(partially-available)`  | ⊖    | Plugin row -- list / info surfaces AND the install-failure surface (XSURF-01) for a partially-available plugin (resolver `partially-available`: LSP / hooks / unsupported component); carries `{unsupported hooks}` / `{lsp}` / `{unsupported component}`. A normal install rejects this arm. With `--partial`, the install materializes its supported subset (USTAT-01 / D-64-01); the install-failure row carries the `--partial` hint trailer.                                                                                                                                                                                                                  |
-| `(unavailable)`          | ⊘    | Plugin row -- install / reinstall / import / list / info surfaces for a STRUCTURALLY-unavailable plugin (malformed manifest / hooks.json, unreadable source, or a broken `mcpServers` string reference -- missing file / malformed JSON / wrapper-less / out-of-root -> `{malformed mcp}`); carries the structural reasons.                                                                                                                                                                                                                                                                                                                                        |
+| `(partially-available)`  | ⊖    | Plugin row -- list / info surfaces AND the install-failure surface (XSURF-01) for a partially-available plugin (resolver `partially-available`: LSP / hooks / unsupported component / an MCP server feature pi-mcp-adapter cannot honor); carries `{unsupported hooks}` / `{lsp}` / `{unsupported component}` / `{unsupported mcp}`. A normal install rejects this arm. With `--partial`, the install materializes its supported subset (USTAT-01 / D-64-01); the install-failure row carries the `--partial` hint trailer.                                                                                                                                        |
+| `(unavailable)`          | ⊘    | Plugin row -- install / reinstall / import / list / info surfaces for a STRUCTURALLY-unavailable plugin (malformed manifest / hooks.json, unreadable source, a broken `mcpServers` string reference -- missing file / malformed JSON / wrapper-less / out-of-root -> `{malformed mcp}`, or a server config that Claude Code's schema rejects -> `{malformed mcp}`); carries the structural reasons.                                                                                                                                                                                                                                                                |
 | `(upgradable)`           | ●    | Plugin row -- plugin-list surface only (advisory).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | `(partially-upgradable)` | ●    | Plugin row -- list inventory surface AND the manual update-decline surface (XSURF-03) for a currently-clean installed plugin whose newer no-network cache candidate would NEWLY degrade it (FSTAT-04 / D-66-02). REUSES `●` rather than `◉` because the row is clean today -- only its candidate would degrade. The decline row carries the update-worded `--partial` hint trailer; the inventory row renders byte-frozen.                                                                                                                                                                                                                                         |
 | `(failed)`               | ⊘    | Plugin row -- any failure variant; carries `reasons`, optional `cause:` trailer, optional `rollbackPartial` children.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
@@ -245,9 +245,9 @@ Plugin list: 2 successes
 
 ```text
 ● official [user] <autoupdate>
-  ● dual v0.5.0 (installed) {requires pi-subagents, requires pi-mcp}
+  ● dual v0.5.0 (installed) {requires pi-subagents, requires pi-mcp-adapter}
   ● helper v1.0.0 (installed) {requires pi-subagents}
-  ● mcp-tool v2.0.0 (installed) {requires pi-mcp}
+  ● mcp-tool v2.0.0 (installed) {requires pi-mcp-adapter}
 
 Plugin list: 3 successes
 ```
@@ -392,7 +392,7 @@ Two conditions cause this row. The state record carries the explicit `enabled: f
 
 `{not in manifest}` is the only reason a disabled row on THIS surface can carry. The governing rule: render durable facts that constrain what the user can do next; suppress facts about runtime behavior that is currently suspended. Manifest absence is such a durable fact. `/claude:plugin enable` re-runs the install ledger, and that ledger resolves the plugin from the marketplace manifest. Thus the user cannot re-enable a disabled plugin the manifest no longer declares. The bare row gave no warning before the attempt.
 
-Every other reason stays off this row. A disabled record whose install-time resolution dropped a component kind keeps its unsupported-kind tokens hidden. The soft-dependency markers `{requires pi-subagents}` and `{requires pi-mcp}` cannot appear either: the renderer passes both soft-dependency flags as `false` (ENBL-15 / D-100-06). Disable preserves the record's component inventory (ENBL-18), but that inventory cannot change these bytes.
+Every other reason stays off this row. A disabled record whose install-time resolution dropped a component kind keeps its unsupported-kind tokens hidden. The soft-dependency markers `{requires pi-subagents}`, `{requires pi-mcp-adapter}` and `{requires pi-dynamic-workflows}` cannot appear either: the renderer passes all three soft-dependency flags as `false` (ENBL-15 / D-100-06). Disable preserves the record's component inventory (ENBL-18), but that inventory cannot change these bytes.
 
 This surface builds the row from the installation record alone and reads no source, thus manifest absence is the only reason it ever HAS. The `info` surface applies the same rule to a larger set of facts, because it also reads disk: a disabled row there can additionally carry the failure class (`source missing`, `unreadable`, `permission denied`, `network unreachable`, `authentication required`). Those name a source the next `enable` cannot read, thus they limit the next action in the same way manifest absence does. See the `state-only-disabled-with-components` state under `## /claude:plugin info <plugin>@<marketplace>`.
 
@@ -496,6 +496,19 @@ Plugin list: 1 success
 
 A partial-hook plugin -- one whose `hooks.json` parses and validates cleanly but declares an unsupportable event (a non-bucket-A event such as `Notification`) or matcher group -- partially installs its supported components PLUS the supportable hook handlers, staging a `hooks.json` that is a strict subset of the source with only the unsupportable handlers dropped (PHOOK-04). Once recorded-installed it re-resolves `partially-available` and is DERIVED as `partially-installed`, identical to any other dropped-component degrade. The `hooks` kind rides the SINGLE aggregate `{unsupported hooks}` brace regardless of how many events / matcher groups dropped (D-71-04); the per-handler `event(matcher) (unsupported)` breakdown lives on the `info` surface (D-71-05). The aggregate marker is sourced through `shared/probe-classifiers.ts::narrowUnsupportedKinds` (the typed `unsupported` kind list), distinct from the structural `narrowResolverNotes` path that an `unavailable` malformed-`hooks.json` row uses. Severity `info`; no reload-hint (inventory row).
 
+### Partially-installed inventory row -- MCP server left out (ANAME-07)
+
+<!-- catalog-state: partially-installed-inventory-mcp -->
+
+```text
+● official [user] <autoupdate>
+  ◉ mcp-plugin v1.0.0 (partially-installed) {unsupported mcp}
+
+Plugin list: 1 success
+```
+
+A plugin installed with `--partial` while one of its servers needs a Claude Code MCP feature that pi-mcp-adapter cannot honor. The record lists only the servers that were written, and it re-resolves `partially-available`, so the row is DERIVED as `partially-installed`. The typed `mcpServers` kind rides the single aggregate `{unsupported mcp}` brace through `narrowUnsupportedKinds`, however many servers were left out. The per-server breakdown lives on the `info` surface. Severity `info`; no reload-hint (inventory row).
+
 ### Partially-upgradable inventory row (FSTAT-04 / D-66-02 / D-66-03)
 
 <!-- catalog-state: partially-upgradable-inventory -->
@@ -562,7 +575,7 @@ Marketplace header is SUB-BRANCH A (bare label header, no details). Plugin row o
 A plugin operation needs attention.
 
 ● official [user]
-  ● helper v1.0.0 (installed) {requires pi-subagents, requires pi-mcp}
+  ● helper v1.0.0 (installed) {requires pi-subagents, requires pi-mcp-adapter}
 
 /reload to pick up changes
 ```
@@ -696,6 +709,20 @@ A plugin operation has failed.
 ```
 
 The manifest declares Claude features Pi doesn't support, but the plugin is otherwise structurally sound, so the resolver verdict is the partially-available arm (SEV-02 / D-69-03 / XSURF-01). The install-failure surface renders the resolver-state-driven `(partially-available)` token with the dedicated `⊖` glyph -- consistent with how `list` / `info` describe the same plugin -- not the `⊘ (unavailable)` token reserved for structural defects. The `partially-available` variant has no `scope` field (SNM-11) so the plugin row carries no bracket; reasons name the offending fields verbatim. Because `--partial` can degrade-install the supported components, the row carries a 4-space-indented `--partial` hint trailer pointing the user at the flag, and the install renders at `error` severity (so the leading summary line fires). No `cause:` trailer -- the reason carries the explanation. No reload-hint (nothing landed). The hint references the user's own flag only, with no plugin/marketplace interpolation (T-69-01); the byte-exact wording is FROZEN as the DOC contract (D-70-01) and locked in `docs/messaging-style-guide.md`.
+
+### Failure -- unsupported MCP server feature (partially-available, ANAME-07)
+
+<!-- catalog-state: failure-unsupported-mcp -->
+
+```text
+A plugin operation has failed.
+
+● official [user]
+  ⊖ helper (partially-available) {unsupported mcp}
+    Re-run with --partial to install the supported components.
+```
+
+A server of the plugin uses a Claude Code MCP feature that pi-mcp-adapter cannot honor. The features are a `ws` transport, the host-only types `sse-ide`, `ws-ide`, `sdk` and `claudeai-proxy`, `headersHelper`, a truthy `oauth.xaa`, `bareElicitationCapability: true`, and a leading `~`, `~/` or `~\` in a stdio server's `command` or in an `args` element. A leading `${NAME:-…}` reference whose default starts that way counts too. Claude Code passes such a value through literally, but pi-mcp-adapter expands the home directory after it interpolates the value, so no written form keeps the value literal. `info` names such a server as `(unsupported command ~)` or `(unsupported args ~)`. The resolver gives the partially-available arm, so a normal install refuses before any write. The row carries the one aggregate `{unsupported mcp}` token, however many servers are affected, and the `--partial` hint. With `--partial`, the install writes every other component and every other server. It leaves each affected server out whole, and the record then derives `(partially-installed)`. `info` names each server that was left out, with the feature that blocks it. A per-tool `permission_policy` or a non-empty `toolPermissions` does not block; the server installs and the command warns that the rules are not enforced. A server config that Claude Code's own schema rejects is a different case: it is a structural defect, and the plugin is `(unavailable) {malformed mcp}`.
 
 ### Workflow plus unsupported-kind rejection (WINV-04)
 
@@ -1439,7 +1466,7 @@ A plugin operation has failed.
 
 ### Prune rollback needs manual recovery
 
-If rollback finds a changed path, prune keeps the current file and the original in a recovery backup. A missing directory artifact also stays absent and requires manual restoration from that backup. The backup's `manifest.json` maps each numbered entry to a permitted root and a relative target. Inspect that manifest before retrying. This also applies to shared metadata: the scope state lock does not cover independent writers of `mcp.json` or the agents index, so prune does not replace a changed whole document during rollback. A backup can require a manual merge even when the change came from prune. The command reports each restore failure with a redacted cause and gives the backup directory name. It does not suggest `/reload` because the removal did not commit.
+If rollback finds a changed path, prune keeps the current file and the original in a recovery backup. A missing directory artifact also stays absent and requires manual restoration from that backup. The backup's `manifest.json` maps each numbered entry to a permitted root and a relative target. Inspect that manifest before retrying. This also applies to shared metadata: the scope state lock does not cover independent writers of `mcp-adapter.json`, `mcp.json` or the agents index, so prune does not replace a changed whole document during rollback. A backup can require a manual merge even when the change came from prune. The command reports each restore failure with a redacted cause and gives the backup directory name. It does not suggest `/reload` because the removal did not commit.
 
 <!-- catalog-state: rollback-partial -->
 
@@ -1455,7 +1482,7 @@ A plugin operation has failed.
 
 ### Shared metadata changed during rollback
 
-The current `mcp.json` remains available, and the original bytes remain in the numbered recovery backup. An independent writer can edit this file between any two prune operations, including while rollback checks it.
+The current `mcp-adapter.json` remains available, and the original bytes remain in the numbered recovery backup. An independent writer can edit this file between any two prune operations, including while rollback checks it. pi-mcp-adapter itself writes this file, for example on `/mcp-adapter disable`.
 
 <!-- catalog-state: rollback-mcp-changed -->
 
@@ -1465,8 +1492,8 @@ A plugin operation has failed.
 ● (prune) [project]
   ⊘ (prune) (failed) {rollback partial}
     cause: Prune rollback was incomplete. Inspect prune-backup-ABC123/manifest.json under this scope's pi-claude-marketplace directory before retrying. -> state save failed
-    [mcp] (rollback failed)
-      cause: Prune rollback found an occupied metadata path at mcp.json.
+    [mcp adapter] (rollback failed)
+      cause: Prune rollback found an occupied metadata path at mcp-adapter.json.
 ```
 
 ### Rollback and lock release both fail
@@ -1481,8 +1508,8 @@ A plugin operation has failed.
 ● (prune) [project]
   ⊘ (prune) (failed) {rollback partial}
     cause: Prune rollback was incomplete. Inspect prune-backup-ABC123/manifest.json under this scope's pi-claude-marketplace directory before retrying. (lock release also failed: lock release failed) -> Prune rollback was incomplete. Inspect prune-backup-ABC123/manifest.json under this scope's pi-claude-marketplace directory before retrying. -> state save failed
-    [mcp] (rollback failed)
-      cause: Prune rollback found an occupied metadata path at mcp.json.
+    [mcp adapter] (rollback failed)
+      cause: Prune rollback found an occupied metadata path at mcp-adapter.json.
 ```
 
 ______________________________________________________________________
@@ -1513,7 +1540,7 @@ Bare marketplace header (no status, no details). Plugin status `reinstalled` tri
 
 ```text
 ● official [user]
-  ● alpha v1.0.0 (reinstalled) {requires pi-subagents, requires pi-mcp}
+  ● alpha v1.0.0 (reinstalled) {requires pi-subagents, requires pi-mcp-adapter}
 
 Plugin reinstall: 1 success
 
@@ -2160,7 +2187,7 @@ Three project-scope marketplace blocks. OUT-03/D-04: three `added` marketplace r
 ```text
 ● claude-plugins-official [project] (added)
   ● agent-only-plugin (installed) {requires pi-subagents}
-  ● dual-plugin (installed) {requires pi-subagents, requires pi-mcp}
+  ● dual-plugin (installed) {requires pi-subagents, requires pi-mcp-adapter}
 
 Import: 3 successes
 
@@ -2556,9 +2583,28 @@ ______________________________________________________________________
 
 ## `/claude:plugin info <plugin>@<marketplace>`
 
-Read-only detail surface. Renders the install-cascade always-marketplace-header form (mirrors `install`'s shape per INFO-02) with a per-plugin row at 2-space indent, optional description block hard-wrapped at col 4 / 66-col text width, then either per-kind component lists (sorted: `agents`, `commands`, `mcp`, `skills`, `workflows`) with an optional `dependencies:` line LAST, OR the `components: not resolved` marker (INFO-05), itself followed by the same optional `dependencies:` line on the cold git-source row (D-01-32). INFO-02 + INFO-05 + INFO-07 lock the full state set below.
+Read-only detail surface. Renders the install-cascade always-marketplace-header form (mirrors `install`'s shape per INFO-02) with a per-plugin row at 2-space indent, optional description block hard-wrapped at col 4 / 66-col text width, then either per-kind component lists (sorted: `agents`, `commands`, `mcp`, `skills`, `workflows`) followed by an optional `requires:` line (ADET-01) and an optional `dependencies:` line LAST, OR the `components: not resolved` marker (INFO-05), itself followed by the same optional `dependencies:` line on the cold git-source row (D-01-32). INFO-02 + INFO-05 + INFO-07 lock the full state set below.
 
-Severity routing: every success state (installed / available / unavailable / installed-both-scopes / state-only-installed-both-scopes / components-not-resolved / state-only-installed / state-only-partially-installed / state-only-disabled-with-components) is `info` severity (no second arg to `ctx.ui.notify`); the `state-only-fetch-skipped` and `disabled-fetch-skipped` notes are the two `warning` states on this surface (the user asked for a fetch and the command did not do it); the three `(failed)` states (`{marketplace not added}` missing-marketplace, `{marketplace not added}` --scope mismatch, `{not in manifest}` missing-plugin with NO installation record) route to `error`. No reload-hint fires on any state (info surfaces are read-only per SNM-33).
+Severity routing: every success state (installed / available / unavailable / installed-both-scopes / state-only-installed-both-scopes / components-not-resolved / state-only-installed / state-only-partially-installed / state-only-disabled-with-components / installed-with-missing-companion / installed-with-every-companion / partially-installed-with-mcp-status / installed-with-mcp-pending-approval / installed-with-mcp-not-loaded / installed-both-scopes-mcp-overridden) is `info` severity (no second arg to `ctx.ui.notify`); the `state-only-fetch-skipped` and `disabled-fetch-skipped` notes are the two `warning` states on this surface (the user asked for a fetch and the command did not do it); the three `(failed)` states (`{marketplace not added}` missing-marketplace, `{marketplace not added}` --scope mismatch, `{not in manifest}` missing-plugin with NO installation record) route to `error`. No reload-hint fires on any state (info surfaces are read-only per SNM-33).
+
+Companion line (ADET-01, closed-catalog amendment): a resolved row whose components need a companion extension shows a `requires: <list>` line at 4-space indent. Agents need `pi-subagents`, MCP servers need `pi-mcp-adapter`, and workflows need `pi-dynamic-workflows`. These names are the same names that the `{requires <name>}` markers on `install` and `list` use. The line sits after the per-kind component lines and before the `dependencies:` line, so `dependencies:` stays the last data line and every `note:` line still follows it. The companions are sorted by package name, and each one shows at most once. A companion that the soft-dependency probe does not find loaded carries a `(missing)` tag after its name. The line does not show when no component needs a companion, and it never shows on a `components: not resolved` row. It still shows on a `(disabled)` row, because a disabled record keeps its component inventory (ENBL-18): the line states what the plugin needs, and not whether its runtime is running. The plugin row carries no `{requires ...}` brace, and the `(missing)` tag does not change the severity of any state. The info command takes the probe and stamps the entries on the row; the renderer only formats them.
+
+MCP server status (ASTAT-01, ASTAT-02, closed-catalog amendment): on an `(installed)` or `(partially-installed)` row, each MCP server that the installation record lists as written shows the state that pi-mcp-adapter last reported for it. The state is the first item inside the server's parentheses. The `unset` and `withheld` lists follow it after a semicolon (D-06-03). Info reads the last snapshot that pi-mcp-adapter published on its `pi-mcp-adapter/status/v1` event channel. It never imports the adapter, never asks it for a snapshot and never connects a server. The state uses Claude Code's words (D-06-01):
+
+| pi-mcp-adapter status                                       | Shown text                      |
+| ----------------------------------------------------------- | ------------------------------- |
+| `connected`                                                 | `connected`                     |
+| `cached`                                                    | `cached, connects on first use` |
+| `needs-auth`                                                | `needs authentication`          |
+| `blocked`                                                   | `pending approval`              |
+| `disabled`                                                  | `disabled`                      |
+| `not-connected`                                             | `not connected`                 |
+| `failed`                                                    | `failed`                        |
+| no usable snapshot, or a status this release does not know  | `status unknown`                |
+| a usable snapshot that does not list the server             | `not loaded`                    |
+| a user row's server that the project scope's entry replaces | `overridden by project scope`   |
+
+`cached, connects on first use` and `not connected` are the resting states of a lazy server that has not connected yet. They are not failures. `failed` shows only while the adapter holds the server in its failure backoff. Claude Code's status text says `not connected` for a failed server. Here `failed` takes the word from Claude Code's `/mcp` panel, because the adapter keeps a failure apart from a server it never discovered (D-06-01). The cached state uses a comma, because a second pair of parentheses inside the server's parentheses would read badly (D-06-02). `pending approval` covers all three project-trust block reasons: the project is not trusted, approval is required, or approval was denied. The adapter's own panel shows which one (D-06-04). `status unknown` means that pi-mcp-adapter is absent, has not published in this session, last sent its empty session-start or shutdown snapshot, or sent a malformed snapshot or one of a newer version. pi-mcp-adapter 5.2.0 sends an empty snapshot at every session start. In a session where every server is lazy, no server comes from a project file and every tool list is cached, it sends nothing more until the first MCP use (a tool call, `/mcp` or `/mcp-adapter`). So `status unknown` is the normal reading in such a session until the first MCP use (D-06-06, D-06-06a). `not loaded` shows for a plugin installed in this session that the adapter has not read yet (a `/reload` loads it). The same holds for a server that the reload move wrote into `mcp-adapter.json` in this session, until the next `/reload` (D-05-15). It also shows for an old `mcp.json` entry that the reload move left in place, which the adapter still serves under its old name. `(disabled)` rows (ENBL-08), not-installed rows, left-out servers, servers that the installation record does not list, and `components: not resolved` rows show no state (D-06-08). The state never changes the severity, and info adds no remedy, tool count, failure age or block reason (D-06-04, D-06-05, D-06-10). The info command stamps the state on each server; the renderer only formats it.
 
 ### Success -- installed single scope
 
@@ -2573,6 +2619,7 @@ Triggered by `plugin info <plugin>@<marketplace> --scope user` against an instal
     agents: review-bot
     commands: c1, c2
     skills: commit-summary
+    requires: pi-subagents
 ```
 
 ### Success -- installed single scope with dependencies
@@ -2588,6 +2635,7 @@ Same as above but with a `dependencies: <plugin>@<marketplace>, ...` line emitte
     agents: review-bot
     commands: c1, c2
     skills: commit-summary
+    requires: pi-subagents
     dependencies: helper@utils-mp
 ```
 
@@ -2605,6 +2653,7 @@ The plugin ships workflow scripts. The `workflows:` line shows them LAST among t
     commands: c1, c2
     skills: commit-summary
     workflows: commit-commands:changelog, commit-commands:release
+    requires: pi-dynamic-workflows, pi-subagents
 ```
 
 ### Success -- a workflow script that will not install (WR-09)
@@ -2619,6 +2668,7 @@ The plugin ships a workflow script that the command will not admit. The row show
     Helpful git commit commands for everyday use.
     skills: commit-summary
     workflows: commit-commands:changelog
+    requires: pi-dynamic-workflows
     note: workflow script "roll.js" in "workflows" will be refused: roll.js calls `Math.random`, which the workflow engine refuses as nondeterministic
 ```
 
@@ -2634,6 +2684,7 @@ The plugin ships a workflow script that the command installs and that the host w
     Helpful git commit commands for everyday use.
     skills: commit-summary
     workflows: commit-commands:changelog, commit-commands:greet
+    requires: pi-dynamic-workflows
     note: workflow script "greet.js" in "workflows" would be installed but the engine will refuse to load it: the engine refuses at its check 9 -- `meta.description` must be a non-empty string, and `meta.model` (a string) and `meta.phases` (an array of objects each carrying a string `title`) must match those shapes wherever they are declared
 ```
 
@@ -2650,12 +2701,44 @@ Same as above, but each dependency carries the constraint its manifest declared,
     agents: review-bot
     commands: c1, c2
     skills: commit-summary
+    requires: pi-subagents
     dependencies: both@utils-mp (^2.0.0, sha def5678), helper@utils-mp (^1.0.0), pinned@utils-mp (sha abc1234)
+```
+
+### Success -- a companion the plugin needs is missing (ADET-01)
+
+The plugin has agents and MCP servers, so it needs two companion extensions: pi-subagents runs its agents, and pi-mcp-adapter runs its MCP servers. The `requires:` line names both, sorted by package name. The probe finds pi-subagents loaded but does not find pi-mcp-adapter, so only pi-mcp-adapter carries the `(missing)` tag. Pi's built-in MCP client does not count as pi-mcp-adapter. The tag does not change the severity. With pi-mcp-adapter absent, the `github` server's state is `status unknown`. Severity `info`; no reload-hint (read-only surface).
+
+<!-- catalog-state: installed-with-missing-companion -->
+
+```text
+● claude-plugins-official [user] <autoupdate>
+  ● commit-commands v1.2.0 (installed)
+    Helpful git commit commands for everyday use.
+    agents: review-bot
+    mcp: plugin:commit-commands:github (status unknown)
+    requires: pi-mcp-adapter (missing), pi-subagents
+```
+
+### Success -- every companion, one of them missing (ADET-01)
+
+The plugin has agents, MCP servers and workflow scripts, so it needs all three companion extensions. The `requires:` line lists them in package-name order: pi-dynamic-workflows, pi-mcp-adapter, pi-subagents. The probe finds pi-subagents and pi-mcp-adapter loaded but does not find the host workflow engine, so only pi-dynamic-workflows carries the `(missing)` tag. The adapter's last snapshot lists the `github` server as connected. Severity `info`; no reload-hint (read-only surface).
+
+<!-- catalog-state: installed-with-every-companion -->
+
+```text
+● claude-plugins-official [user] <autoupdate>
+  ● commit-commands v1.2.0 (installed)
+    Helpful git commit commands for everyday use.
+    agents: review-bot
+    mcp: plugin:commit-commands:github (connected)
+    workflows: commit-commands:changelog
+    requires: pi-dynamic-workflows (missing), pi-mcp-adapter, pi-subagents
 ```
 
 ### Success -- installed from the installation record (INFO-09)
 
-The marketplace manifest loads correctly, but it does not declare the plugin. An enabled installation record for the plugin exists, so the row shows the plugin as installed and states the absence as a reason. The version comes from the installation record, because there is no manifest entry to supply one. No description line and no dependencies line show: the manifest is the only source of both, and this state does not reconstruct them. The component names are the Pi-generated INSTALLED names -- `<plugin>-<skill>` for skills, `<plugin>:<command>` for commands, and `pi-claude-marketplace-<plugin>-<agent>` for agents. These names are different from the source names that the manifest-backed states above show (D-96-01). MCP servers are the one exception: the installation record keeps their raw source keys. This state replaces the `error`-severity `missing-plugin-not-in-manifest` outcome for this input, so the severity for an installed record changes from `error` to `info`. Severity `info`; no reload-hint (read-only surface).
+The marketplace manifest loads correctly, but it does not declare the plugin. An enabled installation record for the plugin exists, so the row shows the plugin as installed and states the absence as a reason. The version comes from the installation record, because there is no manifest entry to supply one. No description line and no dependencies line show: the manifest is the only source of both, and this state does not reconstruct them. The component names are the Pi-generated INSTALLED names -- `<plugin>-<skill>` for skills, `<plugin>:<command>` for commands, and `pi-claude-marketplace-<plugin>-<agent>` for agents. These names are different from the source names that the manifest-backed states above show (D-96-01). MCP servers are the one exception: the installation record keeps each server's declared name. From that name, `info` shows every plugin MCP server as `plugin:<plugin>:<server>`, the name Claude Code gives it. It does this on the manifest-backed states and on the installation-record states alike (ANAME-01). This state replaces the `error`-severity `missing-plugin-not-in-manifest` outcome for this input, so the severity for an installed record changes from `error` to `info`. Severity `info`; no reload-hint (read-only surface).
 
 <!-- catalog-state: state-only-installed-single-scope -->
 
@@ -2676,6 +2759,7 @@ The marketplace manifest no longer declares the plugin, so the row reads its who
   ● alpha v1.0.0 (installed) {not in manifest}
     skills: alpha-skill
     workflows: alpha:changelog, alpha:release
+    requires: pi-dynamic-workflows
 ```
 
 ### Success -- partially installed from the installation record (INFO-10)
@@ -2857,11 +2941,11 @@ Severity `info`; no reload-hint (read-only surface).
 
 Triggered when `resolveStrict` returns `state: "partially-available" | "unavailable"` for the plugin entry. USTAT-01 / D-64-01: the not-installed info row uses the resolver state. Its bytes match the list surface.
 
-A structurally malformed plugin resolves to `unavailable`. Structural errors include invalid or schema-invalid `hooks/hooks.json`, unreadable or non-path sources, and broken `mcpServers` references. A broken reference uses the `{malformed mcp}` reason (MCPR-03 / D-02). The row uses the `⊘` glyph and the `(unavailable)` status.
+A structurally malformed plugin resolves to `unavailable`. Structural errors include invalid or schema-invalid `hooks/hooks.json`, unreadable or non-path sources, broken `mcpServers` references, and a server config that Claude Code's schema rejects. A broken reference and a rejected server config both use the `{malformed mcp}` reason (MCPR-03 / D-02 / ANAME-07). A rejected server config makes the whole plugin unavailable, even when another server is only blocked by an unsupported feature. The row uses the `⊘` glyph and the `(unavailable)` status.
 
-A partially available plugin has typed unsupported kinds. These kinds include `lspServers`, other unsupported components, and supported subsets of `hooks.json`. The row uses the `⊖` glyph and the `(partially-available)` status (D-71-03 / PHOOK-03). After installation, the inventory row renders `(partially-installed)`.
+A partially available plugin has typed unsupported kinds. These kinds include `lspServers`, other unsupported components, supported subsets of `hooks.json`, and `mcpServers` when a server uses a Claude Code MCP feature that pi-mcp-adapter cannot honor. The row uses the `⊖` glyph and the `(partially-available)` status (D-71-03 / PHOOK-03). After installation, the inventory row renders `(partially-installed)`.
 
-Each row has one closed-set reason block. The structural arm uses `narrowResolverNotes` for `{unsupported source}` or `{malformed mcp}`. The partial arm uses `narrowUnsupportedKinds` for `{unsupported hooks}`, `{lsp}`, or `{unsupported component}`.
+Each row has one closed-set reason block. The structural arm uses `narrowResolverNotes` for `{unsupported source}` or `{malformed mcp}`. The partial arm uses `narrowUnsupportedKinds` for `{unsupported hooks}`, `{lsp}`, `{unsupported mcp}`, or `{unsupported component}`.
 
 The example shows malformed `hooks.json`, so the row remains `⊘ (unavailable)`. Sources without a readable materialized tree use `componentsResolved: false`. Component-read failures also use that value. Then the renderer writes `components: not resolved` instead of the component list. For a path source or warm git source, the renderer tries to enumerate components for both non-installable states. It sets `componentsResolved` to `true` when that read succeeds.
 
@@ -2874,6 +2958,76 @@ Severity is `info` on this surface. Neither resolver state is a failed command. 
   ⊘ legacy-plugin v0.1.0 (unavailable) {unsupported hooks}
     Old plugin that declares hooks; not installable in Pi.
     components: not resolved
+```
+
+### Not installed -- an MCP server is left out (ANAME-07)
+
+The plugin declares two MCP servers. The `live` server uses the `ws` transport, a Claude Code MCP feature that pi-mcp-adapter cannot honor, so the plugin is `(partially-available)` with the `{unsupported mcp}` reason. The `mcp:` line shows every server by the name Claude Code gives it, `plugin:<plugin>:<server>`, sorted by name. A left-out server also names the feature that blocks it, as `(unsupported <feature>)`. An install with `--partial` installs the plugin without that server. Severity `info`; no reload-hint (read-only surface).
+
+<!-- catalog-state: partially-available-with-unsupported-mcp -->
+
+```text
+● community-mp [user] <no autoupdate>
+  ⊖ db-tools v1.0.0 (partially-available) {unsupported mcp}
+    Database tools for everyday queries.
+    mcp: plugin:db-tools:db, plugin:db-tools:live (unsupported ws)
+    requires: pi-mcp-adapter
+```
+
+### Installed -- an MCP server's variables (AVAR-04, AVAR-05)
+
+The plugin's `api` server reads variables in its `url` and `headers`. Info computes two lists of variable names from the current environment. It only reads, and it uses no network. `unset` names each variable that the server reads, that is not set, and that has no `:-` default. Claude Code's `/plugin` errors list reports the same variables. `withheld` names each deny-listed variable that the server never receives. That is every deny-listed variable in `url` or `headers`, set or not, and every deny-listed variable in `command`, `args` or `env` that is set now. Here `ANALYTICS_TOKEN` is not set, and `ANTHROPIC_API_KEY` is a deny-listed credential in a header. The line shows names only, never values. Each list shows only when it has a name, and the two lists share one pair of parentheses, separated by a semicolon. A server that a partial install leaves out shows only its unsupported feature. An installation record without the plugin's configs shows no lists. The adapter's last snapshot says that the server needs authentication. The state comes first, and the two lists follow after a semicolon. Severity `info`; no reload-hint (read-only surface).
+
+<!-- catalog-state: installed-with-mcp-variables -->
+
+```text
+● community-mp [user] <no autoupdate>
+  ● analytics v1.0.0 (installed)
+    Product analytics tools.
+    mcp: plugin:analytics:api (needs authentication; unset ANALYTICS_TOKEN; withheld ANTHROPIC_API_KEY)
+    requires: pi-mcp-adapter
+```
+
+### Partially installed -- each MCP server's state (ASTAT-01)
+
+The plugin was installed with `--partial`, so its `live` server, which uses the `ws` transport, was left out. The adapter's last snapshot lists the four written servers. `alerts` has cached tools and has not connected yet. `builds` is in its failure backoff. `logs` was never discovered. `metrics` is disabled in the adapter configuration. The left-out `live` server keeps only its `(unsupported ws)` detail and gets no state. Severity `info`; no reload-hint (read-only surface).
+
+<!-- catalog-state: partially-installed-with-mcp-status -->
+
+```text
+● community-mp [user] <no autoupdate>
+  ◉ ops-tools v1.0.0 (partially-installed) {unsupported mcp}
+    Operations tools for everyday use.
+    mcp: plugin:ops-tools:alerts (cached, connects on first use), plugin:ops-tools:builds (failed), plugin:ops-tools:live (unsupported ws), plugin:ops-tools:logs (not connected), plugin:ops-tools:metrics (disabled)
+    requires: pi-mcp-adapter
+```
+
+### Installed -- an MCP server waits for project approval (ASTAT-01)
+
+The plugin is installed in the project scope. pi-mcp-adapter blocks a project server until the user trusts the project and approves the server. Its last snapshot reports the `deploys` server as blocked, so info shows `pending approval`. Info names no block reason; the adapter's own panel shows it. Severity `info`; no reload-hint (read-only surface).
+
+<!-- catalog-state: installed-with-mcp-pending-approval -->
+
+```text
+● community-mp [project] <no autoupdate>
+  ● deploy-tools v1.0.0 (installed)
+    Deployment tools for this project.
+    mcp: plugin:deploy-tools:deploys (pending approval)
+    requires: pi-mcp-adapter
+```
+
+### Installed -- the adapter has not loaded an MCP server (ASTAT-02)
+
+The plugin was installed in this session. The adapter's last snapshot is usable, but it does not list the `tickets` server, because the adapter has not read its configuration since the install. A `/reload` loads it. Severity `info`; no reload-hint (read-only surface).
+
+<!-- catalog-state: installed-with-mcp-not-loaded -->
+
+```text
+● community-mp [user] <no autoupdate>
+  ● ticket-tools v1.0.0 (installed)
+    Ticket tools for everyday use.
+    mcp: plugin:ticket-tools:tickets (not loaded)
+    requires: pi-mcp-adapter
 ```
 
 ### Multi-scope fan-out -- both scopes hold the plugin
@@ -2890,6 +3044,25 @@ Triggered by `plugin info <plugin>@<marketplace>` with NO `--scope` filter when 
 ● mp [user] <no autoupdate>
   ● foo v2.0.0 (installed)
     agents: a1
+    requires: pi-subagents
+```
+
+### Multi-scope fan-out -- an MCP server overridden by the project scope (ASTAT-01 / D-06-09)
+
+The same `plugin@marketplace` is installed in both scopes. Both `mcp-adapter.json` files then hold the same key, because the install collision check exempts the plugin's own entry in the other scope. pi-mcp-adapter reads `<cwd>/.pi/mcp-adapter.json` last, so it runs the project entry, and its snapshot lists the key once. The project row shows that entry's state, `pending approval` included, because the adapter does not fall back to the user entry when it blocks a project server. The user row's server shows `overridden by project scope`, which follows Claude Code's "overridden by" wording. The token shows only when a usable snapshot exists. With none, both rows show `status unknown` (D-06-07). The snapshot names no source, so info decides from the project scope's installation record. A disabled project record writes no adapter entry (ENBL-08), and a project record that does not list the server does not override it. Under `--scope user` info still reads the project record, read-only, and a project `state.json` that it cannot read counts as not overriding. One case is imprecise: when pi-mcp-adapter reads one config file only (its exclusive config mode or `--mcp-config`), it does not load the project file, and the user row can still read `overridden by project scope`. Severity `info`; no reload-hint (read-only surface).
+
+<!-- catalog-state: installed-both-scopes-mcp-overridden -->
+
+```text
+● mp [project] <no autoupdate>
+  ● ops-tools v1.0.0 (installed)
+    mcp: plugin:ops-tools:alerts (connected)
+    requires: pi-mcp-adapter
+
+● mp [user] <no autoupdate>
+  ● ops-tools v1.0.0 (installed)
+    mcp: plugin:ops-tools:alerts (overridden by project scope)
+    requires: pi-mcp-adapter
 ```
 
 ### Multi-scope fan-out -- the record is in both scopes and in no manifest (INFO-09)
@@ -3660,6 +3833,8 @@ D-54-01 / ENBL-01 / ENBL-03. Re-materializes a previously-disabled plugin from t
 
 Fresh enable -- a previously-disabled plugin is re-materialized. The marketplace header is the bare always-marketplace-header form (`mp.status === undefined`, no details -- byte-identical to the install command's header; the former `(added)` token leaked from reusing the install-cascade header shape and was dropped per UAT-04); plugin row = `PluginInstalledMessage` (status: `"installed"`, the existing state-change token). Severity `info`; reload-hint fires per SNM-33 (the plugin row is a state-change transition).
 
+When the enabled plugin's MCP servers reference variables that are not set, or credentials that this extension withholds, this row keeps its own severity, `info`, and each MCP notice follows as its own `warning`: [MCP server variables not set](#mcp-server-variables-not-set-avar-04) and [MCP server credentials withheld](#mcp-server-credentials-withheld-avar-05) (D-08-03). An import that installs such a plugin renders its row the same way. With pi-mcp-adapter not loaded, the row carries `{requires pi-mcp-adapter}` and the SEV-01 raise to `warning`, as install does; see [Enable of a plugin whose companion extension is unloaded](#enable-of-a-plugin-whose-companion-extension-is-unloaded-sev-01--wr-06). The adapter-loaded shapes are pinned in `tests/orchestrators/plugin/enable-disable.test.ts` and `tests/orchestrators/import/execute.test.ts`.
+
 ### Enable cascade -- a declared dependency is re-enabled through its own record (EDEP-01 / EDEP-03)
 
 `enable <plugin>` resolves the plugin's declared dependency closure transitively in the same scope (D-08-03), reusing the install cascade's post-order walk and row conventions (RESV-01 / RESV-06): a member renders by its full `<plugin>@<marketplace>` key because it may resolve from a marketplace other than the header's, rows sort through the project's canonical name-then-scope comparator so the root takes its alphabetical place among the members, and one `notifyWithContext` call carries the whole block.
@@ -3730,7 +3905,7 @@ A plugin operation needs attention.
 /reload to pick up changes
 ```
 
-The re-enable's ledger staged at least one agent, so the row DECLARES the `pi-subagents` companion; `dependencies` is derived from the ledger's staged counts (agents -> `pi-subagents`, MCP servers -> `pi-mcp`), never from a hard-coded empty list. The soft-dep marker rides the same brace as any typed reasons, typed reasons first (MSG-GR-4): a re-enable that also degraded a skill renders `{malformed skill, requires pi-subagents}`. Severity `warning` per SEV-01 -- a declared companion that is not loaded silently degrades an otherwise clean re-enable, the same raise the install row takes for the same ledger run. The two raises COMPOSE: a malformed degrade is `warning` whatever the probe reports, and an unloaded companion is `warning` whatever degraded. A loaded companion -- or a plugin that stages neither agents nor MCP servers -- renders the `enable-fresh` row above unchanged.
+The re-enable's ledger staged at least one agent, so the row DECLARES the `pi-subagents` companion; `dependencies` is derived from the ledger's staged counts (agents -> `pi-subagents`, MCP servers -> `pi-mcp-adapter`), never from a hard-coded empty list. The soft-dep marker rides the same brace as any typed reasons, typed reasons first (MSG-GR-4): a re-enable that also degraded a skill renders `{malformed skill, requires pi-subagents}`. Severity `warning` per SEV-01 -- a declared companion that is not loaded silently degrades an otherwise clean re-enable, the same raise the install row takes for the same ledger run. The two raises COMPOSE: a malformed degrade is `warning` whatever the probe reports, and an unloaded companion is `warning` whatever degraded. A loaded companion -- or a plugin that stages neither agents nor MCP servers -- renders the `enable-fresh` row above unchanged.
 
 ### Idempotent enable
 
@@ -4102,6 +4277,174 @@ Stop hook override cap reached.
 ```
 
 Emitted exactly once by the settle dispatcher (`extensions/pi-claude-marketplace/bridges/hooks/settle.ts`) via `notifyStopHookOverrideCap` when Stop hooks drive 8 consecutive bridge re-entries -- block decisions and `additionalContext` continuations share one consecutive-re-entry counter (D-88-08). The loop protection (STOP-07) suppresses the 8th re-entry so a livelocking hook cannot spin the agent forever, and this warning surfaces the override so the suppression is never silent (D-88-01 transparency). Severity: `warning` (the second arg to `ctx.ui.notify` is the magic string `"warning"`) -- the turn ended (the protection worked) but the plugin's block was overridden. The one-shot latch is per-session: a plain-allow outcome with no re-entry resets the counter and re-arms it (D-88-08), so a fresh 8-re-entry run is required before the warning fires again. The literal example names a mock `ralph-wiggum` plugin; the production string interpolates the blocking plugin's id. The byte form is locked by `tests/architecture/hooks-cap-notify.test.ts` (NOT `tests/architecture/catalog-uat/catalog-contract.test.ts`, whose driver only knows the structured `notify()` entrypoint -- this seam is a bridge diagnostic, not a `NotificationMessage`).
+
+### MCP config comments removed (AFILE-04)
+
+<!-- catalog-state: mcp-comments-dropped -->
+
+```text
+MCP config comments removed.
+
+The user-scope mcp-adapter.json was rewritten to update plugin MCP servers; its JSONC comments were removed and everything else in it was kept.
+```
+
+Emitted via `notifyMcpConfigNotices` by every command that rewrites an MCP config file whose read bytes held JSONC comments: install, update, reinstall, enable, uninstall, disable, marketplace remove, prune, and the reconcile, import and marketplace update cascades. The commands that stage a plugin's MCP servers also rewrite the scope's `mcp.json` to remove the plugin's old entries there, so the file can be `mcp.json` for them too. The command's own row comes first. The notice fires at most once per file per command, because the rewrite removes the comments and the next read finds none. A trailing comma alone is not a comment. Severity: `warning`. One line per file; the line names the scope and the file name (`mcp-adapter.json` or `mcp.json`), never an absolute path. The byte form is locked by `tests/architecture/mcp-config-notices.test.ts` (NOT `tests/architecture/catalog-uat/catalog-contract.test.ts`, whose driver only knows the structured `notify()` entrypoint).
+
+### MCP config left unchanged (AFILE-02)
+
+<!-- catalog-state: mcp-config-left-unchanged -->
+
+```text
+MCP config left unchanged.
+
+The project-scope mcp-adapter.json is not a valid MCP config, so it was left unchanged. Fix it before you install or update a plugin that has MCP servers.
+```
+
+Emitted via `notifyMcpConfigNotices` when a command with no MCP servers to write (install, update, reinstall or enable of such a plugin, directly or inside a cascade) meets an `mcp-adapter.json` that is not a valid MCP config. The file is not rewritten and keeps its exact bytes. A plugin that does have MCP servers refuses instead, and its failed row names the file. When a staging command removes a plugin's old entries from the scope's `mcp.json` and that file is not a valid MCP config, the file is left unchanged with this notice for `mcp.json`, and the command does not fail. Severity: `warning`. The byte form is locked by `tests/architecture/mcp-config-notices.test.ts`.
+
+### MCP server override kept (AFILE-06)
+
+<!-- catalog-state: mcp-override-kept -->
+
+```text
+MCP server override kept.
+
+hello now provides "plugin_hello_srv_" in the project-scope mcp-adapter.json. Your override for "plugin_hello_srv_" is kept, but these fields of it stop applying: requestTimeoutMs, env. It comes back when you uninstall or disable hello.
+```
+
+Emitted via `notifyMcpConfigNotices` when a command that stages a plugin's MCP servers finds a user override under one of the plugin's server keys. The server is named by its adapter key, `plugin_<plugin>_<server>_`. The commands are install, update, reinstall and enable, run directly or inside the reconcile, import and marketplace update cascades. An override is a marker-less entry with no `command`, `url` or `socket` in the target `mcp-adapter.json`, such as the `{ "disabled": true }` stub that `/mcp-adapter disable` writes. The notice fires only when the override holds a field that stops applying.
+
+The plugin's entry replaces the override and keeps it verbatim as `_piClaudeMarketplace.keptOverride`. pi-mcp-adapter does not read that member. The carried fields (`disabled`, `approveTools`, `includeTools`, `excludeTools`, `lifecycle`, `idleTimeout`, `requestTimeoutMs`, `debug`, `searchKeywords`, `openUi`, `trace`) apply from the entry. The one exception is a carried field that the plugin's entry also sets. Today that is only `requestTimeoutMs`, which comes from the server's `timeout`. Such a field takes the plugin's value on install, update and reinstall, so it stops applying too. When a later version stops setting it, the override's own value applies again. The marker lists the names of these plugin-set fields as `_piClaudeMarketplace.pluginSetFields`, never their values. The line names every field that stops applying, never its value, in the override's key order. An override whose fields all still apply is kept with no notice.
+
+Uninstall, disable, prune, marketplace remove, a cascade undo, and an update that drops the server write the override back. A plugin-set field comes back with the override's own value. Each other carried field the override holds takes the value of the plugin's entry at that time, so a `/mcp-adapter enable` or `disable` made while the plugin was installed wins. A carried field the override lacks is not added, so a value the plugin declares stays out of the user's entry. Every other field comes back as kept. When the plugin's entry leaves `mcp-adapter.json`, the user's choices that it held, the carried fields that the plugin did not set and that no written-back override holds, are kept under the file's top-level `_piClaudeMarketplace.serverChoices` member with the plugin's name and marketplace, until the same plugin from the same marketplace stages the server again (D-08-02). pi-mcp-adapter ignores that member. A command that writes the override back in the same run shows no notice for it. The command's rows come first, then any comments-removed notice, then this one. Severity: `warning`. One line per server. The byte form is locked by `tests/architecture/mcp-config-notices.test.ts` (NOT `tests/architecture/catalog-uat/catalog-contract.test.ts`).
+
+### MCP server variables not set (AVAR-04)
+
+<!-- catalog-state: mcp-variables-missing -->
+
+```text
+MCP server variables not set.
+
+Server "plugin_hello_srv_" from hello in the project-scope mcp-adapter.json uses environment variables that were not set at install: DD_API_KEY, DD_SITE.
+```
+
+Emitted via `notifyMcpConfigNotices` by every command that stages a plugin's MCP servers: install, update, reinstall and enable, run directly or inside the reconcile, import and marketplace update cascades. Following Claude Code, a variable counts as missing only when it is unset and has no `:-` default, so `${DD_API_KEY:-}` with `DD_API_KEY` unset is not reported. The written entry keeps `${NAME}`, so pi-mcp-adapter reads the variable when it starts the server. A withheld credential in `command`, `args` or `env` is the exception: it is written as the literal text `${NAME}`, so a value set later never reaches the server. For this reason the line says only that the variables were not set at install. A command that removes the server's entry again in the same run, as a rollback or an install that lands disabled does, shows no line for it. One line per server, which names each missing variable once, in first-seen order. The line names variables, never their values. The command's rows come first, then any comments-removed and override-kept notices, then this one. Severity: `warning`. The byte form is locked by `tests/architecture/mcp-config-notices.test.ts` (NOT `tests/architecture/catalog-uat/catalog-contract.test.ts`).
+
+### MCP server credentials withheld (AVAR-05)
+
+<!-- catalog-state: mcp-credentials-blanked -->
+
+```text
+MCP server credentials withheld.
+
+Server "plugin_hello_srv_" from hello in the project-scope mcp-adapter.json references credential variables that Claude Code never sends to a remote server: ANTHROPIC_API_KEY. They were written as empty values.
+```
+
+Emitted via `notifyMcpConfigNotices` by the same commands as the missing-variable notice. It fires when a remote server's `url` or `headers` references a variable on Claude Code's credential deny-list and that variable is set at install. The written entry carries an empty value in its place, so a value set later never reaches the server. Claude Code writes the same fact only to its debug log, so this user-visible warning is a documented divergence. Like the missing-variable notice, it shows no line for a server whose entry the same command removed again. One line per server, which names each withheld variable once, in first-seen order. The line names variables, never their values. It follows the missing-variable notice. Severity: `warning`. The byte form is locked by `tests/architecture/mcp-config-notices.test.ts` (NOT `tests/architecture/catalog-uat/catalog-contract.test.ts`).
+
+### MCP server tool rules not enforced (ANAME-07)
+
+<!-- catalog-state: mcp-tool-rules-unenforced -->
+
+```text
+MCP server tool rules not enforced.
+
+Server "plugin_hello_srv_" from hello in the project-scope mcp-adapter.json declares tool permission rules that pi-mcp-adapter does not enforce: tools[].permission_policy, toolPermissions. Its tools run without these rules.
+```
+
+Emitted via `notifyMcpConfigNotices` by every command that stages a plugin's MCP servers: install, update, reinstall and enable, run directly or inside the reconcile, import and marketplace update cascades. The reload migration carries the same line in its notice for a moved server. It fires when a remote server declares a `tools` element with a `permission_policy` or a non-empty `toolPermissions`. The server is installed and works, but its per-tool restrictions are not enforced, because pi-mcp-adapter has no per-tool rule. The written entry carries neither field. A command that removes the server's entry again in the same run shows no line for it. One line per server, which names the fields in the order `tools[].permission_policy`, `toolPermissions`. The line names fields, never tool names or policy values. It follows the credentials-withheld notice. Severity: `warning`. The byte form is locked by `tests/architecture/mcp-config-notices.test.ts` (NOT `tests/architecture/catalog-uat/catalog-contract.test.ts`).
+
+### Old MCP server settings removed (AMIG-01)
+
+<!-- catalog-state: mcp-leftover-removed -->
+
+```text
+Old MCP server settings removed.
+
+Removed "srv" from the project-scope mcp-adapter.json: pi-mcp-adapter had written it under the old name of a server from hello, for example for /mcp-adapter disable, and it no longer applies.
+```
+
+Emitted via `notifyMcpConfigNotices` by install, enable, reinstall and update, run directly or inside the reconcile, import and marketplace update cascades, and carried in the reload migration notice. A leftover is a marker-less entry under the old name of a server whose `mcp.json` entry the command removed, in one of the two shapes pi-mcp-adapter writes under a server's name. In the same scope's `mcp-adapter.json` it is an override stub, such as the `{ "disabled": true }` stub `/mcp-adapter disable` writes, or a full definition that carries `directTools`, which is the copy the panel's direct-tools toggle writes. In the project `mcp-adapter.json`, for a user-scope plugin, it is an override stub only, because `/mcp-adapter disable` always writes the project file. Only the reload migration removes it there: the migration takes the project-scope lock for that write, inside the user-scope lock, and reads no project state, while the other commands hold only the user-scope lock and leave the project file unchanged. When the project has no `pi-claude-marketplace` directory, the migration writes the file without the lock rather than create that directory. When the project-scope lock is held, the plugin's old entries stay in `mcp.json` with an unfinished row and the next `/reload` tries again. A marker-less full definition without `directTools` is the user's own server: it is never removed or reported. An override stub whose old name another pi-mcp-adapter config source still defines in full, such as a project `.mcp.json` server or another plugin's `mcp.json` entry, applies to that live server, so it is kept and not reported. A panel copy is a full server that would run beside the new key, so it is always removed. Nothing else marker-less is removed. One line per removed entry; the line names the old name, the scope, the file name and the plugin, and escapes control characters in the old name. It is the last MCP config notice. Severity: `warning`. The byte form is locked by `tests/architecture/mcp-config-notices.test.ts` (NOT `tests/architecture/catalog-uat/catalog-contract.test.ts`).
+
+### Plugin MCP servers moved out of mcp.json (AMIG-01, AMIG-03)
+
+<!-- catalog-state: mcp-migration-moved -->
+
+```text
+Plugin MCP servers moved from mcp.json to mcp-adapter.json.
+
+Moved to mcp-adapter.json:
+  github -> plugin_acme_github_ (acme) [project]
+  slack -> plugin_acme_slack_ (acme) [user]
+The new names reset what pi-mcp-adapter keeps for each server name: sign in again to servers that use OAuth, and approve project servers again. Until you reload, pi-mcp-adapter can still show the old names.
+Server "plugin_acme_github_" from acme in the project-scope mcp-adapter.json uses environment variables that were not set at install: GITHUB_TOKEN.
+/reload to pick up changes
+```
+
+Emitted once per `/reload` or start by `notifyMcpMigration`, after the reconcile step has visited both scopes and before the reconcile cascade. It is sent even when reconcile has nothing else to report. Released builds wrote each plugin MCP server into the scope's `mcp.json` under its declared name. The step moves each server of an installed, enabled plugin into the same scope's `mcp-adapter.json` and removes the old entry. One row per moved server, project rows before user rows, then by plugin, then by old name. The old name comes from `mcp.json`. The new name is the adapter key, `plugin_<plugin>_<server>_`, which the `/mcp-adapter` panel, sign-in prompts and project approvals show. pi-mcp-adapter read its config at `session_start`, before this step, so the old names can show until the next reload. Nothing from an old entry is carried: each server is written as a fresh install of the plugin writes it, so an edit made in `mcp.json` does not survive. The body keeps a fixed order: the moved rows, the removed rows with their reason, the rows left in `mcp.json`, the cost line, the MCP config lines for the files the step wrote (here a variable that was not set), and the reload hint. Severity: `info` when every server moved and nothing was left in place, dropped or removed as a leftover, and no moved server has a variable that was not set, a credential that was withheld or tool rules that are not enforced; `warning` otherwise, as every other staging path sends these MCP config lines. This example is a `warning` because of its variable line. The byte form is locked by `tests/architecture/mcp-migration-notice.test.ts` (NOT `tests/architecture/catalog-uat/catalog-contract.test.ts`).
+
+### Plugin MCP server move stopped (AMIG-03)
+
+<!-- catalog-state: mcp-migration-stopped -->
+
+```text
+Plugin MCP servers in mcp.json need attention.
+
+Left in mcp.json:
+  The user-scope move stopped: state.json is locked by another Pi process. The next /reload tries again.
+```
+
+Emitted by `notifyMcpMigration` at the same point as the moved notice, in the same single notification. A stopped row names the scope and what stopped the move, with no absolute path. A failure while moving one plugin names it as `<plugin>@<marketplace>` and does not stop the other plugins. The entries stay in `mcp.json` and keep working under their old names, and the next `/reload` tries again. Moved rows come first when the same reload also moved servers, and the cost line and the reload hint then follow the rows. Severity: `warning` when a move stopped; the first line is the summary. The byte form is locked by `tests/architecture/mcp-migration-notice.test.ts`.
+
+### Plugin MCP servers left in mcp.json (AMIG-01, AMIG-04)
+
+<!-- catalog-state: mcp-migration-left-in-place -->
+
+```text
+Plugin MCP servers in mcp.json need attention.
+
+Left in mcp.json:
+  The project-scope mcp-adapter.json is not a valid MCP config, so nothing in this scope moved. Fix it, then run /reload.
+  orphan (gone) [project] No plugin installed in the project scope owns it. Install gone@mp or remove it from mcp.json.
+  github, slack (acme) [user] The plugin source is not available offline. Run /claude:plugin reinstall acme@official to move it.
+  db (dbtools) [user] plugin_dbtools_db_ is already defined in the user-scope mcp-adapter.json, so no server of dbtools moved. Remove or rename that server, then run /reload.
+  tool (legacy) [user] The official marketplace copy cannot give the source of legacy. Run /claude:plugin uninstall legacy@official to remove it, or /claude:plugin marketplace update official when the copy is out of date.
+  mod (moved) [user] The cached source of moved has no plugin at its declared path. Run /claude:plugin update moved@official to move it.
+  old (retired) [user] The official marketplace no longer lists retired in a valid form. Run /claude:plugin marketplace update official, or /claude:plugin uninstall retired@official to remove it.
+```
+
+Emitted by `notifyMcpMigration` in the same single notification as the moved and stopped rows. Each row names a plugin whose servers the step could not move, and why. The entries stay in `mcp.json` and keep working under their old names, and the next `/reload` tries again. An entry is unowned when no install record in its own scope owns it; a record of the same plugin in the other scope does not. The plugin source is not available offline when the plugin is a git source whose clone is not in the cache. A reinstall fetches the clone and moves the entries. The cached source has no plugin at its declared path when the plugin is a git source whose cached copy lacks the path the marketplace declares, for example because the plugin moved inside its repository. The cached copy is the warm mirror of an unpinned source, else the clone of the recorded commit. `/claude:plugin update` installs the source the marketplace now declares and moves the entries. A reinstall reads the same marketplace copy as the step, so the two causes that the marketplace copy decides get a row that suggests a marketplace update, which refreshes that copy, and an uninstall, which removes the plugin and its old entries. One row says the manifest no longer lists the plugin, or lists it in a form that is not valid, and suggests the marketplace update first. The other says the marketplace copy cannot give the plugin source: the marketplace checkout or its manifest is missing or cannot be parsed, the copy lacks the plugin's source, or the copy declares a git-subdir path that leaves the plugin's repository. An update re-reads that same path, so it cannot clear the last cause. When the marketplace checkout itself is missing, a marketplace update cannot restore it. So this row suggests the uninstall first, which clears every cause, and the marketplace update for a copy that is out of date. Removing the marketplace and adding it again also clears a missing checkout, but the removal uninstalls the plugin too. A collision is a full server that another pi-mcp-adapter config source already defines under the plugin's new key; then none of that plugin's servers move, and the row names the key and the source. A scope's own config file or the project `.mcp.json` is named by scope and file name; any other source, such as `~/.config/mcp/mcp.json` or an ancestor `.mcp.json`, is named by its path relative to the home directory, never an absolute path. A config file that is not valid stops every move in its scope before any write. A plugin that the same reload installs, uninstalls, disables or enables is not listed, because that operation moves or removes its entries itself. There is no damping: an entry is reported on every reload until its cause is cleared, because the step keeps no state (COMPAT-01). One row per plugin, which lists its old names in file order. Rows sort project before user, then by plugin, then by first old name, together with the stopped rows. They follow the moved and removed rows. With no moved row there is no cost line, and with no moved or removed row there is no reload hint. Severity: `warning`. The byte form is locked by `tests/architecture/mcp-migration-notice.test.ts`.
+
+### Plugin MCP servers removed from mcp.json (AMIG-01, AMIG-03)
+
+<!-- catalog-state: mcp-migration-removed -->
+
+```text
+Plugin MCP servers moved from mcp.json to mcp-adapter.json.
+
+Moved to mcp-adapter.json:
+  srv -> plugin_hello_srv_ (hello) [project]
+Removed from mcp.json:
+  gone (hello) [project] hello no longer declares it.
+  live (hello) [project] {unsupported mcp} ws: pi-mcp-adapter cannot run it.
+  bad (broken) [user] {malformed mcp}: broken's MCP config is not valid, so none of its servers are installed.
+The new names reset what pi-mcp-adapter keeps for each server name: sign in again to servers that use OAuth, and approve project servers again. Until you reload, pi-mcp-adapter can still show the old names.
+Removed "srv" from the project-scope mcp-adapter.json: pi-mcp-adapter had written it under the old name of a server from hello, for example for /mcp-adapter disable, and it no longer applies.
+/reload to pick up changes
+```
+
+Emitted by `notifyMcpMigration` in the same single notification as the moved rows. Each row names an old `mcp.json` entry that the step removed without writing it to `mcp-adapter.json`, and why. The step removes what the installed plugin no longer provides. A server the plugin no longer declares does not run in Claude Code either, so its entry is removed. A server that would not work as it does in Claude Code, because it needs a feature pi-mcp-adapter cannot run, is not installed: its entry is removed, the plugin's other servers move, and the record becomes `(partially-installed)`, as `install --partial` leaves it, so `info` names the server as left out. A plugin whose MCP config is not valid under Claude Code's rules installs no MCP server, as a fresh install refuses it: every old entry of that plugin is removed, none is written, and the record lists no MCP server. The row repeats the reason for each removed entry. A disabled plugin's servers are never restored at load (ENBL-08), so its old entries are removed and its record does not change. Every removal is listed, so none is silent. One row per removed entry, project rows before user rows, then by plugin, then by old name. Removals for an unsupported feature or an invalid config make the notice a `warning`; removals because a plugin no longer declares a server or is disabled do not by themselves. The reload hint follows whenever a row moved or was removed; the cost line only when a row moved. The byte form is locked by `tests/architecture/mcp-migration-notice.test.ts`.
+
+<!-- catalog-state: mcp-migration-unfinished -->
+
+```text
+Plugin MCP servers in mcp.json need attention.
+
+Left in mcp.json:
+  srv (hello) [project] The new entries are written, but mcp.json could not be updated: permission denied. The next /reload finishes the move.
+```
+
+Emitted by `notifyMcpMigration` when the step wrote a plugin's servers to `mcp-adapter.json` but could not remove the old entries from `mcp.json`, for example because the file could not be written. The step writes `mcp-adapter.json` first, then `state.json`, then `mcp.json`, so a fault between the writes loses no server: both files hold it for one session. The next `/reload` finds the old entries again, leaves `mcp-adapter.json` unchanged, removes the old entries and reports the move once. A user-scope move also removes the plugin's old-name disable stubs from the project `mcp-adapter.json` before it removes the old entries. When that write fails, for example because a project-scope operation holds the lock, the old entries and the stubs stay, and the row names the `project-scope mcp-adapter.json` in place of `mcp.json`. The row lists the plugin's old names in file order and a detail with no absolute path and no final period of its own. It sorts with the other rows left in `mcp.json`. Severity: `warning`. The byte form is locked by `tests/architecture/mcp-migration-notice.test.ts`.
 
 ______________________________________________________________________
 

@@ -69,7 +69,7 @@ Severity is **computed** from contents inside `notify()` (SNM-14, refined by UXG
 
 The reload-hint trailer is **computed** at render time (SNM-15): the trailer is emitted iff any plugin carries one of `installed | updated | reinstalled | uninstalled` OR any marketplace carries a `status` set. The call site never asks for it.
 
-The dependency probe is **computed** at render time (SNM-16): each `dependencies: ["agents"]` triggers a per-row probe for the `pi-subagents` companion extension and emits `{requires pi-subagents}` when absent; `dependencies: ["mcp"]` triggers the analogous probe for `pi-mcp-adapter` and emits `{requires pi-mcp}` when absent. The 3 structurally-absorbed v1.3 Reasons (`rollback partial`, `requires pi-subagents`, `requires pi-mcp`) no longer appear in any typed `reasons` field of the new model.
+The dependency probe is **computed** at render time (SNM-16): each `dependencies: ["agents"]` triggers a per-row probe for the `pi-subagents` companion extension and emits `{requires pi-subagents}` when absent; `dependencies: ["mcp"]` triggers the analogous probe for `pi-mcp-adapter` and emits `{requires pi-mcp-adapter}` when absent. The 3 structurally-absorbed v1.3 Reasons (`rollback partial`, `requires pi-subagents`, `requires pi-mcp-adapter`) no longer appear in any typed `reasons` field of the new model.
 
 Tests exercise `notify()` via a mock `ctx` and assert on the exact string passed to `ctx.ui.notify` (matches V1's existing notification-recording test pattern).
 

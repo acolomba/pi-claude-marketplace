@@ -57,9 +57,10 @@ import type { ExtensionState } from "../../persistence/state-io.ts";
 import type {
   NotificationContext,
   ResourcesDiscoverEvent,
-  ToolInventory,
+  PiInventory,
 } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
+import type { McpConfigNotice, McpMigrationRow } from "../../shared/notification-dispatch.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { GitOps } from "../marketplace/shared.ts";
 import type { InstallHooksRouting } from "../plugin/install-disable-cascade.ts";
@@ -334,7 +335,7 @@ export type DependencyDisableStamp = (
  */
 export interface ApplyReconcileOptions {
   readonly ctx: NotificationContext;
-  readonly pi: ToolInventory;
+  readonly pi: PiInventory;
   /** Project-scope cwd (ignored for the user scope). */
   readonly cwd: string;
   /** Lifecycle-owned route effects shared with registered hook callbacks. */
@@ -377,6 +378,17 @@ export interface ApplyReconcileOptions {
    */
   readonly stampDependencyDisabled?: DependencyDisableStamp;
   /**
+   * AMIG-01 injection seam for the load-time MCP move. Production callers
+   * (index.ts) omit it and `mcp-migration.ts::migrateLegacyMcpEntries`
+   * applies. The seam exists because the step's call position is a contract
+   * no file layout distinguishes: it runs once per scope after the read pass
+   * and before the plan is applied, also when the scope's config is invalid,
+   * and never after a read pass that threw. Its NFR-2 isolation is the other
+   * contract: a throwing step becomes a stopped row and never escapes
+   * `applyReconcile`.
+   */
+  readonly migrateMcpEntries?: McpMigrationStep;
+  /**
    * D-09-13: the host's `resources_discover` reason. Only `"reload"` runs the
    * dependency-install step (`apply.ts::applyDependencyInstalls`) and its
    * D-09-07 re-plan; an omitted value keeps the safer startup posture every
@@ -386,6 +398,26 @@ export interface ApplyReconcileOptions {
    */
   readonly reason?: ResourcesDiscoverEvent["reason"];
 }
+
+/**
+ * AMIG-01 / AMIG-03: one scope's input to the load-time MCP move. `plan` is
+ * the scope's reconcile plan, undefined when the config is invalid. The step
+ * appends its rows and the MCP config facts of the files it wrote to the two
+ * accumulators, which collect both scopes for the one migration notice. The
+ * types live here, not in `mcp-migration.ts`, so the step and `apply.ts`,
+ * which imports the step, share them without an import back (FLOW-09).
+ */
+export interface McpMigrationInput {
+  readonly scope: Scope;
+  readonly cwd: string;
+  readonly plan: ReconcilePlan | undefined;
+  readonly reason?: ResourcesDiscoverEvent["reason"] | undefined;
+  readonly rows: McpMigrationRow[];
+  readonly notices: McpConfigNotice[];
+}
+
+/** AMIG-01: the load-time MCP move for one scope. */
+export type McpMigrationStep = (input: McpMigrationInput) => Promise<void>;
 
 /**
  * Per-scope read-pass result. `plan` is undefined when CFG-03 aborted the

@@ -112,7 +112,7 @@ test("renders installed reasons before missing dependency markers", () => {
     workflowEngineLoaded: true,
   } satisfies SoftDepStatus;
   const expectedRow =
-    "● beta-plugin [user] v1.2.3 (installed) {orphan rewake, malformed skill, requires pi-subagents, requires pi-mcp}";
+    "● beta-plugin [user] v1.2.3 (installed) {orphan rewake, malformed skill, requires pi-subagents, requires pi-mcp-adapter}";
 
   // act
   const row = IMPORT_CONTEXT.render.installed(message, probe, "project");

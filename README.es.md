@@ -26,7 +26,7 @@ Esta extensión instala complementos desde los mercados de complementos de Claud
 - Habilidades.
 - Agentes. Requiere [pi-subagents](https://pi.dev/packages/pi-subagents).
 - Hooks (ganchos). Soporte parcial. Para más información, consulta [Compatibilidad de hooks](docs/hooks-compatibility.md).
-- Servidores MCP. Requiere [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter).
+- Servidores MCP. Requiere [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter). Para más información, consulta [Compatibilidad de MCP](docs/mcp-compatibility.md).
 - Workflows (flujos de trabajo). Requiere [@quintinshaw/pi-dynamic-workflows](https://pi.dev/packages/@quintinshaw/pi-dynamic-workflows). Para más información, consulta [Compatibilidad de workflows](docs/workflows-compatibility.md).
 
 Los complementos que contienen componentes no compatibles pueden instalarse parcialmente. Un complemento instalado parcialmente puede no funcionar según lo previsto.
@@ -35,9 +35,9 @@ El comando `/claude:plugin` gestiona los mercados y complementos de Claude, como
 
 ## Requisitos previos
 
-- [Pi Coding Agent](https://pi.dev) 0.86.1 o posterior
-- [pi-subagents](https://pi.dev/packages/pi-subagents) (opcional pero recomendado, `pi install npm:pi-subagents`)
-- [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter) (opcional pero recomendado, `pi install npm:pi-mcp-adapter`)
+- [Pi Coding Agent](https://pi.dev) 1.0.0 o posterior
+- [pi-subagents](https://pi.dev/packages/pi-subagents) 0.74.0 o posterior (opcional pero recomendado, `pi install npm:pi-subagents`)
+- [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter) 5.2.0 o una versión 5.x posterior (opcional pero recomendado, `pi install npm:pi-mcp-adapter`). La compatibilidad con MCP integrada en Pi no cumple este requisito.
 - [@quintinshaw/pi-dynamic-workflows](https://pi.dev/packages/@quintinshaw/pi-dynamic-workflows) (opcional pero recomendado, `pi install npm:@quintinshaw/pi-dynamic-workflows`)
 
 ## Uso
@@ -118,38 +118,13 @@ Las habilidades usan la forma `/skill:` de Pi y también tienen un alias en las 
 
 Los alias de habilidades usan dos puntos en todas las plataformas. Si un alias entra en conflicto con un comando, el comando tiene prioridad. Usa `/skill:foo-bar` para ejecutar la habilidad.
 
-Los nombres de los servidores MCP no cambian. Si otra configuración de MCP ya utiliza ese nombre, la instalación o actualización del complemento fallará.
+Los servidores MCP de los complementos reciben los nombres que les da Claude Code. El modelo ve cada herramienta como `mcp__plugin_<plugin>_<server>__<tool>`. pi-mcp-adapter guarda cada servidor bajo una clave que termina en `_`. `/claude:plugin info` muestra cada servidor como `plugin:<plugin>:<server>`.
 
-| Nombre del complemento | Clave de `mcpServers` | Nombre del servidor MCP en Pi  |
-| ---------------------- | --------------------- | ------------------------------ |
-| `foo`                  | `api`                 | `api`                          |
-| `foo`                  | `foo-api`             | `foo-api`                      |
-| `bar`                  | `api`                 | _conflicto si `api` ya existe_ |
-
-### Personalización de los agentes generados
-
-Esta extensión convierte cada agente de complemento en un archivo de agente de pi-subagents llamado `pi-claude-marketplace-<plugin>-<agent>`. No edites estos archivos: install, update y reinstall los regeneran.
-
-Dos reglas de conversión que conviene conocer:
-
-- Si el agente de origen no declara `tools:`, el agente generado no tiene lista de herramientas permitidas. pi-subagents entonces otorga sus herramientas integradas predeterminadas, igual que Claude Code otorga todas las herramientas disponibles para subagentes. Los procesos hijos en segundo plano también reciben herramientas de extensiones del entorno, como las herramientas MCP de pi-mcp-adapter. Si el agente de origen define `disallowedTools`, esos nombres se convierten en `excludeTools`, que necesita pi-subagents 0.62.0 o posterior. Las versiones anteriores ignoran ese campo.
-- Los campos de agente `allowed-tools`, `mcpServers`, `permissionMode` y `hooks` se descartan, con una advertencia que explica el motivo. Claude Code ignora los cuatro en agentes de complementos (`allowed-tools` es un campo de comandos de barra). Los servidores MCP propios del complemento y su hooks.json sí se instalan.
-
-Para cambiar la configuración de un agente generado de forma que el cambio sobreviva a las actualizaciones del complemento, usa las anulaciones de agentes de pi-subagents en tu archivo de configuración de Pi (`~/.pi/agent/settings.json` para el ámbito de usuario, `<project>/.pi/settings.json` para el ámbito del proyecto):
-
-```json
-{
-  "subagents": {
-    "agentOverrides": {
-      "pi-claude-marketplace-foo-reviewer": {
-        "tools": "read,bash,mcp:github"
-      }
-    }
-  }
-}
-```
-
-Una anulación reemplaza el mismo campo en el frontmatter generado. Las entradas `mcp:<server>` otorgan herramientas MCP directas cuando pi-mcp-adapter está instalado. pi-subagents carga herramientas MCP solo para procesos hijos en segundo plano (`async: true`).
+| Nombre del complemento | Clave de `mcpServers` | Clave del servidor en el adaptador | Nombres de las herramientas     | Nombre que muestra `info` |
+| ---------------------- | --------------------- | ---------------------------------- | ------------------------------- | ------------------------- |
+| `foo`                  | `api`                 | `plugin_foo_api_`                  | `mcp__plugin_foo_api__<tool>`   | `plugin:foo:api`          |
+| `foo`                  | `my.db`               | `plugin_foo_my_db_`                | `mcp__plugin_foo_my_db__<tool>` | `plugin:foo:my.db`        |
+| `bar`                  | `api`                 | `plugin_bar_api_`                  | `mcp__plugin_bar_api__<tool>`   | `plugin:bar:api`          |
 
 ### Ámbito (Scoping)
 
@@ -161,7 +136,7 @@ También puedes instalar el mismo complemento en ambos ámbitos, el de usuario y
 
 ### Complementos parcialmente disponibles
 
-Algunos complementos contienen componentes no compatibles: un hook que no se puede mapear, un servidor LSP o un tema. Para instalar o actualizar estos complementos parcialmente, pasa la opción `--partial`. Esta extensión instala los componentes compatibles e ignora los incompatibles.
+Algunos complementos contienen componentes no compatibles: un hook que no se puede mapear, un servidor LSP, un tema o un servidor MCP que usa una función que pi-mcp-adapter no puede ejecutar. Para instalar o actualizar estos complementos parcialmente, pasa la opción `--partial`. Esta extensión instala los componentes compatibles e ignora los incompatibles.
 
 Lista los complementos parcialmente disponibles.
 

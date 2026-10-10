@@ -70,9 +70,10 @@ import { createCompletionCache } from "../../extensions/pi-claude-marketplace/sh
 import { retryTree } from "../orchestrators/plugin/scope-tree-inventory.ts";
 import { createGitOpsFake } from "../platform/git-ops-fake.ts";
 import { createHermeticEnvironment } from "../platform/hermetic-environment.ts";
+import { noStatusSnapshot } from "../platform/mcp-status-seed.ts";
 
 import { buildInstalledPluginRecord } from "./handlers/marketplace-seed.ts";
-import { createNotificationBoundary } from "./notification-boundary.ts";
+import { createNotificationBoundary, expectSoftDepProbes } from "./notification-boundary.ts";
 
 import type { Notification } from "./notification-boundary.ts";
 import type { EdgeDeps } from "../../extensions/pi-claude-marketplace/edge/types.ts";
@@ -314,6 +315,7 @@ function createEdgeDeps(
   const selectedGitOps = gitOps ?? createGitOpsFake({ boundary: "memory" }).gitOps;
   return {
     completionCache,
+    mcpStatus: noStatusSnapshot(),
     gitOps: selectedGitOps,
     beginPluginUpdateRun: () => (): Promise<PluginUpdateOutcome> => {
       throw new Error("the registration glue must not run a plugin update");
@@ -352,9 +354,7 @@ function registerCommandWithCache(
     .thenReturn()
     .times(1);
   if (expectedNotifications > 0) {
-    when(() => pi.getAllTools())
-      .thenReturn([])
-      .times(expectedNotifications * 3);
+    expectSoftDepProbes(pi, expectedNotifications);
   }
 
   registerClaudePluginCommand(

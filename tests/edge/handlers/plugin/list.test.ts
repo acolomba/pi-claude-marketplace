@@ -60,10 +60,10 @@
 //
 // Measured boundary counts, taken through a counting context before a case was
 // written, because the two paths disagree:
-//   * a rejection reads `ctx.ui` once, `ctx.cwd` never, and `pi.getAllTools()`
-//     never -- `notifyUsageError` writes straight to the channel;
-//   * a delegating command reads `ctx.ui` once, `ctx.cwd` once, and
-//     `pi.getAllTools()` THREE times, on every filter and scope combination.
+//   * a rejection reads `ctx.ui` once, `ctx.cwd` never, and takes no
+//     soft-dependency probe -- `notifyUsageError` writes straight to the channel;
+//   * a delegating command reads `ctx.ui` once, `ctx.cwd` once, and takes ONE
+//     soft-dependency probe, on every filter and scope combination.
 //
 // Both scope roots are values this file chose: `<cwd>/.pi` for the project scope
 // and `<HOME>/.pi/agent` for the user scope, with the agent-directory variable
@@ -419,7 +419,7 @@ for (const { args, expectedBlocks, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 1, {
       value: workspace.cwd,
       reads: 1,
     });
@@ -465,7 +465,7 @@ for (const { args, expectedBlocks, label } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 1, {
       value: workspace.cwd,
       reads: 1,
     });
@@ -552,7 +552,7 @@ for (const { anchor, args, expectedBlocks, label } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 1, {
       value: workspace.cwd,
       reads: 1,
     });
@@ -611,7 +611,7 @@ for (const { args, expectedBlocks, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 1, {
       value: workspace.cwd,
       reads: 1,
     });
@@ -670,7 +670,7 @@ for (const { args, expectedBlocks, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 1, {
       value: workspace.cwd,
       reads: 1,
     });

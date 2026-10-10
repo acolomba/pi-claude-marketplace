@@ -1527,7 +1527,11 @@ the per-scope partition), `orchestrators/reconcile/apply.ts`
 `edge/handlers/plugin/uninstall.ts` (new `--keep-data` flag parsing),
 `edge/args.ts` / `edge/flag-catalog.ts` (flag registration, drift-gated).
 
-## MCPSRC-01: MCP collision slot list has drifted behind pi-mcp-adapter
+## ~~MCPSRC-01: MCP collision slot list has drifted behind pi-mcp-adapter~~ -- CLOSED
+
+Closed 2026-10-03 by AFILE-05: a nine-source, later-wins walk of
+pi-mcp-adapter 5's config sources, where only full definitions declare
+and the refusal names the winning source.
 
 Surfaced 2026-08-13 from the upstream release review covering
 2026-08-05..2026-08-12 (pi 0.84.0-0.84.1, pi-subagents 0.41.0-0.47.1,
@@ -1644,7 +1648,12 @@ first-declarer-wins walk), `bridges/mcp/stage.ts`
 that locks the slot order, and the RN-5 user-contract wording wherever it
 enumerates the slots.
 
-## ENVDOC-01: `docs/env-vars.md` has drifted behind two upstreams
+## ~~ENVDOC-01: `docs/env-vars.md` has drifted behind two upstreams~~ -- CLOSED
+
+Closed 2026-10-09 by ADOC-01 in the `mcp-4` milestone. `docs/env-vars.md`
+now re-anchors the "MCP runtime env inheritance" section to pi-mcp-adapter
+5.2.0, around `resolveCommandSecret` and its `!` and `!!` rules, and gives
+`AI_AGENT` a pi-only row with no spawn-order caveat.
 
 Surfaced 2026-08-13 from the same upstream release review that produced
 [MCPSRC-01]. Two independent staleness points, both in `docs/env-vars.md`,
@@ -1696,7 +1705,21 @@ footnote list at 33-35; per-surface tables; the "MCP runtime env
 inheritance" subsection at 151). Documentation only -- no extension source
 changes, since we neither set nor consume `AI_AGENT`.
 
-## ENVLIT-01: `literalEnv` opt-out is unevaluated for MCP env fidelity
+Source for the rewrite (2026-10-07): the "Variables" section of
+`docs/mcp-compatibility.md` states the current MCP variable rules.
+
+## ~~ENVLIT-01: `literalEnv` opt-out is unevaluated for MCP env fidelity~~ -- CLOSED
+
+Closed 2026-10-07 by AVAR-03 in the `mcp-4` milestone. The missing fact is now
+known: Claude Code 2.1.291 expands `${VAR}` and `${VAR:-default}` in stdio
+`env` values (all keys except `CLAUDE_PLUGIN_ROOT` and `CLAUDE_PLUGIN_DATA`).
+Verdict: `literalEnv` is not used. `literalEnv: true` turns off the adapter's
+runtime `${VAR}` expansion of `env`, and Claude's rule needs that expansion,
+because this extension never writes a resolved environment value. The
+install-time rewrite keeps `${VAR}` for the adapter and escapes the
+adapter-only syntax instead. `docs/mcp-compatibility.md` section "Variables"
+records the verdict.
+
 
 Surfaced 2026-08-13 from the upstream release review. The doc-accuracy
 half of this is [ENVDOC-01]; this item is the behavioral question, which
@@ -2474,7 +2497,17 @@ Code seams: `bridges/agents/frontmatter.ts` (`parseFrontmatter`),
 `bridges/skills/stage.ts` (the gate-1 parse call), `platform/pi-api.ts:38`
 (the re-exported parser).
 
-## MENVX-01: a staged MCP `env` value beginning with `!` executes as a shell command
+## ~~MENVX-01: a staged MCP `env` value beginning with `!` executes as a shell command~~ -- CLOSED
+
+Closed 2026-10-07 by AVAR-03 in the `mcp-4` milestone. Disposition: escape.
+A written `env` or `headers` value that starts with `!` is written with one
+more `!`, so `!x` becomes `!!x`. pi-mcp-adapter drops one `!` from a `!!`
+value and interpolates the rest, so it outputs the literal value that Claude
+Code passes and runs no shell command. The adapter conformance test
+(`tests/integration/adapter-expansion-conformance.test.ts`) proves this
+against pi-mcp-adapter 5.1.0 in CI. `docs/mcp-compatibility.md` section
+"Variables" records the rule.
+
 
 Surfaced by the upstream release review covering 2026-08-24..2026-08-31,
 verified first-hand against the published `pi-mcp-adapter@2.31.0` tarball on
@@ -3759,3 +3792,85 @@ Carried from `any-git-host` (`03-REVIEW-DISPOSITION.md`; milestone audit, 2026-0
   root. The `listRemotes` arm no longer uses `chmod`.
 - Code hygiene: WR-01/WR-06/WR-07 (stale JSDoc and flow header), WR-08
   (five positional parameters), WR-09, IN-02, IN-03, IN-06, IN-07, IN-08.
+
+## ~~MCPOVR-01: MCP server overrides do not survive plugin disable then enable~~ -- CLOSED
+
+Closed 2026-10-10 by the `mcp-4` milestone debt work. Disposition:
+`implemented` by D-08-01 and D-08-02. `openUi` and `trace` join the carried
+fields (D-08-01). A user's per-server choices now survive plugin disable then
+enable, uninstall then reinstall, and an update that drops the server: they
+move into the top-level `_piClaudeMarketplace.serverChoices` member of
+`mcp-adapter.json`, recorded with the plugin and marketplace names (review fix 28a1bf0c), in the same atomic write
+that removes or writes the entry (D-08-02, NFR-1). Commits: `fb345e31` and
+`00e310e7` (code and lifecycle tests), `57182472` (pi-mcp-adapter 5.2.0
+loads a user file that holds a stored choice), `73200878` (docs). The
+original entry follows.
+
+Surfaced by the `mcp-4` adapter-file delivery work (2026-10-03), source
+D-02-15. AFILE-06 carries a user's own fields (`disabled`, `approveTools`,
+`lifecycle` and the rest of the closed set) from the previous marked entry
+into the new one on `update` and `reinstall`. `disable` unstages the plugin's
+marked entries instead, so a `/mcp-adapter disable` choice, or any other
+carried field, is gone when the plugin is disabled and enabled again: the
+enable re-stages from the plugin's own entry with nothing to carry from.
+
+Scope when picked up: keeping the choices needs persisted state, because the
+MC-5 marker is a byte-stable contract and cannot hold them. Decide where the
+carried fields live while the plugin is disabled (the install record is the
+natural candidate) and how enable reads them back.
+
+Changed by D-02-21 (2026-10-04): a marker-less override that a plugin's entry
+absorbed at install now survives disable then enable. Disable writes it back
+from `_piClaudeMarketplace.keptOverride`, and enable keeps it again. A choice
+the user writes into the plugin's own entry while the plugin owns the name
+(for example `/mcp-adapter disable` after install) still does not survive.
+The `keptOverride` member shows that the marker can carry an additive member,
+so "the marker cannot hold them" no longer holds as written. Whether those
+choices belong in the marker or in persisted state is still open.
+
+## ~~MCPROW-01: review the `enable` and `import` row grammar when MCP notices follow~~ -- CLOSED
+
+Closed 2026-10-10 by the `mcp-4` milestone debt work. Disposition:
+`no renderer change`, by D-08-03. `(installed)` is the catalog's normal
+enable row, and the MCP variable notices print as their own warning lines,
+as for `install`. The warning severity the pinned test recorded came from
+SEV-01: pi-mcp-adapter was not loaded, which raises the row exactly as it
+does for install, and SEV-01 is kept for that consistency. Commits:
+`f1a31171` and `6a85e010` pin the enable and import rows with the adapter
+loaded; `73200878` adds the catalog sentence. The original entry follows.
+
+Surfaced by the `mcp-4` variable expansion verification (2026-10-07). The
+staging-verb tests record two behaviors as found rather than designed:
+
+- `enable` of a plugin whose servers carry unset variables or withheld
+  credentials renders the plugin row as `(installed)` at warning severity, not
+  as an enabled row.
+- An `import` row that carries the two MCP notices is info severity and has no
+  "needs attention" summary line, unlike a standalone install row.
+
+The operator accepted both for the variable expansion phase. Scope when picked
+up: decide whether each matches the tri-state severity model (info = desired
+state reached, warning = carried out but short) and the import grammar, check
+Claude Code's `/plugin` behavior first, then update the renderer, the catalog
+and the pinned tests together.
+
+## ROOTKEY-01: a root plugin name outside the token alphabet gets a dependency cause
+
+Surfaced by the `mcp-4` reserved record-key work (2026-10-10, broken-windows
+ledger entry 90). `install` checks the root `<plugin>@<marketplace>` key
+against the dependency token rule before the resolver runs:
+`resolveDependencyClosure` in `domain/dependency-closure.ts` calls `splitKey`,
+and `TOKEN_PATTERN` in `domain/dependencies.ts` needs a leading letter or
+digit. So `install __proto__@<mp>`, and any root name outside that alphabet
+(for example `_x@mp`), is refused as `(failed) {invalid manifest}` with the
+cause `Plugin "__proto__@hostile" declares an unusable dependency (root:
+expected <plugin>@<marketplace>).` The plugin declares no dependency, so the
+cause is misleading. `list` and `info` show the resolver's verdict for the
+same name, `(unavailable) {unsupported source}`. The refusal itself is
+correct: no record is dropped and no file changes. The case
+`tests/integration/reserved-record-keys.test.ts` pins the current text.
+
+Scope when picked up: decide which verdict an invalid root name should get,
+check what Claude Code's `/plugin install` prints for such a name first, then
+either run the resolver before the closure root check or give the root check
+its own cause, and update the catalog and the pinned case together.

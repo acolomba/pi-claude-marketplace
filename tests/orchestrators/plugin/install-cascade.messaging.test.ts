@@ -12,6 +12,7 @@ import {
   DependencyCascadeError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { notifyWithContext } from "../../../extensions/pi-claude-marketplace/shared/notify-context.ts";
+import { adapterCommand } from "../../platform/pi-inventory-seed.ts";
 
 import type {
   CascadeFailureSubject,
@@ -22,7 +23,7 @@ import type { InstallMsg } from "../../../extensions/pi-claude-marketplace/orche
 import type {
   NotificationContext,
   SoftDepStatus,
-  ToolInventory,
+  PiInventory,
   ToolInventoryItem,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
@@ -39,8 +40,10 @@ import type {
  * catalog contract independently drives through the dispatcher.
  */
 
-const BOTH_LOADED: readonly ToolInventoryItem[] = [{ name: "subagent" }, { name: "mcp" }];
-const MCP_ONLY: readonly ToolInventoryItem[] = [{ name: "mcp" }];
+// Every case reports pi-mcp-adapter loaded through its `mcp-adapter` command
+// (ADET-02), so these tool lists only decide whether pi-subagents is loaded.
+const BOTH_LOADED: readonly ToolInventoryItem[] = [{ name: "subagent" }];
+const MCP_ONLY: readonly ToolInventoryItem[] = [];
 const PROBE_BOTH_LOADED: SoftDepStatus = {
   workflowEngineLoaded: false,
   piSubagentsLoaded: true,
@@ -73,7 +76,7 @@ function emit(rows: readonly CascadeMsg[], tools: readonly ToolInventoryItem[]):
       },
     },
   };
-  const pi: ToolInventory = { getAllTools: () => tools };
+  const pi: PiInventory = { getAllTools: () => tools, getCommands: () => [adapterCommand()] };
 
   notifyWithContext(
     ctx,

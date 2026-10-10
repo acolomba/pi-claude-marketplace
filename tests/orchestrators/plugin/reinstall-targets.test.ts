@@ -475,3 +475,100 @@ test("reports a marketplace removed after scope resolution", async (testContext)
   );
   assert.deepStrictEqual(projectLoads, [projectRoot, projectRoot]);
 });
+
+test("D-08-07: a bare plugin named constructor stays in the project container as an absent name does", async (testContext) => {
+  // arrange
+  const cwd = await targetEnvironment(testContext);
+  await seedScope(cwd, "project", { shared: [] });
+  await seedScope(cwd, "user", { shared: [] });
+
+  // act
+  const selection = await selectReinstallTargets({
+    cwd,
+    target: { kind: "plugin", marketplace: "shared", plugin: "constructor" },
+  });
+
+  // assert
+  assert.deepStrictEqual(selection, {
+    cardinality: "single",
+    targets: [{ marketplace: "shared", plugin: "constructor", scope: "project" }],
+  });
+});
+
+test("D-08-07: a bare plugin named constructor selects its user record over a project container that lacks it", async (testContext) => {
+  // arrange
+  const cwd = await targetEnvironment(testContext);
+  await seedScope(cwd, "project", { shared: [] });
+  await seedScope(cwd, "user", { shared: ["constructor"] });
+
+  // act
+  const selection = await selectReinstallTargets({
+    cwd,
+    target: { kind: "plugin", marketplace: "shared", plugin: "constructor" },
+  });
+
+  // assert
+  assert.deepStrictEqual(selection, {
+    cardinality: "single",
+    targets: [{ marketplace: "shared", plugin: "constructor", scope: "user" }],
+  });
+});
+
+for (const requestedScope of [undefined, "project", "user"] as const) {
+  test(`D-08-07: a plugin in a marketplace named constructor reports the marketplace as not added for scope ${requestedScope ?? "unset"}`, async (testContext) => {
+    // arrange
+    const cwd = await targetEnvironment(testContext);
+    await seedScope(cwd, "project", { shared: ["x"] });
+    await seedScope(cwd, "user", { shared: ["x"] });
+
+    // act & assert
+    await assert.rejects(
+      selectReinstallTargets({
+        cwd,
+        ...(requestedScope !== undefined && { scope: requestedScope }),
+        target: { kind: "plugin", marketplace: "constructor", plugin: "x" },
+      }),
+      (error: unknown) => {
+        assert.ok(error instanceof MarketplaceNotAddedSignal);
+        assert.deepStrictEqual(
+          {
+            marketplace: error.marketplace,
+            notInstalledAt: error.notInstalledAt,
+            plugin: error.plugin,
+            requestedScope: error.requestedScope,
+          },
+          {
+            marketplace: "constructor",
+            notInstalledAt: undefined,
+            plugin: undefined,
+            requestedScope,
+          },
+        );
+        return true;
+      },
+    );
+  });
+}
+
+test("D-08-07: a marketplace named toString reports the marketplace as not added", async (testContext) => {
+  // arrange
+  const cwd = await targetEnvironment(testContext);
+  await seedScope(cwd, "project", { shared: ["x"] });
+  await seedScope(cwd, "user", { shared: ["x"] });
+
+  // act & assert
+  await assert.rejects(
+    selectReinstallTargets({
+      cwd,
+      target: { kind: "marketplace", marketplace: "toString" },
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof MarketplaceNotAddedSignal);
+      assert.deepStrictEqual(
+        { marketplace: error.marketplace, requestedScope: error.requestedScope },
+        { marketplace: "toString", requestedScope: undefined },
+      );
+      return true;
+    },
+  );
+});

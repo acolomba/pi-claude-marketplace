@@ -1,4 +1,5 @@
 import type { DroppedHook } from "./components/hooks.ts";
+import type { DroppedMcpServer } from "./mcp-server-features.ts";
 import type { GitHubSource, GitSubdirSource, PathSource, UrlSource } from "./source.ts";
 import type Type from "typebox";
 
@@ -67,6 +68,40 @@ type DroppedHookArmKeysDrift =
 
 type DroppedHookArmKeysCheck = AssertTrue<[true] extends [DroppedHookArmKeysDrift] ? true : false>;
 
+type DroppedMcpServerSchema = Type.TObject<{
+  server: Type.TString;
+  feature: Type.TUnion<
+    [
+      Type.TLiteral<"ws">,
+      Type.TLiteral<"sse-ide">,
+      Type.TLiteral<"ws-ide">,
+      Type.TLiteral<"sdk">,
+      Type.TLiteral<"claudeai-proxy">,
+      Type.TLiteral<"headersHelper">,
+      Type.TLiteral<"oauth.xaa">,
+      Type.TLiteral<"command ~">,
+      Type.TLiteral<"args ~">,
+      Type.TLiteral<"bareElicitationCapability">,
+    ]
+  >;
+}>;
+
+type DroppedMcpServerDriftCheck = AssertTrue<
+  DroppedMcpServer extends Type.Static<DroppedMcpServerSchema>
+    ? Type.Static<DroppedMcpServerSchema> extends DroppedMcpServer
+      ? true
+      : false
+    : false
+>;
+
+type DroppedMcpServerKeysCheck = AssertTrue<
+  [keyof DroppedMcpServer] extends [keyof Type.Static<DroppedMcpServerSchema>]
+    ? [keyof Type.Static<DroppedMcpServerSchema>] extends [keyof DroppedMcpServer]
+      ? true
+      : false
+    : false
+>;
+
 interface MaterializableFields {
   installable: Type.TLiteral<true>;
   name: Type.TString;
@@ -85,7 +120,17 @@ interface MaterializableFields {
         : never
     >
   >;
+  // ANAME-07: the servers a partial install leaves out, each with its feature.
+  droppedMcpServers: Type.TOptional<
+    Type.TArray<
+      [DroppedMcpServerDriftCheck, DroppedMcpServerKeysCheck] extends [true, true]
+        ? DroppedMcpServerSchema
+        : never
+    >
+  >;
   defaultEnabled: Type.TBoolean;
+  // ANAME-06: written on every MCP server entry of the plugin.
+  description: Type.TOptional<Type.TString>;
 }
 
 // TypeBox requires a mapped property record; an interface has no implicit index signature.

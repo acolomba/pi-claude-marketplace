@@ -23,8 +23,8 @@
 // boundary at one emission and zero probes and leaves the working directory
 // UNSTATED, so a workflow that ran would carry strong-mock's pending-call proxy
 // into `removeMarketplace`'s first `locationsFor(scope, opts.cwd)` call. A
-// delegating case states one emission, two tool probes (one soft-dependency
-// probe reading twice), and one working-directory read. All four counts were
+// delegating case states one emission, one soft-dependency probe, and one
+// working-directory read. All four counts were
 // measured against the real module through a counting proxy before this file
 // was written.
 //
@@ -222,7 +222,7 @@ for (const { args, expectedFootprint, expectedMessage, selection } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, "delegates");
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 1, {
       reads: 1,
       value: workspace.cwd,
     });
@@ -299,7 +299,7 @@ for (const { args, expectedFootprint, expectedNotification, placement } of [
     const workspace = await createHermeticWorkspace(t, "scope-target");
     await seedMarketplace(workspace.cwd, "project", "alpha");
     await seedInvalidLocalConfig(workspace.cwd, "project");
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 1, {
       reads: 1,
       value: workspace.cwd,
     });
@@ -319,7 +319,7 @@ test("accepts a scope flag beside the scope-target flag and honors the scope it 
   // arrange
   const workspace = await createHermeticWorkspace(t, "both-selectors");
   await seedBothScopes(workspace);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 1, {
     reads: 1,
     value: workspace.cwd,
   });

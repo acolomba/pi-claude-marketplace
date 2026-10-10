@@ -26,7 +26,7 @@ This extension installs plugins from Claude plugin marketplaces that contain the
 - Skills.
 - Agents. Requires [pi-subagents](https://pi.dev/packages/pi-subagents).
 - Hooks. Partial support. For more information, see [Hook compatibility](docs/hooks-compatibility.md).
-- MCP servers. Requires [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter).
+- MCP servers. Requires [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter). For more information, see [MCP compatibility](docs/mcp-compatibility.md).
 - Workflows. Requires [@quintinshaw/pi-dynamic-workflows](https://pi.dev/packages/@quintinshaw/pi-dynamic-workflows). For more information, see [Workflow compatibility](docs/workflows-compatibility.md).
 
 Plugins that contain unsupported components can be partially installed. A partially installed plugin may fail to work as intended.
@@ -35,9 +35,9 @@ The `/claude:plugin` command manages Claude marketplaces and plugins, like Claud
 
 ## Prerequisites
 
-- [Pi Coding Agent](https://pi.dev) 0.86.1 or newer
-- [pi-subagents](https://pi.dev/packages/pi-subagents) (optional but recommended, `pi install npm:pi-subagents`)
-- [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter) (optional but recommended, `pi install npm:pi-mcp-adapter`)
+- [Pi Coding Agent](https://pi.dev) 1.0.0 or newer
+- [pi-subagents](https://pi.dev/packages/pi-subagents) 0.74.0 or newer (optional but recommended, `pi install npm:pi-subagents`)
+- [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter) 5.2.0 or a later 5.x release (optional but recommended, `pi install npm:pi-mcp-adapter`). Pi's built-in MCP support does not satisfy this requirement.
 - [@quintinshaw/pi-dynamic-workflows](https://pi.dev/packages/@quintinshaw/pi-dynamic-workflows) (optional but recommended, `pi install npm:@quintinshaw/pi-dynamic-workflows`)
 
 ## Usage
@@ -118,38 +118,13 @@ Skills use Pi's `/skill:` form and also have an alias in interactive sessions:
 
 Skill aliases use a colon on every platform. If an alias conflicts with a command, the command takes precedence. Use `/skill:foo-bar` to invoke the skill.
 
-MCP server names do not change. If another MCP configuration already uses that name, the plugin install or update fails.
+Plugin MCP servers get the names that Claude Code gives them. The model sees each tool as `mcp__plugin_<plugin>_<server>__<tool>`. pi-mcp-adapter stores each server under a key that ends with `_`. `/claude:plugin info` shows each server as `plugin:<plugin>:<server>`.
 
-| Plugin name | `mcpServers` key | Pi MCP server name                 |
-| ----------- | ---------------- | ---------------------------------- |
-| `foo`       | `api`            | `api`                              |
-| `foo`       | `foo-api`        | `foo-api`                          |
-| `bar`       | `api`            | _conflict if `api` already exists_ |
-
-### Customizing generated agents
-
-This extension converts each plugin agent into a pi-subagents agent file named `pi-claude-marketplace-<plugin>-<agent>`. Do not edit these files: install, update, and reinstall regenerate them.
-
-Two conversion rules to know:
-
-- If the source agent does not declare `tools:`, the generated agent has no tool allowlist. pi-subagents then grants its default builtin tools, like Claude Code grants every tool available to subagents. Background children also receive ambient extension tools, such as MCP tools from pi-mcp-adapter. If the source agent sets `disallowedTools`, those names become `excludeTools`, which needs pi-subagents 0.62.0 or newer. Older versions ignore the field.
-- Agent-level `allowed-tools`, `mcpServers`, `permissionMode`, and `hooks` fields are dropped, with a warning that explains why. Claude Code ignores all four on plugin agents (`allowed-tools` is a slash-command field). The plugin's own MCP servers and its hooks.json still install.
-
-To change a generated agent's settings so the change survives plugin updates, use pi-subagents agent overrides in your Pi settings file (`~/.pi/agent/settings.json` for the user scope, `<project>/.pi/settings.json` for the project scope):
-
-```json
-{
-  "subagents": {
-    "agentOverrides": {
-      "pi-claude-marketplace-foo-reviewer": {
-        "tools": "read,bash,mcp:github"
-      }
-    }
-  }
-}
-```
-
-An override replaces the same field in the generated frontmatter. `mcp:<server>` entries grant direct MCP tools when pi-mcp-adapter is installed. pi-subagents loads MCP tools only for background (`async: true`) children.
+| Plugin name | `mcpServers` key | Adapter server key  | Tool names                      | Name shown by `info` |
+| ----------- | ---------------- | ------------------- | ------------------------------- | -------------------- |
+| `foo`       | `api`            | `plugin_foo_api_`   | `mcp__plugin_foo_api__<tool>`   | `plugin:foo:api`     |
+| `foo`       | `my.db`          | `plugin_foo_my_db_` | `mcp__plugin_foo_my_db__<tool>` | `plugin:foo:my.db`   |
+| `bar`       | `api`            | `plugin_bar_api_`   | `mcp__plugin_bar_api__<tool>`   | `plugin:bar:api`     |
 
 ### Scoping
 
@@ -161,7 +136,7 @@ You can also install the same plugin in both the user and project scopes. Then t
 
 ### Partially available plugins
 
-Some plugins contain unsupported components: an unmappable hook, an LSP server, or a theme. To install or update these plugins partially, pass the `--partial` option. This extension installs the supported components and ignores the unsupported ones.
+Some plugins contain unsupported components: an unmappable hook, an LSP server, a theme, or an MCP server that uses a feature pi-mcp-adapter cannot run. To install or update these plugins partially, pass the `--partial` option. This extension installs the supported components and ignores the unsupported ones.
 
 List partially available plugins.
 

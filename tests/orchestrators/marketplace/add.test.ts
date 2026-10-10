@@ -36,6 +36,7 @@ import {
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { SymlinkRefusedError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
+import { expectSoftDepProbes } from "../../edge/notification-boundary.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
@@ -332,9 +333,7 @@ function makeCtx(expectedNotifications = 1): {
     when(() => ctx.ui)
       .thenReturn(ui)
       .times(expectedNotifications);
-    when(() => pi.getAllTools())
-      .thenReturn([])
-      .times(expectedNotifications === 2 ? 3 : expectedNotifications * 3);
+    expectSoftDepProbes(pi, expectedNotifications === 2 ? 1 : expectedNotifications);
     when(() => ui.notify)
       .thenReturn((message, severity) => {
         notifications.push(severity === undefined ? { message } : { message, severity });
@@ -1267,6 +1266,132 @@ test("accepts a path marketplace with an allowed dependency marketplace", async 
   });
 });
 
+/** Writes a path marketplace whose manifest declares `name` and no plugins. */
+async function writeNamedPathMarketplace(cwd: string, name: string): Promise<string> {
+  const marketplaceRoot = path.join(cwd, "named-marketplace");
+  const manifestDirectory = path.join(marketplaceRoot, ".claude-plugin");
+  await mkdir(manifestDirectory, { recursive: true });
+  await writeFile(
+    path.join(manifestDirectory, "marketplace.json"),
+    JSON.stringify({ name, plugins: [] }),
+  );
+  return marketplaceRoot;
+}
+
+test("D-08-07: adds a path marketplace named constructor", async (t) => {
+  await createHermeticEnvironment(t, "mp-add-constructor-home-");
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    const marketplaceRoot = await writeNamedPathMarketplace(cwd, "constructor");
+    const { ctx, pi, notifications } = makeCtx();
+    const { gitOps } = createGitOps();
+
+    // act
+    await addMarketplace({ ctx, pi, scope: "project", cwd, rawSource: marketplaceRoot, gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [{ message: "● constructor [project] (added)" }]);
+    assert.deepStrictEqual(Object.keys((await loadState(locations.extensionRoot)).marketplaces), [
+      "constructor",
+    ]);
+  });
+});
+
+test("MA-8 / D-08-07: refuses a second add of a marketplace named constructor", async (t) => {
+  await createHermeticEnvironment(t, "mp-add-constructor-dup-home-");
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    const marketplaceRoot = await writeNamedPathMarketplace(cwd, "constructor");
+    const first = makeCtx();
+    await addMarketplace({
+      ctx: first.ctx,
+      pi: first.pi,
+      scope: "project",
+      cwd,
+      rawSource: marketplaceRoot,
+      gitOps: createGitOps().gitOps,
+    });
+    const { ctx, pi, notifications } = makeCtx();
+
+    // act
+    await addMarketplace({
+      ctx,
+      pi,
+      scope: "project",
+      cwd,
+      rawSource: marketplaceRoot,
+      gitOps: createGitOps().gitOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A marketplace operation has failed.\n\n⊘ constructor [project] (failed) {duplicate name}",
+        severity: "error",
+      },
+    ]);
+    assert.deepStrictEqual(Object.keys((await loadState(locations.extensionRoot)).marketplaces), [
+      "constructor",
+    ]);
+  });
+});
+
+test("D-08-07: refuses a path marketplace named __proto__ as an invalid manifest", async (t) => {
+  await createHermeticEnvironment(t, "mp-add-proto-home-");
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    const marketplaceRoot = await writeNamedPathMarketplace(cwd, "__proto__");
+    const { ctx, pi, notifications } = makeCtx();
+    const { gitOps } = createGitOps();
+
+    // act
+    await addMarketplace({ ctx, pi, scope: "project", cwd, rawSource: marketplaceRoot, gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A marketplace operation has failed.\n\n" +
+          `⊘ ${marketplaceRoot} [project] (failed) {invalid manifest}`,
+        severity: "error",
+      },
+    ]);
+    assert.deepStrictEqual((await loadState(locations.extensionRoot)).marketplaces, {});
+  });
+});
+
+test("D-08-07: refuses a cloned marketplace named __proto__ as an invalid manifest", async (t) => {
+  await createHermeticEnvironment(t, "mp-add-proto-clone-home-");
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    const fixtureSourceDir = await writeNamedPathMarketplace(cwd, "__proto__");
+    const { ctx, pi, notifications } = makeCtx();
+    const { gitOps } = createGitOps({ fixtureSourceDir });
+
+    // act
+    await addMarketplace({
+      ctx,
+      pi,
+      scope: "project",
+      cwd,
+      rawSource: "anthropics/claude-plugins-official",
+      gitOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A marketplace operation has failed.\n\n" +
+          "⊘ anthropics/claude-plugins-official [project] (failed) {invalid manifest}",
+        severity: "error",
+      },
+    ]);
+    assert.deepStrictEqual((await loadState(locations.extensionRoot)).marketplaces, {});
+  });
+});
+
 test("rejects a path marketplace with a scalar dependency allowlist", async () => {
   await withTmpScope(async ({ cwd, locations }) => {
     // arrange
@@ -2162,7 +2287,7 @@ test("ATTR-07: a Unix domain socket path renders (failed) {source missing}", asy
         });
       });
       await unlink(socketPath).catch(() => {
-        /* already gone */
+        // already gone
       });
     }
   });

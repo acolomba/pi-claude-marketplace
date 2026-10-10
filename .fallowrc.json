@@ -147,7 +147,6 @@
     ]
   },
   "duplicates": {
-    "ignoredClones": ["dup:cc950b18:2"],
     "threshold": 3
   },
   "includeEntryExports": true,

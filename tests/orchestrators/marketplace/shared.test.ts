@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, readdir, stat, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { test, type TestContext } from "node:test";
 
@@ -13,6 +13,7 @@ import {
   classifyAutoupdateFlip,
   loadVisibleMarketplaces,
   crossScopeFlag,
+  foldUnstageNotices,
   marketplaceInOtherScope,
   narrowCascadeFailure,
   refreshGitHubClone,
@@ -23,11 +24,13 @@ import { locationsFor } from "../../../extensions/pi-claude-marketplace/persiste
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import * as defaultGit from "../../../extensions/pi-claude-marketplace/platform/git.ts";
 import { atomicWriteJson } from "../../../extensions/pi-claude-marketplace/shared/atomic-json.ts";
+import { McpConfigFileError } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 import {
   InvalidMarketplaceManifestError,
   MarketplaceNotFoundError,
   PluginShapeError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import { expectSoftDepProbes } from "../../edge/notification-boundary.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
@@ -45,6 +48,7 @@ import type {
   ExtensionAPI,
   ExtensionContext,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { McpConfigNotice } from "../../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 
 type MarketplaceRecord = ExtensionState["marketplaces"][string];
@@ -244,9 +248,7 @@ function notificationBoundary(expectation?: NotificationExpectation): {
   const ui = mock<ExtensionContext["ui"]>({ exactParams: true, name: "extension UI" });
   if (expectation !== undefined) {
     when(() => ctx.ui).thenReturn(ui);
-    when(() => pi.getAllTools())
-      .thenReturn([])
-      .times(3);
+    expectSoftDepProbes(pi, 1);
     when(() => {
       ui.notify(expectation.message, expectation.severity);
     }).thenReturn(undefined);
@@ -321,6 +323,35 @@ async function seedWorkflowEnvelope(
   return target;
 }
 
+/**
+ * Points the scope's legacy `mcp.json` at a file in a directory the test makes
+ * read-only, so the file reads normally and an atomic write to it fails.
+ * Returns the directory, which the case unlocks after acting.
+ */
+async function lockLegacyMcpJson(
+  t: TestContext,
+  cwd: string,
+  locations: ScopedLocations,
+  bytes: string,
+): Promise<string> {
+  // A 0o555 directory stays writable for uid 0, so the write this helper
+  // exists to refuse would succeed. Refuse up front and name the environment.
+  if (typeof process.getuid === "function" && process.getuid() === 0) {
+    throw new Error("lockLegacyMcpJson cannot deny root; run this suite as a non-root user");
+  }
+
+  const lockedDirectory = path.join(cwd, "locked");
+  const lockedLegacy = path.join(lockedDirectory, "mcp.json");
+  await mkdir(lockedDirectory, { recursive: true });
+  await writeFile(lockedLegacy, bytes);
+  await symlink(lockedLegacy, locations.mcpJsonPath);
+  t.after(async () => {
+    await chmod(lockedDirectory, 0o700).catch(() => undefined);
+  });
+  await chmod(lockedDirectory, 0o555);
+  return lockedDirectory;
+}
+
 async function seedFullCascade(
   locations: ScopedLocations,
   marketplace: string,
@@ -345,9 +376,9 @@ async function seedFullCascade(
   await mkdir(path.dirname(hookFile), { recursive: true });
   await writeFile(hookFile, '{"hooks":{}}');
 
-  await mkdir(path.dirname(locations.mcpJsonPath), { recursive: true });
+  await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
   await writeFile(
-    locations.mcpJsonPath,
+    locations.mcpAdapterJsonPath,
     JSON.stringify({
       mcpServers: {
         "sample-server": {
@@ -666,6 +697,9 @@ test("cascadeUnstagePlugin returns every removed resource in six-kind order", as
       mcpServers: ["sample-server"],
       workflows: [workflowName],
     },
+    writtenMcpFiles: [
+      { path: locations.mcpAdapterJsonPath, bytes: Buffer.from('{\n  "mcpServers": {}\n}\n') },
+    ],
   };
 
   // act
@@ -806,6 +840,436 @@ test("cascadeUnstagePlugin raises a typed workflows failure naming every unremov
   assert.deepStrictEqual(outcome.dropped.hooks, ["sample"]);
   assert.deepStrictEqual(outcome.dropped.workflows, ["sample:greet"]);
   await assert.rejects(() => stat(removablePath), { code: "ENOENT" });
+});
+
+test("AVAR-04 / ANAME-07: foldUnstageNotices drops the variable and tool-rule notices of the removed servers and appends the unstage's notices", () => {
+  // arrange
+  const notices: McpConfigNotice[] = [
+    { kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" },
+    {
+      kind: "variables-missing",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "plugin_hello_api_",
+      names: ["API_SITE"],
+    },
+    {
+      kind: "credentials-blanked",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "plugin_hello_api_",
+      names: ["ANTHROPIC_API_KEY"],
+    },
+    {
+      kind: "tool-rules-unenforced",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "plugin_hello_api_",
+      fields: ["toolPermissions"],
+    },
+    {
+      kind: "override-kept",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "plugin_hello_api_",
+      fields: ["env"],
+    },
+    {
+      kind: "variables-missing",
+      scope: "user",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "plugin_hello_api_",
+      names: ["API_SITE"],
+    },
+    {
+      kind: "variables-missing",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "plugin_hello_docs_",
+      names: ["DOCS_SITE"],
+    },
+    {
+      kind: "tool-rules-unenforced",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "plugin_hello_docs_",
+      fields: ["tools[].permission_policy"],
+    },
+  ];
+
+  // act
+  foldUnstageNotices(notices, {
+    scope: "project",
+    plugin: "hello",
+    droppedServers: ["api"],
+    notices: [
+      {
+        kind: "override-restored",
+        scope: "project",
+        file: "mcp-adapter.json",
+        server: "plugin_hello_api_",
+      },
+    ],
+  });
+
+  // assert
+  assert.deepStrictEqual(notices, [
+    { kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" },
+    {
+      kind: "override-kept",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "plugin_hello_api_",
+      fields: ["env"],
+    },
+    {
+      kind: "variables-missing",
+      scope: "user",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "plugin_hello_api_",
+      names: ["API_SITE"],
+    },
+    {
+      kind: "variables-missing",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "plugin_hello_docs_",
+      names: ["DOCS_SITE"],
+    },
+    {
+      kind: "tool-rules-unenforced",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "plugin_hello_docs_",
+      fields: ["tools[].permission_policy"],
+    },
+    {
+      kind: "override-restored",
+      scope: "project",
+      file: "mcp-adapter.json",
+      server: "plugin_hello_api_",
+    },
+  ]);
+});
+
+test("AFILE-04: cascadeUnstagePlugin carries the notice for a commented mcp-adapter.json", async (t) => {
+  // arrange
+  const { locations } = await createProjectScope(t, "cascade-mcp-comments");
+  await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+  await writeFile(
+    locations.mcpAdapterJsonPath,
+    '// user note\n{"mcpServers":{"sample-server":{"command":"node","_piClaudeMarketplace":{"plugin":"sample","marketplace":"official"}}}}\n',
+  );
+  const record = pluginRecord({ mcpServers: ["sample-server"] });
+  const expected: UnstageOutcome = {
+    ok: true,
+    dropped: {
+      skills: [],
+      commands: [],
+      agents: [],
+      hooks: ["sample"],
+      mcpServers: ["sample-server"],
+      workflows: [],
+    },
+    mcpConfigNotices: [{ kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" }],
+    writtenMcpFiles: [
+      { path: locations.mcpAdapterJsonPath, bytes: Buffer.from('{\n  "mcpServers": {}\n}\n') },
+    ],
+  };
+
+  // act
+  const outcome = await cascadeUnstagePlugin("sample", "official", locations, record);
+
+  // assert
+  assert.deepStrictEqual(outcome, expected);
+});
+
+test("AFILE-01: cascadeUnstagePlugin writes a kept override back and reports the write-back", async (t) => {
+  // arrange
+  const { locations } = await createProjectScope(t, "cascade-mcp-kept-override");
+  await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+  await writeFile(
+    locations.mcpAdapterJsonPath,
+    '{"mcpServers":{"sample-server":{"command":"node","disabled":true,"_piClaudeMarketplace":{"plugin":"sample","marketplace":"official","keptOverride":{"disabled":true}}}}}\n',
+  );
+  const record = pluginRecord({ mcpServers: ["sample-server"] });
+  const expected: UnstageOutcome = {
+    ok: true,
+    dropped: {
+      skills: [],
+      commands: [],
+      agents: [],
+      hooks: ["sample"],
+      mcpServers: ["sample-server"],
+      workflows: [],
+    },
+    mcpConfigNotices: [
+      {
+        kind: "override-restored",
+        scope: "project",
+        file: "mcp-adapter.json",
+        server: "sample-server",
+      },
+    ],
+    writtenMcpFiles: [
+      {
+        path: locations.mcpAdapterJsonPath,
+        bytes: Buffer.from(
+          '{\n  "mcpServers": {\n    "sample-server": {\n      "disabled": true\n    }\n  }\n}\n',
+        ),
+      },
+    ],
+  };
+
+  // act
+  const outcome = await cascadeUnstagePlugin("sample", "official", locations, record);
+
+  // assert
+  assert.deepStrictEqual(
+    { outcome, file: await readFile(locations.mcpAdapterJsonPath, "utf8") },
+    {
+      outcome: expected,
+      file: '{\n  "mcpServers": {\n    "sample-server": {\n      "disabled": true\n    }\n  }\n}\n',
+    },
+  );
+});
+
+test("AFILE-04: cascadeUnstagePlugin keeps the notice when a later slot fails", async (t) => {
+  // arrange
+  const { locations } = await createProjectScope(t, "cascade-mcp-comments-failure");
+  await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+  await writeFile(
+    locations.mcpAdapterJsonPath,
+    '/* user note */ {"mcpServers":{"sample-server":{"command":"node","_piClaudeMarketplace":{"plugin":"sample","marketplace":"official"}}}}\n',
+  );
+  await mkdir(path.join(locations.workflowsSavedDir, "sample:blocked.json"), { recursive: true });
+  const record = pluginRecord({ mcpServers: ["sample-server"], workflows: ["sample:blocked"] });
+
+  // act
+  const { cause, ...outcome } = await cascadeUnstagePlugin("sample", "official", locations, record);
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    ok: false,
+    dropped: {
+      skills: [],
+      commands: [],
+      agents: [],
+      hooks: ["sample"],
+      mcpServers: ["sample-server"],
+      workflows: [],
+    },
+    mcpConfigNotices: [{ kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" }],
+    writtenMcpFiles: [
+      { path: locations.mcpAdapterJsonPath, bytes: Buffer.from('{\n  "mcpServers": {}\n}\n') },
+    ],
+  });
+  assert.ok(cause instanceof WorkflowsUnstageFailureError);
+  assert.deepStrictEqual(
+    cause.failedWorkflows.map((failure) => failure.name),
+    ["sample:blocked"],
+  );
+});
+
+test("AFILE-04: cascadeUnstagePlugin reports the adapter file's servers and notice when the legacy write fails", async (t) => {
+  // arrange
+  const { cwd, locations } = await createProjectScope(t, "cascade-mcp-legacy-write-failure");
+  await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+  await writeFile(
+    locations.mcpAdapterJsonPath,
+    '// user note\n{"mcpServers":{"sample-server":{"command":"node","_piClaudeMarketplace":{"plugin":"sample","marketplace":"official"}}}}\n',
+  );
+  const lockedDirectory = await lockLegacyMcpJson(
+    t,
+    cwd,
+    locations,
+    '{"mcpServers":{"legacy-server":{"command":"node","_piClaudeMarketplace":{"plugin":"sample","marketplace":"official"}}}}\n',
+  );
+  const record = pluginRecord({ mcpServers: ["sample-server", "legacy-server"] });
+
+  // act
+  const { cause, ...outcome } = await cascadeUnstagePlugin("sample", "official", locations, record);
+  await chmod(lockedDirectory, 0o700);
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    ok: false,
+    dropped: {
+      skills: [],
+      commands: [],
+      agents: [],
+      hooks: ["sample"],
+      mcpServers: ["sample-server"],
+      workflows: [],
+    },
+    mcpConfigNotices: [{ kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" }],
+    writtenMcpFiles: [
+      { path: locations.mcpAdapterJsonPath, bytes: Buffer.from('{\n  "mcpServers": {}\n}\n') },
+    ],
+  });
+  const writeFailure = cause as NodeJS.ErrnoException | undefined;
+  assert.deepStrictEqual(
+    { code: writeFailure?.code, syscall: writeFailure?.syscall },
+    { code: "EACCES", syscall: "open" },
+  );
+});
+
+test("TR-03: cascadeUnstagePlugin keeps a server the unwritten legacy mcp.json still holds", async (t) => {
+  // arrange
+  const { cwd, locations } = await createProjectScope(t, "cascade-mcp-legacy-shared-name");
+  const ownedServer =
+    '{"command":"node","_piClaudeMarketplace":{"plugin":"sample","marketplace":"official"}}';
+  await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+  await writeFile(locations.mcpAdapterJsonPath, `{"mcpServers":{"srv":${ownedServer}}}\n`);
+  const lockedDirectory = await lockLegacyMcpJson(
+    t,
+    cwd,
+    locations,
+    `{"mcpServers":{"srv":${ownedServer}}}\n`,
+  );
+  const record = pluginRecord({ mcpServers: ["srv"] });
+
+  // act
+  const { cause, ...outcome } = await cascadeUnstagePlugin("sample", "official", locations, record);
+  await chmod(lockedDirectory, 0o700);
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    ok: false,
+    dropped: {
+      skills: [],
+      commands: [],
+      agents: [],
+      hooks: ["sample"],
+      mcpServers: [],
+      workflows: [],
+    },
+    writtenMcpFiles: [
+      { path: locations.mcpAdapterJsonPath, bytes: Buffer.from('{\n  "mcpServers": {}\n}\n') },
+    ],
+  });
+  const writeFailure = cause as NodeJS.ErrnoException | undefined;
+  assert.deepStrictEqual(
+    { code: writeFailure?.code, syscall: writeFailure?.syscall },
+    { code: "EACCES", syscall: "open" },
+  );
+});
+
+test("TR-03 / ANAME-01: cascadeUnstagePlugin reports the declared names of entries under their generated keys, in record order", async (t) => {
+  // arrange
+  const { locations } = await createProjectScope(t, "cascade-mcp-keyed");
+  const ownedServer =
+    '{"command":"node","_piClaudeMarketplace":{"plugin":"sample","marketplace":"official"}}';
+  await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+  await writeFile(
+    locations.mcpAdapterJsonPath,
+    `{"mcpServers":{"plugin_sample_api_":${ownedServer},"plugin_sample_db_":${ownedServer}}}\n`,
+  );
+  const record = pluginRecord({ mcpServers: ["db", "api"] });
+
+  // act
+  const outcome = await cascadeUnstagePlugin("sample", "official", locations, record);
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    ok: true,
+    dropped: {
+      skills: [],
+      commands: [],
+      agents: [],
+      hooks: ["sample"],
+      mcpServers: ["db", "api"],
+      workflows: [],
+    },
+    writtenMcpFiles: [
+      { path: locations.mcpAdapterJsonPath, bytes: Buffer.from('{\n  "mcpServers": {}\n}\n') },
+    ],
+  });
+});
+
+test("TR-03 / ANAME-01: cascadeUnstagePlugin reports the declared name of a legacy mcp.json entry under that name", async (t) => {
+  // arrange
+  const { locations } = await createProjectScope(t, "cascade-mcp-legacy-raw");
+  await mkdir(path.dirname(locations.mcpJsonPath), { recursive: true });
+  await writeFile(
+    locations.mcpJsonPath,
+    '{"mcpServers":{"db":{"command":"node","_piClaudeMarketplace":{"plugin":"sample","marketplace":"official"}}}}\n',
+  );
+  const record = pluginRecord({ mcpServers: ["db"] });
+
+  // act
+  const outcome = await cascadeUnstagePlugin("sample", "official", locations, record);
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    ok: true,
+    dropped: {
+      skills: [],
+      commands: [],
+      agents: [],
+      hooks: ["sample"],
+      mcpServers: ["db"],
+      workflows: [],
+    },
+    writtenMcpFiles: [
+      { path: locations.mcpJsonPath, bytes: Buffer.from('{\n  "mcpServers": {}\n}\n') },
+    ],
+  });
+});
+
+test("TR-03 / ANAME-01: cascadeUnstagePlugin maps the keys a failed legacy write still removed to declared names", async (t) => {
+  // arrange
+  const { cwd, locations } = await createProjectScope(t, "cascade-mcp-keyed-partial");
+  const ownedServer =
+    '{"command":"node","_piClaudeMarketplace":{"plugin":"sample","marketplace":"official"}}';
+  await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+  await writeFile(
+    locations.mcpAdapterJsonPath,
+    `{"mcpServers":{"plugin_sample_db_":${ownedServer}}}\n`,
+  );
+  const lockedDirectory = await lockLegacyMcpJson(
+    t,
+    cwd,
+    locations,
+    `{"mcpServers":{"legacy":${ownedServer}}}\n`,
+  );
+  const record = pluginRecord({ mcpServers: ["db", "legacy"] });
+
+  // act
+  const { cause, ...outcome } = await cascadeUnstagePlugin("sample", "official", locations, record);
+  await chmod(lockedDirectory, 0o700);
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    ok: false,
+    dropped: {
+      skills: [],
+      commands: [],
+      agents: [],
+      hooks: ["sample"],
+      mcpServers: ["db"],
+      workflows: [],
+    },
+    writtenMcpFiles: [
+      { path: locations.mcpAdapterJsonPath, bytes: Buffer.from('{\n  "mcpServers": {}\n}\n') },
+    ],
+  });
+  const writeFailure = cause as NodeJS.ErrnoException | undefined;
+  assert.deepStrictEqual(
+    { code: writeFailure?.code, syscall: writeFailure?.syscall },
+    { code: "EACCES", syscall: "open" },
+  );
 });
 
 test("cascadeUnstagePlugin deletes the staged hooks subtree from the scope root", async (t) => {
@@ -981,8 +1445,8 @@ test("cascadeUnstagePlugin preserves earlier partials when hook name validation 
 test("cascadeUnstagePlugin reports hook partial when malformed MCP JSON fails last", async (t) => {
   // arrange
   const { locations } = await createProjectScope(t, "cascade-mcp-failure");
-  await mkdir(path.dirname(locations.mcpJsonPath), { recursive: true });
-  await writeFile(locations.mcpJsonPath, "{");
+  await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+  await writeFile(locations.mcpAdapterJsonPath, "{");
   const record = pluginRecord({ mcpServers: ["sample-server"] });
 
   // act
@@ -998,8 +1462,11 @@ test("cascadeUnstagePlugin reports hook partial when malformed MCP JSON fails la
     mcpServers: [],
     workflows: [],
   });
-  assert.ok(outcome.cause instanceof Error);
-  assert.match(outcome.cause.message, /malformed JSON/);
+  assert.ok(outcome.cause instanceof McpConfigFileError);
+  assert.deepStrictEqual(
+    { filePath: outcome.cause.filePath, defect: outcome.cause.defect },
+    { filePath: locations.mcpAdapterJsonPath, defect: "invalid-jsonc" },
+  );
 });
 
 for (const { title, state, name, enable, expected } of [
@@ -1360,6 +1827,71 @@ test("resolveScopeOrNotifyNotAdded names the user scope holding the container on
   // assert
   assert.equal(resolved, undefined);
   boundary.verifyAll();
+});
+
+test("D-08-07: resolveScopeOrNotifyNotAdded reports a marketplace named constructor as not added", async (t) => {
+  // arrange
+  const { userLocations, projectLocations } = await createHermeticScopes(t, "notify-reserved");
+  await saveMarketplaces(userLocations, []);
+  await saveMarketplaces(projectLocations, []);
+  const boundary = notificationBoundary({
+    message:
+      "A marketplace operation has failed.\n\n⊘ constructor (failed) {marketplace not added}",
+    severity: "error",
+  });
+
+  // act
+  const resolved = await resolveScopeOrNotifyNotAdded(
+    { ctx: boundary.ctx, pi: boundary.pi, name: "constructor" },
+    userLocations,
+    projectLocations,
+  );
+
+  // assert
+  assert.equal(resolved, undefined);
+  boundary.verifyAll();
+});
+
+test("D-08-07: resolveScopeOrNotifyNotAdded finds no marketplace named toString in either scope", async (t) => {
+  // arrange
+  const { userLocations, projectLocations } = await createHermeticScopes(
+    t,
+    "notify-reserved-explicit",
+  );
+  await saveMarketplaces(userLocations, []);
+  await saveMarketplaces(projectLocations, []);
+  const boundary = notificationBoundary({
+    message:
+      "A marketplace operation has failed.\n\n⊘ toString [user] (failed) {marketplace not added}",
+    severity: "error",
+  });
+
+  // act
+  const resolved = await resolveScopeOrNotifyNotAdded(
+    { ctx: boundary.ctx, pi: boundary.pi, name: "toString", scope: "user" },
+    userLocations,
+    projectLocations,
+  );
+
+  // assert
+  assert.equal(resolved, undefined);
+  boundary.verifyAll();
+});
+
+test("D-08-07: classifyAutoupdateFlip throws not found for a marketplace named constructor", () => {
+  // arrange
+  const state: ExtensionState = { schemaVersion: 2, marketplaces: {} };
+
+  // act & assert
+  assert.throws(
+    () => classifyAutoupdateFlip(state, "constructor", true),
+    (error: unknown) => {
+      assert.ok(error instanceof MarketplaceNotFoundError);
+      assert.equal(error.mpName, "constructor");
+      assert.deepStrictEqual(error.scopes, []);
+      return true;
+    },
+  );
 });
 
 for (const scope of ["user", "project"] satisfies readonly Scope[]) {

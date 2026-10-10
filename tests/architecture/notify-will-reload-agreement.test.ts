@@ -20,29 +20,26 @@
  * (`RELOAD_HINT_TRAILER`) live in `shared/notification-summary.ts`, while
  * `shared/notification-dispatch.ts::notify()` owns their only public effect.
  * The assertion therefore observes the oracle through the trailer's presence
- * in the rendered output (WILL-02 leaves the seam to discretion). This file is
- * green on the current (pre-retirement) tree -- it
- * inspects realized-cascade reload behavior, which already matches the oracle;
- * it is the anchor the pending-surface retirement must converge to.
+ * in the rendered output (WILL-02 leaves the seam to discretion). The file
+ * inspects realized-cascade reload behavior, the anchor the pending surface
+ * must agree with.
  */
 
 import assert from "node:assert/strict";
-import test, { mock } from "node:test";
+import test, { type TestContext } from "node:test";
 
 import { notify } from "../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
 import { type NotificationMessage } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
+import { adapterCommand } from "../platform/pi-inventory-seed.ts";
+
+import type {
+  CommandInventoryItem,
+  NotificationContext,
+} from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
 // ---------------------------------------------------------------------------
 // Mock helpers -- mirror the catalog-uat / grammar-invariant harness.
 // ---------------------------------------------------------------------------
-
-interface MockCtx {
-  ui: { notify: ReturnType<typeof mock.fn> };
-}
-
-function makeCtx(): MockCtx {
-  return { ui: { notify: mock.fn() } };
-}
 
 interface MockTool {
   name?: string;
@@ -50,6 +47,7 @@ interface MockTool {
 
 interface MockPi {
   getAllTools: () => MockTool[];
+  getCommands: () => CommandInventoryItem[];
 }
 
 /**
@@ -58,7 +56,8 @@ interface MockPi {
  */
 function piWithAllLoaded(): MockPi {
   return {
-    getAllTools: () => [{ name: "subagent" }, { name: "mcp" }, { name: "workflow_control" }],
+    getAllTools: () => [{ name: "subagent" }, { name: "workflow_control" }],
+    getCommands: () => [adapterCommand()],
   };
 }
 
@@ -245,34 +244,36 @@ const IMMEDIATE_FIXTURES: readonly AgreementFixture[] = [
   },
 ];
 
-function render(fixture: AgreementFixture): string {
-  const ctx = makeCtx();
-  notify(ctx as never, fixture.pi, fixture.message);
+function render(t: TestContext, fixture: AgreementFixture): string {
+  const uiNotify = t.mock.fn<(message: string, severity?: string) => void>();
+  const ctx: NotificationContext = { ui: { notify: uiNotify } };
+  notify(ctx, fixture.pi, fixture.message);
   assert.equal(
-    ctx.ui.notify.mock.calls.length,
+    uiNotify.mock.calls.length,
     1,
     `notify() must call ctx.ui.notify exactly once (IL-2) for: ${fixture.label}`,
   );
-  const args = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
-  return args[0];
+  const [call] = uiNotify.mock.calls;
+  assert.ok(call);
+  return call.arguments[0];
 }
 
-test("WILL-02: every reload-deferred realized cascade emits the reload-hint trailer (pending keeps its will-token)", () => {
-  for (const fixture of RELOAD_DEFERRED_FIXTURES) {
-    const emitted = render(fixture);
+for (const fixture of RELOAD_DEFERRED_FIXTURES) {
+  test(`WILL-02: a reload-deferred realized cascade emits the reload-hint trailer (pending keeps its will-token): ${fixture.label}`, (t) => {
+    const emitted = render(t, fixture);
     assert.ok(
       emitted.includes(RELOAD_HINT_TRAILER),
       `${fixture.label}: the realized cascade for pending '${fixture.pendingToken}' MUST emit the reload-hint trailer (WILL-02)`,
     );
-  }
-});
+  });
+}
 
-test("WILL-02: every immediate marketplace action's realized cascade omits the reload-hint trailer (pending drops the will-token)", () => {
-  for (const fixture of IMMEDIATE_FIXTURES) {
-    const emitted = render(fixture);
+for (const fixture of IMMEDIATE_FIXTURES) {
+  test(`WILL-02: an immediate marketplace action's realized cascade omits the reload-hint trailer (pending drops the will-token): ${fixture.label}`, (t) => {
+    const emitted = render(t, fixture);
     assert.ok(
       !emitted.includes(RELOAD_HINT_TRAILER),
       `${fixture.label}: the realized cascade for ${fixture.pendingToken} MUST NOT emit the reload-hint trailer (WILL-03)`,
     );
-  }
-});
+  });
+}

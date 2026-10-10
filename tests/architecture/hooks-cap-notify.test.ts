@@ -15,113 +15,75 @@
 // exempted from a NotificationMessage-only gate).
 
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
-import path from "node:path";
-import test, { mock } from "node:test";
+import test from "node:test";
 
 import { notifyStopHookOverrideCap } from "../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
 
-import { VOCABULARY_GUARD_DOC_TARGETS } from "./gate-targets.ts";
-import { REPO_ROOT } from "./source-scan.ts";
+import { readCatalogBlock } from "./catalog-block.ts";
 
 import type { ExtensionContext } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
-
-// D-07-05: the catalog is the registry's target, not a path spelled here. The
-// group is a tuple, so the binding is positional and `readCatalogBlock` states
-// the basename it expects.
-const [OUTPUT_CATALOG_REL] = VOCABULARY_GUARD_DOC_TARGETS;
+import type { TestContext } from "node:test";
 
 // The plugin id baked into the catalog's `stop-override-cap` fenced block. The
 // byte-equality assertion drives the seam with this exact id so the emitted
 // string matches the documented example verbatim.
 const CATALOG_PLUGIN_ID = "ralph-wiggum";
 
-/**
- * Read the fenced block body that follows a `<!-- catalog-state: STATE -->`
- * marker in docs/output-catalog.md. Mirrors the catalog-uat parser's
- * fence-walk (the body is the lines between the ``` fences, joined by "\n").
- */
-async function readCatalogBlock(state: string): Promise<string> {
-  assert.strictEqual(
-    path.posix.basename(OUTPUT_CATALOG_REL),
-    "output-catalog.md",
-    `D-07-05: this gate reads the output catalog, but the registry target bound to it is ${OUTPUT_CATALOG_REL}`,
-  );
-  const catalog = await readFile(path.join(REPO_ROOT, OUTPUT_CATALOG_REL), "utf8");
-  const lines = catalog.split("\n");
-  const marker = `<!-- catalog-state: ${state} -->`;
-
-  let pending = false;
-  let inFence = false;
-  const body: string[] = [];
-  for (const line of lines) {
-    if (!pending) {
-      if (line.trim() === marker) {
-        pending = true;
-      }
-
-      continue;
-    }
-
-    if (!inFence) {
-      if (line.startsWith("```")) {
-        inFence = true;
-      }
-
-      continue;
-    }
-
-    if (line.startsWith("```")) {
-      const block = body.join("\n");
-
-      // D-07-03: an empty fence would hand the byte-equality assertion an empty
-      // expectation, turning a documentation-parity pin into a comparison
-      // against nothing.
-      assert.ok(
-        block.length > 0,
-        `D-07-03: the '${state}' block in ${OUTPUT_CATALOG_REL} is empty, so this gate compares against nothing`,
-      );
-      return block;
-    }
-
-    body.push(line);
-  }
-
-  throw new Error(`catalog block for state '${state}' not found in ${OUTPUT_CATALOG_REL}`);
+interface Notification {
+  readonly message: string;
+  readonly severity: string | undefined;
 }
 
-interface MockCtx {
+interface RecordingCtx {
   readonly ctx: ExtensionContext;
-  readonly notify: ReturnType<typeof mock.fn>;
+  readonly notifications: Notification[];
 }
 
-function makeCtx(): MockCtx {
-  const notify = mock.fn();
+function makeCtx(t: TestContext): RecordingCtx {
+  const notifications: Notification[] = [];
+  const notify = t.mock.fn((message: string, severity?: string): void => {
+    notifications.push({ message, severity });
+  });
+  // The seam reads only `ui.notify`; the rest of the host context is irrelevant to it.
   const ctx = { ui: { notify } } as unknown as ExtensionContext;
-  return { ctx, notify };
+
+  return { ctx, notifications };
 }
 
-test("STOP-07 / D-88-01: notifyStopHookOverrideCap emits one warning-severity ctx.ui.notify call", () => {
-  const { ctx, notify } = makeCtx();
+function onlyNotification(notifications: readonly Notification[]): Notification {
+  const [first] = notifications;
+  assert.ok(first !== undefined, "the cap-trip seam must emit a notification");
+
+  return first;
+}
+
+test("STOP-07 / D-88-01: notifyStopHookOverrideCap emits one warning-severity ctx.ui.notify call", (t) => {
+  // arrange
+  const { ctx, notifications } = makeCtx(t);
+
+  // act
   notifyStopHookOverrideCap(ctx, CATALOG_PLUGIN_ID);
 
+  // assert
+  assert.equal(notifications.length, 1, "the cap-trip seam must call ctx.ui.notify exactly once");
   assert.equal(
-    notify.mock.calls.length,
-    1,
-    "the cap-trip seam must call ctx.ui.notify exactly once",
+    onlyNotification(notifications).severity,
+    "warning",
+    "the cap-trip warning must be warning severity",
   );
-  const args = notify.mock.calls[0]!.arguments as [string, string?];
-  assert.equal(args[1], "warning", "the cap-trip warning must be warning severity");
 });
 
-test("STOP-07 / D-88-01: cap-trip first line is a non-empty summary followed by a `\\n\\n` detail block naming the plugin", () => {
-  const { ctx, notify } = makeCtx();
+test("STOP-07 / D-88-01: cap-trip first line is a non-empty summary followed by a `\\n\\n` detail block naming the plugin", (t) => {
+  // arrange
+  const { ctx, notifications } = makeCtx(t);
+
+  // act
   notifyStopHookOverrideCap(ctx, CATALOG_PLUGIN_ID);
 
-  const emitted = (notify.mock.calls[0]!.arguments as [string, string?])[0];
+  // assert
+  const emitted = onlyNotification(notifications).message;
   const firstNewline = emitted.indexOf("\n");
   const firstLine = firstNewline === -1 ? emitted : emitted.slice(0, firstNewline);
-
   assert.ok(firstLine.length > 0, "the summary first line must be non-empty");
   assert.ok(
     emitted.includes("\n\n"),
@@ -133,15 +95,17 @@ test("STOP-07 / D-88-01: cap-trip first line is a non-empty summary followed by 
   assert.ok(detail.includes(CATALOG_PLUGIN_ID), "the detail block must name the blocking plugin");
 });
 
-test("STOP-07 / D-88-01: cap-trip output is byte-equal to the docs/output-catalog.md `stop-override-cap` block", async () => {
+test("STOP-07 / D-88-01: cap-trip output is byte-equal to the docs/output-catalog.md `stop-override-cap` block", async (t) => {
+  // arrange
   const expected = await readCatalogBlock("stop-override-cap");
+  const { ctx, notifications } = makeCtx(t);
 
-  const { ctx, notify } = makeCtx();
+  // act
   notifyStopHookOverrideCap(ctx, CATALOG_PLUGIN_ID);
 
-  const emitted = (notify.mock.calls[0]!.arguments as [string, string?])[0];
+  // assert
   assert.equal(
-    emitted,
+    onlyNotification(notifications).message,
     expected,
     "notifyStopHookOverrideCap output drifted from the catalog's stop-override-cap block",
   );

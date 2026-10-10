@@ -32,7 +32,10 @@ import {
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
+import { expectSoftDepProbes } from "../../edge/notification-boundary.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+import { noStatusSnapshot } from "../../platform/mcp-status-seed.ts";
+import { emptyPiInventory } from "../../platform/pi-inventory-seed.ts";
 
 import type { EnableDisableHooksRouting } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts";
 import type { InstallHooksRouting } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-disable-cascade.ts";
@@ -43,7 +46,7 @@ import type {
   ExtensionAPI,
   ExtensionContext,
   NotificationContext,
-  ToolInventory,
+  PiInventory,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { CompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
@@ -70,8 +73,7 @@ interface FetchBoundary {
  * The fetch command's notification boundary. fetch is handed the whole
  * `ExtensionContext` / `ExtensionAPI` rather than the two narrow read contracts
  * `makeCtx` builds, so the members it may reach are stated as expectations and
- * verified after the call: one cascade emission and the soft-dependency probe,
- * which reads the tool list three times -- pi-subagents, mcp adapter, workflow engine.
+ * verified after the call: one cascade emission and one soft-dependency probe.
  */
 function makeFetchBoundary(): FetchBoundary {
   const ctx = mock<ExtensionContext>({ exactParams: true, name: "fetch context" });
@@ -81,9 +83,7 @@ function makeFetchBoundary(): FetchBoundary {
   when(() => ctx.ui)
     .thenReturn(ui)
     .once();
-  when(() => pi.getAllTools())
-    .thenReturn([])
-    .times(3);
+  expectSoftDepProbes(pi, 1);
   when(() => ui.notify)
     .thenReturn((message, severity) => {
       notifications.push(severity === undefined ? { message } : { message, severity });
@@ -103,7 +103,7 @@ function makeFetchBoundary(): FetchBoundary {
 
 function makeCtx(): {
   ctx: NotificationContext;
-  pi: ToolInventory;
+  pi: PiInventory;
   notifications: NotifyRecord[];
 } {
   const notifications: NotifyRecord[] = [];
@@ -114,7 +114,7 @@ function makeCtx(): {
       },
     },
   };
-  return { ctx, pi: { getAllTools: () => [] }, notifications };
+  return { ctx, pi: emptyPiInventory(), notifications };
 }
 
 /**
@@ -946,7 +946,15 @@ test("getPluginInfo reports the installed plugin through the bound reader capabi
   const { ctx, pi, notifications } = makeCtx();
 
   // act
-  await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "p1", scope: "project", cwd });
+  await getPluginInfo({
+    ctx,
+    pi,
+    mcpStatus: noStatusSnapshot(),
+    marketplace: "mp",
+    plugin: "p1",
+    scope: "project",
+    cwd,
+  });
 
   // assert
   assert.deepStrictEqual(notifications, [

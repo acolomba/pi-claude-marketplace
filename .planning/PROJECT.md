@@ -12,11 +12,49 @@ A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/r
 
 ## Current Milestone: none
 
-No active milestone. any-git-host (workstream `git-hosts`) closed 2026-09-30 and is
-on main via PR #221; the workstream was archived to `milestones/ws-git-hosts-2026-10-01/`
-on 2026-10-01, and no workstream is active. v1.20 transitive-dependencies closed
-2026-09-24 and is on main via PR #198, merged 2026-10-01. Start the next one with
-`/gsd-new-milestone`.
+No active milestone. mcp-4 closed 2026-10-10 on `features/mcp-4`; PR #250 is open
+and not yet merged. Its UAT check, `/gsd-cleanup` and the 0.20.0 version bump are
+done. Start the next milestone with `/gsd-new-milestone`.
+
+## Previous Milestone: mcp-4 -- MCP 4 (branch: features/mcp-4, completed 2026-10-10, PR #250 open, not yet merged, no npm release)
+
+**Goal:** Make Pi 1.0 the baseline and deliver plugin MCP servers through pi-mcp-adapter 5,
+using its tool search, naming, status and variable features at Claude Code parity -- without
+adopting Pi's built-in MCP.
+**Outcome:** completed 2026-10-10 -- 41/41 requirements, 8 phases, 73 plans, 176 tasks. The
+first audit read `tech_debt`; Phase 8 cleared it, and the re-audit passed (8/8 phases, 12/12
+integration seams, 6/6 flows, Nyquist compliant on all 8, `threats_open: 0`). Archived to
+`.planning/milestones/mcp-4-*`.
+
+**Target features:**
+
+- **Dependency floor.** Pi `>=1.0.0` (dev `^1.0.0`, with pi-tui), pi-subagents `>=0.74.0`,
+  pi-mcp-adapter `>=5.2.0 <6` as the documented MCP soft dependency. Re-apply the Pi 0.99
+  typing fixes from features/mcp `74162ca6` and its peer-test and canary fixes (`5b1d8ef6`,
+  `dac3a245`, `69e0870a`, `4f82096f`) at the 1.0 floor; bump all devDependencies; re-verify the
+  workflow engine (`@quintinshaw/pi-dynamic-workflows` 3.13.1) canaries on Pi 1.0.
+- **mcp-adapter.json delivery.** Stage and unstage marked entries in `<scopeRoot>/mcp-adapter.json`
+  instead of `<scopeRoot>/mcp.json`; the NFR-10 write set changes to match, and the collision
+  walk follows adapter 5's nine-source precedence (closes MCPSRC-01).
+- **Auto migration.** Reconcile moves marked entries out of both `mcp.json` files into
+  `mcp-adapter.json` on `/reload`, atomically, with no reinstall (NFR-2).
+- **Tool-search exposure.** Write `directTools: "search"`, Claude Code's default tool search.
+- **Upstream server naming.** Name servers from Claude Code's `plugin:<plugin>:<server>` key,
+  normalized.
+- **`${VAR:-default}` parity.** Expand variables with Claude Code's rules and escape what the
+  adapter would expand again (closes MENVX-01, ENVLIT-01).
+- **Live status in `info`.** Show each plugin MCP server's adapter runtime state.
+- **Adapter-only detection.** A missing adapter stays `{pi-mcp-adapter}` even when Pi's built-in
+  MCP is active; detection keeps working now that adapter 5 owns `/mcp`.
+
+**Key context:** The features/mcp `builtin-mcp` milestone (Pi 0.99 built-in MCP via
+`pi.registerMcpServer()`) is abandoned: moving off pi-mcp-adapter would regress users. Adapter
+3.x/4.x stopped reading `mcp.json`; 5.0.0 (2026-10-01) reads Pi's `mcp.json` again and replaces
+the built-in `/mcp`, but runtime-registered servers are proxy-only there, so the bridge writes the
+adapter-native file to reach every adapter field. Adapter 5.0's optional `@earendil-works/pi-ai`
+peer range stops at `^0.99.0`; 5.1.0 (2026-10-05) admits `^1.0.0`, so the floor is `>=5.1.0` and
+no upstream gap remains (D-04-12). 5.2.0 (2026-10-09) moves the MCP SDK to 2.3.1, which fixes
+GHSA-6qxp-vccf-f47h, so the floor is `>=5.2.0 <6` (D-07-07).
 
 ## Previous Milestone: any-git-host -- Any Git Host (workstream: git-hosts, branch: features/git-hosts, completed 2026-09-30, merged via PR #221, no npm release)
 
@@ -460,6 +498,15 @@ Four distinct categories of unsupported Claude hook events. All cause plugin `(u
 
 ## Current State
 
+**Current:** mcp-4 closed 2026-10-10 on `features/mcp-4` (Phases 1-8, 73 plans; archived to
+`.planning/milestones/mcp-4-*`), not yet merged or released. Pi 1.0 is the floor, with
+pi-subagents `>=0.74.0` and pi-mcp-adapter `>=5.2.0 <6`. Plugin MCP servers are written to
+the adapter's own `mcp-adapter.json` under Claude Code's tool names, load through tool search,
+expand variables by Claude Code's rules without writing an environment value to disk, and show
+their live state in `info`. One `/reload` moves old `mcp.json` entries into the new file. The
+re-audit passed 41/41 after Phase 8 cleared the first audit's debt. ROOTKEY-01 is carried in
+`BACKLOG.md`.
+
 **Landed on main, unreleased (workstream):** milestone `any-git-host` (2026-09-30, Phases 1-3,
 11 plans; archived to
 `.planning/milestones/ws-git-hosts-2026-10-01/milestones/any-git-host-*`). Private https
@@ -481,12 +528,11 @@ gate on first load. No `0.19.x` tag contains the bridge, by design: those were c
 `releases/v0.19.2`, which PR #216 merged back into `main`. The next release off `main` carries
 workflows with no extra step.
 
-**Current:** v1.20 transitive-dependencies closed 2026-09-24 with 45/45
+**Previously shipped:** v1.20 transitive-dependencies closed 2026-09-24 with 45/45
 requirements and all 12 phase verifications passed. The clean committed tree
 passed `npm run check`: 7,760 unit tests, 63 integration tests, and 100%
-aggregate production coverage. One successful live private-repository
-credential challenge remains deferred in Phase 3 UAT. The next milestone is
-not yet defined.
+aggregate production coverage. The live private-repository credential
+challenge deferred in Phase 3 UAT passed on 2026-09-30. Merged in PR #198.
 
 **Previously shipped:** refine-unit-tests (2026-09-13, Phases 1-9, 213 plans, 412 tasks;
 archived to `.planning/milestones/refine-unit-tests-*`). v1.19 gave every production
@@ -529,7 +575,8 @@ been declared in `package.json` and invoked by nothing, now run: the three fast 
 
 **Shipped:** url-source URL Sources (2026-07-13, Phases 76-79). Arbitrary public HTTPS git URLs are first-class sources for both marketplaces and plugins: `marketplace add/update/remove/info` clone `source.url` directly (no github.com reconstruction); the resolver classifies `url` / `git-subdir` / `github`-object plugin sources installable through a source-addressed refcounted clone cache (`plugin-clones/<urlhash12>-<sha12>/`, one external-monorepo clone serving every referencing plugin, warm-cache operations offline); the full plugin lifecycle works for git sources (sha-change atomic swaps, last-reference clone GC on uninstall/update/marketplace-remove, network-free list/info + install-completion parity); and the GitHub-only Device Flow generalized into a `GitAuthProvider` registry (public repos on any host clone unauthenticated, registered hosts run their flow host-keyed via `CredentialOps`, no-provider hosts fail clean, no-credential-leak gate covers every provider file). `npm run check` GREEN (2739 unit + 16 integration).
 
-**Next:** define the next milestone (`/gsd-new-milestone`). The live credential
+**Next:** run the mcp-4 UAT check and `/gsd-cleanup`, offer the 0.20.0 version bump
+(D-07-11), and open the mcp-4 PR. Then define the next milestone (`/gsd-new-milestone`). The live credential
 challenge deferred in the v1.20 audit passed on 2026-09-30. Earlier context carried forward, all
 deliberate: **two** accepted direct-coverage shortfalls, down from seven
 (`bridges/commands/discover.ts` and `orchestrators/plugin/install-outcome.ts`, both pinned
@@ -544,14 +591,77 @@ operator decision. Workstream `milestone` (force-install closeout) remains open.
 
 ## Requirements
 
-### Active — awaiting next milestone
+### Active — next milestone
 
-No active requirements are defined. The completed v1.20 requirements are in
-[the archive](milestones/v1.20-REQUIREMENTS.md). All validated requirements
-below remain historical completed work.
+No active requirements. `/gsd-new-milestone` defines the next set. The completed mcp-4
+requirements are in [the archive](milestones/mcp-4-REQUIREMENTS.md).
 
 ### Validated
 
+- ✓ Pi 1.0 is the baseline: peer `>=1.0.0`, Node `^22.22.2 || ^24.15.0 ||
+  >=26.0.0`, every devDependency current except TypeScript, pi-subagents
+  `>=0.74.0` proven with zero skips, pi-mcp-adapter `>=5.0.0` as an optional
+  peer (later raised to `>=5.2.0 <6` by D-04-12 and D-07-07), and the Stop and engine canaries passing live on Pi 1.0 with engine
+  3.13.1 (PIFL-01..07) — mcp-4 Phase 1, verified 2026-10-02.
+- ✓ Only pi-mcp-adapter satisfies the MCP soft dependency: detected by its
+  extension `mcp-adapter[:n]` command or an adapter source; Pi's built-in
+  MCP and a foreign `mcp` tool never count. Rows say
+  `{requires pi-mcp-adapter}` and `info` gains a `requires:` line that tags
+  a missing companion (ADET-01, ADET-02) — mcp-4 Phase 1, verified
+  2026-10-02.
+- ✓ Plugin MCP servers are marked entries in `<scopeRoot>/mcp-adapter.json`,
+  read as JSONC the way the adapter reads it, refused rather than replaced
+  when unparseable, written under the legacy `mcp-servers` key when the
+  user's file uses it, checked for collisions in adapter 5's nine-source
+  order, with dropped comments warned about and user overrides carried
+  through updates (AFILE-01..06) — mcp-4 Phase 2, verified 2026-10-06.
+- ✓ Plugin MCP tools reach the model under Claude Code's names: key
+  `plugin_<plugin>_<server>_`, tools `mcp__plugin_<plugin>_<server>__<tool>`,
+  `toolPrefix: "mcp"` and `directTools: "search"` on every entry. Hook
+  matchers and agent `tools:` match them, folded key clashes refuse, and a
+  closed 2.1.291 field table translates transport, timeout, OAuth and
+  `description`. Unhonored features give `{unsupported mcp}` with `--partial`
+  (ANAME-01..07) — mcp-4 Phase 3, verified 2026-10-06.
+- ✓ Plugin MCP entries expand variables by Claude Code 2.1.291 rules: only
+  the five Claude fields, `${VAR:-default}` and the plugin/project builtins at
+  install, plain `${VAR}` kept for pi-mcp-adapter, no environment value on
+  disk. Split tokens, a guard on both sides of a kept reference and `!!`
+  defeat the adapter second expansion, proven against adapter 5.1.0 in CI;
+  Claude credential deny-list blanks withheld credentials; install and `info`
+  name unset and withheld variables; a leading `~` in stdio command/args is
+  `{unsupported mcp}`; peer range `>=5.1.0 <6` (AVAR-01..05) — mcp-4 Phase 4,
+  verified 2026-10-07.
+- ✓ `/reload` moves every installed plugin's MCP servers from `mcp.json`
+  into `mcp-adapter.json` in the fresh-install shape, with no flag stored:
+  the marked legacy entries are the trigger and go last, so any crash
+  converges on the next reload. Old entries are cleanup, not input; old-name
+  adapter stubs and panel copies are removed; unsupported or undeclared
+  servers are dropped with the record made partial; tool permission rules
+  install with a warning; one notice lists each rename, its sign-in and
+  re-approval cost, and every entry left behind with a remedy that clears
+  its cause (AMIG-01..04) — mcp-4 Phase 5, verified 2026-10-09.
+- ✓ `/claude:plugin info` shows each written plugin MCP server's state as
+  pi-mcp-adapter last reported it on `pi-mcp-adapter/status/v1` (Claude Code
+  words, first in the server's parentheses), `status unknown` / `not loaded`
+  when it cannot know, and `overridden by project scope` on the user row
+  when both scopes hold the plugin; the adapter is never imported and no
+  server is connected (ASTAT-01, ASTAT-02) — mcp-4 Phase 6, verified
+  2026-10-09.
+- ✓ The docs describe plugin MCP delivery as built: `mcp-adapter.json`,
+  Claude Code names, tool search, variable rules, upgrading, the status
+  `info` shows, project approval, adapter settings, and every divergence
+  grouped with its license; the CHANGELOG records the milestone. A live
+  canary on Pi 1.0 with pi-mcp-adapter 5.2.0 proves the migration in one
+  reload, a fresh install, both tool-search routes and `info` status from
+  `status unknown` to `connected`; peer range `>=5.2.0 <6`
+  (GHSA-6qxp-vccf-f47h) (ADOC-01..03) — mcp-4 Phase 7, verified 2026-10-09.
+- ✓ The milestone carries no debt: the PR passes the fallow audit, every
+  Phase 1-7 review finding is fixed or closed with a reason, a user's
+  per-server MCP choices (now with `openUi` and `trace`) survive disable then
+  enable and uninstall then reinstall, remote servers keep OAuth beside clean
+  non-Authorization headers, MCP staging takes an explicit environment, and
+  state lookups read own keys only (`__proto__` refused as a name)
+  (DEBT-01..05) — mcp-4 Phase 8, verified 2026-10-10.
 - ✓ Bare and wrapped plugin manifests follow consistent precedence, malformed
   manifests keep their failure behavior, and missing manifests remain valid —
   v1.20 Phase 1, verified 2026-09-14.
@@ -855,7 +965,7 @@ test.ts` (43 V2 tests, +2 G-21-01 inventory-vs-transition regressions)
 - **Codebase state at v1.3 close (2026-05-25):** 1249/1249 tests green; lint + format + types clean. v1.3 milestone landed +15,030 / -1,917 LOC across 180 files (~3 days, 223 commits). Drift-guard plugin (`tests/lint-rules/`, 34 rules) and byte-equality catalog UAT (`tests/architecture/catalog-uat.test.ts` against `docs/output-catalog.md`) are now load-bearing -- `npm run check` will fail on any user-contract drift.
 - **Existing V1 implementation** lives on branch `features/initial`. The PRD (`docs/prd/pi-claude-marketplace-prd.md`) documents that V1's surface, behavior, and contracts. The successor architecture (this branch lineage) reuses the PRD as the spec; whether a given module was preserved, refactored, or rewritten was a per-phase planning decision.
 - **Personas served:** Pi end user (developer), project lead curating per-project marketplaces, plugin author verifying resolution, operator/power user diagnosing drift.
-- **Soft-dependency model is load-bearing:** `pi-subagents` (probed via `subagent` tool) and `pi-mcp-adapter` (probed via `mcp` tool name OR `sourceInfo.source` substring match for `pi-mcp-adapter`) MUST never block installs; absent soft deps degrade with per-row `{requires pi-subagents}` / `{requires pi-mcp}` markers on installed/updated/reinstalled rows plus the canonical reload trailer.
+- **Soft-dependency model is load-bearing:** `pi-subagents` (probed via `subagent` tool) and `pi-mcp-adapter` (probed via its extension-registered `mcp-adapter[:n]` command OR a `sourceInfo.source` naming `pi-mcp-adapter`; Pi's built-in MCP and a bare `mcp` tool never count -- ADET-01/ADET-02) MUST never block installs; absent soft deps degrade with per-row `{requires pi-subagents}` / `{requires pi-mcp-adapter}` markers on installed/updated/reinstalled rows plus the canonical reload trailer.
 - **Marketplace/plugin scope split is explicit:** marketplaces can be configured in user or project scope; plugin operations target a scope for writes. Project-target installs can source from project marketplaces first and user marketplaces second; user-target installs can source only from user marketplaces. The same plugin may be installed in both scopes, with project scope taking precedence for unqualified single-target operations.
 - **v1.3 user-contract (D-30 binding):** `docs/messaging-style-guide.md` v1.0 + `docs/output-catalog.md` are the normative user-contract for every user-visible `ctx.ui.notify` callsite and the single sanctioned `console.warn` (`persistence/migrate.ts:178` §14.1 wording). The five PRD §6.12 ES-5 marker strings are superseded by the §15 replacement table (`{requires pi-subagents}` / `{requires pi-mcp}` / `/reload to pick up changes` / `⊘ <resource> (manual recovery) {<reason>}` / `{rollback partial}` reason + per-phase children). ES-1..ES-4 from PRD §6.12 are unchanged. Structural enforcement: `tests/architecture/no-legacy-markers.test.ts` blocks re-introduction; the 34-rule MSG-* lint plugin reads `docs/messaging-style-guide.md` YAML frontmatter (`status_tokens` / `reasons` / `markers` / `pattern_classes`) as the binding closed sets via `tests/lint-rules/lib/frontmatter.js`.
 - **State persistence surfaces (PRD §4):** `<scope>/pi-claude-marketplace/state.json`, `<scope>/pi-claude-marketplace/resources/{skills,prompts}/`, `<scope>/agents/pi-claude-marketplace-*.md`, `<scope>/mcp.json` -- plus `<scope>/pi-claude-marketplace/agents-index.json` for agent provenance. Where `<scope>` is `~/.pi/agent/` (user; honors `PI_CODING_AGENT_DIR`) or `<cwd>/.pi/` (project).
@@ -867,11 +977,11 @@ test.ts` (43 V2 tests, +2 G-21-01 inventory-vs-transition regressions)
 - **Upstream parity:** Claude Code's behavior is the default for every user-visible decision, because this extension installs real Claude plugins and anything it does differently is something a user already learned upstream and must unlearn. Exactly two things license a divergence: a recorded project decision carried here with an ID (SC-1, for instance), or a Pi capability gap that makes parity unavailable. Neither "upstream looks wrong" nor "our way is simpler" qualifies -- those go to the user as a question. Research the upstream contract with `skills/claude-code-compat-research`.
 - **Runtime:** Node `^22.22.2 || ^24.15.0 || >=26.0.0` (NFR-4)
 - **Tech stack:** TypeScript strict; the resolver MUST expose discriminated `installable: true | false` so consumers cannot read `pluginRoot` from a non-installable plugin (NFR-7)
-- **Pi API:** `@earendil-works/pi-coding-agent` peer dependency, pinned to `>=0.86.1` (dev `^0.86.1`); the NFR-11 floor-pinning SHOULD is now satisfied
+- **Pi API:** `@earendil-works/pi-coding-agent` peer dependency, pinned to `>=1.0.0` (dev `^1.0.0`); the NFR-11 floor-pinning SHOULD is now satisfied
 - **File operations:** All disk mutations atomic (tmp + rename or atomic JSON write) -- NFR-1
 - **Recovery model:** No fix may require a Pi process restart; `Run /reload` must suffice (NFR-2). All operations must be safe to retry -- idempotent or fail-clean (NFR-3)
 - **Network policy (NFR-5, amended by url-source and by D-03-03):** Network is required only for git-source `marketplace add`/`update`, and for `install`/`update`/`reinstall` of git-source plugins **on cache miss only** -- warm sha-pinned cache operations stay offline. Resolving a dependency that carries a version constraint may additionally read that dependency's source repository tag list over the network, even when a cached or otherwise resolvable copy of that dependency already exists, because the constraint can demand a different tag than the cached one (D-03-03). `list`, `info`, `uninstall`, `marketplace remove`, and path-source operations MUST NOT touch the network
-- **Containment (NFR-10, re-anchored by url-source):** Refuse to write outside `<scopeRoot>/pi-claude-marketplace/`, `<scopeRoot>/agents/`, or `<scopeRoot>/mcp.json`; plugin roots must resolve inside their **owning clone root** (marketplace clone for `path` sources, `plugin-clones/<key>/` for git sources)
+- **Containment (NFR-10, re-anchored by url-source):** Refuse to write outside `<scopeRoot>/pi-claude-marketplace/`, `<scopeRoot>/agents/`, `<scopeRoot>/mcp-adapter.json`, or `<scopeRoot>/mcp.json` (kept for legacy entries); plugin roots must resolve inside their **owning clone root** (marketplace clone for `path` sources, `plugin-clones/<key>/` for git sources)
 - **Quality bar:** `npm run check` must stay green -- typecheck + ESLint + `fallow` (dead code, health, duplication) + Prettier + unit tests + integration tests (NFR-6)
 - **Output channel:** All user-visible messages MUST go through `ctx.ui.notify(message, severity)`; direct `process.stdout`/`process.stderr` writes forbidden in command/bridge code (IL-2). Single sanctioned `console.warn` is the load-time legacy migration save failure (IL-3)
 - **No telemetry V1:** No metrics, no event sink, no analytics endpoint (IL-4)
@@ -990,6 +1100,14 @@ test.ts` (43 V2 tests, +2 G-21-01 inventory-vs-transition regressions)
 | **D-1-01 (2026-09-25): every host gets an auth bundle; the registry gates only Device Flow** (any-git-host, Phase 1): a host the registry does not claim takes the stored-credential path through `git credential fill` | One path serves Gitea, Forgejo, self-hosted GitLab and Bitbucket with no hostname literal; the host guard in `onAuth` replaces the two-host cap. | ✓ Good |
 | **D-2-01 (2026-09-26): clone at the verbatim URL, no retry and no fallback** (any-git-host, Phase 2): `.git` is appended only for a GitHub `owner/repo` source | Claude Code parity; a retry would absorb a 404 and mask a real failure. A suffix-less URL on a host that serves only `/repo.git` now fails, and the error names the URL sent (D-2-02). | ✓ Good |
 | **D-3-01 (2026-09-27): leftover recognition compares the canonical identity** (any-git-host, Phase 3): the leftover's `origin` is matched against `canonicalCloneUrl`, then removed and replaced by the fresh staging clone | Identity is `.git`- and fragment-insensitive, so the same source matches however it was typed; reuse-in-place was rejected because a crash leftover is likely partial. | ✓ Good |
+| **D-01-01/03/05 (mcp-4, Phase 1): only pi-mcp-adapter satisfies the MCP soft dependency** — the marker reads `{requires pi-mcp-adapter}` whether or not Pi's built-in MCP is active, and the adapter counts as loaded by its own command or source | Pi's built-in MCP is out of scope (operator decision); counting it would hide a missing adapter | ✓ Good |
+| **D-02-01/03/06 (mcp-4, Phase 2): deliver into the adapter's own file** — read `mcp-adapter.json` with the adapter's JSONC grammar, walk its nine sources later-wins for collisions, carry a closed set of user fields through restages (`openUi` and `trace` joined in D-08-01) | Runtime-registered servers are proxy-only in adapter 5; the native file reaches every adapter field and keeps a user's `/mcp-adapter disable` | ✓ Good |
+| **D-03-01/02/07 (mcp-4, Phase 3): Claude Code names with no translation layer** — key `plugin_<plugin>_<server>_` with `toolPrefix: "mcp"` and `directTools: "search"` pinned; a closed 2.1.291 field table, unknown keys dropped | Yields `mcp__plugin_<plugin>_<server>__<tool>` exactly; the cost is a trailing `_` on adapter surfaces | ✓ Good |
+| **D-04-02/03/08 (mcp-4, Phase 4): expand only what Claude expands at install time** — `${VAR:-default}` and path variables resolve at install, plain `${VAR}` stays for the adapter, a leading `!` is written `!!`, deny-listed credentials are withheld | Resolving everything at install time would write secrets to disk; escaping keeps the adapter's second expansion output equal to Claude's | ✓ Good |
+| **D-05-01/08/16 (mcp-4, Phase 5): migrate by re-staging from the cached source** — write `mcp-adapter.json` first, remove old `mcp.json` entries last, leave any entry that cannot move in place with its cause and remedy | Offline (NFR-5) and fresh-install bytes; add-before-remove means no server is ever lost (NFR-3) | ✓ Good |
+| **D-06-01/06a/09 (mcp-4, Phase 6): status in Claude Code's words from the adapter's status events** — nine closed tokens, an explicit unknown, and `overridden by project scope` for a user row shadowed by a project install | Parity with Claude Code's `/mcp` wording; never import the adapter | ✓ Good |
+| **D-07-02/07/11 (mcp-4, Phase 7): operator-run live canary, adapter floor `>=5.2.0 <6`, 0.20.0 bump offered at PR time** | A real Pi 1.0 plus adapter run proves the whole path; 5.2.0 fixes GHSA-6qxp-vccf-f47h | ✓ Good; bump still to offer |
+| **D-08-02/05/07 (mcp-4, Phase 8): choices survive uninstall and disable; remedies must clear their cause; state maps are read by own key** — choices move to `_piClaudeMarketplace.serverChoices`; `reinstall` falls back to the recorded-sha clone; `constructor`/`__proto__` names behave like any other | The first audit's `tech_debt`: a remedy that cannot fix its cause breaks NFR-3, and inherited keys misread records | ✓ Good; ROOTKEY-01 carried |
 
 ## Evolution
 
@@ -1011,6 +1129,46 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
+
+_Last updated: 2026-10-10 after mcp-4 milestone close. Eight phases, 73 plans,
+41/41 requirements; the re-audit passed after Phase 8 cleared the first audit's
+debt. Archived to `.planning/milestones/mcp-4-*`; not yet merged. Prior updates
+follow._
+
+_Last updated: 2026-10-10 after mcp-4 Phase 8 (clear milestone debt) verified
+5/5; review WR-01..04 and IN-01..03 fixed (7/7); security verified, 0 open;
+Nyquist validated. All eight phases are complete; the milestone re-audit and
+close are next. Prior updates follow._
+
+_Last updated: 2026-10-09 after mcp-4 Phase 7 (docs and live proof) verified
+3/3; review WR-01/02 and IN-01..06 fixed (8/8); security verified, 0 open;
+Nyquist validated. All seven phases are complete; the milestone audit and
+close are next. Prior updates follow._
+
+_Last updated: 2026-10-09 after mcp-4 Phase 6 (live MCP status in info)
+verified 10/10; review WR-01 (snapshot getter swap) fixed, 2 info open;
+security 12/12 closed. Phase 7 (docs and live proof) is next. Prior updates
+follow._
+
+_Last updated: 2026-10-09 after mcp-4 Phase 5 (automatic migration on /reload)
+verified 4/4; the review-fix loop converged clean at iteration 3 (WR-01..04
+fixed, 8 info open) and the operator accepted the notice wording and asked
+for home-relative collision source names. Phase 6 (live MCP status in info)
+is next. Prior updates follow._
+
+_Last updated: 2026-10-07 after mcp-4 Phase 4 (variable expansion at Claude Code
+parity) verified 5/5; the review-fix loop closed WR-01..07 and the operator
+accepted the notice wording, the CI zizmor suppression and the AR-04-03 widening.
+Phase 5 (automatic migration on /reload) is next. Prior updates follow._
+
+_Last updated: 2026-10-06 after mcp-4 Phase 3 (Claude Code tool names and tool
+search) verified; the operator accepted review warnings WR-01, WR-02, WR-03 and
+WR-05 as they stand. Phase 4 (variable expansion at Claude Code parity) is next.
+Prior updates follow._
+
+_Last updated: 2026-10-02 after mcp-4 Phase 1 (Pi 1.0 floor and adapter-only
+detection) verified 5/5; Phase 2 (adapter-file delivery) is next. Prior updates
+follow._
 
 _Last updated: 2026-09-24 after v1.20 closeout. All 12 phases and 45
 requirements are complete; the Phase 3 private-repository credential check is
@@ -1116,3 +1274,5 @@ _Last updated: 2026-09-21 after the workflows-replay milestone closed in workstr
 _Last updated: 2026-09-30 after the any-git-host milestone closed in workstream `git-hosts`. Three phases, 11 plans, 10/10 requirements; private repos on any git host, verbatim-URL endpoints and leftover-clone recovery, reimplemented from PR #153 and merged to main in PR #221. Audit `passed` after PR #231 closed the review debt (GHRED-01, GHADD-01)._
 
 _Last updated: 2026-10-01 after the `git-hosts` workstream was archived to `milestones/ws-git-hosts-2026-10-01/`. No workstream is active; any-git-host is on main and in no npm release yet._
+
+_Last updated: 2026-10-01 after milestone mcp-4 started._

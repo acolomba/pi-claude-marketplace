@@ -173,7 +173,7 @@ function declaredVocabulary(src: string, name: string): readonly string[] {
   );
 
   return [...src.slice(start + opening.length, end).matchAll(/"([^"]*)"/g)].map(
-    (match) => match[1]!,
+    (match) => match[1] ?? "",
   );
 }
 
@@ -208,7 +208,7 @@ const EXPECTED_REASONS = [
   "unsupported hooks",
   "lsp",
   "requires pi-subagents",
-  "requires pi-mcp",
+  "requires pi-mcp-adapter",
   "rollback partial",
   "unreadable",
   "unparseable",
@@ -302,6 +302,8 @@ const EXPECTED_REASONS = [
   "stale workflow command",
   "requires pi-dynamic-workflows",
   "components now supported",
+  // ANAME-07: a server needs a Claude Code MCP feature pi-mcp-adapter lacks.
+  "unsupported mcp",
 ] as const;
 
 const EXPECTED_STATUS_TOKENS = [
