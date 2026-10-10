@@ -5,17 +5,17 @@ titles: json
 findings:
   - id: IN-01
     severity: info
-    disposition: open
+    disposition: fixed
     title: "`statusToken`'s own-key fallback guards an input that the types and the only reader both rule out"
   - id: IN-02
     severity: info
-    disposition: open
+    disposition: fixed
     title: "The ASTAT-02 comment says \"each field is read once after the check\", but `servers` is read again"
   - id: WR-01
     severity: warning
     disposition: fixed
     title: "A snapshot field read twice lets a payload pass the check and then put a non-string into the closed status set"
-open: 2
+open: 0
 total: 3
 recorded: 2026-10-09T19:12:30.037Z
 ---
@@ -24,8 +24,8 @@ recorded: 2026-10-09T19:12:30.037Z
 
 | Finding | Severity | Disposition | Source |
 |---------|----------|-------------|--------|
-| IN-01 | info | open | - |
-| IN-02 | info | open | - |
+| IN-01 | info | fixed | 10d7cb26 |
+| IN-02 | info | fixed | 10d7cb26 |
 | WR-01 | warning | fixed | 06-REVIEW-FIX.md (not in the current review) |
 
 Dispositions: `open` (recorded, not yet triaged), `fixed`, `skipped`, `deferred`.
