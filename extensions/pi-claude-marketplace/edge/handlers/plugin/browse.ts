@@ -134,10 +134,11 @@ export function makeBrowseHandler(handlers: BrowseActionHandlers): SubcommandHan
     }
 
     // Non-TUI modes have no terminal for the picker.
-    if (ctx.mode !== "tui") {
+    const mode = ctx.mode;
+    if (mode !== "tui") {
       notifyUsageError(ctx, run, {
-        message: `Browse is unavailable in ${ctx.mode} mode. Use /claude:plugin list instead.`,
-        usage: USAGE,
+        message: `Browse is unavailable in ${mode} mode. Use /claude:plugin list instead.`,
+        usage: mode === "print" ? "" : USAGE,
       });
       return;
     }

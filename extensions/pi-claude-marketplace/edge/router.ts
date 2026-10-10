@@ -61,8 +61,7 @@ export interface SubcommandHandlers {
   marketplaceUpdate: SubcommandHandler;
   marketplaceAutoupdate: SubcommandHandler;
   marketplaceNoautoupdate: SubcommandHandler;
-  // Interactive SelectList browser (TUI-only). Falls back to `list` in
-  // non-TUI modes.
+  // Interactive SelectList browser; non-TUI modes receive a refusal.
   browse: SubcommandHandler;
   help: SubcommandHandler;
 }
@@ -184,9 +183,8 @@ export function selectClaudePluginRoute(
   const [head, rest] = peelToken(args);
 
   if (head === "") {
-    // Bare `/claude:plugin` opens the interactive browser (TUI) or falls
-    // back to the inventory list (non-TUI), matching Claude Code's
-    // `/plugin` UX. `rest` is "" here (peelToken of empty input).
+    // Bare `/claude:plugin` selects browse, including its mode admission.
+    // `rest` is "" here (peelToken of empty input).
     return { commandId: "plugin browse", handler: handlers.browse, args: rest };
   }
 

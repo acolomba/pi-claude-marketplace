@@ -1139,8 +1139,11 @@ export function formatEnvelopeArguments(envelope: ResolvedEnvelope, body: string
 export function formatRawSurface(surface: ResolvedRawSurface): NotifyArguments | undefined {
   switch (surface.kind) {
     case "usage-error":
-      // SNM-13 / D-06: one blank line separates the message from the usage.
-      return [`${surface.message}\n\n${surface.usage}`, RAW_SURFACE_SEVERITY[surface.kind]];
+      // SNM-13 / D-06: one blank line separates the message from nonempty usage.
+      return [
+        surface.usage === "" ? surface.message : `${surface.message}\n\n${surface.usage}`,
+        RAW_SURFACE_SEVERITY[surface.kind],
+      ];
     case "usage-info":
       return [surface.usage, RAW_SURFACE_SEVERITY[surface.kind]];
     case "diagnostic":

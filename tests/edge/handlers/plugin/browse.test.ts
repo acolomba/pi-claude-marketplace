@@ -149,7 +149,7 @@ for (const mode of ["json", "rpc"] as const) {
     const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
     when(() => ctx.mode)
       .thenReturn(mode)
-      .times(3);
+      .times(2);
     const browseHandler = makeBrowseHandler(handlers);
 
     // act
@@ -175,6 +175,33 @@ for (const mode of ["json", "rpc"] as const) {
     verify(handlers);
   });
 }
+
+test("refuses browse in print with only the error and remedy before state or picker access", async () => {
+  // arrange
+  const handlers = mock<BrowseActionHandlers>({ exactParams: true, name: "browse actions" });
+  const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
+  const ui = mock<ExtensionCommandContext["ui"]>({ exactParams: true, name: "UI" });
+  when(() => ctx.mode)
+    .thenReturn("print")
+    .times(2);
+  when(() => ctx.ui)
+    .thenReturn(ui)
+    .times(1);
+  when(() => {
+    ui.notify("Browse is unavailable in print mode. Use /claude:plugin list instead.", "error");
+  })
+    .thenReturn()
+    .times(1);
+  const browseHandler = makeBrowseHandler(handlers);
+
+  // act
+  await browseHandler("", ctx, runWithNothingLoaded());
+
+  // assert
+  verify(ctx);
+  verify(ui);
+  verify(handlers);
+});
 
 test("TUI mode with no marketplaces emits structured (no marketplaces) notification", async (t) => {
   // arrange
