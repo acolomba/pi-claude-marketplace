@@ -21,6 +21,7 @@ import { ADAPTER_EMPTY_ENV } from "../../shared/session-env.ts";
 import {
   CLAUDE_MARKETPLACE_MARKER_KEY,
   buildMarker,
+  isPlainObject,
   keptOverrideOf,
   pluginSetFieldsOf,
 } from "./marker.ts";
@@ -73,10 +74,6 @@ export interface StampServersInput {
   readonly keptOverrides: Readonly<Record<string, unknown>>;
   /** The plugin's description, written on every entry when present (ANAME-06). */
   readonly description?: string | undefined;
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 // pi-mcp-adapter's scan of a header value in OAuth mode: each match names a

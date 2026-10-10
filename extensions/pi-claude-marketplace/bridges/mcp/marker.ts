@@ -37,7 +37,8 @@ export interface ClaudeMarketplaceMarker {
   readonly keptOverride?: Readonly<Record<string, unknown>>;
 }
 
-function isPlainObject(value: unknown): value is Record<string, unknown> {
+/** A plain object, not null and not an array: the shape every MCP config member must have. */
+export function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -54,20 +55,15 @@ function isStringArray(value: unknown): value is readonly string[] {
  * member; any other value parses as a marker without that member.
  */
 function readMarker(value: unknown): ClaudeMarketplaceMarker | null {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+  if (!isPlainObject(value) || !Object.hasOwn(value, CLAUDE_MARKETPLACE_MARKER_KEY)) {
     return null;
   }
 
-  if (!Object.hasOwn(value, CLAUDE_MARKETPLACE_MARKER_KEY)) {
+  const obj = value[CLAUDE_MARKETPLACE_MARKER_KEY];
+  if (!isPlainObject(obj)) {
     return null;
   }
 
-  const marker = (value as Record<string, unknown>)[CLAUDE_MARKETPLACE_MARKER_KEY];
-  if (typeof marker !== "object" || marker === null || Array.isArray(marker)) {
-    return null;
-  }
-
-  const obj = marker as Record<string, unknown>;
   if (
     !Object.hasOwn(obj, "plugin") ||
     !Object.hasOwn(obj, "marketplace") ||

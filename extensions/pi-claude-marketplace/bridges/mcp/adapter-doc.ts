@@ -27,7 +27,12 @@ import stripJsonComments from "strip-json-comments";
 import { McpConfigFileError } from "../../shared/errors-bridges.ts";
 
 import { restoredOverride, userCarriedFields } from "./adapter-entry.ts";
-import { CLAUDE_MARKETPLACE_MARKER_KEY, isOwnedBy, keptOverrideOf } from "./marker.ts";
+import {
+  CLAUDE_MARKETPLACE_MARKER_KEY,
+  isOwnedBy,
+  isPlainObject,
+  keptOverrideOf,
+} from "./marker.ts";
 import { safeSet } from "./safe-set.ts";
 
 import type { RawMcpDoc } from "./types.ts";
@@ -86,10 +91,6 @@ export interface McpServerPartition {
    * carries it (AFILE-06).
    */
   readonly keptOverrides: Readonly<Record<string, unknown>>;
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /**
