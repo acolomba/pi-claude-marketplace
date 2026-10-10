@@ -21,10 +21,11 @@
 // directory outside node_modules and imports the internal module from
 // there by an absolute file path via `pathToFileURL`. The test skips only
 // when the peer is absent: no root resolves, or the resolved root has no
-// `src/` tree. A present peer that fails to copy or import fails the test,
-// and so does an explicit `PI_SUBAGENTS_ROOT` that names an existing
-// directory with no `src/` tree, because either one means the check
-// silently stopped running.
+// `src/` tree and no `package.json`. An explicit `PI_SUBAGENTS_ROOT` that
+// names an existing directory also counts as present. A present peer with
+// no `src/` tree fails the test, and so does a present peer that fails to
+// copy or import, because either one means the check silently stopped
+// running.
 
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -95,9 +96,10 @@ function resolvePiSubagentsPackageRoot(): PiSubagentsRoot | undefined {
  * (outside node_modules, sidestepping Node's node_modules type-stripping
  * restriction) and dynamically imports the internal skills module from
  * there by absolute file path. Returns undefined only when the peer is
- * absent, so the caller can skip. Throws when the `src/` tree exists but
- * the copy, the module lookup, or the import fails, and when an explicit
- * `PI_SUBAGENTS_ROOT` names an existing directory with no `src/` tree.
+ * absent, so the caller can skip. Throws when a present peer has no `src/`
+ * tree (the root holds a `package.json`, or an explicit `PI_SUBAGENTS_ROOT`
+ * names an existing directory), and when the copy, the module lookup, or
+ * the import fails.
  */
 async function loadPiSubagentsSkillsModule(
   root: PiSubagentsRoot | undefined,
@@ -109,8 +111,9 @@ async function loadPiSubagentsSkillsModule(
 
   const installedSrcDir = path.join(root.dir, "src");
   if (!existsSync(installedSrcDir)) {
-    if (root.explicit && existsSync(root.dir)) {
-      assert.fail(`PI_SUBAGENTS_ROOT=${root.dir} exists but has no src/ tree`);
+    const installed = existsSync(path.join(root.dir, "package.json"));
+    if (installed || (root.explicit && existsSync(root.dir))) {
+      assert.fail(`pi-subagents at ${root.dir} is present but has no src/ tree`);
     }
 
     return undefined;

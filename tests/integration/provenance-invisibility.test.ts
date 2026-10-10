@@ -85,9 +85,9 @@ function resolvePiSubagentsPackageRoot(): PiSubagentsRoot | undefined {
  * node_modules type-stripping restriction) and dynamically imports the agent
  * frontmatter parser module from there by absolute file path. Returns
  * undefined only when the peer is absent, so the caller can skip. Throws
- * when the `src/` tree exists but the copy, the module lookup, or the import
- * fails, and when an explicit `PI_SUBAGENTS_ROOT` names an existing
- * directory with no `src/` tree.
+ * when a present peer has no `src/` tree (the root holds a `package.json`,
+ * or an explicit `PI_SUBAGENTS_ROOT` names an existing directory), and when
+ * the copy, the module lookup, or the import fails.
  */
 async function loadPiSubagentsFrontmatterModule(
   root: PiSubagentsRoot | undefined,
@@ -99,8 +99,9 @@ async function loadPiSubagentsFrontmatterModule(
 
   const installedSrcDir = path.join(root.dir, "src");
   if (!existsSync(installedSrcDir)) {
-    if (root.explicit && existsSync(root.dir)) {
-      assert.fail(`PI_SUBAGENTS_ROOT=${root.dir} exists but has no src/ tree`);
+    const installed = existsSync(path.join(root.dir, "package.json"));
+    if (installed || (root.explicit && existsSync(root.dir))) {
+      assert.fail(`pi-subagents at ${root.dir} is present but has no src/ tree`);
     }
 
     return undefined;
