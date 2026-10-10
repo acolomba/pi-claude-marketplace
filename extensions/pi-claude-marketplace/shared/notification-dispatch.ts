@@ -535,7 +535,9 @@ export interface McpMigrationNotListedRow {
  * AMIG-01: an installed plugin whose source the cached marketplace copy
  * cannot give: a missing or unparseable manifest, a source the copy lacks, or
  * a declared git-subdir path that leaves the plugin's repository. A reinstall
- * reads the same copy, so the remedy is a marketplace update or an uninstall.
+ * reads the same copy. An uninstall clears every cause, so it comes first; a
+ * marketplace update refreshes an out-of-date copy but cannot restore a
+ * missing checkout.
  */
 export interface McpMigrationMarketplaceUnreadableRow {
   readonly kind: "marketplace-unreadable";
@@ -798,7 +800,7 @@ function leftRowLine(row: McpMigrationLeftRow): string {
     case "source-outdated":
       return `${ownerRowPrefix(row)} The cached source of ${printable(row.plugin)} has no plugin at its declared path. Run /claude:plugin update ${printable(row.plugin)}@${printable(row.marketplace)} to move it.`;
     case "marketplace-unreadable":
-      return `${ownerRowPrefix(row)} The ${printable(row.marketplace)} marketplace copy cannot give the source of ${printable(row.plugin)}. Run /claude:plugin marketplace update ${printable(row.marketplace)}, or /claude:plugin uninstall ${printable(row.plugin)}@${printable(row.marketplace)} to remove it.`;
+      return `${ownerRowPrefix(row)} The ${printable(row.marketplace)} marketplace copy cannot give the source of ${printable(row.plugin)}. Run /claude:plugin uninstall ${printable(row.plugin)}@${printable(row.marketplace)} to remove it, or /claude:plugin marketplace update ${printable(row.marketplace)} when the copy is out of date.`;
     case "collision":
       return `${ownerRowPrefix(row)} ${printable(row.key)} is already defined in ${printable(row.source)}, so no server of ${printable(row.plugin)} moved. Remove or rename that server, then run /reload.`;
     case "unfinished":

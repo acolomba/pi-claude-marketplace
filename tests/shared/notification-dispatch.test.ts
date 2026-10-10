@@ -7404,7 +7404,7 @@ describe("notifyMcpMigration", () => {
         marketplace: "m",
         servers: ["s"],
       },
-      line: "  s (p) [user] The m marketplace copy cannot give the source of p. Run /claude:plugin marketplace update m, or /claude:plugin uninstall p@m to remove it.",
+      line: "  s (p) [user] The m marketplace copy cannot give the source of p. Run /claude:plugin uninstall p@m to remove it, or /claude:plugin marketplace update m when the copy is out of date.",
     },
     {
       row: {
@@ -7497,7 +7497,7 @@ describe("notifyMcpMigration", () => {
         [
           "Plugin MCP servers in mcp.json need attention.\n\n" +
             "Left in mcp.json:\n" +
-            "  tool (legacy) [user] The official marketplace copy cannot give the source of legacy. Run /claude:plugin marketplace update official, or /claude:plugin uninstall legacy@official to remove it.\n" +
+            "  tool (legacy) [user] The official marketplace copy cannot give the source of legacy. Run /claude:plugin uninstall legacy@official to remove it, or /claude:plugin marketplace update official when the copy is out of date.\n" +
             "  mod, aux (moved) [user] The cached source of moved has no plugin at its declared path. Run /claude:plugin update moved@official to move it.",
           "warning",
         ],
