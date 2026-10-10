@@ -5,17 +5,17 @@ milestone_name: MCP 4
 current_phase: 8
 current_phase_name: Clear milestone debt
 status: executing
-stopped_at: Completed 08-08-PLAN.md
-last_updated: "2026-10-10T04:20:54.629Z"
+stopped_at: Completed 08-09-PLAN.md
+last_updated: "2026-10-10T04:33:08.667Z"
 last_activity: 2026-10-09
 last_activity_desc: Phase 8 execution started
-state_head: 6a85e0109325b5ae179ec3904e39f5fdee668907
+state_head: 9e36c6940b8a299dbb8816a5a434d1cc3c2a3299
 progress:
   total_phases: 8
   completed_phases: 7
   total_plans: 73
-  completed_plans: 60
-  percent: 82
+  completed_plans: 61
+  percent: 84
 ---
 
 # Project State
@@ -35,11 +35,11 @@ sign-ins and approvals.
 ## Current Position
 
 Phase: 8 (Clear milestone debt) — EXECUTING
-Plan: 9 of 21
+Plan: 10 of 21
 Status: Ready to execute
 Last activity: 2026-10-09 — Phase 8 execution started
 
-Progress: [████████░░] 82%
+Progress: [████████░░] 84%
 
 ### workflows-replay closeout (merged from main)
 
@@ -306,6 +306,7 @@ still open with a comment explaining what landed.
 | Phase 08 P06 | 7min | 2 tasks | 7 files |
 | Phase 08 P07 | 6min | 3 tasks | 5 files |
 | Phase 08 P08 | 14min | 2 tasks | 5 files |
+| Phase 08 P09 | 10min | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -733,6 +734,7 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 08]: The agents and skills rollback marker sits above the throw in the else-if arm (bridges/agents/stage.ts:517): the first span line carries an eslint-disable-next-line directive, and a fallow marker above the directive does not hide the group.
 - [Phase 08]: dispatchRow keeps an unknown-valued view of the render map and casts the looked-up arm once; a typed RenderFn view fails tsc (function parameters are contravariant)
 - [Phase 08]: D-08-03: the adapter-loaded enable and import shapes are pinned by tests; SEV-01 kept, no renderer change
+- [Phase 08]: D-08-07: shared/own-key.ts (ownValue, setOwn) is the own-key helper every zone imports; isReservedRecordKey reserves only __proto__; marketplace add checks reserved and duplicate names in one helper (newMarketplaceName)
 
 ### Pending Todos
 
@@ -866,11 +868,11 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Completed 08-08-PLAN.md
+**Stopped at:** Completed 08-09-PLAN.md
 
 **Resume file:** None
 
-Last session: 2026-10-10T04:20:54.143Z
+Last session: 2026-10-10T04:32:56.562Z
 Phase 7 closed: 5/5 plans; Nyquist validated; security verified (0 open);
 review 8/8 fixed; verifier 3/3, re-running the live canary against
 pi-mcp-adapter 5.2.0. `/gsd-autonomous --from 7` ran the transition, then
