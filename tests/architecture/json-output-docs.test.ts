@@ -5,7 +5,10 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 
+import { Compile } from "typebox/compile";
+
 import type { TestContext } from "node:test";
+import type { TSchema } from "typebox";
 
 interface SnippetOutput {
   status: number | null;
@@ -565,4 +568,217 @@ test("the invocation selector fails explicitly when no command arrived", async (
     stdout: "",
     stderr: "No command outcome received\n",
   });
+});
+
+interface SchemaNode {
+  readonly $ref?: string;
+  readonly anyOf?: readonly SchemaNode[];
+  readonly oneOf?: readonly SchemaNode[];
+  readonly properties?: Readonly<Record<string, SchemaNode>>;
+  readonly required?: readonly string[];
+  readonly items?: SchemaNode;
+  readonly const?: unknown;
+}
+
+interface DocumentedField {
+  readonly type: string;
+  readonly presence: string;
+}
+
+function schemaVariants(node: SchemaNode, root: SchemaNode): readonly SchemaNode[] {
+  if (node.$ref) {
+    assert.ok(node.$ref.startsWith("#/"), "Only local schema references are supported");
+    let target: unknown = root;
+    for (const key of node.$ref.slice(2).split("/")) {
+      assert.ok(target && typeof target === "object");
+      target = Reflect.get(target, key.replaceAll("~1", "/").replaceAll("~0", "~"));
+    }
+
+    assert.ok(target && typeof target === "object", `Missing schema reference: ${node.$ref}`);
+    return schemaVariants(target, root);
+  }
+
+  return (node.anyOf ?? node.oneOf)?.flatMap((arm) => schemaVariants(arm, root)) ?? [node];
+}
+
+function schemaFields(node: SchemaNode, root: SchemaNode, prefix = ""): Map<string, string> {
+  const arms = schemaVariants(node, root);
+  const fields = new Map<string, string>();
+  const names = new Set(arms.flatMap((arm) => Object.keys(arm.properties ?? {})));
+  for (const name of names) {
+    const children = arms.flatMap((arm) => (arm.properties?.[name] ? [arm.properties[name]] : []));
+    const requiredCount = arms.filter((arm) => arm.required?.includes(name)).length;
+    const presence =
+      requiredCount === arms.length ? "required" : requiredCount > 0 ? "conditional" : "optional";
+    const fieldPath = `${prefix}${name}`;
+    fields.set(fieldPath, presence);
+    const nested = children.map((child) => child.items ?? child);
+    const childPrefix = `${fieldPath}${children.some((child) => child.items) ? "[]" : ""}.`;
+    for (const [nestedPath, nestedPresence] of schemaFields({ anyOf: nested }, root, childPrefix)) {
+      fields.set(nestedPath, nestedPresence);
+    }
+  }
+
+  return fields;
+}
+
+function referenceSections(guide: string): Map<string, string> {
+  const sections = new Map<string, string>();
+  for (const match of guide.matchAll(/<!-- fields: ([\w:-]+) -->([\s\S]*?)<!-- \/fields -->/g)) {
+    const name = match[1];
+    const body = match[2];
+    assert.ok(name && body);
+    assert.ok(!sections.has(name), `Duplicate reference section: ${name}`);
+    sections.set(name, body);
+  }
+
+  return sections;
+}
+
+function documentedRows(
+  sections: ReadonlyMap<string, string>,
+  name: string,
+): Map<string, DocumentedField> {
+  const body = sections.get(name);
+  assert.ok(body, `Missing reference section: ${name}`);
+  const rows = new Map<string, DocumentedField>();
+  for (const use of body.matchAll(/<!-- use: ([\w-]+) -->/g)) {
+    assert.ok(use[1]);
+    for (const [field, row] of documentedRows(sections, use[1])) {
+      rows.set(field, row);
+    }
+  }
+
+  for (const row of body.matchAll(/^\|\s*`([^`]+)`\s*\|([^|]+)\|([^|]+)\|([^|]*)\|\s*$/gm)) {
+    const [, field, type = "", presence = "", meaning = ""] = row;
+    assert.ok(
+      field && type.trim() && presence.trim() && meaning.trim(),
+      `Incomplete field description: ${name}.${field}`,
+    );
+    rows.set(field, { type: type.trim(), presence: presence.trim() });
+  }
+
+  return rows;
+}
+
+function documentedFields(
+  sections: ReadonlyMap<string, string>,
+  name: string,
+  prefix = "",
+): Map<string, string> {
+  const fields = new Map<string, string>();
+  for (const [field, row] of documentedRows(sections, name)) {
+    const fieldPath = `${prefix}${field}`;
+    fields.set(fieldPath, row.presence);
+    const reference = /\]\(#([\w-]+)\)(\[\])?/.exec(row.type);
+    if (reference?.[1]) {
+      const childPrefix = `${fieldPath}${reference[2] ?? ""}.`;
+      for (const [nestedPath, presence] of documentedFields(sections, reference[1], childPrefix)) {
+        fields.set(nestedPath, presence);
+      }
+    }
+  }
+
+  return fields;
+}
+
+function assertReferenceInventory(guide: string, schema: SchemaNode): void {
+  const sections = referenceSections(guide);
+  const members = schemaVariants(schema, schema);
+  const kinds = members.map((member) => member.properties?.kind?.const);
+  assert.deepStrictEqual(
+    [...sections.keys()]
+      .filter((name) => name.startsWith("kind:"))
+      .map((name) => name.slice(5))
+      .sort(),
+    [...kinds].sort(),
+  );
+  for (const member of members) {
+    const kind = member.properties?.kind?.const;
+    assert.strictEqual(typeof kind, "string");
+    assert.deepStrictEqual(
+      [...documentedFields(sections, `kind:${String(kind)}`)].sort(),
+      [...schemaFields(member, schema)].sort(),
+      `Documented paths and requiredness for ${String(kind)}`,
+    );
+  }
+}
+
+async function readReferenceInputs() {
+  const guide = await readFile(new URL("../../docs/json-output.md", import.meta.url), "utf8");
+  const schema = JSON.parse(
+    await readFile(new URL("../../schema/claude-plugin.schema.json", import.meta.url), "utf8"),
+  ) as SchemaNode;
+  return { guide, schema };
+}
+
+test("the reference covers every schema kind and recursive field with its requiredness", async () => {
+  // arrange
+  const { guide, schema } = await readReferenceInputs();
+
+  // act
+  const verifyReference = () => {
+    assertReferenceInventory(guide, schema);
+  };
+
+  // assert
+  assert.doesNotThrow(verifyReference);
+});
+
+for (const field of ["causeChain", "components", "owner", "supported", "envelopeCount"]) {
+  test(`the reference check rejects a missing ${field} description`, async () => {
+    // arrange
+    const { guide, schema } = await readReferenceInputs();
+    const incompleteGuide = guide
+      .split("\n")
+      .filter((line) => !line.trimStart().startsWith(`| \`${field}\``))
+      .join("\n");
+
+    // act & assert
+    assert.throws(() => {
+      assertReferenceInventory(incompleteGuide, schema);
+    }, assert.AssertionError);
+  });
+}
+
+test("the reference check rejects a missing payload kind", async () => {
+  // arrange
+  const { guide, schema } = await readReferenceInputs();
+  const incompleteGuide = guide.replace(
+    /<!-- fields: kind:cascade -->[\s\S]*?<!-- \/fields -->/,
+    "",
+  );
+
+  // act & assert
+  assert.throws(() => {
+    assertReferenceInventory(incompleteGuide, schema);
+  }, assert.AssertionError);
+});
+
+test("the reference check rejects incorrect requiredness", async () => {
+  // arrange
+  const { guide, schema } = await readReferenceInputs();
+  const incompleteGuide = guide.replace(/(\|\s*`causeChain`[^\n]*?\|\s*)required/, "$1optional");
+
+  // act & assert
+  assert.throws(() => {
+    assertReferenceInventory(incompleteGuide, schema);
+  }, assert.AssertionError);
+});
+
+test("the partial-result payload examples satisfy the committed schema", async () => {
+  // arrange
+  const { guide, schema } = await readReferenceInputs();
+  const validator = Compile(schema as TSchema);
+
+  // act
+  const payloads = [...guide.matchAll(/```jsonl\n([\s\S]*?)\n```/g)].flatMap((fence) =>
+    (fence[1] ?? "").split("\n").map((line): unknown => JSON.parse(line)),
+  );
+
+  // assert
+  assert.ok(payloads.length > 0);
+  for (const payload of payloads) {
+    assert.ok(validator.Check(payload), JSON.stringify(payload));
+  }
 });
