@@ -57,6 +57,7 @@ import {
   ADAPTER_SERVER_KEYS,
   partitionServers,
   readMcpConfigDoc,
+  restoredOverrideNames,
   storedChoicesFor,
   withPluginServersKeepingChoices,
   type McpConfigDoc,
@@ -90,6 +91,7 @@ import type {
   McpCredentialsBlankedNotice,
   McpLeftoverRemovedNotice,
   McpOverrideKeptNotice,
+  McpOverrideRestoredNotice,
   McpToolRulesUnenforcedNotice,
   McpVariablesMissingNotice,
 } from "../../shared/notification-dispatch.ts";
@@ -185,10 +187,12 @@ function precedenceOf(walk: McpSourceWalk, sourcePath: string): number {
  * full, under the name or under a key that folds equal to it (ANAME-03). The
  * refusal names the highest-precedence other declarer, its key, and the
  * source pi-mcp-adapter would load, which is the target when it ranks higher.
- * An owned entry in the target is a self-replace and stays exempt, under
- * either spelling, unless a foreign entry under the loaded key folds equal to
- * the name: the plugin's entry then sits under the shadowed key, and staging
- * would replace the foreign one.
+ * An entry the plugin owns under the exact name in the target is a
+ * self-replace and stays exempt, unless a foreign entry under the loaded key
+ * folds equal to the name: the plugin's entry then sits under the shadowed
+ * key, and staging would replace the foreign one. An owned entry under a
+ * spelling that only folds equal to the name is a rename, so the other sources
+ * are still walked for the new key.
  */
 async function assertNoMcpCollisions(check: McpCollisionCheck): Promise<void> {
   if (check.names.length === 0) {
@@ -198,7 +202,7 @@ async function assertNoMcpCollisions(check: McpCollisionCheck): Promise<void> {
   const walk = await walkMcpSources(check.cwd);
   for (const name of check.names) {
     if (
-      foldedMatches(Object.keys(check.ours), name).length > 0 &&
+      Object.hasOwn(check.ours, name) &&
       foldedMatches(Object.keys(check.theirs), name).length === 0
     ) {
       continue;
@@ -273,6 +277,22 @@ function overrideKeptNotices(
   }
 
   return notices;
+}
+
+/**
+ * AFILE-06: one notice per plugin entry the stage drops whose kept override it
+ * writes back, decided by the test unstage uses. A staged key replaces its
+ * entry, so it restores nothing.
+ */
+function overrideRestoredNotices(
+  config: McpConfigDoc,
+  stagedKeys: readonly string[],
+  owner: { readonly scope: Scope; readonly pluginName: string; readonly marketplaceName: string },
+): McpOverrideRestoredNotice[] {
+  const { scope, pluginName, marketplaceName } = owner;
+  return restoredOverrideNames(config, pluginName, marketplaceName)
+    .filter((server) => !stagedKeys.includes(server))
+    .map((server) => ({ kind: "override-restored", scope, file: "mcp-adapter.json", server }));
 }
 
 /**
@@ -553,14 +573,20 @@ export async function prepareStageMcpServers(input: StageMcpInput): Promise<Prep
   );
 
   // AFILE-04: the writer drops JSONC comments, so a rewritten target whose
-  // bytes held comments is reported. The noop branches write nothing and keep the comments. AFILE-06: each
-  // absorbed override with fields the new entry does not carry is reported
-  // after them. AVAR-04 / AVAR-05: each server's missing-variable and
+  // bytes held comments is reported. The noop branches write nothing and keep
+  // the comments. AFILE-06: each absorbed override with fields the new entry
+  // does not carry is reported after them, then each override a dropped entry
+  // writes back. AVAR-04 / AVAR-05: each server's missing-variable and
   // withheld-credential notices follow, then ANAME-07: each server's
   // unenforced tool-rule notice. AMIG-01: each dropped leftover comes last.
   const notices = Object.freeze<McpConfigNotice[]>([
     ...commentsDroppedNotices(rewritesTarget && config.hadComments, locations.scope),
     ...overrideKeptNotices(stamped, overlays, locations.scope, pluginName),
+    ...overrideRestoredNotices(config, newKeys, {
+      scope: locations.scope,
+      pluginName,
+      marketplaceName,
+    }),
     ...variableNotices(variableReports, locations.scope, pluginName),
     ...toolRuleNotices(keyed, locations.scope, pluginName),
     ...leftoverNotices(leftovers, locations.scope, pluginName),

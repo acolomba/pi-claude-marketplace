@@ -1484,6 +1484,63 @@ describe("prepareStageMcpServers", () => {
     });
   });
 
+  test("AFILE-06: a stage that drops a server with a kept override writes it back and reports override-restored after the override-kept notices", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-override-restored-");
+    await writeSource(
+      locations.mcpAdapterJsonPath,
+      '{"mcpServers":{"plugin_acme_server_":{"disabled":true,"env":{"STUB_TOKEN":"stub-secret"}},"plugin_acme_old_":{"url":"https://old.example/mcp","disabled":true,"_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog","keptOverride":{"disabled":true}}}}}',
+    );
+    const expectedBytes = `{
+  "mcpServers": {
+    "plugin_acme_old_": {
+      "disabled": true
+    },
+    "plugin_acme_server_": {
+      "url": "https://acme.example/mcp",
+      "directTools": "search",
+      "toolPrefix": "mcp",
+      "disabled": true,
+      "_piClaudeMarketplace": {
+        "plugin": "acme",
+        "marketplace": "catalog",
+        "keptOverride": {
+          "disabled": true,
+          "env": {
+            "STUB_TOKEN": "stub-secret"
+          }
+        }
+      }
+    }
+  }
+}
+`;
+
+    // act
+    const prepared = await prepareAcme(locations, cwd);
+    await commitPreparedMcp(prepared);
+    const storedBytes = await readFile(locations.mcpAdapterJsonPath, "utf8");
+
+    // assert
+    assert.deepStrictEqual(prepared.result.notices, [
+      {
+        kind: "override-kept",
+        scope: "project",
+        file: "mcp-adapter.json",
+        plugin: "acme",
+        server: "plugin_acme_server_",
+        fields: ["env"],
+      },
+      {
+        kind: "override-restored",
+        scope: "project",
+        file: "mcp-adapter.json",
+        server: "plugin_acme_old_",
+      },
+    ]);
+    assert.strictEqual(storedBytes, expectedBytes);
+  });
+
   test("ANAME-07: staging a plugin timeout over a stub's timeout writes the plugin's value and names the stub's", async (t) => {
     // arrange
     const { cwd, locations } = await createProjectScope(t, "mcp-stage-plugin-set-");
@@ -2638,6 +2695,67 @@ describe("prepareStageMcpServers", () => {
     await writeSource(
       locations.mcpAdapterJsonPath,
       '{"mcpServers":{"plugin_acme_a-b_":{"url":"https://old.example/mcp","_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog"}}}}',
+    );
+    const expectedBytes = `{
+  "mcpServers": {
+    "plugin_acme_a_b_": {
+      "url": "https://x.example/mcp",
+      "directTools": "search",
+      "toolPrefix": "mcp",
+      "_piClaudeMarketplace": {
+        "plugin": "acme",
+        "marketplace": "catalog"
+      }
+    }
+  }
+}
+`;
+
+    // act
+    await commitPreparedMcp(await preparePlugin(locations, cwd, "acme", ["a_b"]));
+    const storedBytes = await readFile(locations.mcpAdapterJsonPath, "utf8");
+
+    // assert
+    assert.strictEqual(storedBytes, expectedBytes);
+  });
+
+  test("ANAME-03: a rename onto a key the plugin owns only under the other spelling still refuses a full definition in another source", async (t) => {
+    // arrange
+    const { cwd, home } = await createHermeticEnvironment(t, "mcp-stage-folded-rename-");
+    const locations = locationsFor("user", cwd);
+    const configPath = path.join(home, ".config", "mcp", "mcp.json");
+    const targetBytes =
+      '{"mcpServers":{"plugin_acme_a-b_":{"url":"https://old.example/mcp","_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog"}}}}';
+    await writeSource(configPath, '{"mcpServers":{"plugin_acme_a_b_":{"command":"user"}}}');
+    await writeSource(locations.mcpAdapterJsonPath, targetBytes);
+
+    // act
+    const collision = await rejectionOf(preparePlugin(locations, cwd, "acme", ["a_b"]));
+
+    // assert
+    assert.ok(collision instanceof McpServerCollisionError);
+    assert.deepStrictEqual(foldedCollisionFields(collision), {
+      name: "McpServerCollisionError",
+      message: `Refusing to stage MCP server "plugin_acme_a_b_": ${configPath} already defines it, and pi-mcp-adapter would load the definition in ${locations.mcpAdapterJsonPath}.`,
+      serverName: "plugin_acme_a_b_",
+      owningPath: configPath,
+      winningPath: locations.mcpAdapterJsonPath,
+      definedAs: undefined,
+    });
+    assert.strictEqual(await readFile(locations.mcpAdapterJsonPath, "utf8"), targetBytes);
+  });
+
+  test("ANAME-03: restaging the exact key the plugin owns stays exempt from a full definition in another source", async (t) => {
+    // arrange
+    const { cwd, home } = await createHermeticEnvironment(t, "mcp-stage-exact-self-");
+    const locations = locationsFor("user", cwd);
+    await writeSource(
+      path.join(home, ".config", "mcp", "mcp.json"),
+      '{"mcpServers":{"plugin_acme_a_b_":{"command":"user"}}}',
+    );
+    await writeSource(
+      locations.mcpAdapterJsonPath,
+      '{"mcpServers":{"plugin_acme_a_b_":{"url":"https://old.example/mcp","_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog"}}}}',
     );
     const expectedBytes = `{
   "mcpServers": {

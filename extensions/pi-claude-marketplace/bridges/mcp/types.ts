@@ -77,10 +77,12 @@ export interface StageMcpCommitResult {
    * AFILE-04 / AFILE-02 / AFILE-06 / AVAR-04: facts about the config file this
    * stage rewrites or leaves alone, for the orchestrator to route to the user:
    * a `comments-dropped` or `left-unchanged` notice, then one `override-kept`
-   * notice per absorbed override whose fields stop applying, then the
-   * per-server variable notices from the variable reports of the staged
-   * entries, in declared server order: a server's `variables-missing` notice
-   * before its `credentials-blanked` notice (AVAR-05), then the per-server
+   * notice per absorbed override whose fields stop applying, then one
+   * `override-restored` notice per dropped entry whose kept override the stage
+   * writes back, then the per-server variable notices from the variable
+   * reports of the staged entries, in declared server order: a server's
+   * `variables-missing` notice before its `credentials-blanked` notice
+   * (AVAR-05), then the per-server
    * `tool-rules-unenforced` notices, in declared server order (ANAME-07), then
    * one `leftover-removed` notice per old-name leftover the stage drops from
    * the target (AMIG-01). Distinct from `warnings`, which are hygiene notes
