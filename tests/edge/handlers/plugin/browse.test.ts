@@ -1,7 +1,7 @@
 // Owner for edge/handlers/plugin/browse.ts (MOD-09).
 //
 // Tests for the /claude:plugin browse shim:
-//   - non-TUI fallback to list subcommand
+//   - non-TUI refusal before list or marketplace work
 //   - TUI mode with no marketplaces (diagnostic notification)
 //   - TUI mode custom UI cancel
 //   - TUI mode action dispatch for install (with/without --local), uninstall,
@@ -21,6 +21,7 @@ import {
 import { locationsFor } from "../../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
 import { runWithNothingLoaded } from "../../../shared/notification-run-seeds.ts";
+import { createJsonCapture } from "../../json-capture.ts";
 import { createMachineNotificationBoundary } from "../../notification-boundary.ts";
 import { buildInstalledPluginRecord, mergeMarketplaceIntoState } from "../marketplace-seed.ts";
 
@@ -73,17 +74,12 @@ async function seedMarketplace(
 
 function createMockActionHandlers(): {
   readonly handlers: BrowseActionHandlers;
-  readonly mockList: SubcommandHandler;
   readonly mockInstall: SubcommandHandler;
   readonly mockUninstall: SubcommandHandler;
   readonly mockPluginInfo: SubcommandHandler;
   readonly mockEnable: SubcommandHandler;
   readonly mockDisable: SubcommandHandler;
 } {
-  const mockList = mock<SubcommandHandler>({
-    exactParams: true,
-    name: "list handler",
-  });
   const mockInstall = mock<SubcommandHandler>({
     exactParams: true,
     name: "install handler",
@@ -107,14 +103,12 @@ function createMockActionHandlers(): {
 
   return {
     handlers: {
-      list: mockList,
       install: mockInstall,
       uninstall: mockUninstall,
       pluginInfo: mockPluginInfo,
       enable: mockEnable,
       disable: mockDisable,
     },
-    mockList,
     mockInstall,
     mockUninstall,
     mockPluginInfo,
@@ -146,23 +140,41 @@ test("browse rejects non-empty arguments with usage error", async () => {
   verify(ui);
 });
 
-test("non-TUI mode falls back to the list subcommand handler", async () => {
-  // arrange
-  const run = runWithNothingLoaded();
-  const { handlers, mockList } = createMockActionHandlers();
-  const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
-  when(() => ctx.mode).thenReturn("json");
-  when(() => mockList("", ctx, run)).thenResolve(undefined);
+for (const mode of ["json", "rpc"] as const) {
+  test(`refuses browse in ${mode} before list, state, or picker access`, async () => {
+    // arrange
+    const capture = createJsonCapture();
+    const run = { ...runWithNothingLoaded(), entrySink: capture.entrySink };
+    const handlers = mock<BrowseActionHandlers>({ exactParams: true, name: "browse actions" });
+    const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
+    when(() => ctx.mode)
+      .thenReturn(mode)
+      .times(3);
+    const browseHandler = makeBrowseHandler(handlers);
 
-  const browseHandler = makeBrowseHandler(handlers);
+    // act
+    await browseHandler("", ctx, run);
 
-  // act
-  await browseHandler("", ctx, run);
-
-  // assert
-  verify(ctx);
-  verify(mockList);
-});
+    // assert
+    assert.deepStrictEqual(capture.entries, [
+      {
+        customType: "claude-plugin",
+        payload: {
+          schemaVersion: 1,
+          origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+          kind: "usage-error",
+          severity: "error",
+          needsReload: false,
+          message: `Browse is unavailable in ${mode} mode. Use /claude:plugin list instead.`,
+          usage: "Usage: /claude:plugin browse",
+        },
+      },
+    ]);
+    capture.assertValid();
+    verify(ctx);
+    verify(handlers);
+  });
+}
 
 test("TUI mode with no marketplaces emits structured (no marketplaces) notification", async (t) => {
   // arrange

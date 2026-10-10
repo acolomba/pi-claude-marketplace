@@ -110,7 +110,7 @@ export function registerClaudePluginCommand(
   const enable = makeEnableDisableHandler(true, hooksRouting);
   const disable = makeEnableDisableHandler(false, hooksRouting);
   const list = makeListHandler();
-  const browse = makeBrowseHandler({ list, install, uninstall, pluginInfo, enable, disable });
+  const browse = makeBrowseHandler({ install, uninstall, pluginInfo, enable, disable });
 
   const handlers: SubcommandHandlers = {
     bootstrap: makeBootstrapHandler(deps),
