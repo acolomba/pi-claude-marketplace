@@ -80,9 +80,8 @@ D-08 decisions below.
   MCPROW-01 in BACKLOG with this explanation. No renderer change. Upstream reports enable and install as plain success and shows
   missing-variable warnings separately (`/mcp`, `claude mcp list`);
   `08-UPSTREAM-EVIDENCE.md` §2. Showing the notice at enable and import is a
-  Pi capability gap (Pi has no `/mcp`). Renderer, `docs/output-catalog.md`
-  and the pinned tests change together; follow the tri-state severity model
-  (info = desired state reached, warning = carried out but short).
+  Pi capability gap (Pi has no `/mcp`). `docs/output-catalog.md` gains one
+  sentence on this; the renderer stays as it is.
 
 ### WR-02: OAuth with headers (parity fix)
 

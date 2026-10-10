@@ -375,10 +375,38 @@ requirement (Phases 3 and 4), and no release may sit between the first write to
 4. `enable` and `import` report success rows with the MCP variable notices as separate warning lines (D-08-03, closes MCPROW-01); remote entries with `headers` and no `Authorization` keep OAuth (D-08-04); the Phase 5 migration remedies work (D-08-05); MCP staging takes an explicit environment (D-08-06); name-indexed state lookups refuse inherited keys such as `constructor` (D-08-07, OWNKEY-01). (DEBT-04)
 5. The planning records match the code: ROADMAP Phase 1 criterion 4, `STATE.md`'s ADET-02 wording, and the review disposition ledgers. (DEBT-05)
 
-**Plans**: 0 plans
+**Plans**: 21 plans in 5 waves
 
-Plans:
-- [ ] TBD (run /gsd-plan-phase 8 to break down)
+**Wave 1**
+- [ ] 08-01-PLAN.md — hoist the plugin-info fixture clone; close P3 WR-05, IN-04 and P6 IN-01, IN-02 (DEBT-01, DEBT-02)
+- [ ] 08-02-PLAN.md — Phase 5 migration review debt and the D-08-05 source-outdated row (DEBT-04, DEBT-02)
+- [ ] 08-03-PLAN.md — per-server choices outlive the plugin lifecycle; `openUi` and `trace` carried (D-08-01, D-08-02) (DEBT-03, DEBT-02)
+- [ ] 08-04-PLAN.md — the reinstall remedy works when a git mirror's HEAD cannot be read (D-08-05) (DEBT-04, DEBT-02)
+- [ ] 08-05-PLAN.md — two rare-path fixes and two stale explanations from the Phase 2 and 4 reviews (DEBT-02)
+- [ ] 08-06-PLAN.md — reviewed markers on two inherited clone groups; Phase 1 canary and stub findings (DEBT-01, DEBT-02)
+- [ ] 08-07-PLAN.md — Phase 1 e2e harness, cast and `scripts/pi.sh` findings (DEBT-02)
+- [ ] 08-08-PLAN.md — pin the adapter-loaded enable and import shapes (D-08-03) and share one tool seed (DEBT-04, DEBT-02)
+- [ ] 08-09-PLAN.md — own-key helper and the `__proto__` name rule (D-08-07) (DEBT-04)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 08-10-PLAN.md — OAuth beside non-Authorization headers (D-08-04), domain MCP rule findings, adapter conformance (DEBT-04, DEBT-03, DEBT-02)
+- [ ] 08-11-PLAN.md — explicit staging environment for install and enable (D-08-06) (DEBT-04, DEBT-02)
+- [ ] 08-12-PLAN.md — explicit staging environment for migration, update and reinstall (D-08-06) (DEBT-04)
+- [ ] 08-15-PLAN.md — own-key reads at the front door: target resolution, info, completions (D-08-07) (DEBT-04, DEBT-01)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 08-13-PLAN.md — the bridge requires an explicit environment (D-08-06); P3 IN-01 and P2 IN-02 (DEBT-04, DEBT-02)
+- [ ] 08-14-PLAN.md — user docs for this phase's changes and every doc-only finding (DEBT-03, DEBT-04, DEBT-02)
+- [ ] 08-16-PLAN.md — own-key install, enable, disable and uninstall (D-08-07) (DEBT-04, DEBT-02)
+- [ ] 08-17-PLAN.md — own-key reinstall, update and list (D-08-07) (DEBT-04)
+- [ ] 08-18-PLAN.md — own-key reconcile, import, persistence and marketplace modules (D-08-07) (DEBT-04, DEBT-02)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 08-19-PLAN.md — reserved plugin names end to end and a whole-tree own-key gate (D-08-07) (DEBT-04)
+- [ ] 08-20-PLAN.md — one `isPlainObject` in the MCP bridge (P2 IN-03) (DEBT-02)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [ ] 08-21-PLAN.md — close every review ledger, match the records to the code, close MCPOVR-01 and MCPROW-01, final audit and check (DEBT-05, DEBT-02, DEBT-01)
 
 ## Progress
 

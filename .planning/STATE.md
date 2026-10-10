@@ -2,19 +2,20 @@
 gsd_state_version: "1.0"
 milestone: mcp-4
 milestone_name: MCP 4
-current_phase: 07
+current_phase: 8
+current_phase_name: Clear milestone debt
 status: completed
 stopped_at: Phase 07 complete — all phases complete
-last_updated: "2026-10-09T23:29:17.401Z"
+last_updated: "2026-10-10T02:42:21.644Z"
 last_activity: 2026-10-09
 last_activity_desc: Phase 07 complete
-state_head: c3aa8f09f6b5f18989e8d5cdbf8324a9db06c133
+state_head: bf9ad08e284e7516f9e3b7ada8bb2e59ddecd9af
 progress:
-  total_phases: 7
+  total_phases: 8
   completed_phases: 7
-  total_plans: 52
+  total_plans: 73
   completed_plans: 52
-  percent: 100
+  percent: 71
 ---
 
 # Project State
@@ -33,12 +34,12 @@ sign-ins and approvals.
 
 ## Current Position
 
-Phase: 07
+Phase: 8 (Clear milestone debt) — READY TO EXECUTE
 Plan: Not started
 Status: All phases complete
 Last activity: 2026-10-09 — Phase 07 complete
 
-Progress: [██████████] 100%
+Progress: [███████░░░] 71%
 
 ### workflows-replay closeout (merged from main)
 
