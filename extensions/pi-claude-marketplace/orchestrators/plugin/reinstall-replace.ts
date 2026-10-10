@@ -50,6 +50,7 @@ import type { CommandsReplacement, PreparedCommandsStaging } from "../../bridges
 import type { McpReplacement, PreparedMcpStaging } from "../../bridges/mcp/index.ts";
 import type { PreparedSkillsStaging, SkillsReplacement } from "../../bridges/skills/index.ts";
 import type { PreparedWorkflowsStaging } from "../../bridges/workflows/index.ts";
+import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
 import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
 import type { InstalledReferenceNames } from "../../domain/skill-tokens.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
@@ -147,6 +148,8 @@ export interface ReplaceReinstalledPluginInput {
   readonly agentsDirs: readonly string[];
   /** SKTK-01: the workflow names the skills bridge retargets sibling references onto. */
   readonly workflowNames: readonly string[];
+  /** D-08-06: the environment the reinstall stages MCP servers with. */
+  readonly env: ClaudeEnv;
 }
 
 /** Physical bridge operations consumed by the atomic replacement schedule. */
@@ -457,6 +460,7 @@ async function prepareAllHandles(
       pluginData: input.pluginDataDir,
       sourcePath: `${input.installable.pluginRoot}#mcpServers`,
       description: input.installable.description,
+      env: input.env,
     });
     // WLIF-01: fifth and LAST, mirroring the install ledger's ordering. The
     // previous names come from the OLD record's inventory -- the same slot the

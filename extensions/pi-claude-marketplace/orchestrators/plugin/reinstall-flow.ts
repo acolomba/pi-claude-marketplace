@@ -98,6 +98,7 @@ import {
 } from "./shared.ts";
 
 import type { HooksRouting } from "../../bridges/hooks/index.ts";
+import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
 import type { PluginEntry } from "../../domain/components/plugin.ts";
 import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
 import type { GitBackedSource } from "../../domain/source.ts";
@@ -203,11 +204,18 @@ const REINSTALL_FLOW_OWNERS: ReinstallFlowOwners = {
   selectReinstallTargets,
 };
 
-/** Binds one reinstall operation to a required semantic transaction owner. */
+/**
+ * Binds one reinstall operation to a required semantic transaction owner.
+ *
+ * D-08-06: `env` is the environment the reinstall stages MCP servers with. It
+ * defaults to Pi's process environment here, at the entry point, the way
+ * `createGetPluginInfo` binds it.
+ */
 export function createReinstallPlugin(
   transaction: ReinstallTransaction,
   hooksRouting: ReinstallHooksRouting,
   completionCache: CompletionCache,
+  env: ClaudeEnv = process.env,
 ): ReinstallPluginFn {
   return (options) =>
     reinstallPluginWithTransaction(
@@ -215,6 +223,7 @@ export function createReinstallPlugin(
       transaction,
       hooksRouting,
       completionCache,
+      env,
       options,
     );
 }
@@ -277,6 +286,7 @@ async function reinstallPluginWithTransaction(
   transaction: ReinstallTransaction,
   hooksRouting: ReinstallHooksRouting,
   completionCache: CompletionCache,
+  env: ClaudeEnv,
   opts: ReinstallPluginOptions,
 ): Promise<ReinstallPluginOutcome> {
   const { ctx, pi, scope, cwd, marketplace, plugin } = opts;
@@ -287,7 +297,7 @@ async function reinstallPluginWithTransaction(
   try {
     locked = await transaction.withLockedStateTransaction(
       locations,
-      (tx) => runLockedReinstall(owners, transaction, hooksRouting, tx, locations, opts),
+      (tx) => runLockedReinstall(owners, transaction, hooksRouting, tx, locations, env, opts),
       opts.stateTransaction,
     );
   } catch (err) {
@@ -700,6 +710,7 @@ async function runLockedReinstall(
   hooksRouting: ReinstallHooksRouting,
   tx: LockedStateTransaction,
   locations: ScopedLocations,
+  env: ClaudeEnv,
   opts: ReinstallPluginOptions,
 ): Promise<LockedSuccess> {
   const { scope, cwd, marketplace, plugin } = opts;
@@ -785,6 +796,7 @@ async function runLockedReinstall(
       agentsDirs: generated.agentsDirs,
       referenceNames: generated,
       workflowNames: generated.workflows,
+      env,
     },
     transaction.replaceOperations,
   );

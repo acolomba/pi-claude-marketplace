@@ -9713,6 +9713,55 @@ test("AFILE-04: a self-rendered reinstall shows the notice after its row", async
   });
 });
 
+const STAGING_VARIABLE_NOTICE: NotifyRecord = {
+  severity: "warning",
+  message:
+    'MCP server variables not set.\n\nServer "plugin_hello_server1_" from hello in the project-scope mcp-adapter.json uses environment variables that were not set at install: PI_CM_SET_FOR_STAGING.',
+};
+
+for (const { label, env, notices } of [
+  { label: "sets", env: { PI_CM_SET_FOR_STAGING: "1" }, notices: [] },
+  { label: "lacks", env: {}, notices: [STAGING_VARIABLE_NOTICE] },
+] as const) {
+  test(`D-08-06: a reinstall whose environment ${label} a variable stages with that environment`, async () => {
+    await withHermeticHome(async () => {
+      // arrange
+      const cwd = await mkdtemp(path.join(tmpdir(), `reinstall-env-${label}-`));
+      try {
+        const marketplaceRoot = path.join(cwd, "mp-src");
+        await seedMarketplace({ cwd, marketplaceRoot, resources: { mcp: true }, install: true });
+        await writeFile(
+          path.join(marketplaceRoot, "plugins", "hello", ".mcp.json"),
+          JSON.stringify({
+            mcpServers: { server1: { command: "node", args: ["${PI_CM_SET_FOR_STAGING}"] } },
+          }),
+        );
+        const reinstall = createReinstallPlugin(
+          REAL_REINSTALL_TRANSACTION,
+          createHooksRouting(createHooksRuntime(), { readHooksJson }),
+          createCompletionCache(),
+          env,
+        );
+        const { ctx, pi, notifications } = makeCtx();
+
+        // act
+        await reinstall({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+
+        // assert
+        assert.deepStrictEqual(notifications, [
+          {
+            message:
+              "● mp [project]\n  ● hello v1.0.0 (reinstalled) {requires pi-mcp-adapter}\n\n/reload to pick up changes",
+          },
+          ...notices,
+        ]);
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
+
 test("AFILE-02: reinstalling a plugin with no MCP servers over an unparseable mcp-adapter.json leaves it unchanged and says so", async () => {
   await withHermeticHome(async () => {
     // arrange

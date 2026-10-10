@@ -146,6 +146,7 @@ function replacementInput(pluginRoot = "/plugin"): ReplaceReinstalledPluginInput
     } as unknown as ReplaceReinstalledPluginInput["oldRecord"],
     agentsDirs: [],
     workflowNames: [],
+    env: {},
   };
 }
 
