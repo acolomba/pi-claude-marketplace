@@ -41,7 +41,7 @@
     {
       "number": "8",
       "name": "Address tech debt: ledger dispositions and advisory",
-      "status": "pending"
+      "status": "in_progress"
     }
   ],
   "next": {
@@ -49,5 +49,5 @@
     "label": "Advance to the next step",
     "reason": "Phase 08 of 8 · executing"
   },
-  "updated_at": "2026-10-10T20:03:17.354Z"
+  "updated_at": "2026-10-10T20:10:45.215Z"
 }
