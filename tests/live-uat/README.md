@@ -432,7 +432,7 @@ What this proves beyond the scripted canary:
 
 ### Human verification checklist
 
-These runtime timing / interrupt behaviours cannot be sustained by a headless `pi -p` drive (which tears down its non-interactive lifecycle after the initial request). They require a **human at an interactive `pi` session**. Each item below is an explicit `human_needed` verification: record the observed result against the expected result; a mismatch is a STOP-01 / STOP-07 regression.
+A headless `pi -p` drive on Pi 1.0.0 reaches the 8-block cap (8 blocks, pi exit 0; see the Stop contract canary above), but it cannot show the cap-trip warning or the interrupt and queued-message timing below. These items require a **human at an interactive `pi` session**. Each item below is an explicit `human_needed` verification: record the observed result against the expected result; a mismatch is a STOP-01 / STOP-07 regression.
 
 **Interactive setup** (shared by all items):
 
@@ -478,7 +478,7 @@ echo >> /tmp/stop-uat/stdin.log
 
 #### Item 4 -- the 8-consecutive-block override cap (STOP-07)
 
-- **Repro:** Install the always-block canary. In an **interactive** session (a real TTY -- the scripted `stop-canary.mjs` proves only the first re-entry; headless `pi` cannot sustain the loop), send one prompt and let the always-block hook drive the re-entry loop with no further input.
+- **Repro:** Install the always-block canary. In an **interactive** session (a real TTY -- a headless `pi -p` run reaches the cap, but only an interactive session shows the cap-trip warning), send one prompt and let the always-block hook drive the re-entry loop with no further input.
 - **Expected:** the loop runs settle → block → re-enter for 8 consecutive blocks; the **8th** block is suppressed (no re-entry), the turn ends, and the warning surfaces **exactly once**: `Stop hook override cap reached.` followed by the detail naming the plugin (`… blocked 8 times in a row; the turn ended despite its active block.`). The marker/`stdin.log` shows exactly 8 block invocations, then the run goes idle (no livelock).
 - **Failure signature:** the marker shows more than 8 blocks (the cap did not bound the livelock -- a T-88-02 regression), the warning is missing or fires more than once, or the run never terminates.
 

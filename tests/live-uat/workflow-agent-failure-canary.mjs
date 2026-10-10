@@ -17,13 +17,13 @@
 // `package-lock.json` (NFR-5, D-98-10), so it is resolved at run time out of a
 // scratch prefix named by `PI_WORKFLOW_ENGINE_ROOT`:
 //
-//   mkdir -p /tmp/wf-engine
-//   npm install --prefix /tmp/wf-engine @quintinshaw/pi-dynamic-workflows@3.10.1
+//   mkdir -p /var/tmp/wf-engine
+//   npm install --prefix /var/tmp/wf-engine @quintinshaw/pi-dynamic-workflows@3.13.1
 //   mkdir -p tmp/pi-uat/wf-agent
 //   PI_CODING_AGENT_DIR=$(pwd)/tmp/pi-uat/wf-agent \
-//   PI_WORKFLOW_ENGINE_ROOT=/tmp/wf-engine/node_modules \
+//   PI_WORKFLOW_ENGINE_ROOT=/var/tmp/wf-engine/node_modules \
 //     node tests/live-uat/workflow-agent-failure-canary.mjs
-//   rm -rf /tmp/wf-engine tmp/pi-uat/wf-agent
+//   rm -rf /var/tmp/wf-engine tmp/pi-uat/wf-agent
 //
 // The version pin reproduces the grade `docs/workflows-compatibility.md`
 // publishes for this driver. Dropping it re-measures against whatever is
