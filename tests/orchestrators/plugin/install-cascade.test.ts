@@ -679,8 +679,8 @@ test("AFILE-04 a later member's failure still reports the comments an earlier me
 });
 
 test("AVAR-04 a later member's failure drops the variable notice of the server an earlier member's undo removed", async (t) => {
-  // arrange: bar's server references a variable no environment sets, and the
-  // requesting plugin is ALREADY recorded, so its own ledger throws after bar
+  // arrange: bar's server references a variable the empty staging environment
+  // lacks, and the requesting plugin is ALREADY recorded, so its own ledger throws after bar
   // staged and bar's undo then removes the server.
   const environment = await createHermeticEnvironment(t, "install-cascade-variable-notice-undo-");
   const state = await seedMarketplace(environment.cwd, ["bar", "foo"], { preinstalled: ["foo"] });
@@ -688,7 +688,7 @@ test("AVAR-04 a later member's failure drops the variable notice of the server a
   await writeFile(
     path.join(environment.cwd, MARKETPLACE, "plugins", "bar", ".mcp.json"),
     JSON.stringify({
-      mcpServers: { "bar-server": { command: "node", args: ["${PI_CM_UNSET_IN_EVERY_ENV}"] } },
+      mcpServers: { "bar-server": { command: "node", args: ["${BAR_SERVER_SITE}"] } },
     }),
   );
 

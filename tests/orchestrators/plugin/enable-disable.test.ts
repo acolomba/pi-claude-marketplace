@@ -7191,8 +7191,8 @@ test("AFILE-04: an enable cascade undo that unstages from a commented mcp-adapte
 
 test("AVAR-04: an enable cascade undo shows no variable notice for the member server it removed", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
-    // arrange -- the member's server references a variable no environment
-    // sets, and the root's ledger throws after the member staged it.
+    // arrange -- the member's server references a variable the empty staging
+    // environment lacks, and the root's ledger throws after the member staged it.
     const { mpRoot } = await seedEdepGraph(home, [
       { name: "a", version: "1.0.0", dependencies: [{ name: "b" }], enabled: false },
       { name: "b", version: "1.0.0", enabled: false },
@@ -7200,7 +7200,7 @@ test("AVAR-04: an enable cascade undo shows no variable notice for the member se
     await writeFile(
       path.join(mpRoot, "plugins", "b", ".mcp.json"),
       JSON.stringify({
-        mcpServers: { "b-server": { command: "node", args: ["${PI_CM_UNSET_IN_EVERY_ENV}"] } },
+        mcpServers: { "b-server": { command: "node", args: ["${B_SERVER_SITE}"] } },
       }),
     );
     const transaction: EnableDisableTransaction = {
@@ -7216,6 +7216,7 @@ test("AVAR-04: an enable cascade undo shows no variable notice for the member se
     const setPluginEnabledForOwner = createSetPluginEnabled(
       transaction,
       createHooksRouting(createHooksRuntime(), { readHooksJson }),
+      {},
     );
     const { ctx, notifications } = makeCtx(cwd);
 
@@ -7234,6 +7235,62 @@ test("AVAR-04: an enable cascade undo shows no variable notice for the member se
     assert.deepStrictEqual(notifications, [ROOT_LEDGER_FAILED_ROW]);
   });
 });
+
+const STAGING_ENABLED_ROW = {
+  message: "● mp [user]\n  ● foo v1.2.3 (installed)\n\n/reload to pick up changes",
+};
+
+for (const { title, env, expectedNotifications } of [
+  {
+    title: "reports no missing variable that its environment sets",
+    env: { PI_CM_SET_FOR_STAGING: "1" },
+    expectedNotifications: [STAGING_ENABLED_ROW],
+  },
+  {
+    title: "reports a variable its environment lacks as not set",
+    env: {},
+    expectedNotifications: [
+      STAGING_ENABLED_ROW,
+      {
+        severity: "warning",
+        message:
+          'MCP server variables not set.\n\nServer "plugin_foo_local_" from foo in the user-scope mcp-adapter.json uses environment variables that were not set at install: PI_CM_SET_FOR_STAGING.',
+      },
+    ],
+  },
+]) {
+  test(`D-08-06: an enable built with an explicit environment ${title}`, async () => {
+    await withHermeticHome(async ({ cwd, home }) => {
+      // arrange
+      await seedRealDisabledMarketplace(home, {
+        marketplaceName: "mp",
+        pluginName: "foo",
+        version: "1.2.3",
+        mcpServers: { local: { command: "node", args: ["${PI_CM_SET_FOR_STAGING}"] } },
+      });
+      const setPluginEnabledForOwner = createSetPluginEnabled(
+        REAL_ENABLE_DISABLE_TRANSACTION,
+        createHooksRouting(createHooksRuntime(), { readHooksJson }),
+        env,
+      );
+      const { ctx, notifications } = makeCtx(cwd);
+
+      // act
+      await setPluginEnabledForOwner({
+        ctx,
+        pi: makePi([], [adapterCommand()]),
+        cwd,
+        marketplace: "mp",
+        plugin: "foo",
+        enable: true,
+        scope: "user",
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, expectedNotifications);
+    });
+  });
+}
 
 test("AVAR-04 / AVAR-05: with pi-mcp-adapter loaded, enable reports an info success row and the MCP notices as separate warnings (D-08-03)", async (t) => {
   await withHermeticHome(async ({ cwd, home }) => {

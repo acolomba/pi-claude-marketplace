@@ -3699,9 +3699,9 @@ test("AFILE-04: a failed dependency cascade still reports the removed comments a
   });
 });
 
-// AVAR-04: a variable name that no environment sets, so every stage of a
-// server that references it reports the variable as missing.
-const UNSET_VARIABLE_ARGS = ["${PI_CM_UNSET_IN_EVERY_ENV}"];
+// AVAR-04: a variable the cases' empty staging environment lacks, so every
+// stage of a server that references it reports the variable as missing.
+const UNSET_VARIABLE_ARGS = ["${SERVER_SITE}"];
 
 const STAGING_INSTALLED_ROW = {
   message: "● mp [project]\n  ● hello v0.0.1 (installed)\n\n/reload to pick up changes",
@@ -3754,7 +3754,7 @@ for (const { title, env, expectedNotifications } of [
 }
 
 test("AVAR-04: a failed dependency cascade shows no variable notice for the dependency server its undo removed", async () => {
-  await withHermeticHome(async ({ installPlugin }) => {
+  await withHermeticHome(async ({ completionCache, hooksRouting, transaction }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-avar04-cascade-failed-"));
     try {
       // arrange
@@ -3775,6 +3775,7 @@ test("AVAR-04: a failed dependency cascade shows no variable notice for the depe
       const agentsPath = await seedForeignServer1();
       const adapterPath = path.join(cwd, ".pi", "mcp-adapter.json");
       const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
+      const installPlugin = createInstallPlugin(transaction, hooksRouting, completionCache, {});
 
       // act
       await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
@@ -3797,7 +3798,7 @@ test("AVAR-04: a failed dependency cascade shows no variable notice for the depe
 });
 
 test("AVAR-04: an install that lands disabled shows no variable notice for the server the disable removed", async () => {
-  await withHermeticHome(async ({ installPlugin }) => {
+  await withHermeticHome(async ({ completionCache, hooksRouting, transaction }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-avar04-landed-disabled-"));
     try {
       // arrange
@@ -3810,6 +3811,7 @@ test("AVAR-04: an install that lands disabled shows no variable notice for the s
         mcpServers: { server1: { command: "node", args: UNSET_VARIABLE_ARGS } },
       });
       const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
+      const installPlugin = createInstallPlugin(transaction, hooksRouting, completionCache, {});
 
       // act
       await installPlugin({
