@@ -2,43 +2,43 @@
 gsd_state_version: "1.0"
 milestone: mcp-4
 milestone_name: MCP 4
-current_phase: 08
 status: completed
-stopped_at: Phase 08 complete — all phases complete
-last_updated: "2026-10-10T08:26:03.311Z"
+stopped_at: mcp-4 milestone closed and archived; UAT check and cleanup next
+last_updated: "2026-10-10T08:41:03.315Z"
 last_activity: 2026-10-10
-last_activity_desc: Phase 08 complete
-state_head: 4947be2730a51e76733adb2e7e7d27aff96f1221
+last_activity_desc: Milestone mcp-4 completed and archived
+state_head: 2516eaa720054b550c02196d722624d958e3c4a3
 progress:
   total_phases: 8
   completed_phases: 8
   total_plans: 73
   completed_plans: 73
   percent: 100
+current_phase: 08
 ---
 
 # Project State
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-10-09 after mcp-4 Phase 7)
+See: `.planning/PROJECT.md` (updated 2026-10-10 after mcp-4 milestone close)
 
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 8 — Clear milestone debt
-The roadmap has 7 phases and maps all 36 requirements. Phases 2 to 5
-go out in one release, because every entry-shape change costs users new
-sign-ins and approvals.
+**Current focus:** mcp-4 closed; next: UAT check, cleanup, version bump and PR.
+All 8 phases (01/ to 08/) and 41/41 requirements are complete, and the
+re-audit passed. The archive is `.planning/milestones/mcp-4-*`; the phase
+directories stay under `.planning/phases/` until `/gsd-cleanup`. The 02/ to
+05/ work still goes out in one release, because every entry-shape change
+costs users new sign-ins and approvals.
 
 ## Current Position
 
-Phase: 8 (Clear milestone debt) — COMPLETE
-Plan: 21 of 21
-Status: All mcp-4 phases complete; next the milestone re-audit, then complete-milestone
-Last activity: 2026-10-10 — Phase 8 verified 5/5 (review 7/7 fixed, threats_open 0, Nyquist compliant)
-
-Progress: [██████████] 100%
+Phase: Milestone mcp-4 complete
+Plan: —
+Status: Milestone complete; next the UAT check, `/gsd-cleanup`, the version bump offer and the PR
+Last activity: 2026-10-10 — Milestone mcp-4 completed and archived
 
 ### workflows-replay closeout (merged from main)
 
@@ -764,14 +764,15 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 
 ### Pending Todos
 
-The mcp-4 open decisions are listed in `ROADMAP.md` under "Open decisions",
-each bound to the discuss session that settles it. Two prerequisites gate
+The mcp-4 open decisions were settled in their discuss sessions; the list is
+in the archived roadmap, `milestones/mcp-4-ROADMAP.md`, under "Open decisions". Two prerequisites gate
 planning:
 
 1. Done 2026-10-06: Phase 3 measured the tool-name length (Pi has no limit,
    D-03-17) and confirmed the Claude plugin tool form.
-2. **Phase 4:** write a threat model before planning (secrets on disk, the
-   credential deny-list, shell execution through a leading `!`).
+2. Done 2026-10-07: 04/ planned against a threat model (secrets on disk, the
+   credential deny-list, shell execution through a leading `!`); `04-SECURITY.md`
+   reads `threats_open: 0`.
 
 The four v1.20 discuss-bound decisions this list used to carry are closed:
 the archived v1.20 roadmap marks three as settled, and RESV-03, the fourth,
@@ -1092,5 +1093,8 @@ The workstream archive removed the old routing blocker.
 
 ## Operator Next Steps
 
-- Discuss Phase 1 with `/gsd-discuss-phase 1` (it has open decisions), then
-  plan it with `/gsd-plan-phase 1`.
+- Run the mcp-4 UAT check (`/gsd-audit-uat`), then `/gsd-cleanup` to archive
+  the phase directories to `milestones/mcp-4-phases/`.
+- Offer the 0.20.0 version bump (D-07-11), add the CHANGELOG lines for the
+  debt-clearing changes, and open the mcp-4 PR.
+- After the merge, start the next milestone with `/gsd-new-milestone`.
