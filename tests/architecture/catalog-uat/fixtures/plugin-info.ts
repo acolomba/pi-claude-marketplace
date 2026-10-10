@@ -2,6 +2,16 @@ import { piWithAllLoaded, piWithBothLoaded, piWithSubagentsLoaded } from "../moc
 
 import type { FixtureMap } from "../fixture-types.ts";
 
+const COMMIT_COMMANDS_INSTALLED = {
+  status: "installed",
+  name: "commit-commands",
+  version: "1.2.0",
+  description: "Helpful git commit commands for everyday use.",
+  componentsResolved: true,
+  components: { agents: ["review-bot"], commands: ["c1", "c2"], skills: ["commit-summary"] },
+  requires: [{ companion: "pi-subagents", missing: false }],
+} as const;
+
 /** Catalog fixtures for the plugin info command surface. */
 export const PLUGIN_INFO_FIXTURES: FixtureMap = {
   "/claude:plugin info <plugin>@<marketplace>": {
@@ -13,17 +23,7 @@ export const PLUGIN_INFO_FIXTURES: FixtureMap = {
         marketplaceScope: "user",
         marketplaceDetails: { autoupdate: true },
         plugin: {
-          status: "installed",
-          name: "commit-commands",
-          version: "1.2.0",
-          description: "Helpful git commit commands for everyday use.",
-          componentsResolved: true,
-          components: {
-            agents: ["review-bot"],
-            commands: ["c1", "c2"],
-            skills: ["commit-summary"],
-          },
-          requires: [{ companion: "pi-subagents", missing: false }],
+          ...COMMIT_COMMANDS_INSTALLED,
         },
       },
     },
@@ -36,17 +36,7 @@ export const PLUGIN_INFO_FIXTURES: FixtureMap = {
         marketplaceScope: "user",
         marketplaceDetails: { autoupdate: true },
         plugin: {
-          status: "installed",
-          name: "commit-commands",
-          version: "1.2.0",
-          description: "Helpful git commit commands for everyday use.",
-          componentsResolved: true,
-          components: {
-            agents: ["review-bot"],
-            commands: ["c1", "c2"],
-            skills: ["commit-summary"],
-          },
-          requires: [{ companion: "pi-subagents", missing: false }],
+          ...COMMIT_COMMANDS_INSTALLED,
           dependencies: ["helper@utils-mp"],
         },
       },
@@ -60,17 +50,7 @@ export const PLUGIN_INFO_FIXTURES: FixtureMap = {
         marketplaceScope: "user",
         marketplaceDetails: { autoupdate: true },
         plugin: {
-          status: "installed",
-          name: "commit-commands",
-          version: "1.2.0",
-          description: "Helpful git commit commands for everyday use.",
-          componentsResolved: true,
-          components: {
-            agents: ["review-bot"],
-            commands: ["c1", "c2"],
-            skills: ["commit-summary"],
-          },
-          requires: [{ companion: "pi-subagents", missing: false }],
+          ...COMMIT_COMMANDS_INSTALLED,
           // Pre-rendered and pre-sorted on the dependency NAME (D-01-04):
           // `both`, `helper`, `pinned`. The renderer does not sort.
           dependencies: [
