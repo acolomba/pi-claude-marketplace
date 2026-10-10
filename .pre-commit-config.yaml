@@ -109,4 +109,4 @@ repos:
         entry: npm run check:commit
         language: system
         pass_filenames: false
-        files: '^(\.editorconfig|\.fallowrc\.json|\.gitattributes|\.gitignore|\.prettierignore|\.prettierrc\.json|eslint\.config\.js|package-lock\.json|package\.json|sonar-project\.properties|tsconfig\.json|(extensions|rule-packs|tests|\.github/workflows)/.*|scripts/.*\.mjs|demos/.*\.ts|docs/output-catalog\.md)$'
+        files: '^(\.editorconfig|\.fallowrc\.json|\.gitattributes|\.gitignore|\.prettierignore|\.prettierrc\.json|eslint\.config\.js|package-lock\.json|package\.json|sonar-project\.properties|tsconfig\.json|(extensions|rule-packs|tests|\.github/workflows)/.*|scripts/.*\.mjs|demos/.*\.ts|docs/(output-catalog|json-output)\.md)$'

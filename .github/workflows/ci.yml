@@ -18,6 +18,7 @@ on:
       - "scripts/**/*.mjs"
       - "demos/**/*.ts"
       - "docs/output-catalog.md"
+      - "docs/json-output.md"
       - ".github/workflows/**"
       - ".editorconfig"
       - ".fallowrc.json"
