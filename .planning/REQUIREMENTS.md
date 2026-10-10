@@ -36,7 +36,9 @@ Research: `.planning/research/SUMMARY.md` (and STACK, FEATURES, ARCHITECTURE, PI
   require, and NFR-4 is amended to match in AGENTS.md and PROJECT.md.
 - [x] **PIFL-07**: The Stop canary (features/mcp `4f82096f`, re-run, not cherry-picked) and the
   workflow-engine canary pass live on Pi 1.0 with `@quintinshaw/pi-dynamic-workflows` 3.13.1, and
-  `scripts/pi.sh` pins adapter 5.0.0, pi-subagents 0.74.0 and engine 3.13.1.
+  `scripts/pi.sh` pins adapter 5.0.0, pi-subagents 0.74.0 and engine 3.13.1 (amended by D-04-12:
+  the adapter pin moved to 5.1.0; amended by D-07-07: the adapter pin is now 5.2.0; amended by
+  quick task 261006-kr1: the engine pin is now 3.14.0).
 
 ### Adapter detection (ADET)
 

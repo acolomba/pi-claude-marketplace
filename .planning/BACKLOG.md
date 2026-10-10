@@ -3793,7 +3793,18 @@ Carried from `any-git-host` (`03-REVIEW-DISPOSITION.md`; milestone audit, 2026-0
 - Code hygiene: WR-01/WR-06/WR-07 (stale JSDoc and flow header), WR-08
   (five positional parameters), WR-09, IN-02, IN-03, IN-06, IN-07, IN-08.
 
-## MCPOVR-01: MCP server overrides do not survive plugin disable then enable
+## ~~MCPOVR-01: MCP server overrides do not survive plugin disable then enable~~ -- CLOSED
+
+Closed 2026-10-10 by the `mcp-4` milestone debt work. Disposition:
+`implemented` by D-08-01 and D-08-02. `openUi` and `trace` join the carried
+fields (D-08-01). A user's per-server choices now survive plugin disable then
+enable, uninstall then reinstall, and an update that drops the server: they
+move into the top-level `_piClaudeMarketplace.serverChoices` member of
+`mcp-adapter.json`, recorded with the plugin name, in the same atomic write
+that removes or writes the entry (D-08-02, NFR-1). Commits: `fb345e31` and
+`00e310e7` (code and lifecycle tests), `57182472` (pi-mcp-adapter 5.2.0
+loads a user file that holds a stored choice), `73200878` (docs). The
+original entry follows.
 
 Surfaced by the `mcp-4` adapter-file delivery work (2026-10-03), source
 D-02-15. AFILE-06 carries a user's own fields (`disabled`, `approveTools`,
@@ -3817,7 +3828,16 @@ The `keptOverride` member shows that the marker can carry an additive member,
 so "the marker cannot hold them" no longer holds as written. Whether those
 choices belong in the marker or in persisted state is still open.
 
-## MCPROW-01: review the `enable` and `import` row grammar when MCP notices follow
+## ~~MCPROW-01: review the `enable` and `import` row grammar when MCP notices follow~~ -- CLOSED
+
+Closed 2026-10-10 by the `mcp-4` milestone debt work. Disposition:
+`no renderer change`, by D-08-03. `(installed)` is the catalog's normal
+enable row, and the MCP variable notices print as their own warning lines,
+as for `install`. The warning severity the pinned test recorded came from
+SEV-01: pi-mcp-adapter was not loaded, which raises the row exactly as it
+does for install, and SEV-01 is kept for that consistency. Commits:
+`f1a31171` and `6a85e010` pin the enable and import rows with the adapter
+loaded; `73200878` adds the catalog sentence. The original entry follows.
 
 Surfaced by the `mcp-4` variable expansion verification (2026-10-07). The
 staging-verb tests record two behaviors as found rather than designed:
@@ -3833,3 +3853,24 @@ up: decide whether each matches the tri-state severity model (info = desired
 state reached, warning = carried out but short) and the import grammar, check
 Claude Code's `/plugin` behavior first, then update the renderer, the catalog
 and the pinned tests together.
+
+## ROOTKEY-01: a root plugin name outside the token alphabet gets a dependency cause
+
+Surfaced by the `mcp-4` reserved record-key work (2026-10-10, broken-windows
+ledger entry 90). `install` checks the root `<plugin>@<marketplace>` key
+against the dependency token rule before the resolver runs:
+`resolveDependencyClosure` in `domain/dependency-closure.ts` calls `splitKey`,
+and `TOKEN_PATTERN` in `domain/dependencies.ts` needs a leading letter or
+digit. So `install __proto__@<mp>`, and any root name outside that alphabet
+(for example `_x@mp`), is refused as `(failed) {invalid manifest}` with the
+cause `Plugin "__proto__@hostile" declares an unusable dependency (root:
+expected <plugin>@<marketplace>).` The plugin declares no dependency, so the
+cause is misleading. `list` and `info` show the resolver's verdict for the
+same name, `(unavailable) {unsupported source}`. The refusal itself is
+correct: no record is dropped and no file changes. The case
+`tests/integration/reserved-record-keys.test.ts` pins the current text.
+
+Scope when picked up: decide which verdict an invalid root name should get,
+check what Claude Code's `/plugin install` prints for such a name first, then
+either run the resolver before the closure root check or give the root check
+its own cause, and update the catalog and the pinned case together.
