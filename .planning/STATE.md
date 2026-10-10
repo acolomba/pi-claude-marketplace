@@ -3,12 +3,12 @@ gsd_state_version: "1.0"
 milestone: json-output
 current_phase: 08
 current_phase_name: "Address tech debt: ledger dispositions and advisory"
-status: completed
+status: executing
 stopped_at: Phase 8 context gathered
-last_updated: "2026-10-10T19:25:18.662Z"
+last_updated: "2026-10-10T19:30:08.482Z"
 last_activity: 2026-10-10
-last_activity_desc: Phase 7 complete
-state_head: ba761d0848e5d1772b33d2a3ca5e8b801f06134f
+last_activity_desc: Phase 08 execution started
+state_head: 5fd28a83d0f798f04e6196e44a14ad196132bf3e
 progress:
   total_phases: 8
   completed_phases: 7
@@ -26,14 +26,14 @@ See: `.planning/PROJECT.md` (updated 2026-10-10 after json-output Phase 7 comple
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** json-output milestone audit and archival
+**Current focus:** Phase 08 — Address tech debt: ledger dispositions and advisory
 
 ## Current Position
 
-Phase: 08 (Address tech debt: ledger dispositions and advisory) — READY TO EXECUTE
-Plan: 6 of 6 complete; all 7 human reviews passed
-Status: All phases complete
-Last activity: 2026-10-10 — Phase 7 complete
+Phase: 08 (Address tech debt: ledger dispositions and advisory) — EXECUTING
+Plan: 1 of 4
+Status: Executing Phase 08
+Last activity: 2026-10-10 — Phase 08 execution started
 
 Progress: [██████████] 100% (7 of 7 phases fully verified; 45 of 45 plans complete)
 
