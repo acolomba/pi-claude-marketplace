@@ -39,6 +39,8 @@ scripts/pi.sh --home tmp/pi-home
 
 `scripts/pi.sh` starts the pinned Pi with this extension and its companion extensions. `--home PATH` keeps the Pi settings and sessions in a disposable directory. For all options, run `scripts/pi.sh --help`.
 
+Without `--home` or `PI_CODING_AGENT_DIR`, the Pi home is `<prefix>/home`, inside the script's private npm prefix. That home starts without `auth.json` and `models.json`, so log in once with `/login` or set your provider's environment variables.
+
 ## Checks
 
 ```bash

@@ -24,6 +24,10 @@ write out of ~/.pi/agent, the Pi home defaults to <prefix>/home when
 neither --home nor PI_CODING_AGENT_DIR is set. Set PI_CODING_AGENT_DIR to
 run against another agent directory, ~/.pi/agent included.
 
+The default home starts without auth.json and models.json, so log in once
+with /login or set your provider's environment variables. With the default
+home, a PI_CODING_AGENT_SESSION_DIR that is already set is kept.
+
 Options:
   --cd PATH    Run Pi from PATH instead of the current directory.
   --clear      Clear the terminal before preparing and launching Pi.
@@ -37,6 +41,7 @@ USAGE
 
 clear_screen=0
 pi_home=""
+default_home=0
 pi_cd=""
 pi_args=()
 
@@ -211,11 +216,17 @@ done
 # operator's normal Pi sessions. Default to a Pi home inside the prefix.
 if [[ -z "$pi_home" && -z "${PI_CODING_AGENT_DIR:-}" ]]; then
   pi_home="$prefix/home"
+  default_home=1
 fi
 
 if [[ -n "$pi_home" ]]; then
   export PI_CODING_AGENT_DIR="$pi_home/agent"
-  export PI_CODING_AGENT_SESSION_DIR="$pi_home/sessions"
+  if ((default_home)); then
+    # The operator chose no home, so a session dir they exported still wins.
+    export PI_CODING_AGENT_SESSION_DIR="${PI_CODING_AGENT_SESSION_DIR:-$pi_home/sessions}"
+  else
+    export PI_CODING_AGENT_SESSION_DIR="$pi_home/sessions"
+  fi
   mkdir -p "$PI_CODING_AGENT_DIR" "$PI_CODING_AGENT_SESSION_DIR"
 fi
 
