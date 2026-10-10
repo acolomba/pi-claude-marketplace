@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
+import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { Compile } from "typebox/compile";
 
 import { NOTIFICATION_PAYLOAD_SCHEMA } from "../../extensions/pi-claude-marketplace/shared/notification-wire.ts";
-import { resolvePiRuntime } from "../pi-runtime.ts";
+import { resolvePiRuntime, type PiRuntime } from "../pi-runtime.ts";
 
 import { runJsonOutputRuntime } from "./json-output-runtime.ts";
 
@@ -17,6 +19,36 @@ const STARTUP_MARKERS = [
   { marker: "session_start", origin: "startup" },
   { marker: "resources_discover", origin: "startup" },
 ];
+
+function resolvePeerFloor(): PiRuntime {
+  const fixtureRoot = path.join(REPO_ROOT, "tests/e2e/pi-peer-floor");
+  const packageRoot = path.join(fixtureRoot, "node_modules/@earendil-works/pi-coding-agent");
+  const manifestPath = path.join(packageRoot, "package.json");
+  assert.ok(
+    existsSync(manifestPath),
+    "Missing peer floor: run npm --prefix tests/e2e/pi-peer-floor ci --ignore-scripts",
+  );
+  const manifest: unknown = JSON.parse(readFileSync(manifestPath, "utf8"));
+  assert.ok(
+    typeof manifest === "object" &&
+      manifest !== null &&
+      "version" in manifest &&
+      "name" in manifest,
+  );
+  assert.strictEqual(manifest.name, "@earendil-works/pi-coding-agent");
+  assert.strictEqual(manifest.version, "0.86.1");
+  const runtime = resolvePiRuntime(fixtureRoot);
+  assert.strictEqual(runtime.version, "0.86.1");
+  const relativeCli = path.relative(realpathSync(packageRoot), realpathSync(runtime.cliPath));
+  assert.ok(
+    relativeCli.length > 0 &&
+      relativeCli !== ".." &&
+      !relativeCli.startsWith(`..${path.sep}`) &&
+      !path.isAbsolute(relativeCli),
+    "Peer-floor CLI must resolve inside its own package",
+  );
+  return runtime;
+}
 
 function customEntries(records: readonly Record<string, unknown>[]): Record<string, unknown>[] {
   return records.filter((record) => record.type === "custom");
@@ -80,95 +112,102 @@ function assertStartupProof(run: JsonOutputRun): void {
   );
 }
 
-test("installed runtime emits a schema-valid empty list with JSON stdin closed", async (t) => {
-  // arrange
-  const runtime = resolvePiRuntime(REPO_ROOT);
+for (const { label, resolveRuntime } of [
+  { label: "installed runtime", resolveRuntime: () => resolvePiRuntime(REPO_ROOT) },
+  { label: "peer floor", resolveRuntime: resolvePeerFloor },
+]) {
+  test(`${label} emits a schema-valid empty list with JSON stdin closed`, async (t) => {
+    // arrange
+    const runtime = resolveRuntime();
 
-  // act
-  const run = await runJsonOutputRuntime({
-    runtime,
-    mode: "json",
-    startupProbe: false,
-    persist: false,
+    // act
+    const run = await runJsonOutputRuntime({
+      runtime,
+      mode: "json",
+      startupProbe: false,
+      persist: false,
+    });
+
+    // assert
+    const outcomes = assertListOutcome(run);
+    t.diagnostic(
+      `${label}: Pi ${run.version}; exit ${run.exitCode}; ${outcomes} validated command outcomes; ${run.args.join(" ")}`,
+    );
   });
 
-  // assert
-  const outcomes = assertListOutcome(run);
-  t.diagnostic(
-    `Pi ${run.version}; exit ${run.exitCode}; ${outcomes} validated command outcomes; ${run.args.join(" ")}`,
-  );
-});
+  test(`${label} keeps startup markers in memory outside the JSON stream`, async (t) => {
+    // arrange
+    const runtime = resolveRuntime();
 
-test("installed runtime keeps startup markers in memory outside the JSON stream", async (t) => {
-  // arrange
-  const runtime = resolvePiRuntime(REPO_ROOT);
+    // act
+    const run = await runJsonOutputRuntime({
+      runtime,
+      mode: "json",
+      startupProbe: true,
+      persist: false,
+    });
 
-  // act
-  const run = await runJsonOutputRuntime({
-    runtime,
-    mode: "json",
-    startupProbe: true,
-    persist: false,
+    // assert
+    const outcomes = assertListOutcome(run);
+    assertStartupProof(run);
+    t.diagnostic(
+      `${label}: Pi ${run.version}; json; exit ${run.exitCode}; ${outcomes} validated outcomes; both startup markers observed before streamed proof`,
+    );
   });
 
-  // assert
-  const outcomes = assertListOutcome(run);
-  assertStartupProof(run);
-  t.diagnostic(
-    `Pi ${run.version}; json; exit ${run.exitCode}; ${outcomes} validated outcomes; both startup markers observed before streamed proof`,
-  );
-});
+  test(`${label} retrieves unstreamed startup markers with RPC get_entries`, async (t) => {
+    // arrange
+    const runtime = resolveRuntime();
 
-test("installed runtime retrieves unstreamed startup markers with RPC get_entries", async (t) => {
-  // arrange
-  const runtime = resolvePiRuntime(REPO_ROOT);
+    // act
+    const run = await runJsonOutputRuntime({
+      runtime,
+      mode: "rpc",
+      startupProbe: true,
+      persist: false,
+    });
 
-  // act
-  const run = await runJsonOutputRuntime({
-    runtime,
-    mode: "rpc",
-    startupProbe: true,
-    persist: false,
+    // assert
+    const outcomes = assertListOutcome(run);
+    assertStartupProof(run);
+    t.diagnostic(
+      `${label}: Pi ${run.version}; rpc; exit ${run.exitCode}; ${outcomes} validated outcomes; both startup markers observed before streamed proof`,
+    );
+    const response = run.records.find(
+      (record) => record.type === "response" && record.id === "entries",
+    );
+    assert.ok(response);
+    assert.ok(
+      typeof response.data === "object" && response.data !== null && "entries" in response.data,
+    );
+    const entries = response.data.entries;
+    assert.ok(Array.isArray(entries));
+    assert.deepStrictEqual(
+      customEntries(entries)
+        .filter((entry) => entry.customType === "runtime-startup")
+        .map((entry) => entry.data),
+      STARTUP_MARKERS,
+    );
   });
 
-  // assert
-  const outcomes = assertListOutcome(run);
-  assertStartupProof(run);
-  t.diagnostic(
-    `Pi ${run.version}; rpc; exit ${run.exitCode}; ${outcomes} validated outcomes; both startup markers observed before streamed proof`,
-  );
-  const response = run.records.find(
-    (record) => record.type === "response" && record.id === "entries",
-  );
-  assert.ok(response);
-  assert.ok(
-    typeof response.data === "object" && response.data !== null && "entries" in response.data,
-  );
-  const entries = response.data.entries;
-  assert.ok(Array.isArray(entries));
-  assert.deepStrictEqual(
-    customEntries(entries)
-      .filter((entry) => entry.customType === "runtime-startup")
-      .map((entry) => entry.data),
-    STARTUP_MARKERS,
-  );
-});
+  test(`${label} writes no session file for a persistence-enabled slash-only run`, async (t) => {
+    // arrange
+    const runtime = resolveRuntime();
 
-test("installed runtime writes no session file for a persistence-enabled slash-only run", async (t) => {
-  // arrange
-  const runtime = resolvePiRuntime(REPO_ROOT);
+    // act
+    const run = await runJsonOutputRuntime({
+      runtime,
+      mode: "json",
+      startupProbe: false,
+      persist: true,
+    });
 
-  // act
-  const run = await runJsonOutputRuntime({
-    runtime,
-    mode: "json",
-    startupProbe: false,
-    persist: true,
+    // assert
+    assertListOutcome(run);
+    assert.deepStrictEqual(run.sessionFiles, []);
+    assert.ok(!run.args.includes("--no-session"));
+    t.diagnostic(
+      `${label}: Pi ${run.version}; exit ${run.exitCode}; persistence enabled; zero session files`,
+    );
   });
-
-  // assert
-  assertListOutcome(run);
-  assert.deepStrictEqual(run.sessionFiles, []);
-  assert.ok(!run.args.includes("--no-session"));
-  t.diagnostic(`Pi ${run.version}; exit ${run.exitCode}; persistence enabled; zero session files`);
-});
+}

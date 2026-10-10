@@ -20,7 +20,7 @@ repos:
       - id: detect-private-key
       - id: check-added-large-files
         args: ["--maxkb=64"]
-        exclude: ^(package-lock\.json|\.planning/)
+        exclude: ^(package-lock\.json|tests/e2e/pi-peer-floor/package-lock\.json|\.planning/)
       - id: check-json
         exclude: ^tests/orchestrators/marketplace/_fixtures/invalid-manifest/
       - id: check-yaml

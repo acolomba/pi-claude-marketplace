@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { copyFile, mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -176,20 +176,28 @@ export async function runJsonOutputRuntime(options: JsonOutputOptions): Promise<
       }
     }
 
-    const invocation = await runProcess(
-      args,
+    const env = {
+      PATH: process.env.PATH ?? "",
+      HOME: home,
+      PI_CODING_AGENT_DIR: agentDir,
+      PI_CODING_AGENT_SESSION_DIR: sessionDir,
+      PI_OFFLINE: "1",
+    };
+    const versionProbe = spawnSync(process.execPath, [options.runtime.cliPath, "--version"], {
       cwd,
-      {
-        PATH: process.env.PATH ?? "",
-        HOME: home,
-        PI_CODING_AGENT_DIR: agentDir,
-        PI_CODING_AGENT_SESSION_DIR: sessionDir,
-        PI_OFFLINE: "1",
-      },
-      options.mode,
-    );
+      env,
+      encoding: "utf8",
+      timeout: 20_000,
+      killSignal: "SIGKILL",
+      maxBuffer: MAX_BYTES,
+    });
+    assert.strictEqual(versionProbe.error, undefined);
+    assert.strictEqual(versionProbe.signal, null);
+    assert.strictEqual(versionProbe.status, 0, versionProbe.stderr);
+    assert.strictEqual(versionProbe.stdout.trim(), options.runtime.version);
+    const invocation = await runProcess(args, cwd, env, options.mode);
     const sessionFiles = await readdir(sessionDir, { recursive: true });
-    return { version: options.runtime.version, args, ...invocation, sessionFiles };
+    return { version: versionProbe.stdout.trim(), args, ...invocation, sessionFiles };
   } finally {
     await rm(root, { recursive: true, force: true });
   }

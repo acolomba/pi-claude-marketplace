@@ -46,3 +46,34 @@ These historical measurements are not new measurements of download count or
 package age. The execution registry check above confirms the authorized
 artifact's identity before provisioning. Runtime acceptance is recorded
 separately in `07-03-SUMMARY.md` after both targets execute.
+
+## Transitive Dependency Advisory Disposition
+
+Lock generation exited 0 and reported one high-severity dependency.
+`npm --prefix tests/e2e/pi-peer-floor audit --json` exited 1. It reports
+`brace-expansion@5.0.9`, reached through `minimatch@10.2.6`, with these advisories:
+
+- [GHSA-qhr7-859c-m2p7](https://github.com/advisories/GHSA-qhr7-859c-m2p7):
+  high, nested-brace recursion exhausts the stack.
+- [GHSA-6j4f-fj2g-mc7p](https://github.com/advisories/GHSA-6j4f-fj2g-mc7p):
+  high, comma-part recursion exhausts the stack.
+- [GHSA-q2hr-2g5m-vwhr](https://github.com/advisories/GHSA-q2hr-2g5m-vwhr):
+  moderate, quadratic expansion consumes CPU.
+
+The root lock already contains the same `brace-expansion@5.0.9` artifact and
+integrity, including under the installed Pi package. This is a pre-existing
+dependency issue, not an age signal or an artifact-identity mismatch.
+
+Fixture scope assessment: the advisories require attacker-controlled brace
+patterns. These cases use fixed slash commands, a checked-in extension fixture,
+fresh empty project/home/session directories, no marketplace inputs, no inherited
+credentials, offline mode, and no model prompts. They do not accept untrusted glob
+patterns. Each child has a 20-second kill deadline and bounded captured output.
+The published impact is availability loss, not code execution or disclosure.
+There is no new reachable high-severity surface in this constrained fixture, so
+the existing authorization remains applicable. This is not a clean npm audit or
+a general safety claim about running Pi against untrusted projects.
+
+Preserve the exact upstream fixture tree for the floor test. General dependency
+remediation in the root installation is outside this plan; no audit fix or root
+lock change is made here.
