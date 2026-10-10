@@ -152,7 +152,614 @@ One invocation can emit an installed plugin row and then an `internal-error`. Fo
 
 ```jsonl
 {"schemaVersion":1,"origin":{"kind":"command","commandId":"plugin install","invocationId":"run-1"},"kind":"cascade","severity":"info","needsReload":true,"marketplaces":[{"name":"tools","scope":"user","plugins":[{"status":"installed","name":"review","id":"review@tools","reasons":[]}]}]}
-{"schemaVersion":1,"origin":{"kind":"command","commandId":"plugin install","invocationId":"run-1"},"kind":"internal-error","severity":"error","needsReload":true,"causeChain":["Later step failed."],"truncated":false}
+{"schemaVersion":1,"origin":{"kind":"command","commandId":"plugin install","invocationId":"run-1"},"kind":"internal-error","severity":"error","needsReload":true,"summary":"Later step failed.","cause":{"causeChain":["Later step failed."],"truncated":false}}
 ```
 
 Completed changes remain. The severity example prints `error`, and the reload example prints `true`. An error does not promise rollback, and it does not erase earlier results. Keep the whole invocation when reporting failures.
+
+## Schema reference
+
+The current `schemaVersion` is `1`. A new optional field, a new kind, or a new closed-set member keeps the same version. Removing or renaming a field, changing its type, or changing its meaning requires a version bump.
+
+A closed set lists the currently supported values. Consumers must handle unfamiliar values conservatively even when the version stays the same. Preserve unknown fields and kinds when forwarding records. Do not treat an unfamiliar kind as proof of a command outcome. If a new severity or other value prevents a safe verdict, report an unsupported value instead of assuming success. The examples above follow this policy. The committed schema describes the current producer and rejects additional object properties. An older copy of that strict schema can therefore reject valid additive output from a newer producer.
+
+The tables describe `entry.data`, outside Pi's event wrapper. Field paths are relative to the object named by the table. `[]` means an array of the linked object or primitive type. Requiredness applies when the containing object exists. A conditional field exists only in the branch described in its meaning. Optional fields are omitted when absent, rather than set to `null`.
+
+### Common fields
+
+Every kind includes these fields. The `internal-error` kind narrows origin and severity as stated below. The command verdict is the maximum severity over all entries with that command's `origin.invocationId`, excluding load, hook, and other invocation entries.
+
+<!-- fields: common-fields -->
+
+| Field path      | Type              | Presence | Meaning                                             |
+| --------------- | ----------------- | -------- | --------------------------------------------------- |
+| `schemaVersion` | integer `1`       | required | Payload compatibility version.                      |
+| `kind`          | string            | required | Payload kind from the nineteen kind sections below. |
+| `origin`        | [Origin](#origin) | required | Source of this notification.                        |
+| `severity`      | string            | required | `info`, `warning`, or `error`, in increasing order. |
+| `needsReload`   | boolean           | required | Whether completed changes need `/reload`.           |
+
+<!-- /fields -->
+
+### Structured summary
+
+The ten structured kinds through `prune-committed-warning` also permit this field. The producer includes it on warning and error payloads, and it can be empty. Raw kinds omit it. `internal-error` requires it.
+
+<!-- fields: structured-summary -->
+
+| Field path | Type   | Presence | Meaning                                                                          |
+| ---------- | ------ | -------- | -------------------------------------------------------------------------------- |
+| `summary`  | string | optional | Human-readable warning or error summary, separate from structured result fields. |
+
+<!-- /fields -->
+
+### Origin
+
+<!-- fields: origin -->
+
+| Field path     | Type            | Presence    | Meaning                                                                            |
+| -------------- | --------------- | ----------- | ---------------------------------------------------------------------------------- |
+| `kind`         | string          | required    | `command`, `load`, or `hook`.                                                      |
+| `commandId`    | nonempty string | conditional | Required only for `command`. Names the operation, such as `plugin list`.           |
+| `invocationId` | nonempty string | conditional | Required only for `command`. Identifies one invocation, including its nested work. |
+
+<!-- /fields -->
+
+Load and hook origins have only `kind`. Command IDs can repeat across runs. Invocation IDs keep their results separate, including overlapping commands.
+
+### Command origin
+
+`internal-error` uses the command branch of [Origin](#origin). Both identifiers are required.
+
+<!-- fields: command-origin -->
+
+<!-- use: origin -->
+
+| Field path     | Type            | Presence | Meaning                                  |
+| -------------- | --------------- | -------- | ---------------------------------------- |
+| `commandId`    | nonempty string | required | Command operation as defined in Origin.  |
+| `invocationId` | nonempty string | required | Command invocation as defined in Origin. |
+
+<!-- /fields -->
+
+### Payload kinds
+
+Each section includes [Common fields](#common-fields). References to a body reuse its fields at the payload root. Cascaded info blocks contain only that body, without their own envelope.
+
+#### cascade
+
+Command results or inventory, including an empty `marketplaces` array.
+
+<!-- fields: kind:cascade -->
+
+<!-- use: common-fields -->
+
+<!-- use: structured-summary -->
+
+| Field path          | Type                                      | Presence | Meaning                                     |
+| ------------------- | ----------------------------------------- | -------- | ------------------------------------------- |
+| `marketplaces`      | [Marketplace block](#marketplace-block)[] | required | Marketplace and plugin rows in model order. |
+| `tally`             | [Tally](#tally)                           | optional | Counts for a plural result.                 |
+| `noOp`              | boolean `true`                            | optional | The command reports no work.                |
+| `advisories`        | string[]                                  | optional | Advisory lines in caller order.             |
+| `retainedWorkflows` | [Retained workflow](#retained-workflow)[] | optional | Workflow staging retained for recovery.     |
+
+<!-- /fields -->
+
+#### reconcile-applied-cascade
+
+Applied load-time reconciliation. It carries no `noOp`, advisories, or retained workflows.
+
+<!-- fields: kind:reconcile-applied-cascade -->
+
+<!-- use: common-fields -->
+
+<!-- use: structured-summary -->
+
+| Field path     | Type                                      | Presence | Meaning                                 |
+| -------------- | ----------------------------------------- | -------- | --------------------------------------- |
+| `marketplaces` | [Marketplace block](#marketplace-block)[] | required | Reconciled marketplace and plugin rows. |
+| `tally`        | [Tally](#tally)                           | optional | Counts for a plural result.             |
+
+<!-- /fields -->
+
+#### marketplace-info
+
+One marketplace. Adds the fields of [Marketplace info body](#marketplace-info-body) at the root.
+
+<!-- fields: kind:marketplace-info -->
+
+<!-- use: common-fields -->
+
+<!-- use: structured-summary -->
+
+<!-- use: marketplace-info-body -->
+
+<!-- /fields -->
+
+#### plugin-info
+
+One plugin. Adds the fields of [Plugin info body](#plugin-info-body) at the root.
+
+<!-- fields: kind:plugin-info -->
+
+<!-- use: common-fields -->
+
+<!-- use: structured-summary -->
+
+<!-- use: plugin-info-body -->
+
+<!-- /fields -->
+
+#### marketplace-info-cascade
+
+Information about multiple marketplaces.
+
+<!-- fields: kind:marketplace-info-cascade -->
+
+<!-- use: common-fields -->
+
+<!-- use: structured-summary -->
+
+| Field path | Type                                              | Presence | Meaning                                                           |
+| ---------- | ------------------------------------------------- | -------- | ----------------------------------------------------------------- |
+| `blocks`   | [Marketplace info body](#marketplace-info-body)[] | required | At least one marketplace body, without per-block envelope fields. |
+
+<!-- /fields -->
+
+#### plugin-info-cascade
+
+Information about multiple plugins.
+
+<!-- fields: kind:plugin-info-cascade -->
+
+<!-- use: common-fields -->
+
+<!-- use: structured-summary -->
+
+| Field path | Type                                    | Presence | Meaning                                                      |
+| ---------- | --------------------------------------- | -------- | ------------------------------------------------------------ |
+| `blocks`   | [Plugin info body](#plugin-info-body)[] | required | At least one plugin body, without per-block envelope fields. |
+
+<!-- /fields -->
+
+#### marketplace-not-added
+
+A requested marketplace is absent from the selected scope.
+
+<!-- fields: kind:marketplace-not-added -->
+
+<!-- use: common-fields -->
+
+<!-- use: structured-summary -->
+
+| Field path | Type     | Presence | Meaning                                                       |
+| ---------- | -------- | -------- | ------------------------------------------------------------- |
+| `name`     | string   | required | Requested marketplace name.                                   |
+| `scope`    | Scope    | optional | Selected scope when specified.                                |
+| `reasons`  | Reason[] | required | Resolved not-added reason, including scope-specific variants. |
+
+<!-- /fields -->
+
+#### reconcile-pending-empty
+
+No pending reconciliation changes, with any retained staging information.
+
+<!-- fields: kind:reconcile-pending-empty -->
+
+<!-- use: common-fields -->
+
+<!-- use: structured-summary -->
+
+| Field path          | Type                                      | Presence | Meaning                                 |
+| ------------------- | ----------------------------------------- | -------- | --------------------------------------- |
+| `advisories`        | string[]                                  | optional | Advisory lines in caller order.         |
+| `retainedWorkflows` | [Retained workflow](#retained-workflow)[] | optional | Workflow staging retained for recovery. |
+
+<!-- /fields -->
+
+#### prune-empty
+
+No orphaned dependencies to prune in the scope.
+
+<!-- fields: kind:prune-empty -->
+
+<!-- use: common-fields -->
+
+<!-- use: structured-summary -->
+
+| Field path | Type  | Presence | Meaning                    |
+| ---------- | ----- | -------- | -------------------------- |
+| `scope`    | Scope | required | Scope of the orphan sweep. |
+
+<!-- /fields -->
+
+#### prune-committed-warning
+
+A warning after the prune state save succeeded.
+
+<!-- fields: kind:prune-committed-warning -->
+
+<!-- use: common-fields -->
+
+<!-- use: structured-summary -->
+
+| Field path | Type            | Presence | Meaning                            |
+| ---------- | --------------- | -------- | ---------------------------------- |
+| `scope`    | Scope           | required | Scope whose prune state was saved. |
+| `cause`    | [Cause](#cause) | optional | Serialized warning cause.          |
+
+<!-- /fields -->
+
+#### usage-error
+
+An invalid command or a mode refusal.
+
+<!-- fields: kind:usage-error -->
+
+<!-- use: common-fields -->
+
+| Field path | Type   | Presence | Meaning                             |
+| ---------- | ------ | -------- | ----------------------------------- |
+| `message`  | string | required | Error and remedy.                   |
+| `usage`    | string | required | Usage help. The field can be empty. |
+
+<!-- /fields -->
+
+#### usage-info
+
+Explicitly requested command help.
+
+<!-- fields: kind:usage-info -->
+
+<!-- use: common-fields -->
+
+| Field path | Type   | Presence | Meaning     |
+| ---------- | ------ | -------- | ----------- |
+| `usage`    | string | required | Usage help. |
+
+<!-- /fields -->
+
+#### diagnostic
+
+An out-of-band warning. It does not establish a command outcome.
+
+<!-- fields: kind:diagnostic -->
+
+<!-- use: common-fields -->
+
+| Field path | Type     | Presence | Meaning                                  |
+| ---------- | -------- | -------- | ---------------------------------------- |
+| `header`   | string   | required | Diagnostic heading.                      |
+| `lines`    | string[] | required | Diagnostic body lines in supplied order. |
+
+<!-- /fields -->
+
+#### device-flow-prompt
+
+Authorization instructions. It does not establish a command outcome or carry an access token.
+
+<!-- fields: kind:device-flow-prompt -->
+
+<!-- use: common-fields -->
+
+| Field path        | Type   | Presence | Meaning                                       |
+| ----------------- | ------ | -------- | --------------------------------------------- |
+| `verificationUri` | string | required | Address where the user authorizes the device. |
+| `userCode`        | string | required | Code the user enters at that address.         |
+
+<!-- /fields -->
+
+#### async-rewake-summary
+
+A plugin author's asynchronous hook summary.
+
+<!-- fields: kind:async-rewake-summary -->
+
+<!-- use: common-fields -->
+
+| Field path | Type   | Presence | Meaning                                                                               |
+| ---------- | ------ | -------- | ------------------------------------------------------------------------------------- |
+| `text`     | string | required | Author's summary text, kept verbatim. This is distinct from the envelope's `summary`. |
+
+<!-- /fields -->
+
+#### stop-override-cap
+
+A Stop-hook override reached its re-entry limit.
+
+<!-- fields: kind:stop-override-cap -->
+
+<!-- use: common-fields -->
+
+| Field path | Type                | Presence | Meaning                                  |
+| ---------- | ------------------- | -------- | ---------------------------------------- |
+| `pluginId` | string              | required | Plugin whose hook reached the cap.       |
+| `cap`      | nonnegative integer | required | Re-entry cap that triggered the warning. |
+
+<!-- /fields -->
+
+#### reconcile-aborted
+
+Load-time reconciliation stopped after a failure.
+
+<!-- fields: kind:reconcile-aborted -->
+
+<!-- use: common-fields -->
+
+| Field path     | Type   | Presence | Meaning                   |
+| -------------- | ------ | -------- | ------------------------- |
+| `causeMessage` | string | required | Renderable cause message. |
+
+<!-- /fields -->
+
+#### plugin-path-skipped
+
+A load pass could not refresh one scope's plugin PATH.
+
+<!-- fields: kind:plugin-path-skipped -->
+
+<!-- use: common-fields -->
+
+| Field path | Type   | Presence | Meaning                                          |
+| ---------- | ------ | -------- | ------------------------------------------------ |
+| `scope`    | Scope  | required | Scope whose PATH refresh was skipped.            |
+| `reason`   | string | required | Free-text reason, outside the closed Reason set. |
+
+<!-- /fields -->
+
+#### internal-error
+
+An unexpected command failure or a final outcome when ordinary delivery failed. Its origin is always `command`, severity is always `error`, and `summary` is required.
+
+<!-- fields: kind:internal-error -->
+
+<!-- use: common-fields -->
+
+| Field path | Type                              | Presence | Meaning                   |
+| ---------- | --------------------------------- | -------- | ------------------------- |
+| `origin`   | [Command origin](#command-origin) | required | Command branch only.      |
+| `summary`  | string                            | required | Redacted failure summary. |
+| `cause`    | [Cause](#cause)                   | required | Redacted failure chain.   |
+
+<!-- /fields -->
+
+### Marketplace block
+
+<!-- fields: marketplace-block -->
+
+| Field path | Type                                        | Presence | Meaning                                              |
+| ---------- | ------------------------------------------- | -------- | ---------------------------------------------------- |
+| `name`     | string                                      | required | Marketplace name.                                    |
+| `scope`    | Scope                                       | required | Marketplace scope.                                   |
+| `plugins`  | [Plugin row](#plugin-row)[]                 | required | Plugin rows in model order. An empty array is valid. |
+| `status`   | MarketplaceStatus                           | optional | Result of the marketplace operation.                 |
+| `details`  | [Marketplace details](#marketplace-details) | optional | Autoupdate and last-update information.              |
+| `reasons`  | Reason[]                                    | optional | Resolved marketplace reasons.                        |
+
+<!-- /fields -->
+
+### Plugin row
+
+<!-- fields: plugin-row -->
+
+| Field path        | Type                                | Presence | Meaning                                                                      |
+| ----------------- | ----------------------------------- | -------- | ---------------------------------------------------------------------------- |
+| `status`          | PluginStatus                        | required | Plugin state or operation result.                                            |
+| `name`            | string                              | required | Plugin name.                                                                 |
+| `id`              | string                              | required | Qualified address, `<name>@<marketplace>`.                                   |
+| `reasons`         | Reason[]                            | required | Resolved reasons, including soft-dependency markers. Empty means no reasons. |
+| `version`         | string                              | optional | Plugin version.                                                              |
+| `from`            | string                              | optional | Version before an update.                                                    |
+| `to`              | string                              | optional | Version after an update.                                                     |
+| `scope`           | Scope                               | optional | Plugin installation scope.                                                   |
+| `description`     | string                              | optional | Plugin description.                                                          |
+| `partial`         | boolean                             | optional | Whether only part of the plugin is supported.                                |
+| `hint`            | RowHint                             | optional | Follow-up action hint.                                                       |
+| `cause`           | [Cause](#cause)                     | optional | Serialized row failure.                                                      |
+| `leaks`           | string[]                            | optional | Paths left behind by failed cleanup, after redaction.                        |
+| `rollbackPartial` | [Rollback phase](#rollback-phase)[] | optional | Rollback phases that did not finish.                                         |
+
+<!-- /fields -->
+
+### Marketplace details
+
+<!-- fields: marketplace-details -->
+
+| Field path      | Type    | Presence | Meaning                                    |
+| --------------- | ------- | -------- | ------------------------------------------ |
+| `autoupdate`    | boolean | required | Whether marketplace autoupdate is enabled. |
+| `lastUpdatedAt` | string  | optional | Recorded last-update timestamp.            |
+
+<!-- /fields -->
+
+### Marketplace info body
+
+<!-- fields: marketplace-info-body -->
+
+| Field path            | Type                                        | Presence | Meaning                                         |
+| --------------------- | ------------------------------------------- | -------- | ----------------------------------------------- |
+| `name`                | string                                      | required | Marketplace name.                               |
+| `scope`               | Scope                                       | required | Marketplace scope.                              |
+| `details`             | [Marketplace details](#marketplace-details) | required | Marketplace settings and timestamp.             |
+| `source`              | [Marketplace source](#marketplace-source)   | required | Source selected by `sourceKind`.                |
+| `description`         | string                                      | optional | Marketplace description.                        |
+| `allowedMarketplaces` | string[]                                    | optional | Marketplace names allowed for dependency edges. |
+
+<!-- /fields -->
+
+### Marketplace source
+
+Each source has exactly one branch. Branch-specific fields are absent from the other branches.
+
+<!-- fields: marketplace-source -->
+
+| Field path   | Type   | Presence    | Meaning                                                            |
+| ------------ | ------ | ----------- | ------------------------------------------------------------------ |
+| `sourceKind` | string | required    | `github`, `url`, or `path`.                                        |
+| `owner`      | string | conditional | Required for `github`. Repository owner.                           |
+| `repo`       | string | conditional | Required for `github`. Repository name.                            |
+| `ref`        | string | optional    | Git ref for `github` or `url`. Absent for `path`.                  |
+| `url`        | string | conditional | Required for `url`. Repository URL.                                |
+| `absPath`    | string | conditional | Required for `path`. Absolute source path, deliberately preserved. |
+
+<!-- /fields -->
+
+### Plugin info body
+
+<!-- fields: plugin-info-body -->
+
+| Field path           | Type                                        | Presence | Meaning                                     |
+| -------------------- | ------------------------------------------- | -------- | ------------------------------------------- |
+| `marketplaceName`    | string                                      | required | Marketplace from which the plugin was read. |
+| `marketplaceScope`   | Scope                                       | required | Scope of that marketplace record.           |
+| `marketplaceDetails` | [Marketplace details](#marketplace-details) | required | Marketplace settings and timestamp.         |
+| `plugin`             | [Plugin info row](#plugin-info-row)         | required | Resolved or unresolved plugin information.  |
+
+<!-- /fields -->
+
+### Plugin info row
+
+<!-- fields: plugin-info-row -->
+
+| Field path           | Type                      | Presence    | Meaning                                                                              |
+| -------------------- | ------------------------- | ----------- | ------------------------------------------------------------------------------------ |
+| `status`             | PluginInfoStatus          | required    | Plugin information state.                                                            |
+| `name`               | string                    | required    | Plugin name.                                                                         |
+| `id`                 | string                    | required    | Qualified address, `<name>@<marketplaceName>`.                                       |
+| `reasons`            | Reason[]                  | required    | Resolved reasons. Empty means no reasons.                                            |
+| `version`            | string                    | optional    | Plugin version.                                                                      |
+| `scope`              | Scope                     | optional    | Plugin installation scope.                                                           |
+| `description`        | string                    | optional    | Plugin description.                                                                  |
+| `notes`              | string[]                  | optional    | Ordered advisory lines about component files.                                        |
+| `dependencies`       | string[]                  | optional    | Dependency addresses with any version or SHA constraints, sorted by dependency name. |
+| `componentsResolved` | boolean                   | required    | Selects the resolved (`true`) or unresolved (`false`) branch.                        |
+| `components`         | [Components](#components) | conditional | Required when `componentsResolved` is `true`. Absent when it is `false`.             |
+
+<!-- /fields -->
+
+### Components
+
+Component names are sorted alphabetically. A missing component field means that no entries of that type are supplied.
+
+<!-- fields: components -->
+
+| Field path  | Type                        | Presence | Meaning                                            |
+| ----------- | --------------------------- | -------- | -------------------------------------------------- |
+| `agents`    | string[]                    | optional | Agent names.                                       |
+| `commands`  | string[]                    | optional | Command names.                                     |
+| `hooks`     | [Hook entry](#hook-entry)[] | optional | Hook events and matchers.                          |
+| `mcp`       | string[]                    | optional | MCP server names.                                  |
+| `skills`    | string[]                    | optional | Skill names.                                       |
+| `workflows` | string[]                    | optional | Admitted workflow names in `<plugin>:<name>` form. |
+
+<!-- /fields -->
+
+### Hook entry
+
+The plain branch has `event` and an optional `matcher`. The lenient branch adds `kind` and `supported`.
+
+<!-- fields: hook-entry -->
+
+| Field path  | Type             | Presence    | Meaning                                                         |
+| ----------- | ---------------- | ----------- | --------------------------------------------------------------- |
+| `event`     | string           | required    | Hook event name.                                                |
+| `matcher`   | string           | optional    | Hook matcher when specified.                                    |
+| `kind`      | string `lenient` | conditional | Required in the lenient branch. Absent in the plain branch.     |
+| `supported` | boolean          | conditional | Required in the lenient branch. Whether this hook is supported. |
+
+<!-- /fields -->
+
+### Cause
+
+<!-- fields: cause -->
+
+| Field path   | Type     | Presence | Meaning                                                            |
+| ------------ | -------- | -------- | ------------------------------------------------------------------ |
+| `causeChain` | string[] | required | Serialized error messages, outermost first, after redaction.       |
+| `truncated`  | boolean  | required | Whether serialization stopped before the whole chain was included. |
+
+<!-- /fields -->
+
+### Rollback phase
+
+<!-- fields: rollback-phase -->
+
+| Field path | Type            | Presence | Meaning                                |
+| ---------- | --------------- | -------- | -------------------------------------- |
+| `phase`    | string          | required | Name of the incomplete rollback phase. |
+| `cause`    | [Cause](#cause) | optional | Failure from that rollback phase.      |
+
+<!-- /fields -->
+
+### Tally
+
+All counts are nonnegative integers. The failure and warning counts are always present when the tally exists.
+
+<!-- fields: tally -->
+
+| Field path | Type                            | Presence | Meaning                                |
+| ---------- | ------------------------------- | -------- | -------------------------------------- |
+| `label`    | string                          | required | Subject of the count, such as plugins. |
+| `failures` | nonnegative integer             | required | Failed rows.                           |
+| `warnings` | nonnegative integer             | required | Warning rows.                          |
+| `success`  | [Success tally](#success-tally) | optional | Successful operation count.            |
+
+<!-- /fields -->
+
+### Success tally
+
+<!-- fields: success-tally -->
+
+| Field path | Type                | Presence | Meaning                                  |
+| ---------- | ------------------- | -------- | ---------------------------------------- |
+| `count`    | nonnegative integer | required | Successful rows.                         |
+| `verb`     | string              | optional | Operation named by the successful count. |
+
+<!-- /fields -->
+
+### Retained workflow
+
+<!-- fields: retained-workflow -->
+
+| Field path      | Type                | Presence | Meaning                                      |
+| --------------- | ------------------- | -------- | -------------------------------------------- |
+| `name`          | string              | required | Name of the retained workflow staging entry. |
+| `envelopeCount` | nonnegative integer | optional | Observed count of stored workflow envelopes. |
+
+<!-- /fields -->
+
+### Closed-set tokens
+
+These are native wire values, including spaces and hyphens. They are not the labels produced by the text renderer. `Scope` is `user` or `project`.
+
+`PluginStatus`: `installed`, `updated`, `reinstalled`, `uninstalled`, `available`, `unavailable`, `upgradable`, `failed`, `skipped`, `manual recovery`, `will install`, `will uninstall`, `will enable`, `will disable`, `disabled`, `partially-installed`, `partially-upgradable`, `partially-available`, `remote`.
+
+`PluginInfoStatus`: `installed`, `available`, `remote`, `unavailable`, `partially-available`, `failed`, `partially-installed`, `disabled`.
+
+`MarketplaceStatus`: `added`, `removed`, `updated`, `failed`, `autoupdate enabled`, `autoupdate disabled`, `skipped`.
+
+`RowHint`: `partial-install`, `partial-update`, `stale-gate-update`, `enable`.
+
+`Reason`: `up-to-date`, `not found`, `already installed`, `not installed`, `not in manifest`, `invalid manifest`, `no longer installable`, `unsupported source`, `unsupported component`, `unsupported hooks`, `lsp`, `requires pi-subagents`, `requires pi-mcp`, `rollback partial`, `unreadable`, `unparseable`, `unreadable manifest`, `source mismatch`, `plugins remain`, `concurrently uninstalled`, `concurrently updated`, `stale clone`, `duplicate name`, `lock held`, `already autoupdate`, `already no autoupdate`, `already enabled`, `already disabled`, `permission denied`, `source missing`, `network unreachable`, `marketplace not added`, `marketplace not added to user scope`, `marketplace not added to project scope`, `orphan rewake`, `authentication required`, `dangling reference`, `malformed mcp`, `malformed skill`, `malformed command`, `installs disabled`, `marketplace in user scope`, `marketplace in project scope`, `data kept`, `no matching version`, `version conflict`, `constraint too complex`, `invalid version constraint`, `dependency marketplace not added`, `dependency cycle`, `dependency failed`, `dependency promoted`, `dependency pruned`, `dependency unsatisfied`, `dependency version unsatisfied`, `dependents unsatisfied`, `dependency current copy`, `dependency enabled`, `dependents remain`, `dependency installed`, `dependents constrain`, `cross-marketplace`, `stale workflow command`, `requires pi-dynamic-workflows`, `components now supported`.
+
+## Limitations
+
+Print mode uses Pi's silent `notify` behavior. Scripts that need plugin output must use `--mode json`. Plugin command severity does not determine Pi's process exit status. Pi can exit zero after a command reports an error. Independent CLI or runtime failures can still return nonzero. Check both the process status and the selected command's payloads.
+
+Entries emitted during `session_start` and `resources_discover` are not streamed in JSON or RPC mode. These hooks run before the output subscription starts. RPC clients can retrieve those entries with `get_entries`. The absence of a startup entry from the stream does not mean that the hook did not run.
+
+RPC front-ends receive custom `claude-plugin` entries through the JSON strategy. They do not also receive the human `notify` text. Front-ends must render these entries, at least the `device-flow-prompt` fields `verificationUri` and `userCode`, so users can authorize the device.
+
+A slash-command-only run does not create its initial session file until an assistant message exists. This applies even when persistence is enabled. The independent `--no-session` flag disables persistence altogether. An entry in session memory or the event stream therefore does not prove that Pi wrote a session file.
+
+The [real-runtime tests](../tests/e2e/pi-json-output.test.ts) passed on installed Pi 0.87.1 and the separate exact-floor fixture, Pi 0.86.1. Both runs verified schema-valid command output, startup memory without streaming, RPC retrieval, and slash-only persistence timing. The [execution record](../.planning/phases/07-mode-refusals-real-pi-verification-and-docs/07-03-SUMMARY.md#verification-evidence) records the commands, versions, and results. These tests use fresh directories and no operator credentials.
+
+Output delivery has four accepted limits:
+
+- Each ordinary command append failure gets one direct recovery attempt on the same sink. Successful recovery permits later entries and a new recovery attempt for a later independent failure.
+- The extension does not retry the business operation because output failed.
+- Failed output does not undo completed changes or promise rollback. Earlier results and `needsReload` remain relevant.
+- If the sink also rejects recovery, delivery closes. Sustained sink failure can leave no command outcome, even after work completed.
+
+The [command-run evidence](../.planning/phases/06-command-run-contract/06-03-SUMMARY.md#fault-path-evidence) covers recovery, retained changes, and separate overlapping invocations. Invocation IDs correlate output for one command, including its nested work. They are not persistent user identifiers or cross-session tracking, and the extension sends no telemetry. If no known outcome arrives, the examples fail with `No command outcome received`. Prompts, diagnostics, silence, and a zero Pi exit status cannot establish success. Keep earlier payloads when a later failure arrives.
