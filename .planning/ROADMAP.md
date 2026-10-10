@@ -296,9 +296,18 @@ Plans:
 
 ### Phase 8: Address tech debt: ledger dispositions and advisory
 
-**Goal:** [To be planned]
-**Requirements**: TBD
+**Goal:** Every open WINDOWS.md entry carries a `fixed` or `waived` disposition with an auditable reason, so the `/gsd-ship` broken-windows gate reads zero open, and the `brace-expansion` advisory is remediated in the root lock with the Pi-pinned residual recorded and carried.
 **Depends on:** Phase 7
+**Requirements:** none (closeout phase; traceability lives in WINDOWS.md and BACKLOG.md)
+**Research flag:** no. Every disposition's evidence was gathered and verified during discussion and is recorded in 08-CONTEXT.md.
+**Success Criteria** (what must be TRUE):
+
+1. `gsd-tools windows status` reports `open_count: 0`. Entries 85 and 89 are `fixed`. Every waived entry (32-34, 41-58, 84, 88) carries a `[json-output]`-prefixed reason that names #236 (`d7213bc2`) or its BACKLOG carrier.
+2. Both pi-subagents resolver tests (`tests/integration/skill-path-resolution.test.ts`, `tests/integration/provenance-invisibility.test.ts`) resolve the package root before the hermetic HOME swap. The SC-2 / AGSK-06 case runs, not skips, where the global peer is installed. CI behavior is unchanged.
+3. Root `package-lock.json` pins `node_modules/brace-expansion` at >=5.0.12 with `package.json` dependencies unchanged. The only path `npm audit` still reports is under `node_modules/@earendil-works/pi-coding-agent/`. The e2e peer-floor fixture lock is byte-identical.
+4. BACKLOG.md carries WOUT-01 (workflow output quality unobserved) and DEPADV-01 (nested brace-expansion pinned by Pi's shrinkwrap). DEP-07-03-01 in the phase 7 deferred items points at DEPADV-01.
+5. `03-VALIDATION.md` reads `nyquist_compliant: true`. `01-VALIDATION.md` stays `false` with its contradicting checkbox unticked. `npm run check` is green with no new suppression and the text corpus unchanged.
+
 **Plans:** 0 plans
 
 Plans:
