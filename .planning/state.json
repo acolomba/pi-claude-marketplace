@@ -37,12 +37,17 @@
       "number": "7",
       "name": "Docs and live proof",
       "status": "complete"
+    },
+    {
+      "number": "8",
+      "name": "Clear milestone debt",
+      "status": "pending"
     }
   ],
   "next": {
-    "command": "/gsd:new-milestone",
-    "label": "Start a new milestone",
-    "reason": "All phases complete — start a new milestone"
+    "command": "/gsd:progress --next",
+    "label": "Advance to the next step",
+    "reason": "Phase 8 of 8 · 71% · executing"
   },
-  "updated_at": "2026-10-10T00:24:15.179Z"
+  "updated_at": "2026-10-10T02:45:47.571Z"
 }

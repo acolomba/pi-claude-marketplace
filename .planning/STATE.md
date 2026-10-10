@@ -4,12 +4,12 @@ milestone: mcp-4
 milestone_name: MCP 4
 current_phase: 8
 current_phase_name: Clear milestone debt
-status: completed
+status: executing
 stopped_at: Phase 07 complete — all phases complete
-last_updated: "2026-10-10T02:42:21.644Z"
+last_updated: "2026-10-10T02:45:47.472Z"
 last_activity: 2026-10-09
-last_activity_desc: Phase 07 complete
-state_head: bf9ad08e284e7516f9e3b7ada8bb2e59ddecd9af
+last_activity_desc: Phase 8 execution started
+state_head: 70b0bd819b5a770d5274d2d0060c57d82f11905d
 progress:
   total_phases: 8
   completed_phases: 7
@@ -27,17 +27,17 @@ See: `.planning/PROJECT.md` (updated 2026-10-09 after mcp-4 Phase 7)
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** mcp-4 milestone close — audit, complete, cleanup
+**Current focus:** Phase 8 — Clear milestone debt
 The roadmap has 7 phases and maps all 36 requirements. Phases 2 to 5
 go out in one release, because every entry-shape change costs users new
 sign-ins and approvals.
 
 ## Current Position
 
-Phase: 8 (Clear milestone debt) — READY TO EXECUTE
-Plan: Not started
-Status: All phases complete
-Last activity: 2026-10-09 — Phase 07 complete
+Phase: 8 (Clear milestone debt) — EXECUTING
+Plan: 1 of 21
+Status: Executing Phase 8
+Last activity: 2026-10-09 — Phase 8 execution started
 
 Progress: [███████░░░] 71%
 
