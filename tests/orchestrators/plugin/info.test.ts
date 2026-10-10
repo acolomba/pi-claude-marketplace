@@ -6998,6 +6998,58 @@ test("AVAR-03: info names a server left out for a leading ~ with its field", asy
   });
 });
 
+test("ADET-01: info names no pi-mcp-adapter when the install leaves out every MCP server", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    await seedAlphaWithPluginJson(home, cwd, {
+      name: "alpha",
+      mcpServers: { live: { type: "ws", url: "wss://alpha.example.test/live" } },
+    });
+    const { ctx, pi, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+
+    // assert
+    assert.deepEqual(notifications, [
+      {
+        message:
+          "● mp [user] <no autoupdate>\n" +
+          "  ⊖ alpha v1.0.0 (partially-available) {unsupported mcp}\n" +
+          "    mcp: plugin:alpha:live (unsupported ws)",
+      },
+    ]);
+  });
+});
+
+test("ADET-01: info still names pi-mcp-adapter when the install writes one of the plugin's MCP servers", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    await seedAlphaWithPluginJson(home, cwd, {
+      name: "alpha",
+      mcpServers: {
+        live: { type: "ws", url: "wss://alpha.example.test/live" },
+        stdio: { command: "alpha-server" },
+      },
+    });
+    const { ctx, pi, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+
+    // assert
+    assert.deepEqual(notifications, [
+      {
+        message:
+          "● mp [user] <no autoupdate>\n" +
+          "  ⊖ alpha v1.0.0 (partially-available) {unsupported mcp}\n" +
+          "    mcp: plugin:alpha:live (unsupported ws), plugin:alpha:stdio\n" +
+          "    requires: pi-mcp-adapter (missing)",
+      },
+    ]);
+  });
+});
+
 /**
  * Seeds a user-scope path-source `analytics` plugin whose `plugin.json`
  * declares the given MCP servers.

@@ -2963,11 +2963,12 @@ function emitFetchSkip(
 }
 
 /**
- * ADET-01: stamps the companions a resolved row's components need onto the
- * block's plugin row, each tagged missing per the invocation's one probe
- * snapshot. An unresolved row and a row that needs no companion keep their
- * shape. A disabled row keeps its component inventory (ENBL-18), so it carries
- * the line too: the line states what the plugin needs, not what is running.
+ * ADET-01: stamps the companions that the components the install writes need
+ * onto the block's plugin row, each tagged missing per the invocation's one
+ * probe snapshot. A server that a partial install leaves out needs no adapter.
+ * An unresolved row and a row that needs no companion keep their shape. A
+ * disabled row keeps its component inventory (ENBL-18), so it carries the line
+ * too: the line states what the plugin needs, not what is running.
  */
 function withCompanionRequirements(built: InfoBlock, probe: SoftDepStatus): InfoBlock {
   const plugin = built.block.plugin;
@@ -2977,7 +2978,7 @@ function withCompanionRequirements(built: InfoBlock, probe: SoftDepStatus): Info
 
   const requires = companionRequirements(
     (plugin.components.agents?.length ?? 0) > 0,
-    (plugin.components.mcp?.length ?? 0) > 0,
+    (plugin.components.mcp ?? []).some((server) => server.unsupportedFeature === undefined),
     (plugin.components.workflows?.length ?? 0) > 0,
     probe,
   );
