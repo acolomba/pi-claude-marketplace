@@ -21,7 +21,8 @@ closes. This phase:
 Phase 1's Nyquist validation and security review were done before this
 phase (`24d2d904`, `6f11df72`) and are out of scope.
 
-No new requirement IDs. Each plan cites the finding IDs it closes
+Requirements: DEBT-01..05 (`.planning/REQUIREMENTS.md`, one per roadmap
+success criterion). Each plan also cites the finding IDs it closes
 (`P<phase> IN-NN` / `WR-NN`, `MCPOVR-01`, `MCPROW-01`, `OWNKEY-01`) and the
 D-08 decisions below.
 
@@ -48,26 +49,35 @@ D-08 decisions below.
   `plugin:<plugin>:<server>`, and no plugin disable, enable or uninstall
   code touches it (`08-UPSTREAM-EVIDENCE.md` §1). The operator: "it's ok for
   the two lifecycles to be separate."
-- Storage is Claude's discretion, with constraints: the choices must sit
-  outside the entry that disable and uninstall remove; they are keyed by
-  the generated server key (one key builder, `domain/name.ts`); writes stay
-  atomic (NFR-1) and inside the NFR-10 write set; a `/reload` alone must
-  converge (NFR-2). Candidates: a marker-less user stub left in
-  `mcp-adapter.json` (the D-02-21 `keptOverride` / stub write-back path
-  already does this for absorbed overrides; check how pi-mcp-adapter
-  treats a stub no other source defines), or a scope-level store in
-  `state.json` that outlives the install record. Research which one
-  pi-mcp-adapter tolerates and pick the simpler.
+- Storage (operator ruling 2026-10-09, after research): a new top-level
+  member `_piClaudeMarketplace.serverChoices` in the same
+  `mcp-adapter.json`, outside `mcpServers`, keyed by the generated server
+  key (`domain/name.ts`). Disable and uninstall move a server's carried
+  choices into it; enable and reinstall move them back into the new entry;
+  each move is part of the one atomic write of that file (NFR-1, NFR-10).
+  pi-mcp-adapter 5.2.0 ignores and preserves unknown top-level keys
+  (`08-RESEARCH.md`). Rejected: a leftover stub entry (the adapter loads it
+  as a real server: a `disabled` stub shows as a disabled server, any other
+  field fails to connect) and a `state.json` store (second file write,
+  schema bump, every remover changes).
+- Research side finding: `/mcp-adapter disable` writes to the project file,
+  so a user-scope plugin's choice already survives per project; fix
+  `docs/mcp-compatibility.md` accordingly.
 - Divergence to document: upstream keys the choice per project; ours is per
   scope file. Record it as a Pi capability gap in `docs/mcp-compatibility.md`.
 
 ### MCPROW-01: success row plus separate notices
 
-- **D-08-03:** `enable` of a plugin whose servers carry unset variables or
-  withheld credentials renders the normal enabled row at info severity, not
-  `(installed)` at warning. The MCP variable notices render as their own
-  warning lines, as `install` does. `import` rows show the same notices the
-  same way. Upstream reports enable and install as plain success and shows
+- **D-08-03:** The target behavior: `enable` and `import` of a plugin whose
+  servers carry unset variables or withheld credentials report a success
+  row with the MCP variable notices as their own warning lines, as
+  `install` does. Research found this already holds with the adapter
+  loaded: `(installed)` is the catalog's normal enable row, and the
+  warning in the pinned test comes from SEV-01 (pi-mcp-adapter not
+  loaded raises the row, exactly as for install). Operator ruling
+  2026-10-09: keep SEV-01 consistent across install, enable and import;
+  add tests pinning the adapter-loaded enable and import shapes; close
+  MCPROW-01 in BACKLOG with this explanation. No renderer change. Upstream reports enable and install as plain success and shows
   missing-variable warnings separately (`/mcp`, `claude mcp list`);
   `08-UPSTREAM-EVIDENCE.md` §2. Showing the notice at enable and import is a
   Pi capability gap (Pi has no `/mcp`). Renderer, `docs/output-catalog.md`
@@ -84,7 +94,13 @@ D-08 decisions below.
   object; pi-mcp-adapter turns OAuth off for any non-empty `headers`
   unless `auth: "oauth"` is set (`08-UPSTREAM-EVIDENCE.md` §3). The
   Phase 3 UAT acceptance carried no decision ID and no capability gap, so
-  the parity default applies. Fix the `03-REVIEW.md` claim "Claude keeps
+  the parity default applies. Operator ruling 2026-10-09: write
+  `auth: "oauth"` only when every header value is clean. pi-mcp-adapter
+  in OAuth mode refuses to connect when a header value is an unset
+  `${VAR}`, a withheld credential written as `""`, or carries the escape
+  token `{env:PI_CLAUDE_MARKETPLACE_EMPTY}` (`08-RESEARCH.md`); such a
+  server keeps today's entry (connects without OAuth). Record that
+  remainder as a Pi capability gap in `docs/mcp-compatibility.md`. Fix the `03-REVIEW.md` claim "Claude keeps
   OAuth in both cases" in the docs: true only without Authorization.
   Side check: in OAuth mode the adapter refuses to connect when a header
   `${VAR}` is unset or empty, where upstream warns and keeps the raw text;
@@ -114,7 +130,10 @@ D-08 decisions below.
 ### OWNKEY-01: inherited keys
 
 - **D-08-07:** Name-indexed lookups on plain-object state maps refuse
-  inherited keys (`constructor`, `__proto__`, `toString`, ...). Fix at the
+  inherited keys (`constructor`, `__proto__`, `toString`, ...). Operator
+  ruling 2026-10-09: name validation rejects only `__proto__`;
+  `constructor`, `toString` and the other prototype names stay valid names
+  and work because every read checks own keys. Fix at the
   source as well as the reads: names are validated by `assertSafeName`,
   which lets `constructor` and `__proto__` through; a `__proto__` key in a
   write drops the record. Triage counts 131 lookups in 30 files; a shared
@@ -125,7 +144,12 @@ D-08 decisions below.
 
 - **D-08-08:** `npx fallow audit --base <merge-base with origin/main>`
   must read `pass`. At `24d2d904` it reads `warn` with 14 clone groups:
-  - 4 are new on this branch: the two `tests/architecture/catalog-uat/fixtures/plugin-info.ts`
+  - Research correction: only the 2 `plugin-info.ts` fixture groups count
+    as added at HEAD; hoisting their shared row turns the audit to `pass`
+    (tested in a scratch clone). Editing lines inside an old group
+    re-flags it as added, so run the audit after every plan that touches a
+    listed file and at the end. Original list, for reference:
+  - 4 looked new on this branch: the two `tests/architecture/catalog-uat/fixtures/plugin-info.ts`
     groups (P3 WR-05; hoist the shared fixture row), `bridges/agents/stage.ts:514`
     vs `bridges/skills/stage.ts:563`, and the live-uat canary pair
     `tests/live-uat/manifest-absence-canary.mjs:631` vs
@@ -141,6 +165,14 @@ D-08 decisions below.
   `fallow-ignore-next-line code-duplication -- <reason>` marker on a
   reviewed group (CONVENTIONS "Suppressions"), and update the marker count
   there. Re-run the audit after every change; marker spans move.
+
+### Disposition ledgers
+
+- GSD's ledger parser knows `open|fixed|skipped|deferred` only
+  (`08-RESEARCH.md`). Write `fixed` for fixed and already-fixed rows (cite
+  the commit), and `wontfix` rows with their reason; note in the plan that
+  a later code-review rewrite of that ledger would read `wontfix` as
+  `open`. Phase 7 has no ledger yet; create `07-REVIEW-DISPOSITION.md`.
 
 ### Claude's Discretion
 

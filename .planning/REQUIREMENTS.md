@@ -137,6 +137,26 @@ Research: `.planning/research/SUMMARY.md` (and STACK, FEATURES, ARCHITECTURE, PI
   shows status in info.
 - [x] **ADOC-03**: CHANGELOG records the milestone, and a version bump is offered before the PR.
 
+### Milestone debt (DEBT)
+
+Added 2026-10-09 after the milestone audit read `tech_debt`; the operator chose to clear it
+before close.
+
+- [ ] **DEBT-01**: `npx fallow audit` against the merge-base with `origin/main` reads `pass`, so
+  the Lint `fallow-audit` job passes the PR.
+- [ ] **DEBT-02**: Every review finding of Phases 1-7 reads `fixed`, `wontfix` with a reason, or
+  `already-fixed` in its disposition file; none reads `open`, `deferred` or `skipped`.
+- [ ] **DEBT-03**: A user's per-server choices in `mcp-adapter.json`, now including `openUi` and
+  `trace`, survive update, reinstall, plugin disable then enable, and uninstall then reinstall
+  (D-08-01, D-08-02; closes MCPOVR-01).
+- [ ] **DEBT-04**: `enable` and `import` report success rows with the MCP variable notices as
+  separate warning lines (D-08-03; closes MCPROW-01); remote entries with `headers` and no
+  `Authorization` keep OAuth (D-08-04); the Phase 5 migration remedies work (D-08-05); MCP
+  staging takes an explicit environment (D-08-06); name-indexed state lookups refuse inherited
+  keys (D-08-07, OWNKEY-01).
+- [ ] **DEBT-05**: The planning records match the code: ROADMAP Phase 1 criterion 4, the
+  `STATE.md` ADET-02 wording, and the review disposition ledgers.
+
 ## Future Requirements
 
 - Upstream adapter request: a `__` tool-separator mode, which would remove the trailing-underscore
@@ -199,14 +219,19 @@ Research: `.planning/research/SUMMARY.md` (and STACK, FEATURES, ARCHITECTURE, PI
 | ADOC-01 | Phase 7 | Complete |
 | ADOC-02 | Phase 7 | Complete |
 | ADOC-03 | Phase 7 | Complete |
+| DEBT-01 | Phase 8 | Pending |
+| DEBT-02 | Phase 8 | Pending |
+| DEBT-03 | Phase 8 | Pending |
+| DEBT-04 | Phase 8 | Pending |
+| DEBT-05 | Phase 8 | Pending |
 
 **Coverage:**
 
-- Milestone requirements: 36 total
-- Mapped to phases: 36
+- Milestone requirements: 41 total
+- Mapped to phases: 41
 - Unmapped: 0
 
 ---
 
 *Requirements defined: 2026-10-02*
-*Last updated: 2026-10-02 after roadmap creation (7 phases)*
+*Last updated: 2026-10-09 after adding Phase 8 (milestone debt, DEBT-01..05)*

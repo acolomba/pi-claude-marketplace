@@ -365,15 +365,15 @@ requirement (Phases 3 and 4), and no release may sit between the first write to
 
 **Depends on**: Phase 7
 
-**Requirements**: none new (closes the audit's tech debt; see `.planning/mcp-4-MILESTONE-AUDIT.md`)
+**Requirements**: DEBT-01, DEBT-02, DEBT-03, DEBT-04, DEBT-05
 
 **Success Criteria** (what must be TRUE):
 
-1. `npx fallow audit --base <merge-base with origin/main>` reports verdict `pass`, so the Lint `fallow-audit` job passes the PR.
-2. Every review finding of Phases 1-7 reads `fixed`, `wontfix` with a reason, or `already-fixed` in its disposition file; none reads `open`, `deferred` or `skipped`.
-3. A user's `openUi` and `trace` choices in `mcp-adapter.json` survive update and reinstall like the other carried fields (D-08-01).
-4. MCPOVR-01 and MCPROW-01 are fixed or closed by a recorded decision, and name-indexed state lookups refuse inherited keys such as `constructor` (OWNKEY-01).
-5. The planning records match the code: ROADMAP Phase 1 criterion 4, `STATE.md`'s ADET-02 wording, and the Phase 2/3 disposition ledgers.
+1. `npx fallow audit --base <merge-base with origin/main>` reports verdict `pass`, so the Lint `fallow-audit` job passes the PR. (DEBT-01)
+2. Every review finding of Phases 1-7 reads `fixed`, `wontfix` with a reason, or `already-fixed` in its disposition file; none reads `open`, `deferred` or `skipped`. (DEBT-02)
+3. A user's per-server choices in `mcp-adapter.json`, now including `openUi` and `trace`, survive update, reinstall, plugin disable then enable, and uninstall then reinstall (D-08-01, D-08-02; closes MCPOVR-01). (DEBT-03)
+4. `enable` and `import` report success rows with the MCP variable notices as separate warning lines (D-08-03, closes MCPROW-01); remote entries with `headers` and no `Authorization` keep OAuth (D-08-04); the Phase 5 migration remedies work (D-08-05); MCP staging takes an explicit environment (D-08-06); name-indexed state lookups refuse inherited keys such as `constructor` (D-08-07, OWNKEY-01). (DEBT-04)
+5. The planning records match the code: ROADMAP Phase 1 criterion 4, `STATE.md`'s ADET-02 wording, and the review disposition ledgers. (DEBT-05)
 
 **Plans**: 0 plans
 
