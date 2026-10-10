@@ -3,10 +3,10 @@ gsd_state_version: "1.0"
 milestone: mcp-4
 status: completed
 stopped_at: mcp-4 milestone closed and archived; UAT check and cleanup next
-last_updated: "2026-10-10T11:34:58.538Z"
+last_updated: "2026-10-10T13:22:09.180Z"
 last_activity: 2026-10-10
-last_activity_desc: Milestone mcp-4 completed and archived
-state_head: aec1ec108185e6d77950b1b80ebf0b1c563d41dd
+last_activity_desc: Completed quick task 261010-cfi — Accept Node 24 and 26 EISDIR text in mcp-migration test
+state_head: e34cec12effe85649c6164b5184944da4d2e3482
 progress:
   total_phases: 8
   completed_phases: 8
@@ -38,7 +38,7 @@ costs users new sign-ins and approvals.
 Phase: Milestone mcp-4 complete
 Plan: —
 Status: Milestone complete; next the UAT check, `/gsd-cleanup`, the version bump offer and the PR
-Last activity: 2026-10-10 — Milestone mcp-4 completed and archived
+Last activity: 2026-10-10 — Completed quick task 261010-cfi: Accept Node 24 and 26 EISDIR text in mcp-migration test
 
 ### workflows-replay closeout (merged from main)
 
@@ -802,6 +802,7 @@ See [task summary](./milestones/any-git-host-quick/260917-hfp-clear-the-phase-5-
 
 | #          | Description                                                                                                 | Date       | Commit   | Directory                                                                                            |
 | ---------- | ----------------------------------------------------------------------------------------------------------- | ---------- | -------- | ---------------------------------------------------------------------------------------------------- |
+| 261010-cfi | Accept Node 24 and 26 EISDIR text in mcp-migration test | 2026-10-10 | e34cec12 | [261010-cfi-accept-node-24-and-26-eisdir-text-in-mcp](./quick/261010-cfi-accept-node-24-and-26-eisdir-text-in-mcp/) |
 
 ## Deferred Items
 
