@@ -75,6 +75,7 @@ import {
   type Reason,
 } from "../../shared/notification-types.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
+import { ownValue } from "../../shared/own-key.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 import {
   AgentsUnstageFailureError,
@@ -1154,7 +1155,7 @@ async function runUninstallOutcome(
         return;
       }
 
-      const mp = state.marketplaces[marketplace];
+      const mp = ownValue(state.marketplaces, marketplace);
       if (mp === undefined) {
         // ATTR-04 reachability note. The "marketplace never added" case is
         // now caught BEFORE the guard by `resolveCrossScopePluginTarget`
@@ -1169,7 +1170,7 @@ async function runUninstallOutcome(
         return;
       }
 
-      const installed = mp.plugins[plugin];
+      const installed = ownValue(mp.plugins, plugin);
       if (installed === undefined) {
         // PU-5 silent converge: record already gone (another process completed
         // first or there was never an install). PRD §5.2.2 specifies literal

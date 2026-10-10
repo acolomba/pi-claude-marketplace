@@ -73,6 +73,7 @@ import { type ContentReason } from "../../shared/notification-types.ts";
 import { type PluginFailedMessage, type Reason } from "../../shared/notification-types.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
 import { companionSeverity, malformedReasonsForKinds } from "../../shared/notify-reasons.ts";
+import { ownValue, setOwn } from "../../shared/own-key.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import { runPhases } from "../../transaction/phase-ledger.ts";
@@ -623,8 +624,8 @@ function enableCascadeLookup(
   rootKey: string,
 ): ClosureLookup {
   return async (subject) => {
-    const marketplace = state.marketplaces[subject.marketplace];
-    const record = marketplace?.plugins[subject.name];
+    const marketplace = ownValue(state.marketplaces, subject.marketplace);
+    const record = ownValue(marketplace?.plugins, subject.name);
     if (marketplace === undefined || record === undefined) {
       return { kind: "found", dependencies: [] };
     }
@@ -723,7 +724,7 @@ function classifyEnableCascadeMember(
   state: ExtensionState,
   member: ClosureMember,
 ): EnableCascadeMember {
-  const record = state.marketplaces[member.marketplace]?.plugins[member.name];
+  const record = ownValue(ownValue(state.marketplaces, member.marketplace)?.plugins, member.name);
   if (record === undefined) {
     return {
       key: member.key,
@@ -845,8 +846,8 @@ async function unstageBackToDisabled(
   key: string,
   mcpConfigNotices: McpConfigNotice[],
 ): Promise<void> {
-  const marketplaceRecord = state.marketplaces[marketplace];
-  const installedNow = marketplaceRecord?.plugins[plugin];
+  const marketplaceRecord = ownValue(state.marketplaces, marketplace);
+  const installedNow = ownValue(marketplaceRecord?.plugins, plugin);
   if (marketplaceRecord === undefined || installedNow === undefined) {
     return;
   }
@@ -870,7 +871,11 @@ async function unstageBackToDisabled(
     throw outcome.cause ?? new Error(`Rollback of "${key}" did not complete.`);
   }
 
-  marketplaceRecord.plugins[plugin] = toDisabledRecord(installedNow, new Date().toISOString());
+  setOwn(
+    marketplaceRecord.plugins,
+    plugin,
+    toDisabledRecord(installedNow, new Date().toISOString()),
+  );
 }
 
 /**
@@ -1467,7 +1472,7 @@ async function dispatchBranch(args: {
   // the partial-cascade arm, or the caller's own on the clean arm --
   // persists `tx.state` with the replaced slot.
   if (disableResult.disabled !== undefined) {
-    mp.plugins[plugin] = disableResult.disabled;
+    setOwn(mp.plugins, plugin, disableResult.disabled);
   }
 
   // I3: a partial disable cascade mutated `installed.resources.*` in place to
@@ -2303,8 +2308,8 @@ async function runSetEnabledOutcome(
         // file.
         configBasename = path.basename(selection.targetConfigPath);
 
-        const mp = state.marketplaces[marketplace];
-        const installed = mp?.plugins[plugin];
+        const mp = ownValue(state.marketplaces, marketplace);
+        const installed = ownValue(mp?.plugins, plugin);
         if (mp === undefined || installed === undefined) {
           return { kind: "not-recorded" };
         }

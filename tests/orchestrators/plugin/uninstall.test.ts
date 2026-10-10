@@ -1136,6 +1136,54 @@ test("ATTR-04 / M4: marketplace record itself absent -> LOUD {marketplace not ad
   });
 });
 
+test("D-08-07: uninstall of a plugin named constructor reports it as not installed and changes no file", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-own-key-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedState(locations.extensionRoot, {
+        schemaVersion: 1,
+        marketplaces: {
+          mp: {
+            name: "mp",
+            scope: "project",
+            source: pathSource("./src"),
+            addedFromCwd: cwd,
+            manifestPath: path.join(cwd, "marketplace.json"),
+            marketplaceRoot: cwd,
+            plugins: {},
+          },
+        },
+      });
+      const stateBefore = await readFile(locations.stateJsonPath, "utf8");
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      await uninstallWithFreshOwner({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "constructor",
+      });
+
+      // assert
+      assert.deepEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ constructor (failed) {not installed}",
+          severity: "error",
+        },
+      ]);
+      assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("SCOPE-01: explicit-scope uninstall of an other-scope-only target names the scope the container sits in", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-scope01-"));

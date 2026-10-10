@@ -2837,6 +2837,119 @@ test("Marketplace not added: explicit --scope emits standalone marketplace-not-a
   });
 });
 
+test("D-08-07: enable of a plugin named constructor reports it as not installed and changes no file", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { statePath } = await writeUserState(home, {
+      marketplaceName: "mp",
+      pluginName: "other-plugin",
+      disabled: false,
+    });
+    const stateBefore = await readFile(statePath, "utf8");
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "mp",
+      plugin: "constructor",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert
+    assert.deepEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n\n● mp [user]\n  ⊘ constructor (skipped) {not installed}",
+        severity: "error",
+      },
+    ]);
+    assert.equal(await readFile(statePath, "utf8"), stateBefore);
+  });
+});
+
+test("D-08-07: disable in a marketplace named toString reports the marketplace as not added", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { statePath } = await writeUserState(home, {
+      marketplaceName: "mp",
+      pluginName: "x",
+      disabled: false,
+    });
+    const stateBefore = await readFile(statePath, "utf8");
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "toString",
+      plugin: "x",
+      enable: false,
+      scope: "user",
+    });
+
+    // assert
+    assert.deepEqual(notifications, [
+      {
+        message:
+          "A marketplace operation has failed.\n\n⊘ toString [user] (failed) {marketplace not added}",
+        severity: "error",
+      },
+    ]);
+    assert.equal(await readFile(statePath, "utf8"), stateBefore);
+  });
+});
+
+test("D-08-07: a plugin named constructor enables, disables and enables through its own record", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { statePath } = await seedRealDisabledMarketplace(home, {
+      marketplaceName: "mp",
+      pluginName: "constructor",
+      version: "1.2.3",
+    });
+    const args = {
+      pi: makePi(),
+      cwd,
+      marketplace: "mp",
+      plugin: "constructor",
+      scope: "user" as const,
+    };
+    const recordedEnabled = async (): Promise<boolean | undefined> => {
+      const state = await loadState(path.dirname(statePath));
+      const plugins = state.marketplaces["mp"]?.plugins ?? {};
+      return Object.hasOwn(plugins, "constructor") ? plugins["constructor"]?.enabled : undefined;
+    };
+
+    // act
+    await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: true });
+    const afterFirstEnable = await recordedEnabled();
+    await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: false });
+    const afterDisable = await recordedEnabled();
+    const { ctx, notifications } = makeCtx(cwd);
+    await setPluginEnabled({ ...args, ctx, enable: true });
+    const afterSecondEnable = await recordedEnabled();
+
+    // assert
+    assert.deepEqual([afterFirstEnable, afterDisable, afterSecondEnable], [true, false, true]);
+    assert.deepEqual(notifications, [
+      {
+        message: [
+          "● mp [user]",
+          "  ● constructor v1.2.3 (installed)",
+          "",
+          "/reload to pick up changes",
+        ].join("\n"),
+      },
+    ]);
+  });
+});
+
 // ──────────────────────────────────────────────────────────────────────────
 // RECON-03: orchestrated-mode coverage
 // ──────────────────────────────────────────────────────────────────────────
