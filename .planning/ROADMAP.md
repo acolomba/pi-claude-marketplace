@@ -375,13 +375,13 @@ requirement (Phases 3 and 4), and no release may sit between the first write to
 4. `enable` and `import` report success rows with the MCP variable notices as separate warning lines (D-08-03, closes MCPROW-01); remote entries with `headers` and no `Authorization` keep OAuth (D-08-04); the Phase 5 migration remedies work (D-08-05); MCP staging takes an explicit environment (D-08-06); name-indexed state lookups refuse inherited keys such as `constructor` (D-08-07, OWNKEY-01). (DEBT-04)
 5. The planning records match the code: ROADMAP Phase 1 criterion 4, `STATE.md`'s ADET-02 wording, and the review disposition ledgers. (DEBT-05)
 
-**Plans**: 3/21 plans executed in 5 waves
+**Plans**: 4/21 plans executed in 5 waves
 
 **Wave 1**
 - [x] 08-01-PLAN.md — hoist the plugin-info fixture clone; close P3 WR-05, IN-04 and P6 IN-01, IN-02 (DEBT-01, DEBT-02)
 - [x] 08-02-PLAN.md — Phase 5 migration review debt and the D-08-05 source-outdated row (DEBT-04, DEBT-02)
 - [x] 08-03-PLAN.md — per-server choices outlive the plugin lifecycle; `openUi` and `trace` carried (D-08-01, D-08-02) (DEBT-03, DEBT-02)
-- [ ] 08-04-PLAN.md — the reinstall remedy works when a git mirror's HEAD cannot be read (D-08-05) (DEBT-04, DEBT-02)
+- [x] 08-04-PLAN.md — the reinstall remedy works when a git mirror's HEAD cannot be read (D-08-05) (DEBT-04, DEBT-02)
 - [ ] 08-05-PLAN.md — two rare-path fixes and two stale explanations from the Phase 2 and 4 reviews (DEBT-02)
 - [ ] 08-06-PLAN.md — reviewed markers on two inherited clone groups; Phase 1 canary and stub findings (DEBT-01, DEBT-02)
 - [ ] 08-07-PLAN.md — Phase 1 e2e harness, cast and `scripts/pi.sh` findings (DEBT-02)
@@ -433,7 +433,7 @@ plan these phases with the UI gate skipped.
 | 5. Automatic migration on /reload | mcp-4 | 5/5 | Complete    | 2026-10-09 |
 | 6. Live MCP status in info | mcp-4 | 3/3 | Complete    | 2026-10-09 |
 | 7. Docs and live proof | mcp-4 | 5/5 | Complete    | 2026-10-09 |
-| 8. Clear milestone debt | mcp-4 | 3/21 | In Progress | - |
+| 8. Clear milestone debt | mcp-4 | 4/21 | In Progress | - |
 
 ## Carried Forward
 

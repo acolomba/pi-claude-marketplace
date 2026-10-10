@@ -5,17 +5,17 @@ milestone_name: MCP 4
 current_phase: 8
 current_phase_name: Clear milestone debt
 status: executing
-stopped_at: Completed 08-03-PLAN.md
-last_updated: "2026-10-10T03:34:48.353Z"
+stopped_at: Completed 08-04-PLAN.md
+last_updated: "2026-10-10T03:45:38.887Z"
 last_activity: 2026-10-09
 last_activity_desc: Phase 8 execution started
-state_head: 00e310e7a39404ff4916ff3152193fe08dc3a8bd
+state_head: 5ba2752c24e70c417098df50c893703807dfd08f
 progress:
   total_phases: 8
   completed_phases: 7
   total_plans: 73
-  completed_plans: 55
-  percent: 75
+  completed_plans: 56
+  percent: 77
 ---
 
 # Project State
@@ -35,11 +35,11 @@ sign-ins and approvals.
 ## Current Position
 
 Phase: 8 (Clear milestone debt) — EXECUTING
-Plan: 4 of 21
+Plan: 5 of 21
 Status: Ready to execute
 Last activity: 2026-10-09 — Phase 8 execution started
 
-Progress: [████████░░] 75%
+Progress: [████████░░] 77%
 
 ### workflows-replay closeout (merged from main)
 
@@ -301,6 +301,7 @@ still open with a comment explaining what landed.
 | Phase 08 P01 | 13min | 3 tasks | 6 files |
 | Phase 08 P02 | 17min | 3 tasks | 7 files |
 | Phase 08 P03 | 30min | 2 tasks | 9 files |
+| Phase 08 P04 | 10min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -723,6 +724,7 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 08]: A stored MCP server choice is { plugin, fields } under _piClaudeMarketplace.serverChoices; only the recording plugin consumes it (D-08-02)
 - [Phase 08]: Unstage keeps choices only in mcp-adapter.json; legacy mcp.json composes with withPluginServers
 - [Phase 08]: An override the user emptied leaves the file at unstage; a kept {} stub round-trips (AFILE-06)
+- [Phase 08]: D-08-05: reinstall treats a mirror whose HEAD cannot be read as unusable and materializes the recorded-sha clone; the reload migration's presence probe makes the same choice with file reads only
 
 ### Pending Todos
 
@@ -856,11 +858,11 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Completed 08-03-PLAN.md
+**Stopped at:** Completed 08-04-PLAN.md
 
 **Resume file:** None
 
-Last session: 2026-10-10T03:34:47.677Z
+Last session: 2026-10-10T03:45:38.440Z
 Phase 7 closed: 5/5 plans; Nyquist validated; security verified (0 open);
 review 8/8 fixed; verifier 3/3, re-running the live canary against
 pi-mcp-adapter 5.2.0. `/gsd-autonomous --from 7` ran the transition, then
