@@ -5,17 +5,17 @@ milestone_name: MCP 4
 current_phase: 8
 current_phase_name: Clear milestone debt
 status: executing
-stopped_at: Completed 08-07-PLAN.md
-last_updated: "2026-10-10T04:11:01.046Z"
+stopped_at: Completed 08-08-PLAN.md
+last_updated: "2026-10-10T04:20:54.629Z"
 last_activity: 2026-10-09
 last_activity_desc: Phase 8 execution started
-state_head: 64a49e4d7429a95a78a85143fa0b69ea8e274c26
+state_head: 6a85e0109325b5ae179ec3904e39f5fdee668907
 progress:
   total_phases: 8
   completed_phases: 7
   total_plans: 73
-  completed_plans: 59
-  percent: 81
+  completed_plans: 60
+  percent: 82
 ---
 
 # Project State
@@ -35,11 +35,11 @@ sign-ins and approvals.
 ## Current Position
 
 Phase: 8 (Clear milestone debt) — EXECUTING
-Plan: 8 of 21
+Plan: 9 of 21
 Status: Ready to execute
 Last activity: 2026-10-09 — Phase 8 execution started
 
-Progress: [████████░░] 81%
+Progress: [████████░░] 82%
 
 ### workflows-replay closeout (merged from main)
 
@@ -305,6 +305,7 @@ still open with a comment explaining what landed.
 | Phase 08 P05 | 7min | 2 tasks | 5 files |
 | Phase 08 P06 | 7min | 2 tasks | 7 files |
 | Phase 08 P07 | 6min | 3 tasks | 5 files |
+| Phase 08 P08 | 14min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -731,6 +732,7 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 08]: holdsBytes takes its read through an optional readMetadata restore op, so the lstat-read race and the rethrow are testable for 100% direct coverage
 - [Phase 08]: The agents and skills rollback marker sits above the throw in the else-if arm (bridges/agents/stage.ts:517): the first span line carries an eslint-disable-next-line directive, and a fallow marker above the directive does not hide the group.
 - [Phase 08]: dispatchRow keeps an unknown-valued view of the render map and casts the looked-up arm once; a typed RenderFn view fails tsc (function parameters are contravariant)
+- [Phase 08]: D-08-03: the adapter-loaded enable and import shapes are pinned by tests; SEV-01 kept, no renderer change
 
 ### Pending Todos
 
@@ -864,11 +866,11 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Completed 08-07-PLAN.md
+**Stopped at:** Completed 08-08-PLAN.md
 
 **Resume file:** None
 
-Last session: 2026-10-10T04:11:00.634Z
+Last session: 2026-10-10T04:20:54.143Z
 Phase 7 closed: 5/5 plans; Nyquist validated; security verified (0 open);
 review 8/8 fixed; verifier 3/3, re-running the live canary against
 pi-mcp-adapter 5.2.0. `/gsd-autonomous --from 7` ran the transition, then
