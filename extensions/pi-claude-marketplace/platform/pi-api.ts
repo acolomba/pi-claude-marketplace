@@ -234,12 +234,13 @@ function probeArm(arm: () => boolean): boolean {
 
 /**
  * ADET-02: pi-mcp-adapter is loaded iff `pi.getCommands()` lists an extension
- * command named `mcp-adapter`, or an extension command or a tool
- * `sourceInfo.source` contains "pi-mcp-adapter". The command is present with
- * `disableProxyTool` and in a fork. A bare tool named `mcp` does not count, and neither does Pi's
- * built-in MCP (`mcp__*` tools and an `mcp` command from `builtin:mcp`). Each
- * arm is guarded on its own and both always run, so one snapshot makes the
- * same reads in every state and a throwing arm leaves the other one deciding.
+ * command named `mcp-adapter`, or the `sourceInfo.source` of an extension
+ * command or of a tool contains "pi-mcp-adapter". The command is present with
+ * `disableProxyTool` and in a fork. A bare tool named `mcp` does not count,
+ * and neither does Pi's built-in MCP (`mcp__*` tools and an `mcp` command from
+ * `builtin:mcp`). Each arm is guarded on its own and both always run, so one
+ * snapshot makes the same reads in every state and a throwing arm leaves the
+ * other one deciding.
  */
 function hasLoadedPiMcpAdapter(pi: PiInventory): boolean {
   const viaCommands = probeArm(() => pi.getCommands().some((command) => isAdapterCommand(command)));
