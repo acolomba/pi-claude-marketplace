@@ -40,19 +40,35 @@ The user selected the recommended option for every question on 2026-10-10.
 ### Inherited ledger entries (ids 32-34, 41-58; 21 entries from test-backlog)
 
 - **D-01:** Waive each entry with `gsd_run windows waive <id> "<reason>"`. The
-  reason is prefixed `[json-output]` and names commit `d7213bc2` (#236,
-  2026-10-05, "perf(checks): run only incremental checks before commits") as the
-  change that deleted the tooling the entry records a deviation against:
-  the unused-type-member live gate (32-34) or the coverage-producer pipeline
-  (41-58). Shape: `[json-output] Moot: records a scope deviation against the
-  <gate or pipeline>, which #236 (d7213bc2, 2026-10-05) deleted; nothing remains
-  to fix. The shipped work was audited at the test-backlog close.`
+  reason is prefixed `[json-output]` and names the commit that removed the
+  subject the entry records a deviation against (corrected by research on
+  2026-10-10; the discussion had attributed both groups to #236):
+  - 32-34: the unused-type-member live gate (`lint:type-members`,
+    `scripts/check-unused-type-members.*`), deleted by #236 (`d7213bc2`,
+    2026-10-05). Reason: `[json-output] Moot: records a scope deviation against
+    the unused-type-member live gate (lint:type-members), which #236 (d7213bc2,
+    2026-10-05) deleted; nothing remains to fix. The shipped work was audited at
+    the test-backlog close.`
+  - 41-58: the coverage-producer pipeline (`scripts/coverage-*.mjs`,
+    `tests/scripts/**`, `vendor/coverage/`), removed on the test-backlog branch
+    by `0affe79e` (2026-09-20) before that branch squash-merged as #202
+    (`feb04658`), so none of those files ever reached `main` (`git log --all`
+    finds no commit adding them). Entry 58's second file,
+    `tests/architecture/pre-commit-hooks.ts`, was deleted by #234 (`e6c274bf`,
+    2026-10-01). Reason: `[json-output] Moot: records a scope deviation against
+    the coverage-producer pipeline, which test-backlog removed in 0affe79e
+    (2026-09-20) before it merged as #202 (feb04658); none of its files reached
+    main, so nothing remains to fix. The shipped work was audited at the
+    test-backlog close.`
 - **D-02:** Not `fixed`: no code change resolved these entries, and `fixed`
   carries no reason, so a future reader could not tell retirement-by-deletion
-  from repair. Not triaged individually: 15 of the 17 files the entries name
-  are absent, and the two present ones (`bridges/hooks/stage.ts`,
-  `edge/handlers/tools.ts`) are named only as sites the deleted analyzer
-  under-credited.
+  from repair. Not triaged individually: the 21 entries name 18 distinct paths,
+  14 are absent, and the four present ones no longer hold what the entries
+  describe: `bridges/hooks/stage.ts` and `edge/handlers/tools.ts` are named
+  only as sites the deleted analyzer under-credited, `.gitignore` has no
+  `vendor/coverage` line (entry 42), and `package.json` has no
+  `coverage:producer` or `lint:type-members` script (entries 43, 32). The
+  SUMMARY records this evidence with the `ls` loop in 08-RESEARCH.md.
 
 ### This milestone's entries (84, 85, 88, 89)
 
@@ -129,7 +145,11 @@ The user selected the recommended option for every question on 2026-10-10.
 - **D-12:** The `stale` verification digests of phases 1-6 are left alone.
   Phase 07's E7 evidence re-ran the whole-tree gate on the final tree, and the
   milestone archive retires the flag; six verifier re-runs would add no
-  information.
+  information. Phase 07 will join them: its VERIFICATION `covered_files` lists
+  `package-lock.json` and its own `deferred-items.md`, both of which this phase
+  edits (D-07, D-09), so phase 07 reads `stale` after this phase. Accepted under
+  the same reasoning; the SUMMARY records it so the `/gsd-progress` route to
+  phase 07 is not mistaken for a regression.
 
 ### Claude's Discretion
 
@@ -154,6 +174,7 @@ The user selected the recommended option for every question on 2026-10-10.
 **Downstream agents MUST read these before planning or implementing.**
 
 ### Phase inputs
+- `.planning/phases/08-address-tech-debt-ledger-dispositions-and-advisory/08-RESEARCH.md` — measured verb behavior, pitfalls (unquoted reasons truncate, zsh globs `[json-output]`, half-finished batches refuse), the retry-safe batch skeleton, draft reasons, and the Validation Architecture
 - `.planning/json-output-MILESTONE-AUDIT.md` — the `tech_debt` list this phase answers; frontmatter `tech_debt:` and the "Phase Verification" table
 - `.planning/WINDOWS.md` — the ledger (JSON is the sole source of truth; mutate only through `gsd_run windows fixed|waive|status`, never by hand)
 - `.planning/phases/07-mode-refusals-real-pi-verification-and-docs/deferred-items.md` — DEP-07-03-01 (advisory) and TEST-07-06-01 (the skip behind ledger 89)
@@ -206,7 +227,7 @@ Evidence measured during discussion on 2026-10-10 (all in scratch copies, tree u
 - `node_modules/@earendil-works/pi-coding-agent/npm-shrinkwrap.json` exists (lockfileVersion 3) and pins `brace-expansion 5.0.9`, `minimatch 10.2.6`; the 0.99.2 tarball's shrinkwrap pins the same; the 1.1.0 tarball has no shrinkwrap.
 - `HOME=<other> npm root -g` returns `/home/linuxbrew/.linuxbrew/lib/node_modules` instead of `/home/acolomba/.npm-global/lib/node_modules`; `CI=1 node --test tests/integration/skill-path-resolution.test.ts` reports the one skip with "pi-subagents resolver module not reachable in this environment".
 - `node --test tests/orchestrators/marketplace/update.test.ts` exits 0.
-- `git show --stat d7213bc2`: 271 files changed, 18,932 insertions, 28,039 deletions; `scripts/coverage-*.mjs`, `tests/scripts/`, `scripts/check-unused-type-members.contracts.json`, `tests/architecture/pre-commit-hooks.ts` absent; no `lint:type-members` or `coverage:producer` script in `package.json`.
+- `git show --stat d7213bc2`: 271 files changed, 18,932 insertions, 28,039 deletions, including every `scripts/check-unused-type-members.*` file and the `lint:type-members` script. `git log --all --diff-filter=A -- scripts/coverage-producer.convert.mjs scripts/coverage-validate.mjs` is empty: the coverage-producer files were removed by `0affe79e` on the test-backlog branch (not an ancestor of HEAD) before #202 (`feb04658`) squash-merged, so they never existed on `main`. `tests/architecture/pre-commit-hooks.ts` was deleted by #234 (`e6c274bf`). Today no `coverage:producer` or `lint:type-members` script is in `package.json`.
 
 </specifics>
 
