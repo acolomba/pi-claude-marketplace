@@ -482,6 +482,11 @@ async function drivePiTurn(pi) {
   // "terminated normally" is read off the exit status rather than inferred
   // from the harness timer not firing. A spawn `error` is printed and the
   // drive resolves without an exit status.
+  //
+  // This spawn-and-timeout block repeats in `manifest-absence-canary.mjs` on
+  // purpose. Each driver is a standalone operator-run script that imports
+  // nothing from a sibling (see the file header). A shared helper would add an
+  // import to a drop-in script and a second unused-file suppression.
   return await new Promise((resolve) => {
     const child = spawn(process.execPath, [pi.cliPath, ...args], {
       cwd: REPO_ROOT,

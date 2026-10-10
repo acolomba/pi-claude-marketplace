@@ -628,6 +628,11 @@ async function flowC() {
     "Say the single word: ready.",
   ];
 
+  // This spawn-and-timeout block repeats in `stop-canary.mjs` on purpose.
+  // Each driver is a standalone operator-run script that imports nothing from a
+  // sibling (see the file header). A shared helper would add an import to a
+  // drop-in script and a second unused-file suppression.
+  // fallow-ignore-next-line code-duplication -- reviewed: each live-UAT driver keeps its own spawn-and-timeout block so it stays runnable alone; see the comment above
   const run = await new Promise((resolve) => {
     const child = spawn(process.execPath, [pi.cliPath, ...args], {
       cwd: REPO_ROOT,

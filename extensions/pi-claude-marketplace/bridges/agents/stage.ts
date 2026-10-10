@@ -514,6 +514,7 @@ export async function replacePreparedAgents(
         await removeOrphanIfPresent(pair.to, "file");
         // eslint-disable-next-line no-await-in-loop -- rollback undoes only the renames already recorded
       } else if (await pathExists(pair.to)) {
+        // fallow-ignore-next-line code-duplication -- reviewed: the agents and skills bridges keep the same TR-06 orphan-or-reject rename loop on purpose, so each rollback stays beside the commit it protects; the marker sits on this line because the first line of the span carries an eslint directive
         throw new Error(`Cannot replace agent target with non-previous content at ${pair.to}`);
       }
 
