@@ -2,20 +2,19 @@
 gsd_state_version: "1.0"
 milestone: mcp-4
 milestone_name: MCP 4
-current_phase: 8
-current_phase_name: Clear milestone debt
-status: verifying
-stopped_at: Completed 08-21-PLAN.md
-last_updated: "2026-10-10T07:19:13.037Z"
-last_activity: 2026-10-09
-last_activity_desc: Phase 8 execution started
-state_head: f47a2c9edf2699127d891fc139c432991c82d300
+current_phase: 08
+status: completed
+stopped_at: Phase 08 complete — all phases complete
+last_updated: "2026-10-10T08:26:03.311Z"
+last_activity: 2026-10-10
+last_activity_desc: Phase 08 complete
+state_head: 4947be2730a51e76733adb2e7e7d27aff96f1221
 progress:
   total_phases: 8
-  completed_phases: 7
+  completed_phases: 8
   total_plans: 73
   completed_plans: 73
-  percent: 88
+  percent: 100
 ---
 
 # Project State
@@ -34,12 +33,12 @@ sign-ins and approvals.
 
 ## Current Position
 
-Phase: 8 (Clear milestone debt) — EXECUTING
+Phase: 8 (Clear milestone debt) — COMPLETE
 Plan: 21 of 21
-Status: Phase complete — ready for verification
-Last activity: 2026-10-09 — Phase 8 execution started
+Status: All mcp-4 phases complete; next the milestone re-audit, then complete-milestone
+Last activity: 2026-10-10 — Phase 8 verified 5/5 (review 7/7 fixed, threats_open 0, Nyquist compliant)
 
-Progress: [█████████░] 88%
+Progress: [██████████] 100%
 
 ### workflows-replay closeout (merged from main)
 
@@ -72,7 +71,7 @@ still open with a comment explaining what landed.
 
 **Velocity:**
 
-- Total plans completed: 229
+- Total plans completed: 247
 - Average recorded duration: 11.9 min
 - Total recorded execution time: 30 hr 1 min
 
@@ -93,7 +92,7 @@ still open with a comment explaining what landed.
 | 5 | 5 | - | - |
 | 6 | 3 | - | - |
 | 07 | 5 | - | - |
-| 8 | 3 | - | - |
+| 08 | 21 | - | - |
 | 09 | 4 | - | - |
 | 10 | 4 | - | - |
 | 11 | 7 | - | - |
@@ -895,7 +894,7 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Completed 08-21-PLAN.md
+**Stopped at:** Phase 08 complete — all phases complete
 
 **Resume file:** None
 

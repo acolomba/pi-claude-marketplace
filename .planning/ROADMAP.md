@@ -31,7 +31,7 @@ Decimal phases (2.1, 3.1) are urgent insertions only, marked INSERTED.
 - [x] **Phase 5: Automatic migration on /reload** - `/reload` moves each installed plugin's marked entries from `mcp.json` into `mcp-adapter.json` in their final shape, adding before removing, idempotently, with one notice that lists the renames and what they cost the user. (completed 2026-10-09)
 - [x] **Phase 6: Live MCP status in info** - `/claude:plugin info` shows each plugin MCP server's state from the adapter's status events, and an explicit unknown state when there is nothing to show. (completed 2026-10-09)
 - [x] **Phase 7: Docs and live proof** - README and docs describe the new delivery and its divergences, a live UAT against a real adapter 5 proves the whole path, and the CHANGELOG records the milestone. (completed 2026-10-09)
-- [ ] **Phase 8: Clear milestone debt** - the PR passes the fallow audit, every open review finding is fixed or closed with a reason, MCPOVR-01 and MCPROW-01 are settled, `openUi` and `trace` become carried fields, state lookups refuse inherited keys, and the planning records match the code.
+- [x] **Phase 8: Clear milestone debt** - the PR passes the fallow audit, every open review finding is fixed or closed with a reason, MCPOVR-01 and MCPROW-01 are settled, `openUi` and `trace` become carried fields, state lookups refuse inherited keys, and the planning records match the code. (completed 2026-10-10)
 
 **Release rule.** Phases 2 to 5 go out in one release. Every change to the entry shape (name,
 `directTools`, escaping) invalidates the adapter's per-server state: OAuth sign-ins, project
@@ -375,7 +375,7 @@ requirement (Phases 3 and 4), and no release may sit between the first write to
 4. `enable` and `import` report success rows with the MCP variable notices as separate warning lines (D-08-03, closes MCPROW-01); remote entries with `headers` and no `Authorization` keep OAuth (D-08-04); the Phase 5 migration remedies work (D-08-05); MCP staging takes an explicit environment (D-08-06); name-indexed state lookups refuse inherited keys such as `constructor` (D-08-07, OWNKEY-01). (DEBT-04)
 5. The planning records match the code: ROADMAP Phase 1 criterion 4, `STATE.md`'s ADET-02 wording, and the review disposition ledgers. (DEBT-05)
 
-**Plans**: 21/21 plans executed in 5 waves
+**Plans**: 21/21 plans complete in 5 waves
 
 **Wave 1**
 - [x] 08-01-PLAN.md — hoist the plugin-info fixture clone; close P3 WR-05, IN-04 and P6 IN-01, IN-02 (DEBT-01, DEBT-02)
@@ -433,7 +433,7 @@ plan these phases with the UI gate skipped.
 | 5. Automatic migration on /reload | mcp-4 | 5/5 | Complete    | 2026-10-09 |
 | 6. Live MCP status in info | mcp-4 | 3/3 | Complete    | 2026-10-09 |
 | 7. Docs and live proof | mcp-4 | 5/5 | Complete    | 2026-10-09 |
-| 8. Clear milestone debt | mcp-4 | 21/21 | In Progress | - |
+| 8. Clear milestone debt | mcp-4 | 21/21 | Complete    | 2026-10-10 |
 
 ## Carried Forward
 
