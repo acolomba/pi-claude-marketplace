@@ -110,6 +110,7 @@ test("MCP-only staging materializes no agent, command, or skill target", async (
     pluginRoot,
     pluginData,
     sourcePath: path.join(pluginRoot, ".mcp.json"),
+    env: {},
     servers: resolution.mcpServers,
     description: resolution.description,
   });

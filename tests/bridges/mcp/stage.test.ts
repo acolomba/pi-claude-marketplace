@@ -83,6 +83,26 @@ async function lockedLink(
   return lockedDirectory;
 }
 
+/**
+ * Sets or deletes `name` in Pi's process environment for one case and
+ * restores its prior value afterwards.
+ */
+function setProcessVariable(t: TestContext, name: string, value: string | undefined): void {
+  const previousValue = process.env[name];
+  t.after(() => {
+    if (previousValue === undefined) {
+      Reflect.deleteProperty(process.env, name);
+    } else {
+      process.env[name] = previousValue;
+    }
+  });
+  if (value === undefined) {
+    Reflect.deleteProperty(process.env, name);
+  } else {
+    process.env[name] = value;
+  }
+}
+
 /** Prepares the `acme` plugin's single `server` entry, a URL transport with no env injection. */
 function prepareAcme(
   locations: ReturnType<typeof locationsFor>,
@@ -95,6 +115,7 @@ function prepareAcme(
     pluginName: "acme",
     pluginRoot: path.join(cwd, "plugins", "acme"),
     pluginData: path.join(cwd, "data", "acme"),
+    env: {},
     servers: { server: { type: "http", url: "https://acme.example/mcp" } },
   });
 }
@@ -113,6 +134,7 @@ function preparePlugin(
     pluginName,
     pluginRoot: path.join(cwd, "plugins", pluginName),
     pluginData: path.join(cwd, "data", pluginName),
+    env: {},
     servers: Object.fromEntries(
       serverNames.map((serverName) => [serverName, { type: "http", url: "https://x.example/mcp" }]),
     ),
@@ -228,6 +250,7 @@ describe("prepareStageMcpServers", () => {
       pluginName: "empty-plugin",
       pluginRoot: path.join(cwd, "plugins", "empty-plugin"),
       pluginData: path.join(cwd, "data", "empty-plugin"),
+      env: {},
       servers: {},
     });
 
@@ -284,6 +307,7 @@ describe("prepareStageMcpServers", () => {
       pluginRoot,
       pluginData,
       sourcePath: path.join(pluginRoot, ".mcp.json"),
+      env: {},
       servers: {
         current: {
           command: "${CLAUDE_PLUGIN_ROOT}/bin/server",
@@ -331,6 +355,7 @@ describe("prepareStageMcpServers", () => {
       pluginName: "acme",
       pluginRoot: path.join(cwd, "plugins", "acme"),
       pluginData: path.join(cwd, "data", "acme"),
+      env: {},
       servers: {},
     });
 
@@ -409,6 +434,7 @@ describe("prepareStageMcpServers", () => {
             pluginName: "acme",
             pluginRoot: path.join(cwd, "plugins", "acme"),
             pluginData: path.join(cwd, "data", "acme"),
+            env: {},
             servers: { server: { type: "http", url: "https://mcp.example.test" } },
           }),
         (error: unknown) => {
@@ -454,6 +480,7 @@ describe("prepareStageMcpServers", () => {
       pluginName: "acme",
       pluginRoot: path.join(cwd, "plugins", "acme"),
       pluginData: path.join(cwd, "data", "acme"),
+      env: {},
       servers: {},
     });
     await commitPreparedMcp(prepared);
@@ -499,6 +526,7 @@ describe("prepareStageMcpServers", () => {
       pluginName: "acme",
       pluginRoot: path.join(cwd, "plugins", "acme"),
       pluginData: path.join(cwd, "data", "acme"),
+      env: {},
       servers: { server: { type: "http", url: "https://mcp.example.test" } },
     });
 
@@ -557,6 +585,7 @@ describe("prepareStageMcpServers", () => {
       pluginName: "acme",
       pluginRoot: path.join(cwd, "plugins", "acme"),
       pluginData: path.join(cwd, "data", "acme"),
+      env: {},
       servers: { server: { type: "http", url: "https://mcp.example.test" } },
     });
 
@@ -593,6 +622,7 @@ describe("prepareStageMcpServers", () => {
       pluginName: "acme",
       pluginRoot: path.join(cwd, "plugins", "acme"),
       pluginData: path.join(cwd, "data", "acme"),
+      env: {},
       servers: { server: { type: "http", url: "https://mcp.example.test" } },
     });
 
@@ -626,6 +656,7 @@ describe("prepareStageMcpServers", () => {
       pluginName: "acme",
       pluginRoot: path.join(cwd, "plugins", "acme"),
       pluginData: path.join(cwd, "data", "acme"),
+      env: {},
       servers: {},
     });
     await commitPreparedMcp(prepared);
@@ -655,6 +686,7 @@ describe("prepareStageMcpServers", () => {
       pluginName: "acme",
       pluginRoot: path.join(cwd, "plugins", "acme"),
       pluginData: path.join(cwd, "data", "acme"),
+      env: {},
       servers: { server: { type: "http", url: "https://mcp.example.test" } },
     });
 
@@ -703,6 +735,7 @@ describe("prepareStageMcpServers", () => {
       pluginName: "acme",
       pluginRoot: path.join(cwd, "plugins", "acme"),
       pluginData: path.join(cwd, "data", "acme"),
+      env: {},
       servers: { server: { type: "http", url: "https://mcp.example.test" } },
     });
 
@@ -736,6 +769,7 @@ describe("prepareStageMcpServers", () => {
       pluginName: "acme",
       pluginRoot: path.join(cwd, "plugins", "acme"),
       pluginData: path.join(cwd, "data", "acme"),
+      env: {},
       servers: { server: { type: "http", url: "https://mcp.example.test" } },
     });
 
@@ -764,6 +798,7 @@ describe("prepareStageMcpServers", () => {
       pluginName: "acme",
       pluginRoot: path.join(cwd, "plugins", "acme"),
       pluginData: path.join(cwd, "data", "acme"),
+      env: {},
       servers: { scalar: "invalid" },
     });
 
@@ -797,6 +832,7 @@ describe("prepareStageMcpServers", () => {
       pluginName: "empty-plugin",
       pluginRoot: path.join(cwd, "plugins", "empty-plugin"),
       pluginData: path.join(cwd, "data", "empty-plugin"),
+      env: {},
       servers: {},
     });
 
@@ -822,6 +858,7 @@ describe("prepareStageMcpServers", () => {
           pluginName: "acme",
           pluginRoot: path.join(cwd, "plugins", "acme"),
           pluginData: path.join(cwd, "data", "acme"),
+          env: {},
           servers: { server: { command: "node" } },
         }),
       (error: unknown) => {
@@ -1175,6 +1212,7 @@ describe("prepareStageMcpServers", () => {
         pluginName: "acme",
         pluginRoot,
         pluginData,
+        env: {},
         servers: { server: { command: "acme", env: { PLUGIN_TOKEN: "plugin-env" } } },
       }),
     );
@@ -1485,6 +1523,7 @@ describe("prepareStageMcpServers", () => {
       pluginName: "acme",
       pluginRoot: path.join(cwd, "plugins", "acme"),
       pluginData: path.join(cwd, "data", "acme"),
+      env: {},
       servers: { server: { type: "http", url: "https://acme.example/mcp", timeout: 60000 } },
     });
     await commitPreparedMcp(prepared);
@@ -1520,6 +1559,7 @@ describe("prepareStageMcpServers", () => {
       pluginName: "acme",
       pluginRoot: path.join(cwd, "plugins", "acme"),
       pluginData: path.join(cwd, "data", "acme"),
+      env: {},
       servers: {
         beta: { type: "http", url: "https://beta.example/mcp" },
         alpha: { type: "http", url: "https://alpha.example/mcp" },
@@ -1725,6 +1765,7 @@ describe("prepareStageMcpServers", () => {
         pluginName: "acme",
         pluginRoot: path.join(cwd, "plugins", "acme"),
         pluginData: path.join(cwd, "data", "acme"),
+        env: {},
         servers: {},
       }),
     );
@@ -1750,6 +1791,7 @@ describe("prepareStageMcpServers", () => {
       pluginName: "acme",
       pluginRoot,
       pluginData,
+      env: {},
       servers: { server: { command: "${CLAUDE_PROJECT_DIR}/server" } },
     });
 
@@ -1882,20 +1924,10 @@ describe("prepareStageMcpServers", () => {
     );
   });
 
-  test("AVAR-02: a stage without an injected env reads Pi's process environment", async (t) => {
+  test("AVAR-02: a stage given an empty env reports a variable Pi's process environment sets as missing", async (t) => {
     // arrange
-    const { cwd, locations } = await createProjectScope(t, "mcp-stage-avar-process-env-");
-    const previousValue = process.env.PI_CM_AVAR_PROCESS;
-    process.env.PI_CM_AVAR_PROCESS = "process-value";
-    t.after(() => {
-      if (previousValue === undefined) {
-        delete process.env.PI_CM_AVAR_PROCESS;
-      } else {
-        process.env.PI_CM_AVAR_PROCESS = previousValue;
-      }
-    });
-    const pluginRoot = path.join(cwd, "plugins", "hello");
-    const pluginData = path.join(cwd, "data", "hello");
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-avar-process-set-");
+    setProcessVariable(t, "PI_CM_AVAR_PROCESS", "process-value");
 
     // act
     const prepared = await prepareStageMcpServers({
@@ -1903,27 +1935,44 @@ describe("prepareStageMcpServers", () => {
       cwd,
       marketplaceName: "catalog",
       pluginName: "hello",
-      pluginRoot,
-      pluginData,
-      servers: { local: { command: "server", args: ["${PI_CM_AVAR_PROCESS:-unset}"] } },
+      pluginRoot: path.join(cwd, "plugins", "hello"),
+      pluginData: path.join(cwd, "data", "hello"),
+      env: {},
+      servers: { local: { command: "server", args: ["${PI_CM_AVAR_PROCESS}"] } },
     });
 
     // assert
-    assert.deepStrictEqual(prepared.kind === "staged" ? prepared._nextDoc : prepared, {
-      mcpServers: {
-        plugin_hello_local_: {
-          command: "server",
-          args: ["${PI_CM_AVAR_PROCESS}"],
-          env: {
-            CLAUDE_PLUGIN_ROOT: pluginRoot,
-            CLAUDE_PLUGIN_DATA: pluginData,
-          },
-          directTools: "search",
-          toolPrefix: "mcp",
-          _piClaudeMarketplace: { plugin: "hello", marketplace: "catalog" },
-        },
+    assert.deepStrictEqual(prepared.result.notices, [
+      {
+        kind: "variables-missing",
+        scope: "project",
+        file: "mcp-adapter.json",
+        plugin: "hello",
+        server: "plugin_hello_local_",
+        names: ["PI_CM_AVAR_PROCESS"],
       },
+    ]);
+  });
+
+  test("AVAR-02: a stage reads a variable from the env it is given when Pi's process environment lacks it", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-avar-process-unset-");
+    setProcessVariable(t, "PI_CM_AVAR_PROCESS", undefined);
+
+    // act
+    const prepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: "catalog",
+      pluginName: "hello",
+      pluginRoot: path.join(cwd, "plugins", "hello"),
+      pluginData: path.join(cwd, "data", "hello"),
+      env: { PI_CM_AVAR_PROCESS: "x" },
+      servers: { local: { command: "server", args: ["${PI_CM_AVAR_PROCESS}"] } },
     });
+
+    // assert
+    assert.deepStrictEqual(prepared.result.notices, []);
   });
 
   test("AVAR-04: a server with an unset variable reports one variables-missing notice after the override-kept notices", async (t) => {
@@ -2353,6 +2402,7 @@ describe("prepareStageMcpServers", () => {
         pluginName: "acme",
         pluginRoot: path.join(cwd, "plugins", "acme"),
         pluginData: path.join(cwd, "data", "acme"),
+        env: {},
         servers: {
           db: { type: "http", url: "https://db.example/mcp" },
           "my.api": { type: "http", url: "https://api.example/mcp" },
@@ -2405,6 +2455,7 @@ describe("prepareStageMcpServers", () => {
         pluginName: "acme",
         pluginRoot: path.join(cwd, "plugins", "acme"),
         pluginData: path.join(cwd, "data", "acme"),
+        env: {},
         servers: { db: { type: "http", url: "https://db.example/mcp" } },
       }),
     );
@@ -2459,6 +2510,7 @@ describe("prepareStageMcpServers", () => {
         pluginName: "acme",
         pluginRoot: path.join(cwd, "plugins", "acme"),
         pluginData: path.join(cwd, "data", "acme"),
+        env: {},
         servers: { db: { type: "http", url: "https://db.example/mcp" } },
       }),
     );
@@ -2657,6 +2709,7 @@ describe("prepareStageMcpServers", () => {
       pluginName: "acme",
       pluginRoot: path.join(cwd, "plugins", "acme"),
       pluginData: path.join(cwd, "data", "acme"),
+      env: {},
       servers: {
         server: { type: "http", url: "https://acme.example/mcp", toolPermissions: { drop: "ask" } },
       },
@@ -2834,6 +2887,7 @@ describe("prepareStageMcpServers", () => {
       pluginName: "acme",
       pluginRoot: path.join(cwd, "plugins", "acme"),
       pluginData: path.join(cwd, "data", "acme"),
+      env: {},
       servers: {},
     });
 
@@ -2864,6 +2918,7 @@ describe("prepareStageMcpServers", () => {
       pluginName: "acme",
       pluginRoot: path.join(cwd, "plugins", "acme"),
       pluginData: path.join(cwd, "data", "acme"),
+      env: {},
       servers: {},
     });
 
@@ -2903,6 +2958,7 @@ describe("commitPreparedMcp", () => {
       pluginRoot,
       pluginData,
       sourcePath,
+      env: {},
       servers: {
         local: {
           command: "${CLAUDE_PLUGIN_ROOT}/bin/server",
@@ -2957,6 +3013,7 @@ describe("commitPreparedMcp", () => {
       pluginName: "empty-plugin",
       pluginRoot: path.join(cwd, "plugins", "empty-plugin"),
       pluginData: path.join(cwd, "data", "empty-plugin"),
+      env: {},
       servers: {},
     });
 
@@ -3009,6 +3066,7 @@ describe("abortPreparedMcp", () => {
       pluginName: "acme",
       pluginRoot: path.join(cwd, "plugins", "acme"),
       pluginData: path.join(cwd, "data", "acme"),
+      env: {},
       servers: { server: { command: "node" } },
     });
 
@@ -3030,6 +3088,7 @@ describe("abortPreparedMcp", () => {
       pluginName: "empty-plugin",
       pluginRoot: path.join(cwd, "plugins", "empty-plugin"),
       pluginData: path.join(cwd, "data", "empty-plugin"),
+      env: {},
       servers: {},
     });
 
@@ -3053,6 +3112,7 @@ describe("replacePreparedMcp", () => {
       pluginName: "empty-plugin",
       pluginRoot: path.join(cwd, "plugins", "empty-plugin"),
       pluginData: path.join(cwd, "data", "empty-plugin"),
+      env: {},
       servers: {},
     });
 
@@ -3080,6 +3140,7 @@ describe("replacePreparedMcp", () => {
       pluginName: "acme",
       pluginRoot,
       pluginData,
+      env: {},
       servers: { owned: { command: "node" } },
     });
     const expectedBytes = `{
@@ -3128,6 +3189,7 @@ describe("replacePreparedMcp", () => {
       pluginName: "acme",
       pluginRoot: path.join(cwd, "plugins", "acme"),
       pluginData: path.join(cwd, "data", "acme"),
+      env: {},
       servers: { server: { command: "node" } },
     });
     await mkdir(locations.mcpAdapterJsonPath, { recursive: true });
@@ -3191,6 +3253,7 @@ describe("replacePreparedMcp", () => {
       pluginName: "acme",
       pluginRoot: path.join(cwd, "plugins", "acme"),
       pluginData: path.join(cwd, "data", "acme"),
+      env: {},
       servers: {},
     });
 
@@ -3267,6 +3330,7 @@ describe("rollbackMcpReplacement", () => {
       pluginName: "empty-plugin",
       pluginRoot: path.join(cwd, "plugins", "empty-plugin"),
       pluginData: path.join(cwd, "data", "empty-plugin"),
+      env: {},
       servers: {},
     });
     const replacement = await replacePreparedMcp(prepared);
@@ -3289,6 +3353,7 @@ describe("rollbackMcpReplacement", () => {
       pluginName: "acme",
       pluginRoot: path.join(cwd, "plugins", "acme"),
       pluginData: path.join(cwd, "data", "acme"),
+      env: {},
       servers: { server: { command: "node" } },
     });
     const replacement = await replacePreparedMcp(prepared);
@@ -3316,6 +3381,7 @@ describe("rollbackMcpReplacement", () => {
       pluginName: "acme",
       pluginRoot: path.join(cwd, "plugins", "acme"),
       pluginData: path.join(cwd, "data", "acme"),
+      env: {},
       servers: { owned: { command: "node" } },
     });
     const replacement = await replacePreparedMcp(prepared);
@@ -3347,6 +3413,7 @@ describe("rollbackMcpReplacement", () => {
       pluginName: "acme",
       pluginRoot: path.join(cwd, "plugins", "acme"),
       pluginData: path.join(cwd, "data", "acme"),
+      env: {},
       servers: { owned: { command: "node" } },
     });
     const replacement = await replacePreparedMcp(prepared);
@@ -3373,6 +3440,7 @@ describe("rollbackMcpReplacement", () => {
       pluginName: "acme",
       pluginRoot: path.join(cwd, "plugins", "acme"),
       pluginData: path.join(cwd, "data", "acme"),
+      env: {},
       servers: { owned: { command: "node" } },
     });
     const replacement = await replacePreparedMcp(prepared);
@@ -3444,6 +3512,7 @@ describe("finalizeMcpReplacement", () => {
       pluginName: "empty-plugin",
       pluginRoot: path.join(cwd, "plugins", "empty-plugin"),
       pluginData: path.join(cwd, "data", "empty-plugin"),
+      env: {},
       servers: {},
     });
     const noopReplacement = await replacePreparedMcp(noopPrepared);
@@ -3454,6 +3523,7 @@ describe("finalizeMcpReplacement", () => {
       pluginName: "acme",
       pluginRoot: path.join(cwd, "plugins", "acme"),
       pluginData: path.join(cwd, "data", "acme"),
+      env: {},
       servers: { server: { command: "node" } },
     });
     const replaced = await replacePreparedMcp(stagedPrepared);
@@ -3479,6 +3549,7 @@ describe("finalizeMcpReplacement", () => {
       pluginName: "acme",
       pluginRoot: path.join(cwd, "plugins", "acme"),
       pluginData: path.join(cwd, "data", "acme"),
+      env: {},
       servers: { server: { command: "node" } },
     });
     const replacement = await replacePreparedMcp(prepared);

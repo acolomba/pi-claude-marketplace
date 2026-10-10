@@ -46,6 +46,7 @@ const stageMcpInput: StageMcpInput = {
   pluginRoot: "/plugins/acme",
   pluginData: "/data/official/acme",
   sourcePath: "/plugins/acme/.mcp.json",
+  env: {},
 } satisfies StageMcpInput;
 void stageMcpInput;
 
@@ -167,8 +168,20 @@ const stageMcpInputWithoutPluginData: StageMcpInput = {
   pluginName: "acme",
   servers: {},
   pluginRoot: "/plugins/acme",
+  env: {},
 };
 void stageMcpInputWithoutPluginData;
+// @ts-expect-error D-08-06: stage input always carries the caller's environment
+const stageMcpInputWithoutEnv: StageMcpInput = {
+  locations: undefined!,
+  cwd: "/work/project",
+  marketplaceName: "official",
+  pluginName: "acme",
+  servers: {},
+  pluginRoot: "/plugins/acme",
+  pluginData: "/data/official/acme",
+};
+void stageMcpInputWithoutEnv;
 // @ts-expect-error exact optional properties reject an explicit undefined source path
 void ({ ...stageMcpInput, sourcePath: undefined } satisfies StageMcpInput);
 // @ts-expect-error a staged record always identifies its source path

@@ -39,9 +39,9 @@ export interface StageMcpInput {
   readonly description?: string | undefined;
   /**
    * The environment Claude's variable rule reads at install time (AVAR-02).
-   * Absent means Pi's `process.env`.
+   * The operation's entry point supplies it (D-08-06).
    */
-  readonly env?: ClaudeEnv | undefined;
+  readonly env: ClaudeEnv;
 }
 
 /**
