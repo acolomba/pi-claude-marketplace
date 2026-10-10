@@ -39,14 +39,15 @@ of task coverage or completed validation.
 | TENB-03 | Real stdout schema, exact peer floor, startup positive/negative controls | New isolated e2e test and floor target; name assigned by planner | Missing test |
 | JDOC-01/02 | Actual jq examples, severity/outcome/reload matrix, field inventory | New guide-example test; `node --test tests/architecture/wire-schema.test.ts` | Missing example test |
 | JDOC-03 | Output policy, backlog corrections, README link | Focused content/diff review | Pending |
-| Criterion 6 | Strict corpus, unchanged catalog fixtures, deletion only after final pass | `node scripts/notify-corpus.mjs check` plus zero-extra assertion; `node --test tests/architecture/catalog-uat/catalog-contract.test.ts` | Corpus policy unresolved |
+| Criterion 6 | Strict corpus, unchanged catalog fixtures, deletion only after final pass | `node scripts/notify-corpus.mjs check` plus zero-extra assertion; `node --test tests/architecture/catalog-uat/catalog-contract.test.ts` | Pending exact D-14 additions ledger |
 
 ## Wave 0 Requirements
 
 - [ ] Add isolated headless runner/fixtures with exact-floor version checks.
 - [ ] Add startup emission positive controls and persistence-enabled slash-only coverage.
 - [ ] Add checks that execute the guide's real snippets, including missing outcomes.
-- [ ] Resolve new refusal text versus frozen-corpus rule before corpus amendment.
+- [x] User approved the narrow corpus exception in CONTEXT.md D-14.
+- [ ] Record exact refusal-only additions and prove preservation of all 3,149 old samples.
 - [ ] Planner assigns every task a concrete command, threat ref, and wave.
 
 ## Manual-Only Verifications
@@ -54,8 +55,8 @@ of task coverage or completed validation.
 Review guide completeness/readability, exact selected refusal wording, bounded
 AGENTS/backlog changes, and the two allowed catalog prose corrections. Preserve
 all catalog fenced examples and the 260-state / 39,143-byte fixture locks.
-Any corpus exception requires explicit authorization and an exact change ledger;
-no silent recapture or test suppression is permitted.
+CONTEXT.md D-14 authorizes only new refusal samples, with an exact change ledger;
+no removals, replacements, silent recapture, or test suppression are permitted.
 
 ## Validation Sign-Off
 

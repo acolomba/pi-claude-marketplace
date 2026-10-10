@@ -127,3 +127,15 @@ Internal implementation and test organization within existing project rules.
 ## Deferred ideas
 
 None.
+
+## Research follow-up: corpus exception
+
+Research showed that tests of the newly required print refusals add notify
+samples even when their notification fake is silent.
+
+1. Allow only new refusal samples (recommended): preserve all 3,149 existing
+   samples, record every addition, and keep catalog examples unchanged.
+2. Keep the corpus fixed: revisit how to verify the new refusals.
+
+**User's choice:** 1. The user then explicitly said "continue".
+The approved exception is recorded as D-14 in CONTEXT.md.

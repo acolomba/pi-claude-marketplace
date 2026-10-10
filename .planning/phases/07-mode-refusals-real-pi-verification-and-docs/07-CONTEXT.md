@@ -77,11 +77,25 @@ host-auth composition. No new upstream divergence is proposed.
   no rollback promise, and possible missing output if the sink stays broken.
   Keep per-command correlation separate from tracking or telemetry.
 - **D-13:** Amend AGENTS.md IL-2 to match PROJECT.md D8; close MRO-01 and
-  correct its two false claims. After the final strict corpus re-diff is empty,
+  correct its two false claims. After the final strict corpus re-diff is empty
+  against the narrowly amended baseline authorized by D-14,
   delete the three scripts/notify-corpus*.mjs files and remove references
   outside .planning/. Only the two sanctioned output-catalog prose corrections
   are allowed: resolver owns soft-dependency markers; dispatch text strategy
   renders device-flow values. Preserve fenced blocks and count/byte locks.
+
+### Approved corpus exception
+
+- **D-14:** The user selected option 1 after research exposed the conflict
+  between new print refusals and the zero-additions corpus rule. Allow only
+  new samples caused by the Phase 7 browse/device-flow refusals. Preserve all
+  3,149 existing samples exactly, including per-file multiplicity, severity,
+  and argument count. Record every addition in an exact ledger before updating
+  the baseline. No removals, replacements, unrelated additions, recorder
+  suppression, or catalog-example changes are authorized. The final comparison
+  must show the amended baseline fully present and zero unexplained extras
+  before deleting the three corpus scripts. This narrowly supersedes the
+  earlier fixed-3149/zero-additions interpretation of D-13 and ROADMAP criterion 6.
 
 ### the agent's Discretion
 

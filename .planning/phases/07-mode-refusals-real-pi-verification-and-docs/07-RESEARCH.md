@@ -444,3 +444,10 @@ This resolves the current-install subprocess uncertainty for Pi 0.87.1.
 It does not establish peer-floor 0.86.1 or startup-stream behavior. Those
 remain required implementation tests. The earlier EPERM was a sandbox
 restriction, not an automatic approval rejection or a Pi compatibility defect.
+
+## Parent follow-up: corpus decision resolved
+
+The user approved option 1: allow only samples from the new Phase 7 refusals,
+preserve all 3,149 existing samples, record every addition, and keep catalog
+examples unchanged. CONTEXT.md D-14 is the canonical scoped exception.
+Earlier unresolved-policy statements are historical; planning can proceed.
