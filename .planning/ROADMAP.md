@@ -275,7 +275,7 @@ Plans:
 5. The IL-2 output-channel line in AGENTS.md matches PROJECT.md (D8). Backlog MRO-01 is closed, and its two wrong claims are corrected.
 6. Milestone close-out for the Phase 1 corpus tool. After the final corpus re-diff comes back empty, the three `scripts/notify-corpus*.mjs` files are deleted (Phase 1 D-01), and no file outside `.planning/` names them. The `docs/output-catalog.md` prose that says `composeReasons` appends the soft-dep markers is amended to name the resolve step, and the device-flow prose (around lines 4088-4090) that says the domain emits the prompt is amended to name the dispatch module's text strategy (Phase 3 CONTEXT). This is the milestone's one sanctioned catalog edit: prose only, no fenced block changes, and `EXPECTED_STATE_COUNT` / `EXPECTED_UTF8_BYTES` do not move.
 
-**Plans:** 3/6 plans executed
+**Plans:** 4/6 plans executed
 
 Plans:
 **Wave 1**
@@ -284,7 +284,7 @@ Plans:
 - [x] 07-03-PLAN.md — Isolated real-Pi runtime and peer-floor verification
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 07-04-PLAN.md — JSON guide and executable shell examples
+- [x] 07-04-PLAN.md — JSON guide and executable shell examples
 
 **Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 07-05-PLAN.md — Schema reference, limitations, and policy corrections
@@ -302,7 +302,7 @@ Plans:
 | 4. Wire Schema and JSON Strategy | 6/6 | Complete    | 2026-10-06 |
 | 5. Mode-Selected JSON Sink | 7/7 | Complete    | 2026-10-07 |
 | 6. Command-Run Contract | 4/4 | Complete    | 2026-10-09 |
-| 7. Mode Refusals, Real-Pi Verification, and Docs | 3/6 | In Progress | - |
+| 7. Mode Refusals, Real-Pi Verification, and Docs | 4/6 | In Progress | - |
 
 ## Carried Forward
 
