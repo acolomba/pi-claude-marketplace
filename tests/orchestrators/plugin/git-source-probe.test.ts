@@ -5,7 +5,7 @@
 // present in this suite.
 
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, test, type TestContext } from "node:test";
@@ -22,6 +22,7 @@ import {
   readMirrorHeadSha,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/git-source-probe.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { PathContainmentError } from "../../../extensions/pi-claude-marketplace/shared/path-containment.ts";
 
 import type {
   GitHubSource,
@@ -374,6 +375,29 @@ describe("makeRecordedShaPresenceProbe", () => {
 
     // assert
     assert.deepStrictEqual(result, { kind: "not-cached" });
+  });
+
+  test("NFR-10: an unpinned source whose mirror path the cache refuses propagates the refusal", async (testContext) => {
+    // arrange
+    const { locations, marketplaceRoot } = await freshLocations(testContext);
+    const cloneUrl = "https://example.com/recorded-plugin";
+    const mirrorDir = await locations.pluginCloneDir(pluginMirrorKey(cloneUrl));
+    await cloneDirectory(locations, cloneUrl, SHA_A);
+    await symlink(marketplaceRoot, mirrorDir);
+    const source: UrlSource = { kind: "url", raw: cloneUrl, url: cloneUrl };
+
+    // act & assert
+    await assert.rejects(
+      makeRecordedShaPresenceProbe(locations, SHA_A)(source),
+      (error: unknown) => {
+        assert.ok(error instanceof PathContainmentError);
+        assert.deepStrictEqual(
+          { parent: error.parent, child: error.child },
+          { parent: path.dirname(mirrorDir), child: mirrorDir },
+        );
+        return true;
+      },
+    );
   });
 
   test("AMIG-01: a pinned source reads the recorded-sha clone when the manifest sha differs", async (testContext) => {

@@ -115,19 +115,31 @@ async function anchorSubdir(
 
 /**
  * MIRR-05: the source's URL-keyed mirror when it is present, materialized
- * with the sha its checked-out HEAD names, or undefined when it is absent.
+ * with the sha `readHead` reads from its checked-out HEAD, or undefined when
+ * it is absent or `readHead` gives no sha.
  */
 async function probeMirror(
   locations: ScopedLocations,
   source: GitBackedSource,
   cloneUrl: string,
+  readHead: (mirrorDir: string) => Promise<string | undefined>,
 ): Promise<GitPluginRootResult | undefined> {
   const mirrorDir = await locations.pluginCloneDir(pluginMirrorKey(cloneUrl));
   if (!(await pathExists(mirrorDir))) {
     return undefined;
   }
 
-  return anchorSubdir(source, mirrorDir, await readMirrorHeadSha(mirrorDir));
+  const sha = await readHead(mirrorDir);
+  return sha === undefined ? undefined : anchorSubdir(source, mirrorDir, sha);
+}
+
+/** The mirror's HEAD sha, or undefined when it cannot be read (D-08-05). */
+async function readUsableMirrorSha(mirrorDir: string): Promise<string | undefined> {
+  try {
+    return await readMirrorHeadSha(mirrorDir);
+  } catch {
+    return undefined;
+  }
 }
 
 /** The clone keyed on `sha`: materialized when it is present, else `not-cached`. */
@@ -184,7 +196,8 @@ export function makePresenceProbe(
     // the HEAD sha read off disk; a cold one -> not-cached (the arm rendered
     // `(remote)` downstream). Read surfaces read the mirror but never refresh.
     if (source.sha === undefined) {
-      return (await probeMirror(locations, source, cloneUrl)) ?? { kind: "not-cached" };
+      const mirror = await probeMirror(locations, source, cloneUrl, readMirrorHeadSha);
+      return mirror ?? { kind: "not-cached" };
     }
 
     return probeShaClone(locations, source, cloneUrl, source.sha);
@@ -196,10 +209,11 @@ export function makePresenceProbe(
  * `not-cached` in place of the clone, so the reload migration stays offline.
  * An unpinned source reads a present URL-keyed mirror first. A mirror whose
  * HEAD cannot be read falls through to the clone, as reinstall does
- * (D-08-05). The clone is keyed on the install record's sha, never the
- * manifest's `source.sha`, which can differ from it after a marketplace
- * update. Every read is a path check or a file read: it never creates a
- * directory and never spawns git.
+ * (D-08-05); any other mirror failure, such as a containment refusal
+ * (NFR-10), propagates, as it does in reinstall. The clone is keyed on the
+ * install record's sha, never the manifest's `source.sha`, which can differ
+ * from it after a marketplace update. Every read is a path check or a file
+ * read: it never creates a directory and never spawns git.
  */
 export function makeRecordedShaPresenceProbe(
   locations: ScopedLocations,
@@ -209,7 +223,7 @@ export function makeRecordedShaPresenceProbe(
     const cloneUrl = canonicalCloneUrl(source);
     const mirror =
       source.sha === undefined
-        ? await probeMirror(locations, source, cloneUrl).catch(() => undefined)
+        ? await probeMirror(locations, source, cloneUrl, readUsableMirrorSha)
         : undefined;
     return mirror ?? probeShaClone(locations, source, cloneUrl, recordedSha);
   };
