@@ -194,11 +194,12 @@ export function makePresenceProbe(
 /**
  * AMIG-01 / NFR-5: reinstall's source choice (`reinstall-clone-probe.ts`) with
  * `not-cached` in place of the clone, so the reload migration stays offline.
- * An unpinned source reads a present URL-keyed mirror first; otherwise the
- * clone is keyed on the install record's sha, never the manifest's
- * `source.sha`, which can differ from it after a marketplace update. Every
- * read is a path check or a file read: it never creates a directory and
- * never spawns git.
+ * An unpinned source reads a present URL-keyed mirror first. A mirror whose
+ * HEAD cannot be read falls through to the clone, as reinstall does
+ * (D-08-05). The clone is keyed on the install record's sha, never the
+ * manifest's `source.sha`, which can differ from it after a marketplace
+ * update. Every read is a path check or a file read: it never creates a
+ * directory and never spawns git.
  */
 export function makeRecordedShaPresenceProbe(
   locations: ScopedLocations,
@@ -207,7 +208,9 @@ export function makeRecordedShaPresenceProbe(
   return async (source): Promise<GitPluginRootResult> => {
     const cloneUrl = canonicalCloneUrl(source);
     const mirror =
-      source.sha === undefined ? await probeMirror(locations, source, cloneUrl) : undefined;
+      source.sha === undefined
+        ? await probeMirror(locations, source, cloneUrl).catch(() => undefined)
+        : undefined;
     return mirror ?? probeShaClone(locations, source, cloneUrl, recordedSha);
   };
 }

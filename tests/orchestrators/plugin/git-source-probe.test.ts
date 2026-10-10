@@ -85,6 +85,11 @@ async function writeDetachedHead(mirrorDir: string, sha: string): Promise<void> 
   await writeFile(path.join(mirrorDir, ".git", "HEAD"), `${sha}\n`);
 }
 
+async function writeHeadlessMirror(mirrorDir: string): Promise<void> {
+  await mkdir(path.join(mirrorDir, ".git"), { recursive: true });
+  await writeFile(path.join(mirrorDir, ".git", "HEAD"), "ref: refs/heads/main\n");
+}
+
 async function writeLooseHead(mirrorDir: string, refPath: string, sha: string): Promise<void> {
   await mkdir(path.dirname(path.join(mirrorDir, ".git", refPath)), { recursive: true });
   await writeFile(path.join(mirrorDir, ".git", "HEAD"), `ref: ${refPath}\n`);
@@ -334,6 +339,41 @@ describe("makeRecordedShaPresenceProbe", () => {
       pluginRoot: cloneDir,
       resolvedSha: SHA_A,
     });
+  });
+
+  test("D-08-05: an unpinned source behind a headless mirror reads the warm recorded-sha clone", async (testContext) => {
+    // arrange
+    const { locations } = await freshLocations(testContext);
+    const cloneUrl = "https://example.com/recorded-plugin";
+    const mirrorDir = await mirrorDirectory(locations, cloneUrl);
+    await writeHeadlessMirror(mirrorDir);
+    const cloneDir = await cloneDirectory(locations, cloneUrl, SHA_A);
+    const source: UrlSource = { kind: "url", raw: cloneUrl, url: cloneUrl };
+
+    // act
+    const result = await makeRecordedShaPresenceProbe(locations, SHA_A)(source);
+
+    // assert
+    assert.deepStrictEqual(result, {
+      kind: "materialized",
+      pluginRoot: cloneDir,
+      resolvedSha: SHA_A,
+    });
+  });
+
+  test("D-08-05: an unpinned source behind a headless mirror with no recorded-sha clone is not-cached", async (testContext) => {
+    // arrange
+    const { locations } = await freshLocations(testContext);
+    const cloneUrl = "https://example.com/recorded-plugin";
+    const mirrorDir = await mirrorDirectory(locations, cloneUrl);
+    await writeHeadlessMirror(mirrorDir);
+    const source: UrlSource = { kind: "url", raw: cloneUrl, url: cloneUrl };
+
+    // act
+    const result = await makeRecordedShaPresenceProbe(locations, SHA_A)(source);
+
+    // assert
+    assert.deepStrictEqual(result, { kind: "not-cached" });
   });
 
   test("AMIG-01: a pinned source reads the recorded-sha clone when the manifest sha differs", async (testContext) => {

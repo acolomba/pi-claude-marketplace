@@ -1263,7 +1263,7 @@ describe("migrateLegacyMcpEntries", () => {
     },
     { cause: "a git record without resolvedSha", seed: { pinned: true, cache: "warm" } },
     {
-      cause: "a mirror whose HEAD cannot be read, so the resolve throws",
+      cause: "a mirror whose HEAD cannot be read and no recorded-sha clone",
       seed: { recordedSha: RECORDED_SHA, pinned: false, cache: "headless-mirror" },
     },
   ] as const) {
@@ -1286,6 +1286,31 @@ describe("migrateLegacyMcpEntries", () => {
       await assert.rejects(readFile(scope.locations.mcpAdapterJsonPath), { code: "ENOENT" });
     });
   }
+
+  test("AMIG-01 / NFR-10: a recorded-sha clone path the cache refuses to read gives one source-unreadable row and no write", async (t) => {
+    // arrange
+    const scope = await createProjectScope(t, "git-refused");
+    const { cloneDir, legacyBytes } = await seedGitOwner(scope, {
+      recordedSha: RECORDED_SHA,
+      pinned: true,
+      cache: "cold",
+    });
+    await mkdir(path.dirname(cloneDir), { recursive: true });
+    await symlink(scope.cwd, cloneDir);
+    const log: string[] = [];
+    const input = migrationInput(scope.cwd);
+
+    // act
+    await migrateLegacyMcpEntries(input, recordingOperations(log));
+
+    // assert
+    assert.deepStrictEqual(
+      { rows: input.rows, log },
+      { rows: [helloRow("source-unreadable")], log: [] },
+    );
+    assert.strictEqual(await readFile(scope.locations.mcpJsonPath, "utf8"), legacyBytes);
+    await assert.rejects(readFile(scope.locations.mcpAdapterJsonPath), { code: "ENOENT" });
+  });
 
   test("AMIG-01 / D-08-05: a recorded commit with no plugin at the declared path gives one source-outdated row and no write", async (t) => {
     // arrange
