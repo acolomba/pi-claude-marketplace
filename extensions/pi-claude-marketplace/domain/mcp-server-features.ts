@@ -5,7 +5,8 @@
 // their pi-mcp-adapter `ServerEntry` equivalents. A field the table does not
 // name never reaches `mcp-adapter.json`, so a plugin cannot set an adapter-only
 // power Claude never grants, such as `auth`, `approveTools` or `lifecycle`
-// (ANAME-05, ANAME-07).
+// (ANAME-05, ANAME-07). The table writes `auth: "oauth"` itself where Claude
+// keeps OAuth beside `headers` (D-08-04); a plugin's own `auth` is dropped.
 //
 // `classifyMcpServer` sorts one server into supported, blocked by a Claude
 // feature pi-mcp-adapter cannot honor, or malformed by Claude's own schema.
@@ -148,8 +149,24 @@ function remoteTimeoutField(server: Readonly<Record<string, unknown>>): {
     : {};
 }
 
+/**
+ * D-08-04: Claude Code keeps OAuth beside `headers` unless one of them is
+ * `Authorization` in any letter case. pi-mcp-adapter turns OAuth off for any
+ * non-empty `headers` unless the entry sets `auth: "oauth"`.
+ */
+function authField(server: Readonly<Record<string, unknown>>): { auth?: "oauth" } {
+  if (!isPlainObject(server.headers)) {
+    return {};
+  }
+
+  const keys = Object.keys(server.headers);
+  return keys.length > 0 && !keys.some((key) => key.toLowerCase() === "authorization")
+    ? { auth: "oauth" }
+    : {};
+}
+
 function remoteOptions(server: Readonly<Record<string, unknown>>): Record<string, unknown> {
-  return { ...oauthField(server.oauth), ...remoteTimeoutField(server) };
+  return { ...authField(server), ...oauthField(server.oauth), ...remoteTimeoutField(server) };
 }
 
 /**
@@ -175,12 +192,13 @@ function serverFields(server: Readonly<Record<string, unknown>>): Record<string,
 /**
  * Translates one Claude server object, before variable expansion, into the
  * adapter entry this extension writes (ANAME-07). The entry holds the mapped
- * transport fields, `oauth` and `requestTimeoutMs`, then the owned fields: the
- * plugin's `description` when given (ANAME-06), `directTools` (`true` for a
- * literal `alwaysLoad: true`, else `"search"`, ANAME-04) and `toolPrefix:
- * "mcp"`. A value of the wrong type is skipped, and so is every field the
- * table does not name, including a server's own `description`, `directTools`
- * and `toolPrefix`.
+ * transport fields, `auth: "oauth"` for a remote server whose `headers` keep
+ * OAuth in Claude (D-08-04), `oauth` and `requestTimeoutMs`, then the owned
+ * fields: the plugin's `description` when given (ANAME-06), `directTools`
+ * (`true` for a literal `alwaysLoad: true`, else `"search"`, ANAME-04) and
+ * `toolPrefix: "mcp"`. A value of the wrong type is skipped, and so is every
+ * field the table does not name, including a server's own `auth`,
+ * `description`, `directTools` and `toolPrefix`.
  */
 export function translateMcpServer(
   server: Readonly<Record<string, unknown>>,

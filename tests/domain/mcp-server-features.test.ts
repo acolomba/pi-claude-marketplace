@@ -24,7 +24,7 @@ const SEARCH_OWNED = { directTools: "search", toolPrefix: "mcp" } as const;
 const ROWS: readonly TranslationRow[] = [
   {
     title:
-      "ANAME-07: an sse server keeps url, headers, its OAuth mapping and timeout and drops adapter-only keys",
+      "ANAME-07 / D-08-04: an sse server keeps url, headers, OAuth beside them, its OAuth mapping and timeout and drops adapter-only keys",
     server: {
       type: "sse",
       url: "https://mcp.example.com/sse",
@@ -50,6 +50,7 @@ const ROWS: readonly TranslationRow[] = [
       url: "https://mcp.example.com/sse",
       headers: { "X-Team": "core" },
       httpTransport: "sse",
+      auth: "oauth",
       oauth: {
         clientId: "pi-client",
         redirectUri: "http://localhost:8765/callback",
@@ -79,14 +80,44 @@ const ROWS: readonly TranslationRow[] = [
     entry: { command: "node", ...SEARCH_OWNED },
   },
   {
-    title: "ANAME-07: an http server keeps url and headers and sets no httpTransport",
+    title:
+      "ANAME-07 / D-08-04: an http server keeps url, headers and OAuth and sets no httpTransport",
     server: { type: "http", url: "https://mcp.example.com", headers: { A: "1" }, command: "x" },
-    entry: { url: "https://mcp.example.com", headers: { A: "1" }, ...SEARCH_OWNED },
+    entry: { url: "https://mcp.example.com", headers: { A: "1" }, auth: "oauth", ...SEARCH_OWNED },
   },
   {
-    title: "ANAME-07: a streamable-http server keeps url and headers and sets no httpTransport",
+    title:
+      "ANAME-07 / D-08-04: a streamable-http server keeps url, headers and OAuth and sets no httpTransport",
     server: { type: "streamable-http", url: "https://mcp.example.com", headers: { A: "1" } },
-    entry: { url: "https://mcp.example.com", headers: { A: "1" }, ...SEARCH_OWNED },
+    entry: { url: "https://mcp.example.com", headers: { A: "1" }, auth: "oauth", ...SEARCH_OWNED },
+  },
+  ...["Authorization", "authorization", "AUTHORIZATION"].map((key): TranslationRow => ({
+    title: `D-08-04: an http server with an ${key} header among others writes no auth`,
+    server: {
+      type: "http",
+      url: "https://mcp.example.com",
+      headers: { "X-Team": "core", [key]: "Bearer x" },
+    },
+    entry: {
+      url: "https://mcp.example.com",
+      headers: { "X-Team": "core", [key]: "Bearer x" },
+      ...SEARCH_OWNED,
+    },
+  })),
+  {
+    title: "D-08-04: an sse server with empty headers writes no auth",
+    server: { type: "sse", url: "https://mcp.example.com", headers: {} },
+    entry: { url: "https://mcp.example.com", headers: {}, httpTransport: "sse", ...SEARCH_OWNED },
+  },
+  {
+    title: "D-08-04: an http server without headers writes no auth",
+    server: { type: "http", url: "https://mcp.example.com", oauth: { clientId: "pi-client" } },
+    entry: { url: "https://mcp.example.com", oauth: { clientId: "pi-client" }, ...SEARCH_OWNED },
+  },
+  {
+    title: "D-08-04: a stdio server with headers writes no auth",
+    server: { command: "node", headers: { "X-Team": "core" } },
+    entry: { command: "node", ...SEARCH_OWNED },
   },
   {
     title: "ANAME-07: an unknown type writes the owned fields only",
@@ -273,7 +304,7 @@ describe("translateMcpServer", () => {
     });
   }
 
-  test("ANAME-07: writes fields in the order transport, oauth, timeout, description, owned", () => {
+  test("ANAME-07 / D-08-04: writes fields in the order transport, auth, oauth, timeout, description, owned", () => {
     // arrange
     const server = {
       lifecycle: "eager",
@@ -292,8 +323,28 @@ describe("translateMcpServer", () => {
     assert.equal(
       JSON.stringify(translated),
       '{"url":"https://mcp.example.com/sse","headers":{"A":"1"},"httpTransport":"sse",' +
-        '"oauth":{"clientId":"pi-client","scope":"read"},"requestTimeoutMs":90000,' +
+        '"auth":"oauth","oauth":{"clientId":"pi-client","scope":"read"},"requestTimeoutMs":90000,' +
         '"description":"Hello tools","directTools":true,"toolPrefix":"mcp"}',
+    );
+  });
+
+  test("D-08-04: an http server writes auth after headers and before oauth", () => {
+    // arrange
+    const server = {
+      oauth: { clientId: "pi-client" },
+      headers: { "X-Team": "core" },
+      url: "https://mcp.example.com",
+      type: "http",
+    };
+
+    // act
+    const translated = translateMcpServer(server, undefined);
+
+    // assert
+    assert.equal(
+      JSON.stringify(translated),
+      '{"url":"https://mcp.example.com","headers":{"X-Team":"core"},"auth":"oauth",' +
+        '"oauth":{"clientId":"pi-client"},"directTools":"search","toolPrefix":"mcp"}',
     );
   });
 });

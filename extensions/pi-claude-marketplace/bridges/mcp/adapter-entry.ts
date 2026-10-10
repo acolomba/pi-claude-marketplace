@@ -16,6 +16,7 @@
 // belongs in this module or the table.
 
 import { translateMcpServer } from "../../domain/mcp-server-features.ts";
+import { ADAPTER_EMPTY_ENV } from "../../shared/session-env.ts";
 
 import {
   CLAUDE_MARKETPLACE_MARKER_KEY,
@@ -30,6 +31,8 @@ import {
   type SubstitutedEntry,
   type VariableReport,
 } from "./substitute.ts";
+
+import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
 
 // AFILE-06: the user's choices in pi-mcp-adapter's `ServerEntry` that survive
 // a re-stage. `directTools`, `toolPrefix` and `description` are owned by this
@@ -76,13 +79,57 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+// pi-mcp-adapter's scan of a header value in OAuth mode: each match names a
+// variable that must be set and non-empty.
+const ADAPTER_REFERENCE = /\$\{(\w+)\}|\$env:(\w+)|\{env:(\w+)\}/g;
+
+// The split token names a variable Pi's process sets to the empty string.
+function isSetForAdapter(env: ClaudeEnv, name: string): boolean {
+  const value = Object.hasOwn(env, name) ? env[name] : undefined;
+  return name !== ADAPTER_EMPTY_ENV && (value ?? "") !== "";
+}
+
+// Exactly one group matches, and `join` writes the others as "".
+function isCleanHeaderValue(value: unknown, env: ClaudeEnv): boolean {
+  if (typeof value !== "string" || value.trim() === "") {
+    return false;
+  }
+
+  return [...value.matchAll(ADAPTER_REFERENCE)].every((match) =>
+    isSetForAdapter(env, match.slice(1).join("")),
+  );
+}
+
+/**
+ * D-08-04: pi-mcp-adapter refuses to connect in OAuth mode when a header value
+ * is empty after trimming or names an unset or empty variable. Such an entry
+ * loses the table's `auth`, so it keeps connecting without OAuth. The decision
+ * reads only whether each variable is set; no value is written.
+ */
+function withOAuthDecision(substituted: SubstitutedEntry, env: ClaudeEnv): SubstitutedEntry {
+  const { auth, ...withoutAuth } = substituted.entry;
+  const headers = withoutAuth.headers;
+  if (
+    auth === undefined ||
+    (isPlainObject(headers) &&
+      Object.values(headers).every((value) => isCleanHeaderValue(value, env)))
+  ) {
+    return substituted;
+  }
+
+  return { entry: withoutAuth, report: substituted.report };
+}
+
 /**
  * Translates the plugin's entry through the closed table (ANAME-07), then
  * injects env and expands Claude's fields (MENV-01/02, AVAR-01..03), all
- * BEFORE the marker is spread on, so the marker never enters the walk. A
- * non-object entry keeps the `{}` tolerance with no expansion, so it gets the
- * owned fields only and an empty report, and each normalization is reported
- * as a warning instead of reporting a dead entry as staged.
+ * BEFORE the marker is spread on, so the marker never enters the walk, and
+ * keeps the table's `auth` only beside clean headers (D-08-04). The resolver
+ * classifies a non-object entry and a malformed stdio env as malformed
+ * (D-03-18), so the two warnings here are defense in depth for a caller that
+ * bypasses it: a non-object entry keeps the `{}` tolerance with no expansion
+ * and gets the owned fields only and an empty report, and each normalization
+ * is reported instead of reporting a dead entry as staged.
  */
 function translatedEntry(
   name: string,
@@ -105,7 +152,10 @@ function translatedEntry(
     );
   }
 
-  return substituteAndInject(translateMcpServer(entry, description), substitution);
+  return withOAuthDecision(
+    substituteAndInject(translateMcpServer(entry, description), substitution),
+    substitution.env,
+  );
 }
 
 /** ANAME-07: the carried fields the translated entry sets, in carried-set order. */

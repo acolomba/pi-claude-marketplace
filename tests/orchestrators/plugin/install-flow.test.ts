@@ -3106,7 +3106,7 @@ test("ANAME-01: install writes Claude Code server keys that the global toolPrefi
   });
 });
 
-test("ANAME-07: install writes Claude servers through the closed adapter table", async () => {
+test("ANAME-07 / D-08-04: install writes Claude servers through the closed adapter table", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-aname07-"));
     try {
@@ -3168,6 +3168,7 @@ test("ANAME-07: install writes Claude servers through the closed adapter table",
         "X-Team": "core"
       },
       "httpTransport": "sse",
+      "auth": "oauth",
       "oauth": {
         "clientId": "pi-client",
         "redirectUri": "http://localhost:8765/callback",

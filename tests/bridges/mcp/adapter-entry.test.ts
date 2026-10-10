@@ -112,6 +112,84 @@ function fullEntry(prefix: string): Record<string, unknown> {
   );
 }
 
+interface OAuthHeaderRow {
+  readonly title: string;
+  readonly headers: Readonly<Record<string, unknown>>;
+  readonly env: Readonly<Record<string, string>>;
+  readonly expectedEntry: Readonly<Record<string, unknown>>;
+}
+
+// D-08-04: pi-mcp-adapter's OAuth mode refuses a header value that is empty
+// after trimming or that names an unset or empty variable, so such an entry
+// keeps connecting without OAuth.
+const OAUTH_HEADER_ROWS: readonly OAuthHeaderRow[] = [
+  {
+    title: "a literal header value keeps auth",
+    headers: { "X-Team": "core" },
+    env: {},
+    expectedEntry: {
+      url: "https://mcp.example.test",
+      headers: { "X-Team": "core" },
+      auth: "oauth",
+    },
+  },
+  {
+    title: "a reference to a set variable keeps auth",
+    headers: { "X-Id": "${PI_CM_SET}" },
+    env: { PI_CM_SET: "1" },
+    expectedEntry: {
+      url: "https://mcp.example.test",
+      headers: { "X-Id": "${PI_CM_SET}" },
+      auth: "oauth",
+    },
+  },
+  {
+    title: "a reference to an unset variable drops auth",
+    headers: { "X-Team": "core", "X-Org": "${PI_CM_UNSET}" },
+    env: {},
+    expectedEntry: {
+      url: "https://mcp.example.test",
+      headers: { "X-Team": "core", "X-Org": "${PI_CM_UNSET}" },
+    },
+  },
+  {
+    title: "a withheld credential written empty drops auth",
+    headers: { "X-Key": "${ANTHROPIC_API_KEY}" },
+    env: { ANTHROPIC_API_KEY: "api-key-value" },
+    expectedEntry: { url: "https://mcp.example.test", headers: { "X-Key": "" } },
+  },
+  {
+    title: "the split token after a set reference drops auth",
+    headers: { "X-Id": "${PI_CM_SET}_eu" },
+    env: { PI_CM_SET: "1" },
+    expectedEntry: {
+      url: "https://mcp.example.test",
+      headers: { "X-Id": "${PI_CM_SET}{env:PI_CLAUDE_MARKETPLACE_EMPTY}_eu" },
+    },
+  },
+  {
+    title: "the split token drops auth even when the staging environment sets its variable",
+    headers: { "X-Id": "${PI_CM_SET}_eu" },
+    env: { PI_CM_SET: "1", PI_CLAUDE_MARKETPLACE_EMPTY: "x" },
+    expectedEntry: {
+      url: "https://mcp.example.test",
+      headers: { "X-Id": "${PI_CM_SET}{env:PI_CLAUDE_MARKETPLACE_EMPTY}_eu" },
+    },
+  },
+  {
+    title: "a blank literal header value drops auth",
+    headers: { "X-Team": "  " },
+    env: {},
+    expectedEntry: { url: "https://mcp.example.test", headers: { "X-Team": "  " } },
+  },
+  {
+    title: "a header value that is not a string drops auth",
+    headers: { "X-Port": 8080 },
+    env: {},
+    expectedEntry: { url: "https://mcp.example.test", headers: { "X-Port": 8080 } },
+  },
+];
+
 describe("stampServers", () => {
   test("translates the plugin entry and appends the marker when no previous entry exists", () => {
     // arrange
@@ -825,7 +903,7 @@ describe("stampServers", () => {
     );
   });
 
-  test("ANAME-07: a plugin entry holding every ServerEntry and OAuthConfig key at hostile values keeps only the closed table's fields", () => {
+  test("ANAME-07 / D-08-04: a plugin entry holding every ServerEntry and OAuthConfig key at hostile values keeps only the closed table's fields and the table's auth", () => {
     // arrange
     const hostile = {
       ...Object.fromEntries(SERVER_ENTRY_KEYS.map((key) => [key, `hostile-${key}`])),
@@ -869,6 +947,7 @@ describe("stampServers", () => {
           url: "https://mcp.example.com/sse",
           headers: { "X-Team": "core" },
           httpTransport: "sse",
+          auth: "oauth",
           oauth: {
             clientId: "pi-client",
             redirectUri: "http://localhost:8765/callback",
@@ -882,6 +961,29 @@ describe("stampServers", () => {
       }),
     );
   });
+
+  for (const { title, headers, env, expectedEntry } of OAUTH_HEADER_ROWS) {
+    test(`D-08-04: ${title}`, () => {
+      // arrange
+      const substitution: McpSubstitutionContext = { ...PROJECT_CONTEXT, env };
+
+      // act
+      const stamping = stampServers({
+        servers: { server: { type: "http", url: "https://mcp.example.test", headers } },
+        pluginName: "acme",
+        marketplaceName: "catalog",
+        substitution,
+        previous: {},
+        keptOverrides: {},
+      });
+
+      // assert
+      assert.strictEqual(
+        JSON.stringify(stamping.stamped),
+        JSON.stringify({ server: { ...expectedEntry, ...OWNED, _piClaudeMarketplace: MARKER } }),
+      );
+    });
+  }
 
   test("ANAME-06: a non-object entry gets the plugin's description with the owned fields", () => {
     // arrange
