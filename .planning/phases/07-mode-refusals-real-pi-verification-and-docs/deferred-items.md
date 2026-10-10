@@ -7,8 +7,12 @@
   denial-of-service advisories and one moderate CPU denial-of-service advisory.
   The fixture accepts no attacker-controlled glob patterns and runs bounded,
   isolated offline children, so its specific execution surface is mitigated.
-  General root dependency remediation remains open and outside 07-03's scope;
-  root dependencies must remain unchanged for this task. See
+  07-03 left root dependencies unchanged. Lock commit `a12dfa16` later pinned
+  the root `node_modules/brace-expansion` entry at 5.0.12.
+  `npm audit --package-lock-only` still reports the copy that Pi's own
+  `npm-shrinkwrap.json` pins at
+  `node_modules/@earendil-works/pi-coding-agent/node_modules/brace-expansion`,
+  and BACKLOG.md DEPADV-01 carries it. See
   [07-PEER-FLOOR-AUDIT.md](./07-PEER-FLOOR-AUDIT.md#transitive-dependency-advisory-disposition)
   for advisory links, versions, and the constrained-fixture assessment. This
   record does not claim that npm audit passes or waive general remediation.
@@ -25,3 +29,7 @@
   must retain this coverage limitation. Shared tracking is parent-owned;
   suggested WINDOWS entry: kind `skipped-test`, phase `07`, description
   `[json-output] Existing optional pi-subagents resolver integration case skips because its module is unavailable; no new test skip was introduced.`
+  The two resolver commits `3f20490a` and `9829a30e` make both resolver tests
+  resolve the pi-subagents root before the hermetic HOME swap, so the SC-2 /
+  AGSK-06 case runs where the global peer is installed; CI installs no global
+  peer and still skips it; WINDOWS #89 records the disposition.
