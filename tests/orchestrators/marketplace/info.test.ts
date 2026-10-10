@@ -230,7 +230,7 @@ test("marketplace info displays a nonempty allowlist after the description", asy
     await getMarketplaceInfo({ ctx: boundary.ctx, pi: boundary.pi, name: "policy", cwd });
 
     // assert
-    assert.deepEqual(await snapshotEnvironment(home, cwd), before);
+    assert.deepStrictEqual(await snapshotEnvironment(home, cwd), before);
     boundary.verifyAll();
   });
 });
@@ -261,7 +261,7 @@ test("marketplace info omits an empty allowlist", async () => {
     await getMarketplaceInfo({ ctx: boundary.ctx, pi: boundary.pi, name: "empty", cwd });
 
     // assert
-    assert.deepEqual(await snapshotEnvironment(home, cwd), before);
+    assert.deepStrictEqual(await snapshotEnvironment(home, cwd), before);
     boundary.verifyAll();
   });
 });
@@ -307,7 +307,7 @@ test("marketplace info shows each scope's own allowlist", async () => {
     await getMarketplaceInfo({ ctx: boundary.ctx, pi: boundary.pi, name: "same", cwd });
 
     // assert
-    assert.deepEqual(await snapshotEnvironment(home, cwd), before);
+    assert.deepStrictEqual(await snapshotEnvironment(home, cwd), before);
     boundary.verifyAll();
   });
 });
@@ -349,7 +349,7 @@ test("malformed present allowlist follows the invalid manifest info failure", as
     await getMarketplaceInfo({ ctx: boundary.ctx, pi: boundary.pi, name: "bad-policy", cwd });
 
     // assert
-    assert.deepEqual(await snapshotEnvironment(home, cwd), before);
+    assert.deepStrictEqual(await snapshotEnvironment(home, cwd), before);
     boundary.verifyAll();
   });
 });
@@ -402,7 +402,7 @@ test("INFO-01: an explicit user github source renders all optional fields", asyn
     });
 
     // assert
-    assert.deepEqual(await snapshotEnvironment(home, cwd), before);
+    assert.deepStrictEqual(await snapshotEnvironment(home, cwd), before);
     boundary.verifyAll();
   });
 });
@@ -439,7 +439,7 @@ test("INFO-01: an explicit user github source omits absent optional fields", asy
     });
 
     // assert
-    assert.deepEqual(await snapshotEnvironment(home, cwd), before);
+    assert.deepStrictEqual(await snapshotEnvironment(home, cwd), before);
     boundary.verifyAll();
   });
 });
@@ -483,7 +483,7 @@ test("MURL-05: an explicit user URL source renders all optional fields", async (
     });
 
     // assert
-    assert.deepEqual(await snapshotEnvironment(home, cwd), before);
+    assert.deepStrictEqual(await snapshotEnvironment(home, cwd), before);
     boundary.verifyAll();
   });
 });
@@ -520,7 +520,7 @@ test("MURL-05: an explicit user URL source omits absent optional fields", async 
     });
 
     // assert
-    assert.deepEqual(await snapshotEnvironment(home, cwd), before);
+    assert.deepStrictEqual(await snapshotEnvironment(home, cwd), before);
     boundary.verifyAll();
   });
 });
@@ -557,7 +557,7 @@ test("INFO-01: an explicit project path source renders its minimal block", async
     });
 
     // assert
-    assert.deepEqual(await snapshotEnvironment(home, cwd), before);
+    assert.deepStrictEqual(await snapshotEnvironment(home, cwd), before);
     boundary.verifyAll();
   });
 });
@@ -604,7 +604,7 @@ test("INFO-01: a user path source renders description independently of source ki
     });
 
     // assert
-    assert.deepEqual(await snapshotEnvironment(home, cwd), before);
+    assert.deepStrictEqual(await snapshotEnvironment(home, cwd), before);
     boundary.verifyAll();
   });
 });
@@ -641,7 +641,7 @@ test("NFR-12: an unknown stored source falls back to the recorded marketplace ro
     });
 
     // assert
-    assert.deepEqual(await snapshotEnvironment(home, cwd), before);
+    assert.deepStrictEqual(await snapshotEnvironment(home, cwd), before);
     boundary.verifyAll();
   });
 });
@@ -698,7 +698,7 @@ test("INFO-03: implicit scope renders project then user in one notification", as
     });
 
     // assert
-    assert.deepEqual(await snapshotEnvironment(home, cwd), before);
+    assert.deepStrictEqual(await snapshotEnvironment(home, cwd), before);
     boundary.verifyAll();
   });
 });
@@ -737,7 +737,7 @@ test("INFO-04: explicit user scope ignores a project-only marketplace", async ()
     });
 
     // assert
-    assert.deepEqual(await snapshotEnvironment(home, cwd), before);
+    assert.deepStrictEqual(await snapshotEnvironment(home, cwd), before);
     boundary.verifyAll();
   });
 });
@@ -776,7 +776,7 @@ test("INFO-04: explicit project scope ignores a user-only marketplace", async ()
     });
 
     // assert
-    assert.deepEqual(await snapshotEnvironment(home, cwd), before);
+    assert.deepStrictEqual(await snapshotEnvironment(home, cwd), before);
     boundary.verifyAll();
   });
 });
@@ -799,7 +799,7 @@ test("D-03: implicit scope renders an absent marketplace without a scope bracket
     });
 
     // assert
-    assert.deepEqual(await snapshotEnvironment(home, cwd), before);
+    assert.deepStrictEqual(await snapshotEnvironment(home, cwd), before);
     boundary.verifyAll();
   });
 });
@@ -842,7 +842,7 @@ test("manifest absence renders the complete source-missing failure envelope", as
     });
 
     // assert
-    assert.deepEqual(await snapshotEnvironment(home, cwd), before);
+    assert.deepStrictEqual(await snapshotEnvironment(home, cwd), before);
     boundary.verifyAll();
   });
 });
@@ -887,7 +887,7 @@ test("malformed manifest JSON renders the complete unparseable failure envelope"
     });
 
     // assert
-    assert.deepEqual(await snapshotEnvironment(home, cwd), before);
+    assert.deepStrictEqual(await snapshotEnvironment(home, cwd), before);
     boundary.verifyAll();
   });
 });
@@ -936,7 +936,7 @@ test("schema-invalid manifest JSON renders the catalog invalid-manifest envelope
     });
 
     // assert
-    assert.deepEqual(await snapshotEnvironment(home, cwd), before);
+    assert.deepStrictEqual(await snapshotEnvironment(home, cwd), before);
     boundary.verifyAll();
   });
 });
@@ -997,7 +997,7 @@ test("implicit scope emits a healthy project block before a failed user block", 
     });
 
     // assert
-    assert.deepEqual(await snapshotEnvironment(home, cwd), before);
+    assert.deepStrictEqual(await snapshotEnvironment(home, cwd), before);
     boundary.verifyAll();
   });
 });
@@ -1029,7 +1029,7 @@ test("a malformed stored marketplace record rejects without notifying or mutatin
     const boundary = notificationBoundary();
 
     // act
-    const result = getMarketplaceInfo({
+    const infoPromise = getMarketplaceInfo({
       ctx: boundary.ctx,
       pi: boundary.pi,
       name: "broken-mp",
@@ -1039,12 +1039,12 @@ test("a malformed stored marketplace record rejects without notifying or mutatin
 
     // assert
     await assert.rejects(
-      result,
+      infoPromise,
       new Error(
         'state.json marketplace "broken-mp" has malformed source object (missing kind/raw)',
       ),
     );
-    assert.deepEqual(await snapshotEnvironment(home, cwd), before);
+    assert.deepStrictEqual(await snapshotEnvironment(home, cwd), before);
     boundary.verifyAll();
   });
 });

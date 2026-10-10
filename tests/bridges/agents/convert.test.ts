@@ -70,16 +70,19 @@ Body content.
 }
 
 describe("GUIDED_DROPPED_FIELDS", () => {
-  test("exposes the complete guided set and every member warns when dropped", () => {
-    // arrange
-    const expectedGuidedFields = ["allowed-tools", "mcpServers", "permissionMode", "hooks"];
+  const expectedGuidedFields = ["allowed-tools", "mcpServers", "permissionMode", "hooks"];
 
+  test("exposes the complete guided set", () => {
     // act
     const guidedFields = [...GUIDED_DROPPED_FIELDS];
 
     // assert
     assert.deepStrictEqual(guidedFields, expectedGuidedFields);
-    for (const field of expectedGuidedFields) {
+  });
+
+  for (const field of expectedGuidedFields) {
+    test(`warns with a targeted message when ${field} is dropped`, () => {
+      // act
       const agent = convertAgent({
         pluginName: "acme",
         pluginRoot: "/root",
@@ -96,14 +99,16 @@ describe("GUIDED_DROPPED_FIELDS", () => {
         sourceHash: "abc",
         mapModel: false,
       });
+
+      // assert
       assert.deepStrictEqual(agent.droppedFields, [field]);
       assert.strictEqual(
         agent.warnings.some((warning) => warning.includes(`\`${field}\``)),
         true,
         `expected a targeted warning naming ${field}`,
       );
-    }
-  });
+    });
+  }
 });
 
 describe("convertAgent", () => {

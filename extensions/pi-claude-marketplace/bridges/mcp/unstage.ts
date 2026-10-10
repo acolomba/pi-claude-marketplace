@@ -191,6 +191,10 @@ async function writeUnstageTargets(
   return Object.freeze(writtenFiles);
 }
 
+/**
+ * Removes the plugin's entries from the scope's `mcp-adapter.json` and legacy
+ * `mcp.json`, and returns the removed names with the notices and bytes written.
+ */
 export async function unstageMcpServers(input: UnstageMcpInput): Promise<UnstageMcpResult> {
   const { locations, marketplaceName, pluginName } = input;
 

@@ -759,7 +759,7 @@ async function seedEnabledPlugin(
     path.join(extensionRoot, "state.json"),
     JSON.stringify({
       schemaVersion: 3,
-      ...(opts.stamped !== false && { lastReconciledExtensionVersion: EXTENSION_VERSION }),
+      ...(opts.stamped === false ? {} : { lastReconciledExtensionVersion: EXTENSION_VERSION }),
       marketplaces: {
         mp: {
           name: "mp",

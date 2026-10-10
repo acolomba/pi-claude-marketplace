@@ -93,12 +93,12 @@ async function seedMarketplace(
 
 /** Registers `/claude:plugin` and returns a runner that collects one command's notifications. */
 function registeredCommand(cwd: string): (args: string) => Promise<NotifyRecord[]> {
-  const mock = makeMockPi([]);
+  const piHost = makeMockPi([]);
   const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
   const completionCache = createCompletionCache();
   const pluginUpdates = createPluginUpdateOperations(hooksRouting, completionCache);
   registerClaudePluginCommand(
-    mock.pi,
+    piHost.pi,
     {
       completionCache,
       mcpStatus: noStatusSnapshot(),
@@ -108,7 +108,7 @@ function registeredCommand(cwd: string): (args: string) => Promise<NotifyRecord[
     hooksRouting,
     pluginUpdates.updatePlugins,
   );
-  const command = mock.commands.get("claude:plugin");
+  const command = piHost.commands.get("claude:plugin");
   assert.ok(command);
   return async (args) => {
     const { ctx, notifications } = makeCtx(cwd);

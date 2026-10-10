@@ -3608,7 +3608,7 @@ test("plugin list manifest absent: INV-02: a manifest-absent degraded record kee
       scopeRoot: userRoot,
       cwd,
       mpName: "mp1",
-      // Manifest LOADS and simply does not declare `plug`.
+      // Manifest LOADS and does not declare `plug`.
       manifest: { name: "mp1", plugins: [] },
       installed: { plug: { version: "1.0.0", unsupported: ["lspServers"] } },
     });

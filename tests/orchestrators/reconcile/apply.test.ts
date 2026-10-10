@@ -1392,7 +1392,7 @@ describe("applyReconcile", () => {
       },
     ]);
     // LOAD-03: the removal happened on the FIRST pass -- the reconcile-driven
-    // uninstall no longer refuses -- and the row that reports the consequence
+    // uninstall does not refuse -- and the row that reports the consequence
     // for `keeper` is the load-time check's, on the next pass (D-06-06).
     assert.deepStrictEqual(Object.keys(afterFirst.marketplaces["mp"]?.plugins ?? {}), ["keeper"]);
     assert.equal(afterFirst.marketplaces["mp"]?.plugins["keeper"]?.enabled, true);
@@ -1425,10 +1425,9 @@ describe("applyReconcile", () => {
           manifestPath,
           marketplaceRoot,
           // D-03-07 post-order: the dependency's record precedes its declarer's,
-          // which used to be the ORDER THAT REFUSED -- removing `orphan` first
-          // met a still-recorded `keeper` that declared it. LOAD-03 removed
-          // that refusal, so the bucket now settles in plain record order and
-          // the retry loop has nothing to retry.
+          // removing `orphan` first meets a still-recorded `keeper` that declared
+          // it. LOAD-03 does not refuse that removal, so the bucket settles in
+          // plain record order and the retry loop has nothing to retry.
           plugins: {
             orphan: pluginRecord({ pluginRoot: path.join(marketplaceRoot, "plugins", "orphan") }),
             keeper: pluginRecord({ pluginRoot: path.join(marketplaceRoot, "plugins", "keeper") }),
@@ -2255,7 +2254,7 @@ describe("applyReconcile", () => {
 
     // assert: the dependency's own ledger error rides the row intact -- its
     // message AND its nested cause, both redacted -- instead of the single
-    // truncated line RESV-06 used to leave behind.
+    // truncated line RESV-06 forbids.
     assert.deepStrictEqual(notifications, [
       {
         message:

@@ -209,10 +209,10 @@ function renderPartiallyUpgradableBrace(message: NotificationMessage): string {
   verifyPi(pi);
   const body = boundary.notifications[0]?.message;
   assert.ok(body !== undefined, "the strict boundary must capture one notification");
-  const matched = PARTIALLY_UPGRADABLE_BRACE.exec(body);
-  assert.ok(matched, `expected a (partially-upgradable) {…} brace in:\n${body}`);
+  const brace = PARTIALLY_UPGRADABLE_BRACE.exec(body)?.[1];
+  assert.ok(brace !== undefined, `expected a (partially-upgradable) {…} brace in:\n${body}`);
 
-  return matched[1]!;
+  return brace;
 }
 
 test("keeps the update-decline and list partially-upgradable reason braces byte-identical", () => {

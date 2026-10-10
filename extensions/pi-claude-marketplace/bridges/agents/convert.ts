@@ -279,7 +279,7 @@ function mapToolName(token: string, grants: readonly McpGrant[]): string | undef
 }
 
 /**
- * Map source tool tokens to Pi names via TOOL_MAP, and Claude-form MCP names
+ * Maps source tool tokens to Pi names via TOOL_MAP, and Claude-form MCP names
  * of the written servers to pi-subagents `mcp:` entries (ANAME-02); other
  * tokens land in `dropped`. Pure mapping/dropping -- no warnings here.
  * AGSK-03 / AGSK-05 / D-83.1-01 / D-83.1-02: `Skill` is excluded from
@@ -473,17 +473,16 @@ function omittedToolMapping(
   };
 }
 
-/** Pick the `thinking:` value to emit.
+/**
+ * Picks the `thinking:` value to emit. Thinking wins over effort. When
+ * `thinking` is set BUT invalid, the result falls back to `effort` only if
+ * `effort` is set and valid; otherwise it omits the value.
  *
- *  Per the plan, "thinking wins over effort." Implementation choice for the
- *  edge case where `thinking` is set BUT invalid: fall back to `effort` only
- *  if `effort` is set and valid; otherwise omit.
- *
- *  - thinking set and valid       -> emit thinking
- *  - thinking set and invalid     -> warn; if effort set+valid emit effort, else omit
- *  - thinking absent, effort set+valid -> emit effort
- *  - thinking absent, effort set+invalid -> warn, omit
- *  - both absent -> omit silently
+ * - thinking set and valid       -> emit thinking
+ * - thinking set and invalid     -> warn; if effort set+valid emit effort, else omit
+ * - thinking absent, effort set+valid -> emit effort
+ * - thinking absent, effort set+invalid -> warn, omit
+ * - both absent -> omit silently
  */
 function mapThinking(
   rawThinking: string | undefined,
@@ -557,20 +556,8 @@ function mapSkills(
   return { emit: dedupePreservingOrder(emit), warnings };
 }
 
-/**
- * AG-7 / PI-10 / D-08 corollary: pure conversion. Performs all field
- * mappings, substitutes ${CLAUDE_PLUGIN_ROOT}/${CLAUDE_PLUGIN_DATA} in the
- * body via shared/vars.ts, and assembles the file content via the
- * frontmatter emitter.
- *
- * AG-11: throws Error when an explicit `tools:` declaration maps to an empty
- * list (pi-subagents reads an empty allowlist as "no tools", which has no
- * safe representation). An omitted `tools:` is NOT an error -- the generated
- * frontmatter omits the allowlist so pi-subagents grants its default
- * builtins (#179). Error message lists source tools and disallowedTools so
- * the user can correct upstream.
- */
-export function convertAgent(input: {
+/** The arguments of `convertAgent`. */
+export interface ConvertAgentInput {
   pluginName: string;
   pluginRoot: string;
   pluginDataDir: string;
@@ -599,7 +586,22 @@ export function convertAgent(input: {
    * entries; every other `mcp__` name is dropped.
    */
   mcpServerNames?: readonly string[] | undefined;
-}): ConvertedAgent {
+}
+
+/**
+ * AG-7 / PI-10 / D-08 corollary: pure conversion. Performs all field
+ * mappings, substitutes ${CLAUDE_PLUGIN_ROOT}/${CLAUDE_PLUGIN_DATA} in the
+ * body via shared/vars.ts, and assembles the file content via the
+ * frontmatter emitter.
+ *
+ * AG-11: throws Error when an explicit `tools:` declaration maps to an empty
+ * list (pi-subagents reads an empty allowlist as "no tools", which has no
+ * safe representation). An omitted `tools:` is NOT an error -- the generated
+ * frontmatter omits the allowlist so pi-subagents grants its default
+ * builtins (#179). Error message lists source tools and disallowedTools so
+ * the user can correct upstream.
+ */
+export function convertAgent(input: ConvertAgentInput): ConvertedAgent {
   const {
     pluginName,
     pluginRoot,
@@ -735,7 +737,7 @@ function optionalModel(model: string | undefined): { model?: string } {
 }
 
 /**
- * AG-11: reject an explicit `tools:` declaration whose mapped list is empty
+ * AG-11: rejects an explicit `tools:` declaration whose mapped list is empty
  * -- pi-subagents reads an empty allowlist as "no tools", which has no safe
  * representation. The message includes source values so the user can correct
  * upstream. AGSK-03 / D-83.1-02 (#86): Skill is silently excluded from

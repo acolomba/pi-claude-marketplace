@@ -310,7 +310,7 @@ test("AGENT-01: update retries agent migration once the occupying target is free
 });
 
 test("exposes the atomic plugin update swap owner", () => {
-  // act and assert
+  // act & assert
   assert.strictEqual(typeof swapPluginUpdate, "function");
 });
 

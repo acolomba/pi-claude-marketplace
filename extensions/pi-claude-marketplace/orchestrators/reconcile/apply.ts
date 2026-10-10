@@ -871,7 +871,7 @@ interface PluginToggleAxes {
 /**
  * Lift the enable arm's degradation signals off the orchestrated outcome. Each
  * field is omitted when empty (`exactOptionalPropertyTypes`), so a clean enable
- * yields `{}` and its projected row is byte-identical (NREG-01).
+ * yields `{}` and its projected row gains no markers (NREG-01).
  *
  * SEV-01 / D-98-02: the staged-count verdicts ride here too -- they drive the
  * projected row's dependency list, mirroring the install arm's
@@ -1113,7 +1113,7 @@ function applySourceMismatches(plan: ReconcilePlan, outcomes: PerEntryOutcome[])
   for (const m of plan.sourceMismatches) {
     // Per-cause propagation: each variant lifts its renderable fields onto
     // the corresponding SourceMismatchOutcome arm. The renderer derives
-    // byte-identical output from the new variants via
+    // the subject from the variants via
     // `sourceMismatchOutcomeSubject` (mp-name for the first three causes;
     // rawKey for malformed-plugin-key).
     switch (m.cause) {
@@ -1449,7 +1449,7 @@ async function applyReconcileWithReader(
   // rows render through reconcile's own render map, never the central
   // renderPluginRow switch. The `reconcile-applied-cascade` standalone envelope
   // (its content-derived severity + the load-time silence contract) stays
-  // central and byte-identical via emitReconcileAppliedContextCascade.
+  // central via emitReconcileAppliedContextCascade.
   const message = buildReconcileAppliedCascade(outcomes);
   notifyReconcileAppliedWithContext(opts.ctx, opts.pi, RECONCILE_APPLIED_CONTEXT, message);
 

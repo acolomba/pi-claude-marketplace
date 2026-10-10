@@ -256,7 +256,7 @@ export interface PluginUninstallFailedOutcome extends PluginOutcomeBase {
  * `EnableDegradationSignals` rather than re-declared, so the orchestrated
  * projection cannot drift from the standalone verb -- a signal added to that
  * shape cannot be silently dropped here. Each field is omitted when empty, so
- * a clean enable renders byte-identically to before (NREG-01).
+ * a clean enable adds nothing to its row (NREG-01).
  *
  * SEV-01 / D-98-02: the inherited signals include the ledger's staged-agent and
  * staged-MCP verdicts, from which `enabledRowFromOutcome` derives the row's
@@ -500,8 +500,8 @@ export type SourceMismatchOutcome =
  * Derive the renderable subject (the marketplace-block key name) from a
  * `SourceMismatchOutcome`. For source-mismatch / unknown-stored /
  * dangling-reference the subject is `marketplace`; for malformed-plugin-key
- * the subject is `rawKey`. Centralising the derivation here keeps the
- * renderers byte-identical across the four causes.
+ * the subject is `rawKey`. Centralising the derivation here gives the
+ * renderers one subject rule across the four causes.
  */
 export function sourceMismatchOutcomeSubject(outcome: SourceMismatchOutcome): string {
   return outcome.cause === "malformed-plugin-key" ? outcome.rawKey : outcome.marketplace;

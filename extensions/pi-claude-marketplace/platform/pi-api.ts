@@ -250,6 +250,7 @@ function hasLoadedPiMcpAdapter(pi: PiInventory): boolean {
   return viaCommands || viaTools;
 }
 
+/** Snapshots which optional companion extensions Pi has loaded. */
 export function softDepStatus(pi: PiInventory): SoftDepStatus {
   return {
     piSubagentsLoaded: hasLoadedPiSubagents(pi),

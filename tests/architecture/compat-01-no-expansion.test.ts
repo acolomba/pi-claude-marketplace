@@ -173,7 +173,7 @@ function declaredVocabulary(src: string, name: string): readonly string[] {
   );
 
   return [...src.slice(start + opening.length, end).matchAll(/"([^"]*)"/g)].map(
-    (match) => match[1]!,
+    (match) => match[1] ?? "",
   );
 }
 

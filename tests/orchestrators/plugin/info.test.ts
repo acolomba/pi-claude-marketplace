@@ -3452,10 +3452,8 @@ test("plugin info manifest absent: D-96-04: a mixed disabled + state-only `--fet
 // ---------------------------------------------------------------------------
 // INFO-12 / NFR-5: the state-only arm reaches no network surface.
 //
-// Before the arm split this held for free -- a manifest-absent name returned
-// its `(failed)` row before any fetch-capable builder existed. The arm now sits
-// DOWNSTREAM of `buildInfoFetchContext`, so "we do not call the network here"
-// is a claim that needs an assertion which can fail. The counters below are
+// The arm sits DOWNSTREAM of `buildInfoFetchContext`, so "we do not call the
+// network here" is a claim that needs an assertion which can fail. The counters below are
 // call counts on injected doubles, never a reading of the control flow: break
 // the guard by threading a `fetchCtx` into `buildStateOnlyInstalledRow` and
 // probing, and these tests go red.
@@ -9576,7 +9574,7 @@ test("WR-09: the workflow names and the advisories come from one discovery pass"
     const filesystemPromises = createRequire(import.meta.url)(
       "node:fs/promises",
     ) as typeof import("node:fs/promises");
-    const originalReadFile = filesystemPromises.readFile.bind(filesystemPromises);
+    const originalReadFile = filesystemPromises.readFile;
     t.mock.method(
       filesystemPromises,
       "readFile",

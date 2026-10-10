@@ -10,6 +10,7 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..
 const CATALOG_PATH = path.join(REPO_ROOT, "docs/output-catalog.md");
 
 test("loadCatalogExamples preserves exact section, state, and output bytes", () => {
+  // arrange
   const catalog = [
     "# Output catalog",
     "",
@@ -28,6 +29,7 @@ test("loadCatalogExamples preserves exact section, state, and output bytes", () 
     "```",
   ].join("\n");
 
+  // act & assert
   assert.deepStrictEqual(loadCatalogExamples(catalog), [
     {
       section: "/claude:plugin list",
@@ -39,6 +41,7 @@ test("loadCatalogExamples preserves exact section, state, and output bytes", () 
 });
 
 test("loadCatalogExamples maps the two non-command catalog sections exactly", () => {
+  // arrange
   const catalog = [
     "## reconcile-applied-cascade",
     "<!-- catalog-state: applied -->",
@@ -52,6 +55,7 @@ test("loadCatalogExamples maps the two non-command catalog sections exactly", ()
     "```",
   ].join("\n");
 
+  // act & assert
   assert.deepStrictEqual(loadCatalogExamples(catalog), [
     {
       section: "reconcile-applied-cascade",
@@ -67,10 +71,13 @@ test("loadCatalogExamples maps the two non-command catalog sections exactly", ()
 });
 
 test("loadCatalogExamples parses all 270 independent catalog tuples", async () => {
+  // arrange
   const catalog = await readFile(CATALOG_PATH, "utf8");
 
+  // act
   const examples = loadCatalogExamples(catalog);
 
+  // assert
   assert.equal(examples.length, 270);
   assert.equal(new Set(examples.map(({ section }) => section)).size, 21);
   assert.deepStrictEqual(examples[0], {
@@ -87,8 +94,10 @@ test("loadCatalogExamples parses all 270 independent catalog tuples", async () =
 });
 
 test("loadCatalogExamples rejects a fenced output with no state marker", () => {
+  // arrange
   const catalog = ["## `/claude:plugin list`", "```text", "output", "```"].join("\n");
 
+  // act & assert
   assert.throws(
     () => loadCatalogExamples(catalog),
     new Error(
@@ -98,6 +107,7 @@ test("loadCatalogExamples rejects a fenced output with no state marker", () => {
 });
 
 test("loadCatalogExamples ignores annotated examples outside recognized sections", () => {
+  // arrange
   const catalog = [
     "## Conventions",
     "<!-- catalog-state: empty -->",
@@ -106,10 +116,12 @@ test("loadCatalogExamples ignores annotated examples outside recognized sections
     "```",
   ].join("\n");
 
+  // act & assert
   assert.deepStrictEqual(loadCatalogExamples(catalog), []);
 });
 
 test("loadCatalogExamples rejects duplicate section and state tuples", () => {
+  // arrange
   const catalog = [
     "## `/claude:plugin list`",
     "<!-- catalog-state: empty -->",
@@ -122,6 +134,7 @@ test("loadCatalogExamples rejects duplicate section and state tuples", () => {
     "```",
   ].join("\n");
 
+  // act & assert
   assert.throws(
     () => loadCatalogExamples(catalog),
     new Error(
@@ -131,6 +144,7 @@ test("loadCatalogExamples rejects duplicate section and state tuples", () => {
 });
 
 test("loadCatalogExamples rejects adjacent state markers", () => {
+  // arrange
   const catalog = [
     "## `/claude:plugin list`",
     "<!-- catalog-state: empty -->",
@@ -140,6 +154,7 @@ test("loadCatalogExamples rejects adjacent state markers", () => {
     "```",
   ].join("\n");
 
+  // act & assert
   assert.throws(
     () => loadCatalogExamples(catalog),
     new Error(
@@ -149,8 +164,10 @@ test("loadCatalogExamples rejects adjacent state markers", () => {
 });
 
 test("loadCatalogExamples rejects an empty state marker", () => {
+  // arrange
   const catalog = ["## `/claude:plugin list`", "<!-- catalog-state: -->"].join("\n");
 
+  // act & assert
   assert.throws(
     () => loadCatalogExamples(catalog),
     new Error("Catalog parse error at line 2: empty catalog-state marker."),
@@ -158,8 +175,10 @@ test("loadCatalogExamples rejects an empty state marker", () => {
 });
 
 test("loadCatalogExamples rejects a malformed state marker", () => {
+  // arrange
   const catalog = ["## `/claude:plugin list`", "<!-- catalog-state: Bad_State -->"].join("\n");
 
+  // act & assert
   assert.throws(
     () => loadCatalogExamples(catalog),
     new Error(
@@ -169,6 +188,7 @@ test("loadCatalogExamples rejects a malformed state marker", () => {
 });
 
 test("loadCatalogExamples rejects an empty fenced output", () => {
+  // arrange
   const catalog = [
     "## `/claude:plugin list`",
     "<!-- catalog-state: empty -->",
@@ -176,6 +196,7 @@ test("loadCatalogExamples rejects an empty fenced output", () => {
     "```",
   ].join("\n");
 
+  // act & assert
   assert.throws(
     () => loadCatalogExamples(catalog),
     new Error(
@@ -185,8 +206,10 @@ test("loadCatalogExamples rejects an empty fenced output", () => {
 });
 
 test("loadCatalogExamples rejects a marker that has no following fence", () => {
+  // arrange
   const catalog = ["## `/claude:plugin list`", "<!-- catalog-state: empty -->"].join("\n");
 
+  // act & assert
   assert.throws(
     () => loadCatalogExamples(catalog),
     new Error(
@@ -196,12 +219,14 @@ test("loadCatalogExamples rejects a marker that has no following fence", () => {
 });
 
 test("loadCatalogExamples rejects a marker followed by a new recognized section with no fence", () => {
+  // arrange
   const catalog = [
     "## `/claude:plugin list`",
     "<!-- catalog-state: empty -->",
     "## `/claude:plugin install <plugin>@<marketplace>`",
   ].join("\n");
 
+  // act & assert
   assert.throws(
     () => loadCatalogExamples(catalog),
     new Error(
@@ -211,12 +236,14 @@ test("loadCatalogExamples rejects a marker followed by a new recognized section 
 });
 
 test("loadCatalogExamples rejects a marker followed by an unrecognized section with no fence", () => {
+  // arrange
   const catalog = [
     "## `/claude:plugin list`",
     "<!-- catalog-state: empty -->",
     "## Conventions",
   ].join("\n");
 
+  // act & assert
   assert.throws(
     () => loadCatalogExamples(catalog),
     new Error(
@@ -226,6 +253,7 @@ test("loadCatalogExamples rejects a marker followed by an unrecognized section w
 });
 
 test("loadCatalogExamples rejects an unclosed fenced output", () => {
+  // arrange
   const catalog = [
     "## `/claude:plugin list`",
     "<!-- catalog-state: empty -->",
@@ -233,6 +261,7 @@ test("loadCatalogExamples rejects an unclosed fenced output", () => {
     "output",
   ].join("\n");
 
+  // act & assert
   assert.throws(
     () => loadCatalogExamples(catalog),
     new Error(
@@ -242,10 +271,12 @@ test("loadCatalogExamples rejects an unclosed fenced output", () => {
 });
 
 test("loadCatalogExamples rejects an unclosed fenced output opened outside a recognized section", () => {
+  // arrange
   const catalog = ["## Conventions", "<!-- catalog-state: empty -->", "```text", "output"].join(
     "\n",
   );
 
+  // act & assert
   assert.throws(
     () => loadCatalogExamples(catalog),
     new Error(

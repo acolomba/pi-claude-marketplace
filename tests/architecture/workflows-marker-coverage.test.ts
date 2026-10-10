@@ -38,8 +38,7 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 
@@ -62,6 +61,7 @@ import { saveState } from "../../extensions/pi-claude-marketplace/persistence/st
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { notify } from "../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
 import { createGitOpsFake } from "../platform/git-ops-fake.ts";
+import { withHermeticEnvironment } from "../platform/hermetic-environment.ts";
 import { toolInfo } from "../platform/pi-inventory-seed.ts";
 
 import { filesMatching } from "./source-scan.ts";
@@ -103,6 +103,8 @@ function makeCtx(engineLoaded: boolean): {
   notifications: NotifyRecord[];
 } {
   const notifications: NotifyRecord[] = [];
+  // The surfaces under test read only `ui.notify` and `getAllTools`; the casts
+  // stand in for the much larger Pi context and API types.
   const ctx = {
     ui: {
       notify(message: string, severity?: string): void {
@@ -127,38 +129,6 @@ function renderThroughNotify(engineLoaded: boolean, message: NotificationMessage
   const emitted = notifications[0];
   assert.ok(emitted !== undefined, "notify() emitted nothing");
   return emitted.message;
-}
-
-/**
- * Isolate `HOME` (and the agent-dir override) for the duration of `fn` so the
- * user-scope state root lands under a tmp directory. The three full-orchestrator
- * cases mutate these process globals, which is why the projection below drives
- * the cases SEQUENTIALLY rather than through `Promise.all`.
- */
-async function withHermeticHome<T>(fn: (cwd: string) => Promise<T>): Promise<T> {
-  const home = await mkdtemp(path.join(tmpdir(), "wf-marker-home-"));
-  const cwd = await mkdtemp(path.join(tmpdir(), "wf-marker-cwd-"));
-  const prevHome = process.env.HOME;
-  const agentDirExisted = Object.hasOwn(process.env, "PI_CODING_AGENT_DIR");
-  const prevAgentDir = process.env.PI_CODING_AGENT_DIR;
-  process.env.HOME = home;
-  delete process.env.PI_CODING_AGENT_DIR;
-  try {
-    return await fn(cwd);
-  } finally {
-    if (prevHome === undefined) {
-      delete process.env.HOME;
-    } else {
-      process.env.HOME = prevHome;
-    }
-
-    if (agentDirExisted) {
-      process.env.PI_CODING_AGENT_DIR = prevAgentDir;
-    }
-
-    await rm(home, { force: true, recursive: true });
-    await rm(cwd, { force: true, recursive: true });
-  }
 }
 
 async function writeUnder(filePath: string, bytes: string): Promise<void> {
@@ -265,7 +235,7 @@ const SITE_CASES = [
     // only public surface that reaches it.
     site: "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts",
     drive: async (engineLoaded) =>
-      withHermeticHome(async (cwd) => {
+      withHermeticEnvironment("wf-marker-", async ({ cwd }) => {
         // arrange
         const marketplaceRoot = await seedWorkflowPlugin(cwd);
         await recordMarketplace(cwd, marketplaceRoot);
@@ -284,7 +254,7 @@ const SITE_CASES = [
     // PERSISTED record, so the install above is what puts a workflow name in it.
     site: "extensions/pi-claude-marketplace/orchestrators/plugin/list-installed-row.ts",
     drive: async (engineLoaded) =>
-      withHermeticHome(async (cwd) => {
+      withHermeticEnvironment("wf-marker-", async ({ cwd }) => {
         // arrange
         const marketplaceRoot = await seedWorkflowPlugin(cwd);
         await recordMarketplace(cwd, marketplaceRoot);
@@ -441,7 +411,7 @@ const SITE_CASES = [
     // with production collaborators is the only public surface that reaches it.
     site: "extensions/pi-claude-marketplace/orchestrators/import/execute.ts",
     drive: async (engineLoaded) =>
-      withHermeticHome(async (cwd) => {
+      withHermeticEnvironment("wf-marker-", async ({ cwd }) => {
         // arrange
         const marketplaceRoot = await seedWorkflowPlugin(cwd);
         await writeUnder(

@@ -182,12 +182,12 @@ async function scopeTree(
 }
 
 function registeredCommand(cwd: string) {
-  const mock = makeMockPi([]);
+  const piHost = makeMockPi([]);
   const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
   const completionCache = createCompletionCache();
   const git = createGitOpsFake({ boundary: "memory" });
   registerClaudePluginCommand(
-    mock.pi,
+    piHost.pi,
     {
       completionCache,
       mcpStatus: noStatusSnapshot(),
@@ -207,7 +207,7 @@ function registeredCommand(cwd: string) {
     hooksRouting,
     createPluginUpdateOperations(hooksRouting, completionCache).updatePlugins,
   );
-  const command = mock.commands.get("claude:plugin");
+  const command = piHost.commands.get("claude:plugin");
   assert.ok(command);
   const { ctx, notifications } = makeCtx(cwd);
   return { command, ctx, notifications, gitCalls: git.state.calls };

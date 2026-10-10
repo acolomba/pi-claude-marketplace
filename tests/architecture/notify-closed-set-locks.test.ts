@@ -208,39 +208,43 @@ test("OUT-08: Reason is the closed 66-entry reason set", () => {
   // No changelog of past counts lives here. Git holds that history, a comment is
   // not a gate, and a count restated far from this assertion is a claim nothing
   // turns red for.
+  // act & assert
   assert.strictEqual(Object.keys(REASON_ENROLLMENT).length, 66);
 });
 
 test("SNM-02: StatusToken is the closed 24-entry token set", () => {
-  // FSTAT-02 / FSTAT-04 / D-66-05: +2 for the derived `partially-installed` /
-  // `partially-upgradable` realized tokens. `will partially install` is a render
-  // modifier on `will install`, NOT a token, so the set grows by exactly 2.
-  // USTAT-02 / D-64-01: +1 for the de-collapsed not-installed `partially-available`
-  // render token (22 -> 23).
-  // RSTA-01 / D-80-06: +1 for the not-installed git-source `remote` token (23 -> 24).
+  // FSTAT-02 / FSTAT-04 / D-66-05: `partially-installed` and `partially-upgradable`
+  // are derived realized tokens. `will partially install` is a render modifier on
+  // `will install`, not a token.
+  // USTAT-02 / D-64-01: `partially-available` is the not-installed render token.
+  // RSTA-01 / D-80-06: `remote` is the not-installed git-source token.
+  // act & assert
   assert.strictEqual(Object.keys(STATUS_TOKEN_ENROLLMENT).length, 24);
 });
 
 test("SNM-02: PluginStatus is the closed 19-entry plugin-status set", () => {
-  // FSTAT-02 / FSTAT-04 / D-66-05: +2 for `partially-installed` / `partially-upgradable`.
-  // USTAT-02 / D-64-01: +1 for `partially-available` (17 -> 18). Both sets gain the
-  // member; `PluginStatus` MUST because `PluginInfoRowBase.status` derives via
-  // `Extract<PluginStatus, "partially-available">`.
-  // RSTA-01 / D-80-06: +1 for `remote` (18 -> 19) -- likewise required in
-  // `PluginStatus` because the info surface renders `(remote)` via
-  // `Extract<PluginStatus, "remote">`.
+  // FSTAT-02 / FSTAT-04 / D-66-05: `partially-installed` and `partially-upgradable`
+  // belong to the set.
+  // USTAT-02 / D-64-01: `partially-available` belongs to both token sets because
+  // `PluginInfoRowBase.status` derives via `Extract<PluginStatus, "partially-available">`.
+  // RSTA-01 / D-80-06: `remote` belongs to `PluginStatus` because the info surface
+  // renders `(remote)` via `Extract<PluginStatus, "remote">`.
+  // act & assert
   assert.strictEqual(Object.keys(PLUGIN_STATUS_ENROLLMENT).length, 19);
 });
 
 test("SNM-02: MarketplaceStatus is the closed 7-entry marketplace-status set", () => {
+  // act & assert
   assert.strictEqual(Object.keys(MARKETPLACE_STATUS_ENROLLMENT).length, 7);
 });
 
 test("ASTAT-02: McpServerStatus is the closed 10-entry MCP server status set", () => {
+  // act & assert
   assert.strictEqual(Object.keys(MCP_SERVER_STATUS_ENROLLMENT).length, 10);
 });
 
 test("standalone notification kinds include scoped prune outcomes exactly", () => {
+  // act & assert
   assert.strictEqual(Object.keys(NOTIFICATION_KIND_ENROLLMENT).length, 10);
 });
 

@@ -767,6 +767,11 @@ export async function rollbackMcpReplacement(
   return Object.freeze(await restoreFiles(requireMcpReplacementInternals(replacement).written));
 }
 
+/**
+ * AMIG-02: accepts a replacement this module made and returns no leaks, since
+ * a replace that stays has nothing left to clean up. Throws for a handle it
+ * did not make.
+ */
 export function finalizeMcpReplacement(replacement: McpReplacement): readonly string[] {
   if (replacement.kind === "noop") {
     return Object.freeze([]);

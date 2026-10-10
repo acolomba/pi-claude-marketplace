@@ -49,8 +49,8 @@ function isStringArray(value: unknown): value is readonly string[] {
 /**
  * Returns the parsed marker subobject if `value` is an object with a
  * well-formed `_piClaudeMarketplace: { plugin: string; marketplace: string }`
- * entry; otherwise null. Robust against arrays, primitives, and partial
- * shapes -- never throws. `pluginSetFields` is returned only when it is an
+ * entry; otherwise null. Arrays, primitives, and partial shapes yield null; it
+ * never throws. `pluginSetFields` is returned only when it is an
  * own array of strings, and `keptOverride` only when it is an own plain-object
  * member; any other value parses as a marker without that member.
  */
@@ -84,7 +84,7 @@ function readMarker(value: unknown): ClaudeMarketplaceMarker | null {
 }
 
 /**
- * Build a marker subobject. The plan-side discipline of MC-5 is uniform
+ * Builds a marker subobject. The plan-side discipline of MC-5 is uniform
  * with state-record discipline -- callers are expected to have already
  * validated `plugin` and `marketplace` via `assertSafeName` upstream.
  * This helper does NOT re-validate; the bridge
@@ -122,7 +122,7 @@ export function markerOwnerOf(value: unknown): McpMarkerOwner | undefined {
   return marker === null ? undefined : { plugin: marker.plugin, marketplace: marker.marketplace };
 }
 
-/** Convenience: `readMarker(value)` followed by tuple equality. */
+/** Whether `value`'s marker names exactly this plugin and marketplace. */
 export function isOwnedBy(value: unknown, plugin: string, marketplace: string): boolean {
   const m = readMarker(value);
   return m !== null && m.plugin === plugin && m.marketplace === marketplace;

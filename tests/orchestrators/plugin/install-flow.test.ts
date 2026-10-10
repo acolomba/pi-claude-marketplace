@@ -1985,7 +1985,7 @@ const DFEN_PRECEDENCE_CASES: readonly DfenPrecedenceCase[] = [
   },
   {
     // The trivially-enabled control: both sides agree on `true`, so a gate that
-    // was simply inverted would still have to fail somewhere, and this is where.
+    // was inverted would still have to fail somewhere, and this is where.
     label:
       "an explicit `enabled: true` under a manifest declaring defaultEnabled true is an ordinary install",
     tmpPrefix: "install-dfen05-both-true-",
@@ -11794,13 +11794,13 @@ test("retry proof: install: disabled cascade failure preserves shrunken record a
       let mcpFault = true;
       let mcpError: Error | undefined;
       transactionControl.runPhases = async <C>(phases: readonly Phase<C>[], ctx: C) => {
-        const result = await runPhases(phases, ctx);
+        const phasesResult = await runPhases(phases, ctx);
         // RESV-01: install schedules TWO ledgers -- the outer cascade, one
         // phase per closure member, and the six-phase bridge ledger inside each
         // of those phases. The fault arms after the BRIDGE ledger commits, so
         // the arming gate names that ledger by a phase it owns rather than
         // firing on whichever `runPhases` call returns first.
-        if (result.ok && mcpFault && phases.some((phase) => phase.name === "mcp")) {
+        if (phasesResult.ok && mcpFault && phases.some((phase) => phase.name === "mcp")) {
           activeSchedule.push("commit:mcp", "disable:mcp:armed");
           await chmod(locations.mcpAdapterJsonPath, 0o000);
           try {
@@ -11811,7 +11811,7 @@ test("retry proof: install: disabled cascade failure preserves shrunken record a
           }
         }
 
-        return result;
+        return phasesResult;
       };
 
       const stateBytes = await readFile(locations.stateJsonPath, "utf8");
@@ -14926,7 +14926,7 @@ test("WLIF-01: a re-stage over a kept record displaces the plugin's own envelope
       const { ctx } = makeCtx();
 
       // act
-      const result = await runInstallLedger(kept, locations, {
+      const ledgerOutcome = await runInstallLedger(kept, locations, {
         ctx,
         cwd,
         marketplace: "mp",
@@ -14938,13 +14938,13 @@ test("WLIF-01: a re-stage over a kept record displaces the plugin's own envelope
       });
 
       // assert
-      assert.strictEqual(result.kind, "installed");
+      assert.strictEqual(ledgerOutcome.kind, "installed");
       // WLIF-05: the projection reports the name the re-stage placed, and the
       // state snapshot the ledger mutated in place agrees with it. Both are
       // asserted because they answer different questions -- the projection is
       // what a caller OUTSIDE the ledger can see, and the enable verb has no
       // other channel to it.
-      assert.deepStrictEqual(result.summary.stagedWorkflowNames, ["hello:greet"]);
+      assert.deepStrictEqual(ledgerOutcome.summary.stagedWorkflowNames, ["hello:greet"]);
       assert.deepStrictEqual(kept.marketplaces.mp?.plugins.hello?.resources.workflows, [
         "hello:greet",
       ]);
@@ -14997,7 +14997,7 @@ test("WLIF-05: the projection reports the placed names in discovery order, stabl
       // act -- re-run the ledger over the UNCHANGED tree through the enable
       // seam, so the second run displaces the plugin's own envelopes aside
       // rather than refusing on occupancy.
-      const result = await runInstallLedger(kept, locations, {
+      const ledgerOutcome = await runInstallLedger(kept, locations, {
         ctx,
         cwd,
         marketplace: "mp",
@@ -15009,8 +15009,11 @@ test("WLIF-05: the projection reports the placed names in discovery order, stabl
       });
 
       // assert
-      assert.strictEqual(result.kind, "installed");
-      assert.deepStrictEqual(result.summary.stagedWorkflowNames, ["hello:zulu", "hello:alpha"]);
+      assert.strictEqual(ledgerOutcome.kind, "installed");
+      assert.deepStrictEqual(ledgerOutcome.summary.stagedWorkflowNames, [
+        "hello:zulu",
+        "hello:alpha",
+      ]);
       assert.deepStrictEqual(kept.marketplaces.mp?.plugins.hello?.resources.workflows, [
         "hello:zulu",
         "hello:alpha",

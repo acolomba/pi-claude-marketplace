@@ -208,6 +208,7 @@ test("occupied artifact remains untouched and keeps its recovery backup", async 
 
 test("artifact publication refuses a replacement created at the write boundary", async () => {
   await withHermeticEnvironment("prune-rollback-publish-race-", async ({ cwd }) => {
+    // arrange
     const locations = locationsFor("project", cwd);
     const fixture = await seed(locations);
     const original = await readFile(fixture.command);
@@ -226,8 +227,10 @@ test("artifact publication refuses a replacement created at the write boundary",
     });
     await rm(fixture.command);
 
+    // act
     const failures = await rollback.rollback();
 
+    // assert
     assert.equal(published, true);
     assert.deepStrictEqual(
       failures.map(({ phase }) => phase),
@@ -278,6 +281,7 @@ test("publication failure keeps the backup and reports an artifact restore failu
 
 test("nested directory backup stays complete across repeated partial rollbacks", async () => {
   await withHermeticEnvironment("prune-rollback-directory-retry-", async ({ cwd }) => {
+    // arrange
     const locations = locationsFor("project", cwd);
     const fixture = await seed(locations);
     const skillDir = path.dirname(fixture.skill);
@@ -288,6 +292,7 @@ test("nested directory backup stays complete across repeated partial rollbacks",
     });
     await rm(skillDir, { recursive: true });
 
+    // act & assert
     const firstFailures = await rollback.rollback();
     assert.deepStrictEqual(
       firstFailures.map(({ phase }) => phase),
@@ -310,6 +315,7 @@ test("nested directory backup stays complete across repeated partial rollbacks",
 
 test("an in-place edit to a restored file cannot change its retained backup", async () => {
   await withHermeticEnvironment("prune-rollback-file-alias-", async ({ cwd }) => {
+    // arrange
     const locations = locationsFor("project", cwd);
     const fixture = await seed(locations);
     const original = await readFile(fixture.command);
@@ -326,8 +332,10 @@ test("an in-place edit to a restored file cannot change its retained backup", as
     await rm(fixture.command);
     await writeFile(locations.mcpJsonPath, "independent metadata\n");
 
+    // act
     const failures = await rollback.rollback();
 
+    // assert
     assert.deepStrictEqual(
       failures.map(({ phase }) => phase),
       ["mcp"],
@@ -342,6 +350,7 @@ test("an in-place edit to a restored file cannot change its retained backup", as
 
 test("restored file mode survives the process umask", async () => {
   await withHermeticEnvironment("prune-rollback-file-mode-", async ({ cwd }) => {
+    // arrange
     const locations = locationsFor("project", cwd);
     const fixture = await seed(locations);
     await chmod(fixture.command, 0o764);
@@ -350,12 +359,15 @@ test("restored file mode survives the process umask", async () => {
     });
     await rm(fixture.command);
     const priorUmask = process.umask(0o077);
+
+    // act & assert
     try {
       assert.deepStrictEqual(await rollback.rollback(), []);
     } finally {
       process.umask(priorUmask);
     }
 
+    // assert
     assert.equal((await lstat(fixture.command)).mode & 0o777, 0o764);
   });
 });
@@ -706,6 +718,7 @@ test("nested symlink content is compared without following its target", async ()
 
 test("missing directory retains a nested symlink in its backup", async () => {
   await withHermeticEnvironment("prune-rollback-symlink-publish-", async ({ cwd }) => {
+    // arrange
     const locations = locationsFor("project", cwd);
     const fixture = await seed(locations);
     const linked = path.join(path.dirname(fixture.skill), "linked.md");
@@ -717,8 +730,10 @@ test("missing directory retains a nested symlink in its backup", async () => {
     });
     await rm(path.dirname(fixture.skill), { recursive: true });
 
+    // act
     const failures = await rollback.rollback();
 
+    // assert
     assert.deepStrictEqual(
       failures.map(({ phase }) => phase),
       ["skills"],
@@ -734,6 +749,7 @@ test("missing directory retains a nested symlink in its backup", async () => {
 
 test("rollback rejects a symlink substituted into an artifact backup", async () => {
   await withHermeticEnvironment("prune-rollback-symlink-artifact-", async ({ cwd }) => {
+    // arrange
     const locations = locationsFor("project", cwd);
     const fixture = await seed(locations);
     const outside = path.join(cwd, "outside.md");
@@ -746,8 +762,10 @@ test("rollback rejects a symlink substituted into an artifact backup", async () 
     await symlink(outside, backup);
     await rm(fixture.command);
 
+    // act
     const failures = await rollback.rollback();
 
+    // assert
     assert.deepStrictEqual(
       failures.map(({ phase }) => phase),
       ["commands"],
@@ -760,6 +778,7 @@ test("rollback rejects a symlink substituted into an artifact backup", async () 
 
 test("unsupported backup artifact kind retains the recovery snapshot", async () => {
   await withHermeticEnvironment("prune-rollback-unsupported-backup-", async ({ cwd }) => {
+    // arrange
     const locations = locationsFor("project", cwd);
     const fixture = await seed(locations);
     const rollback = await preparePruneRollback(locations, [fixture.member], {
@@ -780,8 +799,10 @@ test("unsupported backup artifact kind retains the recovery snapshot", async () 
     const unsupportedBackup = path.join(locations.extensionRoot, rollback.backupName, "1");
     await rm(fixture.command);
 
+    // act
     const failures = await rollback.rollback();
 
+    // assert
     assert.deepStrictEqual(
       failures.map(({ phase }) => phase),
       ["commands"],
@@ -890,6 +911,7 @@ test("shared MCP edit after unstage stays current and retains its original backu
 
 test("MCP edit before unstage observation stays current and retains its backup", async () => {
   await withHermeticEnvironment("prune-rollback-mcp-before-mark-", async ({ cwd }) => {
+    // arrange
     const locations = locationsFor("project", cwd);
     const fixture = await seed(locations);
     const original = await readFile(locations.mcpJsonPath);
@@ -899,8 +921,10 @@ test("MCP edit before unstage observation stays current and retains its backup",
     const independent = Buffer.from('{ "mcpServers": { "orphan": 1, "independent": 2 } }\n');
     await writeFile(locations.mcpJsonPath, independent);
 
+    // act
     const failures = await rollback.rollback();
 
+    // assert
     assert.deepStrictEqual(
       failures.map(({ phase }) => phase),
       ["mcp"],
@@ -915,6 +939,7 @@ test("MCP edit before unstage observation stays current and retains its backup",
 
 test("MCP edit during rollback observation remains current with recovery backup", async () => {
   await withHermeticEnvironment("prune-rollback-mcp-read-race-", async ({ cwd }) => {
+    // arrange
     const locations = locationsFor("project", cwd);
     const fixture = await seed(locations);
     const original = await readFile(locations.mcpJsonPath);
@@ -932,8 +957,10 @@ test("MCP edit during rollback observation remains current with recovery backup"
     const rollback = await preparePruneRollback(locations, [fixture.member], ops);
     await writeFile(locations.mcpJsonPath, '{ "mcpServers": {} }\n');
 
+    // act
     const failures = await rollback.rollback();
 
+    // assert
     assert.equal(injected, true);
     assert.deepStrictEqual(
       failures.map(({ phase }) => phase),
@@ -1008,6 +1035,7 @@ test("metadata directory collision leaves the directory and its backup intact", 
 
 test("missing shared metadata keeps its original recovery backup", async () => {
   await withHermeticEnvironment("prune-rollback-metadata-missing-", async ({ cwd }) => {
+    // arrange
     const locations = locationsFor("project", cwd);
     const fixture = await seed(locations);
     const original = await readFile(locations.mcpJsonPath);
@@ -1016,8 +1044,10 @@ test("missing shared metadata keeps its original recovery backup", async () => {
     });
     await rm(locations.mcpJsonPath);
 
+    // act
     const failures = await rollback.rollback();
 
+    // assert
     assert.deepStrictEqual(
       failures.map(({ phase }) => phase),
       ["mcp"],
@@ -1032,6 +1062,7 @@ test("missing shared metadata keeps its original recovery backup", async () => {
 
 test("a damaged metadata backup is reported without replacing the live document", async () => {
   await withHermeticEnvironment("prune-rollback-metadata-backup-damaged-", async ({ cwd }) => {
+    // arrange
     const locations = locationsFor("project", cwd);
     const fixture = await seed(locations);
     const original = await readFile(locations.mcpJsonPath);
@@ -1042,8 +1073,10 @@ test("a damaged metadata backup is reported without replacing the live document"
     await rm(backup);
     await mkdir(backup);
 
+    // act
     const failures = await rollback.rollback();
 
+    // assert
     assert.deepStrictEqual(
       failures.map(({ phase }) => phase),
       ["mcp"],

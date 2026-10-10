@@ -9,7 +9,7 @@
 // (adapter-entry.ts, adapter-doc.ts) copy `JSON.parse`d keys verbatim and
 // share this guard so they cannot drift (WR-01).
 
-/** Copy `value` onto `out` under `key`, treating a literal `__proto__` key as an own data property. */
+/** Copies `value` onto `out` under `key`, treating a literal `__proto__` key as an own data property. */
 export function safeSet(out: Record<string, unknown>, key: string, value: unknown): void {
   if (key === "__proto__") {
     Object.defineProperty(out, key, {

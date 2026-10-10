@@ -151,10 +151,10 @@ describe("planReconcile", () => {
     });
 
     // act
-    const result = planReconcile(merged, state, "project");
+    const plan = planReconcile(merged, state, "project");
 
     // assert
-    assert.deepStrictEqual(result, {
+    assert.deepStrictEqual(plan, {
       scope: "project",
       marketplacesToAdd: [],
       marketplacesToRemove: [],
@@ -183,10 +183,10 @@ describe("planReconcile", () => {
     );
 
     // act
-    const result = planReconcile(merged, stateWith(), "project");
+    const plan = planReconcile(merged, stateWith(), "project");
 
     // assert
-    assert.deepStrictEqual(result, {
+    assert.deepStrictEqual(plan, {
       scope: "project",
       marketplacesToAdd: [
         {
@@ -227,10 +227,10 @@ describe("planReconcile", () => {
     });
 
     // act
-    const result = planReconcile(merged, state, "project");
+    const plan = planReconcile(merged, state, "project");
 
     // assert
-    assert.deepStrictEqual(result, {
+    assert.deepStrictEqual(plan, {
       scope: "project",
       marketplacesToAdd: [],
       marketplacesToRemove: [{ scope: "project", marketplace: "unmatched", plugins: [] }],
@@ -253,10 +253,10 @@ describe("planReconcile", () => {
     });
 
     // act
-    const result = planReconcile(merged, state, "project");
+    const plan = planReconcile(merged, state, "project");
 
     // assert
-    assert.deepStrictEqual(result, {
+    assert.deepStrictEqual(plan, {
       scope: "project",
       marketplacesToAdd: [],
       marketplacesToRemove: [],
@@ -341,10 +341,10 @@ describe("planReconcile", () => {
     });
 
     // act
-    const result = planReconcile(merged, state, "project");
+    const plan = planReconcile(merged, state, "project");
 
     // assert
-    assert.deepStrictEqual(result, {
+    assert.deepStrictEqual(plan, {
       scope: "project",
       marketplacesToAdd: [],
       marketplacesToRemove: [],
@@ -374,10 +374,10 @@ describe("planReconcile", () => {
     const state = stateWith();
 
     // act
-    const result = planReconcile(merged, state, "user");
+    const plan = planReconcile(merged, state, "user");
 
     // assert
-    assert.deepStrictEqual(result, {
+    assert.deepStrictEqual(plan, {
       scope: "user",
       marketplacesToAdd: [
         {
@@ -431,10 +431,10 @@ describe("planReconcile", () => {
     });
 
     // act
-    const result = planReconcile(merged, state, "project");
+    const plan = planReconcile(merged, state, "project");
 
     // assert
-    assert.deepStrictEqual(result, {
+    assert.deepStrictEqual(plan, {
       scope: "project",
       marketplacesToAdd: [],
       marketplacesToRemove: [],
@@ -469,10 +469,10 @@ describe("planReconcile", () => {
     const state = stateWith();
 
     // act
-    const result = planReconcile(merged, state, "user");
+    const plan = planReconcile(merged, state, "user");
 
     // assert
-    assert.deepStrictEqual(result, {
+    assert.deepStrictEqual(plan, {
       scope: "user",
       marketplacesToAdd: [],
       marketplacesToRemove: [],
@@ -551,10 +551,10 @@ describe("planReconcile", () => {
     });
 
     // act
-    const result = planReconcile(merged, state, "project");
+    const plan = planReconcile(merged, state, "project");
 
     // assert
-    assert.deepStrictEqual(result, {
+    assert.deepStrictEqual(plan, {
       scope: "project",
       marketplacesToAdd: [],
       marketplacesToRemove: [
@@ -607,12 +607,12 @@ describe("planReconcile", () => {
     });
 
     // act
-    const result = planReconcile(merged, state, "project");
+    const plan = planReconcile(merged, state, "project");
 
     // assert -- every bucket, not just the install and enable ones. A record
     // reaching `pluginsToUninstall` or `pluginsToDisable` would take the
     // envelope off disk on a plain reload, which is the opposite failure.
-    assert.deepStrictEqual(result, {
+    assert.deepStrictEqual(plan, {
       scope: "project",
       marketplacesToAdd: [],
       marketplacesToRemove: [],
@@ -647,10 +647,10 @@ describe("planReconcile", () => {
     });
 
     // act
-    const result = planReconcile(merged, state, "project");
+    const plan = planReconcile(merged, state, "project");
 
     // assert
-    assert.deepStrictEqual(result, {
+    assert.deepStrictEqual(plan, {
       scope: "project",
       marketplacesToAdd: [],
       marketplacesToRemove: [],
@@ -680,10 +680,10 @@ describe("planReconcile", () => {
     });
 
     // act
-    const result = planReconcile(merged, state, "project");
+    const plan = planReconcile(merged, state, "project");
 
     // assert
-    assert.deepStrictEqual(result, {
+    assert.deepStrictEqual(plan, {
       scope: "project",
       marketplacesToAdd: [],
       marketplacesToRemove: [],
@@ -726,10 +726,10 @@ describe("planReconcile", () => {
     });
 
     // act
-    const result = planReconcile(merged, state, "project");
+    const plan = planReconcile(merged, state, "project");
 
     // assert
-    assert.deepStrictEqual(result, {
+    assert.deepStrictEqual(plan, {
       scope: "project",
       marketplacesToAdd: [],
       marketplacesToRemove: [],
@@ -786,10 +786,10 @@ describe("planReconcile", () => {
     });
 
     // act
-    const result = planReconcile(merged, state, "project");
+    const plan = planReconcile(merged, state, "project");
 
     // assert
-    assert.deepStrictEqual(result, {
+    assert.deepStrictEqual(plan, {
       scope: "project",
       marketplacesToAdd: [
         {
@@ -851,10 +851,10 @@ describe("planReconcile", () => {
     });
 
     // act
-    const result = planReconcile(merged, state, "project");
+    const plan = planReconcile(merged, state, "project");
 
     // assert
-    assert.deepStrictEqual(result, {
+    assert.deepStrictEqual(plan, {
       scope: "project",
       marketplacesToAdd: [],
       marketplacesToRemove: [],

@@ -37,11 +37,13 @@ import { errorMessage, StateLockHeldError } from "../shared/errors.ts";
 
 import type { ScopedLocations } from "../persistence/locations.ts";
 
+/** A locked load of the scope's state, saved at most once through `save()`. */
 export interface LockedStateTransaction {
   readonly state: ExtensionState;
   save(): Promise<void>;
 }
 
+/** Replacement state I/O for `withStateGuard` and `withLockedStateTransaction`. */
 export interface LockedStateTransactionDeps {
   readonly loadState?: typeof loadState;
   readonly saveState?: typeof saveState;
@@ -166,6 +168,7 @@ export async function withExistingScopeLock<T>(
     throw toError(primaryError);
   }
 
+  // `result` is assigned whenever `body()` resolved, the only path that reaches here.
   return result as T;
 }
 

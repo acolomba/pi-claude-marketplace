@@ -77,6 +77,7 @@ test("SC-2 / AGSK-06: emitted skillPath resolves the staged skill via pi-subagen
       return;
     }
 
+    // arrange
     t.diagnostic(`pi-subagents ${peer.version} at ${peer.root}`);
     const skillsModule = await loadPiSubagentsModule<PiSubagentsSkillsModule>(peer, "skills");
 
@@ -144,6 +145,7 @@ test("SC-2 / AGSK-06: emitted skillPath resolves the staged skill via pi-subagen
       "utf8",
     );
 
+    // act
     // localBaseDir = dirname(agent.filePath), mirroring how pi-subagents
     // resolves an agent's skills for both foreground and background runs.
     const { resolved, missing } = resolveSkillsWithFallback(
@@ -154,6 +156,7 @@ test("SC-2 / AGSK-06: emitted skillPath resolves the staged skill via pi-subagen
       path.dirname(agentFilePath),
     );
 
+    // assert
     assert.ok(
       resolved.some((skill) => skill.name === generatedName),
       "resolveSkillsWithFallback must resolve the generated skill by name via the emitted skillPath",

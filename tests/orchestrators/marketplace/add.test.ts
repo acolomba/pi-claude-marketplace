@@ -2287,7 +2287,7 @@ test("ATTR-07: a Unix domain socket path renders (failed) {source missing}", asy
         });
       });
       await unlink(socketPath).catch(() => {
-        /* already gone */
+        // already gone
       });
     }
   });

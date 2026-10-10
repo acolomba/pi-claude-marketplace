@@ -9,7 +9,7 @@
 // `edge/register.ts` (which legally imports from `orchestrators/`) can
 // reach all four underlying modules without violating BLOCK C's
 // edge/ -> persistence/ restriction (edge/ -> domain/ has been allowed
-// directly since Phase 21 / D-21-02; the domain/manifest read still routes
+// directly (D-21-02); the domain/manifest read still routes
 // through here because it's paired with the persistence/ read in the same
 // resolver interface).
 //

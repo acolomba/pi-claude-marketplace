@@ -442,10 +442,10 @@ describe("sourceMismatchOutcomeSubject", () => {
     } satisfies SourceMismatchOutcome;
 
     // act
-    const subject = sourceMismatchOutcomeSubject(outcome);
+    const outcomeSubject = sourceMismatchOutcomeSubject(outcome);
 
     // assert
-    assert.strictEqual(subject, "missing");
+    assert.strictEqual(outcomeSubject, "missing");
   });
 
   test("selects the raw key for a malformed plugin key", () => {
@@ -458,10 +458,10 @@ describe("sourceMismatchOutcomeSubject", () => {
     } satisfies SourceMismatchOutcome;
 
     // act
-    const subject = sourceMismatchOutcomeSubject(outcome);
+    const outcomeSubject = sourceMismatchOutcomeSubject(outcome);
 
     // assert
-    assert.strictEqual(subject, "formatter");
+    assert.strictEqual(outcomeSubject, "formatter");
   });
 
   test("selects the marketplace for a source mismatch", () => {
@@ -474,10 +474,10 @@ describe("sourceMismatchOutcomeSubject", () => {
     } satisfies SourceMismatchOutcome;
 
     // act
-    const subject = sourceMismatchOutcomeSubject(outcome);
+    const outcomeSubject = sourceMismatchOutcomeSubject(outcome);
 
     // assert
-    assert.strictEqual(subject, "official");
+    assert.strictEqual(outcomeSubject, "official");
   });
 
   test("selects the marketplace for an unknown stored source", () => {
@@ -490,10 +490,10 @@ describe("sourceMismatchOutcomeSubject", () => {
     } satisfies SourceMismatchOutcome;
 
     // act
-    const subject = sourceMismatchOutcomeSubject(outcome);
+    const outcomeSubject = sourceMismatchOutcomeSubject(outcome);
 
     // assert
-    assert.strictEqual(subject, "legacy");
+    assert.strictEqual(outcomeSubject, "legacy");
   });
 });
 

@@ -696,6 +696,9 @@ function projectDroppedHookEntries(dropped: readonly DroppedHook[]): readonly Ho
  */
 function parseHooksForInfo(raw: string, cwd: string): HookConfigParseResult<null> {
   const ifCtx = { homedir: homedir(), cwd, projectRoot: cwd };
+  // `skipIfMap: true` means the compiler is never invoked, so a bound builtin
+  // stands in for it: an arrow literal here would be a function no test can
+  // reach, and direct coverage counts functions.
   const noopCompileIf = JSON.parse.bind(JSON, "null") as () => null;
   return parseHooksConfig(raw, ifCtx, noopCompileIf, { skipIfMap: true });
 }
@@ -707,7 +710,7 @@ function parseHooksForInfo(raw: string, cwd: string): HookConfigParseResult<null
  * re-open the file at info-render time. Returns `undefined` when the
  * file has no `hooksConfigPath` (the plugin declares no hooks). A defensive
  * re-parse failure projects through empty defaults, so the renderer omits the
- * hooks block just as it did before this private coverage simplification.
+ * hooks block.
  *
  * PHOOK-05 / D-71-05: `parseHooksConfig` returns the FILTERED supported
  * subset as `value` plus the `dropped` enumeration. For a partially-available

@@ -182,7 +182,7 @@ export type Reason =
   // constraining plugins. `version conflict` cannot carry it: nothing here
   // contradicts anything. `no matching version` cannot carry it either: that
   // token claims the source advertised no tag in range, which is false on
-  // the arm where a version WAS found and simply falls outside what the
+  // the arm where a version WAS found and falls outside what the
   // dependents allow.
   | "dependents constrain"
   // D-11-06: the root marketplace disallows a new cross-marketplace edge.

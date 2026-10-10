@@ -2100,7 +2100,7 @@ for (const { label, pluginNames, gitSourced, knownMarketplaces, dependencyMarket
 }
 
 test("TAGS-02 a path source whose marketplace clone carries no matching release tag installs anyway", async (t) => {
-  // arrange: TAGS-01's precedent test (this loop's former third case) --
+  // arrange: TAGS-01's precedent test --
   // `bar` is path-sourced and its own marketplace clone carries no tag at
   // all, so TAGS-02's fallback applies rather than D-03-09's no-fallthrough
   // rule, which stays reserved for the git-backed and absent-source arms.

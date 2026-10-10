@@ -1307,7 +1307,7 @@ export function removePluginRecord(
  * D-04: update / reinstall preserves the consume-time `enabled` default and
  * any forward-compat keys; the patch carries no per-operation mutation. The
  * patched shape is therefore `{...existing, ...{}}` -- byte-identical to the
- * existing entry. So the gate is simply: if the key is ALREADY PRESENT,
+ * existing entry. So the gate is: if the key is ALREADY PRESENT,
  * writing back would produce a byte-identical file -- SKIP to preserve
  * RECON-05 mtime stability. If the key is ABSENT, writing back ADDS the key
  * so the user-authored config gains the implicit declaration.

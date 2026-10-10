@@ -584,7 +584,7 @@ for (const { condition, stage, rendered, expectedMessage } of plannedInstallRows
 // The staging sweeper deliberately keeps an aged tree whose `.previous/` still
 // holds envelopes, because those bytes are the only surviving copy of the
 // user's previous workflow scripts. The tree sits outside every scope root, so
-// uninstall and a reload cannot reach it, and until now no surface named it.
+// uninstall and a reload cannot reach it, so a command must name it.
 // These cases pin that this command names it on BOTH of its arms, in the same
 // bytes, once per invocation.
 // ---------------------------------------------------------------------------

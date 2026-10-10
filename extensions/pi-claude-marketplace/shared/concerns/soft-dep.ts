@@ -9,16 +9,15 @@ import type { SoftDepStatus } from "../../platform/pi-api.ts";
  * threaded `SoftDepStatus` probe to the soft-dep markers to append. It also owns
  * the companion package names and `companionRequirements`, the same mapping
  * shaped for the info `requires:` line (ADET-01). The central
- * `composeReasons` (which stays in `notify.ts` as shared presentation
+ * `composeReasons` (in `notification-grammar.ts`, as shared presentation
  * vocabulary) delegates its soft-dep branch here.
  *
  * The `softDepStatus(pi)` probe stays threaded by the renderer (environment is
  * the renderer's job); this module is pure given the probe result. `Reason` is
- * imported type-only from `notify.ts` -- the byte-critical `REASONS` tuple stays
- * the single source of catalog truth there, and the type-only import is the
- * cycle safeguard (no `import-x/no-cycle` rule is configured, so the
+ * imported type-only from `notification-types.ts`, the single source of the
+ * reason vocabulary. The type-only import is the cycle safeguard: the
  * renderer->concern call direction plus type-only back-references prevent any
- * runtime cycle).
+ * runtime cycle.
  */
 
 /**

@@ -1541,7 +1541,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
     const zuluTarget = path.join(locations.agentsDir, "pi-claude-marketplace-acme-zulu.md");
     const alphaStaged = path.join(prepared.stagingDir, path.basename(alphaTarget));
     const zuluStaged = path.join(prepared.stagingDir, path.basename(zuluTarget));
-    const stagedFilePaths = [...prepared._stagedFilePaths];
+    const stagedFilePaths = [...prepared.stagedFilePaths];
     const zuluPair = stagedFilePaths[1];
     assert.ok(zuluPair);
     Object.defineProperty(stagedFilePaths, 1, {
@@ -1552,7 +1552,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
         return zuluPair;
       },
     });
-    const vanishingPrepared = { ...prepared, _stagedFilePaths: stagedFilePaths };
+    const vanishingPrepared = { ...prepared, stagedFilePaths: stagedFilePaths };
 
     // act
     const error = await commitPreparedAgents(createRemovalOps(), vanishingPrepared).then(

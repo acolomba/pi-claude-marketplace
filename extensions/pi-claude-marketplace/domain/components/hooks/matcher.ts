@@ -81,7 +81,7 @@ function classifyAlternative(token: string): Alternative {
 }
 
 /**
- * Parse a Claude hook matcher into its dispatch-safe form. A pipe-OR
+ * Parses a Claude hook matcher into its dispatch-safe form. A pipe-OR
  * matcher degrades per alternative (TOOL-02, MATCH-02, #217): each
  * alternative is classified on its own, a mapped Claude tool or an MCP
  * literal joins `toolNames`, an MCP server prefix joins `toolPrefixes`

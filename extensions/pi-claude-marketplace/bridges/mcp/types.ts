@@ -137,11 +137,13 @@ export interface PreparedMcpStaged {
 /** Opaque reinstall replacement handle for staged MCP changes. */
 export type McpReplacement = McpReplacementNoop | McpReplacementReplaced;
 
+/** A reinstall replacement that staged nothing. */
 export interface McpReplacementNoop {
   readonly kind: "noop";
   readonly prepared: Extract<PreparedMcpStaging, { kind: "noop" }>;
 }
 
+/** A reinstall replacement that wrote the staged servers. */
 export interface McpReplacementReplaced {
   readonly kind: "replaced";
   readonly prepared: PreparedMcpStaged;

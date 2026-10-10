@@ -280,8 +280,8 @@ interface Footprint {
 
 /** The declarative layer at one path, or undefined when no file was written. */
 async function readConfigLayer(filePath: string): Promise<ScopeConfig | undefined> {
-  const result = await loadConfig(filePath);
-  return result.status === "valid" ? result.config : undefined;
+  const loaded = await loadConfig(filePath);
+  return loaded.status === "valid" ? loaded.config : undefined;
 }
 
 async function readGeneratedAgents(scopeRoot: string): Promise<GeneratedAgentProjection[]> {

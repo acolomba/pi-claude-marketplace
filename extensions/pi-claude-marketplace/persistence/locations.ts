@@ -214,8 +214,8 @@ export function locationsFor(scope: Scope, cwd: string): ScopedLocations {
   // scopeRoot at the same tier as agentsDir, mcpJsonPath and mcpAdapterJsonPath
   // (AFILE-01). NFR-10 containment
   // is enforced at the WRITE site (saveConfig) rather than here; both paths are
-  // composed from hard-coded suffixes on scopeRoot so the locations.ts comment
-  // block below (lines 134-143) covering the suffix-only construction applies.
+  // composed from hard-coded suffixes on scopeRoot so the T-03-04 disposition
+  // below covering the suffix-only construction applies.
   const configJsonPath = path.join(scopeRoot, "claude-plugins.json");
   const configLocalJsonPath = path.join(scopeRoot, "claude-plugins.local.json");
   const skillsStagingDir = path.join(extensionRoot, "skills-staging");

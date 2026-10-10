@@ -3222,11 +3222,13 @@ test("updateMarketplace: explicit-scope missing marketplace -> standalone {marke
 // direction: the container sits in project, the operator named user.
 test("CMP-4 / SCOPE-01: explicit --scope user against a project-only marketplace renders the user-direction qualified row", async () => {
   await withHermeticHome(async ({ cwd }) => {
+    // arrange
     // seedGithubMarketplace seeds the PROJECT scope; ask for USER explicitly.
     await seedGithubMarketplace({ cwd, name: "mp" });
     const { ctx, pi, notifications } = makeCtx();
     const { gitOps } = createGitOps();
 
+    // act
     await updateMarketplace({
       completionCache: createCompletionCache(),
       ctx,
@@ -3237,6 +3239,7 @@ test("CMP-4 / SCOPE-01: explicit --scope user against a project-only marketplace
       gitOps,
     });
 
+    // assert
     assert.equal(notifications.length, 1);
     assert.equal(
       notifications[0]?.message,

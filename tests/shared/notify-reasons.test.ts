@@ -50,15 +50,13 @@ void ("command" satisfies DegradeKind);
 // @ts-expect-error DegradeKind excludes component kinds without degraded frontmatter behavior
 void ("hook" satisfies DegradeKind);
 
-/*
- * OUT-08 coverage proof, observed through the contract it guards.
- *
- * The proof is module-private and is folded into the per-kind reason map's
- * annotation, so a reason left without a topic home -- or a stray literal that
- * is not a `Reason` -- collapses that map's value type to `never` and the owner
- * stops compiling. What a caller can still see is the mapping's own result, and
- * it is exactly the failure-class vocabulary rather than the empty type.
- */
+// OUT-08 coverage proof, observed through the contract it guards.
+//
+// The proof is module-private and is folded into the per-kind reason map's
+// annotation, so a reason left without a topic home -- or a stray literal that
+// is not a `Reason` -- collapses that map's value type to `never` and the owner
+// stops compiling. What a caller can still see is the mapping's own result, and
+// it is exactly the failure-class vocabulary rather than the empty type.
 void (true satisfies IsExact<ReturnType<typeof malformedReasonsForKinds>[number], FailureReason>);
 
 const skipSeverityCases = [

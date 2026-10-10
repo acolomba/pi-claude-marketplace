@@ -180,6 +180,7 @@ export function splitCompletionInput(input: string): { tokens: string[]; current
     return { tokens: allTokens, current: "" };
   }
 
+  // Non-empty input without trailing whitespace always yields at least one token.
   const [current] = allTokens.slice(-1) as [string];
   return { tokens: allTokens.slice(0, -1), current };
 }

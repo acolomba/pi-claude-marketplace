@@ -810,7 +810,7 @@ describe("applyBackfillForScopeIsolated", () => {
   // MANIFEST READ, which is the first statement of the offline re-resolve. It
   // is one step downstream of "the resolver was never called" -- a future
   // change that read the manifest before the disabled filter would keep this
-  // pair honest about the read while no longer bounding the resolve.
+  // pair honest about the read while failing to bound the resolve.
   test("ENBL-08 / D-116-03: leaves a disabled record's poisoned manifest unread, so the stamp lands", async (t) => {
     // arrange
     const { cwd, locations } = await createHermeticProjectScope(t, "disabled-unread-manifest");
@@ -2479,7 +2479,7 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
       },
     };
     // The snapshot still carries the record; the on-disk state the
-    // self-locking re-materialize re-reads no longer does.
+    // self-locking re-materialize re-reads lacks it.
     const afterConcurrentUninstall: ExtensionState = {
       schemaVersion: 3,
       lastReconciledExtensionVersion: STALE_STAMP,

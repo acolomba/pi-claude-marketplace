@@ -29,8 +29,7 @@
 //  PluginUpdatePhase3Error with RECOVERY_PLUGIN_REINSTALL_PREFIX hint.
 //  Else: success outcome carries WR-04 stagedAgentNames/stagedMcpServerNames.
 //
-// D-141-03 / D-141-05: the four bridges' staging warnings are READ (they were
-// not, so every one of them was dark on this path) and split by install's
+// D-141-03 / D-141-05: the four bridges' staging warnings are READ and split by install's
 // rule through `./shared.ts::splitStagingWarnings`. The skills and commands
 // DISCOVERY half always rides the `updated` outcome's `notes`; the agents and
 // mcp HYGIENE half joins it in cascade mode only. The direct path renders the
@@ -759,8 +758,8 @@ function applyAllSuccessRecordFields(sRecord: PluginStateRecord, preflight: Plug
   // post-commit GC and the next update read the swapped sha. Undefined for
   // an unpinned source (no clone to protect). WR-01: also clear a STALE
   // `resolvedSha` a prior update or install left on the record -- otherwise
-  // a `path` source whose re-resolution no longer pins a tag would keep
-  // naming a commit `resolvedSource` no longer sits at.
+  // a `path` source whose re-resolution does not pin a tag would keep
+  // naming a commit `resolvedSource` does not sit at.
   if (resolvedSha === undefined) {
     delete sRecord.resolvedSha;
   } else {

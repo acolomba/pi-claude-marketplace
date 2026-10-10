@@ -5333,7 +5333,7 @@ test("retry proof: uninstall: a refused cache path escape is swallowed and later
 // severity with its reload stamp -- the command was carried out in full -- and
 // the dependent keys ride the cause line as sorted `name@marketplace` keys.
 //
-// Who counts as a declarer is unchanged from Phase 5: a disabled declarer
+// Who counts as a declarer: a disabled declarer
 // still holds (D-05-04), only the target scope's own state is consulted
 // (D-05-05), and every declaration is read offline (D-05-06). The
 // fail-closed refusal survives too (D-05-07): a declarer whose declarations
@@ -6864,10 +6864,10 @@ test("AFILE-04: uninstall over a commented mcp-adapter.json shows the comments-r
     '// user note\n{"mcpServers":{"uni-server":{"command":"node","_piClaudeMarketplace":{"plugin":"hello","marketplace":"mp"}}}}\n';
 
   // act
-  const result = await uninstallOverAdapterFile(adapterBytes);
+  const observed = await uninstallOverAdapterFile(adapterBytes);
 
   // assert
-  assert.deepStrictEqual(result, {
+  assert.deepStrictEqual(observed, {
     outcome: undefined,
     notifications: [HELLO_UNINSTALLED_ROW, COMMENTS_REMOVED_NOTICE],
     adapter: '{\n  "mcpServers": {}\n}\n',
@@ -6880,10 +6880,10 @@ test("AFILE-04: uninstall over a commented mcp-adapter.json writes the kept over
     '// user note\n{"mcpServers":{"uni-server":{"command":"node","disabled":true,"_piClaudeMarketplace":{"plugin":"hello","marketplace":"mp","keptOverride":{"disabled":true}}}}}\n';
 
   // act
-  const result = await uninstallOverAdapterFile(adapterBytes);
+  const observed = await uninstallOverAdapterFile(adapterBytes);
 
   // assert
-  assert.deepStrictEqual(result, {
+  assert.deepStrictEqual(observed, {
     outcome: undefined,
     notifications: [HELLO_UNINSTALLED_ROW, COMMENTS_REMOVED_NOTICE],
     adapter: `{

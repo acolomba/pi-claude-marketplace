@@ -293,9 +293,11 @@ function fixtureAt(fixtures: FixtureMap, section: string, state: string): Catalo
 }
 
 test("catalog contract rejects duplicate fixture tuples and empty sections", () => {
+  // arrange
   const fixture = fixtureAt(PLUGIN_FETCH_FIXTURES, "/claude:plugin fetch", "single-available");
   const one: FixtureMap = { section: { state: fixture } };
 
+  // act & assert
   assert.throws(
     () => mergeFixtureMaps([one, one]),
     new Error("Duplicate catalog fixture tuple: section::state"),
@@ -307,12 +309,14 @@ test("catalog contract rejects duplicate fixture tuples and empty sections", () 
 });
 
 test("catalog contract rejects missing and extra fixture tuples", () => {
+  // arrange
   const fixture = fixtureAt(PLUGIN_FETCH_FIXTURES, "/claude:plugin fetch", "single-available");
   const fixtures: FixtureMap = { section: { extra: fixture } };
   const examples: readonly CatalogExample[] = [
     { section: "section", state: "missing", expected: "independent bytes" },
   ];
 
+  // act & assert
   assert.deepStrictEqual(completenessFailures(examples, fixtures), [
     { section: "section", state: "missing", kind: "missing-fixture" },
     { section: "section", state: "extra", kind: "extra-fixture" },
@@ -320,6 +324,7 @@ test("catalog contract rejects missing and extra fixture tuples", () => {
 });
 
 test("catalog contract rejects equal-key ordering drift", () => {
+  // act & assert
   assert.throws(() => {
     assertSameTupleOrder(
       ["section::second", "section::first"],
@@ -329,6 +334,7 @@ test("catalog contract rejects equal-key ordering drift", () => {
 });
 
 test("catalog contract matches all 21 fixture modules to 270 exact documented states", async () => {
+  // arrange
   assert.equal(FIXTURE_MAPS.length, EXPECTED_MODULE_COUNT);
   const fixtures = mergeFixtureMaps(FIXTURE_MAPS);
   assert.equal(Object.keys(fixtures).length, EXPECTED_SECTION_COUNT);
@@ -342,14 +348,15 @@ test("catalog contract matches all 21 fixture modules to 270 exact documented st
     EXPECTED_UTF8_BYTES,
   );
 
+  // act
   const completeness = completenessFailures(examples, fixtures);
-  assert.deepStrictEqual(completeness, []);
-  assertSameTupleOrder(fixtureTupleKeys(fixtures).sort(), catalogTupleKeys(examples).sort());
-
   const renderFailures: ContractFailure[] = [];
   for (const example of examples) {
     renderFailures.push(...renderFailure(example, fixtures));
   }
 
+  // assert
+  assert.deepStrictEqual(completeness, []);
+  assertSameTupleOrder(fixtureTupleKeys(fixtures).sort(), catalogTupleKeys(examples).sort());
   assert.equal(renderFailures.length, 0, renderFailures.map(formatFailure).join("\n\n"));
 });

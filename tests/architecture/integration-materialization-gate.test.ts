@@ -16,7 +16,7 @@ async function pathExists(filePath: string): Promise<boolean> {
     await stat(filePath);
     return true;
   } catch (error: unknown) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
       return false;
     }
 

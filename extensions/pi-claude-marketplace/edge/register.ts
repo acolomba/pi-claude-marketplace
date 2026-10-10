@@ -76,7 +76,7 @@ const COMMAND_DESCRIPTION =
   "uninstall, prune, list, import, update, and reinstall plugins from configured marketplaces.";
 
 /**
- * Wire the `/claude:plugin` slash command + the TC-7 autocomplete
+ * Wires the `/claude:plugin` slash command + the TC-7 autocomplete
  * normalization onto `pi`. Idempotency: Pi's extension API does NOT
  * dedupe; callers MUST invoke this exactly once per session lifecycle
  * (`index.ts` is the single call site).
@@ -169,7 +169,7 @@ export function registerClaudePluginCommand(
 }
 
 /**
- * Wire the two read-only LLM tools (`pi_claude_marketplace_list` +
+ * Wires the two read-only LLM tools (`pi_claude_marketplace_list` +
  * `pi_claude_marketplace_plugin_list`) onto `pi`. Same idempotency
  * contract as the slash command -- called exactly once.
  */

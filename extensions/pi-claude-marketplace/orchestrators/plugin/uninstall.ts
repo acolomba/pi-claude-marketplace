@@ -239,9 +239,9 @@ export type UninstallHooksRouting = Pick<
  * declarer's own read-failure token would make a false claim about the
  * target's manifest; the cause line names the declarer.
  *
- * D-06-06 narrowed this class to that ONE outcome. A target other installed
- * plugins still declare is no longer refused -- it is removed, and the
- * dependents are named on the success row.
+ * D-06-06 limits this class to that ONE outcome. A target other installed
+ * plugins still declare is removed, and the dependents are named on the
+ * success row.
  *
  * `message` IS the rendered cause line, so it carries only `name@marketplace`
  * keys, field paths or already-redacted text -- never an absolute path -- and
@@ -276,10 +276,9 @@ interface DeclarerReading {
  * through, because the orphan sweep that follows the removal consumes both its
  * index and its candidate records.
  *
- * A non-empty dependent set no longer blocks the removal (D-06-06, superseding
- * D-05-14): it is reported on the success row, and each dependent is disabled
+ * A non-empty dependent set does not block the removal (D-06-06): it is reported on the success row, and each dependent is disabled
  * with a remedy at the next load by the load-time check. Who counts as a
- * declarer is unchanged -- a disabled record still holds its declarations
+ * declarer: a disabled record still holds its declarations
  * (D-05-04), only this scope is consulted (D-05-05), and every declaration is
  * read offline (D-05-06).
  */
@@ -293,10 +292,9 @@ async function readDeclarers(args: {
     locations: args.locations,
     exclude: args.key,
   });
-  // D-05-07 fail-closed, PRESERVED by D-06-06 and NOT to be relaxed alongside
-  // the dependents refusal it used to sit beside: an unreadable record is
-  // never read as "declares nothing". Without this throw a damaged manifest
-  // would turn into a silent removal of something another plugin needs, which
+  // D-05-07 fail-closed, independent of the dependents report (D-06-06): an
+  // unreadable record is never read as "declares nothing". Without this throw
+  // a damaged manifest would turn into a silent removal of something another plugin needs, which
   // is the one outcome this read must never produce.
   if (!result.ok) {
     throw new UninstallRefusedError("unreadable", result.cause.message);

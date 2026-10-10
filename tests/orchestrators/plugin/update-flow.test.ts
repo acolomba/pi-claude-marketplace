@@ -6335,7 +6335,7 @@ test("FORCE-02: --partial on a candidate that became partially available degrade
       });
 
       // The degraded update committed: state reflects the new version and the
-      // supported skill materialized; the unsupported kinds are simply absent.
+      // supported skill materialized; the unsupported kinds are absent.
       const after = await loadState(locations.extensionRoot);
       const record = after.marketplaces["mp"]?.plugins["hello"];
       assert.ok(record !== undefined);
@@ -8983,9 +8983,9 @@ function seamMutatingStateMidUpdate(
   return {
     ...base,
     materializePluginClone: async (args) => {
-      const result = await base.materializePluginClone(args);
+      const clone = await base.materializePluginClone(args);
       await mutate();
-      return result;
+      return clone;
     },
   };
 }

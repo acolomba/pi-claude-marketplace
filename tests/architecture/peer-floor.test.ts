@@ -32,25 +32,26 @@ async function readPackageLock(): Promise<PackageLockJson> {
 }
 
 test("package.json peerDependencies pins the pi-coding-agent floor at >=1.0.0 (FLOOR-01)", async () => {
-  const raw = await readFile(path.join(REPO_ROOT, PACKAGE_JSON_REL), "utf8");
-  const pkg = JSON.parse(raw) as PackageJson;
+  // arrange
+  const pkg = await readPackageJson();
 
+  // act
   const range = pkg.peerDependencies?.[PEER];
+
+  // assert
   assert.ok(range, `peerDependencies["${PEER}"] is missing`);
   assert.equal(range, ">=1.0.0", `FLOOR-01 violation: expected floor ">=1.0.0", got "${range}"`);
 });
 
 test("package-lock.json root peerDependencies stays in sync with package.json for pi-coding-agent (FLOOR-01)", async () => {
-  const [pkgRaw, lockRaw] = await Promise.all([
-    readFile(path.join(REPO_ROOT, PACKAGE_JSON_REL), "utf8"),
-    readFile(path.join(REPO_ROOT, PACKAGE_LOCK_REL), "utf8"),
-  ]);
-  const pkg = JSON.parse(pkgRaw) as PackageJson;
-  const lock = JSON.parse(lockRaw) as PackageLockJson;
+  // arrange
+  const [pkg, lock] = await Promise.all([readPackageJson(), readPackageLock()]);
 
+  // act
   const pkgRange = pkg.peerDependencies?.[PEER];
   const lockRange = lock.packages?.[""]?.peerDependencies?.[PEER];
 
+  // assert
   // D-07-03: without this, a manifest that stopped declaring the peer would be
   // reported as a lock desync rather than as the missing declaration it is, and
   // the sync claim would rest on a field the gate never read.

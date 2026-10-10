@@ -1,9 +1,7 @@
 // tests/architecture/partial-vocabulary-guard.test.ts
 //
 // Surgical-completeness guard for the partial/partially-available vocabulary
-// rename (D-75-01). This is the executable form of the RESEARCH section-4c
-// symbol-level rule and the phase completion criterion: it reads file contents
-// at test time (following the catalog-uat file-reading precedent) and asserts
+// rename (D-75-01). It reads file contents at test time (following the catalog-uat file-reading precedent) and asserts
 // the rename is BOTH complete (in-scope retired tokens absent) AND surgical
 // (out-of-scope homonyms preserved byte-for-byte).
 //
@@ -188,6 +186,7 @@ function filesMatching(re: RegExp, sources: ReadonlyMap<string, string>): string
 }
 
 test("D-75-01 guard: the extension tree is non-empty (sanity)", () => {
+  // act & assert
   assert.ok(
     EXT_SOURCES.size > 50,
     `expected the extension .ts tree to load; got ${EXT_SOURCES.size} files`,
@@ -195,6 +194,7 @@ test("D-75-01 guard: the extension tree is non-empty (sanity)", () => {
 });
 
 test("D-75-01 guard: the docs surface loaded (sanity)", () => {
+  // act & assert
   assert.ok(
     GUARDED_SOURCES.has("docs/output-catalog.md") &&
       GUARDED_SOURCES.has("tests/architecture/catalog-uat/catalog-contract.test.ts"),
@@ -291,7 +291,7 @@ function unwaivedHits(token: string, sources: ReadonlyMap<string, string>): stri
 
 // ---------------------------------------------------------------------------
 // ABSENCE: the in-scope force/unsupported vocabulary is gone from EVERY guarded
-// surface (extension tree + docs + phase architecture tests), in every written
+// surface (extension tree + docs + architecture tests), in every written
 // form -- code literal, identifier, render token, comment, backtick prose, doc
 // label, and fixture KEY. Reads are UTF-8 so the ⊖/◉ glyph files are not skipped.
 // ---------------------------------------------------------------------------
@@ -358,7 +358,10 @@ const ABSENT_TOKENS = [
 
 for (const token of ABSENT_TOKENS) {
   test(`D-75-01 guard: absent everywhere (code + docs + unit tests) -- ${token}`, () => {
+    // act
     const hits = unwaivedHits(token, STATUS_GUARDED_SOURCES);
+
+    // assert
     assert.strictEqual(
       hits.length,
       0,
@@ -403,7 +406,10 @@ const ABSENT_FORCE_PROSE: readonly RegExp[] = [
 
 for (const re of ABSENT_FORCE_PROSE) {
   test(`D-75-01 guard: force-family prose absent -- ${re.source}`, () => {
+    // act
     const hits = filesMatching(re, GUARDED_SOURCES);
+
+    // assert
     assert.strictEqual(
       hits.length,
       0,
@@ -418,8 +424,13 @@ for (const re of ABSENT_FORCE_PROSE) {
 // hooks.ts renders -- allowlist orchestrators/plugin/info.ts for exactly this
 // one token. Everywhere else the plugin-verdict render is `(partially-available)`.
 test("D-75-01 guard: verdict render `(unsupported)` absent outside the info.ts component suffix", () => {
+  // arrange
   const ALLOW = "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts";
+
+  // act
   const hits = filesContaining("`(unsupported)`", GUARDED_SOURCES).filter((f) => f !== ALLOW);
+
+  // assert
   assert.strictEqual(
     hits.length,
     0,
@@ -435,8 +446,13 @@ test("D-75-01 guard: verdict render `(unsupported)` absent outside the info.ts c
 // Every other backtick `unsupported` was the resolver verdict, now
 // `partially-available`.
 test("D-75-01 guard: standalone backtick verdict `unsupported` absent (allowlist: array/kind homonyms)", () => {
+  // arrange
   const re = /`unsupported`(?! (array|kind))/;
+
+  // act
   const hits = filesMatching(re, GUARDED_SOURCES);
+
+  // assert
   assert.strictEqual(
     hits.length,
     0,
@@ -465,7 +481,10 @@ const PRESENT_COMPONENT_TOKENS = [
 
 for (const token of PRESENT_COMPONENT_TOKENS) {
   test(`D-75-01 guard: still present under extensions/ -- ${token}`, () => {
+    // act
     const hits = filesContaining(token, EXT_SOURCES);
+
+    // assert
     assert.ok(
       hits.length > 0,
       `out-of-scope component token ${JSON.stringify(token)} must SURVIVE the rename (an over-rename would delete it)`,
@@ -474,9 +493,14 @@ for (const token of PRESENT_COMPONENT_TOKENS) {
 }
 
 test("D-75-01 guard: the component-level ` (unsupported)` hook-event suffix survives", () => {
+  // arrange
   // shared/concerns/hooks.ts renders `<event> (unsupported)` (leading space) for
   // a dropped hook event -- the component sense, distinct from the plugin verdict.
+
+  // act
   const hits = filesContaining(" (unsupported)", EXT_SOURCES);
+
+  // assert
   assert.ok(
     hits.some((f) => f.endsWith("shared/concerns/hooks.ts")),
     "the component-level ` (unsupported)` hook-event suffix must survive in shared/concerns/hooks.ts",
@@ -484,27 +508,28 @@ test("D-75-01 guard: the component-level ` (unsupported)` hook-event suffix surv
 });
 
 test("D-75-01 guard: overwrite `force: true` semantics survive (rm / writeRef / staging)", () => {
+  // act
   // node-fs `rm({ force: true })` and isomorphic-git `writeRef({ force: true })`
   // are a DIFFERENT `force` than the degrade flag; they must stay byte-identical.
   const rmForce = filesMatching(/force:\s*true/, EXT_SOURCES).filter((f) =>
     f.includes("/bridges/"),
   );
+  const gitForce = filesContaining("force", EXT_SOURCES).filter((f) =>
+    f.endsWith("platform/git.ts"),
+  );
+  // The agents-staging overwrite gate (`AgentStageOptions.force` -> `options?.force`).
+  const stageForce = filesContaining("options?.force", EXT_SOURCES).filter((f) =>
+    f.endsWith("bridges/agents/stage.ts"),
+  );
+
+  // assert
   assert.ok(
     rmForce.length > 0,
     "the bridge staging `force: true` overwrite must survive (an over-rename would corrupt it)",
   );
-
-  const gitForce = filesContaining("force", EXT_SOURCES).filter((f) =>
-    f.endsWith("platform/git.ts"),
-  );
   assert.ok(
     gitForce.length > 0,
     "the isomorphic-git `writeRef` force semantics in platform/git.ts must survive",
-  );
-
-  // The agents-staging overwrite gate (`AgentStageOptions.force` -> `options?.force`).
-  const stageForce = filesContaining("options?.force", EXT_SOURCES).filter((f) =>
-    f.endsWith("bridges/agents/stage.ts"),
   );
   assert.ok(
     stageForce.length > 0,
@@ -546,11 +571,14 @@ function completionDescriptions(rel: string): string[] {
 }
 
 test("D-75-01 guard: completion descriptions carry no PLUGIN-level `unsupported`", () => {
+  // arrange
   // "unsupported" is allowed ONLY when it immediately qualifies a COMPONENT noun
   // (component/source/hook/kind). A plugin-level "unsupported ... plugins" is the
   // retired verdict and must read "partially available".
   const pluginLevelUnsupported = /unsupported(?!\s+(?:component|source|hook|kind))/i;
   const offenders: string[] = [];
+
+  // act
   for (const rel of COMPLETION_DESCRIPTION_FILES) {
     for (const desc of completionDescriptions(rel)) {
       if (pluginLevelUnsupported.test(desc)) {
@@ -559,6 +587,7 @@ test("D-75-01 guard: completion descriptions carry no PLUGIN-level `unsupported`
     }
   }
 
+  // assert
   assert.strictEqual(
     offenders.length,
     0,
@@ -567,7 +596,10 @@ test("D-75-01 guard: completion descriptions carry no PLUGIN-level `unsupported`
 });
 
 test("D-75-01 guard: completion descriptions carry no retired `force` verb", () => {
+  // arrange
   const offenders: string[] = [];
+
+  // act
   for (const rel of COMPLETION_DESCRIPTION_FILES) {
     for (const desc of completionDescriptions(rel)) {
       if (/\bforce/i.test(desc)) {
@@ -576,6 +608,7 @@ test("D-75-01 guard: completion descriptions carry no retired `force` verb", () 
     }
   }
 
+  // assert
   assert.strictEqual(
     offenders.length,
     0,
@@ -588,7 +621,10 @@ test("D-75-01 guard: completion descriptions carry no retired `force` verb", () 
 // `description:` shape ever changes. The `--partial` descriptions live in the
 // flag-catalog single source of truth the completions derive from.
 test("D-75-01 guard: completion-description extractor finds the --partial rows", () => {
+  // act
   const catalog = completionDescriptions("extensions/pi-claude-marketplace/edge/flag-catalog.ts");
+
+  // assert
   assert.ok(
     catalog.some((d) => d.includes("partially available")) &&
       catalog.some((d) => d.includes("unsupported components")),

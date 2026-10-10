@@ -23,7 +23,7 @@ const USAGE = "Usage: /claude:plugin info <plugin>@<marketplace> [--fetch] [--sc
 const ACCEPTED_FLAGS = parseFlagNames("info");
 
 /**
- * Factory: returns the async handler closed over `pi` (required by
+ * Returns the async handler closed over `pi` (required by
  * `notify()` for the soft-dep probe) and the extension load's MCP status
  * tracker (ASTAT-01), whose last snapshot info stamps on each written MCP
  * server. `register.ts` wires this into the `SubcommandHandlers` map under the

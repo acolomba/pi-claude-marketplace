@@ -531,13 +531,16 @@ test("PRL-06: absent installed record returns skipped and does not mutate state 
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-skip-"));
     try {
+      // arrange
       const locations = locationsFor("project", cwd);
       await seedMarketplace({ cwd, marketplaceRoot: path.join(cwd, "mp-src"), install: false });
       const before = await readFile(locations.stateJsonPath, "utf8");
       const { ctx, pi, notifications } = makeCtx();
 
+      // act
       const outcome = await reinstallDefault(cwd, ctx, pi);
 
+      // assert
       assert.equal(outcome.partition, "skipped");
       assert.deepEqual(outcome.notes, ["not installed"]);
       assert.equal(await readFile(locations.stateJsonPath, "utf8"), before);
@@ -916,6 +919,7 @@ test("PDEF-01: reinstall preview detects an agent conflict from a later resolved
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-agent-dir-preview-"));
     try {
+      // arrange
       const locations = locationsFor("project", cwd);
       await seedMarketplace({
         cwd,
@@ -952,6 +956,7 @@ test("PDEF-01: reinstall preview detects an agent conflict from a later resolved
       await saveState(locations.extensionRoot, state);
       const { ctx, pi, notifications } = makeCtx({ toolNames: ["subagent"] });
 
+      // act
       const outcome = await reinstallPlugin({
         ctx,
         pi,
@@ -961,6 +966,7 @@ test("PDEF-01: reinstall preview detects an agent conflict from a later resolved
         plugin: "hello",
       });
 
+      // assert
       assert.strictEqual(outcome.partition, "failed");
       assert.strictEqual(notifications.length, 1);
       assert.strictEqual(notifications[0]?.severity, "error");
@@ -976,6 +982,7 @@ test("PDEF-01: reinstall stages every agent directory and warns on a later dupli
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-agent-dirs-"));
     try {
+      // arrange
       const locations = locationsFor("project", cwd);
       const seeded = await seedMarketplace({
         cwd,
@@ -1006,6 +1013,7 @@ test("PDEF-01: reinstall stages every agent directory and warns on a later dupli
         `"${path.join(conventionalAgentsDir, "..", "declared-agents", "shared-first.md")}"; keeping first discovered source.`;
       const { ctx, pi } = makeCtx({ toolNames: ["subagent"] });
 
+      // act
       const outcome = await reinstallPlugin({
         ctx,
         pi,
@@ -1016,6 +1024,7 @@ test("PDEF-01: reinstall stages every agent directory and warns on a later dupli
         render: "none",
       });
 
+      // assert
       assert.strictEqual(outcome.partition, "reinstalled");
       assert.deepStrictEqual(outcome.notes, [`warning: ${expectedWarning}`]);
       const state = await loadState(locations.extensionRoot);
@@ -1047,6 +1056,7 @@ test("PDEF-01: reinstall rolls back replacements sourced from every agent direct
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-agent-dirs-rollback-"));
     try {
+      // arrange
       const locations = locationsFor("project", cwd);
       const seeded = await seedMarketplace({
         cwd,
@@ -1079,6 +1089,7 @@ test("PDEF-01: reinstall rolls back replacements sourced from every agent direct
       let observedAtSave: readonly string[] = [];
       const { ctx, pi } = makeCtx({ toolNames: ["subagent"] });
 
+      // act
       const outcome = await reinstallPlugin({
         ctx,
         pi,
@@ -1097,6 +1108,7 @@ test("PDEF-01: reinstall rolls back replacements sourced from every agent direct
         },
       });
 
+      // assert
       assert.strictEqual(outcome.partition, "failed");
       assert.match(observedAtSave[0] ?? "", /New first agent\./, JSON.stringify(outcome));
       assert.match(observedAtSave[1] ?? "", /New later agent\./);
@@ -1112,6 +1124,7 @@ test("PRL-10: missing cached manifest entry fails and preserves old state, resou
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-missing-entry-"));
     try {
+      // arrange
       const locations = locationsFor("project", cwd);
       await seedMarketplace({
         cwd,
@@ -1130,8 +1143,10 @@ test("PRL-10: missing cached manifest entry fails and preserves old state, resou
       );
       const { ctx, pi, notifications } = makeCtx();
 
+      // act
       const outcome = await reinstallDefault(cwd, ctx, pi);
 
+      // assert
       assert.equal(outcome.partition, "failed");
       assert.match(notifications[0]?.message ?? "", /not found in cached manifest/);
       assert.equal(await readFile(locations.stateJsonPath, "utf8"), beforeState);
@@ -1147,6 +1162,7 @@ test("PRL-10 / RINST-01: bare reinstall unconditionally overwrites foreign agent
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-overwrite-"));
     try {
+      // arrange
       const locations = locationsFor("project", cwd);
       const seeded = await seedMarketplace({
         cwd,
@@ -1163,11 +1179,13 @@ test("PRL-10 / RINST-01: bare reinstall unconditionally overwrites foreign agent
       });
       const { ctx, pi, notifications } = makeCtx();
 
+      // act
       // RINST-01 / D-67-03: a bare reinstall (no `--partial`) overwrites the
       // agent that holds foreign bytes and refreshes every bridge -- overwrite
       // is unconditional.
       const outcome = await reinstallDefault(cwd, ctx, pi);
 
+      // assert
       assert.equal(outcome.partition, "reinstalled");
       assert.equal(errorNotifications(notifications).length, 0);
       assert.match(await readFile(agentPath, "utf8"), /new agent/);
@@ -1183,6 +1201,7 @@ test("PRL-10: saveState failure rolls back physical replacements and preserves d
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-save-failure-"));
     try {
+      // arrange
       const locations = locationsFor("project", cwd);
       const seeded = await seedMarketplace({
         cwd,
@@ -1203,6 +1222,7 @@ test("PRL-10: saveState failure rolls back physical replacements and preserves d
       });
       const { ctx, pi, notifications } = makeCtx();
 
+      // act
       const outcome = await reinstallPlugin({
         ctx,
         pi,
@@ -1215,6 +1235,7 @@ test("PRL-10: saveState failure rolls back physical replacements and preserves d
         },
       });
 
+      // assert
       assert.equal(outcome.partition, "failed");
       assert.match(notifications[0]?.message ?? "", /saveState failure/);
       assert.equal(await readFile(locations.stateJsonPath, "utf8"), beforeState);
@@ -1230,6 +1251,7 @@ test("PRL-10 / RINST-01: unconditional overwrite of foreign previous agent conte
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-force-rollback-"));
     try {
+      // arrange
       const locations = locationsFor("project", cwd);
       const seeded = await seedMarketplace({
         cwd,
@@ -1243,6 +1265,7 @@ test("PRL-10 / RINST-01: unconditional overwrite of foreign previous agent conte
       await writePluginTree(seeded.pluginRoot, "hello", { agent: "new agent" });
       const { ctx, pi } = makeCtx();
 
+      // act
       const outcome = await reinstallPlugin({
         ctx,
         pi,
@@ -1255,6 +1278,7 @@ test("PRL-10 / RINST-01: unconditional overwrite of foreign previous agent conte
         },
       });
 
+      // assert
       assert.equal(outcome.partition, "failed");
       assert.equal(await readFile(agentPath, "utf8"), foreignBytes);
     } finally {
@@ -1278,6 +1302,7 @@ test("PRL-12: cache and data cleanup failures are SILENTLY swallowed after succe
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-cleanup-warning-"));
     try {
+      // arrange
       const seeded = await seedMarketplace({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
@@ -1287,6 +1312,7 @@ test("PRL-12: cache and data cleanup failures are SILENTLY swallowed after succe
       await writePluginTree(seeded.pluginRoot, "hello", { skill: "new skill" });
       const { ctx, pi, notifications } = makeCtx();
 
+      // act
       const outcome = await reinstallPluginWithCache(
         {
           ctx,
@@ -1300,6 +1326,7 @@ test("PRL-12: cache and data cleanup failures are SILENTLY swallowed after succe
         createCompletionCacheWithDrop(() => Promise.reject(new Error("cache drop failed"))),
       );
 
+      // assert
       assert.equal(outcome.partition, "reinstalled");
       // Exactly one notification (the V2 success cascade); zero warnings.
       assert.equal(notifications.length, 1);
@@ -1324,6 +1351,7 @@ test("PRL-12/RH-5: V2 per-variant reload-hint -- emitted on reinstalled even wit
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-output-"));
     try {
+      // arrange
       await seedMarketplace({
         cwd,
         marketplaceRoot: path.join(cwd, "empty-mp"),
@@ -1333,6 +1361,7 @@ test("PRL-12/RH-5: V2 per-variant reload-hint -- emitted on reinstalled even wit
         install: true,
       });
       const { ctx, pi, notifications } = makeCtx();
+      // act & assert
       const noResource = await reinstallDefault(cwd, ctx, pi);
       assert.equal(noResource.partition, "reinstalled");
       // The reload-hint trailer is emitted structurally
@@ -1379,6 +1408,7 @@ test("PRL-13 quiet render suppresses per-plugin notifications", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-quiet-"));
     try {
+      // arrange
       await seedMarketplace({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
@@ -1387,6 +1417,7 @@ test("PRL-13 quiet render suppresses per-plugin notifications", async () => {
       });
       const { ctx, pi, notifications } = makeCtx();
 
+      // act
       const outcome = await reinstallPlugin({
         ctx,
         pi,
@@ -1397,6 +1428,7 @@ test("PRL-13 quiet render suppresses per-plugin notifications", async () => {
         render: "none",
       });
 
+      // assert
       assert.equal(outcome.partition, "reinstalled");
       assert.equal(notifications.length, 0);
     } finally {
@@ -1409,6 +1441,7 @@ test("PRL-13 quiet render returns warning notes after successful cleanup warning
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-quiet-warnings-"));
     try {
+      // arrange
       await seedMarketplace({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
@@ -1417,6 +1450,7 @@ test("PRL-13 quiet render returns warning notes after successful cleanup warning
       });
       const { ctx, pi, notifications } = makeCtx();
 
+      // act
       const outcome = await reinstallPluginWithCache(
         {
           ctx,
@@ -1431,6 +1465,7 @@ test("PRL-13 quiet render returns warning notes after successful cleanup warning
         createCompletionCacheWithDrop(() => Promise.reject(new Error("cache drop failed"))),
       );
 
+      // assert
       assert.equal(outcome.partition, "reinstalled");
       assert.deepEqual(notifications, []);
       assert.ok(
@@ -1455,6 +1490,7 @@ test("PRL-04 bulk bare reinstall enumerates user and project scopes", async () =
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-bulk-all-"));
     try {
+      // arrange
       await seedMarketplace({
         cwd,
         scope: "user",
@@ -1475,8 +1511,10 @@ test("PRL-04 bulk bare reinstall enumerates user and project scopes", async () =
       });
       const { ctx, pi, notifications } = makeCtx();
 
+      // act
       const outcomes = await reinstallPlugins({ ctx, pi, cwd, target: { kind: "all" } });
 
+      // assert
       // CR-01 / D-04: ordered via compareByNameThenScope (name
       // primary case-insensitive, scope secondary project-before-user
       // per MSG-GR-3). "pmp" sorts before "ump" by name primary alone.
@@ -1507,6 +1545,7 @@ test("PRL-03 bulk marketplace reinstall resolves implicit scope like update", as
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-bulk-scope-"));
     try {
+      // arrange
       await seedMarketplace({
         cwd,
         scope: "project",
@@ -1518,6 +1557,7 @@ test("PRL-03 bulk marketplace reinstall resolves implicit scope like update", as
       });
       const { ctx, pi, notifications } = makeCtx();
 
+      // act
       const outcomes = await reinstallPlugins({
         ctx,
         pi,
@@ -1525,6 +1565,7 @@ test("PRL-03 bulk marketplace reinstall resolves implicit scope like update", as
         target: { kind: "marketplace", marketplace: "mymp" },
       });
 
+      // assert
       assert.deepEqual(
         outcomes.map((o) => o.scope),
         ["project"],
@@ -1544,6 +1585,7 @@ test("PRL-05 bulk reinstall explicit scope filters targets", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-bulk-filter-"));
     try {
+      // arrange
       await seedMarketplace({
         cwd,
         scope: "user",
@@ -1564,6 +1606,7 @@ test("PRL-05 bulk reinstall explicit scope filters targets", async () => {
       });
       const { ctx, pi } = makeCtx();
 
+      // act
       const outcomes = await reinstallPlugins({
         ctx,
         pi,
@@ -1572,6 +1615,7 @@ test("PRL-05 bulk reinstall explicit scope filters targets", async () => {
         target: { kind: "all" },
       });
 
+      // assert
       assert.deepEqual(
         outcomes.map((o) => `[${o.scope}] ${o.name}@${o.marketplace}`),
         ["[project] projectplug@mp"],
@@ -1586,6 +1630,7 @@ test("ATTR-03/SCOPE-01: explicit-scope-plugin reinstall of an other-scope-only t
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-cross-scope-source-"));
     try {
+      // arrange
       await seedMarketplace({
         cwd,
         scope: "user",
@@ -1597,6 +1642,7 @@ test("ATTR-03/SCOPE-01: explicit-scope-plugin reinstall of an other-scope-only t
       });
       const { ctx, pi, notifications } = makeCtx();
 
+      // act
       // --scope project where the marketplace lives ONLY in user scope.
       // ATTR-03 / D-47-A: the PLUGIN is the row's subject -- the container sits
       // one scope over, so nothing is installed at the scope named. SCOPE-01:
@@ -1612,6 +1658,7 @@ test("ATTR-03/SCOPE-01: explicit-scope-plugin reinstall of an other-scope-only t
         target: { kind: "plugin", plugin: "plug", marketplace: "mp" },
       });
 
+      // assert
       // No raw throw escapes; the entrypoint returns [] before the cascade.
       assert.deepEqual([...outcomes], []);
       const body = notifications.at(-1)?.message ?? "";
@@ -1630,6 +1677,7 @@ test("ATTR-03/SCOPE-01: explicit-scope-marketplace reinstall of an other-scope-o
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-mp-cross-scope-empty-"));
     try {
+      // arrange
       await seedMarketplace({
         cwd,
         scope: "user",
@@ -1641,6 +1689,7 @@ test("ATTR-03/SCOPE-01: explicit-scope-marketplace reinstall of an other-scope-o
       });
       const { ctx, pi, notifications } = makeCtx();
 
+      // act
       // Marketplace target with explicit --scope project where mp lives only
       // in user scope. ATTR-03 / D-47-A: the miss is attributed to the
       // standalone `MarketplaceNotAddedMessage`, not to a synthetic
@@ -1654,6 +1703,7 @@ test("ATTR-03/SCOPE-01: explicit-scope-marketplace reinstall of an other-scope-o
         target: { kind: "marketplace", marketplace: "mp" },
       });
 
+      // assert
       assert.deepEqual([...outcomes], []);
       const body = notifications.at(-1)?.message ?? "";
       assert.equal(
@@ -1671,6 +1721,7 @@ test("ATTR-03: bare reinstall of a marketplace absent in BOTH scopes emits stand
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-bare-absent-both-"));
     try {
+      // arrange
       // Seed an unrelated marketplace so both scope states exist on disk but
       // neither holds `ghost-mp`.
       await seedMarketplace({
@@ -1684,6 +1735,7 @@ test("ATTR-03: bare reinstall of a marketplace absent in BOTH scopes emits stand
       });
       const { ctx, pi, notifications } = makeCtx();
 
+      // act
       // Bare form (no --scope): ghost-mp is absent in both scopes.
       // ATTR-03 / D-47-A: the miss is attributed to the standalone
       // `{marketplace not added}` with NO bracket (absent-from-both form).
@@ -1694,6 +1746,7 @@ test("ATTR-03: bare reinstall of a marketplace absent in BOTH scopes emits stand
         target: { kind: "marketplace", marketplace: "ghost-mp" },
       });
 
+      // assert
       assert.deepEqual([...outcomes], []);
       const body = notifications.at(-1)?.message ?? "";
       assert.equal(
@@ -1711,6 +1764,7 @@ test("PRL-13 batch reinstall continues after failed plugin", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-bulk-continue-"));
     try {
+      // arrange
       await seedMarketplace({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
@@ -1736,8 +1790,10 @@ test("PRL-13 batch reinstall continues after failed plugin", async () => {
       );
       const { ctx, pi, notifications } = makeCtx();
 
+      // act
       const outcomes = await reinstallPlugins({ ctx, pi, cwd, target: { kind: "all" } });
 
+      // assert
       assert.deepEqual(
         outcomes.map((o) => `${o.name}:${o.partition}`),
         ["bad:failed", "good:reinstalled"],
@@ -1769,6 +1825,7 @@ test("PRL-13 deterministic partition output sorts by scope marketplace plugin", 
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-bulk-sort-"));
     try {
+      // arrange
       const aRoot = path.join(cwd, "a-src");
       await seedMarketplace({
         cwd,
@@ -1808,8 +1865,10 @@ test("PRL-13 deterministic partition output sorts by scope marketplace plugin", 
       });
       const { ctx, pi, notifications } = makeCtx();
 
+      // act
       const outcomes = await reinstallPlugins({ ctx, pi, cwd, target: { kind: "all" } });
 
+      // assert
       // CR-01 / D-04: ordered project-before-user via
       // `compareByNameThenScope` (name primary case-insensitive, scope
       // secondary project-before-user per MSG-GR-3). Marketplace name
@@ -1849,7 +1908,7 @@ test("PRL-13 deterministic partition output sorts by scope marketplace plugin", 
   });
 });
 
-test("260525-cjr C9: same-name cross-scope reinstall -> project-scope row renders BEFORE user-scope row (MSG-GR-3 stable-sort tie-break)", async () => {
+test("same-name cross-scope reinstall renders the project-scope row before the user-scope row (MSG-GR-3 stable-sort tie-break)", async () => {
   // The existing PRL-13 deterministic-sort test (above) uses DISTINCT
   // marketplace names (a / u / z) so the marketplace-name primary key
   // never produces same-name pairs -- the project-before-user secondary
@@ -1861,6 +1920,7 @@ test("260525-cjr C9: same-name cross-scope reinstall -> project-scope row render
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-same-name-scopes-"));
     try {
+      // arrange
       // Both scopes carry a marketplace named "mp" with a plugin named
       // "p". The roots are deliberately distinct dirs so install
       // succeeds independently in each scope.
@@ -1884,8 +1944,10 @@ test("260525-cjr C9: same-name cross-scope reinstall -> project-scope row render
       });
       const { ctx, pi, notifications } = makeCtx();
 
+      // act
       const outcomes = await reinstallPlugins({ ctx, pi, cwd, target: { kind: "all" } });
 
+      // assert
       // Outcome order asserts the project-before-user tie-break at the
       // orchestrator boundary -- both outcomes share `marketplace: "mp"`
       // and `name: "p"`, so the scope secondary key decides.
@@ -1928,6 +1990,7 @@ test("PRL-14 batch reload hint uses only changed successful outcomes", async () 
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-bulk-reload-"));
     try {
+      // arrange
       await seedMarketplace({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
@@ -1946,8 +2009,10 @@ test("PRL-14 batch reload hint uses only changed successful outcomes", async () 
       });
       const { ctx, pi, notifications } = makeCtx();
 
+      // act
       await reinstallPlugins({ ctx, pi, cwd, target: { kind: "all" } });
 
+      // assert
       const body = notifications.at(-1)?.message ?? "";
       assert.match(body, /\/reload to pick up changes/);
       assert.doesNotMatch(body, /"empty"/);
@@ -1961,6 +2026,7 @@ test("PRL-15 batch soft dependency warnings aggregate successful restaged resour
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-bulk-soft-deps-"));
     try {
+      // arrange
       await seedMarketplace({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
@@ -1986,8 +2052,10 @@ test("PRL-15 batch soft dependency warnings aggregate successful restaged resour
       );
       const { ctx, pi, notifications } = makeCtx();
 
+      // act
       await reinstallPlugins({ ctx, pi, cwd, target: { kind: "all" } });
 
+      // assert
       const body = notifications.at(-1)?.message ?? "";
       // D-19-02 / MSG-SD-1..2: per-row soft-dep markers via
       // the notify() probe. The `good` plugin (reinstalled with
@@ -2015,13 +2083,16 @@ test("GAP-01: an empty bulk reinstall emits only its sentinel", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-no-plugins-"));
     try {
+      // arrange
       // No plugins installed; state is empty.
       const locations = locationsFor("project", cwd);
       await mkdir(locations.extensionRoot, { recursive: true });
       const { ctx, pi, notifications } = makeCtx();
 
+      // act
       const outcomes = await reinstallPlugins({ ctx, pi, cwd, target: { kind: "all" } });
 
+      // assert
       assert.deepEqual([...outcomes], []);
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.message, "(no marketplaces)");
@@ -2035,6 +2106,7 @@ test("GAP-02: reinstallPlugins with plugin removed from manifest emits failed ca
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-zero-reinstall-"));
     try {
+      // arrange
       // Install then remove plugin from manifest so every reinstall target fails.
       await seedMarketplace({
         cwd,
@@ -2048,8 +2120,10 @@ test("GAP-02: reinstallPlugins with plugin removed from manifest emits failed ca
       );
       const { ctx, pi, notifications } = makeCtx();
 
+      // act
       const outcomes = await reinstallPlugins({ ctx, pi, cwd, target: { kind: "all" } });
 
+      // assert
       assert.equal(outcomes.length, 1);
       assert.equal(outcomes[0]?.partition, "failed");
       const body = notifications.at(-1)?.message ?? "";
@@ -2064,6 +2138,7 @@ test("GAP-03: reinstallPlugin render=none failure returns failed without notifyi
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-none-fail-"));
     try {
+      // arrange
       await seedMarketplace({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
@@ -2076,6 +2151,7 @@ test("GAP-03: reinstallPlugin render=none failure returns failed without notifyi
       );
       const { ctx, pi, notifications } = makeCtx();
 
+      // act
       const outcome = await reinstallPlugin({
         ctx,
         pi,
@@ -2086,6 +2162,7 @@ test("GAP-03: reinstallPlugin render=none failure returns failed without notifyi
         render: "none",
       });
 
+      // assert
       assert.equal(outcome.partition, "failed");
       assert.equal(notifications.length, 0);
     } finally {
@@ -2102,6 +2179,7 @@ test("GAP-04: errorWithManualRecovery empty-leaks path: saveState fails on empty
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-empty-leaks-"));
     try {
+      // arrange
       await seedMarketplace({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
@@ -2110,6 +2188,7 @@ test("GAP-04: errorWithManualRecovery empty-leaks path: saveState fails on empty
       });
       const { ctx, pi, notifications } = makeCtx();
 
+      // act
       const outcome = await reinstallPlugin({
         ctx,
         pi,
@@ -2122,6 +2201,7 @@ test("GAP-04: errorWithManualRecovery empty-leaks path: saveState fails on empty
         },
       });
 
+      // assert
       assert.equal(outcome.partition, "failed");
       const note = outcome.notes?.[0] ?? "";
       assert.ok(note.includes("atomic-save-failed"), `expected cause in: ${note}`);
@@ -2143,6 +2223,7 @@ test("GAP-06: prepareAllHandles catch: MCP collision aborts partial handles and 
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-mcp-collision-"));
     try {
+      // arrange
       // Install "hello" with mcp server "server1".
       await seedMarketplace({
         cwd,
@@ -2175,6 +2256,7 @@ test("GAP-06: prepareAllHandles catch: MCP collision aborts partial handles and 
       mcpDoc.mcpServers = mcpServers;
       await writeFile(mcpPath, JSON.stringify(mcpDoc));
 
+      // act
       const { ctx, pi } = makeCtx();
       const outcome = await reinstallPlugin({
         ctx,
@@ -2185,6 +2267,7 @@ test("GAP-06: prepareAllHandles catch: MCP collision aborts partial handles and 
         plugin: "hello",
       });
 
+      // assert
       assert.equal(outcome.partition, "failed");
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -2199,10 +2282,12 @@ test("GAP-07: reinstallPlugin skipped does not trigger runPostSuccessMaintenance
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-skip-no-maint-"));
     try {
+      // arrange
       await seedMarketplace({ cwd, marketplaceRoot: path.join(cwd, "mp-src"), install: false });
       let maintenanceCalled = false;
       const { ctx, pi } = makeCtx();
 
+      // act
       const outcome = await reinstallPluginWithCache(
         {
           ctx,
@@ -2218,6 +2303,7 @@ test("GAP-07: reinstallPlugin skipped does not trigger runPostSuccessMaintenance
         }),
       );
 
+      // assert
       assert.equal(outcome.partition, "skipped");
       assert.equal(maintenanceCalled, false);
     } finally {
@@ -2230,9 +2316,11 @@ test("GAP-08: reinstallPlugin render=none with skipped outcome emits no notifica
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-none-skip-"));
     try {
+      // arrange
       await seedMarketplace({ cwd, marketplaceRoot: path.join(cwd, "mp-src"), install: false });
       const { ctx, pi, notifications } = makeCtx();
 
+      // act
       const outcome = await reinstallPlugin({
         ctx,
         pi,
@@ -2243,6 +2331,7 @@ test("GAP-08: reinstallPlugin render=none with skipped outcome emits no notifica
         render: "none",
       });
 
+      // assert
       assert.equal(outcome.partition, "skipped");
       assert.equal(notifications.length, 0);
     } finally {
@@ -2300,6 +2389,7 @@ test("GAP-10: reinstallPlugin render=none success with no warnings returns bare 
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-none-nowarn-"));
     try {
+      // arrange
       await seedMarketplace({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
@@ -2308,6 +2398,7 @@ test("GAP-10: reinstallPlugin render=none success with no warnings returns bare 
       });
       const { ctx, pi } = makeCtx();
 
+      // act
       const outcome = await reinstallPlugin({
         ctx,
         pi,
@@ -2318,6 +2409,7 @@ test("GAP-10: reinstallPlugin render=none success with no warnings returns bare 
         render: "none",
       });
 
+      // assert
       assert.equal(outcome.partition, "reinstalled");
       assert.equal(outcome.notes, undefined);
     } finally {
@@ -2333,6 +2425,7 @@ test("GAP-11 / RINST-01: reinstallPlugin unconditionally overwrites agent foreig
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-force-success-"));
     try {
+      // arrange
       const locations = locationsFor("project", cwd);
       const seeded = await seedMarketplace({
         cwd,
@@ -2345,6 +2438,7 @@ test("GAP-11 / RINST-01: reinstallPlugin unconditionally overwrites agent foreig
       await writePluginTree(seeded.pluginRoot, "hello", { agent: "new agent" });
       const { ctx, pi, notifications } = makeCtx();
 
+      // act
       const outcome = await reinstallPlugin({
         ctx,
         pi,
@@ -2354,6 +2448,7 @@ test("GAP-11 / RINST-01: reinstallPlugin unconditionally overwrites agent foreig
         plugin: "hello",
       });
 
+      // assert
       assert.equal(outcome.partition, "reinstalled");
       assert.match(await readFile(agentPath, "utf8"), /new agent/);
       assert.equal(errorNotifications(notifications).length, 0);
@@ -2369,6 +2464,7 @@ test("GAP-12: reinstallPlugins exactly-one-reinstalled emits singular summary", 
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-singular-"));
     try {
+      // arrange
       await seedMarketplace({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
@@ -2377,8 +2473,10 @@ test("GAP-12: reinstallPlugins exactly-one-reinstalled emits singular summary", 
       });
       const { ctx, pi, notifications } = makeCtx();
 
+      // act
       const outcomes = await reinstallPlugins({ ctx, pi, cwd, target: { kind: "all" } });
 
+      // assert
       assert.equal(outcomes.length, 1);
       assert.equal(outcomes[0]?.partition, "reinstalled");
       const body = notifications.at(-1)?.message ?? "";
@@ -2394,6 +2492,7 @@ test("GAP-13: reinstallPlugin user-scope happy path reinstalls and records corre
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-user-scope-"));
     try {
+      // arrange
       await seedMarketplace({
         cwd,
         scope: "user",
@@ -2405,6 +2504,7 @@ test("GAP-13: reinstallPlugin user-scope happy path reinstalls and records corre
       });
       const { ctx, pi, notifications } = makeCtx();
 
+      // act
       const outcome = await reinstallPlugin({
         ctx,
         pi,
@@ -2414,6 +2514,7 @@ test("GAP-13: reinstallPlugin user-scope happy path reinstalls and records corre
         plugin: "uplug",
       });
 
+      // assert
       assert.equal(outcome.partition, "reinstalled");
       assert.equal(outcome.scope, "user");
       assert.equal(errorNotifications(notifications).length, 0);
@@ -2432,6 +2533,7 @@ test("GAP-14: reinstallPlugins batch with only skipped outcomes emits skipped ca
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-all-skipped-"));
     try {
+      // arrange
       // Install a plugin then remove it from state so reinstall sees it as skipped.
       const locations = locationsFor("project", cwd);
       await seedMarketplace({
@@ -2457,6 +2559,7 @@ test("GAP-14: reinstallPlugins batch with only skipped outcomes emits skipped ca
       });
       const { ctx, pi, notifications } = makeCtx();
 
+      // act
       // Explicit scope=project so enumerateMarketplaceReinstallTargets finds
       // the marketplace and returns [{ plugin: "hello", scope: "project" }].
       // reinstallPlugin then sees plugin not in mp.plugins and returns skipped.
@@ -2468,6 +2571,7 @@ test("GAP-14: reinstallPlugins batch with only skipped outcomes emits skipped ca
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
       });
 
+      // assert
       assert.equal(outcomes.length, 1);
       assert.equal(outcomes[0]?.partition, "skipped");
       const body = notifications.at(-1)?.message ?? "";
@@ -2487,6 +2591,7 @@ test("GAP-15: reinstallPlugin with bridge warning emits notifyWarning before suc
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-bridge-warn-"));
     try {
+      // arrange
       await seedMarketplace({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
@@ -2495,6 +2600,7 @@ test("GAP-15: reinstallPlugin with bridge warning emits notifyWarning before suc
       });
       const { ctx, pi, notifications } = makeCtx();
 
+      // act
       const outcome = await reinstallPluginWithCache(
         {
           ctx,
@@ -2507,6 +2613,7 @@ test("GAP-15: reinstallPlugin with bridge warning emits notifyWarning before suc
         createCompletionCacheWithDrop(() => Promise.reject(new Error("cache-drop-warn"))),
       );
 
+      // assert
       // dropMarketplaceCache failure is swallowed; reinstall still succeeds.
       assert.equal(outcome.partition, "reinstalled");
       assert.ok(notifications.some((n) => n.message.includes("reinstalled")));
@@ -2569,6 +2676,7 @@ test("GAP-17: reinstallPlugin outcome notes include reinstall-specific failure m
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-notes-chain-"));
     try {
+      // arrange
       await seedMarketplace({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
@@ -2577,6 +2685,7 @@ test("GAP-17: reinstallPlugin outcome notes include reinstall-specific failure m
       });
       const { ctx, pi } = makeCtx();
 
+      // act
       const outcome = await reinstallPlugin({
         ctx,
         pi,
@@ -2589,6 +2698,7 @@ test("GAP-17: reinstallPlugin outcome notes include reinstall-specific failure m
         },
       });
 
+      // assert
       assert.equal(outcome.partition, "failed");
       assert.ok(outcome.notes !== undefined && outcome.notes.length > 0);
       assert.ok(
@@ -2682,6 +2792,7 @@ test("GAP-18: reinstallPlugins enumeration miss for an other-scope-only marketpl
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-enum-err-"));
     try {
+      // arrange
       await seedMarketplace({
         cwd,
         scope: "user",
@@ -2693,6 +2804,7 @@ test("GAP-18: reinstallPlugins enumeration miss for an other-scope-only marketpl
       });
       const { ctx, pi, notifications } = makeCtx();
 
+      // act
       const outcomes = await reinstallPlugins({
         ctx,
         pi,
@@ -2701,6 +2813,7 @@ test("GAP-18: reinstallPlugins enumeration miss for an other-scope-only marketpl
         target: { kind: "marketplace", marketplace: "onlyuser" },
       });
 
+      // assert
       assert.deepEqual([...outcomes], []);
       const body = notifications.at(-1)?.message ?? "";
       assert.equal(
@@ -2722,6 +2835,7 @@ test("GAP-19: reinstallPlugin updateStateRecord concurrent-removal detection", a
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-concurrent-remove-"));
     try {
+      // arrange
       await seedMarketplace({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
@@ -2732,6 +2846,7 @@ test("GAP-19: reinstallPlugin updateStateRecord concurrent-removal detection", a
       let firstAccess = true;
       const { ctx, pi } = makeCtx();
 
+      // act
       const outcome = await reinstallPlugin({
         ctx,
         pi,
@@ -2747,6 +2862,7 @@ test("GAP-19: reinstallPlugin updateStateRecord concurrent-removal detection", a
               return state;
             }
 
+            // assert
             // Proxy the plugins map so the "hello" plugin exists on first
             // access (the initial null-check in runLockedReinstall) but
             // appears removed on all subsequent accesses (updateStateRecord).
@@ -2790,6 +2906,7 @@ test("WB-01 / A7: reinstall with EQUAL existing entry leaves config byte- and mt
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-wb01-noop-"));
     try {
+      // arrange
       const locations = locationsFor("project", cwd);
       await seedMarketplace({
         cwd,
@@ -2806,6 +2923,7 @@ test("WB-01 / A7: reinstall with EQUAL existing entry leaves config byte- and mt
       // Pause to ensure any write would produce a different mtime.
       await new Promise((r) => setTimeout(r, 50));
 
+      // act
       const { ctx, pi } = makeCtx();
       const outcome = await reinstallPlugin({
         ctx,
@@ -2815,8 +2933,9 @@ test("WB-01 / A7: reinstall with EQUAL existing entry leaves config byte- and mt
         marketplace: "mp",
         plugin: "hello",
       });
-      assert.equal(outcome.partition, "reinstalled");
 
+      // assert
+      assert.equal(outcome.partition, "reinstalled");
       const bytesAfter = await readFile(locations.configJsonPath);
       const statAfter = await (await import("node:fs/promises")).stat(locations.configJsonPath);
       assert.deepEqual(bytesAfter, bytesBefore);
@@ -2831,6 +2950,7 @@ test("WB-01 / A7: reinstall with DIFFERENT existing entry writes back the patche
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-wb01-diff-"));
     try {
+      // arrange
       const locations = locationsFor("project", cwd);
       await seedMarketplace({
         cwd,
@@ -2860,6 +2980,7 @@ test("WB-01 / A7: reinstall with DIFFERENT existing entry writes back the patche
         locations.scopeRoot,
       );
 
+      // act
       const { ctx, pi } = makeCtx();
       const outcome = await reinstallPlugin({
         ctx,
@@ -2869,8 +2990,9 @@ test("WB-01 / A7: reinstall with DIFFERENT existing entry writes back the patche
         marketplace: "mp",
         plugin: "hello",
       });
-      assert.equal(outcome.partition, "reinstalled");
 
+      // assert
+      assert.equal(outcome.partition, "reinstalled");
       // Existing shape `{ enabled: false, futureKey: "x" }` deep-equals
       // the spread-over-existing patched shape -- byte-stable, write
       // SKIPPED. The unknown key MUST still be present (no clobber).
@@ -2891,6 +3013,7 @@ test("WB-01: --local reinstall targets the local file; base file untouched", asy
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-wb01-local-"));
     try {
+      // arrange
       const locations = locationsFor("project", cwd);
       await seedMarketplace({
         cwd,
@@ -2902,6 +3025,7 @@ test("WB-01: --local reinstall targets the local file; base file untouched", asy
       // Snapshot base bytes BEFORE the --local reinstall.
       const baseBytesBefore = await readFile(locations.configJsonPath);
 
+      // act
       const { ctx, pi } = makeCtx();
       const outcome = await reinstallPlugin({
         ctx,
@@ -2912,8 +3036,9 @@ test("WB-01: --local reinstall targets the local file; base file untouched", asy
         plugin: "hello",
         local: true,
       });
-      assert.equal(outcome.partition, "reinstalled");
 
+      // assert
+      assert.equal(outcome.partition, "reinstalled");
       // Base bytes UNCHANGED on the --local path (--local NEVER touches the
       // base file).
       const baseBytesAfter = await readFile(locations.configJsonPath);
@@ -2946,6 +3071,7 @@ test("WR-03: reinstallPlugin round-trips the plugin's routing-table entries with
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-wr03-"));
     try {
+      // arrange
       const ownerRuntime = createHooksRuntime();
       const peerRuntime = createHooksRuntime();
       const hooksRouting = createHooksRouting(ownerRuntime, { readHooksJson });
@@ -2982,6 +3108,7 @@ test("WR-03: reinstallPlugin round-trips the plugin's routing-table entries with
         }),
       );
 
+      // act
       const { ctx, pi, notifications } = makeCtx();
       const outcome = await createReinstallPlugin(
         REAL_REINSTALL_TRANSACTION,
@@ -2995,6 +3122,8 @@ test("WR-03: reinstallPlugin round-trips the plugin's routing-table entries with
         marketplace: "mp",
         plugin: "hello",
       });
+
+      // assert
       assert.equal(outcome.partition, "reinstalled");
       const summary = notifications.map((n) => n.message).join("\n");
       assert.ok(
@@ -3092,6 +3221,7 @@ test("LIFE-01 (reinstall): a plugin without hooks removes any stale <hooksDir>/<
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-life01-drop-"));
     try {
+      // arrange
       const locations = locationsFor("project", cwd);
 
       // Seed a plugin WITHOUT hooks.
@@ -3110,6 +3240,7 @@ test("LIFE-01 (reinstall): a plugin without hooks removes any stale <hooksDir>/<
         JSON.stringify({ stale: true }),
       );
 
+      // act
       const { ctx, pi, notifications } = makeCtx();
       const outcome = await reinstallPlugin({
         ctx,
@@ -3119,8 +3250,9 @@ test("LIFE-01 (reinstall): a plugin without hooks removes any stale <hooksDir>/<
         marketplace: "mp",
         plugin: "hello",
       });
-      assert.equal(outcome.partition, "reinstalled");
 
+      // assert
+      assert.equal(outcome.partition, "reinstalled");
       const summary = notifications.map((n) => n.message).join("\n");
       assert.ok(!summary.includes("(failed)"), `expected clean reinstall; got: ${summary}`);
 
@@ -3168,8 +3300,10 @@ test("BFILL-01 / RINST-01: reinstalling a partially-installed plugin succeeds in
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-bfill-partial-"));
     try {
+      // arrange
       await seedThenDegradeToUnsupported(cwd);
 
+      // act
       const { ctx, pi, notifications } = makeCtx();
       const outcome = await reinstallPlugin({
         ctx,
@@ -3181,6 +3315,7 @@ test("BFILL-01 / RINST-01: reinstalling a partially-installed plugin succeeds in
         render: "none",
       });
 
+      // assert
       assert.equal(outcome.partition, "reinstalled");
       assert.equal(notifications.length, 0);
     } finally {
@@ -3193,9 +3328,11 @@ test("BFILL-01 / D-68-02 partial: reinstall records the REAL non-empty unsupport
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-bfill-partial-"));
     try {
+      // arrange
       const locations = locationsFor("project", cwd);
       await seedThenDegradeToUnsupported(cwd);
 
+      // act
       const { ctx, pi } = makeCtx();
       const outcome = await reinstallPlugin({
         ctx,
@@ -3206,8 +3343,9 @@ test("BFILL-01 / D-68-02 partial: reinstall records the REAL non-empty unsupport
         plugin: "hello",
         render: "none",
       });
-      assert.equal(outcome.partition, "reinstalled");
 
+      // assert
+      assert.equal(outcome.partition, "reinstalled");
       const record = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
         "hello"
       ];
@@ -3229,6 +3367,7 @@ test("BFILL-01 / D-68-02 full: reinstall of an installable plugin records instal
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-bfill-full-"));
     try {
+      // arrange
       const locations = locationsFor("project", cwd);
       await seedMarketplace({
         cwd,
@@ -3237,6 +3376,7 @@ test("BFILL-01 / D-68-02 full: reinstall of an installable plugin records instal
         install: true,
       });
 
+      // act
       const { ctx, pi } = makeCtx();
       const outcome = await reinstallPlugin({
         ctx,
@@ -3247,8 +3387,9 @@ test("BFILL-01 / D-68-02 full: reinstall of an installable plugin records instal
         plugin: "hello",
         render: "none",
       });
-      assert.equal(outcome.partition, "reinstalled");
 
+      // assert
+      assert.equal(outcome.partition, "reinstalled");
       const record = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
         "hello"
       ];
@@ -3744,6 +3885,7 @@ test("a url-source reinstall completes on a warm cache with clone and resolveRem
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-purl-offline-"));
     try {
+      // arrange
       await seedInstalledGitSourcePlugin({
         cwd,
         marketplaceName: "mp",
@@ -3751,6 +3893,7 @@ test("a url-source reinstall completes on a warm cache with clone and resolveRem
         source: { source: "url", url: "https://example.com/org/repo", sha: GIT_SOURCE_SHA },
       });
 
+      // act
       // A GitOps stub whose clone AND resolveRemoteRef both throw: any network
       // touch fails the reinstall. The warm cache must short-circuit both.
       const { gitOps, state: gitState } = createGitOps({
@@ -3769,6 +3912,7 @@ test("a url-source reinstall completes on a warm cache with clone and resolveRem
         cloneCacheSeam: reinstallSeamWith(gitOps),
       });
 
+      // assert
       assert.equal(outcome.partition, "reinstalled", "warm-cache reinstall succeeds offline");
       assert.equal(gitState.resolveRemoteRefCalls.length, 0, "no pin re-resolution (no network)");
       assert.equal(gitState.cloneCalls.length, 0, "warm cache short-circuits the clone");
@@ -3782,6 +3926,7 @@ test("a git-source reinstall carries the recorded resolvedSha, version, and inst
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-purl-carry-"));
     try {
+      // arrange
       await seedInstalledGitSourcePlugin({
         cwd,
         marketplaceName: "mp",
@@ -3794,6 +3939,7 @@ test("a git-source reinstall carries the recorded resolvedSha, version, and inst
       assert.ok(before !== undefined, "the seeded install records a git-source plugin");
       assert.equal(before.resolvedSha, GIT_SOURCE_SHA, "install recorded the resolvedSha");
 
+      // act
       const { gitOps } = createGitOps({
         cloneThrows: new Error("network unreachable: clone"),
         resolveRemoteRefThrows: new Error("network unreachable: resolveRemoteRef"),
@@ -3810,6 +3956,7 @@ test("a git-source reinstall carries the recorded resolvedSha, version, and inst
         cloneCacheSeam: reinstallSeamWith(gitOps),
       });
 
+      // assert
       const after = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins["gp"];
       assert.ok(after !== undefined, "the record survives the reinstall");
       assert.equal(after.resolvedSha, GIT_SOURCE_SHA, "resolvedSha carried forward (not dropped)");
@@ -3825,6 +3972,7 @@ test("a cold-cache git-source reinstall re-materializes from the recorded sha wi
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-purl-cold-"));
     try {
+      // arrange
       // The manifest's .git suffix survives onto the wire URL (source.raw)
       // while the parse-time identity (source.url) drops it, so this fixture
       // also discriminates networkCloneUrl from canonicalCloneUrl.
@@ -3842,6 +3990,7 @@ test("a cold-cache git-source reinstall re-materializes from the recorded sha wi
       const cloneRoot = await locations.pluginCloneDir(key);
       await rm(cloneRoot, { recursive: true, force: true });
 
+      // act
       // A gitOps that copies the fixture back on clone (does NOT throw on
       // clone) but whose resolveRemoteRef still throws: the pin must come from
       // the recorded sha, never from a ref re-resolution.
@@ -3862,6 +4011,7 @@ test("a cold-cache git-source reinstall re-materializes from the recorded sha wi
         cloneCacheSeam: reinstallSeamWith(gitOps),
       });
 
+      // assert
       assert.equal(outcome.partition, "reinstalled", "cold-cache reinstall re-materializes");
       assert.equal(gitState.cloneCalls.length, 1, "one clone on the cold cache");
       assert.equal(
@@ -3885,6 +4035,7 @@ test("a git-subdir reinstall honors clone-root subdir containment (pluginRoot un
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-purl-subdir-"));
     try {
+      // arrange
       await seedInstalledGitSourcePlugin({
         cwd,
         marketplaceName: "mp",
@@ -3898,6 +4049,7 @@ test("a git-subdir reinstall honors clone-root subdir containment (pluginRoot un
         subdirPath: "packages/gp",
       });
 
+      // act
       const { gitOps } = createGitOps({
         cloneThrows: new Error("network unreachable: clone"),
         resolveRemoteRefThrows: new Error("network unreachable: resolveRemoteRef"),
@@ -3914,6 +4066,7 @@ test("a git-subdir reinstall honors clone-root subdir containment (pluginRoot un
         cloneCacheSeam: reinstallSeamWith(gitOps),
       });
 
+      // assert
       assert.equal(outcome.partition, "reinstalled", "git-subdir warm-cache reinstall succeeds");
 
       const locations = locationsFor("project", cwd);
@@ -4026,6 +4179,7 @@ test("MIRR-06 / PRL-07: an unpinned reinstall repairs fs-only from the warm mirr
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-mirror-warm-"));
     try {
+      // arrange
       const cloneUrl = "https://example.com/org/repo";
       const locations = locationsFor("project", cwd);
       const mirrorRoot = await locations.pluginCloneDir(pluginMirrorKey(cloneUrl));
@@ -4038,6 +4192,7 @@ test("MIRR-06 / PRL-07: an unpinned reinstall repairs fs-only from the warm mirr
         source: { source: "url", url: cloneUrl },
       });
 
+      // act
       // A gitOps whose clone AND resolveRemoteRef both throw: any network touch
       // fails the reinstall. The warm mirror must repair fs-only.
       const { gitOps, state: gitState } = createGitOps({
@@ -4056,6 +4211,7 @@ test("MIRR-06 / PRL-07: an unpinned reinstall repairs fs-only from the warm mirr
         cloneCacheSeam: reinstallSeamWith(gitOps),
       });
 
+      // assert
       assert.equal(outcome.partition, "reinstalled", "warm-mirror reinstall repairs fs-only");
       assert.equal(gitState.cloneCalls.length, 0, "no clone (warm mirror, no network)");
       assert.equal(gitState.resolveRemoteRefCalls.length, 0, "no ref re-resolution (no network)");
@@ -4080,6 +4236,7 @@ test("MIRR-06 / D-79.1-04: an unpinned reinstall with only a per-sha clone (no m
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-mirror-persha-"));
     try {
+      // arrange
       const cloneUrl = "https://example.com/org/repo";
       const locations = locationsFor("project", cwd);
       // Old-design record: still anchored to the per-sha clone, no mirror dir.
@@ -4094,6 +4251,7 @@ test("MIRR-06 / D-79.1-04: an unpinned reinstall with only a per-sha clone (no m
         source: { source: "url", url: cloneUrl },
       });
 
+      // act
       // clone + resolveRemoteRef both throw: a warm per-sha clone repairs with
       // no network; the mirror dir is absent so the arm falls through to the
       // recorded-sha per-sha path.
@@ -4113,6 +4271,7 @@ test("MIRR-06 / D-79.1-04: an unpinned reinstall with only a per-sha clone (no m
         cloneCacheSeam: reinstallSeamWith(gitOps),
       });
 
+      // assert
       assert.equal(outcome.partition, "reinstalled", "per-sha coexistence reinstall repairs");
       assert.equal(gitState.cloneCalls.length, 0, "warm per-sha clone short-circuits the clone");
       const record = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins["gp"];
@@ -4133,6 +4292,7 @@ test("MIRR-06 / PRL-07: an unpinned reinstall with neither mirror nor per-sha cl
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-mirror-cold-"));
     try {
+      // arrange
       const cloneUrl = "https://example.com/org/repo";
       const locations = locationsFor("project", cwd);
       const perShaKey = pluginCloneKey(cloneUrl, GIT_SOURCE_SHA);
@@ -4147,6 +4307,7 @@ test("MIRR-06 / PRL-07: an unpinned reinstall with neither mirror nor per-sha cl
         source: { source: "url", url: cloneUrl },
       });
 
+      // act
       // clone throws: PRL-07 forbids a network materialize on reinstall, so a
       // cold source must NOT clone successfully -- it fails clean (the same
       // degrade a cold per-sha reinstall hits today).
@@ -4166,6 +4327,7 @@ test("MIRR-06 / PRL-07: an unpinned reinstall with neither mirror nor per-sha cl
         cloneCacheSeam: reinstallSeamWith(gitOps),
       });
 
+      // assert
       assert.equal(outcome.partition, "failed", "a cold source fails clean, never clones");
       assert.equal(gitState.cloneCalls.length, 1, "the per-sha fallback attempts one clone");
       // The clone threw (network-forbidden simulation), so nothing materialized.
@@ -4192,6 +4354,7 @@ test("SUB-02: project-scope reinstall substitutes ${CLAUDE_PROJECT_DIR} to the i
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-sub02-proj-"));
     try {
+      // arrange
       const locations = locationsFor("project", cwd);
       const seeded = await seedMarketplace({
         cwd,
@@ -4212,11 +4375,13 @@ test("SUB-02: project-scope reinstall substitutes ${CLAUDE_PROJECT_DIR} to the i
         agent: "Reinstalled project: ${CLAUDE_PROJECT_DIR} Skill: ${CLAUDE_SKILL_DIR}",
       });
 
+      // act
       const { ctx, pi, notifications } = makeCtx();
       const outcome = await reinstallDefault(cwd, ctx, pi);
+
+      // assert
       assert.equal(outcome.partition, "reinstalled");
       assert.equal(errorNotifications(notifications).length, 0);
-
       const skillBody = await readSkill(cwd);
       assert.ok(
         skillBody.includes(`Reinstalled project: ${cwd}`),
@@ -4272,6 +4437,7 @@ test("SUB-02: user-scope reinstall keeps ${CLAUDE_PROJECT_DIR} literal in skill,
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-sub02-user-"));
     try {
+      // arrange
       const locations = locationsFor("user", cwd);
       await seedMarketplace({
         cwd,
@@ -4285,6 +4451,7 @@ test("SUB-02: user-scope reinstall keeps ${CLAUDE_PROJECT_DIR} literal in skill,
         scope: "user",
       });
 
+      // act
       const { ctx, pi, notifications } = makeCtx();
       const outcome = await reinstallPlugin({
         ctx,
@@ -4294,9 +4461,10 @@ test("SUB-02: user-scope reinstall keeps ${CLAUDE_PROJECT_DIR} literal in skill,
         marketplace: "mp",
         plugin: "hello",
       });
+
+      // assert
       assert.equal(outcome.partition, "reinstalled");
       assert.equal(errorNotifications(notifications).length, 0);
-
       const skillBody = await readFile(
         path.join(locations.skillsTargetDir, "hello-tool", "SKILL.md"),
         "utf8",
@@ -4337,6 +4505,7 @@ test("WR-04: a reinstall whose source frontmatter no longer parses reports the d
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-wr04-degraded-"));
     try {
+      // arrange
       const seeded = await seedMarketplace({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
@@ -4353,6 +4522,7 @@ test("WR-04: a reinstall whose source frontmatter no longer parses reports the d
         "---\nname: [unterminated\n---\n\n# Bad\nBody.\n",
       );
 
+      // act
       const { ctx, pi } = makeCtx();
       const outcome = await reinstallPlugin({
         ctx,
@@ -4363,6 +4533,7 @@ test("WR-04: a reinstall whose source frontmatter no longer parses reports the d
         plugin: "hello",
       });
 
+      // assert
       assert.equal(outcome.partition, "reinstalled");
       assert.ok(outcome.partition === "reinstalled");
       assert.deepEqual([...(outcome.degradedKinds ?? [])], ["skill"]);
@@ -4422,6 +4593,7 @@ test("WR-09: the standalone reinstall row names the degraded kind and takes the 
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-wr09-row-"));
     try {
+      // arrange
       const seeded = await seedMarketplace({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
@@ -4434,6 +4606,7 @@ test("WR-09: the standalone reinstall row names the degraded kind and takes the 
         "---\nname: [unterminated\n---\n\n# Bad\nBody.\n",
       );
 
+      // act
       const { ctx, pi, notifications } = makeCtx();
       await reinstallPlugin({
         ctx,
@@ -4444,6 +4617,7 @@ test("WR-09: the standalone reinstall row names the degraded kind and takes the 
         plugin: "hello",
       });
 
+      // assert
       const first = notifications[0];
       assert.ok(first !== undefined);
       assert.equal(
@@ -4466,10 +4640,11 @@ test("WR-09: the standalone reinstall row names the degraded kind and takes the 
   });
 });
 
-test("WR-09: a clean reinstall row is byte-identical to before -- no brace, no raise", async () => {
+test("WR-09: a clean reinstall row carries no brace and no raise", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-wr09-clean-"));
     try {
+      // arrange
       await seedMarketplace({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
@@ -4477,6 +4652,7 @@ test("WR-09: a clean reinstall row is byte-identical to before -- no brace, no r
         install: true,
       });
 
+      // act
       const { ctx, pi, notifications } = makeCtx();
       await reinstallPlugin({
         ctx,
@@ -4487,6 +4663,7 @@ test("WR-09: a clean reinstall row is byte-identical to before -- no brace, no r
         plugin: "hello",
       });
 
+      // assert
       const first = notifications[0];
       assert.ok(first !== undefined);
       assert.equal(
@@ -4506,6 +4683,7 @@ test("WR-04: a clean reinstall omits the degraded-kinds field entirely", async (
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-wr04-clean-"));
     try {
+      // arrange
       await seedMarketplace({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
@@ -4513,6 +4691,7 @@ test("WR-04: a clean reinstall omits the degraded-kinds field entirely", async (
         install: true,
       });
 
+      // act
       const { ctx, pi } = makeCtx();
       const outcome = await reinstallPlugin({
         ctx,
@@ -4523,6 +4702,7 @@ test("WR-04: a clean reinstall omits the degraded-kinds field entirely", async (
         plugin: "hello",
       });
 
+      // assert
       assert.ok(outcome.partition === "reinstalled");
       assert.equal(Object.hasOwn(outcome, "degradedKinds"), false);
     } finally {
@@ -4544,6 +4724,7 @@ test("S5: a reinstall whose config write-back cannot parse reports the skip besi
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-s5-"));
     try {
+      // arrange
       const locations = locationsFor("project", cwd);
       await seedMarketplace({
         cwd,
@@ -4553,6 +4734,7 @@ test("S5: a reinstall whose config write-back cannot parse reports the skip besi
       });
       await writeFile(locations.configJsonPath, "{ not json ", "utf8");
 
+      // act
       const { ctx, pi, notifications } = makeCtx();
       const outcome = await reinstallPlugin({
         ctx,
@@ -4563,6 +4745,7 @@ test("S5: a reinstall whose config write-back cannot parse reports the skip besi
         plugin: "hello",
       });
 
+      // assert
       assert.equal(outcome.partition, "reinstalled", "the artifacts still reinstall");
       const allText = notifications.map((n) => n.message).join("\n");
       assert.match(allText, /\(reinstalled\)/, `success row still emitted in:\n${allText}`);
@@ -4590,6 +4773,7 @@ test("PRL-10: a source that stopped being installable fails with the typed reaso
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-shape-"));
     try {
+      // arrange
       const marketplaceRoot = path.join(cwd, "mp-src");
       const { manifestPath } = await seedMarketplace({
         cwd,
@@ -4607,6 +4791,7 @@ test("PRL-10: a source that stopped being installable fails with the typed reaso
         "utf8",
       );
 
+      // act
       const { ctx, pi, notifications } = makeCtx();
       const outcome = await reinstallPlugin({
         ctx,
@@ -4617,6 +4802,7 @@ test("PRL-10: a source that stopped being installable fails with the typed reaso
         plugin: "hello",
       });
 
+      // assert
       assert.equal(outcome.partition, "failed");
       const allText = notifications.map((n) => n.message).join("\n");
       assert.doesNotMatch(
@@ -4729,6 +4915,7 @@ test("DFEN-07 / D-103-12 / ENBL-18: reinstall over a disabled record writes noth
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-disabled-"));
     try {
+      // arrange
       const locations = locationsFor("project", cwd);
       const { skillDir, envelopePaths } = await seedDisabledInstall(cwd, {
         workflows: ["greet"],
@@ -4745,9 +4932,11 @@ test("DFEN-07 / D-103-12 / ENBL-18: reinstall over a disabled record writes noth
       const stateBefore = await readFile(locations.stateJsonPath, "utf8");
       const configBefore = await readFile(locations.configJsonPath, "utf8");
 
+      // act
       const { ctx, pi } = makeCtx();
       const outcome = await reinstallDefault(cwd, ctx, pi);
 
+      // assert
       assert.equal(outcome.partition, "skipped");
       assert.deepEqual(outcome.notes, ["already disabled"]);
 
@@ -4778,11 +4967,14 @@ test("DFEN-07 / D-103-12: the standalone reinstall renders one benign skipped ro
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-disabled-row-"));
     try {
+      // arrange
       await seedDisabledInstall(cwd);
       const { ctx, pi, notifications } = makeCtx();
 
+      // act
       await reinstallDefault(cwd, ctx, pi);
 
+      // assert
       // IL-2: one emission for the whole reinstall. The mock records a severity
       // only when the producer passes one, so an absent severity is the info
       // row -- the reason is benign and idempotent, so it must neither raise
@@ -4806,6 +4998,7 @@ test("DFEN-07 / D-103-12: the bulk cascade carries the skipped and the reinstall
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-disabled-bulk-"));
     try {
+      // arrange
       const marketplaceRoot = path.join(cwd, "mp-src");
       await seedMarketplace({
         cwd,
@@ -4817,6 +5010,7 @@ test("DFEN-07 / D-103-12: the bulk cascade carries the skipped and the reinstall
       await seedDisabledInstall(cwd, { marketplaceRoot, pluginName: "sleeper" });
       const { ctx, pi, notifications } = makeCtx();
 
+      // act
       const outcomes = await reinstallPlugins({
         ctx,
         pi,
@@ -4824,6 +5018,7 @@ test("DFEN-07 / D-103-12: the bulk cascade carries the skipped and the reinstall
         target: { kind: "marketplace", marketplace: "mp" },
       });
 
+      // assert
       assert.deepEqual(
         outcomes.map((o) => `${o.name}:${o.partition}`),
         ["keeper:reinstalled", "sleeper:skipped"],
@@ -4859,6 +5054,7 @@ test("DFEN-08: a declared-true entry and a silent entry render identical reinsta
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-dfen08-parity-"));
     try {
+      // arrange
       const locations = locationsFor("project", cwd);
       const marketplaceRoot = path.join(cwd, "mp-src");
 
@@ -4916,6 +5112,7 @@ test("DFEN-08: a declared-true entry and a silent entry render identical reinsta
       assert.equal(before["beta"]?.enabled, true, "precondition: declared true installs enabled");
       assert.equal(before["gamma"]?.enabled, true, "precondition: a silent entry installs enabled");
 
+      // act
       const { ctx, pi, notifications } = makeCtx();
       const outcomes = await reinstallPlugins({
         ctx,
@@ -4924,6 +5121,7 @@ test("DFEN-08: a declared-true entry and a silent entry render identical reinsta
         target: { kind: "marketplace", marketplace: "mp" },
       });
 
+      // assert
       assert.deepEqual(
         outcomes.map((o) => `${o.name}:${o.partition}`),
         ["alpha:skipped", "beta:reinstalled", "gamma:reinstalled"],
@@ -5000,6 +5198,7 @@ test("DFEN-07 / D-103-10: a declaration flipped between install and reinstall do
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-flip-"));
     try {
+      // arrange
       const locations = locationsFor("project", cwd);
       const marketplaceRoot = path.join(cwd, "mp-src");
       const { manifestPath } = await seedMarketplace({
@@ -5038,9 +5237,11 @@ test("DFEN-07 / D-103-10: a declaration flipped between install and reinstall do
         "the rewritten declaration must be visible to this process",
       );
 
+      // act
       const { ctx, pi } = makeCtx();
       const outcome = await reinstallDefault(cwd, ctx, pi);
 
+      // assert
       assert.equal(outcome.partition, "skipped");
       const recordAfter = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
         "hello"
@@ -5090,6 +5291,7 @@ test("D-141-03: a standalone reinstall surfaces a skills discovery warning after
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-discwarn-"));
     try {
+      // arrange
       const marketplaceRoot = path.join(cwd, "mp-src");
       const { pluginRoot } = await seedMarketplace({
         cwd,
@@ -5099,6 +5301,7 @@ test("D-141-03: a standalone reinstall surfaces a skills discovery warning after
       });
       await seedCollidingSkills(pluginRoot, "hello", ["foo"]);
 
+      // act
       const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(2, 1);
       const outcomes = await reinstallPlugins({
         ctx,
@@ -5107,6 +5310,7 @@ test("D-141-03: a standalone reinstall surfaces a skills discovery warning after
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
       });
 
+      // assert
       assert.equal(outcomes[0]?.partition, "reinstalled");
       assert.deepStrictEqual(notifications, [
         {
@@ -5134,6 +5338,7 @@ test("D-141-03: a bulk reinstall surfaces one diagnostic per plugin, singular an
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-discwarn-bulk-"));
     try {
+      // arrange
       const marketplaceRoot = path.join(cwd, "mp-src");
       const hello = await seedMarketplace({
         cwd,
@@ -5154,9 +5359,11 @@ test("D-141-03: a bulk reinstall surfaces one diagnostic per plugin, singular an
       // one-collision fixture leaves dark.
       await seedCollidingSkills(world.pluginRoot, "world", ["foo", "bar"]);
 
+      // act
       const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(3, 1);
       await reinstallPlugins({ ctx, pi, cwd, target: { kind: "all" } });
 
+      // assert
       assert.deepStrictEqual(notifications, [
         {
           message:
@@ -5184,6 +5391,7 @@ test("D-141-03: an orchestrated reinstall carries the discovery half on notes an
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-discwarn-orch-"));
     try {
+      // arrange
       const { pluginRoot } = await seedMarketplace({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
@@ -5192,6 +5400,7 @@ test("D-141-03: an orchestrated reinstall carries the discovery half on notes an
       });
       await seedCollidingSkills(pluginRoot, "hello", ["foo"]);
 
+      // act
       const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(0, 0);
       const outcome = await reinstallPlugin({
         ctx,
@@ -5203,6 +5412,7 @@ test("D-141-03: an orchestrated reinstall carries the discovery half on notes an
         render: "none",
       });
 
+      // assert
       assert.equal(outcome.partition, "reinstalled");
       assert.deepStrictEqual(notifications, []);
       // The flat `notes` fold reaches orchestrated consumers (reconcile
@@ -5228,6 +5438,7 @@ test("NREG-01: a clean reinstall outcome carries neither notes nor discoveryWarn
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-nreg-"));
     try {
+      // arrange
       await seedMarketplace({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
@@ -5235,6 +5446,7 @@ test("NREG-01: a clean reinstall outcome carries neither notes nor discoveryWarn
         install: true,
       });
 
+      // act
       const { ctx, pi } = makeCtx();
       const outcome = await reinstallPlugin({
         ctx,
@@ -5246,6 +5458,7 @@ test("NREG-01: a clean reinstall outcome carries neither notes nor discoveryWarn
         render: "none",
       });
 
+      // assert
       assert.equal(outcome.partition, "reinstalled");
       assert.ok(!Object.hasOwn(outcome, "notes"), JSON.stringify(outcome));
       assert.ok(!Object.hasOwn(outcome, "discoveryWarnings"), JSON.stringify(outcome));
@@ -5259,6 +5472,7 @@ test("NREG-01: a hygiene-only reinstall carries notes but still omits discoveryW
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-nreg-hyg-"));
     try {
+      // arrange
       // The agent has no `description`, so the HYGIENE half is non-empty while
       // the discovery half stays empty. Without this case the omit rule is
       // only exercised where `notes` is empty too, and an unconditional
@@ -5270,6 +5484,7 @@ test("NREG-01: a hygiene-only reinstall carries notes but still omits discoveryW
         install: true,
       });
 
+      // act
       const { ctx, pi } = makeCtx({ toolNames: ["subagent"] });
       const outcome = await reinstallPlugin({
         ctx,
@@ -5281,6 +5496,7 @@ test("NREG-01: a hygiene-only reinstall carries notes but still omits discoveryW
         render: "none",
       });
 
+      // assert
       assert.equal(outcome.partition, "reinstalled");
       assert.ok(Object.hasOwn(outcome, "notes"), JSON.stringify(outcome));
       assert.ok(!Object.hasOwn(outcome, "discoveryWarnings"), JSON.stringify(outcome));
@@ -5294,6 +5510,7 @@ test("D-141-03: an agents hygiene warning rides notes in orchestrated mode and n
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-hygwarn-"));
     try {
+      // arrange
       const marketplaceRoot = path.join(cwd, "mp-src");
       // `writePluginTree` writes the agent frontmatter with no `description`,
       // which the agents bridge reports as a fallback note.
@@ -5307,6 +5524,7 @@ test("D-141-03: an agents hygiene warning rides notes in orchestrated mode and n
       // absence assertion below would also pass if the split returned nothing.
       await seedCollidingSkills(pluginRoot, "hello", ["foo"]);
 
+      // act & assert
       const orchestrated = makeCtx({ toolNames: ["subagent"] });
       const orchestratedOutcome = await reinstallPlugin({
         ctx: orchestrated.ctx,

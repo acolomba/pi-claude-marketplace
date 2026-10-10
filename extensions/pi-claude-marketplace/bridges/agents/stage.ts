@@ -274,11 +274,11 @@ export async function prepareStagePluginAgents(
     locations,
     stagingDir,
     result,
-    _previousEntries: Object.freeze(safePreviousEntries),
-    _foreignPreservedEntries: Object.freeze(foreignPreservedEntries),
-    _otherEntries: Object.freeze(otherEntries),
-    _newEntries: Object.freeze(newEntries),
-    _stagedFilePaths: Object.freeze(stagedFilePaths),
+    previousEntries: Object.freeze(safePreviousEntries),
+    foreignPreservedEntries: Object.freeze(foreignPreservedEntries),
+    otherEntries: Object.freeze(otherEntries),
+    newEntries: Object.freeze(newEntries),
+    stagedFilePaths: Object.freeze(stagedFilePaths),
   };
 }
 
@@ -340,12 +340,12 @@ export async function commitPreparedAgents(
   // The loop stays parallel here because step 1 has no source to roll back
   // to -- those files were never backed up (commitPreparedAgents is the
   // commit path, not the replacePreparedAgents backup path); rollback would
-  // have nothing to restore. _foreignPreservedEntries is INTENTIONALLY
+  // have nothing to restore. foreignPreservedEntries is INTENTIONALLY
   // excluded -- those targets stay untouched on disk and their rows stay
   // in the index.
   try {
-    const previousTargets = new Set(prepared._previousEntries.map((entry) => entry.targetPath));
-    for (const entry of prepared._newEntries) {
+    const previousTargets = new Set(prepared.previousEntries.map((entry) => entry.targetPath));
+    for (const entry of prepared.newEntries) {
       // eslint-disable-next-line no-await-in-loop -- the first non-previous target throws before any rm
       if (!previousTargets.has(entry.targetPath) && (await pathExists(entry.targetPath))) {
         throw new Error(
@@ -355,7 +355,7 @@ export async function commitPreparedAgents(
     }
 
     await Promise.all(
-      prepared._previousEntries.map(async (entry) => {
+      prepared.previousEntries.map(async (entry) => {
         try {
           await rm(entry.targetPath);
         } catch (err) {
@@ -382,7 +382,7 @@ export async function commitPreparedAgents(
   // fallow-ignore-next-line code-duplication -- reviewed: the agents and commands bridges keep the same TR-01/TR-05 commit-and-rollback shape on purpose, so each rollback contract stays beside the commit it protects
   try {
     await mkdir(prepared.locations.agentsDir, { recursive: true });
-    for (const pair of prepared._stagedFilePaths) {
+    for (const pair of prepared.stagedFilePaths) {
       // eslint-disable-next-line no-await-in-loop -- TR-01: one rename at a time so rollback knows which landed
       await rename(pair.from, pair.to);
       completedRenames.push(pair);
@@ -394,9 +394,9 @@ export async function commitPreparedAgents(
     await saveAgentsIndex(prepared.locations, {
       schemaVersion: 1,
       agents: [
-        ...prepared._otherEntries,
-        ...prepared._newEntries,
-        ...prepared._foreignPreservedEntries,
+        ...prepared.otherEntries,
+        ...prepared.newEntries,
+        ...prepared.foreignPreservedEntries,
       ],
     });
   } catch (err) {
@@ -475,8 +475,8 @@ export async function replacePreparedAgents(
   await assertPathInside(prepared.locations.agentsStagingDir, backupRoot, "agents backup root");
   const backupEntries =
     options?.force === true
-      ? [...prepared._previousEntries, ...prepared._foreignPreservedEntries]
-      : [...prepared._previousEntries];
+      ? [...prepared.previousEntries, ...prepared.foreignPreservedEntries]
+      : [...prepared.previousEntries];
   const backups: { name: string; from: string; to: string }[] = [];
   const renamed: { to: string }[] = [];
 
@@ -499,15 +499,15 @@ export async function replacePreparedAgents(
     }
 
     // TR-06: 3-arm policy at the rename loop. ownedNames is the basename
-    // membership set derived from agents-index.json (via _previousEntries). When
+    // membership set derived from agents-index.json (via previousEntries). When
     // a pre-existing target shares an owned basename, it is treated as an
     // orphan from a prior partial install and pre-removed via the
     // kind-strict helper. Foreign content (basename NOT in ownedNames)
     // still triggers the existing PI-6 "non-previous content" rejection
     // verbatim. Agents targets are .md files -> mode "file".
-    const ownedNames = new Set<string>(prepared._previousEntries.map((e) => e.generatedName));
+    const ownedNames = new Set<string>(prepared.previousEntries.map((e) => e.generatedName));
     await mkdir(prepared.locations.agentsDir, { recursive: true });
-    for (const pair of prepared._stagedFilePaths) {
+    for (const pair of prepared.stagedFilePaths) {
       const targetName = path.basename(pair.to, ".md");
       if (ownedNames.has(targetName)) {
         // eslint-disable-next-line no-await-in-loop -- rollback undoes only the renames already recorded
@@ -525,7 +525,7 @@ export async function replacePreparedAgents(
 
     await saveAgentsIndex(prepared.locations, {
       schemaVersion: 1,
-      agents: [...prepared._otherEntries, ...prepared._newEntries],
+      agents: [...prepared.otherEntries, ...prepared.newEntries],
     });
   } catch (err) {
     const leaks = await rollbackAgentsReplacementInternal(

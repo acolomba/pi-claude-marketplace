@@ -304,6 +304,7 @@ for (const { plugin, expected } of ROW_CASES) {
 }
 
 test("pending uninstall stays bare while prune preview adds its reason without a reload", () => {
+  // arrange
   const bare: MarketplaceNotificationMessage = {
     name: "official",
     scope: "user",
@@ -315,6 +316,7 @@ test("pending uninstall stays bare while prune preview adds its reason without a
     plugins: [{ status: "will uninstall", name: "shared-lib", reasons: ["dependency pruned"] }],
   };
 
+  // act & assert
   assert.equal(
     composeMarketplaceBlock(bare, bothLoadedProbe()),
     "● official [user]\n  ○ shared-lib (will uninstall)",

@@ -62,6 +62,7 @@ test("T-d8i-01: provenance stays invisible to pi-subagents' own frontmatter pars
     return;
   }
 
+  // arrange
   t.diagnostic(`pi-subagents ${peer.version} at ${peer.root}`);
   const fm = await loadPiSubagentsModule<PiSubagentsFrontmatterModule>(peer, "frontmatter");
 
@@ -92,8 +93,10 @@ test("T-d8i-01: provenance stays invisible to pi-subagents' own frontmatter pars
     body: bodyText,
   });
 
+  // act
   const { frontmatter, body } = fm.parseFrontmatter(agentFileContent);
 
+  // assert
   // (a) The parsed body IS the child subagent's system prompt. It must carry
   //     none of the provenance keys, values, or the generated marker.
   const provenanceLeaks = [
