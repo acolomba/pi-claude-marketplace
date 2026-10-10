@@ -30,6 +30,8 @@
 // for the schemaVersion-1 config family. Future schema versions land in a
 // successor file, not by bumping this literal.
 
+import { ownValue } from "../shared/own-key.ts";
+
 import {
   saveConfig,
   type MarketplaceConfigEntry,
@@ -54,7 +56,7 @@ export async function writeMarketplaceConfigEntry(
   marketplace: string,
   patch: Partial<MarketplaceConfigEntry>,
 ): Promise<void> {
-  const existing = current.marketplaces?.[marketplace] ?? {};
+  const existing = ownValue(current.marketplaces, marketplace) ?? {};
   // S10 (PR #51): the cast is needed because `existing` may be `{}` (no prior
   // entry) and `patch` is a `Partial`, so the spread's inferred type does NOT
   // guarantee the required `source` field. The runtime backstop is
@@ -122,7 +124,7 @@ export async function writePluginConfigEntry(
   patch: Partial<PluginConfigEntry>,
 ): Promise<void> {
   const key = `${plugin}@${marketplace}`;
-  const existing = current.plugins?.[key] ?? {};
+  const existing = ownValue(current.plugins, key) ?? {};
   const merged: PluginConfigEntry = { ...existing, ...patch };
   const patched: ScopeConfig = {
     ...current,
