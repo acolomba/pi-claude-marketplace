@@ -67,7 +67,12 @@ test("renders an updated row with its ordered resolved reasons", () => {
     from: "hash-2ea95f85703d",
     to: "hash-1c3d9a0bbef1",
     scope: "project",
-    reasons: ["orphan rewake", "malformed skill", "requires pi-subagents", "requires pi-mcp"],
+    reasons: [
+      "orphan rewake",
+      "malformed skill",
+      "requires pi-subagents",
+      "requires pi-mcp-adapter",
+    ],
     severity: "warning",
     needsReload: true,
   } as const satisfies ResolvedRow<UpdateRowMsg>;
@@ -78,7 +83,7 @@ test("renders an updated row with its ordered resolved reasons", () => {
   // assert
   assert.equal(
     row,
-    "● alpha [project] v#2ea95f8 → v#1c3d9a0 (updated) {orphan rewake, malformed skill, requires pi-subagents, requires pi-mcp}",
+    "● alpha [project] v#2ea95f8 → v#1c3d9a0 (updated) {orphan rewake, malformed skill, requires pi-subagents, requires pi-mcp-adapter}",
   );
   assert.deepStrictEqual(message, {
     status: "updated",
@@ -86,7 +91,12 @@ test("renders an updated row with its ordered resolved reasons", () => {
     from: "hash-2ea95f85703d",
     to: "hash-1c3d9a0bbef1",
     scope: "project",
-    reasons: ["orphan rewake", "malformed skill", "requires pi-subagents", "requires pi-mcp"],
+    reasons: [
+      "orphan rewake",
+      "malformed skill",
+      "requires pi-subagents",
+      "requires pi-mcp-adapter",
+    ],
     severity: "warning",
     needsReload: true,
   });
@@ -97,7 +107,7 @@ test("renders a partially-installed row with a folded scope and its resolved mar
   const message = {
     status: "partially-installed",
     name: "beta",
-    reasons: ["malformed command", "lsp", "requires pi-mcp"],
+    reasons: ["malformed command", "lsp", "requires pi-mcp-adapter"],
     version: "2.0.0",
     scope: "user",
     severity: "warning",
@@ -110,12 +120,12 @@ test("renders a partially-installed row with a folded scope and its resolved mar
   // assert
   assert.equal(
     row,
-    "◉ beta v2.0.0 (partially-installed) {malformed command, lsp, requires pi-mcp}",
+    "◉ beta v2.0.0 (partially-installed) {malformed command, lsp, requires pi-mcp-adapter}",
   );
   assert.deepStrictEqual(message, {
     status: "partially-installed",
     name: "beta",
-    reasons: ["malformed command", "lsp", "requires pi-mcp"],
+    reasons: ["malformed command", "lsp", "requires pi-mcp-adapter"],
     version: "2.0.0",
     scope: "user",
     severity: "warning",

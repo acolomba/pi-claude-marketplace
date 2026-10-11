@@ -58,6 +58,7 @@ import { locationsFor } from "../../persistence/locations.ts";
 import { loadState, type ExtensionState } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage, MarketplaceNotFoundError } from "../../shared/errors.ts";
+import { notifyMcpConfigNotices } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import {
   type PluginFailedMessage,
@@ -69,6 +70,7 @@ import {
   type MarketplaceRows,
   type Single,
 } from "../../shared/notify-context.ts";
+import { ownValue } from "../../shared/own-key.ts";
 import {
   withLockedStateTransaction,
   type LockedStateTransactionDeps,
@@ -79,6 +81,7 @@ import { REMOVE_CONTEXT, type RemoveRowMsg } from "./remove.messaging.ts";
 import {
   AgentsUnstageFailureError,
   cascadeUnstagePlugin,
+  mcpConfigNoticesMember,
   narrowCascadeFailure,
   resolveScopeOrNotifyNotAdded,
 } from "./shared.ts";
@@ -87,9 +90,25 @@ import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
+import type { McpConfigNotice } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 
 type RecordedSourceKind = "github" | "url" | "path" | "unknown";
+
+/**
+ * AFILE-04: an orchestrated removal whose state transaction threw after its
+ * plugin cascades rewrote MCP config files. It carries those cascades' notices
+ * so the caller can still show them. The original throw rides `Error.cause`,
+ * and the caller classifies that.
+ */
+export class MarketplaceRemoveFailureError extends Error {
+  readonly mcpConfigNotices: readonly McpConfigNotice[];
+  constructor(mcpConfigNotices: readonly McpConfigNotice[], options: ErrorOptions) {
+    super("Marketplace remove failed after its plugin cascades rewrote MCP config files.", options);
+    this.name = "MarketplaceRemoveFailureError";
+    this.mcpConfigNotices = Object.freeze([...mcpConfigNotices]);
+  }
+}
 
 /**
  * RECON-03: controls how `removeMarketplace` surfaces
@@ -114,9 +133,18 @@ export type RemoveMarketplaceNotifications =
  * `"marketplace not added"` arm (missing marketplace, MarketplaceNotFoundError) can
  * surface its structural sentinel through the same field. Mirrors the
  * `AddMarketplaceOutcome` shape note.
+ *
+ * AFILE-04: the `removed` and `partial` arms carry the plugin cascades' MCP
+ * config notices in `mcpConfigNotices` for the caller to show, set only when
+ * non-empty.
  */
 export type RemoveMarketplaceOutcome =
-  | { readonly status: "removed"; readonly name: string; readonly unstaged: readonly string[] }
+  | {
+      readonly status: "removed";
+      readonly name: string;
+      readonly unstaged: readonly string[];
+      readonly mcpConfigNotices?: readonly McpConfigNotice[];
+    }
   | {
       readonly status: "failed";
       readonly reason: Reason;
@@ -134,6 +162,7 @@ export type RemoveMarketplaceOutcome =
       readonly name: string;
       readonly unstaged: readonly string[];
       readonly failed: readonly { readonly name: string; readonly reason: ContentReason }[];
+      readonly mcpConfigNotices?: readonly McpConfigNotice[];
     };
 
 export interface RemoveMarketplaceOptions {
@@ -229,11 +258,11 @@ async function resolveScopeOrFailedOutcome(
       loadState(userLocations.extensionRoot),
       loadState(projectLocations.extensionRoot),
     ]);
-    if (opts.name in projectState.marketplaces) {
+    if (ownValue(projectState.marketplaces, opts.name) !== undefined) {
       return { scope: "project", locations: projectLocations };
     }
 
-    if (opts.name in userState.marketplaces) {
+    if (ownValue(userState.marketplaces, opts.name) !== undefined) {
       return { scope: "user", locations: userLocations };
     }
 
@@ -242,7 +271,7 @@ async function resolveScopeOrFailedOutcome(
 
   const candLocations = opts.scope === "user" ? userLocations : projectLocations;
   const preState = await loadState(candLocations.extensionRoot);
-  if (preState.marketplaces[opts.name] === undefined) {
+  if (ownValue(preState.marketplaces, opts.name) === undefined) {
     return notAddedOutcome(opts.name, [opts.scope]);
   }
 
@@ -264,7 +293,8 @@ interface FailedPluginCascade {
  * RECON-03: route the partial-failure (≥1 plugin cascade failure) arm to
  * either a typed orchestrated outcome OR the standalone notify() row.
  * Extracted from `removeMarketplace` to keep its cognitive complexity
- * inside the project's lint budget.
+ * inside the project's lint budget. AFILE-04: the MCP config notices follow
+ * the row in standalone mode and ride the outcome in orchestrated mode.
  */
 function emitPartialFailure(args: {
   opts: RemoveMarketplaceOptions;
@@ -272,8 +302,16 @@ function emitPartialFailure(args: {
   resolvedScope: Scope;
   successfullyUnstaged: readonly string[];
   failedPlugins: readonly FailedPluginCascade[];
+  mcpConfigNotices: readonly McpConfigNotice[];
 }): RemoveMarketplaceOutcome {
-  const { opts, orchestrated, resolvedScope, successfullyUnstaged, failedPlugins } = args;
+  const {
+    opts,
+    orchestrated,
+    resolvedScope,
+    successfullyUnstaged,
+    failedPlugins,
+    mcpConfigNotices,
+  } = args;
   // I1 / PR #51: surface BOTH unstaged successes AND per-plugin failures
   // through the typed outcome. The apply cascade caller composes one row
   // per plugin (○ uninstalled for unstaged, ⊘ {reason} for failed) so the
@@ -288,6 +326,7 @@ function emitPartialFailure(args: {
       name: f.name,
       reason: narrowCascadeFailure(f.cause),
     })),
+    ...mcpConfigNoticesMember(mcpConfigNotices),
   };
   if (!orchestrated) {
     // CMC-31 PARTIAL: mp.status="failed"; plugins[] mixes uninstalled +
@@ -325,6 +364,7 @@ function emitPartialFailure(args: {
       },
     ];
     notifyWithContext(opts.ctx, opts.run, REMOVE_CONTEXT, partialRows, undefined, "single");
+    notifyMcpConfigNotices(opts.ctx, opts.run, mcpConfigNotices);
   }
 
   return outcome;
@@ -332,9 +372,11 @@ function emitPartialFailure(args: {
 
 /**
  * D-02: hand-rolled per-plugin cascade loop. Mutates `record.plugins`,
- * `successfullyUnstaged`, and `failedPlugins` in place. Extracted from
- * `removeMarketplace` to keep its cognitive complexity inside the project's
- * lint budget.
+ * `successfullyUnstaged`, `failedPlugins` and `mcpConfigNotices` in place.
+ * AFILE-04: every cascade's MCP config notices are kept, from a failed
+ * cascade too, because its MCP slot may have rewritten the file before a
+ * later slot failed. Extracted from `removeMarketplace` to keep its
+ * cognitive complexity inside the project's lint budget.
  */
 async function cascadePluginsInPlace(args: {
   readonly record: { plugins: Record<string, ExtensionPluginRow> };
@@ -343,11 +385,13 @@ async function cascadePluginsInPlace(args: {
   readonly cascade: typeof cascadeUnstagePlugin;
   readonly successfullyUnstaged: string[];
   readonly failedPlugins: FailedPluginCascade[];
+  readonly mcpConfigNotices: McpConfigNotice[];
 }): Promise<void> {
   const { record, marketplace, locations, cascade, successfullyUnstaged, failedPlugins } = args;
   for (const [pluginName, plugin] of Object.entries(record.plugins)) {
     // eslint-disable-next-line no-await-in-loop -- each unstage rewrites the shared agents index and mcp.json
     const outcome = await cascade(pluginName, marketplace, locations, plugin);
+    args.mcpConfigNotices.push(...(outcome.mcpConfigNotices ?? []));
     if (outcome.ok) {
       successfullyUnstaged.push(pluginName);
       // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- record.plugins is a dynamic-key Record<string, ...>.
@@ -413,7 +457,7 @@ async function cascadeRemoveFromLayer(
   }
 
   const suffix = `@${marketplace}`;
-  const declaresMarketplace = cfg.config.marketplaces?.[marketplace] !== undefined;
+  const declaresMarketplace = ownValue(cfg.config.marketplaces, marketplace) !== undefined;
   const declaresPluginUnderIt = Object.keys(cfg.config.plugins ?? {}).some((key) =>
     key.endsWith(suffix),
   );
@@ -479,6 +523,7 @@ async function runRemoveLockBody(args: {
   readonly cascade: typeof cascadeUnstagePlugin;
   readonly successfullyUnstaged: string[];
   readonly failedPlugins: FailedPluginCascade[];
+  readonly mcpConfigNotices: McpConfigNotice[];
   readonly cfgInvalidSentinel: Error;
 }): Promise<RecordedSourceKind | undefined> {
   const {
@@ -490,6 +535,7 @@ async function runRemoveLockBody(args: {
     cascade,
     successfullyUnstaged,
     failedPlugins,
+    mcpConfigNotices,
     cfgInvalidSentinel,
   } = args;
 
@@ -500,7 +546,7 @@ async function runRemoveLockBody(args: {
   }
 
   const state = tx.state as { marketplaces: Record<string, ExtensionMarketplaceRow> };
-  const record = state.marketplaces[opts.name];
+  const record = ownValue(state.marketplaces, opts.name);
   if (record === undefined) {
     // Concurrent removal between pre-guard probe and the lock body:
     // save the (unchanged) state and let the post-guard arm emit the
@@ -523,6 +569,7 @@ async function runRemoveLockBody(args: {
     cascade,
     successfullyUnstaged,
     failedPlugins,
+    mcpConfigNotices,
   });
 
   if (failedPlugins.length === 0) {
@@ -761,6 +808,7 @@ async function runRemoveOutcome(
   // Per-plugin tracking accumulators captured by the guard closure.
   const failedPlugins: FailedPluginCascade[] = [];
   const successfullyUnstaged: string[] = []; // plugins whose cascade returned ok:true
+  const mcpConfigNotices: McpConfigNotice[] = [];
   let sourceKindAtRecord: RecordedSourceKind | undefined;
 
   // CFG-03 sentinel: a synthetic throw signaling the lock body aborted on an
@@ -782,6 +830,7 @@ async function runRemoveOutcome(
           cascade,
           successfullyUnstaged,
           failedPlugins,
+          mcpConfigNotices,
           cfgInvalidSentinel,
         });
         if (sk !== undefined) {
@@ -792,7 +841,7 @@ async function runRemoveOutcome(
     );
   } catch (err) {
     if (err !== cfgInvalidSentinel) {
-      throw err;
+      rethrowWithMcpConfigNotices(err, opts, orchestrated, mcpConfigNotices);
     }
 
     return surfaceCfgInvalid({
@@ -831,14 +880,45 @@ async function runRemoveOutcome(
       resolvedScope: resolved.scope,
       successfullyUnstaged,
       failedPlugins,
+      mcpConfigNotices,
     });
   }
 
   if (!orchestrated) {
     emitCleanRemoval(opts, resolved.scope, successfullyUnstaged);
+    notifyMcpConfigNotices(opts.ctx, opts.run, mcpConfigNotices);
   }
 
-  return { status: "removed", name: opts.name, unstaged: successfullyUnstaged };
+  return {
+    status: "removed",
+    name: opts.name,
+    unstaged: successfullyUnstaged,
+    ...mcpConfigNoticesMember(mcpConfigNotices),
+  };
+}
+
+/**
+ * AFILE-04: rethrows a state-transaction failure without losing the notices of
+ * the plugin cascades that already rewrote MCP config files. Standalone mode
+ * shows them before the throw leaves; orchestrated mode carries them on a
+ * `MarketplaceRemoveFailureError`.
+ */
+function rethrowWithMcpConfigNotices(
+  err: unknown,
+  opts: Pick<RemoveMarketplaceOptions, "ctx" | "run">,
+  orchestrated: boolean,
+  notices: readonly McpConfigNotice[],
+): never {
+  if (notices.length === 0) {
+    throw err;
+  }
+
+  if (orchestrated) {
+    throw new MarketplaceRemoveFailureError(notices, { cause: err });
+  }
+
+  notifyMcpConfigNotices(opts.ctx, opts.run, notices);
+  throw err;
 }
 
 /**

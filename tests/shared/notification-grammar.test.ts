@@ -27,6 +27,7 @@ import type {
 import type {
   MarketplaceNotAddedMessage,
   MarketplaceNotificationMessage,
+  McpServerSummaryEntry,
   PluginFailedMessage,
   PluginInfoMessage,
   PluginInstalledMessage,
@@ -738,6 +739,190 @@ test("renders no dependencies line for an unresolved row whose list is empty", (
   );
 });
 
+test("ADET-01: renders the stamped requires line after the components and before dependencies and notes", () => {
+  // arrange
+  const message: PluginInfoMessage = {
+    kind: "plugin-info",
+    marketplaceName: "official",
+    marketplaceScope: "user",
+    marketplaceDetails: { autoupdate: false },
+    plugin: {
+      status: "installed",
+      name: "alpha",
+      componentsResolved: true,
+      components: { agents: ["a"], mcp: [{ name: "plugin:alpha:m" }] },
+      requires: [
+        { companion: "pi-mcp-adapter", missing: true },
+        { companion: "pi-subagents", missing: false },
+      ],
+      dependencies: ["dep@mp"],
+      notes: ["a note"],
+    },
+  };
+
+  // act
+  const rendered = renderPluginInfo(message);
+
+  // assert
+  assert.equal(
+    rendered,
+    [
+      "● official [user] <no autoupdate>",
+      "  ● alpha (installed)",
+      "    agents: a",
+      "    mcp: plugin:alpha:m",
+      "    requires: pi-mcp-adapter (missing), pi-subagents",
+      "    dependencies: dep@mp",
+      "    note: a note",
+    ].join("\n"),
+  );
+});
+
+for (const { requirement, label, mcp, mcpLines } of [
+  {
+    requirement: "ANAME-07",
+    label: "tags a left-out server with its blocking feature beside a plain one",
+    mcp: [{ name: "plugin:a:x" }, { name: "plugin:a:y", unsupportedFeature: "headersHelper" }],
+    mcpLines: ["    mcp: plugin:a:x, plugin:a:y (unsupported headersHelper)"],
+  },
+  { requirement: "ANAME-07", label: "prints no mcp line for an empty list", mcp: [], mcpLines: [] },
+  {
+    requirement: "ANAME-07",
+    label: "prints no mcp line for an absent list",
+    mcp: undefined,
+    mcpLines: [],
+  },
+  {
+    requirement: "AVAR-04",
+    label: "renders each server's variable lists, its unsupported feature, or its bare name",
+    mcp: [
+      { name: "plugin:a:p", unsetVariables: ["A", "B"] },
+      { name: "plugin:a:q", withheldVariables: ["C"] },
+      { name: "plugin:a:r", unsetVariables: ["A"], withheldVariables: ["C"] },
+      { name: "plugin:a:s", unsupportedFeature: "ws" },
+      { name: "plugin:a:t" },
+    ],
+    mcpLines: [
+      "    mcp: plugin:a:p (unset A, B), plugin:a:q (withheld C), " +
+        "plugin:a:r (unset A; withheld C), plugin:a:s (unsupported ws), plugin:a:t",
+    ],
+  },
+  {
+    requirement: "AVAR-04",
+    label: "renders the bare name for two empty variable lists",
+    mcp: [{ name: "plugin:a:p", unsetVariables: [], withheldVariables: [] }],
+    mcpLines: ["    mcp: plugin:a:p"],
+  },
+  {
+    requirement: "ASTAT-01",
+    label: "renders a server's state alone inside its parentheses",
+    mcp: [{ name: "plugin:a:p", status: "connected" } satisfies McpServerSummaryEntry],
+    mcpLines: ["    mcp: plugin:a:p (connected)"],
+  },
+  {
+    requirement: "ASTAT-01",
+    label: "renders a server's state first, then its unset and withheld lists",
+    mcp: [
+      {
+        name: "plugin:a:p",
+        status: "needs authentication",
+        unsetVariables: ["A"],
+        withheldVariables: ["C"],
+      } satisfies McpServerSummaryEntry,
+    ],
+    mcpLines: ["    mcp: plugin:a:p (needs authentication; unset A; withheld C)"],
+  },
+]) {
+  test(`${requirement}: ${label}`, () => {
+    // arrange
+    const message: PluginInfoMessage = {
+      kind: "plugin-info",
+      marketplaceName: "official",
+      marketplaceScope: "user",
+      marketplaceDetails: { autoupdate: false },
+      plugin: {
+        status: "installed",
+        name: "a",
+        componentsResolved: true,
+        components: { agents: ["b"], ...(mcp !== undefined && { mcp }) },
+      },
+    };
+
+    // act
+    const rendered = renderPluginInfo(message);
+
+    // assert
+    assert.equal(
+      rendered,
+      ["● official [user] <no autoupdate>", "  ● a (installed)", "    agents: b", ...mcpLines].join(
+        "\n",
+      ),
+    );
+  });
+}
+
+test("ADET-01: formats the requires entries as stamped", () => {
+  // arrange
+  const message: PluginInfoMessage = {
+    kind: "plugin-info",
+    marketplaceName: "official",
+    marketplaceScope: "user",
+    marketplaceDetails: { autoupdate: false },
+    plugin: {
+      status: "installed",
+      name: "alpha",
+      componentsResolved: true,
+      components: { workflows: ["alpha:w"] },
+      requires: [{ companion: "pi-dynamic-workflows", missing: false }],
+    },
+  };
+
+  // act
+  const rendered = renderPluginInfo(message);
+
+  // assert
+  assert.equal(
+    rendered,
+    [
+      "● official [user] <no autoupdate>",
+      "  ● alpha (installed)",
+      "    workflows: alpha:w",
+      "    requires: pi-dynamic-workflows",
+    ].join("\n"),
+  );
+});
+
+for (const { label, stamp } of [
+  { label: "absent", stamp: {} },
+  { label: "empty", stamp: { requires: [] } },
+]) {
+  test(`ADET-01: renders no requires line when the stamped list is ${label}`, () => {
+    // arrange
+    const message: PluginInfoMessage = {
+      kind: "plugin-info",
+      marketplaceName: "official",
+      marketplaceScope: "user",
+      marketplaceDetails: { autoupdate: false },
+      plugin: {
+        status: "installed",
+        name: "alpha",
+        componentsResolved: true,
+        components: { skills: ["s"] },
+        ...stamp,
+      },
+    };
+
+    // act
+    const rendered = renderPluginInfo(message);
+
+    // assert
+    assert.equal(
+      rendered,
+      "● official [user] <no autoupdate>\n  ● alpha (installed)\n    skills: s",
+    );
+  });
+}
+
 test("renders resolved plugin components and wraps descriptions without ellipsis", () => {
   // arrange
   const description = `${"word ".repeat(20)}supercalifragilisticexpialidocious`.trim();
@@ -753,7 +938,13 @@ test("renders resolved plugin components and wraps descriptions without ellipsis
       reasons: ["not in manifest"],
       description,
       componentsResolved: true,
-      components: { agents: ["a"], commands: ["c"], hooks: undefined, mcp: ["m"], skills: ["s"] },
+      components: {
+        agents: ["a"],
+        commands: ["c"],
+        hooks: undefined,
+        mcp: [{ name: "plugin:alpha:m" }],
+        skills: ["s"],
+      },
       dependencies: ["dep"],
     },
   };
@@ -772,7 +963,7 @@ test("renders resolved plugin components and wraps descriptions without ellipsis
       "    supercalifragilisticexpialidocious",
       "    agents: a",
       "    commands: c",
-      "    mcp: m",
+      "    mcp: plugin:alpha:m",
       "    skills: s",
       "    dependencies: dep",
     ].join("\n"),
@@ -1579,6 +1770,39 @@ const RAW_SURFACE_ROWS: {
       "warning",
     ],
   },
+  "mcp-config-notices": {
+    surface: {
+      kind: "mcp-config-notices",
+      section: "left-unchanged",
+      notices: [{ kind: "left-unchanged", scope: "user", file: "mcp.json" }],
+    },
+    expectedArguments: [
+      "MCP config left unchanged.\n\nThe user-scope mcp.json is not a valid MCP config, so it was left unchanged. Fix it before you install or update a plugin that has MCP servers.",
+      "warning",
+    ],
+  },
+  "mcp-migration": {
+    surface: {
+      kind: "mcp-migration",
+      rows: [
+        {
+          kind: "removed",
+          scope: "project",
+          plugin: "hello",
+          marketplace: "mp",
+          server: "gone",
+          cause: "not-declared",
+        },
+      ],
+      notices: [],
+      severity: "info",
+      needsReload: true,
+    },
+    expectedArguments: [
+      "Plugin MCP servers removed from mcp.json.\n\nRemoved from mcp.json:\n  gone (hello) [project] hello no longer declares it.\n/reload to pick up changes",
+      "info",
+    ],
+  },
 };
 
 for (const [kind, { surface, expectedArguments }] of Object.entries(RAW_SURFACE_ROWS)) {
@@ -1687,6 +1911,21 @@ for (const { title, surface, expectedArguments } of [
     ],
   },
   {
+    title:
+      "ends a migration notice that needs no reload without the hint, at its resolved severity",
+    surface: {
+      kind: "mcp-migration",
+      rows: [{ kind: "stopped", scope: "user", detail: "state.json is locked" }],
+      notices: [],
+      severity: "warning",
+      needsReload: false,
+    },
+    expectedArguments: [
+      "Plugin MCP servers in mcp.json need attention.\n\nLeft in mcp.json:\n  The user-scope move stopped: state.json is locked. The next /reload tries again.",
+      "warning",
+    ],
+  },
+  {
     title: "passes a backtick in the stop-override plugin id through unescaped",
     surface: { kind: "stop-override-cap", pluginId: "a`b", cap: 8 },
     expectedArguments: [
@@ -1765,7 +2004,7 @@ test("empty plugin collections keep their header and singletons keep complete gr
         version: "1.2.3",
         severity: "info",
         needsReload: true,
-        reasons: ["lsp", "requires pi-mcp"],
+        reasons: ["lsp", "requires pi-mcp-adapter"],
         description: "One plugin",
       },
     ],
@@ -1779,6 +2018,6 @@ test("empty plugin collections keep their header and singletons keep complete gr
   assert.equal(emptyText, "● official [project]");
   assert.equal(
     singletonText,
-    "● official [project]\n  ● alpha [user] v1.2.3 (installed) {lsp, requires pi-mcp}\n    One plugin",
+    "● official [project]\n  ● alpha [user] v1.2.3 (installed) {lsp, requires pi-mcp-adapter}\n    One plugin",
   );
 });

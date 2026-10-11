@@ -87,7 +87,12 @@ test("renders installed content reasons before the resolved markers", () => {
     name: "beta-plugin",
     scope: "user",
     version: "1.2.3",
-    reasons: ["orphan rewake", "malformed skill", "requires pi-subagents", "requires pi-mcp"],
+    reasons: [
+      "orphan rewake",
+      "malformed skill",
+      "requires pi-subagents",
+      "requires pi-mcp-adapter",
+    ],
     severity: "warning",
     needsReload: true,
   } satisfies ResolvedRow<ImportMsg>;
@@ -96,12 +101,17 @@ test("renders installed content reasons before the resolved markers", () => {
     name: "beta-plugin",
     scope: "user",
     version: "1.2.3",
-    reasons: ["orphan rewake", "malformed skill", "requires pi-subagents", "requires pi-mcp"],
+    reasons: [
+      "orphan rewake",
+      "malformed skill",
+      "requires pi-subagents",
+      "requires pi-mcp-adapter",
+    ],
     severity: "warning",
     needsReload: true,
   };
   const expectedRow =
-    "● beta-plugin [user] v1.2.3 (installed) {orphan rewake, malformed skill, requires pi-subagents, requires pi-mcp}";
+    "● beta-plugin [user] v1.2.3 (installed) {orphan rewake, malformed skill, requires pi-subagents, requires pi-mcp-adapter}";
 
   // act
   const row = composePluginLines(message, "project")[0]!.slice(2);

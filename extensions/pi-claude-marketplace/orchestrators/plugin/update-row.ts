@@ -106,11 +106,10 @@ export interface UpdatedRowSeverity {
 
  * malformed kinds, then dropped kinds (`docs/output-catalog.md`,
  * `enable-orphan-rewake`), then the stale-command token. A clean update composes
- * no reasons and keeps the caller's severity, so its row is byte-identical to
- * before (NREG-01).
+ * no reasons and keeps the caller's severity (NREG-01).
  *
  * CMC-13 / MSG-SD-3: `dependencies` carries the declared kinds that drive the
- * `{requires pi-subagents}` / `{requires pi-mcp}` /
+ * `{requires pi-subagents}` / `{requires pi-mcp-adapter}` /
  * `{requires pi-dynamic-workflows}` markers on BOTH forms (WR-03); resolveRows
  * composes them from that membership and the command run's snapshot under the
  * context's marker policy (D-05, D-12).

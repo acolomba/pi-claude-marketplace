@@ -37,11 +37,13 @@ import { errorMessage, StateLockHeldError } from "../shared/errors.ts";
 
 import type { ScopedLocations } from "../persistence/locations.ts";
 
+/** A locked load of the scope's state, saved at most once through `save()`. */
 export interface LockedStateTransaction {
   readonly state: ExtensionState;
   save(): Promise<void>;
 }
 
+/** Replacement state I/O for `withStateGuard` and `withLockedStateTransaction`. */
 export interface LockedStateTransactionDeps {
   readonly loadState?: typeof loadState;
   readonly saveState?: typeof saveState;
@@ -109,14 +111,22 @@ export async function withLockedStateTransaction<T>(
   });
 }
 
-/**
- * Per-scope proper-lockfile lifecycle. Acquires the lock (mapping ELOCKED
- * to StateLockHeldError), runs the body, and releases the lock -- chaining
- * release errors into the body error if both fail so neither is dropped.
- */
 async function withScopeLock<T>(locations: ScopedLocations, body: () => Promise<T>): Promise<T> {
   await mkdir(locations.extensionRoot, { recursive: true });
+  return withExistingScopeLock(locations, body);
+}
 
+/**
+ * Per-scope proper-lockfile lifecycle around `body`, with no state read or
+ * write. Acquires the lock (mapping ELOCKED to StateLockHeldError), runs the
+ * body, and releases the lock -- chaining release errors into the body error
+ * if both fail so neither is dropped. It creates no directory, so acquisition
+ * rejects when the scope's extension root does not exist.
+ */
+export async function withExistingScopeLock<T>(
+  locations: ScopedLocations,
+  body: () => Promise<T>,
+): Promise<T> {
   let release: () => Promise<void>;
   try {
     release = await acquireStateLock(locations);
@@ -158,6 +168,7 @@ async function withScopeLock<T>(locations: ScopedLocations, body: () => Promise<
     throw toError(primaryError);
   }
 
+  // `result` is assigned whenever `body()` resolved, the only path that reaches here.
   return result as T;
 }
 

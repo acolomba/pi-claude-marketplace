@@ -5,7 +5,10 @@ import {
   AgentOwnershipConflictError,
   BridgeStagingError,
   CommandNameError,
+  McpConfigFileError,
   McpServerCollisionError,
+  McpServerKeyCollisionError,
+  McpUnstagePartialError,
   WorkflowTargetOccupiedError,
 } from "../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 
@@ -221,13 +224,14 @@ describe("AgentOwnershipConflictError", () => {
 });
 
 describe("McpServerCollisionError", () => {
-  test("exposes the complete MCP collision refusal", () => {
+  test("AFILE-05: exposes the owning and winning sources of an MCP collision refusal", () => {
     // arrange
     const serverName = "acme-server";
-    const owningPath = "/scope/mcp.json";
+    const owningPath = "/home/.agents/mcp.json";
+    const winningPath = "/home/.pi/agent/mcp-adapter.json";
 
     // act
-    const error = new McpServerCollisionError(serverName, owningPath);
+    const error = new McpServerCollisionError(serverName, owningPath, winningPath);
 
     // assert
     assert.ok(error instanceof McpServerCollisionError);
@@ -238,26 +242,37 @@ describe("McpServerCollisionError", () => {
         message: error.message,
         serverName: error.serverName,
         owningPath: error.owningPath,
+        winningPath: error.winningPath,
         cause: error.cause,
       },
       {
         name: "McpServerCollisionError",
-        message: 'Refusing to stage MCP server "acme-server": already exists in /scope/mcp.json.',
+        message:
+          'Refusing to stage MCP server "acme-server": /home/.agents/mcp.json already defines it, and pi-mcp-adapter would load the definition in /home/.pi/agent/mcp-adapter.json.',
         serverName: "acme-server",
-        owningPath: "/scope/mcp.json",
+        owningPath: "/home/.agents/mcp.json",
+        winningPath: "/home/.pi/agent/mcp-adapter.json",
         cause: undefined,
       },
     );
   });
 
-  test("keeps adjacent server names and owning paths distinct", () => {
+  test("keeps adjacent server names, owning paths and winning paths distinct", () => {
     // arrange
     const firstServerName = "server";
     const secondServerName = "server-1";
 
     // act
-    const firstError = new McpServerCollisionError(firstServerName, "/scope/mcp.json");
-    const secondError = new McpServerCollisionError(secondServerName, "/scope/mcp-1.json");
+    const firstError = new McpServerCollisionError(
+      firstServerName,
+      "/scope/mcp.json",
+      "/scope/mcp-adapter.json",
+    );
+    const secondError = new McpServerCollisionError(
+      secondServerName,
+      "/scope/mcp-1.json",
+      "/scope/mcp-1.json",
+    );
 
     // assert
     assert.deepStrictEqual(
@@ -266,25 +281,237 @@ describe("McpServerCollisionError", () => {
           message: firstError.message,
           serverName: firstError.serverName,
           owningPath: firstError.owningPath,
+          winningPath: firstError.winningPath,
         },
         {
           message: secondError.message,
           serverName: secondError.serverName,
           owningPath: secondError.owningPath,
+          winningPath: secondError.winningPath,
         },
       ],
       [
         {
-          message: 'Refusing to stage MCP server "server": already exists in /scope/mcp.json.',
+          message:
+            'Refusing to stage MCP server "server": /scope/mcp.json already defines it, and pi-mcp-adapter would load the definition in /scope/mcp-adapter.json.',
           serverName: "server",
           owningPath: "/scope/mcp.json",
+          winningPath: "/scope/mcp-adapter.json",
         },
         {
-          message: 'Refusing to stage MCP server "server-1": already exists in /scope/mcp-1.json.',
+          message:
+            'Refusing to stage MCP server "server-1": /scope/mcp-1.json already defines it, and pi-mcp-adapter would load the definition in /scope/mcp-1.json.',
           serverName: "server-1",
           owningPath: "/scope/mcp-1.json",
+          winningPath: "/scope/mcp-1.json",
         },
       ],
+    );
+  });
+
+  test("ANAME-03: names the other source's key when it folds onto the staged key", () => {
+    // arrange
+    const otherKey = "plugin_my-tools_db_";
+
+    // act
+    const error = new McpServerCollisionError(
+      "plugin_my_tools_db_",
+      "/scope/mcp-adapter.json",
+      "/scope/mcp-adapter.json",
+      otherKey,
+    );
+
+    // assert
+    assert.ok(error instanceof McpServerCollisionError);
+    assert.deepStrictEqual(
+      {
+        name: error.name,
+        message: error.message,
+        serverName: error.serverName,
+        owningPath: error.owningPath,
+        winningPath: error.winningPath,
+        definedAs: error.definedAs,
+      },
+      {
+        name: "McpServerCollisionError",
+        message:
+          'Refusing to stage MCP server "plugin_my_tools_db_": /scope/mcp-adapter.json already defines "plugin_my-tools_db_", which Pi treats as the same tool namespace because it does not tell "-" from "_".',
+        serverName: "plugin_my_tools_db_",
+        owningPath: "/scope/mcp-adapter.json",
+        winningPath: "/scope/mcp-adapter.json",
+        definedAs: "plugin_my-tools_db_",
+      },
+    );
+  });
+
+  test("ANAME-03: an other key equal to the staged key keeps the equal-key message and no definedAs", () => {
+    // arrange
+    const otherKey = "plugin_acme_db_";
+
+    // act
+    const error = new McpServerCollisionError(
+      "plugin_acme_db_",
+      "/scope/mcp.json",
+      "/scope/mcp-adapter.json",
+      otherKey,
+    );
+
+    // assert
+    assert.deepStrictEqual(
+      { message: error.message, definedAs: error.definedAs },
+      {
+        message:
+          'Refusing to stage MCP server "plugin_acme_db_": /scope/mcp.json already defines it, and pi-mcp-adapter would load the definition in /scope/mcp-adapter.json.',
+        definedAs: undefined,
+      },
+    );
+  });
+});
+
+describe("McpServerKeyCollisionError", () => {
+  test("ANAME-03: names the plugin, both servers and the one key they share", () => {
+    // arrange
+    const servers = ["a.b", "a_b"] as const;
+    const keys = ["plugin_acme_a_b_", "plugin_acme_a_b_"] as const;
+
+    // act
+    const error = new McpServerKeyCollisionError("acme", servers, keys);
+
+    // assert
+    assert.ok(error instanceof McpServerKeyCollisionError);
+    assert.ok(error instanceof Error);
+    assert.deepStrictEqual(
+      {
+        name: error.name,
+        message: error.message,
+        pluginName: error.pluginName,
+        servers: error.servers,
+        keys: error.keys,
+        cause: error.cause,
+      },
+      {
+        name: "McpServerKeyCollisionError",
+        message:
+          'Refusing to stage MCP servers "a.b" and "a_b" of plugin "acme": both map to the server key "plugin_acme_a_b_".',
+        pluginName: "acme",
+        servers: ["a.b", "a_b"],
+        keys: ["plugin_acme_a_b_", "plugin_acme_a_b_"],
+        cause: undefined,
+      },
+    );
+  });
+
+  test("ANAME-03: names both keys when they differ only by - and _", () => {
+    // arrange
+    const servers = ["a-b", "a_b"] as const;
+    const keys = ["plugin_acme_a-b_", "plugin_acme_a_b_"] as const;
+
+    // act
+    const error = new McpServerKeyCollisionError("acme", servers, keys);
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        message: error.message,
+        pluginName: error.pluginName,
+        servers: error.servers,
+        keys: error.keys,
+      },
+      {
+        message:
+          'Refusing to stage MCP servers "a-b" and "a_b" of plugin "acme": their server keys "plugin_acme_a-b_" and "plugin_acme_a_b_" differ only by "-" and "_", which Pi treats as one tool namespace.',
+        pluginName: "acme",
+        servers: ["a-b", "a_b"],
+        keys: ["plugin_acme_a-b_", "plugin_acme_a_b_"],
+      },
+    );
+  });
+});
+
+describe("McpConfigFileError", () => {
+  for (const { defect, message } of [
+    {
+      defect: "invalid-jsonc",
+      message: "MCP config /scope/mcp-adapter.json is not valid JSONC; it was left unchanged.",
+    },
+    {
+      defect: "top-level-not-object",
+      message:
+        "MCP config /scope/mcp-adapter.json does not hold a JSON object; it was left unchanged.",
+    },
+    {
+      defect: "mcpServers-not-object",
+      message:
+        'MCP config /scope/mcp-adapter.json has an "mcpServers" value that is not an object; it was left unchanged.',
+    },
+    {
+      defect: "mcp-servers-not-object",
+      message:
+        'MCP config /scope/mcp-adapter.json has an "mcp-servers" value that is not an object; it was left unchanged.',
+    },
+  ] as const) {
+    test(`AFILE-02: names the file and the ${defect} defect without a cause`, () => {
+      // arrange
+      const filePath = "/scope/mcp-adapter.json";
+
+      // act
+      const error = new McpConfigFileError(filePath, defect);
+
+      // assert
+      assert.ok(error instanceof McpConfigFileError);
+      assert.deepStrictEqual(
+        {
+          name: error.name,
+          message: error.message,
+          filePath: error.filePath,
+          defect: error.defect,
+          cause: error.cause,
+        },
+        { name: "McpConfigFileError", message, filePath, defect, cause: undefined },
+      );
+    });
+  }
+});
+
+describe("McpUnstagePartialError", () => {
+  test("AFILE-04: carries frozen copies of the rewritten files' names, notices, and bytes and the write failure", () => {
+    // arrange
+    const cause = new Error("EACCES: permission denied");
+    const removedNames = ["first"];
+    const notices = [
+      { kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" },
+    ] as const;
+    const written = [{ path: "/scope/mcp-adapter.json", bytes: Buffer.from("{}\n") }];
+
+    // act
+    const error = new McpUnstagePartialError(removedNames, notices, written, { cause });
+    removedNames.push("later");
+    written.push({ path: "/scope/mcp.json", bytes: Buffer.from("[]\n") });
+
+    // assert
+    assert.ok(error instanceof McpUnstagePartialError);
+    assert.deepStrictEqual(
+      {
+        name: error.name,
+        message: error.message,
+        removedNames: error.removedNames,
+        notices: error.notices,
+        written: error.written,
+        cause: error.cause,
+        frozen:
+          Object.isFrozen(error.removedNames) &&
+          Object.isFrozen(error.notices) &&
+          Object.isFrozen(error.written),
+      },
+      {
+        name: "McpUnstagePartialError",
+        message: "MCP unstage stopped after rewriting part of its config files.",
+        removedNames: ["first"],
+        notices: [{ kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" }],
+        written: [{ path: "/scope/mcp-adapter.json", bytes: Buffer.from("{}\n") }],
+        cause,
+        frozen: true,
+      },
     );
   });
 });

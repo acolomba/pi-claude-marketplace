@@ -79,6 +79,7 @@ import {
   type Plural,
   type Single,
 } from "../../shared/notify-context.ts";
+import { ownValue, setOwn } from "../../shared/own-key.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 
 import { AUTOUPDATE_CONTEXT, NOAUTOUPDATE_CONTEXT } from "./autoupdate.messaging.ts";
@@ -286,7 +287,7 @@ function reclassifyByConfigTruth(
   const reallyUnchanged: string[] = [];
 
   for (const name of result.changed) {
-    if (current.marketplaces?.[name]?.autoupdate === enable) {
+    if (ownValue(current.marketplaces, name)?.autoupdate === enable) {
       reallyUnchanged.push(name);
     } else {
       reallyChanged.push(name);
@@ -294,7 +295,7 @@ function reclassifyByConfigTruth(
   }
 
   for (const name of result.unchanged) {
-    const configValue = current.marketplaces?.[name]?.autoupdate;
+    const configValue = ownValue(current.marketplaces, name)?.autoupdate;
     // Promote: config carries the OPPOSITE explicit value. The user's flip
     // would diverge from config truth without a write-back, so it's a
     // fresh change.
@@ -322,11 +323,11 @@ function buildAutoupdatePatch(
   enable: boolean,
 ): Partial<MarketplaceConfigEntry> {
   const patch: Partial<MarketplaceConfigEntry> = { autoupdate: enable };
-  if (current.marketplaces?.[name]?.source !== undefined) {
+  if (ownValue(current.marketplaces, name)?.source !== undefined) {
     return patch;
   }
 
-  const stateRecord = state.marketplaces[name] as { source?: unknown } | undefined;
+  const stateRecord = ownValue(state.marketplaces, name) as { source?: unknown } | undefined;
   const raw = (stateRecord?.source as { raw?: unknown } | undefined)?.raw;
   if (typeof raw === "string") {
     patch.source = raw;
@@ -364,7 +365,7 @@ async function writeAutoupdateBack(
   const skipped: string[] = [];
   for (const name of changed) {
     const patch = buildAutoupdatePatch(current, state, name, enable);
-    const hasConfigSource = current.marketplaces?.[name]?.source !== undefined;
+    const hasConfigSource = ownValue(current.marketplaces, name)?.source !== undefined;
     if (!hasConfigSource && patch.source === undefined) {
       // I2 / PR #51 / WR-06(b): unsynthesizable source. The entry is dropped
       // from the batch while its name stays in `finalResult.changed`, so the
@@ -375,7 +376,7 @@ async function writeAutoupdateBack(
       continue;
     }
 
-    marketplaces[name] = patch;
+    setOwn(marketplaces, name, patch);
   }
 
   if (Object.keys(marketplaces).length === 0) {
@@ -454,7 +455,7 @@ async function flipOneScope(
       const drySkipped: string[] = [];
       for (const name of finalResult.changed) {
         const patch = buildAutoupdatePatch(current, tx.state, name, opts.enable);
-        const hasConfigSource = current.marketplaces?.[name]?.source !== undefined;
+        const hasConfigSource = ownValue(current.marketplaces, name)?.source !== undefined;
         if (!hasConfigSource && patch.source === undefined) {
           drySkipped.push(name);
         }

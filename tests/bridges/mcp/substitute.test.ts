@@ -6,335 +6,520 @@ import {
   type McpSubstitutionContext,
 } from "../../../extensions/pi-claude-marketplace/bridges/mcp/substitute.ts";
 
-test("substitutes every string leaf while preserving complete source structure", () => {
-  // arrange
-  const server = {
-    "${CLAUDE_PLUGIN_ROOT}": "${CLAUDE_PLUGIN_DATA}/key-value",
-    command: "${CLAUDE_PLUGIN_ROOT}/bin/server",
-    args: [
-      "--data",
-      "${CLAUDE_PLUGIN_DATA}/state",
-      { project: "${CLAUDE_PROJECT_DIR}", enabled: true },
-    ],
-    cwd: "${CLAUDE_PROJECT_DIR}",
-    headers: {
-      Authorization: "Bearer ${CLAUDE_PLUGIN_DATA}",
-      nested: { root: "${CLAUDE_PLUGIN_ROOT}" },
-    },
-    retries: 3,
-    disabled: false,
-    nullable: null,
-  };
-  const originalServer = {
-    "${CLAUDE_PLUGIN_ROOT}": "${CLAUDE_PLUGIN_DATA}/key-value",
-    command: "${CLAUDE_PLUGIN_ROOT}/bin/server",
-    args: [
-      "--data",
-      "${CLAUDE_PLUGIN_DATA}/state",
-      { project: "${CLAUDE_PROJECT_DIR}", enabled: true },
-    ],
-    cwd: "${CLAUDE_PROJECT_DIR}",
-    headers: {
-      Authorization: "Bearer ${CLAUDE_PLUGIN_DATA}",
-      nested: { root: "${CLAUDE_PLUGIN_ROOT}" },
-    },
-    retries: 3,
-    disabled: false,
-    nullable: null,
-  };
-  const context: McpSubstitutionContext = {
-    pluginRoot: "/plugin/root",
-    pluginData: "/plugin/data",
-    projectDir: "/project/root",
-  };
-  const expectedServer = {
-    "${CLAUDE_PLUGIN_ROOT}": "/plugin/data/key-value",
-    command: "/plugin/root/bin/server",
-    args: ["--data", "/plugin/data/state", { project: "/project/root", enabled: true }],
-    cwd: "/project/root",
-    headers: {
-      Authorization: "Bearer /plugin/data",
-      nested: { root: "/plugin/root" },
-    },
-    retries: 3,
-    disabled: false,
-    nullable: null,
-    env: {
-      CLAUDE_PLUGIN_ROOT: "/plugin/root",
-      CLAUDE_PLUGIN_DATA: "/plugin/data",
-      CLAUDE_PROJECT_DIR: "/project/root",
-    },
-  };
+import { EXPANSION_BUILTINS, EXPANSION_CASES, type ExpansionField } from "./expansion-cases.ts";
 
-  // act
-  const substitutedServer = substituteAndInject(server, context);
+interface FieldShape {
+  /** The minimal translated entry holding `value` in the field. */
+  readonly entry: (value: string) => Record<string, unknown>;
+  /** The written entry holding `value` in the field, given the injected env. */
+  readonly writtenEntry: (
+    value: string,
+    injected: Readonly<Record<string, string>>,
+  ) => Record<string, unknown>;
+}
 
-  // assert
-  assert.deepStrictEqual(substitutedServer, expectedServer);
-  assert.deepStrictEqual(server, originalServer);
-  assert.notStrictEqual(substitutedServer, server);
-  assert.ok(typeof substitutedServer === "object" && substitutedServer !== null);
-  assert.notStrictEqual(substitutedServer.args, server.args);
-  assert.notStrictEqual(substitutedServer.headers, server.headers);
-});
+const SERVER_URL = "https://mcp.example.test";
 
-for (const { description, leaf, context, expectedLeaf } of [
-  {
-    description: "adjacent and repeated tokens",
-    leaf: "${CLAUDE_PLUGIN_ROOT}:${CLAUDE_PLUGIN_ROOT}${CLAUDE_PLUGIN_DATA}:${CLAUDE_PROJECT_DIR}",
-    context: { pluginRoot: "/root", pluginData: "/data", projectDir: "/project" },
-    expectedLeaf: "/root:/root/data:/project",
+function remoteShape(entry: (value: string) => Record<string, unknown>): FieldShape {
+  return { entry, writtenEntry: (value) => entry(value) };
+}
+
+const FIELD_SHAPES: Readonly<Record<ExpansionField, FieldShape>> = {
+  command: {
+    entry: (value) => ({ command: value }),
+    writtenEntry: (value, injected) => ({ command: value, env: injected }),
   },
-  {
-    description: "known and unknown tokens",
-    leaf: "${CLAUDE_PLUGIN_ROOT}/${CLAUDE_SESSION_ID}/${CLAUDE_PROJECT_DIR}",
-    context: { pluginRoot: "/root", pluginData: "/data", projectDir: undefined },
-    expectedLeaf: "/root/${CLAUDE_SESSION_ID}/${CLAUDE_PROJECT_DIR}",
+  args: {
+    entry: (value) => ({ command: "server", args: [value] }),
+    writtenEntry: (value, injected) => ({ command: "server", args: [value], env: injected }),
   },
-  {
-    description: "a replacement containing another recognized token",
-    leaf: "${CLAUDE_PLUGIN_ROOT}",
-    context: { pluginRoot: "${CLAUDE_PLUGIN_DATA}", pluginData: "/data", projectDir: undefined },
-    expectedLeaf: "${CLAUDE_PLUGIN_DATA}",
+  env: {
+    entry: (value) => ({ command: "server", env: { VALUE: value } }),
+    writtenEntry: (value, injected) => ({ command: "server", env: { ...injected, VALUE: value } }),
   },
-  {
-    description: "replacement-pattern and Unicode characters",
-    leaf: "${CLAUDE_PLUGIN_DATA}",
-    context: {
-      pluginRoot: "/root",
-      pluginData: "café-☃-$1-$&-\\path-{value}",
-      projectDir: undefined,
-    },
-    expectedLeaf: "café-☃-$1-$&-\\path-{value}",
+  "env-builtin": {
+    entry: (value) => ({ command: "server", env: { CLAUDE_PLUGIN_ROOT: value } }),
+    writtenEntry: (value, injected) => ({
+      command: "server",
+      env: { ...injected, CLAUDE_PLUGIN_ROOT: value },
+    }),
   },
-] satisfies ReadonlyArray<{
-  description: string;
-  leaf: string;
-  context: McpSubstitutionContext;
-  expectedLeaf: string;
-}>) {
-  test(`substitutes ${description} exactly once`, () => {
+  url: remoteShape((value) => ({ url: value })),
+  headers: remoteShape((value) => ({ url: SERVER_URL, headers: { Value: value } })),
+  "oauth.clientId": remoteShape((value) => ({ url: SERVER_URL, oauth: { clientId: value } })),
+  "oauth.scope": remoteShape((value) => ({ url: SERVER_URL, oauth: { scope: value } })),
+  "oauth.authServerMetadataUrl": remoteShape((value) => ({
+    url: SERVER_URL,
+    oauth: { authServerMetadataUrl: value },
+  })),
+};
+
+const SCOPE_BUILTINS = {
+  project: EXPANSION_BUILTINS,
+  user: { ...EXPANSION_BUILTINS, projectDir: undefined },
+} as const;
+
+const INJECTED_ENV = {
+  CLAUDE_PLUGIN_ROOT: "/plugins/acme",
+  CLAUDE_PLUGIN_DATA: "/data/mp/acme",
+} as const;
+
+const PROJECT_CONTEXT: McpSubstitutionContext = { ...EXPANSION_BUILTINS, env: {} };
+
+for (const {
+  title,
+  field,
+  scope = "project",
+  raw,
+  installEnv,
+  written,
+  missing,
+  blanked = [],
+} of EXPANSION_CASES) {
+  test(title, () => {
     // arrange
-    const server = { leaf };
+    const shape = FIELD_SHAPES[field];
+    const context: McpSubstitutionContext = { ...SCOPE_BUILTINS[scope], env: installEnv };
 
     // act
-    const substitutedServer = substituteAndInject(server, context);
+    const substituted = substituteAndInject(shape.entry(raw), context);
 
     // assert
-    assert.deepStrictEqual(substitutedServer, { leaf: expectedLeaf });
+    assert.deepStrictEqual(substituted, {
+      entry: shape.writtenEntry(written, INJECTED_ENV),
+      report: { missing, blanked },
+    });
   });
 }
 
-for (const { description, leaf, expectedLeaf } of [
-  { description: "an empty string", leaf: "", expectedLeaf: "" },
-  { description: "a number", leaf: 42, expectedLeaf: 42 },
-  { description: "a boolean", leaf: false, expectedLeaf: false },
-  { description: "null", leaf: null, expectedLeaf: null },
-  { description: "undefined", leaf: undefined, expectedLeaf: undefined },
-]) {
-  test(`preserves ${description}`, () => {
+test("AVAR-01: writes oauth.redirectUri, description, keys and non-string values unchanged", () => {
+  // arrange
+  const translated = {
+    url: "https://mcp.example.test/${PI_CM_PATH}",
+    headers: { "${PI_CM_KEY}": "plain", Retries: 3 },
+    httpTransport: "sse",
+    oauth: {
+      clientId: "client",
+      redirectUri: "http://localhost:8765/callback",
+      port: 8765,
+    },
+    requestTimeoutMs: 90_000,
+    description: "${PI_CM_DESCRIPTION} $env:PI_CM_SECRET {env:PI_CM_SECRET}",
+    directTools: true,
+    toolPrefix: "mcp",
+  };
+  const context: McpSubstitutionContext = { ...PROJECT_CONTEXT, env: { PI_CM_PATH: "path" } };
+
+  // act
+  const substituted = substituteAndInject(translated, context);
+
+  // assert
+  assert.deepStrictEqual(substituted, {
+    entry: {
+      url: "https://mcp.example.test/${PI_CM_PATH}",
+      headers: { "${PI_CM_KEY}": "plain", Retries: 3 },
+      httpTransport: "sse",
+      oauth: {
+        clientId: "client",
+        redirectUri: "http://localhost:8765/callback",
+        port: 8765,
+      },
+      requestTimeoutMs: 90_000,
+      description: "${PI_CM_DESCRIPTION} $env:PI_CM_SECRET {env:PI_CM_SECRET}",
+      directTools: true,
+      toolPrefix: "mcp",
+    },
+    report: { missing: [], blanked: [] },
+  });
+});
+
+test("AVAR-01: passes field values of an unexpected type through unchanged", () => {
+  // arrange
+  const remote = {
+    command: 7,
+    url: 7,
+    headers: "header",
+    oauth: ["client"],
+    env: "env",
+    args: "args",
+  };
+  const stdio = { command: "server", args: ["--level", 2, null], env: { RETRIES: 3 } };
+
+  // act
+  const substitutedRemote = substituteAndInject(remote, PROJECT_CONTEXT);
+  const substitutedStdio = substituteAndInject(stdio, PROJECT_CONTEXT);
+
+  // assert
+  assert.deepStrictEqual(substitutedRemote, {
+    entry: {
+      command: 7,
+      url: 7,
+      headers: "header",
+      oauth: ["client"],
+      env: "env",
+      args: "args",
+    },
+    report: { missing: [], blanked: [] },
+  });
+  assert.deepStrictEqual(substitutedStdio, {
+    entry: {
+      command: "server",
+      args: ["--level", 2, null],
+      env: { ...INJECTED_ENV, RETRIES: 3 },
+    },
+    report: { missing: [], blanked: [] },
+  });
+});
+
+test("MENV-02: injects the env first and in place, lets declared keys win and keeps field order", () => {
+  // arrange
+  const translated = {
+    command: "server",
+    args: ["--flag"],
+    env: { TOKEN: "token", CLAUDE_PLUGIN_ROOT: "declared-root" },
+    requestTimeoutMs: 5000,
+    description: "acme",
+    directTools: "search",
+    toolPrefix: "mcp",
+  };
+
+  // act
+  const { entry } = substituteAndInject(translated, PROJECT_CONTEXT);
+
+  // assert
+  assert.deepStrictEqual(entry, {
+    command: "server",
+    args: ["--flag"],
+    env: {
+      CLAUDE_PLUGIN_ROOT: "declared-root",
+      CLAUDE_PLUGIN_DATA: "/data/mp/acme",
+      TOKEN: "token",
+    },
+    requestTimeoutMs: 5000,
+    description: "acme",
+    directTools: "search",
+    toolPrefix: "mcp",
+  });
+  assert.deepStrictEqual(Object.keys(entry), [
+    "command",
+    "args",
+    "env",
+    "requestTimeoutMs",
+    "description",
+    "directTools",
+    "toolPrefix",
+  ]);
+  assert.deepStrictEqual(Object.keys(entry.env as Record<string, unknown>), [
+    "CLAUDE_PLUGIN_ROOT",
+    "CLAUDE_PLUGIN_DATA",
+    "TOKEN",
+  ]);
+});
+
+for (const scope of ["project", "user"] as const) {
+  test(`AVAR-01: the injected stdio env is exactly CLAUDE_PLUGIN_ROOT and CLAUDE_PLUGIN_DATA at ${scope} scope`, () => {
     // arrange
-    const server = { leaf };
-    const context: McpSubstitutionContext = {
-      pluginRoot: "/root",
-      pluginData: "/data",
-      projectDir: undefined,
-    };
+    const context: McpSubstitutionContext = { ...SCOPE_BUILTINS[scope], env: {} };
 
     // act
-    const substitutedServer = substituteAndInject(server, context);
+    const { entry } = substituteAndInject({ command: "server" }, context);
 
     // assert
-    assert.deepStrictEqual(substitutedServer, { leaf: expectedLeaf });
+    assert.deepStrictEqual(Object.entries(entry.env as Record<string, unknown>), [
+      ["CLAUDE_PLUGIN_ROOT", "/plugins/acme"],
+      ["CLAUDE_PLUGIN_DATA", "/data/mp/acme"],
+    ]);
   });
 }
 
-test("preserves a literal __proto__ key without changing global prototypes", () => {
+test("AVAR-01: a declared env.CLAUDE_PROJECT_DIR follows the plain rule", () => {
   // arrange
-  const server = JSON.parse(
-    '{"__proto__":{"root":"${CLAUDE_PLUGIN_ROOT}"},"keep":"${CLAUDE_PLUGIN_DATA}"}',
+  const translated = {
+    command: "server",
+    env: { CLAUDE_PROJECT_DIR: "${CLAUDE_PROJECT_DIR}/${PI_CM_UNSET}" },
+  };
+
+  // act
+  const substituted = substituteAndInject(translated, PROJECT_CONTEXT);
+
+  // assert
+  assert.deepStrictEqual(substituted, {
+    entry: {
+      command: "server",
+      env: { ...INJECTED_ENV, CLAUDE_PROJECT_DIR: "/work/project/${PI_CM_UNSET}" },
+    },
+    report: { missing: ["PI_CM_UNSET"], blanked: [] },
+  });
+});
+
+test("AVAR-01: a project-scope ${CLAUDE_PROJECT_DIR} expands at install in command, args, env, url and headers", () => {
+  // arrange
+  const stdio = {
+    command: "${CLAUDE_PROJECT_DIR}/bin/server",
+    args: ["${CLAUDE_PROJECT_DIR}"],
+    env: { DIR: "${CLAUDE_PROJECT_DIR}" },
+  };
+  const remote = {
+    url: "https://mcp.example.test${CLAUDE_PROJECT_DIR}",
+    headers: { Dir: "${CLAUDE_PROJECT_DIR}" },
+  };
+
+  // act
+  const substitutedStdio = substituteAndInject(stdio, PROJECT_CONTEXT);
+  const substitutedRemote = substituteAndInject(remote, PROJECT_CONTEXT);
+
+  // assert
+  assert.deepStrictEqual(
+    [substitutedStdio.entry, substitutedRemote.entry],
+    [
+      {
+        command: "/work/project/bin/server",
+        args: ["/work/project"],
+        env: { ...INJECTED_ENV, DIR: "/work/project" },
+      },
+      { url: "https://mcp.example.test/work/project", headers: { Dir: "/work/project" } },
+    ],
+  );
+});
+
+test("MENV-02: injects the env into a stdio entry without args", () => {
+  // arrange
+  const translated = { command: "server", directTools: "search" };
+
+  // act
+  const { entry } = substituteAndInject(translated, PROJECT_CONTEXT);
+
+  // assert
+  assert.deepStrictEqual(Object.keys(entry), ["command", "env", "directTools"]);
+});
+
+test("returns a fresh entry and leaves the translated entry unchanged", () => {
+  // arrange
+  const translated = {
+    command: "${CLAUDE_PLUGIN_ROOT}/server",
+    args: ["${CLAUDE_PLUGIN_DATA}"],
+    env: { MODE: "!fast" },
+  };
+  const originalTranslated = structuredClone(translated);
+
+  // act
+  substituteAndInject(translated, PROJECT_CONTEXT);
+
+  // assert
+  assert.deepStrictEqual(translated, originalTranslated);
+});
+
+test("preserves a literal __proto__ key in env and headers without changing global prototypes", () => {
+  // arrange
+  const stdio = JSON.parse('{"command":"server","env":{"__proto__":"${PI_CM_V}"}}') as Record<
+    string,
+    unknown
+  >;
+  const remote = JSON.parse(
+    '{"url":"https://mcp.example.test","headers":{"__proto__":"!x"}}',
   ) as Record<string, unknown>;
+
+  // act
+  const substitutedStdio = substituteAndInject(stdio, PROJECT_CONTEXT);
+  const substitutedRemote = substituteAndInject(remote, PROJECT_CONTEXT);
+
+  // assert
+  assert.deepStrictEqual(Object.entries(substitutedStdio.entry.env as Record<string, unknown>), [
+    ...Object.entries(INJECTED_ENV),
+    ["__proto__", "${PI_CM_V}"],
+  ]);
+  assert.deepStrictEqual(Object.entries(substitutedRemote.entry.headers as object), [
+    ["__proto__", "!!x"],
+  ]);
+  assert.strictEqual(({} as Record<string, unknown>).x, undefined);
+});
+
+test("AVAR-02: writes no value of a referenced variable", () => {
+  // arrange
+  const sentinels = {
+    PI_CM_COMMAND: "sentinel-command",
+    PI_CM_ARG: "sentinel-arg",
+    PI_CM_ENV: "sentinel-env",
+    PI_CM_URL: "sentinel-url",
+    PI_CM_HEADER: "sentinel-header",
+    PI_CM_OAUTH: "sentinel-oauth",
+  };
+  const context: McpSubstitutionContext = { ...PROJECT_CONTEXT, env: sentinels };
+  const stdio = {
+    command: "${PI_CM_COMMAND}",
+    args: ["${PI_CM_ARG:-x}"],
+    env: { VALUE: "${PI_CM_ENV}", CLAUDE_PLUGIN_DATA: "${PI_CM_ENV}" },
+  };
+  const remote = {
+    url: "https://${PI_CM_URL}",
+    headers: { Value: "${PI_CM_HEADER:-}" },
+    oauth: { clientId: "${PI_CM_OAUTH}" },
+  };
+
+  // act
+  const writtenText = JSON.stringify([
+    substituteAndInject(stdio, context),
+    substituteAndInject(remote, context),
+  ]);
+
+  // assert
+  assert.deepStrictEqual(
+    Object.values(sentinels).filter((sentinel) => writtenText.includes(sentinel)),
+    [],
+  );
+});
+
+test("AVAR-03: no written env or headers value starts with a single !", () => {
+  // arrange
   const context: McpSubstitutionContext = {
-    pluginRoot: "/plugin/root",
-    pluginData: "/plugin/data",
-    projectDir: undefined,
+    ...PROJECT_CONTEXT,
+    pluginRoot: "!/root",
+    projectDir: "!/project",
+    env: { PI_CM_X: "x" },
   };
-  const expectedServer = JSON.parse(
-    '{"__proto__":{"root":"/plugin/root"},"keep":"/plugin/data"}',
-  ) as Record<string, unknown>;
+  const stdio = {
+    command: "!server",
+    args: ["!arg"],
+    env: { CLAUDE_PLUGIN_DATA: "!data", MODE: "!${PI_CM_X}", PLAIN: "!!x" },
+  };
+  const remote = { url: "!url", headers: { Value: "!header" } };
 
   // act
-  const substitutedServer = substituteAndInject(server, context);
+  const substitutedStdio = substituteAndInject(stdio, context);
+  const substitutedRemote = substituteAndInject(remote, context);
 
   // assert
-  assert.deepStrictEqual(substitutedServer, expectedServer);
-  assert.ok(typeof substitutedServer === "object" && substitutedServer !== null);
-  assert.deepStrictEqual(Object.keys(substitutedServer), ["__proto__", "keep"]);
-  assert.strictEqual(Object.getPrototypeOf(substitutedServer), Object.prototype);
-  assert.strictEqual(({} as Record<string, unknown>).root, undefined);
+  assert.deepStrictEqual(substitutedStdio.entry, {
+    command: "!server",
+    args: ["!arg"],
+    env: {
+      CLAUDE_PLUGIN_ROOT: "!!/root",
+      CLAUDE_PLUGIN_DATA: "!!data",
+      MODE: "!!${PI_CM_X}",
+      PLAIN: "!!!x",
+    },
+  });
+  assert.deepStrictEqual(substitutedRemote.entry, {
+    url: "!url",
+    headers: { Value: "!!header" },
+  });
 });
 
-test("substitutes a project server and lets declared environment keys win", () => {
+test("AVAR-02: reports a stdio server's missing names once each in command, args, env order", () => {
   // arrange
-  const server = {
-    command: "${CLAUDE_PLUGIN_ROOT}/bin/server",
-    args: [
-      "--root=${CLAUDE_PLUGIN_ROOT}:${CLAUDE_PLUGIN_ROOT}",
-      "--data=${CLAUDE_PLUGIN_DATA}",
-      "--project=${CLAUDE_PROJECT_DIR}",
-      "--session=${CLAUDE_SESSION_ID}",
-    ],
-    cwd: "${CLAUDE_PROJECT_DIR}",
+  const translated = {
+    command: "${PI_CM_B}",
+    args: ["${PI_CM_A}", "${PI_CM_B}", "${PI_CM_C}"],
+    env: { FIRST: "${PI_CM_A}${PI_CM_D}", CLAUDE_PLUGIN_ROOT: "${PI_CM_E}" },
+  };
+
+  // act
+  const { report } = substituteAndInject(translated, PROJECT_CONTEXT);
+
+  // assert
+  assert.deepStrictEqual(report, {
+    missing: ["PI_CM_B", "PI_CM_A", "PI_CM_C", "PI_CM_D"],
+    blanked: [],
+  });
+});
+
+test("AVAR-02: reports a remote server's missing names once each in url, headers order", () => {
+  // arrange
+  const translated = {
+    url: "https://${PI_CM_U}",
+    headers: { First: "${PI_CM_V}", Second: "${PI_CM_U}${PI_CM_W}" },
+  };
+
+  // act
+  const { report } = substituteAndInject(translated, PROJECT_CONTEXT);
+
+  // assert
+  assert.deepStrictEqual(report, { missing: ["PI_CM_U", "PI_CM_V", "PI_CM_W"], blanked: [] });
+});
+
+test("AVAR-05: reports a remote server's set withheld names once each in url, headers order", () => {
+  // arrange
+  const translated = {
+    url: "https://mcp.example.test/${GIT_CONFIG_VALUE_0}",
     headers: {
-      Authorization: "Bearer ${CLAUDE_PLUGIN_DATA}",
-      "X-Plugin-Root": "${CLAUDE_PLUGIN_ROOT}",
+      First: "${AWS_SESSION_TOKEN}${ANTHROPIC_API_KEY}",
+      Second: "${GIT_CONFIG_VALUE_0}${NPM_TOKEN}",
+      Third: "${ANTHROPIC_API_KEY}",
     },
-    env: {
-      CLAUDE_PLUGIN_ROOT: "declared-root",
-      TOKEN_PATH: "${CLAUDE_PLUGIN_DATA}/token",
-      UNKNOWN_TOKEN: "${CLAUDE_SESSION_ID}",
-    },
-    enabled: true,
   };
-  const originalServer = {
-    command: "${CLAUDE_PLUGIN_ROOT}/bin/server",
-    args: [
-      "--root=${CLAUDE_PLUGIN_ROOT}:${CLAUDE_PLUGIN_ROOT}",
-      "--data=${CLAUDE_PLUGIN_DATA}",
-      "--project=${CLAUDE_PROJECT_DIR}",
-      "--session=${CLAUDE_SESSION_ID}",
-    ],
-    cwd: "${CLAUDE_PROJECT_DIR}",
-    headers: {
-      Authorization: "Bearer ${CLAUDE_PLUGIN_DATA}",
-      "X-Plugin-Root": "${CLAUDE_PLUGIN_ROOT}",
-    },
+  const context: McpSubstitutionContext = {
+    ...PROJECT_CONTEXT,
     env: {
-      CLAUDE_PLUGIN_ROOT: "declared-root",
-      TOKEN_PATH: "${CLAUDE_PLUGIN_DATA}/token",
-      UNKNOWN_TOKEN: "${CLAUDE_SESSION_ID}",
+      GIT_CONFIG_VALUE_0: "config-value",
+      AWS_SESSION_TOKEN: "aws-value",
+      NPM_TOKEN: "npm-value",
+      ANTHROPIC_API_KEY: "api-key-value",
     },
-    enabled: true,
-  };
-  const context = {
-    pluginRoot: "/plugin/root",
-    pluginData: "/plugin/data",
-    projectDir: "/project/root",
-  } satisfies McpSubstitutionContext;
-  const expectedServer = {
-    command: "/plugin/root/bin/server",
-    args: [
-      "--root=/plugin/root:/plugin/root",
-      "--data=/plugin/data",
-      "--project=/project/root",
-      "--session=${CLAUDE_SESSION_ID}",
-    ],
-    cwd: "/project/root",
-    headers: {
-      Authorization: "Bearer /plugin/data",
-      "X-Plugin-Root": "/plugin/root",
-    },
-    env: {
-      CLAUDE_PLUGIN_ROOT: "declared-root",
-      CLAUDE_PLUGIN_DATA: "/plugin/data",
-      CLAUDE_PROJECT_DIR: "/project/root",
-      TOKEN_PATH: "/plugin/data/token",
-      UNKNOWN_TOKEN: "${CLAUDE_SESSION_ID}",
-    },
-    enabled: true,
   };
 
   // act
-  const substitutedServer = substituteAndInject(server, context);
+  const { report } = substituteAndInject(translated, context);
 
   // assert
-  assert.deepStrictEqual(substitutedServer, expectedServer);
-  assert.deepStrictEqual(server, originalServer);
-  assert.notStrictEqual(substitutedServer, server);
-  assert.notStrictEqual(substitutedServer.args, server.args);
-  assert.notStrictEqual(substitutedServer.headers, server.headers);
-  assert.notStrictEqual(substitutedServer.env, server.env);
+  assert.deepStrictEqual(report, {
+    missing: [],
+    blanked: ["GIT_CONFIG_VALUE_0", "AWS_SESSION_TOKEN", "ANTHROPIC_API_KEY", "NPM_TOKEN"],
+  });
 });
 
-test("leaves project tokens unresolved and omits project injection for user scope", () => {
+test("AVAR-05: a remote unset withheld name is neither blanked nor missing", () => {
   // arrange
-  const server = {
-    command: "${CLAUDE_PLUGIN_ROOT}/bin/server",
-    args: ["--project=${CLAUDE_PROJECT_DIR}"],
-    cwd: "${CLAUDE_PROJECT_DIR}",
-    headers: { Authorization: "Bearer ${CLAUDE_PLUGIN_DATA}" },
-  };
-  const context = {
-    pluginRoot: "/user/plugin/root",
-    pluginData: "/user/plugin/data",
-    projectDir: undefined,
-  } satisfies McpSubstitutionContext;
-  const expectedServer = {
-    command: "/user/plugin/root/bin/server",
-    args: ["--project=${CLAUDE_PROJECT_DIR}"],
-    cwd: "${CLAUDE_PROJECT_DIR}",
-    headers: { Authorization: "Bearer /user/plugin/data" },
-    env: {
-      CLAUDE_PLUGIN_ROOT: "/user/plugin/root",
-      CLAUDE_PLUGIN_DATA: "/user/plugin/data",
-    },
+  const translated = {
+    url: "https://mcp.example.test",
+    headers: { Value: "${ANTHROPIC_API_KEY}" },
   };
 
   // act
-  const substitutedServer = substituteAndInject(server, context);
+  const substituted = substituteAndInject(translated, PROJECT_CONTEXT);
 
   // assert
-  assert.deepStrictEqual(substitutedServer, expectedServer);
+  assert.deepStrictEqual(substituted, {
+    entry: { url: "https://mcp.example.test", headers: { Value: "" } },
+    report: { missing: [], blanked: [] },
+  });
 });
 
-test("substitutes a URL server without injecting environment defaults", () => {
+test("AVAR-05: a plain-field blank adds no blanked name", () => {
   // arrange
-  const server = {
-    url: "https://mcp.test/${CLAUDE_PLUGIN_ROOT}/sse",
-    headers: { Authorization: "Bearer ${CLAUDE_PLUGIN_DATA}" },
-    env: { TOKEN_PATH: "${CLAUDE_PLUGIN_DATA}/token" },
+  const translated = {
+    command: "${CLAUDE_CODE_OAUTH_TOKEN}",
+    args: ["${CLAUDE_CODE_OAUTH_TOKEN}"],
+    env: { TOKEN: "${OTEL_EXPORTER_OTLP_HEADERS}" },
   };
-  const context = {
-    pluginRoot: "plugin-root",
-    pluginData: "plugin-data",
-    projectDir: "/project/root",
-  } satisfies McpSubstitutionContext;
-  const expectedServer = {
-    url: "https://mcp.test/plugin-root/sse",
-    headers: { Authorization: "Bearer plugin-data" },
-    env: { TOKEN_PATH: "plugin-data/token" },
+  const context: McpSubstitutionContext = {
+    ...PROJECT_CONTEXT,
+    env: { CLAUDE_CODE_OAUTH_TOKEN: "oauth-value", OTEL_EXPORTER_OTLP_HEADERS: "otel-value" },
   };
 
   // act
-  const substitutedServer = substituteAndInject(server, context);
+  const substituted = substituteAndInject(translated, context);
 
   // assert
-  assert.deepStrictEqual(substitutedServer, expectedServer);
+  assert.deepStrictEqual(substituted, {
+    entry: { command: "", args: [""], env: { ...INJECTED_ENV, TOKEN: "" } },
+    report: { missing: [], blanked: [] },
+  });
 });
 
-test("does not re-expand substituted context values", () => {
+test("AVAR-05: a deny-listed header variable set to the empty string is blanked and listed", () => {
   // arrange
-  const server = {
-    command: "${CLAUDE_PLUGIN_ROOT}",
-    env: { DECLARED_ROOT: "${CLAUDE_PLUGIN_ROOT}" },
+  const translated = {
+    url: "https://mcp.example.test",
+    headers: { Value: "${ANTHROPIC_API_KEY}" },
   };
-  const context = {
-    pluginRoot: "${CLAUDE_PLUGIN_DATA}",
-    pluginData: "/plugin/data",
-    projectDir: undefined,
-  } satisfies McpSubstitutionContext;
-  const expectedServer = {
-    command: "${CLAUDE_PLUGIN_DATA}",
-    env: {
-      CLAUDE_PLUGIN_ROOT: "${CLAUDE_PLUGIN_DATA}",
-      CLAUDE_PLUGIN_DATA: "/plugin/data",
-      DECLARED_ROOT: "${CLAUDE_PLUGIN_DATA}",
-    },
-  };
+  const context: McpSubstitutionContext = { ...PROJECT_CONTEXT, env: { ANTHROPIC_API_KEY: "" } };
 
   // act
-  const substitutedServer = substituteAndInject(server, context);
+  const substituted = substituteAndInject(translated, context);
 
   // assert
-  assert.deepStrictEqual(substitutedServer, expectedServer);
+  assert.deepStrictEqual(substituted, {
+    entry: { url: "https://mcp.example.test", headers: { Value: "" } },
+    report: { missing: [], blanked: ["ANTHROPIC_API_KEY"] },
+  });
 });

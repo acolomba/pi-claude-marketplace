@@ -104,7 +104,12 @@ test("renders updated content reasons before the resolved markers", () => {
     from: "hash-2ea95f85703d",
     to: "hash-1c3d9a0bbef1",
     scope: "project",
-    reasons: ["orphan rewake", "malformed skill", "requires pi-subagents", "requires pi-mcp"],
+    reasons: [
+      "orphan rewake",
+      "malformed skill",
+      "requires pi-subagents",
+      "requires pi-mcp-adapter",
+    ],
     severity: "warning",
     needsReload: true,
   } as const satisfies ResolvedRow<UpdateMsg>;
@@ -115,7 +120,7 @@ test("renders updated content reasons before the resolved markers", () => {
   // assert
   assert.equal(
     row,
-    "● beta [project] v#2ea95f8 → v#1c3d9a0 (updated) {orphan rewake, malformed skill, requires pi-subagents, requires pi-mcp}",
+    "● beta [project] v#2ea95f8 → v#1c3d9a0 (updated) {orphan rewake, malformed skill, requires pi-subagents, requires pi-mcp-adapter}",
   );
   assert.deepStrictEqual(message, {
     status: "updated",
@@ -123,7 +128,12 @@ test("renders updated content reasons before the resolved markers", () => {
     from: "hash-2ea95f85703d",
     to: "hash-1c3d9a0bbef1",
     scope: "project",
-    reasons: ["orphan rewake", "malformed skill", "requires pi-subagents", "requires pi-mcp"],
+    reasons: [
+      "orphan rewake",
+      "malformed skill",
+      "requires pi-subagents",
+      "requires pi-mcp-adapter",
+    ],
     severity: "warning",
     needsReload: true,
   });
@@ -134,7 +144,7 @@ test("renders a partially-installed transition with ordered resolved reasons", (
   const message = {
     status: "partially-installed",
     name: "gamma",
-    reasons: ["malformed command", "unsupported component", "requires pi-mcp"],
+    reasons: ["malformed command", "unsupported component", "requires pi-mcp-adapter"],
     version: "2.0.0",
     scope: "project",
     severity: "warning",
@@ -147,12 +157,12 @@ test("renders a partially-installed transition with ordered resolved reasons", (
   // assert
   assert.equal(
     row,
-    "◉ gamma [project] v2.0.0 (partially-installed) {malformed command, unsupported component, requires pi-mcp}",
+    "◉ gamma [project] v2.0.0 (partially-installed) {malformed command, unsupported component, requires pi-mcp-adapter}",
   );
   assert.deepStrictEqual(message, {
     status: "partially-installed",
     name: "gamma",
-    reasons: ["malformed command", "unsupported component", "requires pi-mcp"],
+    reasons: ["malformed command", "unsupported component", "requires pi-mcp-adapter"],
     version: "2.0.0",
     scope: "project",
     severity: "warning",

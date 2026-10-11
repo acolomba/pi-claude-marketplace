@@ -16,7 +16,7 @@ async function pathExists(filePath: string): Promise<boolean> {
     await stat(filePath);
     return true;
   } catch (error: unknown) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
       return false;
     }
 
@@ -64,6 +64,7 @@ test("MCP-only staging materializes no agent, command, or skill target", async (
       workflows: [],
     },
     defaultEnabled: true,
+    description: "case-local isolation source",
     mcpServers: {
       local: {
         command: "${CLAUDE_PLUGIN_ROOT}/bin/server",
@@ -73,7 +74,7 @@ test("MCP-only staging materializes no agent, command, or skill target", async (
   };
   const expectedBytes = `{
   "mcpServers": {
-    "local": {
+    "plugin_acme_local_": {
       "command": ${JSON.stringify(path.join(pluginRoot, "bin", "server"))},
       "args": [
         "--data",
@@ -81,9 +82,11 @@ test("MCP-only staging materializes no agent, command, or skill target", async (
       ],
       "env": {
         "CLAUDE_PLUGIN_ROOT": ${JSON.stringify(pluginRoot)},
-        "CLAUDE_PLUGIN_DATA": ${JSON.stringify(pluginData)},
-        "CLAUDE_PROJECT_DIR": ${JSON.stringify(scopeRoot)}
+        "CLAUDE_PLUGIN_DATA": ${JSON.stringify(pluginData)}
       },
+      "description": "case-local isolation source",
+      "directTools": "search",
+      "toolPrefix": "mcp",
       "_piClaudeMarketplace": {
         "plugin": "acme",
         "marketplace": "catalog"
@@ -107,10 +110,12 @@ test("MCP-only staging materializes no agent, command, or skill target", async (
     pluginRoot,
     pluginData,
     sourcePath: path.join(pluginRoot, ".mcp.json"),
+    env: {},
     servers: resolution.mcpServers,
+    description: resolution.description,
   });
   const commit = await commitPreparedMcp(prepared);
-  const storedBytes = await readFile(locations.mcpJsonPath, "utf8");
+  const storedBytes = await readFile(locations.mcpAdapterJsonPath, "utf8");
   const dormantSources = {
     agent: await pathExists(path.join(pluginRoot, "agents", "dormant.md")),
     command: await pathExists(path.join(pluginRoot, "commands", "dormant.md")),
@@ -132,10 +137,11 @@ test("MCP-only staging materializes no agent, command, or skill target", async (
       {
         generatedName: "local",
         sourcePath: path.join(pluginRoot, ".mcp.json"),
-        targetPath: locations.mcpJsonPath,
+        targetPath: locations.mcpAdapterJsonPath,
       },
     ],
     warnings: [],
+    notices: [],
   });
   assert.strictEqual(storedBytes, expectedBytes);
   // D-07-03: the sibling-absence claim below is vacuous unless the source tree

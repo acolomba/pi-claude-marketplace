@@ -3,6 +3,7 @@ import { describe, test } from "node:test";
 
 import { UninstallRefusedError } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
 import {
+  carriedMcpConfigNotices,
   classifyOrchestratorThrow,
   classifyReadPassThrow,
   dependenciesFromInstall,
@@ -36,6 +37,8 @@ import {
   PluginShapeError,
   StateLockHeldError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+
+import type { UninstallPluginOutcome } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
 
 void ({ scope: "project", marketplace: "official" } satisfies OutcomeBase);
 void ({ scope: "user", marketplace: "official", plugin: "formatter" } satisfies PluginOutcomeBase);
@@ -210,6 +213,13 @@ void ({
   cause: new Error("Unexpected token"),
 } satisfies InvalidBlockOutcome);
 void ({ kind: "mp-added", scope: "user", marketplace: "official" } satisfies PerEntryOutcome);
+void ({
+  kind: "plugin-uninstalled",
+  scope: "project",
+  marketplace: "official",
+  plugin: "formatter",
+  mcpConfigNotices: [{ kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" }],
+} satisfies PluginUninstalledOutcome);
 
 // @ts-expect-error outcome bases always identify their marketplace
 void ({ scope: "project" } satisfies OutcomeBase);
@@ -432,10 +442,10 @@ describe("sourceMismatchOutcomeSubject", () => {
     } satisfies SourceMismatchOutcome;
 
     // act
-    const subject = sourceMismatchOutcomeSubject(outcome);
+    const outcomeSubject = sourceMismatchOutcomeSubject(outcome);
 
     // assert
-    assert.strictEqual(subject, "missing");
+    assert.strictEqual(outcomeSubject, "missing");
   });
 
   test("selects the raw key for a malformed plugin key", () => {
@@ -448,10 +458,10 @@ describe("sourceMismatchOutcomeSubject", () => {
     } satisfies SourceMismatchOutcome;
 
     // act
-    const subject = sourceMismatchOutcomeSubject(outcome);
+    const outcomeSubject = sourceMismatchOutcomeSubject(outcome);
 
     // assert
-    assert.strictEqual(subject, "formatter");
+    assert.strictEqual(outcomeSubject, "formatter");
   });
 
   test("selects the marketplace for a source mismatch", () => {
@@ -464,10 +474,10 @@ describe("sourceMismatchOutcomeSubject", () => {
     } satisfies SourceMismatchOutcome;
 
     // act
-    const subject = sourceMismatchOutcomeSubject(outcome);
+    const outcomeSubject = sourceMismatchOutcomeSubject(outcome);
 
     // assert
-    assert.strictEqual(subject, "official");
+    assert.strictEqual(outcomeSubject, "official");
   });
 
   test("selects the marketplace for an unknown stored source", () => {
@@ -480,10 +490,10 @@ describe("sourceMismatchOutcomeSubject", () => {
     } satisfies SourceMismatchOutcome;
 
     // act
-    const subject = sourceMismatchOutcomeSubject(outcome);
+    const outcomeSubject = sourceMismatchOutcomeSubject(outcome);
 
     // assert
-    assert.strictEqual(subject, "legacy");
+    assert.strictEqual(outcomeSubject, "legacy");
   });
 });
 
@@ -991,5 +1001,35 @@ describe("dependencyDisabledOutcome", () => {
       outcome.cause.message,
       'Update "secrets-vault@official" or uninstall "deploy-kit@official"',
     );
+  });
+});
+
+describe("carriedMcpConfigNotices", () => {
+  test("carries the notices of an outcome that has them", () => {
+    // arrange
+    const outcome: UninstallPluginOutcome = {
+      status: "uninstalled",
+      name: "formatter",
+      mcpConfigNotices: [{ kind: "comments-dropped", scope: "user", file: "mcp.json" }],
+    };
+
+    // act
+    const carried = carriedMcpConfigNotices(outcome);
+
+    // assert
+    assert.deepStrictEqual(carried, {
+      mcpConfigNotices: [{ kind: "comments-dropped", scope: "user", file: "mcp.json" }],
+    });
+  });
+
+  test("carries nothing for an outcome without notices", () => {
+    // arrange
+    const outcome: UninstallPluginOutcome = { status: "uninstalled", name: "formatter" };
+
+    // act
+    const carried = carriedMcpConfigNotices(outcome);
+
+    // assert
+    assert.deepStrictEqual(carried, {});
   });
 });

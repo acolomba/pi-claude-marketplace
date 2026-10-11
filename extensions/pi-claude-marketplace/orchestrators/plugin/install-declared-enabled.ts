@@ -1,10 +1,12 @@
+import { ownValue } from "../../shared/own-key.ts";
+
 import type { ScopeConfig } from "../../persistence/config-io.ts";
 
 type PluginConfigMap = ScopeConfig["plugins"];
 type PluginConfigEntry = NonNullable<PluginConfigMap>[string];
 
 function entryFor(plugins: PluginConfigMap, key: string): PluginConfigEntry | undefined {
-  return plugins?.[key];
+  return ownValue(plugins, key);
 }
 
 /**

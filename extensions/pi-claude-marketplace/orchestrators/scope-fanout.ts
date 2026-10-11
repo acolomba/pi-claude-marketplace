@@ -15,6 +15,7 @@
 import { loadMergedScopeConfig } from "../persistence/config-merge.ts";
 import { locationsFor } from "../persistence/locations.ts";
 import { loadState } from "../persistence/state-io.ts";
+import { ownValue } from "../shared/own-key.ts";
 
 import type { ExtensionState } from "../persistence/state-io.ts";
 import type { Scope } from "../shared/types.ts";
@@ -75,7 +76,7 @@ async function readScopeMarketplaceRecord(
 ): Promise<ScopedMarketplaceRecord | undefined> {
   const locations = locationsFor(scope, opts.cwd);
   const state = await loadState(locations.extensionRoot);
-  const record = state.marketplaces[opts.marketplace];
+  const record = ownValue(state.marketplaces, opts.marketplace);
   if (record === undefined) {
     return undefined;
   }
@@ -87,7 +88,7 @@ async function readScopeMarketplaceRecord(
   return {
     scope,
     record,
-    autoupdate: merged.marketplaces[opts.marketplace]?.entry.autoupdate ?? false,
+    autoupdate: ownValue(merged.marketplaces, opts.marketplace)?.entry.autoupdate ?? false,
     declaredEnabled: declaredEnabledFor(merged, opts.pluginKey),
   };
 }
@@ -96,5 +97,5 @@ function declaredEnabledFor(
   merged: MergedScopeConfig,
   pluginKey: string | undefined,
 ): boolean | undefined {
-  return pluginKey === undefined ? undefined : merged.plugins[pluginKey]?.entry.enabled;
+  return pluginKey === undefined ? undefined : ownValue(merged.plugins, pluginKey)?.entry.enabled;
 }

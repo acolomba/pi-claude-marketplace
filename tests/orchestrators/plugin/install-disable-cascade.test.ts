@@ -103,6 +103,7 @@ test("disables a freshly installed record after a clean five-kind cascade", asyn
         mcpServers: ["server-a", "server-b"],
         workflows: [],
       },
+      mcpConfigNotices: [{ kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" }],
     }),
   );
 
@@ -115,7 +116,12 @@ test("disables a freshly installed record after a clean five-kind cascade", asyn
   });
 
   // assert
-  assert.deepStrictEqual(disableOutcome, { ok: true, removeRoutes: true });
+  assert.deepStrictEqual(disableOutcome, {
+    ok: true,
+    removeRoutes: true,
+    mcpConfigNotices: [{ kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" }],
+    droppedMcpServers: ["server-a", "server-b"],
+  });
   assert.deepStrictEqual(state.marketplaces.marketplace?.plugins.plugin, {
     version: "1.2.3",
     resolvedSource: "/workspace/marketplace/plugin",
@@ -158,6 +164,8 @@ test("returns the internal failure without running an unstage when the record is
   // assert
   assert.equal(disableOutcome.ok, false);
   assert.equal(disableOutcome.removeRoutes, false);
+  assert.deepStrictEqual(disableOutcome.mcpConfigNotices, []);
+  assert.deepStrictEqual(disableOutcome.droppedMcpServers, []);
   assert.equal(
     disableOutcome.ok ? undefined : disableOutcome.cause.message,
     'installPlugin: internal error -- the state phase left no record for plugin "plugin" to disable.',
@@ -186,6 +194,7 @@ for (const row of [
           workflows: [],
         },
         cause,
+        mcpConfigNotices: [{ kind: "comments-dropped", scope: "project", file: "mcp.json" }],
       }),
     );
 
@@ -202,6 +211,8 @@ for (const row of [
       ok: false,
       cause,
       removeRoutes: row.expectedRemoveRoutes,
+      mcpConfigNotices: [{ kind: "comments-dropped", scope: "project", file: "mcp.json" }],
+      droppedMcpServers: ["server-a"],
     });
     assert.deepStrictEqual(state.marketplaces.marketplace?.plugins.plugin?.resources, {
       skills: ["skill-b"],
@@ -214,6 +225,65 @@ for (const row of [
     assert.equal(state.marketplaces.marketplace?.plugins.plugin?.updatedAt, UPDATED_AT);
   });
 }
+
+test("AFILE-04: a clean cascade that rewrote no commented file carries no notices", async () => {
+  // arrange
+  const owner = await loadOwner();
+  const state = installedState();
+  const cascade = composeOwner(owner, () =>
+    Promise.resolve({
+      ok: true,
+      dropped: { skills: [], commands: [], agents: [], hooks: [], mcpServers: [], workflows: [] },
+    }),
+  );
+
+  // act
+  const disableOutcome = await cascade.disableFreshInstall({
+    state,
+    locations: locationsFor("project", "/workspace"),
+    marketplace: "marketplace",
+    plugin: "plugin",
+  });
+
+  // assert
+  assert.deepStrictEqual(disableOutcome, {
+    ok: true,
+    removeRoutes: true,
+    mcpConfigNotices: [],
+    droppedMcpServers: [],
+  });
+});
+
+test("AFILE-04: a partial cascade that rewrote no commented file carries no notices", async () => {
+  // arrange
+  const owner = await loadOwner();
+  const state = installedState();
+  const cause = new Error("agents could not be removed");
+  const cascade = composeOwner(owner, () =>
+    Promise.resolve({
+      ok: false,
+      dropped: { skills: [], commands: [], agents: [], hooks: [], mcpServers: [], workflows: [] },
+      cause,
+    }),
+  );
+
+  // act
+  const disableOutcome = await cascade.disableFreshInstall({
+    state,
+    locations: locationsFor("project", "/workspace"),
+    marketplace: "marketplace",
+    plugin: "plugin",
+  });
+
+  // assert
+  assert.deepStrictEqual(disableOutcome, {
+    ok: false,
+    cause,
+    removeRoutes: false,
+    mcpConfigNotices: [],
+    droppedMcpServers: [],
+  });
+});
 
 test("drops cached hooks before rebuilding routes after the saved disable", async () => {
   // arrange

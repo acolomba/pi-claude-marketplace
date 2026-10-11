@@ -80,10 +80,11 @@ import { openNotificationRun } from "../../extensions/pi-claude-marketplace/shar
 import { retryTree } from "../orchestrators/plugin/scope-tree-inventory.ts";
 import { createGitOpsFake } from "../platform/git-ops-fake.ts";
 import { createHermeticEnvironment } from "../platform/hermetic-environment.ts";
+import { noStatusSnapshot } from "../platform/mcp-status-seed.ts";
 
 import { buildInstalledPluginRecord } from "./handlers/marketplace-seed.ts";
 import { createJsonCapture } from "./json-capture.ts";
-import { createNotificationBoundary } from "./notification-boundary.ts";
+import { createNotificationBoundary, expectSoftDepProbes } from "./notification-boundary.ts";
 
 import type { Notification } from "./notification-boundary.ts";
 import type { EdgeDeps } from "../../extensions/pi-claude-marketplace/edge/types.ts";
@@ -173,9 +174,9 @@ interface CommandUnderTest {
 }
 
 /**
- * The `getAllTools()` reads a registered command promises. `runs` is the number
- * of handler invocations: each opens one notification run whose snapshot reads
- * the inventory three times (D-05).
+ * The Pi inventory reads a registered command promises. `runs` is the number
+ * of handler invocations: each opens one notification run whose snapshot takes
+ * one soft-dependency probe (D-05; `expectSoftDepProbes` states its reads).
  */
 interface CommandProbes {
   readonly runs: number;
@@ -232,6 +233,7 @@ function subagentTool(): ReturnType<ExtensionAPI["getAllTools"]>[number] {
     name: "subagent",
     description: "test tool subagent",
     parameters: Type.Object({}),
+    exposure: "direct",
     sourceInfo: {
       origin: "top-level",
       path: "/test/tools/subagent.ts",
@@ -360,6 +362,7 @@ function createEdgeDeps(
   const selectedGitOps = gitOps ?? createGitOpsFake({ boundary: "memory" }).gitOps;
   return {
     completionCache,
+    mcpStatus: noStatusSnapshot(),
     gitOps: selectedGitOps,
     beginPluginUpdateRun: () => (): Promise<PluginUpdateOutcome> => {
       throw new Error("the registration glue must not run a plugin update");
@@ -397,7 +400,6 @@ function registerCommandWithCache(
   })
     .thenReturn()
     .times(1);
-  const toolReads = probes.runs * 3;
   if (probes.capture !== undefined) {
     const capture = probes.capture;
     function appendEntry(this: PiRegistrar, customType: string, payload: unknown): void {
@@ -410,11 +412,7 @@ function registerCommandWithCache(
       .times(probes.appendAttempts ?? 1);
   }
 
-  if (toolReads > 0) {
-    when(() => pi.getAllTools())
-      .thenReturn([])
-      .times(toolReads);
-  }
+  expectSoftDepProbes(pi, probes.runs);
 
   registerClaudePluginCommand(
     pi,
@@ -751,7 +749,7 @@ for (const mode of ["json", "rpc"]) {
         return capture.ui;
       },
     };
-    const independent = { ...entrySink, getAllTools: () => [] };
+    const independent = { ...entrySink, getAllTools: () => [], getCommands: () => [] };
 
     // act
     const firstCommand = Promise.resolve(
@@ -1519,7 +1517,7 @@ for (const mode of ["json", "rpc"] as const) {
         return capture.ui;
       },
     };
-    const independentRoot = { ...capture.entrySink, getAllTools: () => [] };
+    const independentRoot = { ...capture.entrySink, getAllTools: () => [], getCommands: () => [] };
 
     // act
     const firstCommand: unknown = Reflect.apply(registration.handler, undefined, [
@@ -2617,6 +2615,9 @@ test("one soft-dep snapshot drives both the severity stamp and the markers of a 
   when(() => pi.getAllTools)
     .thenReturn(getAllTools)
     .atLeast(3);
+  when(() => pi.getCommands())
+    .thenReturn([])
+    .times(1);
   const completionCache = createCompletionCache();
   const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
   registerClaudePluginCommand(
@@ -2659,7 +2660,7 @@ test("one soft-dep snapshot drives both the severity stamp and the markers of a 
       severity: "warning",
     },
   ]);
-  // D-05: one probe per command run, three inventory reads.
+  // D-05: one probe per command run, three tool reads and one command read.
   assert.strictEqual(getAllTools.mock.callCount(), 3);
   verify(ctx);
   verify(ui);

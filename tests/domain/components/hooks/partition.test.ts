@@ -89,6 +89,29 @@ describe("partitionHooks", () => {
     });
   });
 
+  test("ANAME-02: keeps a server-prefix MCP matcher group as supported", () => {
+    // arrange
+    const config = {
+      PreToolUse: [
+        { matcher: "mcp__plugin_acme_db__.*", hooks: [{ type: "command", command: "prefix" }] },
+        { matcher: "mcp__*", hooks: [{ type: "command", command: "wildcard" }] },
+      ],
+    };
+
+    // act
+    const partition = partitionHooks(config);
+
+    // assert
+    assert.deepStrictEqual(partition, {
+      supported: {
+        PreToolUse: [
+          { matcher: "mcp__plugin_acme_db__.*", hooks: [{ type: "command", command: "prefix" }] },
+        ],
+      },
+      dropped: [{ kind: "group", event: "PreToolUse", matcher: "mcp__*", cond: "regex" }],
+    });
+  });
+
   test("drops an unknown event", () => {
     // arrange
     const config = {

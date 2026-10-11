@@ -26,15 +26,17 @@ interface StagingScope {
 }
 
 /**
- * Relocate the home directory before the bundle is built, and hand the new home
- * back so a case never re-reads a global it just wrote.
+ * Relocate the home directory and clear `PI_CODING_AGENT_DIR` before the bundle
+ * is built, and hand the new home back so a case never re-reads a global it just
+ * wrote.
  *
- * `locationsFor` evaluates the workflow home eagerly and freezes the result, so
- * a bundle built before the relocation points at the developer's real
- * `~/.pi/workflows/` and every case below would sweep there. The restoration is
- * registered before anything is mutated, so a failing assertion cannot leave the
- * variable relocated, and an absent variable is deleted rather than reassigned
- * because `process.env` stringifies every assignment.
+ * `locationsFor` evaluates the workflow root eagerly and freezes the result. A
+ * bundle built before the relocation, or with `PI_CODING_AGENT_DIR` still set,
+ * points at the developer's real workflow root, and every case below would sweep
+ * there. The restoration is registered before anything is mutated, so a failing
+ * assertion cannot leave either variable relocated, and an absent variable is
+ * deleted rather than reassigned because `process.env` stringifies every
+ * assignment.
  *
  * Nothing under the workflow home is created here: the absent-directory case has
  * to observe a home with no staging root at all.
@@ -42,6 +44,7 @@ interface StagingScope {
 async function createStagingScope(t: TestContext, prefix: string): Promise<StagingScope> {
   const home = await mkdtemp(path.join(tmpdir(), prefix));
   const previousHome = process.env.HOME;
+  const previousAgentDirectory = process.env.PI_CODING_AGENT_DIR;
 
   t.after(async () => {
     if (previousHome === undefined) {
@@ -50,9 +53,16 @@ async function createStagingScope(t: TestContext, prefix: string): Promise<Stagi
       process.env.HOME = previousHome;
     }
 
+    if (previousAgentDirectory === undefined) {
+      delete process.env.PI_CODING_AGENT_DIR;
+    } else {
+      process.env.PI_CODING_AGENT_DIR = previousAgentDirectory;
+    }
+
     await rm(home, { recursive: true, force: true, maxRetries: 3 });
   });
   process.env.HOME = home;
+  delete process.env.PI_CODING_AGENT_DIR;
 
   const scopeRoot = await mkdtemp(path.join(tmpdir(), `${prefix}scope-`));
 

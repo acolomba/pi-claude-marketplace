@@ -16,10 +16,13 @@ import type { NotificationOrigin } from "./notification-run.ts";
 import type {
   MarketplaceDetails,
   MarketplaceInfoMessage,
+  McpMigrationRow,
+  McpServerSummaryEntry,
   PluginInfoComponentsResolved,
   PluginInfoMessage,
   PluginInfoRow,
   PluginStatus,
+  RenderedMcpConfigNotice,
   RetainedWorkflowStaging,
 } from "./notification-types.ts";
 import type { CASCADE_PAYLOAD_SCHEMA, NOTIFICATION_PAYLOAD_SCHEMA } from "./notification-wire.ts";
@@ -160,14 +163,27 @@ function wirePresentation(
 
 /**
  * D-01 / D-02: the payload of one resolved raw surface. Its severity comes from
- * `RAW_SURFACE_SEVERITY`, the table the text strategy reads (PMOD-01). A raw
- * kind never needs a reload and carries no `summary`; the rewake summary is
- * copied verbatim into `text` (D-08).
+ * `RAW_SURFACE_SEVERITY`, the table the text strategy reads (PMOD-01), except
+ * the migration notice's, which resolve decides. Only the migration notice can
+ * need a reload, as resolve decides. A raw kind carries no `summary`; the
+ * rewake summary is copied verbatim into `text` (D-08).
  */
 function wireRawSurface(
   surface: ResolvedRawSurface,
   origin: NotificationOrigin,
 ): Type.Static<typeof NOTIFICATION_PAYLOAD_SCHEMA> {
+  if (surface.kind === "mcp-migration") {
+    return {
+      schemaVersion: 1,
+      kind: surface.kind,
+      origin: wireOrigin(origin),
+      severity: surface.severity,
+      needsReload: surface.needsReload,
+      rows: surface.rows.map((row) => wireMigrationRow(row)),
+      notices: surface.notices.map((notice) => wireNotice(notice)),
+    };
+  }
+
   const envelope = {
     schemaVersion: 1,
     origin: wireOrigin(origin),
@@ -197,7 +213,82 @@ function wireRawSurface(
       return { ...envelope, kind: surface.kind, causeMessage: surface.causeMessage };
     case "plugin-path-skipped":
       return { ...envelope, kind: surface.kind, scope: surface.scope, reason: surface.reason };
+    case "mcp-config-notices":
+      return {
+        ...envelope,
+        kind: surface.kind,
+        notices: surface.notices.map((notice) => wireNotice(notice)),
+      };
   }
+}
+
+/** AFILE-04: one config notice, field by field. */
+function wireNotice(notice: RenderedMcpConfigNotice) {
+  switch (notice.kind) {
+    case "comments-dropped":
+    case "left-unchanged":
+      return { kind: notice.kind, scope: notice.scope, file: notice.file };
+    case "override-kept":
+    case "tool-rules-unenforced":
+      return { kind: notice.kind, ...wireNoticeSubject(notice), fields: [...notice.fields] };
+    case "variables-missing":
+    case "credentials-blanked":
+      return { kind: notice.kind, ...wireNoticeSubject(notice), names: [...notice.names] };
+    case "leftover-removed":
+      return { kind: notice.kind, ...wireNoticeSubject(notice) };
+  }
+}
+
+function wireNoticeSubject(notice: Extract<RenderedMcpConfigNotice, { readonly plugin: string }>) {
+  return { scope: notice.scope, file: notice.file, plugin: notice.plugin, server: notice.server };
+}
+
+/** AMIG-03: one migration row, field by field. */
+function wireMigrationRow(row: McpMigrationRow) {
+  switch (row.kind) {
+    case "moved":
+      return {
+        kind: row.kind,
+        scope: row.scope,
+        plugin: row.plugin,
+        marketplace: row.marketplace,
+        from: row.from,
+        to: row.to,
+      };
+    case "removed":
+      return {
+        kind: row.kind,
+        scope: row.scope,
+        plugin: row.plugin,
+        marketplace: row.marketplace,
+        server: row.server,
+        cause: row.cause,
+        ...(row.feature === undefined ? {} : { feature: row.feature }),
+      };
+    case "stopped":
+      return { kind: row.kind, scope: row.scope, detail: row.detail };
+    case "file-unreadable":
+      return { kind: row.kind, scope: row.scope, file: row.file };
+    case "collision":
+      return { kind: row.kind, ...wireRowOwner(row), key: row.key, source: row.source };
+    case "unfinished":
+      return { kind: row.kind, ...wireRowOwner(row), file: row.file, detail: row.detail };
+    case "unowned":
+    case "not-listed":
+    case "source-unreadable":
+    case "source-outdated":
+    case "marketplace-unreadable":
+      return { kind: row.kind, ...wireRowOwner(row) };
+  }
+}
+
+function wireRowOwner(row: Extract<McpMigrationRow, { readonly servers: readonly string[] }>) {
+  return {
+    scope: row.scope,
+    plugin: row.plugin,
+    marketplace: row.marketplace,
+    servers: [...row.servers],
+  };
 }
 
 /** D-04: the cascade payload, with its advisory lines and retained workflows. */
@@ -404,6 +495,11 @@ function wirePluginInfoRow(plugin: PluginInfoRow, message: PluginInfoMessage) {
         ...fields,
         componentsResolved: plugin.componentsResolved,
         components: wireComponents(plugin.components),
+        ...(plugin.requires === undefined
+          ? {}
+          : {
+              requires: plugin.requires.map(({ companion, missing }) => ({ companion, missing })),
+            }),
       }
     : { ...fields, componentsResolved: plugin.componentsResolved };
 }
@@ -415,9 +511,26 @@ function wireComponents(components: PluginInfoComponentsResolved["components"]) 
     ...(components.hooks === undefined
       ? {}
       : { hooks: components.hooks.map((entry) => wireHookEntry(entry)) }),
-    ...(components.mcp === undefined ? {} : { mcp: [...components.mcp] }),
+    ...(components.mcp === undefined
+      ? {}
+      : { mcp: components.mcp.map((entry) => wireMcpServer(entry)) }),
     ...(components.skills === undefined ? {} : { skills: [...components.skills] }),
     ...(components.workflows === undefined ? {} : { workflows: [...components.workflows] }),
+  };
+}
+
+/** ANAME-01 / AVAR-04 / ASTAT-01: one MCP server entry, field by field. */
+function wireMcpServer(entry: McpServerSummaryEntry) {
+  return {
+    name: entry.name,
+    ...(entry.unsupportedFeature === undefined
+      ? {}
+      : { unsupportedFeature: entry.unsupportedFeature }),
+    ...(entry.unsetVariables === undefined ? {} : { unsetVariables: [...entry.unsetVariables] }),
+    ...(entry.withheldVariables === undefined
+      ? {}
+      : { withheldVariables: [...entry.withheldVariables] }),
+    ...(entry.status === undefined ? {} : { status: entry.status }),
   };
 }
 

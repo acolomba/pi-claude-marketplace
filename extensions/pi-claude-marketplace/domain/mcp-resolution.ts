@@ -4,18 +4,59 @@ import { errorMessage } from "../shared/errors.ts";
 
 import { resolveContainedComponentPath } from "./component-paths.ts";
 import { MCP_SERVERS_VALIDATOR } from "./components/mcp.ts";
+import { classifyMcpServer } from "./mcp-server-features.ts";
 
+import type { DroppedMcpServer } from "./mcp-server-features.ts";
 import type { StatKindReader } from "./resolver-types.ts";
 
 /** Mutable resolver fields owned by MCP resolution. */
 export interface McpResolution {
   notes: string[];
+  unsupported: string[];
   mcpServers: Record<string, unknown>;
+  droppedMcpServers?: DroppedMcpServer[];
 }
 
 interface McpResolutionDependencies {
   readonly statKind: StatKindReader;
   readonly readFileText: (path: string) => Promise<string>;
+}
+
+/**
+ * Keeps the supported servers in declared order and leaves out each blocked
+ * one whole. The typed `mcpServers` kind is the only reason a blocked server
+ * gets, as `hooks` is for a dropped hook handler. A malformed server adds a
+ * note and reports a structural defect, which wins over any blocked server
+ * (ANAME-07, D-64-07).
+ */
+function recordMcpServers(
+  resolution: McpResolution,
+  servers: Readonly<Record<string, unknown>>,
+): boolean {
+  const supported: [string, unknown][] = [];
+  const dropped: DroppedMcpServer[] = [];
+  let malformed = false;
+  for (const [server, config] of Object.entries(servers)) {
+    const verdict = classifyMcpServer(config);
+    if (verdict.kind === "supported") {
+      supported.push([server, config]);
+    } else if (verdict.kind === "blocked") {
+      dropped.push({ server, feature: verdict.feature });
+    } else {
+      resolution.notes.push(`malformed mcp server "${server}": ${verdict.detail}`);
+      malformed = true;
+    }
+  }
+
+  // `Object.fromEntries` defines own properties, so a server named
+  // `__proto__` stays a server.
+  resolution.mcpServers = Object.fromEntries(supported);
+  if (dropped.length > 0) {
+    resolution.unsupported.push("mcpServers");
+    resolution.droppedMcpServers = dropped;
+  }
+
+  return malformed;
 }
 
 function applyMcpValue(resolution: McpResolution, mcp: unknown): boolean {
@@ -24,8 +65,7 @@ function applyMcpValue(resolution: McpResolution, mcp: unknown): boolean {
   }
 
   if (MCP_SERVERS_VALIDATOR.Check(mcp)) {
-    resolution.mcpServers = mcp;
-    return false;
+    return recordMcpServers(resolution, mcp);
   }
 
   const errorDetail = MCP_SERVERS_VALIDATOR.Errors(mcp)

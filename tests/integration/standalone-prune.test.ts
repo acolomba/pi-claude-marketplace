@@ -22,6 +22,7 @@ import { createCompletionCache } from "../../extensions/pi-claude-marketplace/sh
 import { makeCtx, makeMockPi } from "../e2e/_helpers.ts";
 import { createGitOpsFake } from "../platform/git-ops-fake.ts";
 import { withHermeticEnvironment } from "../platform/hermetic-environment.ts";
+import { noStatusSnapshot } from "../platform/mcp-status-seed.ts";
 
 import type { ExtensionState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { Scope } from "../../extensions/pi-claude-marketplace/shared/types.ts";
@@ -181,14 +182,15 @@ async function scopeTree(
 }
 
 function registeredCommand(cwd: string) {
-  const mock = makeMockPi([]);
+  const piHost = makeMockPi([]);
   const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
   const completionCache = createCompletionCache();
   const git = createGitOpsFake({ boundary: "memory" });
   registerClaudePluginCommand(
-    mock.pi,
+    piHost.pi,
     {
       completionCache,
+      mcpStatus: noStatusSnapshot(),
       gitOps: git.gitOps,
       beginPluginUpdateRun: () => () =>
         Promise.resolve({
@@ -205,7 +207,7 @@ function registeredCommand(cwd: string) {
     hooksRouting,
     createPluginUpdateOperations(hooksRouting, completionCache).updatePlugins,
   );
-  const command = mock.commands.get("claude:plugin");
+  const command = piHost.commands.get("claude:plugin");
   assert.ok(command);
   const { ctx, notifications } = makeCtx(cwd);
   return { command, ctx, notifications, gitCalls: git.state.calls };

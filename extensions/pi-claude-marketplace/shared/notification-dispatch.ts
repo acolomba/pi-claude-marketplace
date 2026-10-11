@@ -22,7 +22,7 @@ import {
   presentReconcileApplied,
   presentUpdateNoOp,
 } from "./notification-present.ts";
-import { resolveRawSurface } from "./notification-resolve.ts";
+import { mcpConfigNoticeSurfaces, resolveRawSurface } from "./notification-resolve.ts";
 import { COMMAND_DELIVERY, requireNotificationMode } from "./notification-run.ts";
 import { composeRetainedWorkflowsAdvisories } from "./notification-summary.ts";
 
@@ -46,6 +46,8 @@ import type {
   DeviceFlowPrompt,
   HookSurface,
   LoadSurface,
+  McpConfigNotice,
+  McpMigrationReport,
   NotificationMessage,
   ReconcileAppliedCascadeMessage,
   RetainedWorkflowStaging,
@@ -57,6 +59,12 @@ import type { NotificationContext } from "../platform/pi-api.ts";
 function isCommandOutcome(
   presentation: NotificationPresentation | ResolvedRawSurface | CommandErrorPresentation,
 ): boolean {
+  return "envelope" in presentation
+    ? isStructuredOutcome(presentation)
+    : isRawOutcome(presentation);
+}
+
+function isStructuredOutcome(presentation: NotificationPresentation): boolean {
   switch (presentation.kind) {
     case "cascade":
     case "marketplace-info":
@@ -67,17 +75,26 @@ function isCommandOutcome(
     case "reconcile-pending-empty":
     case "prune-empty":
     case "prune-committed-warning":
+      return true;
+    case "reconcile-applied-cascade":
+      return false;
+  }
+}
+
+function isRawOutcome(presentation: ResolvedRawSurface | CommandErrorPresentation): boolean {
+  switch (presentation.kind) {
     case "usage-error":
     case "usage-info":
     case "internal-error":
       return true;
     case "diagnostic":
     case "device-flow-prompt":
-    case "reconcile-applied-cascade":
     case "reconcile-aborted":
     case "plugin-path-skipped":
     case "async-rewake-summary":
     case "stop-override-cap":
+    case "mcp-config-notices":
+    case "mcp-migration":
       return false;
   }
 }
@@ -109,7 +126,8 @@ function commandStateFor(run: NotificationRun): CommandRunState | undefined {
  *    per-row field, reduced to the envelope's severity at resolve time
  *    (SEV-02). The command's run supplies the soft-dep snapshot (D-05).
  *  - The raw-surface path. Each helper builds one `RawSurface` kind, which
- *    `resolveRawSurface` serializes before transport selection (D-13).
+ *    `resolveRawSurface` serializes before transport selection (D-13). The MCP
+ *    config notice helper builds one per non-empty notice section.
  *    Usage helpers receive the command run for the entry sink (D-05-05).
  *
  * The fallow rule `architecture/notify-chokepoint` excludes this file, so it
@@ -329,6 +347,45 @@ export function notifyDeviceFlowPrompt(
       userCode: prompt.userCode,
     }),
   );
+}
+
+/**
+ * AFILE-04 / AFILE-02 / AFILE-06 / AVAR-04 / ANAME-07 / AMIG-01: the one
+ * surface for MCP config notices. Bridges report the facts and orchestrators
+ * call this after their own row. It emits one `mcp-config-notices` kind per
+ * non-empty section, in section order (comments-dropped, left-unchanged,
+ * override-kept, variables-missing, credentials-blanked,
+ * tool-rules-unenforced, leftover-removed), at `"warning"` severity. An empty
+ * list emits nothing. The origin is the caller's run: a command, or the load
+ * pass.
+ */
+export function notifyMcpConfigNotices(
+  ctx: NotificationContext,
+  run: NotificationRun,
+  notices: readonly McpConfigNotice[],
+): void {
+  for (const surface of mcpConfigNoticeSurfaces(notices)) {
+    emitPresentation(ctx, run, resolveRawSurface(surface));
+  }
+}
+
+/**
+ * AMIG-01 / AMIG-03 / AMIG-04: the one migration notice per reload, covering
+ * both scopes, as the load-origin `mcp-migration` kind (D-14). With no row it
+ * emits the notices as `notifyMcpConfigNotices` does, so a written file's
+ * facts still reach the user, and with neither it emits nothing.
+ */
+export function notifyMcpMigration(
+  ctx: NotificationContext,
+  run: NotificationRun,
+  report: McpMigrationReport,
+): void {
+  if (report.rows.length === 0) {
+    notifyMcpConfigNotices(ctx, run, report.notices);
+    return;
+  }
+
+  emitLoadSurface(ctx, run, { kind: "mcp-migration", rows: report.rows, notices: report.notices });
 }
 
 /**

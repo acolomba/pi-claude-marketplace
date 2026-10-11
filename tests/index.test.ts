@@ -52,8 +52,12 @@ import * as entryModule from "../extensions/pi-claude-marketplace/index.ts";
 import { loadState } from "../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { EXTENSION_VERSION } from "../extensions/pi-claude-marketplace/shared/extension-version.ts";
 
+import {
+  buildInstalledPluginRecord,
+  mergeMarketplaceIntoState,
+} from "./edge/handlers/marketplace-seed.ts";
 import { createJsonCapture } from "./edge/json-capture.ts";
-import { createNotificationBoundary } from "./edge/notification-boundary.ts";
+import { createNotificationBoundary, expectSoftDepProbes } from "./edge/notification-boundary.ts";
 import { retryTree } from "./orchestrators/plugin/scope-tree-inventory.ts";
 import { createHermeticEnvironment } from "./platform/hermetic-environment.ts";
 
@@ -124,6 +128,7 @@ interface LoadedExtension {
   readonly tools: readonly (ToolRegistration | undefined)[];
   readonly ctx: ExtensionCommandContext;
   readonly notifications: readonly Notification[];
+  readonly publishStatus: (data: unknown) => void;
   readonly verifyBoundary: () => void;
 }
 
@@ -151,14 +156,17 @@ const CWD_READ_PLUGIN_PATH_RECOMPUTE = 3;
 const CWD_READS_PER_DISCOVER = 4;
 
 /**
- * `pi.getAllTools()` reads per `resources_discover` pass. The pass opens one
+ * Soft-dependency probes per `resources_discover` pass. The pass opens one
  * notification run inside the reconcile try, before the reconcile reads its
- * `cwd`, and the run probes each of the three companion targets once (D-05,
- * D-07). The reconcile cascade renders from that run, and the last-ditch and
- * plugin PATH lines are raw text, so no emission adds a read. A case that runs
- * two passes states twice this count.
+ * `cwd`, and the run takes one snapshot (D-05, D-07). The reconcile cascade
+ * renders from that run, and the last-ditch and plugin PATH lines are raw text,
+ * so no emission adds a probe. A case that runs two passes states twice this
+ * count.
  */
-const TOOL_READS_PER_DISCOVER = 3;
+const PROBES_PER_DISCOVER = 1;
+
+/** `ctx.mode` reads per `resources_discover` pass: one before each load stage. */
+const MODE_READS_PER_DISCOVER = 3;
 
 /** The cascade the reconcile renders for a project scope whose state is unreadable. */
 const RECONCILE_CASCADE_FOR_UNREADABLE_STATE =
@@ -240,7 +248,13 @@ async function createHermeticScope(t: TestContext, label: string): Promise<Herme
   const { agentDir, cwd, home } = await createHermeticEnvironment(t, `index-${label}-`);
   const processRoot = await mkdtemp(path.join(tmpdir(), `index-${label}-process-`));
   const previousCwd = process.cwd();
-  const tracked = ["PATH", "PI_CLAUDE_MARKETPLACE_PATH", ...SESSION_ENV_KEYS];
+  const tracked = [
+    "PATH",
+    "PI_CLAUDE_MARKETPLACE_PATH",
+    "PI_CLAUDE_MARKETPLACE_EMPTY",
+    "CLAUDE_PROJECT_DIR",
+    ...SESSION_ENV_KEYS,
+  ];
   const saved = tracked.map((key) => {
     return { key, previous: process.env[key] };
   });
@@ -265,19 +279,20 @@ async function createHermeticScope(t: TestContext, label: string): Promise<Herme
  * registration, and a missing one alike. It verifies this Pi mock beside the
  * notification boundary.
  *
- * `rootReads` counts the `pi.getAllTools()` reads of the soft-dependency
- * snapshots the case's roots take. Each `resources_discover` pass that reaches
- * the reconcile takes one snapshot, and so does each registered-command
- * invocation; a snapshot reads once per companion target, three times in all
- * (D-05, D-07). A pass that stops before the reconcile and a case that
- * dispatches no command read none. A count of 0 states no expectation rather
- * than `times(0)`, so the first unwanted read fails where it happens.
+ * `probes` counts the soft-dependency snapshots the case's roots take. Each
+ * `resources_discover` pass that reaches the reconcile takes one, and so does
+ * each registered-command invocation (D-05, D-07); `expectSoftDepProbes` states
+ * the Pi reads one snapshot makes. A pass that stops before the reconcile and a
+ * case that dispatches no command take none. A count of 0 states no expectation
+ * rather than `times(0)`, so the first unwanted read fails where it happens.
+ * `modeReads` defaults to a case whose probes are all discover passes; a case
+ * that dispatches a command states it.
  */
 async function loadExtension(
   emissions: number,
-  rootReads: number,
+  probes: number,
   cwd?: { readonly value: string; readonly reads: number },
-  modeReads = emissions + rootReads,
+  modeReads = emissions + MODE_READS_PER_DISCOVER * probes,
   output?: {
     readonly appendEntry: (customType: string, payload: unknown) => void;
     readonly attempts: number;
@@ -286,16 +301,15 @@ async function loadExtension(
 ): Promise<LoadedExtension> {
   const boundary = createNotificationBoundary(emissions, cwd, modeReads);
   const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
-  if (rootReads > 0) {
-    if (output?.inventoryError !== undefined) {
-      when(() => pi.getAllTools())
-        .thenThrow(output.inventoryError)
-        .times(rootReads);
-    } else {
-      when(() => pi.getAllTools())
-        .thenReturn([])
-        .times(rootReads);
-    }
+  if (output?.inventoryError === undefined) {
+    expectSoftDepProbes(pi, probes);
+  } else if (probes > 0) {
+    when(() => pi.getAllTools())
+      .thenThrow(output.inventoryError)
+      .times(probes * 3);
+    when(() => pi.getCommands())
+      .thenThrow(output.inventoryError)
+      .times(probes);
   }
 
   if (output !== undefined && output.attempts > 0) {
@@ -305,6 +319,16 @@ async function loadExtension(
       .times(output.attempts);
   }
 
+  // ASTAT-01: the bus mock states the one subscription the factory makes, so
+  // any other bus call -- a publish included -- fails where it happens.
+  const events = mock<ExtensionAPI["events"]>({ exactParams: true, name: "event bus" });
+  const statusListener = It.willCapture<(data: unknown) => void>("mcp status listener");
+  when(() => events.on("pi-mcp-adapter/status/v1", statusListener))
+    .thenReturn(() => undefined)
+    .times(1);
+  when(() => pi.events)
+    .thenReturn(events)
+    .times(1);
   const bridgeSessionStartListener =
     It.willCapture<BridgeSessionStartListener>("bridge session start");
   when(() => {
@@ -428,7 +452,9 @@ async function loadExtension(
   const sessionEnv = sessionEnvListener.value;
   const toolCall = toolCallListener.value;
   const command = commandRegistration.value;
+  const publishStatus = statusListener.value;
   if (
+    publishStatus === undefined ||
     bridgeSessionStart === undefined ||
     discover === undefined ||
     sessionEnv === undefined ||
@@ -447,9 +473,11 @@ async function loadExtension(
     tools: [firstTool.value, secondTool.value],
     ctx: boundary.ctx,
     notifications: boundary.notifications,
+    publishStatus,
     verifyBoundary: (): void => {
       boundary.verifyBoundary();
       verify(pi);
+      verify(events);
     },
   };
 }
@@ -565,6 +593,19 @@ function contextWithoutSessionManager(ctx: ExtensionCommandContext): ExtensionCo
     get(target, property, receiver): unknown {
       if (property === "sessionManager") {
         return undefined;
+      }
+
+      return Reflect.get(target, property, receiver);
+    },
+  });
+}
+
+/** A context whose working-directory read throws. */
+function contextRefusingCwdRead(ctx: ExtensionCommandContext): ExtensionCommandContext {
+  return new Proxy(ctx, {
+    get(target, property, receiver): unknown {
+      if (property === "cwd") {
+        throw new Error("working directory refused");
       }
 
       return Reflect.get(target, property, receiver);
@@ -766,7 +807,7 @@ async function seedEnabledPlugin(
     path.join(extensionRoot, "state.json"),
     JSON.stringify({
       schemaVersion: 3,
-      ...(opts.stamped !== false && { lastReconciledExtensionVersion: EXTENSION_VERSION }),
+      ...(opts.stamped === false ? {} : { lastReconciledExtensionVersion: EXTENSION_VERSION }),
       marketplaces: {
         mp: {
           name: "mp",
@@ -976,7 +1017,7 @@ for (const mode of ["json", "rpc"]) {
       );
       const promptPath = await seedPrompt(scope.cwd, "kept.md");
       const capture = createJsonCapture();
-      const loaded = await loadExtension(0, 3, undefined, 0, {
+      const loaded = await loadExtension(0, PROBES_PER_DISCOVER, undefined, 0, {
         attempts: 3,
         appendEntry(customType, payload) {
           capture.entrySink.appendEntry(customType, payload);
@@ -1057,11 +1098,17 @@ for (const failure of ["mode", "inventory"] as const) {
     const promptPath = await seedPrompt(scope.cwd, "kept.md");
     const tree = await retryTree(scope.cwd);
     const capture = createJsonCapture();
-    const loaded = await loadExtension(0, failure === "inventory" ? 3 : 0, undefined, 0, {
-      attempts: 0,
-      appendEntry: capture.entrySink.appendEntry,
-      inventoryError: new Error("stale pi"),
-    });
+    const loaded = await loadExtension(
+      0,
+      failure === "inventory" ? PROBES_PER_DISCOVER : 0,
+      undefined,
+      0,
+      {
+        attempts: 0,
+        appendEntry: capture.entrySink.appendEntry,
+        inventoryError: new Error("stale pi"),
+      },
+    );
     const ctx = {
       get mode(): string {
         if (failure === "mode") {
@@ -1099,7 +1146,7 @@ for (const unsupportedRead of [2, 3]) {
     await seedEnabledPlugin(scope.cwd, path.join(scope.cwd, "plugin"));
     const promptPath = await seedPrompt(scope.cwd, "kept.md");
     const capture = createJsonCapture();
-    const loaded = await loadExtension(0, 3, undefined, 0);
+    const loaded = await loadExtension(0, PROBES_PER_DISCOVER, undefined, 0);
     let reads = 0;
     const ctx = {
       get mode(): string {
@@ -1137,7 +1184,7 @@ test("a refused reconcile append retains committed state and independent PATH wo
   const scope = await createHermeticScope(t, "committed-append-refusal");
   await seedEnabledPluginWithMissingDependency(scope.cwd);
   const capture = createJsonCapture();
-  const loaded = await loadExtension(0, 3, undefined, 0, {
+  const loaded = await loadExtension(0, PROBES_PER_DISCOVER, undefined, 0, {
     attempts: 2,
     appendEntry(customType, payload) {
       capture.entrySink.appendEntry(customType, payload);
@@ -1293,7 +1340,7 @@ test("MISS-01 / D-09-13: a reload event installs a missing dependency that a sta
 
   // act -- startup: the load-time check disables "plug", "helper" untouched.
   process.chdir(startupCwd);
-  const startup = await loadExtension(1, 3);
+  const startup = await loadExtension(1, 1);
   await startup.discover(discoverEvent(startupCwd, "startup"), startup.ctx);
 
   // assert
@@ -1304,7 +1351,7 @@ test("MISS-01 / D-09-13: a reload event installs a missing dependency that a sta
 
   // act -- reload: the missing dependency installs and "plug" stays up.
   process.chdir(reloadCwd);
-  const reload = await loadExtension(1, 3);
+  const reload = await loadExtension(1, 1);
   await reload.discover(discoverEvent(reloadCwd, "reload"), reload.ctx);
 
   // assert
@@ -1313,6 +1360,79 @@ test("MISS-01 / D-09-13: a reload event installs a missing dependency that a sta
   assert.equal(afterReload.marketplaces["mp"]?.plugins["helper"]?.enabled, true);
   assert.equal(afterReload.marketplaces["mp"]?.plugins["plug"]?.enabled, true);
   reload.verifyBoundary();
+});
+
+/**
+ * ASTAT-01: record an enabled project-scope plugin "hello" whose installation
+ * wrote the MCP server "srv". The marketplace declares no plugin, so info
+ * renders the record's own inventory under `{not in manifest}`.
+ */
+async function seedRecordedMcpPlugin(cwd: string): Promise<void> {
+  const extensionRoot = path.join(cwd, ".pi", "pi-claude-marketplace");
+  const marketplaceRoot = path.join(cwd, "mp-src");
+  const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
+  await mkdir(extensionRoot, { recursive: true });
+  await mkdir(path.dirname(manifestPath), { recursive: true });
+  await writeFile(manifestPath, JSON.stringify({ name: "mp", plugins: [] }), "utf8");
+  const hello = buildInstalledPluginRecord(
+    { version: "1.0.0" },
+    { skills: [], prompts: [], agents: [], mcpServers: ["srv"], hooks: [], workflows: [] },
+  );
+  await mergeMarketplaceIntoState(extensionRoot, "mp", {
+    name: "mp",
+    scope: "project",
+    source: { kind: "path", raw: "./mp-src", logical: "./mp-src" },
+    addedFromCwd: cwd,
+    manifestPath,
+    marketplaceRoot,
+    plugins: { hello },
+  });
+}
+
+test("ASTAT-01: /claude:plugin info shows the status pi-mcp-adapter last published, and a fresh extension load starts with none", async (t) => {
+  // arrange
+  const scope = await createHermeticScope(t, "mcp-status");
+  await seedRecordedMcpPlugin(scope.cwd);
+  const first = await loadExtension(2, 2, { value: scope.cwd, reads: 2 }, 6);
+
+  // act
+  await first.command.handler("info hello@mp --scope project", first.ctx);
+  first.publishStatus({
+    version: 1,
+    servers: [{ name: "plugin_hello_srv_", status: "connected" }],
+  });
+  await first.command.handler("info hello@mp --scope project", first.ctx);
+  const reloaded = await loadExtension(1, 1, { value: scope.cwd, reads: 1 }, 3);
+  await reloaded.command.handler("info hello@mp --scope project", reloaded.ctx);
+
+  // assert
+  assert.deepStrictEqual(first.notifications, [
+    {
+      message:
+        "● mp [project] <no autoupdate>\n" +
+        "  ● hello v1.0.0 (installed) {not in manifest}\n" +
+        "    mcp: plugin:hello:srv (status unknown)\n" +
+        "    requires: pi-mcp-adapter (missing)",
+    },
+    {
+      message:
+        "● mp [project] <no autoupdate>\n" +
+        "  ● hello v1.0.0 (installed) {not in manifest}\n" +
+        "    mcp: plugin:hello:srv (connected)\n" +
+        "    requires: pi-mcp-adapter (missing)",
+    },
+  ]);
+  assert.deepStrictEqual(reloaded.notifications, [
+    {
+      message:
+        "● mp [project] <no autoupdate>\n" +
+        "  ● hello v1.0.0 (installed) {not in manifest}\n" +
+        "    mcp: plugin:hello:srv (status unknown)\n" +
+        "    requires: pi-mcp-adapter (missing)",
+    },
+  ]);
+  first.verifyBoundary();
+  reloaded.verifyBoundary();
 });
 
 test("keeps hook routing and command completion state inside each extension-load owner graph", async (t) => {
@@ -1324,9 +1444,9 @@ test("keeps hook routing and command completion state inside each extension-load
   await seedBlockingHookPlugin(ownerCwd);
   const ownerMarketplace = await seedMarketplaceSource(ownerCwd, "owned-rows", "hello");
   process.chdir(ownerCwd);
-  // Three tool reads: the command's notification run is the only probe, and the
-  // add notification renders from its snapshot (D-05).
-  const owner = await loadExtension(1, 3, { value: ownerCwd, reads: 1 }, 3);
+  // One probe: the command's notification run is the only one, and the add
+  // notification renders from its snapshot (D-05).
+  const owner = await loadExtension(1, 1, { value: ownerCwd, reads: 1 }, 3);
   const ownerHookContext = hookContext(ownerCwd, "owner-graph-session");
   await owner.bridgeSessionStart({ type: "session_start", reason: "startup" }, ownerHookContext);
   const toolEvent: ToolCallEvent = {
@@ -1373,7 +1493,7 @@ test("discovers prompts under the working directory the event names, not the one
   const scope = await createHermeticScope(t, "invocation-cwd");
   const eventPromptPath = await seedPrompt(scope.cwd, "event-cwd.md");
   await seedPrompt(process.cwd(), "process-cwd.md");
-  const { discover, ctx, verifyBoundary } = await loadExtension(0, TOOL_READS_PER_DISCOVER);
+  const { discover, ctx, verifyBoundary } = await loadExtension(0, PROBES_PER_DISCOVER);
   const expectedDiscovery: ResourcesDiscoverResult = {
     skillPaths: [],
     promptPaths: [eventPromptPath],
@@ -1392,7 +1512,7 @@ test("leaves both scope roots untouched and emits nothing when a pristine worksp
   const scope = await createHermeticScope(t, "pristine");
   const { discover, ctx, notifications, verifyBoundary } = await loadExtension(
     0,
-    TOOL_READS_PER_DISCOVER,
+    PROBES_PER_DISCOVER,
   );
 
   // act
@@ -1412,7 +1532,7 @@ test("appends the recorded plugin's binaries to the process PATH and records the
   const resolvedSource = path.join(scope.cwd, "vendored-plugin");
   const binDir = path.join(resolvedSource, "bin");
   await seedEnabledPlugin(scope.cwd, resolvedSource);
-  const { discover, ctx, verifyBoundary } = await loadExtension(0, TOOL_READS_PER_DISCOVER);
+  const { discover, ctx, verifyBoundary } = await loadExtension(0, PROBES_PER_DISCOVER);
   process.env.PATH = "/usr/bin";
   Reflect.deleteProperty(process.env, "PI_CLAUDE_MARKETPLACE_PATH");
   const expectedPath = `/usr/bin${path.delimiter}${binDir}`;
@@ -1448,7 +1568,7 @@ test(
     await writeFile(path.join(skillPath, "SKILL.md"), "---\nname: recovered-skill\n---\nbody\n");
     const { discover, ctx, notifications, verifyBoundary } = await loadExtension(
       0,
-      2 * TOOL_READS_PER_DISCOVER,
+      2 * PROBES_PER_DISCOVER,
     );
     process.env.PATH = "/usr/bin";
     Reflect.deleteProperty(process.env, "PI_CLAUDE_MARKETPLACE_PATH");
@@ -1541,7 +1661,7 @@ test("reports the scope whose install state it cannot read once as a reconcile f
   const statePath = await seedUnreadableState(scope.cwd);
   const { discover, ctx, notifications, verifyBoundary } = await loadExtension(
     2,
-    TOOL_READS_PER_DISCOVER,
+    PROBES_PER_DISCOVER,
   );
   const expectedNotifications: readonly Notification[] = [
     { message: RECONCILE_CASCADE_FOR_UNREADABLE_STATE, severity: "error" },
@@ -1590,7 +1710,7 @@ test("converges silently over a recorded plugin whose marketplace source is abse
   // bounding what the scan produced. The landed stamp is what carries the claim.
   const { discover, ctx, notifications, verifyBoundary } = await loadExtension(
     0,
-    TOOL_READS_PER_DISCOVER,
+    PROBES_PER_DISCOVER,
   );
   const statePath = path.join(scope.cwd, ".pi", "pi-claude-marketplace", "state.json");
 
@@ -1624,7 +1744,7 @@ test("still answers when the deferred project-scope hydrate fails (NFR-2)", asyn
   await seedInvalidConfig(scope.cwd);
   const { discover, ctx, notifications, verifyBoundary } = await loadExtension(
     1,
-    TOOL_READS_PER_DISCOVER,
+    PROBES_PER_DISCOVER,
   );
   process.env.PATH = "/usr/bin";
   Reflect.deleteProperty(process.env, "PI_CLAUDE_MARKETPLACE_PATH");
@@ -1658,7 +1778,7 @@ test("still answers when the reconcile fails (NFR-2)", async (t) => {
   await seedEnabledPlugin(scope.cwd, resolvedSource);
   const { discover, ctx, notifications, verifyBoundary } = await loadExtension(
     1,
-    TOOL_READS_PER_DISCOVER,
+    PROBES_PER_DISCOVER,
   );
   process.env.PATH = "/usr/bin";
   Reflect.deleteProperty(process.env, "PI_CLAUDE_MARKETPLACE_PATH");
@@ -1694,7 +1814,7 @@ test("still answers when the plugin PATH recompute fails (NFR-2)", async (t) => 
   await seedEnabledPlugin(scope.cwd, resolvedSource);
   const { discover, ctx, notifications, verifyBoundary } = await loadExtension(
     0,
-    TOOL_READS_PER_DISCOVER,
+    PROBES_PER_DISCOVER,
   );
   process.env.PATH = "/usr/bin";
   Reflect.deleteProperty(process.env, "PI_CLAUDE_MARKETPLACE_PATH");
@@ -1720,7 +1840,7 @@ test("reports an aborted reconcile as one raw error line and still answers (NFR-
   await seedInvalidConfig(scope.cwd);
   const { discover, ctx, verifyBoundary } = await loadExtension(
     0,
-    TOOL_READS_PER_DISCOVER,
+    PROBES_PER_DISCOVER,
     undefined,
     5,
   );
@@ -1753,7 +1873,7 @@ test("still answers when the last-ditch reconcile notification is also refused (
   await seedInvalidConfig(scope.cwd);
   const { discover, ctx, verifyBoundary } = await loadExtension(
     0,
-    TOOL_READS_PER_DISCOVER,
+    PROBES_PER_DISCOVER,
     undefined,
     5,
   );
@@ -1779,7 +1899,7 @@ test("still answers when the plugin PATH warning notification is refused (NFR-2)
   const statePath = await seedUnreadableState(scope.cwd);
   const { discover, ctx, verifyBoundary } = await loadExtension(
     0,
-    TOOL_READS_PER_DISCOVER,
+    PROBES_PER_DISCOVER,
     undefined,
     6,
   );
@@ -1824,7 +1944,7 @@ test("attempts every skipped-scope PATH warning when every host notification thr
   process.env.PI_CLAUDE_MARKETPLACE_PATH = [staleUserBin, staleProjectBin].join(path.delimiter);
   const { discover, ctx, verifyBoundary } = await loadExtension(
     0,
-    2 * TOOL_READS_PER_DISCOVER,
+    2 * PROBES_PER_DISCOVER,
     undefined,
     10,
   );
@@ -1875,8 +1995,13 @@ test("attempts every skipped-scope PATH warning when every host notification thr
 
 test("applies the three Claude-Code session variables from the session id (SENV-01/02/03)", async (t) => {
   // arrange
-  await createHermeticScope(t, "session-env");
-  const { sessionEnv, ctx, verifyBoundary } = await loadExtension(0, 0, undefined, 1);
+  const scope = await createHermeticScope(t, "session-env");
+  const { sessionEnv, ctx, verifyBoundary } = await loadExtension(
+    0,
+    0,
+    { value: scope.cwd, reads: 1 },
+    1,
+  );
   const sessionCtx = contextWithSessionId(ctx, () => "session-1");
   const expectedSessionEnv = ["1", "session-1", "session-1"];
 
@@ -1893,8 +2018,13 @@ test("applies the three Claude-Code session variables from the session id (SENV-
 
 test("leaves the session variables alone when the session id cannot be read (WR-02)", async (t) => {
   // arrange
-  await createHermeticScope(t, "session-env-refused");
-  const { sessionEnv, ctx, verifyBoundary } = await loadExtension(0, 0, undefined, 1);
+  const scope = await createHermeticScope(t, "session-env-refused");
+  const { sessionEnv, ctx, verifyBoundary } = await loadExtension(
+    0,
+    0,
+    { value: scope.cwd, reads: 1 },
+    1,
+  );
   const sessionCtx = contextWithSessionId(ctx, () => {
     throw new Error("session id refused");
   });
@@ -1917,8 +2047,13 @@ test("leaves the session variables alone when the session id cannot be read (WR-
 
 test("leaves the session variables alone when there is no session manager (WR-02)", async (t) => {
   // arrange
-  await createHermeticScope(t, "session-env-absent");
-  const { sessionEnv, ctx, verifyBoundary } = await loadExtension(0, 0, undefined, 1);
+  const scope = await createHermeticScope(t, "session-env-absent");
+  const { sessionEnv, ctx, verifyBoundary } = await loadExtension(
+    0,
+    0,
+    { value: scope.cwd, reads: 1 },
+    1,
+  );
   const sessionCtx = contextWithoutSessionManager(ctx);
   for (const key of SESSION_ENV_KEYS) {
     Reflect.deleteProperty(process.env, key);
@@ -1933,6 +2068,95 @@ test("leaves the session variables alone when there is no session manager (WR-02
   assert.deepStrictEqual(
     SESSION_ENV_KEYS.map((key) => process.env[key]),
     expectedSessionEnv,
+  );
+  verifyBoundary();
+});
+
+test("AVAR-03: the factory sets the reserved empty variable and CLAUDE_PROJECT_DIR from the process working directory", async (t) => {
+  // arrange
+  await createHermeticScope(t, "adapter-env-factory");
+  const expectedProjectDir = process.cwd();
+  process.env.PI_CLAUDE_MARKETPLACE_EMPTY = "stale";
+  process.env.CLAUDE_PROJECT_DIR = "/work/stale";
+
+  // act
+  const { verifyBoundary } = await loadExtension(0, 0);
+
+  // assert
+  assert.deepStrictEqual(
+    [process.env.PI_CLAUDE_MARKETPLACE_EMPTY, process.env.CLAUDE_PROJECT_DIR],
+    ["", expectedProjectDir],
+  );
+  verifyBoundary();
+});
+
+test("AVAR-01: session_start refreshes CLAUDE_PROJECT_DIR from the session's cwd", async (t) => {
+  // arrange
+  const scope = await createHermeticScope(t, "adapter-env-session");
+  const { sessionEnv, ctx, verifyBoundary } = await loadExtension(
+    0,
+    0,
+    { value: scope.cwd, reads: 1 },
+    1,
+  );
+  const sessionCtx = contextWithSessionId(ctx, () => "session-1");
+  process.env.PI_CLAUDE_MARKETPLACE_EMPTY = "stale";
+  process.env.CLAUDE_PROJECT_DIR = "/work/stale";
+
+  // act
+  sessionEnv({ type: "session_start", reason: "startup" }, sessionCtx);
+
+  // assert
+  assert.deepStrictEqual(
+    [process.env.PI_CLAUDE_MARKETPLACE_EMPTY, process.env.CLAUDE_PROJECT_DIR],
+    ["", scope.cwd],
+  );
+  verifyBoundary();
+});
+
+test("AVAR-01: session_start removes CLAUDE_PROJECT_DIR for a working directory holding an adapter variable marker", async (t) => {
+  // arrange
+  await createHermeticScope(t, "adapter-env-marker");
+  const { sessionEnv, ctx, verifyBoundary } = await loadExtension(
+    0,
+    0,
+    { value: "/work/{env:SECRET}", reads: 1 },
+    1,
+  );
+  const sessionCtx = contextWithSessionId(ctx, () => "session-1");
+  process.env.PI_CLAUDE_MARKETPLACE_EMPTY = "stale";
+  process.env.CLAUDE_PROJECT_DIR = "/work/previous";
+
+  // act
+  sessionEnv({ type: "session_start", reason: "startup" }, sessionCtx);
+
+  // assert
+  assert.deepStrictEqual(
+    [process.env.PI_CLAUDE_MARKETPLACE_EMPTY, process.env.CLAUDE_PROJECT_DIR],
+    ["", undefined],
+  );
+  verifyBoundary();
+});
+
+test("NFR-2 / AVAR-01: a session context whose cwd cannot be read still empties the reserved variable, removes CLAUDE_PROJECT_DIR and does not throw", async (t) => {
+  // arrange
+  await createHermeticScope(t, "adapter-env-refused");
+  const { sessionEnv, ctx, verifyBoundary } = await loadExtension(0, 0, undefined, 1);
+  const sessionCtx = contextRefusingCwdRead(contextWithSessionId(ctx, () => "session-1"));
+  process.env.PI_CLAUDE_MARKETPLACE_EMPTY = "stale";
+  process.env.CLAUDE_PROJECT_DIR = "/work/previous";
+
+  // act
+  sessionEnv({ type: "session_start", reason: "startup" }, sessionCtx);
+
+  // assert
+  assert.deepStrictEqual(
+    [
+      process.env.PI_CLAUDE_MARKETPLACE_EMPTY,
+      process.env.CLAUDE_PROJECT_DIR,
+      ...SESSION_ENV_KEYS.map((key) => process.env[key]),
+    ],
+    ["", undefined, "1", "session-1", "session-1"],
   );
   verifyBoundary();
 });

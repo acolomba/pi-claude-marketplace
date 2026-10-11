@@ -26,14 +26,6 @@
 // the classification it is checking. Likewise every expected candidate list is
 // hand-authored, compared unsorted, and compared whole.
 //
-// This pair reads COMPLETE: `branches 114/114, functions 36/36, lines 630/630`.
-// It used to carry one uncovered branch, the right-hand side of a
-// `allTokens.at(-1) ?? ""` fallback. That expression is gone from the source --
-// `data.ts:188` now reads `const [current] = allTokens.slice(-1) as [string]`,
-// which has no second arm for V8 to report. The header paragraph that described
-// the fallback, and the brute force that measured it unreachable, both outlived
-// the code they were about.
-//
 // No exhaustiveness claim rides on this pair: `edge/completions/data.ts`
 // contains no `switch` and no closed-union dispatch, so a deleted-arm plant has
 // no target here.

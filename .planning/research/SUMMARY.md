@@ -1,192 +1,242 @@
-# Project Research Summary
+# Project Research Summary: mcp-4 (MCP 4)
 
-**Project:** pi-claude-marketplace — json-output milestone (Mode-Keyed Presentation Strategies)
-**Domain:** Brownfield Pi extension output layer — adding a versioned JSON presentation strategy alongside the byte-locked text renderer for `/claude:plugin`, selected by `ctx.mode`
-**Researched:** 2026-09-28
-**Confidence:** HIGH
-
-> Written by the orchestrator from the synthesizer's inline return (the harness
-> blocked the subagent's file write). Three corrections were applied against the
-> source files: Stack's build-order advice (it recommends signature/sink views
-> first, not last), the characterization-phase contradiction, and production
-> payload validation (an open question in STACK.md, not resolved).
+**Project:** pi-claude-marketplace
+**Milestone:** `mcp-4` (name label, not a version; branch `features/mcp-4`)
+**Domain:** Brownfield Pi extension: Pi 1.0 floor, plugin MCP delivery through pi-mcp-adapter 5
+**Researched:** 2026-10-01
+**Confidence:** HIGH on facts read from shipped code and executed in scratch copies; MEDIUM on three runtime behaviors read but not observed (see Gaps)
 
 ## Executive Summary
 
-This milestone pulls a presentation model out of a mature, byte-locked text renderer (`shared/notification-grammar.ts`, ~1655 lines, 205 catalog states) and adds a peer JSON formatter that emits a versioned typebox wire schema via `pi.appendEntry("claude-plugin", payload)`. No new dependencies are needed — `typebox ^1.1.38` (already in use) covers the schema, and the already-pinned Pi peer (`>=0.86.1`) supplies `ctx.mode` and `appendEntry`. All four researchers converged on the same shape: a `Report` model computed once (severity, reload-needed, tally, summary, composed soft-dep markers, serialized cause chains) that text and JSON format independently, with no probe or `Error`-walking left in either renderer. The wire contract should mirror the project's existing closed-set vocabulary (`Reason`, `Severity`, `PluginStatus`) verbatim rather than inventing a parallel snake_case code system the way upstream Claude Code did — upstream's `--json` output is the useful precedent for shape (envelope + `message`, typed failure codes, absolute-path leaks to avoid) but is not the transport: Pi's own `ctx.mode`/`appendEntry` machinery, not a `--json` flag, is the selection axis (D3).
+This milestone changes where and how the MCP bridge delivers plugin servers. Today it writes marked entries into Pi's `mcp.json`. Adapter 5 translates that file and drops every adapter-only field (`directTools`, `toolPrefix`, `httpTransport`, `description`). It also reports our `_piClaudeMarketplace` marker as an "ignored setting" at every start. The recommended approach, already fixed by the operator, is to write adapter-native entries into `<scopeRoot>/mcp-adapter.json`, with upstream-parity names (`plugin:<plugin>:<server>` normalized), `directTools: "search"`, Claude-rule variable expansion, live status in `info`, and an automatic `/reload` migration. Almost all of this lands on seams that already exist: the stage/commit/unstage triplet, the MC-5 marker, the reconcile per-scope loop, and the `completionCache` injection route. Three components are genuinely new: a pure entry translator, a legacy-move step, and an event-bus status tracker.
 
-The main risk is not build effort but drift and disclosure. Every researcher independently flagged the same two families of danger: (1) the two-renderer split reintroducing byte drift in the already-locked text output (catalog gate, 26,619 bytes, 205 states) because the ~50 call sites and 64 status arms are non-uniform per verb, and (2) the JSON payload persisting to the session JSONL — unlike today's ephemeral `ctx.ui.notify` string — so paths, URL userinfo, device-flow codes, and `Error` causes that were safe to *display once* become shareable artifacts that must be redacted at the model boundary, not display-time. A third, Pi-specific risk sits underneath both: Pi binds extensions and fires `session_start`/`resources_discover` *before* the JSON/RPC writer subscribes to session events, so any `appendEntry` made during that startup window is saved to the in-memory session but never streamed to `--mode json` or RPC stdout — a real regression for RPC clients, who today see that output via `ctx.ui.notify`'s live forwarding (RPC clients can recover it with `get_entries`; json-mode clients cannot). Mitigation is architectural discipline (one `resolve()` step upstream of both strategies, redaction proven by a whole-payload test, the lifecycle-timing gap decided and documented rather than raced against with timers) plus a "characterize before moving" build order that keeps `npm run check` green and the catalog byte-identical throughout.
+The Pi 1.0 floor is low risk. Production code typechecks clean on Pi 1.0.0. The only breaks are 23 type errors in four test files, and the test hunks from features/mcp `74162ca6` fix them exactly. With them applied, scratch runs passed: `tsc` exit 0, unit 8529/8529, integration 67/67, e2e 14/14. No new runtime dependency is needed. The adapter is never imported (a static import turns a soft dependency into a build dependency); status comes from the string channel `pi-mcp-adapter/status/v1` on `pi.events`.
+
+The key risks are all about shipping the entry shape once. Every shape change (name, `directTools`, escaping) invalidates the adapter's per-server state: OAuth sign-ins, project approvals, `/mcp-adapter disable` overrides, and pi-subagents `mcp:<server>` overrides are keyed by server name or definition hash. So naming, translation and variable handling must be final before migration moves a single entry, and no release may sit between delivery and migration. The other critical risks are: `mcp-adapter.json` is JSONC and must never be treated as empty and overwritten, the adapter expands values a second time with no escape in `command`/`args`/`cwd`/`url`, resolving `${VAR}` at install time would write secrets to disk, and adapter-written overlays on our names cause false collisions and get clobbered on update.
+
+## Fixed Decisions (operator, not open)
+
+- pi-mcp-adapter floor `>=5.0.0`; delivery by writing `<scopeRoot>/mcp-adapter.json` (not Pi `mcp.json`, not `registerMcpServer()`).
+- Adapter-only detection: Pi's built-in MCP does not satisfy the soft dependency.
+- pi-subagents `>=0.74.0`; Pi `>=1.0.0` (peer), dev `^1.0.0` with pi-tui `^1.0.0`.
+- Bump all devDependencies; re-verify the workflow engine (3.13.1) on Pi 1.0.
+- Adopt tool-search exposure (`directTools: "search"`), upstream `plugin:<plugin>:<server>` naming, `${VAR:-default}` parity, live status in `info`, automatic migration on `/reload`.
 
 ## Key Findings
 
-### Recommended Stack
+### Recommended Stack (STACK.md)
 
-Add nothing. `typebox ^1.1.38` (installed 1.3.31, already the house schema library in `domain/components/*.ts`) supplies `Type.Union`/`Type.Literal`-tagged discriminated unions, `Compile()` validators for tests, and JSON Schema export for free (1.x schemas are plain JSON Schema 2020-12 objects with no symbol keys — `JSON.stringify` round-trips them byte-equal). The Pi peer stays pinned at `>=0.86.1`; 0.87.1 changes nothing on the surfaces this milestone uses, so there is no reason to bump the floor. `Type.Discriminated` does not exist in typebox 1.x — the idiom is a union of literal-tagged objects, each with `additionalProperties: false`.
+Pi 1.0.0 is a drop-in for production code. No new runtime dependency: the bridge reuses `typebox`, `write-file-atomic`, `proper-lockfile`. Status uses Pi's `pi.events` bus with a locally typed, typebox-validated snapshot. Detection can use `pi.getSettings()` as an aid, but the existing probe already ignores the built-in.
 
 **Core technologies:**
-- `typebox` — versioned wire schema, `Static<>` for TS types, compiled validators for the JSON capture helper — already a dependency, no new source of truth
-- `@earendil-works/pi-coding-agent >=0.86.1` — `ctx.mode`, `pi.appendEntry`, `entry_appended` session event — every surface verified against the installed binary and a real headless `pi` run (`pi -p --mode json --no-session --offline` runs a slash command with no model/credentials; stdin must be closed)
 
-### Expected Features
+- `@earendil-works/pi-coding-agent` peer `>=1.0.0`, dev `^1.0.0` (lock 1.0.0): host API; additive delta for every re-exported symbol.
+- `@earendil-works/pi-tui` dev `^1.0.0`: keeps the type-only import in lockstep with Pi's nested copy.
+- `pi-subagents` optional peer `>=0.74.0`: ships compiled `src/agents/*.js`; both peer integration tests passed 2/2 against 0.74.0 via `PI_SUBAGENTS_ROOT`.
+- `pi-mcp-adapter` documented soft dependency `>=5.0.0`: reads `mcp-adapter.json`, maps `directTools: "search"` to Pi deferred tools, publishes status snapshots. Never a devDependency (ERESOLVE risk, native deps, D-98-10).
+- `@quintinshaw/pi-dynamic-workflows` 3.13.1: pin in `scripts/pi.sh` only; needs a live canary re-grade on Pi 1.0.
+
+**Critical version facts:**
+
+- Hold `typescript` at `^6.0.3`. `typescript@7.0.2` is npm `latest` but `typescript-eslint@8.71.0` peers `<6.1.0`, and eight `scripts/*.mjs` plus two tests import the classic compiler API that TS 7 does not export. "Bump all devDeps" carries this one exception.
+- `typescript-eslint` `^8.71.0` adds one error (`no-unsafe-enum-assignment`, `shared/notify-context.ts:345:30`), apparently a false positive. Plan a task.
+- Other devDeps: `eslint-plugin-sonarjs ^4.2.2`, `fallow ^3.31.0` (also bump the `lint.yml` action SHA to `71369f80d099e25726ad04382f15aef14a251abc`), `prettier ^3.9.9`, `globals ^17.13.0`, `eslint-plugin-import-x ^4.17.1`. Applied together in scratch: `tsc` 0, architecture 456/456, analyzers 285/285, fallow 0, format clean.
+- The adapter's optional `pi-ai` peer range stops at `^0.99.0`. It reaches Pi users only as a hard `ERESOLVE` when `pi-ai@1.x` sits at top level; `pi install` uses `--legacy-peer-deps`. Record it as an upstream gap; do not work around it.
+
+Replaying features/mcp: all five commits apply cleanly onto HEAD, but not verbatim. Reuse the `74162ca6` test hunks only (not its package hunks), change floor literals `0.99.2` -> `1.0.0` and `0.73.1` -> `0.74.0`, regenerate the lock with `npm install`, and re-derive the two `types.d.ts` contract pins (`406:5 -> 525:5`, `414:5 -> 533:5`).
+
+### Expected Features (FEATURES.md)
+
+Upstream facts were read from the Claude Code 2.1.287 binary and cross-checked against docs; adapter facts from the 5.0.0 tarball.
 
 **Must have (table stakes, all P1):**
-- Envelope with `schemaVersion` (integer) and a written additive-vs-breaking compatibility policy (unknown fields/enum members must be ignorable)
-- One discriminated union keyed by `kind`, mapped 1:1 from the existing `NotificationMessage` vocabulary plus new kinds for every D2 raw surface
-- `severity` and `needsReload` required on every payload (the only outcome channel — Pi exits 0 in print/json regardless, per D5)
-- Raw, un-abbreviated values (full version strings, full ISO dates, real booleans) — never the text form's display abbreviations
-- Explicit `scope` wherever the text form elides it (JSON must not need to reproduce the orphan-fold rule)
-- Serialized `causeChain: string[]` (with a `truncated` flag) — never a live `Error` object, which `JSON.stringify`s to `{}`
-- Typed `usage-error`/`usage-info` payloads (upstream prints nothing on usage errors; a JSON consumer needs to be able to tell a usage error from silence)
-- No new path disclosure beyond what text already shows (NFR-9) — payloads now persist to a shareable session file
-- Closed-set tokens (`Reason`, `Severity`, `scope`, `status`) emitted verbatim, never a second snake_case vocabulary
-- `origin` field distinguishing command output from load-time/hook-time output, since all three now share one event stream
-- All 8 raw surfaces get typed kinds, including the **two callers D2's own list misses** (see Cross-Cutting Findings)
-- A published schema reference doc and an in-process JSON capture helper for tests
 
-**Should have (differentiators, P2):**
-- `summary` string on warning/error payloads (a generic client that ignores `kind` still gets one human line)
-- Numeric `tally` (`{failures, warnings, successes}`)
-- Exported JSON Schema file plus a drift test
-- `id: "<name>@<marketplace>"` on plugin rows (mirrors upstream's `pluginId` convention)
+- TS-1 delivery to `mcp-adapter.json`, with a JSONC-safe read and a grown NFR-10 write set.
+- TS-2 + TS-4 upstream naming and a pinned per-server `toolPrefix`.
+- TS-3 `directTools: "search"` (map `alwaysLoad: true` to `directTools: true`).
+- TS-5 automatic migration on `/reload` (NFR-2, NFR-3).
+- TS-6 + TS-7 variable parity: install-time `${CLAUDE_PLUGIN_ROOT}`/`DATA`/project-scope `PROJECT_DIR`; plain `${VAR}` left for the adapter at runtime; `${VAR:-d}` rewritten at install time; leading `!` escaped as `!!`; Claude's field set only (not a deep walk); missing-variable warnings.
+- TS-8 collision walk following the adapter's nine sources, last-wins, overlay-aware (closes MCPSRC-01).
+- TS-9 carry user adapter overrides through re-stage.
+- TS-10 adapter-only detection pinned by a built-in-only negative test.
+- TS-11 dependency floors.
+- D-1 live adapter status in `info` (a stated milestone target).
 
-**Defer (v1.x/v2+):**
-- `invocationId` correlating multi-payload command runs (P3; RPC's `response` boundary already covers most of this)
-- Marketplace `source` field on `marketplace list` rows (upstream parity item, needs a model change text would then have to ignore)
-- Pagination, a per-command `--json` flag, a snake_case `failureCode` vocabulary, streaming progress frames, embedding rendered text in the payload — all explicitly rejected as anti-features that either duplicate a locked decision (D3) or reintroduce the exact scraping problem JSON exists to end
+**Should have (P2/P3):**
 
-### Architecture Approach
+- D-2 hooks-bridge Claude-form tool-name mapping (cheap once G-1 is decided).
+- D-3 server `description` from the manifest.
+- D-4 field translation (`sse` -> `httpTransport`, `request_timeout_ms`, OAuth callback port).
 
-Layered extraction, all new code staying inside the existing `shared/` zone (no new fallow/ESLint zone needed — a new top-level `presentation/` folder would force zone-matrix changes across three gates for no benefit). The target pipeline: **producers** (orchestrators/edge handlers, unchanged `NotificationMessage` vocabulary) → **resolve()** (one `softDepStatus` probe, severity, tally, reload flag, composed reasons, serialized causes — this is where D1's "computed upstream of rendering" lives) → **Report** (the typebox `Static` type, also the wire schema) → **`presentationFor(ctx.mode)`** exhaustive selector → **text strategy** (`notification-grammar.ts`, byte-locked) or **JSON strategy** (`notification-json.ts`, new) → single sink (`ctx.ui.notify` or `pi.appendEntry`, both still living only in `shared/notification-dispatch.ts`).
+**Defer:**
+
+- D-5 PreToolUse parity through the adapter approval broker (separate hooks milestone).
+- Upstream adapter requests: a `__` tool-separator mode (G-1) and `:-` support (G-2).
+- Credential blanking for Pi provider keys (G-5).
+
+**Rejected as anti-features:** `registerMcpServer()` delivery, dual-writing `mcp.json` and `mcp-adapter.json`, install-time resolution of every `${VAR}` (writes secrets to disk), `literalEnv: true` everywhere, runtime `:-` via `!printf`, pre-approving project servers, polling or connecting servers for status, importing the adapter's `./config` at runtime.
+
+### Architecture Approach (ARCHITECTURE.md)
+
+Keep the MCP bridge's prepare/commit/abort triplet, replacement handles and MC-5 marker (byte-stable). Use the file location as the version discriminator: entries in legacy `mcp.json` are untranslated, entries in `mcp-adapter.json` are translated, so the translator runs exactly once per move with no persisted flag (COMPAT-01 forbids a new persisted key). The migration runs as a sibling reconcile step shaped like `backfill.ts`, with its own `withStateGuard`, before `applyPlan` in each scope.
 
 **Major components:**
-1. `shared/notification-model.ts` (new) — typebox schemas, `Static` types, `SCHEMA_VERSION`
-2. `shared/notification-resolve.ts` (new) — turns `NotificationMessage` + row policy + probe into a Report; owns every presentation decision currently scattered across 64 status arms in 16 `*.messaging.ts` files
-3. `shared/notification-mode.ts` (new) — `parseExtensionMode` membership check + exhaustive `switch`, `UnsupportedModeError` on anything else
-4. `shared/notification-json.ts` (new) — pure Report→payload formatter
-5. `shared/notification-grammar.ts` (modified, largest byte-drift risk) — becomes a pure formatter of Report, taking no probe and walking no `Error`
-6. `platform/pi-api.ts` (modified) — derives `ExtensionMode` (not root-exported by the peer), adds `EntrySink`/`PresentationHost` consumer-owned views; `NotificationContext` gains a required `mode`
 
-### Critical Pitfalls
+1. `bridges/mcp/adapter-doc.ts` (new): JSONC-tolerant read, `mcpServers` vs `mcp-servers` key alias, refuse-not-replace on unparseable input, preserves every foreign key.
+2. `bridges/mcp/adapter-entry.ts` (new): one pure translator shared by stage and migrate (name, expansion/escape, `directTools: "search"`, `toolPrefix`); marker stamped by the caller.
+3. `bridges/mcp/migrate.ts` + `orchestrators/reconcile/mcp-migration.ts` (new): bridge does the two-file move with snapshot rollback and returns a rename map; the orchestrator writes `state.json` through `withStateGuard`/`tx.save`.
+4. `platform/mcp-status.ts` (new): consumer-owned typebox mirror of the status snapshot, created in `index.ts` and injected through `EdgeDeps` (like `completionCache`) into `orchestrators/plugin/info.ts`.
+5. `domain/name.ts::generatedMcpServerName` (new): the single name builder, used by the translator, `info`, the status join and hook mapping.
+6. Modified: `persistence/locations.ts` (`mcpAdapterJsonPath`; `mcpJsonPath` becomes legacy read + sweep), `stage.ts` / `unstage.ts` (adapter target, sweep both files), `collision-slots.ts` (nine-source, last-wins), `substitute.ts`, `prune-rollback.ts` (snapshot the new file), `platform/pi-api.ts` (adapter-only probe), notification types, grammar and `docs/output-catalog.md`.
 
-1. **Startup emissions never reach the JSON/RPC stream.** Pi binds extensions (firing `session_start`/`resources_discover`) before the print/RPC writer subscribes to session events, so `appendEntry` calls made during the *first* `resources_discover` are saved to the in-memory session but never appear on stdout in `--mode json` or RPC — a real regression for RPC, which today sees this via live `notify` forwarding. Must be decided and documented, not raced against with `setTimeout`. Separately, emissions after the command handler's promise settles are lost in json mode (Pi disposes the runtime).
-2. **Text byte drift hidden by fixtures that move with the code.** ~50 call sites and 64 status arms are non-uniform per verb (the same status renders through different helper functions in different commands); markers are suppressed per-verb-per-status via hard-coded `false` flags, not derived uniformly. Avoid by characterizing the full wire corpus (every `(message, severity)` pair) *before* extraction and diffing after, keeping `docs/output-catalog.md`'s byte count unchanged throughout.
-3. **Persisted leaks.** `appendEntry` data lands in the session JSONL (shareable, exportable to HTML, attachable to bug reports) — unlike today's ephemeral notify text. Absolute paths, URL userinfo, device codes, and `Error.stack` all become at-rest artifacts. Redact once at the model boundary and prove it with a whole-payload walk test; add the new sink to `CREDENTIAL_LEAK_TARGETS` (AUTH-09).
-4. **`appendEntry`/`ctx.mode` throw where `ctx.ui.notify` never did.** `ctx.ui.notify` is a no-op stub in print/json and cannot throw; `appendEntry` throws before bind and on a stale post-reload context, and `ctx.mode` is a live getter with the same stale-context throw. Long-lived callbacks (async-rewake, Stop-cap) that capture `ctx` must never let this propagate (NFR-2); `bridges/hooks/settle.ts:378` currently has no surrounding try/catch.
-5. **Unknown-mode typed error timing/lint conflict.** A `default: throw` arm on an exhaustive `ExtensionMode` switch is an ESLint error (`switch-exhaustiveness-check`, no default allowed); the fix is a `parseExtensionMode(value: unknown)` membership check before any state mutation, tested with a plain unknown string — never `as unknown as`.
+Key patterns: overlay-aware ownership partition (an entry with no `command`/`url`/`socket` is an overlay, not a collision); marker-keyed unstage (survives the rename); injected event source, never a module global; names minted in `domain/` only. The NFR-10 write set grows rather than swaps: `mcp-adapter.json` is added and `mcp.json` stays for the sweep.
 
-## Cross-Cutting Findings (converged across 3-4 researchers)
+### Critical Pitfalls (PITFALLS.md)
 
-- **Startup entries never stream (Architecture/Pitfalls/Stack, all HIGH).** `bindExtensions` fires `session_start`/`resources_discover` before `print-mode.js`/`rpc-mode.js` subscribe. RPC clients specifically lose today's `extension_ui_request` notify text, including the device-flow code — the most dangerous instance, because auth then polls until the flow times out.
-- **`appendEntry` lives only on `pi`, `mode` only on `ctx`; raw-string sites need `pi` threaded (Stack/Architecture).** ~70 structured call sites already carry `(ctx, pi)`, but the ~50 raw-string call sites (`notifyUsageError`, `notifyUsageInfo`, `notifyDiagnostic`, `makeRawNotifyFn`, `notifyAsyncRewakeSummary`, `notifyStopHookOverrideCap`) take only `ctx` today and need signature changes (router, help handler, argument parsers, auth option bags, two diagnostic helpers). `appendEntry` throws during factory-body load and on a stale `pi` after `/reload`.
-- **`makeRawNotifyFn` has three callers, not one — D2's list is incomplete (Features/Architecture/Pitfalls, all confirmed against source).** Beyond the device-flow prompt (`auth-host.ts:112`), `index.ts:128` ("reconcile aborted") and `index.ts:149` ("plugin PATH not refreshed") are the same raw callback and need kinds (`reconcile-aborted`, `plugin-path-skipped`) for "total coverage" to actually hold.
-- **Session persistence and leaks (Stack/Architecture/Pitfalls).** Payloads go into the session JSONL, are shareable/exportable (HTML export, bug-report bundles), and thereby persist absolute paths, URL userinfo, device codes, and `Error` causes that the ephemeral text form never wrote to disk. Note (Stack): for slash-command-only runs nothing is written to disk until an assistant message exists, so D4's "saved to session file" holds only for sessions with a model turn.
-- **Unknown-mode must be a `parseExtensionMode(unknown)` membership check (Pitfalls/Architecture).** ESLint forbids a `default` arm on an exhaustive switch; lifecycle handlers (`resources_discover`, hooks) must never rethrow (NFR-2) and their own fallback paths must not depend on the mode they just failed to parse. The D6 `browse` refusal, by contrast, has a strategy and should be *emitted* as an error-severity payload, not thrown (a thrown handler error reaches json consumers only on stderr).
-- **`origin`/command-id correlation (Features TS-16, Architecture, Pitfalls UX section).** All three flag the need for a machine command/verb id (not the human `Messaging.label`) so load-time, hook-time, and command-time entries in one stream can be told apart, and so `enable` can be distinguished from `install` even though both render `(installed)`.
-- **Counts vs English summary strings (Features D-1/D-2, Pitfalls #8, Architecture Report shape).** Architecture and Pitfalls insist the wire model carries decisions and counts (`severity`, `tally: {failures, warnings, successes}`, `reloadHint: boolean`), never rendered English (`summary` line text, `/reload to pick up changes` trailer, glyphs) — a wording fix in the catalog would otherwise become a breaking JSON change. Features lists a `summary` string as a P2 differentiator; this is a requirements decision.
-- **Whether production validates payloads (open — STACK.md Open Question 4).** Recommendation from the Pitfalls/Architecture analysis: compile-time `Static<typeof Schema>` typing in production; runtime `Compile().Check` only in the test capture helper, never as a pre-emit gate (a validation failure there would have to throw or drop output, both violating NFR-2).
-- **Gate traps (Pitfalls #9/#10/#12, Architecture "Gates and tests that must change").** Type-member pins (~25 coordinates) sit in every file this milestone rewrites and move on any edit or Prettier reflow; `JSON.stringify` of a model object counts as a "read" of every member for the unused-type-member gate, so the JSON converter must serialize an explicitly built DTO, never the model object itself, never with a replacer. An ESLint `appendEntry` single-site ban needs a planted-violation test (a gate is proved by planting, per house convention), matching the existing `ctx.ui.notify` ban. 23 `as unknown as ExtensionContext` casts across 9 test files currently hide a missing `mode` from the compiler and will fail only at runtime — grep for them explicitly. The new concept must never be spelled `mode` in orchestrator option bags, which already use `opts.notifications?.mode === "orchestrated"` for an unrelated concept.
-
-### Build Order — reconciled recommendation
-
-Architecture's 7-step plan and Pitfalls' "characterize first" insistence agree on substance and sequence: the model/resolve layer lands **before** any row-policy or JSON-strategy work (D1's core invariant: no probe or `Error`-walk left in rendering), and emitting through `appendEntry` comes **last**, once the model and both strategies already exist as pure functions.
-
-**Where Stack disagrees:** Stack recommends doing the *signature and sink-view* work **first** — extend the `pi-api.ts` views (`ExtensionMode`, `EntrySink`, required `mode` on `NotificationContext`) and thread `pi` into the six ctx-only raw functions — because every strategy phase depends on those types. Pitfalls adds a constraint that shapes the resolution: a new type member must land together with its first reader, or the unused-type-member gate fails. Reconciliation for the roadmapper: the type widening can only land early if something reads it (e.g. the raw surfaces consuming `pi` when they become typed kinds); otherwise it belongs with the mode-selection step. Either way, `appendEntry` emission itself stays last.
-
-1. **Characterization baseline (Pitfalls' explicit addition).** Capture the full wire corpus — every `(message, severity)` pair `notification-dispatch.ts` emits across the unit and integration suites — via throwaway, never-merged instrumentation, before touching the renderer. This is the pattern the v1.18 retrospective already validated ("characterize first, then change") and it is the only way to catch byte drift in the ~50 call sites the 205-state catalog doesn't cover (raw surfaces, diagnostic headers).
-2. **Model and resolve behind the text strategy (Architecture step 1; Pitfalls Pitfall 2 mitigation).** Add `notification-model.ts` and `notification-resolve.ts`; move the probe, markers, cause-chain/leak serialization, hints, summary facts, tally, and reload flag into resolve, with grammar formatting the Report. Keep a temporary adapter shape (`formatRow ∘ projectRow`) so the 70 existing direct-arm test calls stay green during this step — but only within this step; carrying it across a phase boundary is the dead-code-gate trap Pitfalls #11 and #12 both name.
-3. **Per-command render maps become row policies (Architecture step 2 — largest production blast radius: 16 messaging files, 12 test files, 70 assertions).** Encode the per-verb divergences (Pitfall 2's table: `disabled`'s two different helper functions, `partially-installed`'s marker-suppression exception on `list`, etc.) as data in a total policy map, not as inferred-from-verb logic in the text converter.
-4. **Raw-string surfaces into typed kinds, still text-only (Architecture step 3; Features TS-12/TS-17; closes the D2 gap including the two missed `index.ts` callers).** Structure usage-error, usage-info, diagnostic, device-code, lifecycle-warning, rewake, and stop-cap as Report kinds routed through one `present()`, before any JSON is wired.
-5. **JSON strategy as a pure function, unwired (Architecture step 4; Stack's Q5/typebox guidance).** Build `notification-json.ts` and the wire schema; validate every catalog fixture converts and passes `Compile(...).Check`. No sink call yet — satisfies the dead-code gate by having the strategy function itself be the reader.
-6. **Mode selection, host widening, and the sink (Architecture step 5 — largest test blast radius; Pitfalls #4/#5/#6/#10/#12 all land here).** `pi-api.ts` gets `mode`/`EntrySink`/`PresentationHost`; `notification-mode.ts`'s exhaustive switch and `parseExtensionMode`; thread `pi` through the ~50 raw call sites; add the ESLint `appendEntry` ban with a planted-violation test; add NFR-2 catches around every long-lived callback; make `mode` a required (never-defaulted) field on every test fake, including the 23 unsafe casts.
-7. **Browse typed error (D6) and documentation.** Route the `browse`-outside-`tui` refusal through the Report as an error-severity payload; publish the schema reference (versioning policy, print-mode silence, the RPC notify-loss decision, the startup-emission gap), and amend AGENTS.md's IL-2 line (D8).
-
-**Step 1/2 swap:** Architecture notes steps 2/3 could swap (policies before model) but rejects that ordering because it would leave the softDep probe inside rendering for a whole extra step, violating D1 earlier than necessary — Pitfalls' Pitfall 2 independently arrives at the same preference for the same reason.
+1. **JSONC wipe.** The adapter accepts comments, trailing commas and a BOM; today's `readScopedDoc` reads such a file as malformed and replaces it, destroying `settings`, `imports`, `claudePlugins` and hand-written servers. Parse with the adapter's grammar and refuse (typed error) on unparseable input. Also write into whichever of `mcpServers` / `mcp-servers` exists, or the user's servers vanish.
+2. **Half-migrated duplicates and two-`/reload` convergence.** Add to `mcp-adapter.json` first, then remove from `mcp.json`; make the pass a content-keyed fixed point; do not hang it on the backfill gate (it stamps unconditionally, so a partial failure never retries). Pi emits `session_start` before `resources_discover`, so the adapter reads config before our write: the first `/reload` still runs the old entries and the migration notice must carry the reload hint. Inject a fault between the two writes in tests.
+3. **Rename orphans per-server state.** OAuth tokens, project approvals (hash of the whole entry), `/mcp-adapter disable` overrides, `allowedServers` and pi-subagents `mcp:<server>` overrides all key on the name or definition. Rename once; the migration notice lists `old -> new`; never touch cache, keyring or approval files (NFR-10); write only when bytes change.
+4. **Second expansion by the adapter.** `command`, `args`, `cwd` and `url` have no escape; `env`/`headers`/`bearerToken` escape only `!` via `!!`. Build a per-field matrix and test it against the pinned adapter's real functions, not a re-typed copy. Warn where no escape exists; do not claim parity.
+5. **Secrets and the credential deny-list.** Never persist an environment value; apply Claude's deny-list (`ANTHROPIC_API_KEY` etc.) in `url` and `headers` and test it as a security control. This phase needs a threat model.
+6. **Overlays on our names.** `/mcp-adapter disable` and the panel write stubs and copies into the files we now own; they cause false collisions and are reverted by whole-entry replacement on update. Overlay rule in the walk plus a closed carry-forward field list.
+7. Also load-bearing: normalized names can still collide (`-` vs `_` folding), exceed 64 characters (unmeasured on Pi 1.0), and miss hook matchers; detection should add a `pi.getCommands()` `mcp-adapter` arm because `/mcp` ownership is no longer a signal; status is push-only and lazy servers rest at `cached`/`not-connected`; features/mcp fixes must be re-implemented, not cherry-picked (pins are line:col and merge-fragile; pi-subagents tests skip silently without `PI_SUBAGENTS_ROOT`).
 
 ## Implications for Roadmap
 
-### Phase 1: Characterization + Model/Resolve Extraction
-**Rationale:** Both Architecture and Pitfalls agree this must be first and isolated — it is the highest byte-drift risk step, and a wire-corpus baseline is the only way to catch regressions the 205-state catalog doesn't cover.
-**Delivers:** wire-corpus baseline (first plan of the phase); `notification-model.ts` (internal Report types), `notification-resolve.ts`; probe/marker/cause-chain computation moved upstream of rendering; catalog and wire-corpus diffs empty.
-**Addresses:** D1 (presentation model), the soft-dep marker composition (TS-8).
-**Avoids:** Pitfall 2 (byte drift), Pitfall 11 (temporary adapters outliving their phase).
+The four files agree on one dependency spine, with differences only in granularity. ARCHITECTURE.md gives six phases (floor+detect, adapter-file foundation, translation, migration, status, close-out). PITFALLS.md splits the same work into eight concerns (FLOOR, DETECT, DELIVER, NAME, VARS, MIGRATE, STATUS, DOCS) and adds the hard ordering rule that MIGRATE follows NAME and VARS with no release between DELIVER and MIGRATE. FEATURES.md puts the floor first (everything needs the Pi 1.0 deferred-tool path) and D-2/D-3/D-4 after validation. The reconciled structure below keeps ARCHITECTURE's six phases, merges DETECT into the floor phase (same file, `pi-api.ts`, pins move once), and keeps NAME and VARS together as the translation phase with an explicit measurement/spike step up front.
 
-### Phase 2: Row Policies + Raw-Surface Typing
-**Rationale:** Converts the remaining per-verb divergences and the D2 raw surfaces into data, still entirely within the text strategy, before any JSON exists — keeps blast radius contained to one representation at a time.
-**Delivers:** Row-policy maps replacing 64 status-arm renderers across 16 messaging files; typed kinds for all 8 raw surfaces including the two `index.ts` callers D2's original list missed.
-**Addresses:** TS-7 through TS-12, TS-17 (total coverage, D2).
-**Avoids:** Pitfall 9 (named-file gates breaking on relocation — inventory gates to re-point before moving code).
+### Phase 1: Pi 1.0 floor and adapter-only detection
 
-### Phase 3: JSON Wire Schema + Strategy (Unwired)
-**Rationale:** Build and validate the JSON converter as a pure function against every catalog fixture before wiring any sink, satisfying the dead-code gate and keeping the mode-selection blast radius separate.
-**Delivers:** typebox wire schema (added to `notification-model.ts`), `notification-json.ts`, schema-conformance test over all 205 fixtures with a planted failing control, redaction walk test.
-**Uses:** typebox `Type.Union`/`Type.Literal` idioms (Stack Q5), `Compile().Check`/`.Errors()` for the test-side validator.
-**Implements:** the Report-as-wire-schema abstraction (Architecture section 4).
-**Addresses:** Pitfall 3 (persisted leaks — redaction and walk test), Pitfall 7 (versioning policy, closed-set enrollment proof), Pitfall 8 (no rendered English on the wire).
+**Rationale:** Moves contract pins, peer gates and floor literals that every later phase touches; detection lives in `platform/pi-api.ts`, so the pins move once.
+**Delivers:** Pi `>=1.0.0`, pi-subagents `>=0.74.0`, all devDeps (TypeScript held), `typescript-eslint` rule resolution, re-implemented features/mcp fixes at the 1.0 floor, `scripts/pi.sh` pins (adapter 5.0.0, pi-subagents 0.74.0, engine 3.13.1), workflow-engine and Stop canaries re-run on Pi 1.0, fallow action SHA, adapter-only `hasLoadedPiMcpAdapter` (exclude `builtin:` sources; consider a `pi.getCommands()` `mcp-adapter` arm), documented adapter floor and the `pi-ai` upstream gap.
+**Addresses:** TS-10, TS-11.
+**Avoids:** Pitfalls 10, 12, 13 (zero-skip pi-subagents floor run via `PI_SUBAGENTS_ROOT`; re-derived pins; sandboxed `PI_CODING_AGENT_DIR`).
 
-### Phase 4: Mode Selection, Sink Wiring, and Test Plumbing
-**Rationale:** Largest test-file blast radius (required `mode` on every fake, ~50 `pi`-threading sites); done last so it wires already-correct, already-tested strategies rather than half-built ones.
-**Delivers:** `platform/pi-api.ts` widening (`ExtensionMode`, `EntrySink`, `PresentationHost`); `notification-mode.ts` exhaustive switch with `parseExtensionMode`; `pi.appendEntry` sink wired for json/rpc; ESLint ban + planted-violation test; NFR-2 catches around lifecycle/hook callbacks; JSON capture helper for tests.
-**Uses:** the Pi timing facts from STACK.md (Q1/Q6), the required-field discipline from PITFALLS.md Pitfall 6.
-**Avoids:** Pitfall 4 (new throw sites), Pitfall 5 (unknown-mode timing/lint), Pitfall 6 (implicit mode fallbacks), Pitfall 10 (type-member pin churn), Pitfall 12 (unbanned sink).
+### Phase 2: Adapter-file foundation
 
-### Phase 5: Browse Typed Error, Docs, and Real-Pi Verification
-**Rationale:** Closes D6 and publishes the contract; a real (non-mocked) `pi --mode json` run is the only way to pin the startup-emission gap and the RPC notify-loss consequence, both of which mock-Pi helpers cannot show.
-**Delivers:** `browse` refusal routed through the Report; schema reference doc (versioning policy, print-mode silence, startup-timing decision, RPC change); AGENTS.md IL-2 amendment; a real-Pi e2e case asserting which entries do and do not stream (and pinning `entry_appended` at the peer floor).
-**Addresses:** D6, TS-18 (published schema reference).
+**Rationale:** Highest-risk core; it must be correct before entry content changes so failures stay attributable.
+**Delivers:** `mcpAdapterJsonPath`; `adapter-doc.ts`; stage/unstage retarget with a legacy sweep of own entries in both files; overlay-aware partition and carry-forward of user fields; nine-source last-wins collision walk (closes MCPSRC-01); prune-rollback snapshot of the new file; NFR-10 text and all gate-referenced paths updated.
+**Addresses:** TS-1, TS-8, TS-9.
+**Avoids:** Pitfalls 1, 2, 3.
+
+### Phase 3: Entry translation (naming, search, variables)
+
+**Rationale:** Fixes what "translated" means before migration bakes it into users' files; a second rewrite costs users a second round of re-approvals and re-sign-ins.
+**Delivers:** `generatedMcpServerName` and `adapter-entry.ts`; `directTools: "search"` and pinned `toolPrefix`; `${VAR:-default}` parity, `!!` escaping, per-field matrix, missing-variable warnings, credential deny-list (closes MENVX-01, ENVLIT-01); `info` manifest arm mapped through the name builder; ENVDOC-01 doc rewrite.
+**Addresses:** TS-2, TS-3, TS-4, TS-6, TS-7, optionally D-2/D-3/D-4.
+**Avoids:** Pitfalls 6 (rename once), 7, 8, 9.
+
+### Phase 4: Automatic migration on `/reload`
+
+**Rationale:** Needs the final translator, since the file-location-as-discriminator pattern applies it exactly once per move.
+**Delivers:** `bridges/mcp/migrate.ts`; `reconcile/mcp-migration.ts` (own lock, called first per scope, before `applyPlan`); record renames in `state.json`; add-then-remove ordering; orphan and panel-copy handling; migration notice listing `old -> new`, re-sign-in and re-approval hints, and the reload trailer.
+**Addresses:** TS-5.
+**Avoids:** Pitfalls 3 (panel copies), 4, 5, 6.
+
+### Phase 5: Live status in `info`
+
+**Rationale:** Independent of migration; needs only final names. Can run in parallel with Phase 4.
+**Delivers:** `platform/mcp-status.ts` created in the factory and injected through `EdgeDeps`; `info` join; amended notification vocabulary and `docs/output-catalog.md`; explicit "unknown" before the first snapshot and after the empty shutdown snapshot; lazy resting states rendered as normal.
+**Addresses:** D-1.
+**Avoids:** Pitfall 11.
+
+### Phase 6: Close-out and live proof
+
+**Rationale:** Unit tests prove we wrote the file; only a real adapter 5 proves it accepts it.
+**Delivers:** README and docs (NFR-10, hooks-compatibility claim, exclusive mode, `--mcp-config`, `MCP_DIRECT_TOOLS`, project-trust prompts), live UAT in a sandboxed agent dir (adapter reads our file; seeded legacy migration with reload counting; `info` shows `connected`/`cached`; `tool_search` finds search tools with `builtin:tool-search` loaded), CHANGELOG, version-bump offer.
 
 ### Phase Ordering Rationale
 
-- Model-before-policies-before-JSON-before-sink is the ordering Architecture and Pitfalls independently converge on, for the same structural reason: each layer must be provably correct on its own before the next layer builds on it, and the byte-locked catalog gate is the regression oracle at every step until JSON is wired. Stack's signature-first advice is reconcilable (see Build Order).
-- Characterization is the first plan of Phase 1 rather than its own phase: Pitfalls treats it as a prerequisite artifact that protects every later step, and it has no deliverable of its own that ships.
-- Mode/sink wiring is deliberately late because it is the only phase that touches ~90 `NotificationContext` references and every test fake — doing it after the strategies are already correct means test failures during this phase are wiring bugs, not logic bugs.
+- Floor first because it moves pins every later phase touches and gates the deferred-tool path.
+- Foundation before translation so file-handling failures are not confused with content failures.
+- Translation before migration because migration must not run until the entry shape is final (name, `directTools`, escaping all change approval hashes and OAuth keys). Ship Phases 2 to 4 in one release.
+- Status after final names, parallel with migration.
+- Extract into `adapter-doc.ts` and `adapter-entry.ts` up front: `stage.ts` (436 lines) sits near the fallow `maxUnitSize: 60` / cognitive-15 ceilings.
 
 ### Research Flags
 
 Needs deeper research during planning:
-- **Phase 1 (Characterization + Model):** the exact per-verb suppression table (which arms pass hard-coded `false` soft-dep flags) needs to be enumerated file-by-file before writing the row-policy data structure — PITFALLS.md Pitfall 2 has a partial list but flags it as needing verification per arm.
-- **Phase 4 (Mode/Sink):** the startup-emission decision (accept-and-document vs. find-a-Pi-channel) is an open product decision, not a research gap — flag for requirements, not for `--research-phase`.
-- **Phase 5 (Real-Pi verification):** needs an e2e harness pattern using the headless `pi` invocation Stack verified (`--mode json --no-session --offline`, stdin closed), which is new to this codebase's e2e suite.
+
+- **Phase 3:** Claude Code normalization and expansion rules, the escape matrix against the pinned adapter, the 64-character tool-name behavior on Pi 1.0, the G-1 tool-name decision. Needs a measurement step and a threat model (secrets, deny-list).
+- **Phase 2:** the overlay carry-forward field list and the comment-preservation question.
+- **Phase 4:** the one-reload lag, orphan handling and panel-copy reconciliation, a fault-injection design.
 
 Standard patterns (skip research-phase):
-- **Phase 2 (Row policies):** typebox schema idioms and the total-map/`satisfies` pattern are already house convention (`domain/components/*.ts`).
-- **Phase 3 (JSON strategy):** the strategy-selector and sink patterns are fully specified by Architecture's target data-flow diagram.
+
+- **Phase 1:** mechanical; STACK.md has measured commands and a per-commit change table.
+- **Phase 5:** established injected-collaborator and closed-catalog amendment patterns.
+- **Phase 6:** docs and UAT recipe; the live-canary scratch-engine route is known.
+
+## Open Decisions for Requirements
+
+Not decided; each needs an operator or planning decision. Recommendation noted where the research gives one.
+
+1. **G-1 exact tool-name form.** Adapter `mcp` mode yields `mcp__<server>_<tool>` (single underscore); Claude yields `mcp__<server>__<tool>`. Option A (recommended by FEATURES): clean key plus hooks-bridge mapping of the known generated server names (D-2) plus an upstream adapter request. Option B (noted in ARCHITECTURE): a trailing-underscore server key (`plugin_<p>_<s>_`) with `toolPrefix: "mcp"` for exact names with no translation layer, at the cost of a trailing `_` on every adapter surface and reliance on an undocumented `formatToolName` quirk. Decide before Phase 3: changing names twice costs two sets of re-sign-ins. Needs `claude-code-compat-research` to confirm the Claude plugin tool form (MEDIUM in ARCHITECTURE).
+2. **Lifecycle (G-9).** Claude keeps plugin servers connected for the session; the adapter defaults to `lazy` with a 10-minute idle shutdown. Choose `keep-alive` (closest to upstream), leave unset (silent divergence), or per-server. Ask the user.
+3. **`${VAR:-default}` timing (G-2).** Install-time rewrite at stage (FEATURES/ARCHITECTURE recommendation; value frozen until reinstall or update), versus PITFALLS' variant of re-rendering at reconcile time (tracks env at `/reload` granularity but rewrites the file when env changes, invalidating project approval hashes, and flips between terminals with different env). Also decide how missing `${VAR}` (adapter gives `""`, Claude keeps literal) and user-scope `${CLAUDE_PROJECT_DIR}` (G-12: adapter expands the leftover literal to `""`; T-92-06 assumed literal) are handled.
+4. **Overlay fields preserved on re-stage.** At least `disabled`; candidates `includeTools`, `excludeTools`, `approveTools`, `lifecycle`, `idleTimeout`, `requestTimeoutMs`, `searchKeywords`, `debug`; `directTools` and `toolPrefix` only if they differ from what we last wrote (needs recording of stamped values). Keep the set closed (optional-field silent-omission class), record a decision ID, pin against the adapter's `ServerEntry`. Also whether to drop the whole entry on unstage (recommended) and leave unmarked overlays alone.
+5. **Orphan legacy entries.** A marked `mcp.json` entry with no owning record in that scope: leave in place with a warning (recommended: a moved orphan is unremovable by any lifecycle op) or move.
+6. **Optional peerDependency for the adapter.** `pi-mcp-adapter >=5.0.0` as an optional peer plus README (STACK recommendation, pi-subagents precedent, machine-readable floor), or README-only (if D-98-10 is read as covering peers; then add a doc-pin test).
+7. **`engines.node` floor.** Still `>=20.19.0` (NFR-4), but Pi (`>=22.19.0`) and `write-file-atomic@8` already make it unreachable. Raising it touches NFR-4; not milestone scope by default.
+8. **typescript-eslint new-rule error.** `no-unsafe-enum-assignment` fires once at `shared/notify-context.ts:345:30`. Fix in code, or disable in `eslint.config.js` with an inline justification, before the bump lands.
+9. **TypeScript held at `^6.0.3`.** Confirm the exception to "bump all devDeps". Revisit when typescript-eslint admits 7.x and the compiler-API scripts move.
+10. **Reload ordering (G-13, Pitfall 5).** Writes from `resources_discover` reach the adapter one reload late. Recommended: accept two-step convergence, put the reload hint in the migration notice, count reloads in UAT. The alternative (migrate in the extension factory) has no `ctx`, no notify and no stable order, and needs a spike.
+11. **Migration announcement.** Silent (RECON-05 style) or one notice listing renames, re-sign-ins (OAuth keyed by name) and project re-approval. Research recommends announcing.
+12. **Comment handling on rewrite.** Our writer and the adapter's own both drop JSONC comments. Warn once, or add a comment-preserving editor (`jsonc-parser`, a new runtime dependency). Also whether to keep a sibling `.bak` before the first write to a file we did not create.
+13. **Migration source.** Re-stage from the cached plugin source (offline, NFR-5-safe, recommended default) versus in-place transform; the verbatim move only when the clone is gone.
+14. **Detection depth.** Add a `pi.getCommands()` `mcp-adapter` arm and handle `disableProxyTool` and fork installs (Pitfall 10), or keep the tool-name and source probe with the built-in negative test only.
+15. **Scope of P2/P3 features.** D-2 hooks mapping (depends on item 1), D-3 `description`, D-4 field translation (`sse`, timeouts, OAuth callback port; warn for `ws` and `headersHelper`): in or out of mcp-4.
+16. **Tool names over 64 characters (G-11).** Measure on Pi 1.0 before Phase 3 planning; decide warn, refuse or ignore.
+17. **`_meta["anthropic/alwaysLoad"]` per tool (G-6), credential blanking (G-5), project-trust re-prompts (G-10).** Likely document-only; confirm.
+18. **Containment through symlinked config files.** `write-file-atomic` follows `realpath`; decide whether the NFR-10 check runs on the real path.
+19. **Scope of ported review findings from features/mcp.** IN-03 (seed `toolInfo` fixture), IN-04, IN-05 (RPC harness) and the open Stop-canary findings: deliberate scope or deferred.
+20. **Spike directory.** Rename or relocate the features/mcp spike dir named after the abandoned milestone (and its README paths) when re-applying `4f82096f`.
+21. **When `mcp.json` leaves the NFR-10 write set.** Later milestone, after the migration window.
 
 ## Confidence Assessment
 
-| Area | Confidence | Notes |
-|------|------------|-------|
-| Stack | HIGH | Every claim verified against the installed `@earendil-works/pi-coding-agent@0.86.1` source plus a real headless `pi` probe run; no third-party source needed |
-| Features | HIGH for the upstream contract and Pi transport (binary/docs agree); MEDIUM for per-verb payload mapping (derived from types and catalog, not a built prototype) | Upstream `claude` 2.1.283 binary strings + official docs cross-checked |
-| Architecture | HIGH for the inventory and Pi runtime facts (grep + source read); MEDIUM for the proposed layout (a design recommendation) | 119 call sites in 45 production files, counted and cross-checked |
-| Pitfalls | HIGH for Pi runtime facts and repo gate facts (read from tree at `ab3d9c31`); MEDIUM for typebox 1.x behavior and size estimates; LOW for anything marked "inferred" | |
+| Area         | Confidence    | Notes                                                                                                                                                                                                                    |
+| ------------ | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Stack        | HIGH          | Versions read from the registry; compatibility executed in scratch copies of HEAD (tsc, unit, integration, e2e, fallow, eslint). Live canaries on Pi 1.0 not yet run.                                                   |
+| Features     | HIGH / MEDIUM | Upstream and adapter behavior read first-hand from the Claude Code 2.1.287 binary and the adapter tarball. Ordering race and design recommendations are MEDIUM. Docs corroborate but the research seam rates WebFetch LOW. |
+| Architecture | HIGH / MEDIUM | Seams, gates and adapter behavior read from the repo and tarballs. Hooks/agents naming ripple is MEDIUM until G-1 is decided.                                                                                           |
+| Pitfalls     | HIGH / MEDIUM | Adapter and Pi behavior read from source; runtime behaviors not observed (below).                                                                                                                                        |
 
-**Overall confidence:** HIGH
+**Overall confidence:** HIGH for the floor, delivery and the migration design; MEDIUM for naming parity and reload timing.
 
 ### Gaps to Address
 
-- **Startup-emission decision (Pitfall 1 / Open Question 1 in FEATURES.md):** whether to accept the RPC startup-visibility regression and document it, or find a Pi-sanctioned channel, is unresolved and must be decided during requirements, not discovered during execution.
-- **URL userinfo stripping (Pitfall 3, Features Open Question 5):** whether a stored `url`-source marketplace's userinfo should be redacted in JSON even though the text form shows it today — a parity-vs-safety tension for requirements to settle explicitly.
-- **Device-flow behavior in `print` mode (Pitfalls Integration Gotchas):** print mode is silent by design (D5), so a device-flow prompt shown nowhere leaves the flow polling until it expires; needs a decision on whether to fail fast with a typed error when auth is needed in `print`.
-- **Whether the tool-surface projection (`edge/handlers/tools.ts`) should align with the new JSON vocabulary** (Features Pitfall 8 note) — the LLM-tool `details` mapping already diverges from raw status names (`upgradable` → `[installed]`); left as an explicit decision, not silently reconciled.
-- **Production payload validation** (STACK.md Open Question 4) and **summary string vs counts only** (Features vs Architecture) — requirements decisions.
+- **Tool-name length on Pi 1.0 (MEDIUM):** whether Pi truncates or a provider rejects names over 64 characters is unverified. Measure with a long fixture before Phase 3 planning.
+- **One-reload lag (MEDIUM):** read in source (`session_start` before `resources_discover`; adapter loads config at factory and in init) but not observed. Prove in live UAT by counting reloads.
+- **Claude plugin tool-name form (MEDIUM):** `mcp__plugin_<p>_<s>__<tool>` is corroborated by the binary and docs but flagged unverified in ARCHITECTURE; confirm with `claude-code-compat-research` before settling G-1.
+- **`directTools: "search"` under `scripts/pi.sh`:** `--no-extensions` removes `builtin:tool-search` on Pi 0.99+; confirm on 1.0.
+- **Adapter fuzzy proxy lookup of Claude-form names:** unverified.
+- **Live canaries not run:** the Stop canary and the workflow-engine canary on Pi 1.0 need a live session with the stub provider; ledger 84 (engine subagents get no tools) is still unexplained.
+- **Non-test adapter auth store in headless CI:** whether `PI_MCP_ADAPTER_TEST_AUTH_STORE=memory` is needed outside tests was not checked.
+- **Concurrent writer:** the adapter rewrites `mcp-adapter.json` with tmp+rename and no shared lock, leaving a lost-update window; keep the read-modify-write span short or document it.
 
 ## Sources
 
 ### Primary (HIGH confidence)
-- Installed `@earendil-works/pi-coding-agent@0.86.1` dist source (types.d.ts, agent-session.js, session-manager.js, print-mode.js, rpc-mode.js, extensions/loader.js, extensions/runner.js) — read directly and measured via a throwaway hermetic probe extension
-- Claude Code 2.1.283 binary (strings grepped) and https://code.claude.com/docs/en/plugins/cli-reference.md — cross-checked against each other
-- Repo at `ab3d9c31` (this worktree): `.fallowrc.json`, `eslint.config.js`, `rule-packs/architecture.json`, `sonar-project.properties`, `docs/unused-type-member-gate.md`, `tests/architecture/*`, all `shared/notification-*.ts` and `*.messaging.ts` files
-- `.planning/MILESTONE-CONTEXT.md` — locked decisions D1-D8
+
+- npm registry metadata for every package named in STACK.md (2026-10-01/02).
+- Unpacked tarballs: `@earendil-works/pi-coding-agent@1.0.0`, `pi-mcp-adapter@4.0.0` and `5.0.0` (docs, `config.ts`, `utils.ts`, `types.ts`, `server-manager.ts`, `index.ts`, `mcp-status.ts`), `pi-subagents@0.74.0`, `@quintinshaw/pi-dynamic-workflows@3.13.0/3.13.1`.
+- Scratch copies of HEAD `8b6ac3bc` with Pi 1.0.0 and all bumps: typecheck, unit, integration, e2e, architecture, analyzers, fallow, prettier, eslint, `lint:type-members`.
+- Claude Code 2.1.287 binary (naming, expansion pipeline, variable grammar, schemas).
+- Repo files and `.planning/BACKLOG.md` (MCPSRC-01, ENVLIT-01, MENVX-01, ENVDOC-01, CFGDIR-01); features/mcp commits `74162ca6`, `5b1d8ef6`, `dac3a245`, `69e0870a`, `4f82096f` and its phase records.
 
 ### Secondary (MEDIUM confidence)
-- npm 11.19.1 and gh 2.97.0 CLI behavior, probed locally
-- `docs/competitive-analysis/pi-plugins.md` (`@nklisch/pi-plugins` control channel) at commit `175142c`
-- typebox 1.3.31 behavior measured in-process (union/literal JSON output, `additionalProperties` enforcement, `.Errors()` shape)
+
+- code.claude.com/docs/en/mcp and `/plugins-reference` via WebFetch: corroborate the binary on tool search, expansion fields, credential deny-list and tool naming.
+- npm 11.19.1 `--package-lock-only` resolution experiments for the `pi-ai` peer gap.
 
 ### Tertiary (LOW confidence)
-- Terraform JSON output format and machine-readable UI docs (webfetch, used only as an analogy for versioning policy)
-- kubectl `-o json` conventions (training knowledge, not re-verified)
+
+- None relied on without a primary corroboration.
+
+Detail lives in `.planning/research/STACK.md`, `FEATURES.md`, `ARCHITECTURE.md` and `PITFALLS.md`.
 
 ---
-*Research completed: 2026-09-28*
-*Ready for roadmap: yes*
+
+*Research completed: 2026-10-01*
+*Ready for roadmap: yes, after the operator settles Open Decisions 1 to 3 (naming form, lifecycle, `:-` timing), which gate Phase 3*

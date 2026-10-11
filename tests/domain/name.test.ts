@@ -6,8 +6,12 @@ import {
   declaredAgentName,
   generatedAgentName,
   generatedCommandName,
+  foldedMcpServerKey,
+  generatedMcpServerKey,
   generatedSkillName,
   generatedWorkflowName,
+  isReservedRecordKey,
+  mcpServerDisplayName,
 } from "../../extensions/pi-claude-marketplace/domain/name.ts";
 import { UnsafeGeneratedNameError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { setCasePlatform } from "../platform/case-platform.ts";
@@ -169,6 +173,35 @@ describe("assertSafeName", () => {
         assert.strictEqual(error.message, errorMessage);
         return true;
       });
+    });
+  }
+});
+
+describe("isReservedRecordKey", () => {
+  test("D-08-07: reserves __proto__", () => {
+    // arrange
+    const name = "__proto__";
+
+    // act
+    const reserved = isReservedRecordKey(name);
+
+    // assert
+    assert.strictEqual(reserved, true);
+  });
+
+  for (const name of [
+    ...Object.getOwnPropertyNames(Object.prototype).filter((member) => member !== "__proto__"),
+    "tools",
+  ]) {
+    test(`D-08-07: leaves ${JSON.stringify(name)} a valid name`, () => {
+      // arrange
+      const recordKey = name;
+
+      // act
+      const reserved = isReservedRecordKey(recordKey);
+
+      // assert
+      assert.strictEqual(reserved, false);
     });
   }
 });
@@ -583,6 +616,89 @@ describe("declaredAgentName", () => {
         assert.strictEqual(error.message, errorMessage);
         return true;
       });
+    });
+  }
+});
+
+describe("generatedMcpServerKey", () => {
+  for (const { plugin, server, expectedKey } of [
+    { plugin: "acme", server: "db", expectedKey: "plugin_acme_db_" },
+    {
+      plugin: "my-plugin",
+      server: "database-tools",
+      expectedKey: "plugin_my-plugin_database-tools_",
+    },
+    { plugin: "acme", server: "my.api", expectedKey: "plugin_acme_my_api_" },
+    { plugin: "acme", server: "a.b:c d/e", expectedKey: "plugin_acme_a_b_c_d_e_" },
+    // Claude Code replaces UTF-16 code units, so the astral emoji's surrogate
+    // pair becomes two underscores.
+    { plugin: "acme", server: "a😀b", expectedKey: "plugin_acme_a__b_" },
+    { plugin: "acme", server: "", expectedKey: "plugin_acme__" },
+  ]) {
+    test(`ANAME-01: keys ${plugin} + ${JSON.stringify(server)} as ${expectedKey}`, () => {
+      // arrange
+      const pluginName = plugin;
+      const serverName = server;
+
+      // act
+      const serverKey = generatedMcpServerKey(pluginName, serverName);
+
+      // assert
+      assert.strictEqual(serverKey, expectedKey);
+    });
+  }
+
+  test("ANAME-01: rejects an unsafe plugin name with the shared name rules", () => {
+    // arrange
+    const plugin = "a/b";
+    const server = "db";
+
+    // act
+    const generateServerKey = () => generatedMcpServerKey(plugin, server);
+
+    // assert
+    assert.throws(generateServerKey, (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.strictEqual(error.constructor, Error);
+      assert.strictEqual(error.message, 'Name "a/b" must not contain path separators.');
+      return true;
+    });
+  });
+});
+
+describe("mcpServerDisplayName", () => {
+  for (const { plugin, server, expectedName } of [
+    { plugin: "acme", server: "my.api", expectedName: "plugin:acme:my.api" },
+    { plugin: "my-plugin", server: "a.b:c d/e", expectedName: "plugin:my-plugin:a.b:c d/e" },
+  ]) {
+    test(`ANAME-01: shows ${plugin} + ${JSON.stringify(server)} as ${expectedName}`, () => {
+      // arrange
+      const pluginName = plugin;
+      const serverName = server;
+
+      // act
+      const displayName = mcpServerDisplayName(pluginName, serverName);
+
+      // assert
+      assert.strictEqual(displayName, expectedName);
+    });
+  }
+});
+
+describe("foldedMcpServerKey", () => {
+  for (const { key, foldedKey } of [
+    { key: "plugin_my-tools_db-1_", foldedKey: "plugin_my_tools_db_1_" },
+    { key: "plugin_acme_db_", foldedKey: "plugin_acme_db_" },
+  ]) {
+    test(`ANAME-03: folds ${key} to ${foldedKey}`, () => {
+      // arrange
+      const serverKey = key;
+
+      // act
+      const folded = foldedMcpServerKey(serverKey);
+
+      // assert
+      assert.strictEqual(folded, foldedKey);
     });
   }
 });

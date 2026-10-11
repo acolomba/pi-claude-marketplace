@@ -1,9 +1,9 @@
 ---
 schema_version: 1
 open_count: 0
-waived_count: 50
-fixed_count: 39
-total_count: 89
+waived_count: 51
+fixed_count: 41
+total_count: 92
 last_updated: 2026-10-10T20:21:09.962Z
 ---
 
@@ -102,8 +102,11 @@ last_updated: 2026-10-10T20:21:09.962Z
 | 85 | 1 | unrun-verify | tests/orchestrators/marketplace/update.test.ts |  | 20 unit cases in the plugin and edge surfaces remain RED by design until plan 01-03 realigns them; whole-suite npm run test:coverage:unit exits 1 | fixed |  | 2026-09-26T03:28:56.741Z | 2026-10-10T20:21:09.247Z |
 | 86 | 01 | deviation | extensions/pi-claude-marketplace/orchestrators/plugin/info.ts |  | buildRemoteNotInstalledRow spreads a dependencies field the componentsResolved:false row shape does not carry, so the D-01-32 cold-git fallback renders nothing | fixed |  | 2026-09-13T19:27:02.848Z | 2026-09-17T16:14:30.946Z |
 | 87 | 09 | deviation | tests/orchestrators/plugin/install-flow.test.ts | 11732 | ESLint @typescript-eslint/require-await on marketplaceTagProbe (introduced by 09-03's 71dcea21); plan 09-04 defers the fix per Task 3's own instruction not to fix earlier-plan defects | fixed |  | 2026-09-22T07:47:54.363Z | 2026-09-22T08:03:16.136Z |
-| 88 | 04 | deviation | extensions/pi-claude-marketplace/shared/notification-dispatch.ts |  | [json-output] composeContextBlocks kept in dispatch: renderMpHeader and composePluginLines have no other production reader; ~110 test sites import them | waived | [json-output] Accepted design: composeContextBlocks stays in shared/notification-dispatch.ts as the one production reader of renderMpHeader and composePluginLines; removing it fails the fallow dead-code gate, 15 test files hold 138 references to the two exports, and the catalog gate pins the output bytes either way. Reversible: a later change can still move the composer. | 2026-10-03T15:02:22.034Z | 2026-10-10T20:21:09.615Z |
-| 89 | 07 | skipped-test | tests/integration/skill-path-resolution.test.ts | 124 | [json-output] Existing optional pi-subagents resolver integration case skips because its module is unavailable; no new test skip was introduced. Evidence: TEST-07-06-01 in phase deferred-items.md. | fixed |  | 2026-10-10T04:04:37.773Z | 2026-10-10T20:21:09.962Z |
+| 88 | 04 | stub | extensions/pi-claude-marketplace/bridges/mcp/substitute.ts |  | [mcp-4] VariableReport.blanked is always empty until the credential deny-list arm lands (plan 04-03) | fixed |  | 2026-10-07T16:56:58.753Z | 2026-10-07T17:39:33.278Z |
+| 89 | 04 | stub | extensions/pi-claude-marketplace/bridges/mcp/stage.ts |  | [mcp-4] prepareStageMcpServers ignores stampServers variableReports until the missing-variable notice lands (plan 04-02) | fixed |  | 2026-10-07T16:56:59.121Z | 2026-10-07T17:11:49.465Z |
+| 90 | 08 | deviation | extensions/pi-claude-marketplace/domain/dependency-closure.ts | 490 | [mcp-4] install __proto__@<mp> is refused by the closure root-key token rule as (failed) {invalid manifest} with the cause 'declares an unusable dependency (root: ...)', not the resolver's (unavailable) {unsupported source}; the same cause text reaches any root name outside the dependency token alphabet (e.g. _x@mp) | waived | [mcp-4] Carried by BACKLOG.md ROOTKEY-01 (f47a2c9e): the refusal is correct and no record or file changes; only the cause text misleads, and choosing the right verdict for an invalid root name needs an upstream check first. Not fixed in the debt phase. | 2026-10-10T06:58:57.793Z | 2026-10-10T07:14:44.742Z |
+| 91 | 04 | deviation | extensions/pi-claude-marketplace/shared/notification-dispatch.ts |  | [json-output] composeContextBlocks kept in dispatch: renderMpHeader and composePluginLines have no other production reader; ~110 test sites import them | waived | [json-output] Accepted design: composeContextBlocks stays in shared/notification-dispatch.ts as the one production reader of renderMpHeader and composePluginLines; removing it fails the fallow dead-code gate, 15 test files hold 138 references to the two exports, and the catalog gate pins the output bytes either way. Reversible: a later change can still move the composer. | 2026-10-03T15:02:22.034Z | 2026-10-10T20:21:09.615Z |
+| 92 | 07 | skipped-test | tests/integration/skill-path-resolution.test.ts | 124 | [json-output] Existing optional pi-subagents resolver integration case skips because its module is unavailable; no new test skip was introduced. Evidence: TEST-07-06-01 in phase deferred-items.md. | fixed |  | 2026-10-10T04:04:37.773Z | 2026-10-10T20:21:09.962Z |
 
 ````json
 [
@@ -1184,6 +1187,45 @@ last_updated: 2026-10-10T20:21:09.962Z
   },
   {
     "id": 88,
+    "kind": "stub",
+    "phase": "04",
+    "file": "extensions/pi-claude-marketplace/bridges/mcp/substitute.ts",
+    "line": null,
+    "description": "[mcp-4] VariableReport.blanked is always empty until the credential deny-list arm lands (plan 04-03)",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-10-07T16:56:58.753Z",
+    "resolved_at": "2026-10-07T17:39:33.278Z",
+    "milestone": null
+  },
+  {
+    "id": 89,
+    "kind": "stub",
+    "phase": "04",
+    "file": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts",
+    "line": null,
+    "description": "[mcp-4] prepareStageMcpServers ignores stampServers variableReports until the missing-variable notice lands (plan 04-02)",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-10-07T16:56:59.121Z",
+    "resolved_at": "2026-10-07T17:11:49.465Z",
+    "milestone": null
+  },
+  {
+    "id": 90,
+    "kind": "deviation",
+    "phase": "08",
+    "file": "extensions/pi-claude-marketplace/domain/dependency-closure.ts",
+    "line": 490,
+    "description": "[mcp-4] install __proto__@<mp> is refused by the closure root-key token rule as (failed) {invalid manifest} with the cause 'declares an unusable dependency (root: ...)', not the resolver's (unavailable) {unsupported source}; the same cause text reaches any root name outside the dependency token alphabet (e.g. _x@mp)",
+    "status": "waived",
+    "reason": "[mcp-4] Carried by BACKLOG.md ROOTKEY-01 (f47a2c9e): the refusal is correct and no record or file changes; only the cause text misleads, and choosing the right verdict for an invalid root name needs an upstream check first. Not fixed in the debt phase.",
+    "recorded_at": "2026-10-10T06:58:57.793Z",
+    "resolved_at": "2026-10-10T07:14:44.742Z",
+    "milestone": null
+  },
+  {
+    "id": 91,
     "kind": "deviation",
     "phase": "04",
     "file": "extensions/pi-claude-marketplace/shared/notification-dispatch.ts",
@@ -1196,7 +1238,7 @@ last_updated: 2026-10-10T20:21:09.962Z
     "milestone": null
   },
   {
-    "id": 89,
+    "id": 92,
     "kind": "skipped-test",
     "phase": "07",
     "file": "tests/integration/skill-path-resolution.test.ts",

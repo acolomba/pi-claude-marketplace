@@ -47,6 +47,7 @@ import {
   mergeMarketplaceIntoState,
 } from "../edge/handlers/marketplace-seed.ts";
 import { createHermeticEnvironment } from "../platform/hermetic-environment.ts";
+import { noStatusSnapshot } from "../platform/mcp-status-seed.ts";
 import { runWithNothingLoaded } from "../shared/notification-run-seeds.ts";
 
 import type { PluginEntry } from "../../extensions/pi-claude-marketplace/domain/components/plugin.ts";
@@ -213,7 +214,15 @@ for (const { label, prepare, resolution, notification } of [
       }),
     );
     const version = await resolvePluginVersion(ENTRY, previousResolution);
-    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+    await getPluginInfo({
+      ctx,
+      run,
+      mcpStatus: noStatusSnapshot(),
+      marketplace: "mp",
+      plugin: "alpha",
+      scope: "user",
+      cwd,
+    });
     const declaration = await readCascadeDeclaration(marketplaceRoot, cwd);
 
     // assert -- the fourth reader falls back to the ENTRY, so the bare
@@ -262,7 +271,15 @@ for (const { label, prepare } of [
     });
     requireInstallable(resolved);
     const version = await resolvePluginVersion(ENTRY, resolved);
-    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+    await getPluginInfo({
+      ctx,
+      run,
+      mcpStatus: noStatusSnapshot(),
+      marketplace: "mp",
+      plugin: "alpha",
+      scope: "user",
+      cwd,
+    });
     const declaration = await readCascadeDeclaration(marketplaceRoot, cwd);
 
     // assert
@@ -356,7 +373,15 @@ test("all four readers locate one bare manifest, and two let it outrank the entr
   const resolved = await resolveStrict(ENTRY, { marketplaceRoot, marketplaceName: "third-party" });
   requireInstallable(resolved);
   const version = await resolvePluginVersion(ENTRY, resolved);
-  await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+  await getPluginInfo({
+    ctx,
+    run,
+    mcpStatus: noStatusSnapshot(),
+    marketplace: "mp",
+    plugin: "alpha",
+    scope: "user",
+    cwd,
+  });
   const declaration = await readCascadeDeclaration(marketplaceRoot, cwd);
 
   // assert -- readers one and two found the file; readers three and four not

@@ -17,11 +17,12 @@ import { isRecordedButDisabled } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { createRemovalOps } from "../../shared/fs-utils.ts";
-import { notify } from "../../shared/notification-dispatch.ts";
+import { notify, notifyMcpConfigNotices } from "../../shared/notification-dispatch.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
 import { companionSeverity, malformedReasonsForKinds } from "../../shared/notify-reasons.ts";
+import { ownValue } from "../../shared/own-key.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
-import { cascadeUnstagePlugin, crossScopeFlag } from "../marketplace/shared.ts";
+import { cascadeUnstagePlugin, crossScopeFlag, foldUnstageNotices } from "../marketplace/shared.ts";
 
 import { readDependencyDeclaration } from "./dependency-declaration-read.ts";
 import {
@@ -76,6 +77,7 @@ import type {
   InstallPluginNotifications,
 } from "./install-outcome.ts";
 import type { InstallMsg } from "./install.messaging.ts";
+import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
 import type { ClosureLookupResult, ClosureSubject } from "../../domain/dependency-closure.ts";
 import type { PluginConfigEntry, ScopeConfig } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
@@ -84,7 +86,7 @@ import type { NotificationContext, SoftDepStatus } from "../../platform/pi-api.t
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
-import type { ContentReason } from "../../shared/notification-types.ts";
+import type { ContentReason, McpConfigNotice } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { runPhases } from "../../transaction/phase-ledger.ts";
 import type { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
@@ -304,6 +306,7 @@ type InstallLedgerCallerOptions = Pick<
  */
 function buildInstallLedgerOptions(
   opts: InstallLedgerCallerOptions,
+  env: ClaudeEnv,
   core: {
     scope: Scope;
     cwd: string;
@@ -340,6 +343,7 @@ function buildInstallLedgerOptions(
     // port as a required member, so this assembly point is the one place the real
     // operations enter the install path.
     removalOps: createRemovalOps(),
+    env,
     ...(opts.credentialOps !== undefined && { credentialOps: opts.credentialOps }),
     ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
     ...(opts.authMemo !== undefined && { authMemo: opts.authMemo }),
@@ -642,6 +646,43 @@ async function lookupCascadeDependencies(
  */
 interface CascadeFailureSink {
   subject?: CascadeFailureSubject;
+  /**
+   * AFILE-04: the notices of every MCP config rewrite that has already
+   * happened, written before the next step that can throw for the same reason
+   * as `subject`: the members that committed before a member failed, or the
+   * whole cascade, disable cascade or promotion when a later config write or
+   * the state save throws.
+   */
+  mcpConfigNotices: readonly McpConfigNotice[];
+}
+
+/**
+ * AFILE-04: the notices member an outcome carries, present only when there is
+ * a notice to carry (NREG-01).
+ */
+function mcpConfigNoticesMember(notices: readonly McpConfigNotice[]): {
+  readonly mcpConfigNotices?: readonly McpConfigNotice[];
+} {
+  return notices.length > 0 ? { mcpConfigNotices: notices } : {};
+}
+
+/**
+ * AFILE-04: a standalone install shows its MCP config notices after its own
+ * row; an orchestrated one sends nothing and leaves them to its caller. Both
+ * modes carry them on the outcome.
+ */
+function withMcpConfigNotices(
+  ctx: NotificationContext,
+  run: NotificationRun,
+  orchestrated: boolean,
+  outcome: InstallPluginOutcome,
+  notices: readonly McpConfigNotice[],
+): InstallPluginOutcome {
+  if (!orchestrated) {
+    notifyMcpConfigNotices(ctx, run, notices);
+  }
+
+  return { ...outcome, ...mcpConfigNoticesMember(notices) };
 }
 
 /**
@@ -685,6 +726,7 @@ function unwrapCascade(
 
   if (cascade.kind === "member-failed") {
     capture.rollbackPartials = [...capture.rollbackPartials, ...cascade.rollbackPartials];
+    sink.mcpConfigNotices = cascade.mcpConfigNotices;
     if (cascade.key !== rootKey) {
       sink.subject = {
         kind: "member",
@@ -845,7 +887,7 @@ function composeInstalledRow(installCtx: InstallLedgerSummary, probe: SoftDepSta
   const declaresWorkflows = installCtx.stagedWorkflowNames.length > 0;
 
   // The renderer emits the per-row soft-dep markers (`{requires
-  // pi-subagents}`, `{requires pi-mcp}`, `{requires pi-dynamic-workflows}`)
+  // pi-subagents}`, `{requires pi-mcp-adapter}`, `{requires pi-dynamic-workflows}`)
   // from this list automatically.
   const dependencies: Dependency[] = [];
   if (declaresAgents) {
@@ -971,6 +1013,8 @@ interface PromotionOutcome {
   readonly declaresMcp: boolean;
   readonly declaresWorkflows: boolean;
   readonly materialized: readonly HydratableMember[];
+  /** AFILE-04: the re-materialization's MCP config notices; empty otherwise. */
+  readonly mcpConfigNotices: readonly McpConfigNotice[];
 }
 
 interface PromotionArgs {
@@ -985,6 +1029,10 @@ interface PromotionArgs {
   };
   readonly capture: InstallFailureCapture;
   readonly transaction: InstallTransaction;
+  /** AFILE-04: receives the re-materialization's notices before the config write. */
+  readonly sink: CascadeFailureSink;
+  /** D-08-06: the environment the re-materialization stages MCP servers with. */
+  readonly env: ClaudeEnv;
 }
 
 /**
@@ -1013,7 +1061,7 @@ interface PromotionArgs {
  */
 async function promoteDependencyRecord(args: PromotionArgs): Promise<PromotionOutcome | undefined> {
   const { marketplace, plugin } = args.opts;
-  const record = args.state.marketplaces[marketplace]?.plugins[plugin];
+  const record = ownValue(ownValue(args.state.marketplaces, marketplace)?.plugins, plugin);
   if (record?.provenance !== "dependency" || refusesPromotion(args.opts, record)) {
     return undefined;
   }
@@ -1027,10 +1075,12 @@ async function promoteDependencyRecord(args: PromotionArgs): Promise<PromotionOu
       declaresMcp: record.resources.mcpServers.length > 0,
       declaresWorkflows: record.resources.workflows.length > 0,
       materialized: [],
+      mcpConfigNotices: [],
     };
   }
 
   const summary = await materializePromotedRecord(args, record);
+  args.sink.mcpConfigNotices = summary.mcpConfigNotices;
   await declarePromotedPlugin(args, { enabled: true });
   return {
     version: summary.version,
@@ -1046,6 +1096,7 @@ async function promoteDependencyRecord(args: PromotionArgs): Promise<PromotionOu
         hooksConfigPath: summary.resolved.hooksConfigPath,
       },
     ],
+    mcpConfigNotices: summary.mcpConfigNotices,
   };
 }
 
@@ -1170,6 +1221,7 @@ async function materializePromotedRecord(
       allowExistingRecord: true,
       partial: !record.compatibility.installable,
       removalOps: createRemovalOps(),
+      env: args.env,
     },
     args.capture,
     args.transaction,
@@ -1359,7 +1411,7 @@ function handleCascadeThrow(args: {
  *   PRESENT manifest), which stays `{not in manifest}` on the plugin row.
  * - `"promoted"` -- D-04-07: a recorded dependency the user has now named was
  *   promoted instead of cascaded. State was saved and any hooks hydrated
- *   inside the lock; the row is the whole report.
+ *   inside the lock; the row, then any MCP config notice, is the whole report.
  * - `"disable-cascade-failed"` -- D-102-02: the ledger succeeded and landed
  *   disabled (DFEN-04), then the disable cascade itself failed. The shrunken
  *   record is already saved inside the lock; `cause` is the cascade's own
@@ -1376,13 +1428,18 @@ type InstallTransactionOutcome =
   | { kind: "invalid-config" }
   | { kind: "marketplace-absent" }
   | { kind: "promoted"; promotion: PromotionOutcome }
-  | { kind: "disable-cascade-failed"; cause: Error }
+  | {
+      kind: "disable-cascade-failed";
+      cause: Error;
+      mcpConfigNotices: readonly McpConfigNotice[];
+    }
   | {
       kind: "installed";
       installCtx: InstallLedgerSummary;
       landedDisabled: boolean;
       members: readonly CascadeMemberOutcome[];
       alreadyInstalled: readonly CascadeSkippedMember[];
+      mcpConfigNotices: readonly McpConfigNotice[];
     };
 
 /**
@@ -1420,6 +1477,7 @@ async function installPluginWithTransaction(
   transaction: InstallTransaction,
   hooksRouting: InstallHooksRouting,
   completionCache: CompletionCache,
+  env: ClaudeEnv,
   opts: InstallPluginOptions,
 ): Promise<InstallPluginOutcome> {
   const { ctx, run, scope, cwd, marketplace, plugin } = opts;
@@ -1443,7 +1501,7 @@ async function installPluginWithTransaction(
   const capture: InstallFailureCapture = { rollbackPartials: [], version: undefined };
   // RESV-06: where the cascade leaves the failing dependency for the catch
   // block, so the failure block names it rather than the plugin the user typed.
-  const cascadeFailure: CascadeFailureSink = {};
+  const cascadeFailure: CascadeFailureSink = { mcpConfigNotices: [] };
 
   // WB-01: target-path selection happens ONCE, and both write arms below read
   // that one decision, so they cannot drift onto different files. The
@@ -1551,6 +1609,8 @@ async function installPluginWithTransaction(
           config: { current, sibling, targetConfigPath },
           capture,
           transaction,
+          sink: cascadeFailure,
+          env,
         });
         if (promotion !== undefined) {
           await tx.save();
@@ -1622,7 +1682,7 @@ async function installPluginWithTransaction(
             const isRoot = member.key === rootKey;
             const pinVersion =
               member.pin?.version ?? (isRoot ? opts.pinVersionOverride : undefined);
-            return buildInstallLedgerOptions(opts, {
+            return buildInstallLedgerOptions(opts, env, {
               scope,
               cwd,
               marketplace: member.marketplace,
@@ -1671,6 +1731,10 @@ async function installPluginWithTransaction(
           return { kind: "marketplace-absent" };
         }
 
+        // AFILE-04: the cascade has rewritten the MCP config files, and the
+        // config write-back and the state save below can still throw.
+        cascadeFailure.mcpConfigNotices = installed.mcpConfigNotices;
+
         // Success: the install context this closure just produced.
         const installCtx = installed.root;
 
@@ -1699,6 +1763,11 @@ async function installPluginWithTransaction(
         // the lock and reported to the post-guard path as its own outcome arm.
         let cascadeError: Error | undefined;
         let removeDisabledRoutesAfterSave = false;
+        // AFILE-04: the stage's notices, then the disable cascade's, which
+        // rewrites the MCP config files again when the install lands disabled.
+        // AVAR-04: the disable drops the variable notices of the servers it
+        // removed.
+        let mcpConfigNotices = installed.mcpConfigNotices;
         if (landedDisabled) {
           // D-102-01: the six-phase ledger already ran and the state phase wrote
           // `enabled: true`; the disable half runs here, after `runPhases` and
@@ -1711,6 +1780,15 @@ async function installPluginWithTransaction(
             plugin,
           });
           removeDisabledRoutesAfterSave = disableResult.removeRoutes;
+          const folded = [...mcpConfigNotices];
+          foldUnstageNotices(folded, {
+            scope: locations.scope,
+            plugin,
+            droppedServers: disableResult.droppedMcpServers,
+            notices: disableResult.mcpConfigNotices,
+          });
+          mcpConfigNotices = folded;
+          cascadeFailure.mcpConfigNotices = mcpConfigNotices;
           if (!disableResult.ok) {
             // D-102-02: record the cause and fall through. The fold already
             // subtracted what DID drop, so the `tx.save()` below persists the
@@ -1867,7 +1945,11 @@ async function installPluginWithTransaction(
         // "installed" arm's fields never carry a value the caller should
         // instead read off "disable-cascade-failed".
         if (cascadeError !== undefined) {
-          return { kind: "disable-cascade-failed", cause: cascadeError };
+          return {
+            kind: "disable-cascade-failed",
+            cause: cascadeError,
+            mcpConfigNotices,
+          };
         }
 
         return {
@@ -1876,6 +1958,7 @@ async function installPluginWithTransaction(
           landedDisabled,
           members: installed.members,
           alreadyInstalled: installed.alreadyInstalled,
+          mcpConfigNotices,
         };
       },
     );
@@ -1883,34 +1966,38 @@ async function installPluginWithTransaction(
     // RESV-06: a dependency is what failed, so the block names it. Routed here
     // rather than through the single-row path below, which would report the
     // plugin the user typed for something one of its dependencies did.
-    const subject = cascadeFailure.subject;
-    if (subject !== undefined) {
-      return handleCascadeThrow({
-        ctx,
-        run,
-        marketplace,
-        scope,
-        plugin,
-        rootKey,
-        subject,
-        orchestrated,
-      });
-    }
-
-    // Pattern S-1 single chokepoint for user-visible errors: one
+    //
+    // Otherwise, Pattern S-1 single chokepoint for user-visible errors: one
     // notify(ctx, run, ...) call carrying a per-variant
     // PluginFailedMessage / PluginUnavailableMessage. Severity derives to
     // "error" structurally and neither variant triggers the reload hint.
-    return handleInstallThrow({
-      err,
-      ctx,
-      run,
-      marketplace,
-      scope,
-      plugin,
-      capture,
-      orchestrated,
-    });
+    //
+    // AFILE-04: either way, the notices of the dependencies that committed
+    // before the failure follow the failed row.
+    const subject = cascadeFailure.subject;
+    const failed =
+      subject !== undefined
+        ? handleCascadeThrow({
+            ctx,
+            run,
+            marketplace,
+            scope,
+            plugin,
+            rootKey,
+            subject,
+            orchestrated,
+          })
+        : handleInstallThrow({
+            err,
+            ctx,
+            run,
+            marketplace,
+            scope,
+            plugin,
+            capture,
+            orchestrated,
+          });
+    return withMcpConfigNotices(ctx, run, orchestrated, failed, cascadeFailure.mcpConfigNotices);
   }
 
   // ATTR-01 / ATTR-08 / M1: marketplace-absent precondition (set inside the
@@ -1967,17 +2054,24 @@ async function installPluginWithTransaction(
 
     // D-04-07: the promotion arm. State was saved and any hooks hydrated inside
     // the lock, and the cascade never ran, so there are no post-commit warnings
-    // to collect; the row is the whole report.
+    // to collect. The row is the whole report, followed by the MCP config
+    // notices of a re-materialization (AFILE-04).
     case "promoted":
-      return promotedRowOutcome({
+      return withMcpConfigNotices(
         ctx,
         run,
-        marketplace,
-        scope,
-        plugin,
-        promotion: outcome.promotion,
         orchestrated,
-      });
+        promotedRowOutcome({
+          ctx,
+          run,
+          marketplace,
+          scope,
+          plugin,
+          promotion: outcome.promotion,
+          orchestrated,
+        }),
+        outcome.promotion.mcpConfigNotices,
+      );
 
     // D-102-02: the ledger succeeded and the disable cascade then failed. The
     // shrunken record was already saved inside the lock, so state.json describes
@@ -1990,33 +2084,39 @@ async function installPluginWithTransaction(
     // planning the disable this one could not finish.
     case "disable-cascade-failed": {
       const cause = errorMessage(outcome.cause);
-      if (orchestrated) {
-        return { status: "failed", error: outcome.cause, cause };
+      if (!orchestrated) {
+        notifyWithContext(
+          ctx,
+          run,
+          INSTALL_CONTEXT,
+          [
+            {
+              name: marketplace,
+              scope,
+              plugins: [
+                {
+                  status: "failed",
+                  severity: "error" as const,
+                  name: plugin,
+                  reasons: [] as const,
+                  cause: outcome.cause,
+                },
+              ],
+            },
+          ],
+          undefined,
+          "single",
+        );
       }
 
-      notifyWithContext(
+      // AFILE-04: the ledger rewrote the file before the disable failed.
+      return withMcpConfigNotices(
         ctx,
         run,
-        INSTALL_CONTEXT,
-        [
-          {
-            name: marketplace,
-            scope,
-            plugins: [
-              {
-                status: "failed",
-                severity: "error" as const,
-                name: plugin,
-                reasons: [] as const,
-                cause: outcome.cause,
-              },
-            ],
-          },
-        ],
-        undefined,
-        "single",
+        orchestrated,
+        { status: "failed", error: outcome.cause, cause },
+        outcome.mcpConfigNotices,
       );
-      return { status: "failed", error: outcome.cause, cause };
     }
 
     case "installed": {
@@ -2092,18 +2192,33 @@ async function installPluginWithTransaction(
         });
       }
 
-      return installedPluginOutcome(installCtx, postCommitWarnings, landedDisabled);
+      // AFILE-04: every cascade member's notices, after the block's own rows.
+      return withMcpConfigNotices(
+        ctx,
+        run,
+        orchestrated,
+        installedPluginOutcome(installCtx, postCommitWarnings, landedDisabled),
+        outcome.mcpConfigNotices,
+      );
     }
   }
 }
 
-/** Bind install orchestration to one required semantic transaction owner. */
+/**
+ * Bind install orchestration to one required semantic transaction owner.
+ *
+ * D-08-06: `env` is the environment the install stages MCP servers with. It
+ * defaults to Pi's process environment here, at the entry point, the way
+ * `createGetPluginInfo` binds it.
+ */
 export function createInstallPlugin(
   transaction: InstallTransaction,
   hooksRouting: InstallHooksRouting,
   completionCache: CompletionCache,
+  env: ClaudeEnv = process.env,
 ): (opts: InstallPluginOptions) => Promise<InstallPluginOutcome> {
-  return (opts) => installPluginWithTransaction(transaction, hooksRouting, completionCache, opts);
+  return (opts) =>
+    installPluginWithTransaction(transaction, hooksRouting, completionCache, env, opts);
 }
 
 /**
@@ -2158,6 +2273,8 @@ export type InstallMissingDependencyOutcome =
       readonly status: "installed";
       readonly members: readonly CascadeMemberOutcome[];
       readonly postCommitWarnings?: readonly string[];
+      /** AFILE-04: the cascade's MCP config notices; omitted when none (NREG-01). */
+      readonly mcpConfigNotices?: readonly McpConfigNotice[];
     } & Pick<LedgerDegradationSignals, "orphanRewake" | "degradedKinds">)
   | { readonly status: "skipped" }
   | {
@@ -2165,6 +2282,11 @@ export type InstallMissingDependencyOutcome =
       readonly error: Error;
       readonly cause: string;
       readonly reason?: "cross-marketplace";
+      /**
+       * AFILE-04: the notices of the members that committed before a later
+       * member failed; omitted when none (NREG-01).
+       */
+      readonly mcpConfigNotices?: readonly McpConfigNotice[];
     };
 
 /** Outcome of the locked closure inside `installMissingDependencyWithTransaction`. */
@@ -2174,6 +2296,7 @@ type InstallMissingDependencyTransactionOutcome =
       readonly kind: "installed";
       readonly root: InstallLedgerSummary;
       readonly members: readonly CascadeMemberOutcome[];
+      readonly mcpConfigNotices: readonly McpConfigNotice[];
     };
 
 /**
@@ -2208,6 +2331,7 @@ async function installMissingDependencyWithTransaction(
   transaction: InstallTransaction,
   hooksRouting: InstallHooksRouting,
   completionCache: CompletionCache,
+  env: ClaudeEnv,
   opts: InstallMissingDependencyOptions,
 ): Promise<InstallMissingDependencyOutcome> {
   const { ctx, run, scope, cwd, marketplace, plugin } = opts;
@@ -2216,7 +2340,7 @@ async function installMissingDependencyWithTransaction(
   // RESV-06 precedent: where the cascade leaves a failing dependency for the
   // catch block, so a nested closure/constraint failure names it rather than
   // the root this entry point was asked to install.
-  const cascadeFailure: CascadeFailureSink = {};
+  const cascadeFailure: CascadeFailureSink = { mcpConfigNotices: [] };
   const rootKey = `${plugin}@${marketplace}`;
 
   let outcome: InstallMissingDependencyTransactionOutcome;
@@ -2229,7 +2353,7 @@ async function installMissingDependencyWithTransaction(
         // pass may already have materialized this key, or it is a disabled
         // record this path leaves alone. Either way the key is already
         // recorded, so this arm saves nothing and installs nothing.
-        if (state.marketplaces[marketplace]?.plugins[plugin] !== undefined) {
+        if (ownValue(ownValue(state.marketplaces, marketplace)?.plugins, plugin) !== undefined) {
           return { kind: "already-recorded" };
         }
 
@@ -2303,7 +2427,7 @@ async function installMissingDependencyWithTransaction(
               })
             )?.sourceRecord,
           ledgerOptionsFor: (member) =>
-            buildInstallLedgerOptions(opts, {
+            buildInstallLedgerOptions(opts, env, {
               scope,
               cwd,
               marketplace: member.marketplace,
@@ -2346,10 +2470,17 @@ async function installMissingDependencyWithTransaction(
           throw cascadeFailureCause(cascadeFailure.subject, rootKey);
         }
 
+        // AFILE-04: the cascade has rewritten the MCP config files.
+        cascadeFailure.mcpConfigNotices = installed.mcpConfigNotices;
         await tx.save();
         // No `landedDisabled` filter -- nothing lands disabled here.
         await hydrateInstalledHooks({ hooksRouting, scope, cwd, members: installed.members });
-        return { kind: "installed", root: installed.root, members: installed.members };
+        return {
+          kind: "installed",
+          root: installed.root,
+          members: installed.members,
+          mcpConfigNotices: installed.mcpConfigNotices,
+        };
       },
     );
   } catch (err) {
@@ -2377,9 +2508,13 @@ async function installMissingDependencyWithTransaction(
             orchestrated: true,
           });
     assertOrchestratedFailedOutcome(failed);
+    const failedWithNotices = {
+      ...failed,
+      ...mcpConfigNoticesMember(cascadeFailure.mcpConfigNotices),
+    };
     return subject?.kind === "closure" && subject.failure.reason === "cross-marketplace"
-      ? { ...failed, reason: "cross-marketplace" }
-      : failed;
+      ? { ...failedWithNotices, reason: "cross-marketplace" }
+      : failedWithNotices;
   }
 
   if (outcome.kind === "already-recorded") {
@@ -2392,16 +2527,22 @@ async function installMissingDependencyWithTransaction(
     status: "installed",
     members: outcome.members,
     ...(warnings.length > 0 && { postCommitWarnings: warnings }),
+    ...mcpConfigNoticesMember(outcome.mcpConfigNotices),
     ...ledgerDegradationSignals(outcome.root),
   };
 }
 
-/** Bind the missing-dependency install to one required semantic transaction owner. */
+/**
+ * Bind the missing-dependency install to one required semantic transaction
+ * owner. D-08-06: `env` defaults to Pi's process environment, as it does for
+ * `createInstallPlugin`.
+ */
 export function createInstallMissingDependency(
   transaction: InstallTransaction,
   hooksRouting: InstallHooksRouting,
   completionCache: CompletionCache,
+  env: ClaudeEnv = process.env,
 ): (opts: InstallMissingDependencyOptions) => Promise<InstallMissingDependencyOutcome> {
   return (opts) =>
-    installMissingDependencyWithTransaction(transaction, hooksRouting, completionCache, opts);
+    installMissingDependencyWithTransaction(transaction, hooksRouting, completionCache, env, opts);
 }

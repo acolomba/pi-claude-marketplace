@@ -19,9 +19,8 @@
 // turns materialization on, so no positive control exists. See
 // `installNetworkCounter`. The Pi boundary states no `ctx.ui` expectation,
 // which is what proves the tools never notify. Each tool's non-empty path
-// promises exactly three `pi.getAllTools()` reads -- the one soft-dependency
-// probe of its notification run (LLMT-01) -- and every other path promises
-// none.
+// promises exactly one soft-dependency probe -- the snapshot of its
+// notification run (LLMT-01) -- and every other path promises none.
 
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -38,17 +37,16 @@ import {
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+import { expectSoftDepProbes } from "../notification-boundary.ts";
 
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import type {
-  ExtensionAPI,
-  ExtensionContext,
-} from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { ExtensionAPI } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type {
   PluginStatus,
   Reason,
 } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
+import type { ExtensionToolContext } from "@earendil-works/pi-coding-agent";
 
 /**
  * The tool definition shape `registerTool` receives, minus the two optional
@@ -73,7 +71,7 @@ type ToolRegistrar = Omit<ExtensionAPI, "registerTool"> & {
 };
 
 interface ToolBoundary {
-  readonly ctx: ExtensionContext;
+  readonly ctx: ExtensionToolContext;
   readonly pi: ExtensionAPI;
   /** Every tool definition the registration function installed, in call order. */
   readonly registrations: readonly ToolRegistration[];
@@ -81,7 +79,7 @@ interface ToolBoundary {
 }
 
 interface RegisteredToolBoundary {
-  readonly ctx: ExtensionContext;
+  readonly ctx: ExtensionToolContext;
   readonly registration: ToolRegistration;
   readonly verifyBoundary: () => void;
 }
@@ -343,9 +341,9 @@ async function seedUrlSourceMarketplace(cwd: string, name: string, raw: string):
  * fails at `verifyBoundary()`. `ctx.cwd` is promised exactly as often as the
  * case's path reads it: the marketplace existence check and the payload load
  * take one read each, and a path that short-circuits before the load takes one
- * in total. `pi.getAllTools()` is promised `inventoryReads` times, each
- * returning no tool: each tool's notification run probes the inventory three
- * times on its non-empty path, and every other path never probes it.
+ * in total. `probes` soft-dependency probes are promised, each finding no
+ * companion loaded: each tool's notification run takes one on its non-empty
+ * path, and every other path never probes.
  *
  * `ctx.ui` carries no expectation on purpose, so an attempt to notify fails
  * where it happens -- a tool returns its result and never reaches the
@@ -356,10 +354,10 @@ function createToolBoundary(
     readonly value: string;
     readonly reads: number;
   },
-  inventoryReads = 0,
+  probes = 0,
 ): ToolBoundary {
   const registrations: ToolRegistration[] = [];
-  const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
+  const ctx = mock<ExtensionToolContext>({ exactParams: true, name: "extension context" });
   const pi = mock<ToolRegistrar>({ exactParams: true, name: "extension API" });
   when(() => pi.registerTool)
     .thenReturn((tool) => {
@@ -372,11 +370,7 @@ function createToolBoundary(
       .times(cwd.reads);
   }
 
-  if (inventoryReads > 0) {
-    when(() => pi.getAllTools())
-      .thenReturn([])
-      .times(inventoryReads);
-  }
+  expectSoftDepProbes(pi, probes);
 
   return {
     ctx,
@@ -397,9 +391,9 @@ function createToolBoundary(
 function registerToolUnderTest(
   register: (pi: ExtensionAPI) => void,
   cwd?: { readonly value: string; readonly reads: number },
-  inventoryReads = 0,
+  probes = 0,
 ): RegisteredToolBoundary {
-  const boundary = createToolBoundary(cwd, inventoryReads);
+  const boundary = createToolBoundary(cwd, probes);
   register(boundary.pi);
   const [registration] = boundary.registrations;
   if (registration === undefined) {
@@ -487,7 +481,7 @@ describe("registerListMarketplacesTool", () => {
         value: scope.cwd,
         reads: 1,
       },
-      3,
+      1,
     );
     const expectedResult = {
       content: [
@@ -526,7 +520,7 @@ describe("registerListMarketplacesTool", () => {
         value: scope.cwd,
         reads: 1,
       },
-      3,
+      1,
     );
     const expectedResult = {
       content: [{ type: "text", text: `[user] dated-mp -- 0 plugin(s) -- ${datedRoot}` }],
@@ -562,7 +556,7 @@ describe("registerListMarketplacesTool", () => {
     const { ctx, registration, verifyBoundary } = registerToolUnderTest(
       registerListMarketplacesTool,
       { value: scope.cwd, reads: 1 },
-      3,
+      1,
     );
     const expectedResult = {
       content: [
@@ -1017,7 +1011,7 @@ describe("registerListPluginsTool", () => {
       const { ctx, registration, verifyBoundary } = registerToolUnderTest(
         registerListPluginsTool,
         { value: scope.cwd, reads: 1 },
-        3,
+        1,
       );
       const expectedBlock: ExpectedMarketplaceBlock = {
         name: marketplace,
@@ -1047,7 +1041,7 @@ describe("registerListPluginsTool", () => {
       const { ctx, registration, verifyBoundary } = registerToolUnderTest(
         registerListPluginsTool,
         { value: scope.cwd, reads: 1 },
-        3,
+        1,
       );
       const expectedBlock: ExpectedMarketplaceBlock = {
         name: "mixed-mp",
@@ -1091,7 +1085,7 @@ describe("registerListPluginsTool", () => {
         value: scope.cwd,
         reads: 1,
       },
-      3,
+      1,
     );
     const expectedResult = {
       content: [
@@ -1147,7 +1141,7 @@ describe("registerListPluginsTool", () => {
         value: scope.cwd,
         reads: 1,
       },
-      3,
+      1,
     );
     const expectedResult = {
       content: [
@@ -1206,7 +1200,7 @@ describe("registerListPluginsTool", () => {
         value: scope.cwd,
         reads: 1,
       },
-      3,
+      1,
     );
     const expectedResult = {
       content: [
@@ -1266,7 +1260,7 @@ describe("registerListPluginsTool", () => {
     const { ctx, registration, verifyBoundary } = registerToolUnderTest(
       registerListPluginsTool,
       { value: scope.cwd, reads: 1 },
-      3,
+      1,
     );
     const expectedResult = {
       content: [
@@ -1325,7 +1319,7 @@ describe("registerListPluginsTool", () => {
           value: scope.cwd,
           reads: 1,
         },
-        3,
+        1,
       );
       const expectedResult = {
         content: [{ type: "text", text: `Marketplace ${marketplace} (project)\n${line}` }],
@@ -1388,7 +1382,7 @@ describe("registerListPluginsTool", () => {
         value: scope.cwd,
         reads: 1,
       },
-      3,
+      1,
     );
     const expectedResult = {
       content: [{ type: "text", text: "Marketplace filtered-mp (project)" }],
@@ -1420,7 +1414,7 @@ describe("registerListPluginsTool", () => {
         value: scope.cwd,
         reads: 1,
       },
-      3,
+      1,
     );
     const expectedResult = {
       content: [{ type: "text", text: "Marketplace bare-mp (project)\n  (no plugins)" }],
@@ -1476,7 +1470,7 @@ describe("registerListPluginsTool", () => {
         value: scope.cwd,
         reads: 2,
       },
-      3,
+      1,
     );
     const expectedResult = {
       content: [
@@ -1538,7 +1532,7 @@ describe("registerListPluginsTool", () => {
         value: scope.cwd,
         reads: 1,
       },
-      3,
+      1,
     );
     const expectedResult = {
       content: [{ type: "text", text: "Marketplace user-mp (user)\n  [installed] bravo  2.0.0" }],
@@ -1655,7 +1649,7 @@ describe("registerListPluginsTool", () => {
         value: scope.cwd,
         reads: 1,
       },
-      3,
+      1,
     );
     const expectedResult = {
       content: [{ type: "text", text: "Marketplace shared-mp (user)\n  [installed] alpha  1.0.0" }],

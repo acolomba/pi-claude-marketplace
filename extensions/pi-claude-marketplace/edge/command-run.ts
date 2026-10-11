@@ -1,7 +1,7 @@
 import { notifyCommandError } from "../shared/notification-dispatch.ts";
 import { createCommandRunState, requireNotificationMode } from "../shared/notification-run.ts";
 
-import type { NotificationContext, ToolInventory } from "../platform/pi-api.ts";
+import type { NotificationContext, PiInventory } from "../platform/pi-api.ts";
 import type {
   NotificationEntrySink,
   NotificationOrigin,
@@ -12,7 +12,7 @@ import type { openNotificationRun } from "../shared/notification-run.ts";
 
 /** Runs selected command work, preserving synchronous text setup exceptions. */
 export function runCommand(
-  pi: ToolInventory & NotificationEntrySink,
+  pi: PiInventory & NotificationEntrySink,
   ctx: NotificationContext,
   commandId: string,
   execute: (run: NotificationRun) => Promise<void>,

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -121,6 +121,7 @@ async function seedLegacyAgentUpdate(t: TestContext, coexist: boolean) {
     locations,
     hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     completionCache: createCompletionCache(),
+    env: {},
     cascade: true,
     cleanupClones: () => Promise.resolve(),
   } as const;
@@ -309,7 +310,7 @@ test("AGENT-01: update retries agent migration once the occupying target is free
 });
 
 test("exposes the atomic plugin update swap owner", () => {
-  // act and assert
+  // act & assert
   assert.strictEqual(typeof swapPluginUpdate, "function");
 });
 
@@ -345,6 +346,7 @@ test("atomically replaces staged resources and finalizes the update ledger", asy
           locations,
           hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
           completionCache: createCompletionCache(),
+          env: {},
           cascade: true,
           cleanupClones: () => Promise.resolve(),
         },
@@ -412,6 +414,7 @@ test("D-10-17a: the updated outcome forwards the preflight's own constraint, key
           locations,
           hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
           completionCache: createCompletionCache(),
+          env: {},
           cascade: true,
           cleanupClones: () => Promise.resolve(),
         },
@@ -463,6 +466,7 @@ test("D-10-17a: an unconstrained update forwards constraint: undefined, key stil
           locations,
           hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
           completionCache: createCompletionCache(),
+          env: {},
           cascade: true,
           cleanupClones: () => Promise.resolve(),
         },
@@ -521,6 +525,7 @@ test("WR-01: a successful path-source swap drops a stale resolvedSha the fresh r
           locations,
           hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
           completionCache: createCompletionCache(),
+          env: {},
           cascade: true,
           cleanupClones: () => {
             cleanupCalls += 1;
@@ -583,6 +588,7 @@ test("finalizes the update ledger even when the post-finalize hooks-cache refres
           locations,
           hooksRouting,
           completionCache: createCompletionCache(),
+          env: {},
           cascade: true,
           cleanupClones: () => Promise.resolve(),
         },
@@ -637,6 +643,7 @@ test("retains the intent ledger and old resource tree after a replacement failur
           locations,
           hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
           completionCache: createCompletionCache(),
+          env: {},
           cascade: true,
           cleanupClones: () => Promise.resolve(),
         },
@@ -657,6 +664,281 @@ test("retains the intent ledger and old resource tree after a replacement failur
       assert.deepStrictEqual(record?.compatibility.notes, ["update-in-progress"]);
       assert.deepStrictEqual(record?.resources.skills, ["seeded-skill"]);
       assert.strictEqual(await readFile(skillObstacle, "utf8"), "old-resource-tree");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+/** AFILE-04: seed `hello` 1.0.0 -> 2.0.0 with one MCP server over the given adapter file. */
+async function prepareMcpUpdate(cwd: string, adapterText: string) {
+  const marketplaceRoot = path.join(cwd, "mp-src");
+  await seedPathMarketplace({
+    cwd,
+    marketplaceRoot,
+    marketplaceName: "mp",
+    manifestPlugins: { hello: { version: "2.0.0", hasMcp: true } },
+    installedVersions: { hello: "1.0.0" },
+  });
+  const locations = locationsFor("project", cwd);
+  await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+  await writeFile(locations.mcpAdapterJsonPath, adapterText);
+  const args = {
+    plugin: "hello",
+    marketplace: "mp",
+    scope: "project",
+    cwd,
+    locations,
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    completionCache: createCompletionCache(),
+    env: {},
+    cascade: true,
+    cleanupClones: () => Promise.resolve(),
+  } as const;
+  return { locations, pluginRoot: path.join(marketplaceRoot, "plugins", "hello"), args };
+}
+
+async function preflightOf(args: Awaited<ReturnType<typeof prepareMcpUpdate>>["args"]) {
+  const preflight = await preparePluginUpdate({
+    plugin: args.plugin,
+    marketplace: args.marketplace,
+    scope: args.scope,
+    locations: args.locations,
+    cleanupClones: args.cleanupClones,
+  });
+  assert.ok(!("partition" in preflight));
+  return preflight;
+}
+
+const COMMENTED_ADAPTER_TEXT =
+  '{\n  // mine\n  "mcpServers": { "mine": { "command": "my-server" } }\n}\n';
+
+const PROJECT_COMMENTS_DROPPED = {
+  kind: "comments-dropped",
+  scope: "project",
+  file: "mcp-adapter.json",
+} as const;
+
+test("AFILE-04: a swap over a commented mcp-adapter.json carries the comments-removed notice", async () => {
+  await withHermeticHome(async () => {
+    // arrange
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-swap-afile04-"));
+    try {
+      const { args } = await prepareMcpUpdate(cwd, COMMENTED_ADAPTER_TEXT);
+      const preflight = await preflightOf(args);
+
+      // act
+      const outcome = await swapPluginUpdate(args, preflight);
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        partition: "updated",
+        name: "hello",
+        fromVersion: "1.0.0",
+        toVersion: "2.0.0",
+        stagedAgentNames: [],
+        stagedMcpServerNames: ["server1"],
+        declaresAgents: false,
+        declaresMcp: true,
+        constraint: undefined,
+        declaresWorkflows: false,
+        mcpConfigNotices: [PROJECT_COMMENTS_DROPPED],
+      });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("AFILE-04: a swap over a comment-free mcp-adapter.json carries no notice", async () => {
+  await withHermeticHome(async () => {
+    // arrange
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-swap-afile04-clean-"));
+    try {
+      const { args } = await prepareMcpUpdate(
+        cwd,
+        '{ "mcpServers": { "mine": { "command": "my-server" } } }\n',
+      );
+      const preflight = await preflightOf(args);
+
+      // act
+      const outcome = await swapPluginUpdate(args, preflight);
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        partition: "updated",
+        name: "hello",
+        fromVersion: "1.0.0",
+        toVersion: "2.0.0",
+        stagedAgentNames: [],
+        stagedMcpServerNames: ["server1"],
+        declaresAgents: false,
+        declaresMcp: true,
+        constraint: undefined,
+        declaresWorkflows: false,
+      });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("AFILE-04: a swap whose workflows commit fails after the MCP commit carries the notice", async () => {
+  await withHermeticHome(async () => {
+    // arrange
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-swap-afile04-failed-"));
+    try {
+      const { locations, pluginRoot, args } = await prepareMcpUpdate(cwd, COMMENTED_ADAPTER_TEXT);
+      await mkdir(path.join(pluginRoot, "workflows"), { recursive: true });
+      await writeFile(
+        path.join(pluginRoot, "workflows", "greet.js"),
+        'export const meta = { name: "greet", description: "does greet" };\n',
+      );
+      const foreignPath = path.join(locations.workflowsSavedDir, "hello:greet.json");
+      await mkdir(locations.workflowsSavedDir, { recursive: true });
+      await writeFile(foreignPath, "{}");
+      const preflight = await preflightOf(args);
+      const refusal = `Cannot replace workflow target with non-previous content at ${foreignPath}`;
+
+      // act
+      const outcome = await swapPluginUpdate(args, preflight);
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        partition: "failed",
+        name: "hello",
+        fromVersion: "1.0.0",
+        toVersion: "2.0.0",
+        notes: [
+          'Plugin "hello" update failed during physical replace. plugin-uninstall + plugin-install for "hello".',
+          `workflows: ${refusal}`,
+        ],
+        reasons: ["rollback partial"],
+        phaseFailures: [{ phase: "workflows", msg: refusal }],
+        declaresAgents: false,
+        declaresMcp: false,
+        declaresWorkflows: false,
+        mcpConfigNotices: [PROJECT_COMMENTS_DROPPED],
+      });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+const LEGACY_MCP_JSON_TEXT = `{
+  // released build
+  "mcpServers": {
+    "server1": {
+      "command": "old",
+      "_piClaudeMarketplace": { "plugin": "hello", "marketplace": "mp" }
+    },
+    "other": { "command": "y" }
+  }
+}
+`;
+
+test("AMIG-02: a swap removes the plugin's marked mcp.json entries after the MCP commit and reports them after the stage notices", async () => {
+  await withHermeticHome(async () => {
+    // arrange
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-swap-amig02-"));
+    try {
+      const { locations, args } = await prepareMcpUpdate(cwd, COMMENTED_ADAPTER_TEXT);
+      await writeFile(locations.mcpJsonPath, LEGACY_MCP_JSON_TEXT);
+      const preflight = await preflightOf(args);
+
+      // act
+      const outcome = await swapPluginUpdate(args, preflight);
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        partition: "updated",
+        name: "hello",
+        fromVersion: "1.0.0",
+        toVersion: "2.0.0",
+        stagedAgentNames: [],
+        stagedMcpServerNames: ["server1"],
+        declaresAgents: false,
+        declaresMcp: true,
+        constraint: undefined,
+        declaresWorkflows: false,
+        mcpConfigNotices: [
+          PROJECT_COMMENTS_DROPPED,
+          { kind: "comments-dropped", scope: "project", file: "mcp.json" },
+        ],
+      });
+      assert.strictEqual(
+        await readFile(locations.mcpJsonPath, "utf8"),
+        '{\n  "mcpServers": {\n    "other": {\n      "command": "y"\n    }\n  }\n}\n',
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("AMIG-02: a legacy removal that fails records an mcp phase failure and keeps both entries", async (t) => {
+  // A 0o555 directory stays writable for uid 0, so the removal would succeed.
+  if (typeof process.getuid === "function" && process.getuid() === 0) {
+    throw new Error("this case cannot deny root; run this suite as a non-root user");
+  }
+
+  await withHermeticHome(async () => {
+    // arrange
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-swap-amig02-failed-"));
+    try {
+      const { locations, pluginRoot, args } = await prepareMcpUpdate(cwd, COMMENTED_ADAPTER_TEXT);
+      const lockedDirectory = path.join(cwd, "locked");
+      await mkdir(lockedDirectory);
+      await writeFile(path.join(lockedDirectory, "mcp.json"), LEGACY_MCP_JSON_TEXT);
+      await symlink(path.join(lockedDirectory, "mcp.json"), locations.mcpJsonPath);
+      t.after(async () => {
+        await chmod(lockedDirectory, 0o700).catch(() => undefined);
+      });
+      await chmod(lockedDirectory, 0o555);
+      const preflight = await preflightOf(args);
+
+      // act
+      const outcome = await swapPluginUpdate(args, preflight);
+      await chmod(lockedDirectory, 0o700);
+
+      // assert
+      assert.ok(outcome.partition === "failed");
+      const failureMsg = outcome.phaseFailures?.[0]?.msg ?? "";
+      assert.match(failureMsg, /^EACCES: permission denied, open '.*\/locked\/mcp\.json\.\d+'$/);
+      assert.deepStrictEqual(outcome, {
+        partition: "failed",
+        name: "hello",
+        fromVersion: "1.0.0",
+        toVersion: "2.0.0",
+        notes: [
+          'Plugin "hello" update failed during physical replace. plugin-uninstall + plugin-install for "hello".',
+          `mcp: ${failureMsg}`,
+        ],
+        reasons: ["rollback partial"],
+        phaseFailures: [{ phase: "mcp", msg: failureMsg }],
+        declaresAgents: false,
+        declaresMcp: false,
+        declaresWorkflows: false,
+        mcpConfigNotices: [PROJECT_COMMENTS_DROPPED],
+      });
+      assert.strictEqual(await readFile(locations.mcpJsonPath, "utf8"), LEGACY_MCP_JSON_TEXT);
+      assert.deepStrictEqual(JSON.parse(await readFile(locations.mcpAdapterJsonPath, "utf8")), {
+        mcpServers: {
+          mine: { command: "my-server" },
+          plugin_hello_server1_: {
+            command: "node",
+            args: ["s.js"],
+            env: {
+              CLAUDE_PLUGIN_ROOT: pluginRoot,
+              CLAUDE_PLUGIN_DATA: path.join(locations.dataRoot, "mp", "hello"),
+            },
+            directTools: "search",
+            toolPrefix: "mcp",
+            _piClaudeMarketplace: { plugin: "hello", marketplace: "mp" },
+          },
+        },
+      });
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

@@ -1,259 +1,211 @@
 # Feature Research
 
-**Domain:** Machine-readable (JSON) presentation strategy for the `/claude:plugin` command surface of a Pi extension, selected by `ctx.mode` and carried over `pi.appendEntry`
-**Milestone:** json-output (Mode-Keyed Presentation Strategies)
-**Researched:** 2026-09-28
-**Confidence:** HIGH for the upstream contract and the Pi transport (both read from primary artifacts); MEDIUM for the per-verb payload mapping (derived from the types and the catalog, not from a built prototype); LOW for the general CLI prior art beyond what was probed locally.
+**Domain:** Claude plugin MCP servers delivered through pi-mcp-adapter 5 on Pi 1.0 (milestone `mcp-4`)
+**Researched:** 2026-10-01
+**Confidence:** HIGH for upstream and adapter facts (read first-hand from shipped code). MEDIUM for the ordering race and the design recommendations.
 
-## Scope of this file
+## Evidence base
 
-This file covers only the new JSON strategy: what a payload must carry, the contract rules around it, and what to leave out. The locked decisions D1-D8 are inputs and are not revisited here. Where a finding creates tension with a locked decision, it goes under "Open questions" at the end, not into a recommendation.
+Each fact below comes from one of these sources. I read the code myself; the release notes alone were not taken as proof.
 
-## Prior art (evidence)
+| Source | What it settles | Confidence |
+|--------|-----------------|------------|
+| Claude Code **2.1.287** binary (`/home/linuxbrew/.linuxbrew/Caskroom/claude-code@latest/2.1.287/claude`, `strings -n 20` then grep, 2026-10-01) | Server key, name normalization, tool-name format, the expansion pipeline, the variable grammar, handling of unset variables, the server schema | HIGH (primary source) |
+| `code.claude.com/docs/en/mcp` and `/plugins-reference` (WebFetch, 2026-10-01) | Tool-search default, the documented field list for expansion, the "uses the unexpanded `${VAR}` text as-is" rule, the tool-name example | The research seam rates WebFetch LOW. Every claim used here also matches the binary, so treat them as corroborated |
+| `pi-mcp-adapter@5.0.0` tarball (`docs/*.md`, `types.ts`, `config.ts`, `utils.ts`, `server-manager.ts`, `direct-tool-surface.ts`, `index.ts`, `mcp-status.ts`) | `ServerEntry` schema, what the adapter expands, tool naming, precedence and merge rules, the status snapshot, its own config writers, JSONC parsing | HIGH (primary source) |
+| `@earendil-works/pi-coding-agent@1.0.0` tarball (`dist/core/agent-session.js`, `dist/core/mcp-servers.js`, `dist/extensions/mcp/*`) | Built-in MCP tool names, built-in validation, the order of `session_start` and `resources_discover` | HIGH (primary source) |
+| Repo: `bridges/mcp/*`, `domain/mcp-resolution.ts`, `shared/vars.ts`, `platform/pi-api.ts`, `bridges/hooks/*`, `.planning/BACKLOG.md` (MCPSRC-01, ENVLIT-01, MENVX-01) | Dependencies on existing code | HIGH |
 
-### Claude Code `claude plugin ... --json` (the upstream contract)
+## Upstream contract: Claude Code 2.1.287
 
-Evidence: the installed binary `claude` 2.1.283 (strings grepped on 2026-09-28) and `https://code.claude.com/docs/en/plugins/cli-reference.md` (fetched 2026-09-28). The binary and the docs agree. Confidence HIGH.
+| # | Behavior | Evidence |
+|---|----------|----------|
+| U1 | **Server key.** Each plugin server registers as `plugin:<pluginName>:<serverKey>`. In `VCr()` this is ``H=`plugin:${h}:${S}` `` with `h = wx(name, source)`, which returns the plugin name unchanged except for the `@builtin` alias case. | binary `VCr`, `wx`; docs |
+| U2 | **Normalization.** `Tn(name) = name.replace(/[^a-zA-Z0-9_-]/g, "_")`. Only `claude.ai ` servers also collapse runs of `_`. So `plugin:my-plugin:db` becomes `plugin_my-plugin_db`. Hyphens are kept. | binary `Tn` |
+| U3 | **Tool name.** `qa(server, tool) = "mcp__" + Tn(server) + "__" + Tn(tool)`, giving `mcp__plugin_<p>_<s>__<tool>`. The separator before the tool is a **double** underscore. This name is what hook matchers, permission rules, agent `tools:`, and skill `allowed-tools` use. | binary `qa`, `Hs`, `us` (parser splits on `__`); docs |
+| U4 | **Tool search on by default.** `ENABLE_TOOL_SEARCH` takes `true`, `false`, `auto` (the default), or `auto:N`. MCP tools are deferred behind ToolSearch unless the server sets `alwaysLoad: true`, or a tool sets `_meta["anthropic/alwaysLoad"]`. A server-level `alwaysLoad: false` defers every tool. Search is off for a custom `ANTHROPIC_BASE_URL` and for older Vertex models. | docs; binary schema has `alwaysLoad` on stdio, http, sse, and ws |
+| U5 | **Expansion pipeline.** `NAn()` runs once per string: first `Vne` replaces `${CLAUDE_PLUGIN_ROOT}`, `${CLAUDE_PROJECT_DIR}` (always, with the project root or cwd, **for any install scope**), and `${CLAUDE_PLUGIN_DATA}`. Next, `opt` replaces `${user_config.KEY}` and throws if the key is unset. Last, `cG` expands environment variables. It runs at **load time on every session**, against the live environment. | binary `NAn`, `Vne`, `opt`, `cG` |
+| U6 | **Variable grammar.** The pattern is `/\$\{([A-Za-z_][A-Za-z0-9_]*(?::-[^}]*)?)\}/g`. Only `${NAME}` and `${NAME:-default}` are recognized. There is no `$NAME`, no `${NAME-default}`, no `$env:`, no `!`, no `~`, and no escape. A set variable expands to its value, and **an empty string counts as set**, so `:-` does not fall back on empty, unlike POSIX. An unset variable with a default expands to the default text verbatim. An unset variable without a default **stays literal**: `${VAR}` is kept, and the name goes into `missingVars`. | binary `cG` |
+| U7 | **Fields.** stdio: `command`, `args`, and every `env` value, except the keys `CLAUDE_PLUGIN_ROOT` and `CLAUDE_PLUGIN_DATA` (`LAn = new Set(["CLAUDE_PLUGIN_ROOT","CLAUDE_PLUGIN_DATA"])`). The env is built as `{CLAUDE_PLUGIN_ROOT, CLAUDE_PLUGIN_DATA, ...declared}`, so declared keys win. http/sse/ws: `url` and `headers` (the "remote sink" mode), plus `headersHelper` (special rules, and `${user_config}` is rejected). Nothing else is expanded. The stdio schema has **no `cwd`**. | binary `NAn`, `qSe`; plugins-reference table |
+| U8 | **Missing variables.** Claude Code logs ``Missing environment variables in plugin MCP config: X`` and records an `mcp-config-invalid` error that `/plugin` Errors shows. **The server still loads** with the literal text. A remote `url` that is invalid after expansion becomes `configError` with reason `env_missing`, `url_invalid`, or `user_config_missing`, and that server fails. | binary `NAn` tail; docs ("uses the unexpanded `${VAR}` text as-is") |
+| U9 | **Credential blanking.** Claude Code's own credentials (`ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`, and so on) always expand to `""`. Toward a remote sink, git/cargo token patterns and `*_BASE_URL` values pointing at Anthropic hosts are blanked too, with a warning. This guard protects Claude's own secrets. | binary `cG`, `Hq`, `J_e`, `eke`, `tke` |
+| U10 | **Server schema (2.1.287).** stdio: `{type?, command, args, env, timeout, alwaysLoad, bareElicitationCapability, role}`. http: `{url, headers, headersHelper, oauth{clientId, callbackPort, ...}, timeout, request_timeout_ms, tools, alwaysLoad, discoveryCache, toolPermissions}`. `sse`, `ws`, and the IDE types also exist. | binary zod schemas |
 
-- **Where it lives.** `--json` exists only on the shell CLI: `plugin list`, `plugin marketplace list`, `plugin install`, `uninstall`, `update`, `enable`, `disable`, `validate`, and `eval`. The in-session `/plugin` slash command has no JSON form. This confirms D3: no parity gap exists.
-- **Mutating verbs print one result object.** For `install`/`uninstall`/`update`/`enable`/`disable`, the last stdout line is one JSON object with three fields that are always present: `command` (the subcommand), `outcome` (`"ok" | "failed"`), and `message` (the human-readable result). Other fields appear only when they apply: `plugin`, `pluginId` (`name@marketplace`), `scope`, `failureCode`, `alreadyInGoalState`, `installedScope`, `reverseDependents`, `shownCommand`, `installedVersion`/`availableVersion` (install), `keptData`/`savedKept` (uninstall), and `updateOutcome`/`oldVersion`/`newVersion`/`skipReason`/`blockedBy`/`refreshFailed` (update). The exit code is unchanged: 0 or 1.
-- **Typed failure codes.** `failureCode` is snake_case: `op_failed`, `already_in_goal_state`, `settings_still_on`, `command_source_declined`, `entry_helper_unconfirmed`, `error_<category>`, and `claudeai_<code>`. For "already enabled", upstream exits 1 but sets `alreadyInGoalState: true` "so a script can treat that case as success". This is an ad-hoc tri-state layered on top of a binary outcome.
-- **Usage errors print no result line.** They print only the reason on stderr and exit 1.
-- **`plugin list --json`** prints a bare array. It has no envelope and no version field. Each object has `id`, `version` (`"unknown"` fallback), `scope`, `enabled`, and `installPath` (an absolute path). It may also have `installedAt`, `lastUpdated`, `projectPath`, `mcpServers`, `errors[]`, `notes[]`, `errorDetails[]`, and `noteDetails[]`. With `--available` the output becomes `{installed: [...], available: [{pluginId, name, marketplaceName, source, description?, version?, installCount?}]}`. That is a shape change keyed on a flag. The output is pretty-printed with `JSON.stringify(x, null, 2)`.
-- **`plugin marketplace list --json`** prints an array of `{name, source, repo|url|path, ref?, installLocation}`, sorted.
-- **No schema version anywhere.** Fields are gated by "Requires Claude Code v2.1.268 or later" notes in the docs instead.
+**ENVLIT-01 is now settled:** Claude Code *does* interpolate `${VAR}` in stdio `env` values (U7). By ENVLIT-01's own rule, `literalEnv` stays unused.
 
-Takeaways: (a) upstream always pairs structured fields with a human `message`; (b) failures carry a machine code; (c) upstream leaks absolute paths (`installPath`, `projectPath`) and ships no version field, and we should not copy either; (d) a one-bit `ok|failed` is too coarse, which is why upstream had to add `alreadyInGoalState`. Our existing tri-state severity already covers that case.
+## Adapter contract: pi-mcp-adapter 5.0.0
 
-### Pi transport (what the consumer actually receives)
-
-Evidence: pinned `@earendil-works/pi-coding-agent` 0.86.1 source, read 2026-09-28. Confidence HIGH.
-
-- `pi.appendEntry(customType, data)` calls `sessionManager.appendCustomEntry`. The entry is `{type: "custom", customType, data, id, parentId, timestamp}`, followed by `_emit({type: "entry_appended", entry})` (`dist/core/agent-session.js:2131-2137`, `dist/core/session-manager.js:855-866`). The Pi envelope therefore already supplies `id` and an ISO `timestamp`, so the payload should not duplicate them.
-- In RPC, every session event is forwarded with `output(toJsonEvent(event))` (`dist/modes/rpc/rpc-mode.js:265`). An extension slash command runs inside `session.prompt()`, and `preflightResult(true)` fires only after `command.handler` returns (`agent-session.js:944-949`). As a result, the RPC `{type: "response", command: "prompt", success: true}` for a `/claude:plugin` prompt arrives **after** every `entry_appended` event that the command produced. That response is the natural end-of-command marker. `success: true` means only that the command ran. It says nothing about the outcome.
-- A handler that throws is routed to `emitError` and then to an `extension_error` frame in RPC. This is a separate channel. NFR-2 already forbids handler throws.
-- Custom entries are **persisted to the session file**. Pi can share that file (`modes/interactive/session-share.js`, via Radius or a private gist) and export it to HTML. A JSON payload is therefore more durable and more shareable than today's ephemeral `ctx.ui.notify` string. This matters for NFR-9 (paths) and for payload size.
-- **Today, RPC clients receive text.** RPC's `ui.notify` forwards `{type: "extension_ui_request", method: "notify", message, notifyType}` (`rpc-mode.js:87-95`). Under D3, RPC switches to JSON-only, so an existing RPC frontend that shows notify strings will stop showing `/claude:plugin` output. This is a consequence of a locked decision. See "Open questions".
-
-### Other CLIs (general conventions)
-
-- **npm** (11.19.1, probed locally): `npm view <missing> --json` writes `{"error": {"code": "E404", "summary": "...", "detail": "..."}}` to stdout, human text to stderr, and exits 1. This is prior art for a typed error object inside the JSON channel, with a code plus a human summary. HIGH (observed).
-- **gh** (2.97.0, probed locally): `--json field,field` selects fields explicitly. An unknown field is a usage error that lists the available fields. `--jq` and `--template` post-process the output. Field selection is a client-side convenience, and there is no version field. HIGH (observed).
-- **Terraform** (`terraform show -json`, machine-readable UI): `format_version` is `"major.minor"`. A minor bump is additive, and consumers "ignore any object properties with unrecognized names". A major bump is breaking, and consumers "reject any input which reports an unsupported major version". The streamed UI frames carry `@level` (severity), `@message` (human summary), and a `type` discriminant. Clients facing an unknown `type` should present at least `@message`. This is the closest analogue to our case (a streamed, typed, severity-bearing event log), and it states the versioning policy outright. LOW per the confidence seam (web source), though it is vendor documentation.
-- **kubectl `-o json`**: every object carries `apiVersion` and `kind`, and lists are `{kind: "List", items: [...]}`. Errors are text on stderr, not JSON. LOW (from training, not re-verified).
-
-### Competitor: `@nklisch/pi-plugins` control channel
-
-Source: `docs/competitive-analysis/pi-plugins.md` (code read at commit `175142c`). They emit `pi.appendEntry` frames in rpc/json modes and a zod discriminated union of `accepted`/`progress`/`result` frames with strict ordering. The grammar is versioned as `plugin-control/v1`. It also has an 11-code exit-code vocabulary, `--cursor`/`--limit` pagination, and an `--output human|json` flag. Appendix D of that document records our decision to adopt only `ctx.mode` and `appendEntry` and to invent no pagination, exit codes, or bespoke status grammar. MRO-01 (`.planning/BACKLOG.md:1051`) tracks the adopted part.
+| # | Behavior | Evidence |
+|---|----------|----------|
+| A1 | **Nine file sources, later wins:** `~/.config/mcp/mcp.json` → `~/.agents/mcp.json` → `~/.agents/mcp/mcp.json` → `<agentDir>/mcp.json` → `<agentDir>/mcp-adapter.json` → opted-in ancestors → `.mcp.json` → `.pi/mcp.json` → `.pi/mcp-adapter.json`. Lower-precedence non-file sources also exist: `pi.mcp` package manifests, `settings.agentPluginPaths`, `claudePlugins`, `imports`, and runtime registrations. `PI_MCP_CONFIG_MODE=exclusive` reads only the global `mcp-adapter.json`, and `--mcp-config` replaces that path. | `docs/configuration.md`; `config.ts::getConfigSources`, `isExclusiveConfigMode` |
+| A2 | **Merge is a shallow per-field merge** (`mergeServerMaps`), not "first declarer owns the name". When a later source switches the transport, the earlier transport's fields are dropped. When the `url` changes, inherited auth is dropped. A later partial entry such as `{ "x": { "directTools": true } }` acts as an **override**. | `config.ts:902-960` |
+| A3 | **`mcp-adapter.json` is parsed as JSONC** (comments and trailing commas allowed) by `parseJsonWithComments`. Entries pass through untouched, unknown keys included, so the `_piClaudeMarketplace` marker survives and server names are not checked. | `config.ts::readValidatedConfig`, `toServerEntries` |
+| A4 | **Pi-format `mcp.json` is translated**, not passed through. The name must match `[A-Za-z0-9_-]+`, `type:"sse"` is skipped, only Pi's fields survive (no `directTools` or `lifecycle`), and every unknown key, **our marker included**, is reported as "ignored" at every startup. | `config.ts::translatePiMcpServer` |
+| A5 | **`ServerEntry` fields:** `description`, `command`, `args`, `socket`, `env`, `inheritEnv`, `cwd`, `url`, `caFile`, `headers`, `requestHeadersCommand{command,args,env,timeoutMs}`, `auth` (`oauth`, `bearer`, `false`, or `{provider}`), `bearerToken`, `bearerTokenEnv`, `bearerTokenStore`, `oauth{grantType, clientId, clientSecret, clientMetadataUrl, scope, redirectUri, clientName, clientUri, logoUri, authServerMetadataUrl, skipIssuerMetadataValidation, authorizationParams}`, `lifecycle` (`lazy`, `eager`, `keep-alive`, `lazy-keep-alive`), `idleTimeout`, `requestTimeoutMs`, `exposeResources`, `directTools` (`boolean`, `string[]`, or `"search"`), `toolPrefix` (`server`, `short`, `none`, `mcp`), `includeTools`, `excludeTools`, `searchKeywords`, `approveTools` (`boolean`, `"destructive"`, or `string[]`), `debug`, `trace`, `httpTransport` (`streamable-http` or `sse`), `pluginDataDir`, `literalEnv`, `protocolVersion`, `tasks`, `disabled`. | `types.ts:438-525`; `docs/servers.md` |
+| A6 | **What the adapter expands at connect time.** `interpolateEnvVars` replaces `${\w+}`, `$env:\w+`, and `{env:\w+}`; **an unset variable becomes `""`**. There is **no `:-` support**: `${A:-b}` does not match `\w+` and passes through literally. There is **no escape for `${`**. By field: `command` gets env and `~/`. `args` get env and `~/`. `cwd` gets env and `~/`. Each `env` value runs a shell command when it starts with `!`; `!!` stands for a literal `!` (and still interpolates); `literalEnv: true` turns off both behaviors. `headers` support `!` and `!!` plus env. `bearerToken` supports `!` plus env. `url` gets env, and an unset variable **throws** before connecting. `caFile`, `socket`, and `requestHeadersCommand.*` get env. | `utils.ts:136-275`; `server-manager.ts:1115-1145, 1575-1600, 2140-2160` |
+| A7 | **Tool name.** `formatToolName(tool, server, mode)` returns `prefix + "_" + tool.replace(/\./g, "_")`. The prefix depends on the mode: `server` (default) uses the sanitized server name, `short` strips `-mcp`, `none` uses no prefix, and `mcp` uses **`mcp__` + server**. So `mcp` mode yields `mcp__<server>_<tool>` with a **single** underscore. Sanitizing keeps `[A-Za-z0-9_-]` and encodes anything else as `_<hex>_`. A per-server `toolPrefix` overrides the global `settings.toolPrefix`. Direct tool names have **no length cap** (Pi's built-in MCP hashes names to fit). | `types.ts:864-905` |
+| A8 | **`directTools: "search"`** on Pi ≥0.99 registers Pi **deferred** tools. They are grouped in a namespace named ``mcp__${server.replace(/-/g,"_")}`` (this is the raw name, not `formatServerNamespace`, so a `:` would leak into it). Pi's `tool_search` and `mcp({search})` activate them, and the activation lasts across resume. A per-server value overrides the global `settings.directTools`. | `index.ts:436-460`; `docs/tools.md` |
+| A9 | **Status snapshot.** `pi.events.on("pi-mcp-adapter/status/v1", ...)` delivers `{version:1, servers[], totalTools, totalResources, connectedCount, disabledCount}`. Each server has `{name, status: connected/cached/failed/needs-auth/not-connected/blocked/disabled, toolCount, directToolCount, resourceCount?, failedAgoSeconds?, disabled, listenState, catalogStale?, blockedReason?}`. It is **push-only**, with no pull API. The first snapshot comes after initialization and after direct tools are reconciled; an empty snapshot comes at shutdown. Building it never connects a server. `MCP_STATUS_EVENT` is exported from the root, and `./types` is a dist subpath. | `docs/extension-api.md`; `mcp-status.ts`; `types.ts:18-60` |
+| A10 | **The adapter writes into the file that owns a server.** A direct-tools toggle in the `/mcp-adapter` panel rewrites `directTools` **in place** in the owning file (`writeDirectToolsConfig`). `/mcp-adapter disable` writes `disabled: true` into the project `.pi/mcp-adapter.json`, editing an existing entry when there is one. Both use tmp+rename and do not lock. | `config.ts:1715-1766, 1961-2000, 1624-1650` |
+| A11 | **Project trust.** Servers from project files, `.pi/mcp-adapter.json` included, are blocked in untrusted projects. In trusted interactive sessions they wait for an approval prompt that defaults to "Don't allow". The approval covers the **complete effective definition**, so a changed definition asks again. Headless sessions skip unapproved servers. | `docs/configuration.md#project-server-trust` |
+| A12 | **Adapter detection.** The adapter registers a tool named `mcp` at factory time; `disableProxyTool` is ignored while any server uses `"search"`. Pi 1.0's built-in MCP registers `mcp__<server>__<tool>` and the `list_mcp_resources`, `list_mcp_resource_templates`, and `read_mcp_resource` tools with `builtin:` source info, and **never a tool named `mcp`**. The adapter takes over `/mcp` and turns the built-in off (`-builtin:mcp`). | adapter `index.ts:2058`, `pi-builtin-mcp.ts`; Pi `dist/extensions/mcp/index.js`, `tools.js:49` |
+| A13 | **Ordering.** Pi 1.0 emits `session_start` **before** `resources_discover`, both at startup and on `/reload` (`agent-session.js:2582-2584, 2928-2930`). The adapter loads its config at factory load (`index.ts:370`) and in the init it starts from `session_start` (`init.ts:149`). Our reconcile runs in `resources_discover`, so whatever it writes reaches the adapter **one reload late**. Confidence is MEDIUM: initialization is asynchronous, but it starts before our handler runs. | Pi and adapter source |
 
 ## Feature Landscape
 
 ### Table Stakes (Users Expect These)
 
-A consumer (a script using `pi --mode json`, or an RPC client) cannot use the output reliably without these.
-
-| Feature | Why Expected | Complexity | Notes / dependencies on existing code |
-|---------|--------------|------------|----------------------------------------|
-| **TS-1 Payload envelope with `schemaVersion`** | Every mature JSON surface versions its output (Terraform `format_version`, kubectl `apiVersion`, competitor `plugin-control/v1`). Upstream's lack of a version is the counter-example: it has to gate fields with "requires v2.1.268" prose. | LOW | `customType: "claude-plugin"` is the namespace (D4). Put `schemaVersion: 1` (integer) at the top of `data`. Do not add a `timestamp`/`id`: the Pi envelope already has both. typebox `Type.Literal(1)`. |
-| **TS-2 Compatibility policy, written down** | Consumers need to know what a version bump means. Without a policy, every additive change is a potential break. | LOW | Recommended policy: integer major version. Additive changes do **not** bump it: a new optional field, a new payload `kind`, or a new member in a closed set (`Reason`, `StatusToken`). Removing, renaming, changing a type, or changing meaning bumps it. Consumers must ignore unknown fields and must treat unknown enum members as opaque, falling back to `severity`. The project amends closed sets often (`Reason` has 46 members today), so bumping on every amendment would churn. Put the policy in the schema reference doc. |
-| **TS-3 One discriminated union keyed by `kind`** | Consumers switch on one field. Terraform uses `type`, and our model already uses `kind`. | MEDIUM | Map 1:1 from `NotificationMessage` (`cascade`, `marketplace-info`, `plugin-info`, `marketplace-info-cascade`, `plugin-info-cascade`, `marketplace-not-added`, `reconcile-pending-empty`, `reconcile-applied-cascade`). Add the D2 raw surfaces as kinds: `usage-error`, `usage-info`, `diagnostic`, `device-flow-prompt`, `hook-rewake-summary`, `stop-hook-override-cap`. The legacy `kind: undefined` cascade must serialize as an explicit `"cascade"`. Depends on the D1 model. |
-| **TS-4 Success signalled by `severity`, not exit code** | Pi exits 0 in print/json regardless (D5, Appendix D), and RPC's `success` only means "ran". The payload is the only outcome channel. | LOW | Reuse the closed `Severity` set (`info`/`warning`/`error`) with its tri-state meaning: info = desired state reached, warning = carried out but short, error = not carried out. Every payload carries `severity` as a **required** field, including info surfaces. Today the info kinds leave it implicit (`dispatchInfoMessage` derives it from `kind`). This is not a new "status field" (Appendix D forbids inventing one). It is the existing model field, serialized. |
-| **TS-5 Per-invocation verdict rule, documented** | One command can emit several payloads. Examples: `marketplace update` emits one per target (catalog `update-all-many-alpha`/`-beta`); a device-flow prompt precedes a cascade; `import` emits a cascade plus a `diagnostic`. A consumer needs one answer per command. | LOW | Document the rule: the command's verdict is the maximum `severity` over all `claude-plugin` entries appended between sending the prompt and receiving the RPC `response`, or before process exit in `--mode json -p`. The same rule gives `needsReload` as an OR over entries. No code needed beyond the docs. |
-| **TS-6 `needsReload` as a required boolean** | This is the machine form of the `/reload to pick up changes` trailer. A script that installs and then uses a plugin must know whether to reload. | LOW | This is already a model decision (`shouldEmitReloadHint`, the OR over caller-stamped `needsReload`). Serialize it at the payload level, and per row where the row carries it. It is required, never absent. |
-| **TS-7 Closed-set tokens emitted verbatim as enums** | Stable enums instead of free text are the core value of JSON output. | LOW | Emit `status`, `reasons[]`, `scope`, and `severity` using the **existing** literal strings (`"partially-installed"`, `"not in manifest"`, `"requires pi-mcp"`). Do not add a parallel snake_case code vocabulary like upstream's `failureCode`: it would double the closed-set gates (`compat-01-no-expansion`, `notify-closed-set-locks`) and let the two vocabularies drift apart. Spaces in enum values are legal JSON and read fine in `jq`. The `reasons` tokens are our typed failure codes. |
-| **TS-8 Reasons carry the soft-dep markers, in contract order** | `{requires pi-subagents}` tells a consumer that the install succeeded but a companion is missing. Losing it silently would misreport a degraded install. | MEDIUM | D1 moves `softDepMarkers` and the `softDepStatus(pi)` probe out of the renderer into the model, which yields a fully composed `reasons[]`: typed reasons first, then markers in the order agents, mcp, workflows (MSG-GR-4). Emit that array unchanged. Also emit `dependencies[]` on the four dependency-bearing rows, so a consumer can tell "declares agents" apart from "agents companion missing". Depends on D1 landing first. |
-| **TS-9 Raw values, not display forms** | A consumer compares versions and dates by value. The text surface abbreviates for people. | LOW | `version` is the full persisted string (`hash-2ea95f85703d`, `sha-a1b2c3d4e5f6`, `1.2.3`), never `v#2ea95f8`. Emit `lastUpdatedAt` in full ISO, even though the list surface hides it (UXG-01). Emit `autoupdate` as a boolean, never the `<autoupdate>` marker text. No glyphs, no `v` prefix, no indentation. These are text-converter formatting decisions and must not reach the JSON converter. |
-| **TS-10 Explicit scope on every row that has one** | The text form hides a plugin's `[scope]` when it equals the marketplace's scope (orphan-fold, D-13-18). A consumer should not have to reproduce that fold rule. | LOW | For rows that have an install scope (installed, upgradable, disabled, partially-*, and the realized transitions), always emit the resolved scope. `pluginScopeOrFallback` already exists for the LLM-tool surface, but it also stamps the marketplace scope onto `available`/`unavailable` rows, where it means "listed from", not "installed at". Keep `scope` absent there. The marketplace block's own `scope` stays required. |
-| **TS-11 Failure detail serialized explicitly** | `cause?: Error` and `rollbackPartial[].cause` are how a failed row explains itself. `JSON.stringify(new Error("x"))` produces `{}`, so a naive converter silently drops every cause. | LOW-MEDIUM | Have the model precompute `causeChain: string[]` (depth 5 with a `truncated` flag, the same walk as `causeChainTrailer`, including the `CleanupContextError` basename rendering). Text joins it with `" -> "` and JSON emits the array. Per phase: `rollbackPartial: [{phase, causeChain?}]`. Redaction must match the text form byte for byte (see TS-13). |
-| **TS-12 Usage errors are payloads** | Upstream prints nothing on a usage error. A JSON consumer then cannot tell a usage error from a silent success. | LOW | `{kind: "usage-error", severity: "error", message, usage}`. `usage-info` (help) is `{severity: "info", usage}`. D6's `browse` refusal outside tui uses the same channel and names `list` in `message`. About 20 files call `notifyUsageError`, but the change stays inside the dispatch owner. |
-| **TS-13 No new path disclosure (NFR-9)** | Payloads persist in a shareable session file. That exposes more than an ephemeral notify string does. | LOW | Rule: no wire field may carry a path the text form would not show. Emit no `installPath`/`projectPath`/`stateJsonPath` (upstream does, and we should not). Keep the existing composition-site redaction (`redactAbsolutePaths` in reconcile, info notes, and diagnostics) as the single policy. A path-source `marketplace info` keeps `absPath`, because the text shows it and the user typed it. Pin this with a gate that lists the schema's string fields. |
-| **TS-14 Array order is a contract; object key order is not** | Consumers diff outputs and assert in tests. | LOW | Marketplace blocks and rows keep model order (`compare-name-scope`: name first, project before user). `reasons[]` keeps its contract order, and multiple payloads from one invocation keep emission order. State in the docs that key order is not guaranteed. |
-| **TS-15 Optional means absent, never `null`** | A single representation per state. `JSON.stringify` drops `undefined`, `exactOptionalPropertyTypes` already forbids stamping `undefined`, and typebox `Type.Optional` models it as absent. | LOW | Upstream does the same ("appear only when they apply"). Always-required fields: `schemaVersion`, `kind`, `severity`, `needsReload`, and `origin` (TS-16). Empty collections are `[]` and not absent where the model has them (for example `marketplaces: []` replaces the `(no marketplaces)` sentinel, and `plugins: []` replaces the bare header). |
-| **TS-16 `origin` distinguishes command output from lifecycle output** | In `--mode json`, the load-time reconcile (`resources_discover`), hook rewake summaries, and the Stop-cap warning show up in the same event stream as command output. They are not responses to any command. | MEDIUM | `origin: {type: "command", command: "plugin install" \| "marketplace add" \| ...}`, `{type: "load"}` (reconcile, PATH refresh, reconcile-aborted), or `{type: "hook"}` (rewake, Stop cap). Use a machine command id, not the human `Messaging.label`. The id also tells `enable` apart from `install`: both render an `(installed)` row. This needs the edge router's verb threaded into the dispatch strategy, which touches `NotificationContext` (already being widened for `mode`/`appendEntry`). |
-| **TS-17 Structured raw surfaces (D2), including the two missed ones** | Total coverage means every emission has a typed kind, not a string wrapped in JSON. | MEDIUM | `device-flow-prompt {verificationUri, userCode}`: `domain/github-auth.ts:436` builds the string today, so the domain must pass the two values instead. `stop-hook-override-cap {pluginId, cap: 8}`. `hook-rewake-summary {text, pluginId}` (the text is plugin-author prose, passed through). `diagnostic {header, lines[]}` (3 call sites). **Also found:** `makeRawNotifyFn` has two more callers in `index.ts` besides device flow: `reconcile aborted: <err>` (error, `index.ts:128`) and `plugin PATH not refreshed for <scope> scope ...` (warning, `index.ts:149`). D2's wording ("`makeRawNotifyFn` (device-flow code)") names only one of the three. Both need kinds, for example `reconcile-aborted {causeChain}` and `plugin-path-skipped {scope, reason}`. |
-| **TS-18 Published schema reference** | Consumers need the contract without reading TypeScript. | LOW | typebox schemas already are JSON Schema. Ship a `docs/` reference (kinds, fields, versioning policy, the verdict rule, and the print-mode limitation per D5). Adding a generated schema file is optional (see D-3 below). |
-| **TS-19 In-process JSON capture helper for tests** | The milestone's second motivation is structured behavioral tests. | LOW | A fake `pi.appendEntry` that records `{customType, data}` and runs `Value.Check(schema, data)` on every capture, so any test that captures also validates the schema. Fakes carry an explicit `mode` (D7). The e2e path is `pi -p --mode json --no-session --offline "/claude:plugin list"`. |
+| Feature | Why Expected | Complexity | Notes / dependency on existing code |
+|---------|--------------|------------|--------------------------------------|
+| **TS-1 Deliver entries to `<scopeRoot>/mcp-adapter.json`** | Pi-format `mcp.json` drops every adapter field (A4) and warns about our marker at every start. Only the adapter-native file can carry `directTools`, `toolPrefix`, `httpTransport`, and `description`. | MEDIUM | Retarget `persistence/locations.ts` (`mcpJsonPath`, line 203) and the stage/commit/replace/rollback/unstage set in `bridges/mcp/stage.ts` and `unstage.ts`. Change the NFR-10 write set to match (and keep `mcp.json` for the migration window). The read path **must accept JSONC** (A3). Today `readScopedDoc` sees a commented file as malformed and **overwrites it**, and `unstage` throws on it. Keep the top-level `settings`, `imports`, and `claudePlugins` (the current code already spreads `...doc`). |
+| **TS-2 Upstream naming `plugin_<plugin>_<server>`** | Claude users see `plugin:<p>:<s>` and `mcp__plugin_<p>_<s>__*` (U1-U3). Today's raw server keys collide easily, which is the MCPSRC-01 failure. | MEDIUM | `generatedName = Tn("plugin:"+plugin+":"+key)`. `StagedMcpRecord.generatedName` stops being the input key (the `types.ts` comment "no rename today" has to change). Detect normalization collisions inside our own namespace: `plugin:a_b:c` and `plugin:a:b_c` both become `plugin_a_b_c`. Fail closed with `McpServerCollisionError`. `info` should list the Claude key, and the generated name is what state stores. Marker-based ownership is unaffected. |
+| **TS-3 Tool-search exposure `directTools: "search"`** | This is Claude Code's default (U4), and on Pi ≥0.99 the adapter maps it to Pi deferred tools found by Pi's `tool_search` (A8). | LOW | Stamp it in `stampServers`. Map `alwaysLoad: true` to `directTools: true`, the only per-server opt-out upstream has. Remove `alwaysLoad` and the other Claude-only keys from the written entry, or leave them as harmless extras: the adapter passes unknown keys through. |
+| **TS-4 Explicit per-server `toolPrefix: "mcp"`** | Without it, a user's global `settings.toolPrefix: "none"` or `"short"` silently renames our tools (A7). `mcp` is the closest available form to U3. | LOW | Comes with TS-2. See gap G-1: it still produces `mcp__<s>_<tool>`, not `mcp__<s>__<tool>`. |
+| **TS-5 Automatic migration on `/reload`** | Existing users have marked entries in `<agentDir>/mcp.json` and `<cwd>/.pi/mcp.json` under the old raw names. NFR-2 means `/reload` has to fix this without a reinstall. | HIGH | Do it in the reconcile path under the state lock, one scope at a time. Write `mcp-adapter.json`, then `state.json` (new `generatedName`/`targetPath`), then remove the entries from `mcp.json`. Each step must be idempotent so a crash in between converges on the next try (NFR-3). Project scope migrates only for the cwd's project; other projects migrate when they are opened. **Ordering (A13):** writes made in `resources_discover` are seen by the adapter only on the next reload. Servers keep working through the old `mcp.json` translation in the meantime, but search exposure arrives one reload later. Either accept that and document it, or run the migration in the extension factory. That needs a phase-level spike. Users who rely only on Pi's built-in MCP lose these servers after migration (see Anti-Features). |
+| **TS-6 Variable expansion parity, plus escaping what the adapter would expand again** | Plugins use `${VAR}` and `${VAR:-default}` in `command`, `args`, `env`, `url`, and `headers` (U5-U7). The adapter has no `:-` and expands `!`, `$env:`, `{env:}`, and `~/`, which Claude does not (A6). This closes MENVX-01 and ENVLIT-01. | HIGH | Extend `bridges/mcp/substitute.ts`; leave `shared/vars.ts` alone, since D-92-01 keeps it separate. **Recommended rules (decision needed, see G-2/G-3):** (a) keep install-time `${CLAUDE_PLUGIN_ROOT}`, `${CLAUDE_PLUGIN_DATA}`, and project-scope `${CLAUDE_PROJECT_DIR}` substitution. (b) Leave plain `${VAR}` for the adapter to expand at runtime: Claude also expands at load time against the live environment, and this keeps secrets off disk. (c) Rewrite `${VAR:-d}` at install time: if `VAR` is set, write `${VAR}`; if not, write `d`. (d) In `env` and `headers` values, turn a leading `!` into `!!`, which closes MENVX-01 by escaping. (e) Restrict the expansion fields to Claude's set (U7). Today's deep walk also rewrites `cwd`, `oauth`, and other keys Claude never touches. (f) Do not expand the values of `env.CLAUDE_PLUGIN_ROOT` or `env.CLAUDE_PLUGIN_DATA` (`LAn`). |
+| **TS-7 Missing-variable warnings at install** | Claude warns `Missing environment variables in plugin MCP config: X` (U8). The adapter silently swaps in `""`, except in `url`, where it throws at connect. | LOW | Report through the existing warning channel used for the malformed-`env` warning in `stampServers`. Check against `process.env` at install time and count a name as missing only when it has no `:-`. |
+| **TS-8 Collision walk that follows adapter 5** | Required by MCPSRC-01: nine sources, later wins (A1). A partial entry is an override, not a collision (A2). | MEDIUM | Rewrite `collision-slots.ts`: reorder the frozen tuple, add the two `.agents` paths and both `mcp-adapter.json` files, read with JSONC, and change "first declarer wins" to last-wins attribution. Count a name as a collision only when another source has a **full** definition (`command`, `url`, or `socket`) that we do not own. Our own entries in the other scope's file are not a collision: user plus project scope means one effective server, like upstream. Update the snapshot test and the MC-4/RN-5 contract text in the same change. With TS-2 names, real collisions become rare. |
+| **TS-9 Keep user adapter overrides when re-staging** | Writing the adapter-native file means the panel's direct-tools toggle and `/mcp-adapter disable` now edit **our** entries in place (A10). Re-staging on update, reinstall, or enable would silently undo them. | MEDIUM | In `prepareStageMcpServers`, when an owned entry is replaced, carry over a closed set of user-owned fields (`disabled`, `includeTools`, `excludeTools`, `approveTools`, `lifecycle`, `idleTimeout`, `requestTimeoutMs`, `searchKeywords`). Carry `directTools` and `toolPrefix` only if they differ from what we last wrote, which means recording our stamped values, for example in the marker. This rule only works if the field set stays closed; see the optional-field silent-omission class. |
+| **TS-10 Detection that only the adapter satisfies** | Entries in `mcp-adapter.json` are invisible to Pi's built-in MCP, so the `{pi-mcp-adapter}` soft-dependency marker must stay accurate when only the built-in is active. | LOW | `platform/pi-api.ts::hasLoadedPiMcpAdapter` already qualifies (A12). Add a test that plants built-in-only tools (`mcp__x__y` and `read_mcp_resource` with `builtin:` source) and asserts "not loaded". |
+| **TS-11 Dependency floors** | Pi `>=1.0.0`, pi-subagents `>=0.74.0`, pi-mcp-adapter `>=5.0.0`. On Pi 0.84-0.87, adapter 5 does not read Pi's `mcp.json`. The adapter's `pi-ai` peer range stops at `^0.99.0`; record this as an upstream gap. | MEDIUM | Re-apply the typing and canary fixes from features/mcp. These are package and peer-test changes, not bridge logic. |
 
 ### Differentiators (Competitive Advantage)
 
-These are not required for a usable contract, but each adds value at low cost or lines up with the Core Value.
-
 | Feature | Value Proposition | Complexity | Notes |
 |---------|-------------------|------------|-------|
-| **D-1 `summary` string on warning/error payloads** | A generic client that does not know a `kind` can still show one human line. This is Terraform's "present at least `@message`" rule. It partly offsets the RPC text loss (see Open questions). Upstream always has `message`. | LOW | The model already computes the summary line (D1): "A plugin operation has failed." Emit it when present. This is model data, not a rendering of the text form, so the peer architecture holds. |
-| **D-2 Numeric `tally`** | Scripts get counts without walking the tree. | LOW | `{failures, warnings, successes}`, or `{updated: n}` under the UGRM-02 update override. Present only when the model makes a tally eligible (plural cardinality with a label). Drop the English "Plugin list: 3 successes" string. |
-| **D-3 Exported JSON Schema file plus a drift gate** | Consumers validate with any JSON Schema tool. It matches the project's gate culture (a test that plants the violation). | LOW-MEDIUM | Generate `schema/claude-plugin.v1.json` from the typebox objects, commit it, and test that the committed file equals the export. Include it in the npm package `files`. |
-| **D-4 `id: "<name>@<marketplace>"` on plugin rows** | This is upstream's `pluginId` convention, which Claude Code users already know. It can be pasted back as a command argument. | LOW | A pure concatenation in the converter. Harmless under D1, since it is formatting, not a decision. |
-| **D-5 Structured advisories** | `pending`'s retained-workflow-staging advisory is pre-rendered prose with a 4-space indent baked in (`composeRetainedWorkflowsAdvisories`). Serializing it verbatim leaks text formatting into JSON. | MEDIUM | Model it as `retainedWorkflowStaging: [{name, envelopeCount?}]`, and let the text converter compose the sentence. `PluginInfoRowBase.notes` (WR-09) can stay free-text strings, since they are already redacted sentences about files. Remove the indent in both places. This is D1-consistent work, just not on D1's named list. |
-| **D-6 Explicit no-op marker on `update`** | `emitUpdateNoOpCascade` produces the "Plugin update: nothing to update" headline. Only the orchestrator's choice of emitter records that decision. | LOW | `noOp: true` on the cascade payload, or derive it as `tally.updated === 0` and document that. Either way the decision moves into the model. |
-| **D-7 `invocationId` correlating the payloads of one command run** | Async hook payloads (rewake) can interleave with command output, so "contiguous entries" is not a safe grouping rule. | LOW-MEDIUM | A random id minted once per handler invocation and stamped on every command-origin payload. Tests need an injectable generator. The RPC `response` boundary (TS-5) already covers most consumers, so this is P2. |
+| **D-1 Live adapter status in `/claude:plugin info`** | One view of each plugin MCP server's runtime state (`connected`, `cached`, `failed` with age, `needs-auth`, `blocked` with reason, `disabled`) plus tool counts. No upstream analog was found: Claude shows status in `/mcp`, and `claude plugin details` reports an "inventory and projected token cost". The adapter's own `claudePlugins` loader has nothing like it either. | MEDIUM | Subscribe once in `index.ts` at factory time (A9 is push-only) and cache the latest snapshot in a leaf module with process lifetime, like `shared/completion-cache.ts`. The `info` orchestrator looks up each record's `generatedName` and stamps the status; notify stays a dumb renderer. New status tokens are amendments to the closed catalog. States to render: no snapshot yet (adapter absent or still initializing), snapshot without our server (needs `/reload`, or shadowed), and `blocked` (project trust, A11). Reading the snapshot never touches the network or connects a server, so `info` stays inside the NFR-5 `FORBIDDEN_TARGETS` gate. |
+| **D-2 Claude-form tool names in the hooks bridge** | The plugin's own hooks with `mcp__plugin_p_s__tool` matchers fire, and the payload `tool_name` matches upstream, even though the adapter emits `mcp__plugin_p_s_tool` (G-1). | MEDIUM | `domain/components/hook-tool-names.ts::mapPiToClaudeToolName` currently passes MCP names through unchanged. Use the known generated server names from state to map the `mcp__<key>_` prefix to `mcp__<key>__` exactly. This is not a regression, because tool names do not match today either, but TS-2 makes the fix deterministic. |
+| **D-3 `description` on each entry** | The adapter ranks `mcp({search})` by server description and shows it in the panel (5.0.0). Using the plugin's manifest description, or "Claude plugin `<p>@<mp>`", improves tool discovery and shows provenance, like Claude's plugin indicator in `/mcp`. | LOW | The resolver already has the manifest. |
+| **D-4 Field translation to adapter-native form** | Claude fields the adapter would otherwise ignore start working: `type:"sse"` → `httpTransport:"sse"` (Pi-format files skip SSE entirely, A4); `request_timeout_ms` → `requestTimeoutMs`; `oauth.callbackPort` → `oauth.redirectUri: http://127.0.0.1:<port>/callback`, as the adapter's Pi translation does. `ws` and `headersHelper` have no equivalent and should produce a warning (G-7, G-8). | MEDIUM | A new pure translation step in the bridge. |
+| **D-5 PreToolUse parity for proxied MCP calls (future)** | Pi's `tool_call` sees only `mcp` for proxied calls. The adapter's approval broker (`pi-mcp-adapter:tool-approval-request`, with `serverName`, `originalToolName`, `args`, and `origin`) sees every MCP call and can be claimed synchronously. | HIGH | Out of scope for mcp-4. Record it in the backlog. |
 
 ### Anti-Features (Commonly Requested, Often Problematic)
 
 | Feature | Why Requested | Why Problematic | Alternative |
 |---------|---------------|-----------------|-------------|
-| **Embedding the full rendered text in the payload** (`text: "● official [user]\n  ● foo ..."`) | It looks like a free fallback for RPC clients, and upstream has `message`. | The JSON converter would have to call the text converter, which breaks D1's peer architecture. It doubles the size of every persisted entry. It invites consumers to scrape the text, which is the failure mode JSON exists to end. It also drags glyphs and catalog bytes into a second contract. | D-1 `summary` (model-computed) plus typed fields. |
-| **A per-command `--json` flag** | Upstream's CLI has one. | D3: selection is by mode only, and upstream's flag is on the shell CLI, not `/plugin`. A flag creates a second selection axis and a second test matrix. | `pi --mode json` / RPC. |
-| **Pagination (`--cursor`/`--limit`)** | The competitor has it, and big lists are big. | No Pi contract anchors it (Appendix D searched the pinned API). It would be bespoke grammar, and our lists are bounded by a user's marketplaces. | Existing filter flags (`--installed`, `--available`, ...). Document `--no-session` for scripted runs to avoid session bloat. |
-| **Exit-code vocabulary / `outcome: ok\|failed`** | Upstream and the competitor both have one. | Pi cannot set exit codes from a command (Appendix D). A binary outcome loses the tri-state, which is why upstream had to bolt on `alreadyInGoalState`. | `severity` (TS-4) and the verdict rule (TS-5). |
-| **A new snake_case `failureCode` vocabulary** | It looks more "API-like" than `"not in manifest"`. | It adds a second closed set that must be kept in sync with `Reason` forever, doubling the gates. | Emit `Reason` tokens verbatim (TS-7). |
-| **Fields the text form does not show** (`installPath`, state paths, clone roots, raw manifest dumps) | Upstream's `list --json` has `installPath` and `mcpServers`. | NFR-9. Session files persist and can be shared. It widens the contract past the model. | Keep to the model's fields (TS-13). A consumer needing paths can read `state.json`. |
-| **Runtime schema validation before every `appendEntry` in production** | Belt and braces. | A validation failure would have to throw or drop output, and both break NFR-2 / never-silent. It also costs time on every emit. | Compile-time `Static<typeof Schema>` in production, `Value.Check` in the test capture helper (TS-19). |
-| **`null` placeholders for absent optionals** | Some consumers like a fixed shape (gh does this). | Two representations of "absent" means `exactOptionalPropertyTypes` friction and converter branches. | Absent (TS-15). |
-| **ANSI, glyphs, `v#` short SHAs, `<autoupdate>` markers in JSON** | "Keep it consistent with text." | These are display decisions and are meaningless to machines. | TS-9. |
-| **Streaming progress frames (`accepted`/`progress`/`result`)** | The competitor has them. | No consumer need was identified. It is bespoke grammar, and our commands are short. The device-flow prompt is the only mid-command emission, and it is already its own `kind`. | One payload per notify seam, plus the RPC response as the end marker. |
-| **Duplicating Pi's entry `id`/`timestamp` inside `data`** | Self-contained payloads. | It is redundant, and it makes tests non-deterministic. | Read them from the `entry_appended` envelope. |
+| Deliver through Pi's built-in `pi.registerMcpServer()` | It is native and needs no adapter. | The abandoned `builtin-mcp` milestone. The adapter treats runtime registrations as **proxy-only**: `direct` and `deferred` exposure are ignored, so search exposure is lost. Moving off the adapter regresses its users. | Write `mcp-adapter.json`. |
+| Write to both `mcp.json` and `mcp-adapter.json` | It keeps Pi-built-in-only users working. | Two sources for the same name get merged (A2), every startup warns about the marker (A4), and unstage has to clean up twice. It also contradicts the "without adopting Pi's built-in MCP" goal. | Adapter only, with an accurate `{pi-mcp-adapter}` soft-dependency row (TS-10). Document that built-in-only users lose plugin servers after migration. |
+| Resolve every `${VAR}` at install time with Claude's rules | It looks like the most literal reading of "expand with Claude Code's rules". | It **writes secrets to disk** (`Authorization: Bearer ${API_KEY}` would land in plain text in `mcp-adapter.json`). It freezes values Claude reads fresh every session, and setting a variable after install does nothing until reinstall. It also needs `literalEnv: true` to keep `env` literal, and `args`, `headers`, and `url` have no escape for `${` anyway (G-3). | Hand plain `${VAR}` to the adapter's runtime expansion, and resolve at install time only the `${VAR:-default}` form the adapter cannot express (TS-6). |
+| `literalEnv: true` on every entry | It looks like an easy fix for the adapter's `!` execution. | Claude does interpolate `env` (U7). This would stop `${VAR}` expansion in `env`, the exact regression ENVLIT-01 warns about. | Escape `!` as `!!` (TS-6d) and close ENVLIT-01 with no change. |
+| Emulate `:-` at runtime with `!printf '%s' "${VAR:-d}"` | It gives true runtime default semantics. | It is shell-dependent, breaks on Windows, runs a process per connection, works only in `env` and `headers`, and has a 10-second timeout. | Rewrite at install time (TS-6c). |
+| Name servers `plugin_<p>_<s>_` (trailing underscore) so that `mcp` mode yields `mcp__plugin_p_s__tool` exactly | It gives exact upstream tool names today with no upstream change. | It depends on an undocumented `formatToolName` quirk the adapter could change. The trailing `_` shows up on every adapter surface (panel, `/mcp-adapter enable`, status names, the `mcp:` references in pi-subagents, the `mcp__plugin_p_s_` namespace). | D-2 now, plus an upstream adapter request for a `__` separator mode. **This is a user decision**; see G-1. |
+| Pre-approve project servers (write adapter approvals, or set `projectServers: "allow"`) | It avoids the trust prompt after each update. | It bypasses a security gate the adapter owns, writes outside the NFR-10 set, and only user-global config may set `projectServers`. | Document the prompt (G-10). |
+| Poll or connect servers to get status for `info` | It gives fresher data. | It breaks the network-free `info` guarantee (NFR-5) and the adapter's lazy model. | Use only the cached push snapshot (D-1). |
+| Import the adapter's `./config` (`getServerProvenance`) at runtime for collision provenance | It removes path drift for good (an idea from MCPSRC-01). | It turns an optional peer into a real runtime dependency. Packaging a dist subpath is a scope decision. | Keep our own walk (TS-8). Revisit only if the precedence list drifts again. |
 
-## Per-verb payload content
+## Parity Gaps: where the adapter cannot express Claude Code behavior
 
-Every payload has this envelope: `{schemaVersion, kind, origin, severity, needsReload, summary?, tally?}` plus the kind body. "Rows" below means `PluginNotificationMessage` serialized by TS-7 through TS-11: `status`, `name`, `id` (D-4), `version?`, `scope?`, `description?`, `reasons[]`, `dependencies[]?`, `from`/`to` (updated), `partialHint?`, `enableHint?`, `partial?` (will install), `causeChain?`, `rollbackPartial?`, and `severity`/`needsReload` where stamped. A marketplace block is `MarketplaceNotificationMessage`: `name`, `scope`, `status?`, `details?{autoupdate, lastUpdatedAt?}`, `reasons?`, `severity?`, `plugins[]`.
-
-| Command | Payload kind(s) | Body content beyond the envelope | Notes |
-|---------|-----------------|----------------------------------|-------|
-| `list` | `cascade` (plural, label "Plugin list") | `marketplaces[]` of statusless `MpList` blocks with `details`, plus inventory rows (`installed`, `upgradable`, `available`, `remote`, `unavailable`, `partially-available`, `partially-installed`, `partially-upgradable`, `disabled`) | `marketplaces: []` replaces `(no marketplaces)`. Inventory rows carry no soft-dep markers (their `dependencies` is omitted by design). `needsReload: false`. Unparseable or zero-plugin manifests show as reasons on the block. |
-| `info <p>@<mp>` | `plugin-info` or `plugin-info-cascade` (both scopes); `marketplace-not-added`; failure `cascade` | `marketplaceName`, `marketplaceScope`, `marketplaceDetails`, `plugin: {status, name, version?, scope?, description?, reasons?, notes?, componentsResolved, components?{agents, commands, hooks: HookSummaryEntry[], mcp, skills, workflows}, dependencies?}` | Keep `componentsResolved: false` as a discriminant, not an absent `components`. `HookSummaryEntry` is already a structured union and passes through as-is. The `--fetch`-skipped warning (D-96-04) shows up as `severity: warning`. |
-| `pending` | `cascade` (label "Reconcile pending") or `reconcile-pending-empty` | Rows: `will install`/`will uninstall`/`will enable`/`will disable` with `scope`, `partial?`; empty form: advisories (D-5) | `needsReload: false` by construction. The "0 actions" wording is text-only; the JSON consumer reads the empty kind. |
-| `install` | `cascade` (single); `marketplace-not-added`; optional preceding `device-flow-prompt` | One block plus one row: `installed`, `partially-installed`, `unavailable`, `partially-available` (`partialHint`), `failed` (`causeChain`, `rollbackPartial`), or `disabled` (`enableHint`) | `marketplace-not-added {name, scope?, presentInOtherScope?}`. `dependencies` and the composed markers go on success rows. |
-| `uninstall` | `cascade` (single); `marketplace-not-added` | `uninstalled` (`reasons` may be `["stale workflow command"]`), `failed`, or `skipped {not installed}` | Uninstall rows never carry soft-dep markers (MSG-SD-3). The model must keep that true. |
-| `update [target]` | `cascade` (single or plural), or the no-op cascade (D-6) | `updated {from, to, dependencies}`, `skipped {up-to-date}` (benign, info), `partially-upgradable` (decline, `partialHint`), `failed`, `manual recovery`; `tally {updated}` | Emit `from`/`to` in full, not as the short-SHA arrow. |
-| `reinstall` | `cascade` | `reinstalled`, `skipped`, `failed`, `unavailable`, `disabled`, with `reasons` (`stale workflow command`, degraded kinds) | Per-scope blocks stay separate (no orphan-fold in JSON anyway). |
-| `fetch` | `cascade` (label "Plugin fetch") | `available`, `partially-available`, `remote`, `skipped` (no-op, FTCH-03) | Pi-only verb with no upstream analogue. |
-| `enable` / `disable` | `cascade` | Enable: `installed` or `partially-installed` (`dependencies`). Disable: `disabled` (`needsReload: true`, the RLD-05 stamp). Both: `skipped {already enabled \| already disabled}` (benign) | `origin.command` is what tells enable apart from install (TS-16). Note the upstream difference: the upstream CLI exits 1 with `already_in_goal_state`, while ours reports info. The tri-state already encodes it, so no flag is needed. |
-| `import` | `cascade` (plural, mixed subjects); optional `diagnostic`; optional `device-flow-prompt` | Marketplace blocks with `status` (`added`/`failed`/`skipped`) plus plugin rows; `tally` | Mixed-subject summary wording (D-03) arrives via `summary`. |
-| `bootstrap` | `cascade` | One marketplace block, `added` or `updated`, with `plugins: []` | `needsReload: false` (marketplace-only). |
-| `browse` | tui: none (interactive). Other modes: `usage-error` (D6) | `message` names `list` | Replaces the `list` fallback at `edge/handlers/plugin/browse.ts:140`. |
-| `help` / bare | `usage-info` | `usage` (free text) | Usage text is inherently prose, so it passes through verbatim. |
-| any verb, bad args | `usage-error` | `message`, `usage` | Always `severity: error`. |
-| `marketplace list` | `cascade` (label "Marketplace list") | Statusless blocks with `details`, `plugins: []` | Upstream's `marketplace list --json` also carries the source. Our `MpList` does not. Deferred (see v1.x). |
-| `marketplace add` | `cascade`; optional `device-flow-prompt` | Block with `status: added` or `failed` plus `reasons` (`duplicate name`, `stale clone`, `unsupported source`, `source missing`, `invalid manifest`, `authentication required`, `network unreachable`) | The device-flow prompt payload must reach the RPC client promptly, or auth waits until the flow times out. |
-| `marketplace remove` | `cascade`; `marketplace-not-added` | Block `removed` or `failed` with child rows (`uninstalled`/`failed`) | Partial removal is `severity: error` with per-plugin detail. |
-| `marketplace info` | `marketplace-info` or `marketplace-info-cascade`; failure forms | `name`, `scope`, `details {autoupdate, lastUpdatedAt?}`, `source` (`github {owner, repo, ref?}` / `url {url, ref?}` / `path {absPath}`), `description?` | Emit `lastUpdatedAt` for every source kind that has it. Text gates it (D-76-10), but that is display policy. Confirm that stored `url` values cannot carry userinfo credentials before persisting them to the session. |
-| `marketplace update [name]` | `cascade`, **one per target**; optional `device-flow-prompt` | Blocks `updated`/`skipped {up-to-date}`/`failed`, with nested autoupdate plugin rows (`updated`, `disabled` pin-moved, `not in manifest`) | Multi-emission is a documented contract (TS-5). |
-| `marketplace autoupdate` / `noautoupdate` | `cascade` | Block `autoupdate enabled`/`autoupdate disabled`/`skipped {already autoupdate \| already no autoupdate}` | Info. |
-| Load (`resources_discover`) | `reconcile-applied-cascade`; `diagnostic`; `reconcile-aborted`; `plugin-path-skipped` | Mixed-subject rows including the backfill `components now supported`; post-commit warnings | `origin.type: "load"`. No reload hint, structurally. The last two kinds are the ones D2's list missed (TS-17). |
-| Hooks | `hook-rewake-summary`; `stop-hook-override-cap` | `{pluginId, text}`; `{pluginId, cap: 8}` | `origin.type: "hook"`. The rewake text is untrusted plugin-author prose. Pass it through as data and never interpret it. |
-
-## How consumers judge success
-
-1. **Scripts (`pi --mode json -p --no-session --offline "/claude:plugin <verb> ..."`).** Parse the stdout JSONL. Keep `type == "entry_appended" && entry.customType == "claude-plugin"`. Check `entry.data.schemaVersion`: reject unknown majors, and ignore unknown fields and kinds. Verdict = max `severity` over the entries whose `origin.type == "command"`. `error` means the command did not happen, `warning` means it happened but fell short, and `info` means the desired state was reached (benign skips such as `already installed` count as info). The process exit code is always 0 and says nothing (D5). If there are zero command-origin entries, treat it as a failure: the handler threw, which should never happen under NFR-2. A `jq` one-liner in the docs would show this.
-2. **RPC clients.** Same filter. The command's entries end at the `{type: "response", command: "prompt"}` for that request, whose `success: true` means only that the command ran. Surface `device-flow-prompt` to the user at once. Load/hook-origin entries can arrive at any time and belong to no request.
-3. **In-process tests.** Use the capture helper (TS-19). Assert on typed fields, never on bytes (the catalog tests keep owning the text bytes).
+| ID | Gap | Impact | Disposition |
+|----|-----|--------|-------------|
+| **G-1** | **Tool-name separator.** In `mcp` mode the adapter produces `mcp__<server>_<tool>`; Claude produces `mcp__<server>__<tool>` (A7 vs U3). No adapter mode yields `__` from a clean server name. | **High.** Plugin hook matchers on their own MCP tools never fire. `tool_name` in hook payloads differs. Skill and agent text that names `mcp__plugin_x_y__tool` refers to a tool that does not exist under that name: the model has to find it through search, and the adapter's fuzzy proxy lookup may or may not resolve it (unverified). Agent `tools:` entries in that form are dropped by the agents bridge. | **Decision needed.** Recommended: clean key + D-2 + an upstream request (`toolPrefix` mode or a `__` separator). Alternative: the trailing-underscore key (see Anti-Features). |
+| G-2 | **No `${VAR:-default}`** at adapter runtime (A6). | The default is picked at install time and kept until reinstall or update. If `VAR` is set at install but unset at runtime, the result is `""`, not the default. | Install-time rewrite (TS-6c). Document it. |
+| G-3 | **Unset `${VAR}` becomes `""`, not literal**, and nothing can escape `${` in `command`, `args`, `cwd`, `url`, or `headers`. Only `env` can opt out, through `literalEnv`. | A literal `${X}` argument differs; that is almost always an authoring bug upstream too. For `url`, both sides fail the server. | Install-time warning (TS-7). Document it. |
+| G-4 | **Syntax the adapter adds:** `$env:VAR`, `{env:VAR}`, `~/` in `command`, `args`, and `cwd`, and a leading `!` in `env`, `headers`, and `bearerToken`. | Rare in plugin manifests, but the values differ from Claude's. | Escape `!` as `!!`. The others cannot be escaped; document them. |
+| G-5 | **No credential blanking** (U9). | A Pi provider key in `process.env` could be expanded into a plugin server's `url` or `headers`. Claude blanks its own keys. | Document it. Mirroring Pi provider keys is a possible follow-up. |
+| G-6 | **Per-tool `_meta["anthropic/alwaysLoad"]`** | No per-tool equivalent of "always load" exists in config; `directTools: string[]` needs the tool names ahead of time. | Those tools stay deferred. Document it. |
+| G-7 | **`headersHelper` ≠ `requestHeadersCommand`.** Claude runs a shell helper that returns headers per connection; the adapter runs an executable per request with a JSON envelope on stdin. | Plugins using `headersHelper` lose dynamic auth. | Warn, and do not translate (D-4). |
+| G-8 | **No `ws` transport.** `sse` works only through `httpTransport`. | `ws` servers cannot run. | Warn (D-4). |
+| G-9 | **Lifecycle.** Claude connects plugin servers at session start and keeps them for the session. The adapter defaults to `lazy` with a 10-minute idle shutdown, which loses server-side state. | Stateful servers (browsers, database sessions) reset after idle time. | **Ask the user.** `keep-alive` is closest to upstream (it reconnects remote servers, as Claude does); the adapter's default favors memory. Leaving `lifecycle` unset diverges silently. |
+| G-10 | **Project trust re-prompts** (A11). The approval is tied to the full definition, and `pluginRoot` paths change on every update. | Each project-scope plugin update prompts again ("Don't allow" is the default), and headless sessions skip the server. | This already happens with `.pi/mcp.json`. Document it. |
+| G-11 | **Tool names over 64 characters** are not truncated by the adapter (A7). | Long `mcp__plugin_<long>_<long>_<tool>` names may be rejected by providers. Claude Code's truncation behavior is unknown. | Warn at stage time when name length plus the known prefix is over 64? Research during the phase. |
+| G-12 | **User-scope `${CLAUDE_PROJECT_DIR}`.** Claude resolves it for every scope (U5). We leave it literal (MENV-03/T-92-06), and the adapter then expands the literal to `""`, because `CLAUDE_PROJECT_DIR` is not in `process.env`. | The value is empty, not literal. The decision record assumed it stays literal. | Re-check T-92-06 against A6. Either note it or set the variable for MCP spawns only, which the adapter's `env` allows through the declared-wins merge. |
+| G-13 | **Same-reload visibility** (A13). | Entries that migration or reconcile installs are seen by the adapter on the second reload. | Spike during the phase. Document if accepted. |
 
 ## Feature Dependencies
 
 ```
-D1 presentation model (severity, reload, tally, summary, soft-dep markers upstream of rendering)
-    ├──requires──> TS-8 composed reasons with markers
-    ├──requires──> TS-4 / TS-6 required severity + needsReload on every kind
-    ├──requires──> TS-11 precomputed causeChain
-    └──enables───> D-1 summary, D-2 numeric tally, D-5 structured advisories, D-6 no-op marker
+TS-11 Dependency floors (Pi 1.0 / adapter 5)
+    └──enables──> TS-3 search = Pi deferred tools (Pi ≥0.99 only)
+                  TS-10 detection test (Pi 1.0 built-in shape)
 
-TS-1 envelope + TS-3 kind union ──requires──> typebox wire schema
-    └──enables───> TS-18 docs, D-3 exported schema + drift gate, TS-19 capture helper
+TS-1 mcp-adapter.json delivery (JSONC-safe read, new NFR-10 write set)
+    ├──requires──> TS-8 collision walk (must include mcp-adapter.json files)
+    ├──requires──> TS-2 naming (+ TS-4 toolPrefix)
+    │                  └──enables──> D-2 hooks Claude-form mapping
+    │                  └──enables──> D-1 info status (snapshot keyed by generated name)
+    ├──requires──> TS-6 expansion/escaping (+ TS-7 warnings)
+    ├──requires──> TS-3 directTools search
+    └──requires──> TS-9 override preservation (panel now edits our file)
 
-TS-16 origin/command id ──requires──> router verb threaded into NotificationContext (widened for mode/appendEntry anyway)
-    └──enhances──> TS-5 verdict rule, D-7 invocationId
+TS-5 Auto migration ──requires──> TS-1, TS-2, TS-6 (re-stage under new rules)
 
-TS-17 raw-surface kinds ──requires──> domain/github-auth.ts passes {verificationUri, userCode}, not a string
-                        ──requires──> index.ts load-path raw strings get kinds
-
-TS-12 usage-error kind ──enables──> D6 browse refusal
-TS-13 no-new-paths ──conflicts──> copying upstream list --json fields (installPath, projectPath)
-Embedded full text (anti) ──conflicts──> D1 peer converters
+D-3 description, D-4 field translation ──enhance──> TS-1
 ```
 
 ### Dependency Notes
 
-- **Everything in the per-verb table requires D1 first.** Without the model refactor, the JSON converter would have to re-derive severity, markers, and hints. That is exactly the duplication D1 exists to prevent, and it would drift from the text form.
-- **TS-16 and TS-17 touch call sites outside the dispatch owner.** Every other JSON feature stays inside `shared/` plus the strategy switch. These two change `edge/router.ts` threading, `domain/github-auth.ts`, and `index.ts`. Plan them explicitly.
-- **TS-19 depends on TS-3's schema object existing.** Build the schema before the helper so the helper validates from day one.
+- **TS-1 requires TS-8:** a stage into `mcp-adapter.json` that skips the adapter-file sources in its collision walk would miss the highest-precedence slots: `.pi/mcp-adapter.json` and the global `mcp-adapter.json`.
+- **TS-5 requires TS-1, TS-2, and TS-6:** migration has to write the final shape once. Re-staging from the recorded plugin root (offline, NFR-5-safe for cached sources) reuses one code path. Fall back to transforming the entry in place when the source is gone.
+- **TS-9 conflicts with naive re-stage:** `prepareStageMcpServers` replaces every owned entry outright ("replace ours with stamped"), so that branch has to merge the carried fields.
+- **D-1 depends on the factory-time subscription:** the snapshot is push-only, so subscribing late means waiting for the next status change.
+- **The ENVDOC-01 doc drift is now worse:** `docs/env-vars.md` §"MCP runtime env inheritance" says the adapter does not interpolate `command` or `args`. In 5.0.0 it does both, and it expands `~/` (A6). Rewrite that section together with TS-6.
 
 ## MVP Definition
 
-### Launch With (v1: this milestone)
+### Launch With (mcp-4)
 
-- [ ] TS-1, TS-2, TS-3: envelope, versioning policy, kind union. Without these there is no contract.
-- [ ] TS-4, TS-5, TS-6: severity/needsReload required on every payload, plus the verdict rule. This is the only outcome channel Pi allows.
-- [ ] TS-7 through TS-11, TS-14, TS-15: faithful, raw-valued, ordered, absent-not-null serialization of the model.
-- [ ] TS-12, TS-17: typed usage errors and every raw surface, including `reconcile-aborted` and `plugin-path-skipped` (D2 total coverage).
-- [ ] TS-13: no new path disclosure. The session file is persistent and shareable.
-- [ ] TS-16: origin. Without it, load-time and hook output can't be told apart from command output in the stream.
-- [ ] TS-18, TS-19: schema reference and capture helper (milestone scope: docs and test enablement).
-- [ ] D-1, D-2, D-6: summary, numeric tally, no-op marker. Near-free once D1 lands, and they close obvious gaps.
+- [ ] TS-11 Floors: every later step depends on the Pi 1.0 deferred-tool path
+- [ ] TS-1 + TS-8: delivery and a correct collision walk, including the JSONC-safe read
+- [ ] TS-2 + TS-4 + TS-3: upstream naming and tool-search exposure, the core of the milestone
+- [ ] TS-6 + TS-7: expansion parity, escaping, and warnings (closes MENVX-01 and ENVLIT-01)
+- [ ] TS-9: otherwise the panel's own controls stop holding
+- [ ] TS-5: existing installs converge on `/reload` (NFR-2)
+- [ ] TS-10: pin the detection behavior
+- [ ] D-1: live status in `info`, a stated milestone target
 
-### Add After Validation (v1.x)
+### Add After Validation
 
-- [ ] D-3 exported schema file plus drift gate: when the first external consumer appears.
-- [ ] D-4 `id` field: when a consumer asks to pipe rows back into commands.
-- [ ] D-5 structured advisories: when `pending` gains a second advisory kind, or a consumer parses one.
-- [ ] Marketplace `source` on `marketplace list` rows (upstream parity for `marketplace list --json`): this needs an `MpList` model change that the text form must then ignore.
+- [ ] D-2 Hooks Claude-form mapping: add it once G-1 is decided. It is cheap if the clean-key option wins.
+- [ ] D-3 Server `description`: a trivial ranking improvement
+- [ ] D-4 Field translation (`sse`, timeouts, oauth callback): add it when a real plugin needs it
 
-### Future Consideration (v2+)
+### Future Consideration
 
-- [ ] D-7 `invocationId`: only if async-hook interleaving proves to be a real correlation problem beyond the RPC response boundary.
-- [ ] A text-bearing companion field for RPC frontends: only if the D3 consequence (below) is reopened.
+- [ ] D-5 PreToolUse via the approval broker: a separate hooks milestone
+- [ ] An upstream adapter request for a `__` tool separator mode (G-1), and for `:-` support (G-2)
+- [ ] Mirroring credential blanking for Pi provider keys (G-5)
 
 ## Feature Prioritization Matrix
 
 | Feature | User Value | Implementation Cost | Priority |
 |---------|------------|---------------------|----------|
-| TS-1/2/3 envelope, policy, kinds | HIGH | MEDIUM | P1 |
-| TS-4/5/6 severity, verdict rule, needsReload | HIGH | LOW | P1 |
-| TS-7/8 verbatim enums, composed reasons | HIGH | MEDIUM (rides D1) | P1 |
-| TS-9/10/14/15 raw values, scope, order, absent | HIGH | LOW | P1 |
-| TS-11 cause chain | HIGH | LOW-MEDIUM | P1 |
-| TS-12 usage-error kind | MEDIUM | LOW | P1 |
-| TS-13 no new paths | HIGH (risk) | LOW | P1 |
-| TS-16 origin/command id | HIGH | MEDIUM | P1 |
-| TS-17 raw-surface kinds (6 + 2 found) | MEDIUM | MEDIUM | P1 |
-| TS-18/19 docs, capture helper | HIGH (milestone goal) | LOW | P1 |
-| D-1 summary / D-2 tally / D-6 no-op | MEDIUM | LOW | P1 |
-| D-3 schema file + gate | MEDIUM | LOW-MEDIUM | P2 |
-| D-4 `id` | LOW-MEDIUM | LOW | P2 |
-| D-5 structured advisories | LOW-MEDIUM | MEDIUM | P2 |
-| D-7 invocationId | LOW | LOW-MEDIUM | P3 |
-
-**Priority key:**
-- P1: Must have for launch
-- P2: Should have, add when possible
-- P3: Nice to have, future consideration
+| TS-1 adapter-file delivery | HIGH | MEDIUM | P1 |
+| TS-2/TS-4 naming + prefix | HIGH | MEDIUM | P1 |
+| TS-3 search exposure | HIGH | LOW | P1 |
+| TS-5 auto migration | HIGH | HIGH | P1 |
+| TS-6/TS-7 expansion + warnings | HIGH | HIGH | P1 |
+| TS-8 collision walk | MEDIUM | MEDIUM | P1 |
+| TS-9 override preservation | MEDIUM | MEDIUM | P1 |
+| TS-10 detection pin | MEDIUM | LOW | P1 |
+| TS-11 floors | HIGH | MEDIUM | P1 |
+| D-1 live status in info | MEDIUM | MEDIUM | P1 (stated target) |
+| D-2 hooks name mapping | MEDIUM | MEDIUM | P2 |
+| D-3 description | LOW | LOW | P2 |
+| D-4 field translation | LOW | MEDIUM | P3 |
+| D-5 broker PreToolUse | MEDIUM | HIGH | P3 |
 
 ## Competitor Feature Analysis
 
-| Feature | Claude Code CLI `--json` (2.1.283) | `@nklisch/pi-plugins` | Our approach |
-|---------|-------------------------------------|-----------------------|--------------|
-| Selection | Per-command `--json` flag, shell only | `--output human\|json` flag, plus mode-keyed channel | `ctx.mode` only (D3) |
-| Transport | stdout, last line (mutations) or whole stdout (lists) | `appendEntry` in rpc/json; stdout lines in print | `appendEntry` in json/rpc; print silent (D4/D5) |
-| Versioning | None (per-field "requires vX") | `plugin-control/v1` grammar id | `schemaVersion` integer plus a written additive policy |
-| Outcome | `outcome: ok\|failed` plus exit 0/1 plus `alreadyInGoalState` | 11-code exit vocabulary (in payload) | Tri-state `severity`, max over the invocation |
-| Error codes | snake_case `failureCode` | Closed diagnostic reason/action vocabularies | Existing closed `Reason` tokens, verbatim |
-| Human text | `message` always present | Human output mode | `summary` on warning/error only; no embedded render |
-| Usage errors | No JSON line, stderr, exit 1 | Exit 2 | `usage-error` payload |
-| Paths | `installPath`, `projectPath` absolute | Scrubbed provenance | Nothing beyond what text shows (NFR-9) |
-| Pagination | None | `--cursor`/`--limit` | None (Appendix D) |
-| Progress | None | `accepted`/`progress`/`result` frames | None; device-flow prompt is its own kind |
+| Feature | pi-mcp-adapter `claudePlugins` loader (5.0.0) | Pi 1.0 built-in MCP | `@nklisch/pi-plugins` | Our approach (mcp-4) |
+|---------|-----------------------------------------------|---------------------|-----------------------|----------------------|
+| Plugin discovery | Explicit local paths only; reads only the root `.mcp.json` | None | Marketplaces, with a forked adapter | Marketplace install with lifecycle |
+| Server names | As written (no plugin namespace) | n/a | Not verified | `plugin_<p>_<s>` (U1/U2) |
+| Tool names | `<server>_<tool>` (default prefix) | `mcp__<server>__<tool>` (Claude form) | Not verified | `mcp__plugin_<p>_<s>_<tool>`, plus D-2 mapping |
+| Variables | `${CLAUDE_PLUGIN_ROOT}` only | Pi's own | Has `${user_config}` | ROOT/DATA/PROJECT_DIR plus `${VAR}`/`:-` parity (TS-6) |
+| Tool search | Global setting | `exposure: deferred` | Not verified | `directTools: "search"` per server |
+| Runtime status | `/mcp-adapter` panel | `/mcp` | `doctor`/`status` | Per-plugin rows in `info` (D-1) |
 
-## Open questions (for requirements, not decided here)
-
-1. **RPC text loss (a consequence of D3).** RPC clients receive `/claude:plugin` notify text today via `extension_ui_request`. Under D3 they will receive only `entry_appended` custom entries. A frontend that does not understand `claude-plugin` will show nothing, and the device-flow code is the dangerous case, because auth then waits until the flow times out. D3 is locked. The requirements should still name this behavior change, and the docs should say that RPC frontends must render `device-flow-prompt` at minimum. D-1 `summary` softens but does not remove the gap.
-2. **D2's raw-surface list is incomplete.** `makeRawNotifyFn` has three callers (`orchestrators/auth-host.ts:112`, `index.ts:128`, `index.ts:149`), not one. The two `index.ts` load-path strings need kinds for "total coverage" to hold.
-3. **`appendEntry` during `resources_discover`.** Whether the session manager accepts custom entries during extension load, before the first prompt, in `--mode json -p` and in `--no-session`, was not verified. This is for architecture or phase research to check, since load-origin payloads depend on it.
-4. **Session growth.** Every RPC `list` appends a full inventory to the persisted session. Recommending `--no-session` for scripts covers one-shot use. Long-lived RPC sessions accumulate entries, and no Pi mechanism prunes custom entries.
-5. **URL userinfo.** Check whether a stored `url`-source marketplace can carry `user:token@` before `marketplace info` persists it into a shareable session. The text form has the same exposure today, but it is ephemeral there.
+The built-in MCP is the only one that reaches Claude-form tool names. It loses on lazy start, proxy, and UI features, and leaving the adapter would regress users. So G-1 stays open, and the fix belongs on the adapter side.
 
 ## Sources
 
-- Claude Code 2.1.283 binary (`/home/linuxbrew/.linuxbrew/Caskroom/claude-code@latest/2.1.283/claude`), strings grepped 2026-09-28: install/uninstall/update/enable/disable `--json` result objects, `failureCode` derivation, `plugin list --json` / `--available` / `marketplace list --json` builders. HIGH.
-- [Plugin commands reference](https://code.claude.com/docs/en/plugins/cli-reference.md), fetched 2026-09-28: "JSON result format", `plugin list` "JSON output" tables, exit codes. HIGH (agrees with the binary).
-- `claude plugin <verb> --help` output, 2.1.283. HIGH.
-- `@earendil-works/pi-coding-agent` 0.86.1 (pinned): `dist/core/agent-session.js` (appendEntry, prompt/extension command path), `dist/core/session-manager.js` / `.d.ts` (CustomEntry), `dist/modes/rpc/rpc-mode.js` (event forwarding, ui.notify forwarding, prompt response timing), `dist/core/extensions/runner.js` (no-op UI), `dist/modes/interactive/session-share.js`. HIGH.
-- npm 11.19.1 and gh 2.97.0, probed locally 2026-09-28. HIGH.
-- [Terraform JSON output format](https://developer.hashicorp.com/terraform/internals/json-format) and [machine-readable UI](https://developer.hashicorp.com/terraform/internals/machine-readable-ui). LOW per the confidence seam (webfetch); used only as an analogy.
-- [gh formatting help](https://cli.github.com/manual/gh_help_formatting). LOW per the seam; the behavior was also observed locally.
-- kubectl `-o json` conventions: training knowledge, not re-verified. LOW.
-- `docs/competitive-analysis/pi-plugins.md` (control channel, exit codes, pagination, Appendix D decisions) and `.planning/BACKLOG.md` MRO-01.
-- In-repo: `extensions/pi-claude-marketplace/shared/notification-types.ts`, `notification-dispatch.ts`, `notification-summary.ts`, `notify-context.ts`, `redact-absolute-paths.ts`, `errors.ts`, `edge/handlers/tools.ts`, `edge/handlers/plugin/browse.ts`, `index.ts`, `domain/github-auth.ts`, `orchestrators/*/*.messaging.ts`; `docs/output-catalog.md`; `.planning/MILESTONE-CONTEXT.md`; `docs/prd/pi-claude-marketplace-prd.md` (NFR-9).
+- Claude Code 2.1.287 binary, functions grepped on 2026-10-01: `VCr`, `wx`, `Tn`, `qa`, `Hs`, `us`, `NAn`, `Vne`, `opt`, `cG`, `Hq`, `qSe`/`LAn`, and the stdio/http zod schemas
+- https://code.claude.com/docs/en/mcp (tool search, expansion fields, the unset-variable rule, plugin tool naming)
+- https://code.claude.com/docs/en/plugins-reference (the "Where each variable resolves" table, `mcpServers` shapes, `userConfig`)
+- pi-mcp-adapter 5.0.0: `docs/configuration.md`, `docs/servers.md`, `docs/tools.md`, `docs/extension-api.md`, `CHANGELOG.md` [5.0.0], `types.ts`, `config.ts`, `utils.ts`, `server-manager.ts`, `direct-tool-surface.ts`, `index.ts`, `mcp-status.ts`, `claude-plugin-loader.ts`, `pi-builtin-mcp.ts`, `package.json`
+- @earendil-works/pi-coding-agent 1.0.0: `dist/core/agent-session.js` (event order), `dist/core/mcp-servers.js` (validation), `dist/extensions/mcp/{index,tools,resources}.js`
+- Repo: `.planning/BACKLOG.md` MCPSRC-01, ENVLIT-01, MENVX-01, ENVDOC-01; `bridges/mcp/*`; `platform/pi-api.ts`; `domain/components/hook-tool-names.ts`; `docs/env-vars.md`
 
 ---
-*Feature research for: JSON presentation strategy for `/claude:plugin` (json-output milestone)*
-*Researched: 2026-09-28*
+*Feature research for: Claude plugin MCP delivery via pi-mcp-adapter 5 (mcp-4)*
+*Researched: 2026-10-01*

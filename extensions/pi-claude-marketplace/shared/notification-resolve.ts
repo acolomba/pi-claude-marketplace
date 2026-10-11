@@ -1,6 +1,7 @@
 import { softDepMarkers } from "./concerns/soft-dep.ts";
 import { hookDebugLog } from "./debug-log.ts";
 import { errorMessage, manualRecoveryLeaks, serializeCauseChain } from "./errors.ts";
+import { isLeftRow, isMovedRow, isRemovedRow, mcpConfigNoticeLine } from "./notification-mcp.ts";
 import {
   buildSummaryLine,
   computeSeverity,
@@ -15,12 +16,23 @@ import type {
   CascadeNotificationMessage,
   MarketplaceNotAddedMessage,
   MarketplaceNotificationMessage,
+  McpConfigNotice,
+  McpConfigNoticeSection,
+  McpConfigNoticesSurface,
+  McpMigrationLeftRow,
+  McpMigrationMovedRow,
+  McpMigrationRemovedRow,
+  McpMigrationRow,
+  McpMigrationSurface,
+  McpOverrideKeptNotice,
+  McpOverrideRestoredNotice,
   NotificationMessage,
   PluginFailedMessage,
   PluginNotificationMessage,
   RawSurface,
   Reason,
   ReconcileAbortedSurface,
+  RenderedMcpConfigNotice,
   Severity,
   WithPlugins,
 } from "./notification-types.ts";
@@ -562,18 +574,21 @@ export function resolveNotAddedReason(message: MarketplaceNotAddedMessage): Reas
 
 /**
  * PMOD-01: the one place a raw kind's severity is decided. The text strategy
- * and the JSON strategy both read it, so the two cannot disagree.
+ * and the JSON strategy both read it, so the two cannot disagree. The
+ * migration notice's severity depends on its rows, so resolve decides it and
+ * carries it on `ResolvedMcpMigration`.
  */
 export const RAW_SURFACE_SEVERITY = {
   "usage-error": "error",
   "usage-info": "info",
   diagnostic: "warning",
   "device-flow-prompt": "info",
+  "mcp-config-notices": "warning",
   "async-rewake-summary": "info",
   "stop-override-cap": "warning",
   "reconcile-aborted": "error",
   "plugin-path-skipped": "warning",
-} as const satisfies Record<RawSurface["kind"], Severity>;
+} as const satisfies Record<Exclude<RawSurface["kind"], "mcp-migration">, Severity>;
 
 /** D-13: a reconcile abort whose live cause has been serialized to text. */
 export interface ResolvedReconcileAborted {
@@ -581,9 +596,25 @@ export interface ResolvedReconcileAborted {
   readonly causeMessage: string;
 }
 
+/**
+ * AMIG-03: the migration notice after resolve. `rows` hold the moved rows,
+ * then the removed rows, then the rows left in `mcp.json`, each group sorted;
+ * `notices` hold the folded notices in section order. `needsReload` is true
+ * exactly when a row moved or was removed.
+ */
+export interface ResolvedMcpMigration {
+  readonly kind: "mcp-migration";
+  readonly rows: readonly McpMigrationRow[];
+  readonly notices: readonly RenderedMcpConfigNotice[];
+  readonly severity: Extract<Severity, "info" | "warning">;
+  readonly needsReload: boolean;
+}
+
 /** D-13: a raw surface after resolve. No member carries a live thrown value. */
 export type ResolvedRawSurface =
-  Exclude<RawSurface, ReconcileAbortedSurface> | ResolvedReconcileAborted;
+  | Exclude<RawSurface, ReconcileAbortedSurface | McpMigrationSurface>
+  | ResolvedReconcileAborted
+  | ResolvedMcpMigration;
 
 /**
  * D-13 / PMOD-04: the one place a raw surface's live value becomes text, and
@@ -592,8 +623,10 @@ export type ResolvedRawSurface =
  * or the string form of any other thrown value. That message, a
  * `plugin-path-skipped` reason, a `usage-error` message, and a `diagnostic`
  * header and lines can carry a thrown message, so each passes through
- * `redactCredentials`. The usage text is static help and stays as written.
- * Every other kind comes back as the same object.
+ * `redactCredentials`. The MCP kinds carry names and details read from plugin
+ * and config files, so every free-text field of theirs passes through it too.
+ * The usage text is static help and stays as written. Every other kind comes
+ * back as the same object.
  */
 export function resolveRawSurface(surface: RawSurface): ResolvedRawSurface {
   switch (surface.kind) {
@@ -620,10 +653,297 @@ export function resolveRawSurface(surface: RawSurface): ResolvedRawSurface {
         header: redactCredentials(surface.header),
         lines: surface.lines.map((line) => redactCredentials(line)),
       };
+    case "mcp-config-notices":
+      return {
+        kind: "mcp-config-notices",
+        section: surface.section,
+        notices: distinctNotices(surface.notices),
+      };
+    case "mcp-migration":
+      return resolveMcpMigration(surface);
     case "usage-info":
     case "device-flow-prompt":
     case "async-rewake-summary":
     case "stop-override-cap":
       return surface;
   }
+}
+
+// AFILE-04 / AFILE-06 / AVAR-04 / ANAME-07 / AMIG-01: the section order of the
+// config notices, in a standalone notice and inside the migration notice.
+const MCP_CONFIG_NOTICE_SECTIONS: readonly McpConfigNoticeSection[] = [
+  "comments-dropped",
+  "left-unchanged",
+  "override-kept",
+  "variables-missing",
+  "credentials-blanked",
+  "tool-rules-unenforced",
+  "leftover-removed",
+];
+
+function overrideKey(notice: McpOverrideKeptNotice | McpOverrideRestoredNotice): string {
+  return JSON.stringify([notice.scope, notice.file, notice.server]);
+}
+
+/**
+ * AFILE-06: the override-kept notices still standing after the list's
+ * write-backs, in the order each server's notice was first set. A later keep
+ * for the same scope, file and server replaces the earlier one, and a
+ * restore removes it. The list is in the order the command wrote the files.
+ */
+function standingOverrideNotices(
+  notices: readonly McpConfigNotice[],
+): readonly McpOverrideKeptNotice[] {
+  const standing = new Map<string, McpOverrideKeptNotice>();
+  for (const notice of notices) {
+    if (notice.kind === "override-kept") {
+      standing.set(overrideKey(notice), notice);
+    } else if (notice.kind === "override-restored") {
+      standing.delete(overrideKey(notice));
+    }
+  }
+
+  return [...standing.values()];
+}
+
+function noticesOfSection(
+  notices: readonly McpConfigNotice[],
+  section: McpConfigNoticeSection,
+): readonly RenderedMcpConfigNotice[] {
+  if (section === "override-kept") {
+    return standingOverrideNotices(notices);
+  }
+
+  return notices.filter((notice): notice is RenderedMcpConfigNotice => notice.kind === section);
+}
+
+/**
+ * AFILE-04 / AFILE-06: a command's MCP config notices as one raw surface per
+ * non-empty section, in section order. An override-kept notice stands only
+ * when no later override-restored notice for the same scope, file and server
+ * cancels it, and an override-restored notice is in no section.
+ */
+export function mcpConfigNoticeSurfaces(
+  notices: readonly McpConfigNotice[],
+): readonly McpConfigNoticesSurface[] {
+  const surfaces: McpConfigNoticesSurface[] = [];
+  for (const section of MCP_CONFIG_NOTICE_SECTIONS) {
+    const sectionNotices = noticesOfSection(notices, section);
+    if (sectionNotices.length > 0) {
+      surfaces.push({ kind: "mcp-config-notices", section, notices: sectionNotices });
+    }
+  }
+
+  return surfaces;
+}
+
+/**
+ * PMOD-04: a notice with each name it carries redacted. Scope, file, and kind
+ * are closed sets; plugin, server, field, and variable names come from files.
+ */
+function redactNotice(notice: RenderedMcpConfigNotice): RenderedMcpConfigNotice {
+  switch (notice.kind) {
+    case "comments-dropped":
+    case "left-unchanged":
+      return notice;
+    case "override-kept":
+    case "tool-rules-unenforced":
+      return {
+        ...notice,
+        plugin: redactCredentials(notice.plugin),
+        server: redactCredentials(notice.server),
+        fields: notice.fields.map((field) => redactCredentials(field)),
+      };
+    case "variables-missing":
+    case "credentials-blanked":
+      return {
+        ...notice,
+        plugin: redactCredentials(notice.plugin),
+        server: redactCredentials(notice.server),
+        names: notice.names.map((name) => redactCredentials(name)),
+      };
+    case "leftover-removed":
+      return {
+        ...notice,
+        plugin: redactCredentials(notice.plugin),
+        server: redactCredentials(notice.server),
+      };
+  }
+}
+
+/**
+ * AFILE-04: the redacted notices of one section, each distinct line once, in
+ * first-seen order. Two notices are the same when they render the same line.
+ */
+function distinctNotices(
+  notices: readonly RenderedMcpConfigNotice[],
+): readonly RenderedMcpConfigNotice[] {
+  const seen = new Set<string>();
+  const distinct: RenderedMcpConfigNotice[] = [];
+  for (const notice of notices.map((each) => redactNotice(each))) {
+    const line = mcpConfigNoticeLine(notice);
+    if (!seen.has(line)) {
+      seen.add(line);
+      distinct.push(notice);
+    }
+  }
+
+  return distinct;
+}
+
+/** PMOD-04: an owner row with its plugin, marketplace, and old names redacted. */
+function redactOwnerRow<
+  Row extends {
+    readonly plugin: string;
+    readonly marketplace: string;
+    readonly servers: readonly string[];
+  },
+>(row: Row): Row {
+  return {
+    ...row,
+    plugin: redactCredentials(row.plugin),
+    marketplace: redactCredentials(row.marketplace),
+    servers: row.servers.map((server) => redactCredentials(server)),
+  };
+}
+
+/** PMOD-04: a migration row with each name and detail it carries redacted. */
+function redactMigrationRow(row: McpMigrationRow): McpMigrationRow {
+  switch (row.kind) {
+    case "moved":
+      return {
+        ...row,
+        plugin: redactCredentials(row.plugin),
+        marketplace: redactCredentials(row.marketplace),
+        from: redactCredentials(row.from),
+        to: redactCredentials(row.to),
+      };
+    case "removed":
+      return {
+        ...row,
+        plugin: redactCredentials(row.plugin),
+        marketplace: redactCredentials(row.marketplace),
+        server: redactCredentials(row.server),
+        ...(row.feature === undefined ? {} : { feature: redactCredentials(row.feature) }),
+      };
+    case "stopped":
+      return { ...row, detail: redactCredentials(row.detail) };
+    case "file-unreadable":
+      return row;
+    case "collision":
+      return {
+        ...redactOwnerRow(row),
+        key: redactCredentials(row.key),
+        source: redactCredentials(row.source),
+      };
+    case "unfinished":
+      return { ...redactOwnerRow(row), detail: redactCredentials(row.detail) };
+    case "unowned":
+    case "not-listed":
+    case "source-unreadable":
+    case "source-outdated":
+    case "marketplace-unreadable":
+      return redactOwnerRow(row);
+  }
+}
+
+/** Plain code-unit order: no locale, no normalization. */
+function codeUnitOrder(left: string, right: string): number {
+  return left < right ? -1 : Number(left > right);
+}
+
+/** Project before user, then plugin, then old name, in code-unit order. */
+function compareMovedRows(left: McpMigrationMovedRow, right: McpMigrationMovedRow): number {
+  return (
+    codeUnitOrder(left.scope, right.scope) ||
+    codeUnitOrder(left.plugin, right.plugin) ||
+    codeUnitOrder(left.from, right.from)
+  );
+}
+
+/** Project before user, then plugin, then old name, in code-unit order. */
+function compareRemovedRows(left: McpMigrationRemovedRow, right: McpMigrationRemovedRow): number {
+  return (
+    codeUnitOrder(left.scope, right.scope) ||
+    codeUnitOrder(left.plugin, right.plugin) ||
+    codeUnitOrder(left.server, right.server)
+  );
+}
+
+/** The plugin and first-name sort keys of a left row; a stopped row sorts by its detail. */
+function leftRowKeys(row: McpMigrationLeftRow): readonly [plugin: string, name: string] {
+  switch (row.kind) {
+    case "stopped":
+      return [row.detail, ""];
+    case "file-unreadable":
+      return ["", row.file];
+    case "unowned":
+    case "not-listed":
+    case "source-unreadable":
+    case "source-outdated":
+    case "marketplace-unreadable":
+    case "collision":
+    case "unfinished":
+      return [row.plugin, row.servers.slice(0, 1).join("")];
+  }
+}
+
+/** Project before user, then plugin, then first old name, in code-unit order. */
+function compareLeftRows(left: McpMigrationLeftRow, right: McpMigrationLeftRow): number {
+  const [leftPlugin, leftName] = leftRowKeys(left);
+  const [rightPlugin, rightName] = leftRowKeys(right);
+  return (
+    codeUnitOrder(left.scope, right.scope) ||
+    codeUnitOrder(leftPlugin, rightPlugin) ||
+    codeUnitOrder(leftName, rightName)
+  );
+}
+
+/** Whether a removal makes the notice a warning: a dropped or malformed server (AMIG-03). */
+function isWarningRemoval(row: McpMigrationRemovedRow): boolean {
+  return row.cause === "unsupported-feature" || row.cause === "malformed";
+}
+
+/**
+ * Whether a notice makes the migration notice a warning: a leftover removed,
+ * or a moved server with an unset variable, a withheld credential or tool
+ * rules not enforced. A standalone section of these kinds is a warning too
+ * (ANAME-07, AVAR-04).
+ */
+function isWarningNotice(notice: RenderedMcpConfigNotice): boolean {
+  return (
+    notice.kind === "leftover-removed" ||
+    notice.kind === "variables-missing" ||
+    notice.kind === "credentials-blanked" ||
+    notice.kind === "tool-rules-unenforced"
+  );
+}
+
+/**
+ * AMIG-01 / AMIG-03 / AMIG-04: resolves the one migration notice per reload.
+ * Moved and removed rows sort project before user, then by plugin, then by
+ * old name; left rows by scope, then plugin, then first old name (a stopped
+ * row by its detail, a file row before the plugin rows), in code-unit order.
+ * The notices fold and deduplicate as a standalone section list does.
+ * Severity is `"warning"` when a row was left in place, a server was removed
+ * as unsupported or malformed, or a notice warns, and `"info"` otherwise: a
+ * server removed because its plugin no longer declares it or is disabled does
+ * not by itself warn.
+ */
+function resolveMcpMigration(surface: McpMigrationSurface): ResolvedMcpMigration {
+  const rows = surface.rows.map((row) => redactMigrationRow(row));
+  const moved = rows.filter(isMovedRow).sort(compareMovedRows);
+  const removed = rows.filter(isRemovedRow).sort(compareRemovedRows);
+  const left = rows.filter(isLeftRow).sort(compareLeftRows);
+  const notices = mcpConfigNoticeSurfaces(surface.notices).flatMap((section) =>
+    distinctNotices(section.notices),
+  );
+  const warns = left.length > 0 || removed.some(isWarningRemoval) || notices.some(isWarningNotice);
+  return {
+    kind: "mcp-migration",
+    rows: [...moved, ...removed, ...left],
+    notices,
+    severity: warns ? "warning" : "info",
+    needsReload: moved.length > 0 || removed.length > 0,
+  };
 }

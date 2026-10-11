@@ -40,6 +40,7 @@ import {
   resolveGitSubdirRoot,
   type RemovalOps,
 } from "../../shared/fs-utils.ts";
+import { ownValue } from "../../shared/own-key.ts";
 import {
   DEFAULT_GIT_OPS,
   refreshGitHubClone,
@@ -497,7 +498,7 @@ export async function seedSameRepoPluginMirrors(args: {
   const { locations, marketplaceName } = args;
 
   const state = await loadState(locations.extensionRoot);
-  const mp = state.marketplaces[marketplaceName];
+  const mp = ownValue(state.marketplaces, marketplaceName);
   if (mp === undefined) {
     return;
   }

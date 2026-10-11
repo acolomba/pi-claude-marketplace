@@ -1,8 +1,15 @@
 import Type from "typebox";
 
+import type { Companion } from "./concerns/soft-dep.ts";
 import type { RowHint } from "./notification-resolve.ts";
 import type {
   MarketplaceStatus,
+  McpConfigFileNotice,
+  McpMigrationFileUnreadableRow,
+  McpMigrationLeftRow,
+  McpMigrationRemovalCause,
+  McpMigrationUnfinishedRow,
+  McpServerStatus,
   PluginInfoRow,
   PluginStatus,
   Reason,
@@ -85,7 +92,7 @@ const REASONS = {
   "unsupported hooks": true,
   lsp: true,
   "requires pi-subagents": true,
-  "requires pi-mcp": true,
+  "requires pi-mcp-adapter": true,
   "rollback partial": true,
   unreadable: true,
   unparseable: true,
@@ -138,6 +145,7 @@ const REASONS = {
   "stale workflow command": true,
   "requires pi-dynamic-workflows": true,
   "components now supported": true,
+  "unsupported mcp": true,
 } as const satisfies Record<Reason, true>;
 
 const SEVERITIES = {
@@ -157,6 +165,61 @@ const ROW_HINTS = {
   "stale-gate-update": true,
   enable: true,
 } as const satisfies Record<RowHint, true>;
+
+/** ASTAT-01 / ASTAT-02: the states plugin info shows for an MCP server. */
+const MCP_SERVER_STATUSES = {
+  connected: true,
+  "cached, connects on first use": true,
+  "needs authentication": true,
+  "pending approval": true,
+  disabled: true,
+  "not connected": true,
+  failed: true,
+  "status unknown": true,
+  "not loaded": true,
+  "overridden by project scope": true,
+} as const satisfies Record<McpServerStatus, true>;
+
+const COMPANIONS = {
+  "pi-dynamic-workflows": true,
+  "pi-mcp-adapter": true,
+  "pi-subagents": true,
+} as const satisfies Record<Companion, true>;
+
+const MCP_CONFIG_FILE_NOTICE_KINDS = {
+  "comments-dropped": true,
+  "left-unchanged": true,
+} as const satisfies Record<McpConfigFileNotice["kind"], true>;
+
+/** The scope config files a file notice or a file-unreadable row names; the two sets are one. */
+const MCP_CONFIG_FILES = {
+  "mcp-adapter.json": true,
+  "mcp.json": true,
+} as const satisfies Record<McpMigrationFileUnreadableRow["file"], true>;
+
+/** The left-in-place rows that carry only an owner and its old names. */
+const MCP_MIGRATION_OWNER_ROW_KINDS = {
+  unowned: true,
+  "not-listed": true,
+  "source-unreadable": true,
+  "source-outdated": true,
+  "marketplace-unreadable": true,
+} as const satisfies Record<
+  Exclude<McpMigrationLeftRow["kind"], "stopped" | "file-unreadable" | "collision" | "unfinished">,
+  true
+>;
+
+const MCP_MIGRATION_REMOVAL_CAUSES = {
+  "not-declared": true,
+  disabled: true,
+  "unsupported-feature": true,
+  malformed: true,
+} as const satisfies Record<McpMigrationRemovalCause, true>;
+
+const MCP_MIGRATION_UNFINISHED_FILES = {
+  "mcp.json": true,
+  "project-scope mcp-adapter.json": true,
+} as const satisfies Record<McpMigrationUnfinishedRow["file"], true>;
 
 /** The keys of an enrollment map, in declaration order. */
 function enrolledKeys<K extends string>(map: Record<K, true>): K[] {
@@ -179,6 +242,13 @@ const REASON = literalEnum(REASONS);
 const SEVERITY = literalEnum(SEVERITIES);
 const SCOPE = literalEnum(SCOPES);
 const ROW_HINT = literalEnum(ROW_HINTS);
+const MCP_SERVER_STATUS = literalEnum(MCP_SERVER_STATUSES);
+const COMPANION = literalEnum(COMPANIONS);
+const MCP_CONFIG_FILE_NOTICE_KIND = literalEnum(MCP_CONFIG_FILE_NOTICE_KINDS);
+const MCP_CONFIG_FILE = literalEnum(MCP_CONFIG_FILES);
+const MCP_MIGRATION_OWNER_ROW_KIND = literalEnum(MCP_MIGRATION_OWNER_ROW_KINDS);
+const MCP_MIGRATION_REMOVAL_CAUSE = literalEnum(MCP_MIGRATION_REMOVAL_CAUSES);
+const MCP_MIGRATION_UNFINISHED_FILE = literalEnum(MCP_MIGRATION_UNFINISHED_FILES);
 
 const COUNT = Type.Integer({ minimum: 0 });
 
@@ -381,6 +451,29 @@ const PLUGIN_INFO_ROW_FIELDS = {
   dependencies: Type.Optional(STRINGS),
 };
 
+/**
+ * ANAME-01 / ANAME-07 / AVAR-04 / ASTAT-01: one plugin MCP server. `name` is
+ * the name Claude Code gives it, `plugin:<plugin>:<server>`. A server a
+ * partial install leaves out carries `unsupportedFeature`; a written server
+ * may carry its unset and withheld variable names and its status.
+ */
+const MCP_SERVER = Type.Object(
+  {
+    name: Type.String(),
+    unsupportedFeature: Type.Optional(Type.String()),
+    unsetVariables: Type.Optional(STRINGS),
+    withheldVariables: Type.Optional(STRINGS),
+    status: Type.Optional(MCP_SERVER_STATUS),
+  },
+  { additionalProperties: false },
+);
+
+/** ADET-01: one companion extension the resolved components need. */
+const COMPANION_REQUIREMENT = Type.Object(
+  { companion: COMPANION, missing: Type.Boolean() },
+  { additionalProperties: false },
+);
+
 /** D-04: a plugin-info row, discriminated by `componentsResolved`. */
 const PLUGIN_INFO_ROW = Type.Union([
   Type.Object(
@@ -392,12 +485,13 @@ const PLUGIN_INFO_ROW = Type.Union([
           agents: Type.Optional(STRINGS),
           commands: Type.Optional(STRINGS),
           hooks: Type.Optional(Type.Array(HOOK_ENTRY)),
-          mcp: Type.Optional(STRINGS),
+          mcp: Type.Optional(Type.Array(MCP_SERVER)),
           skills: Type.Optional(STRINGS),
           workflows: Type.Optional(STRINGS),
         },
         { additionalProperties: false },
       ),
+      requires: Type.Optional(Type.Array(COMPANION_REQUIREMENT)),
     },
     { additionalProperties: false },
   ),
@@ -571,6 +665,134 @@ const PLUGIN_PATH_SKIPPED_PAYLOAD = Type.Object(
   { additionalProperties: false },
 );
 
+const MCP_NOTICE_SUBJECT_FIELDS = {
+  scope: SCOPE,
+  file: Type.Literal("mcp-adapter.json"),
+  plugin: Type.String(),
+  server: Type.String(),
+};
+
+/**
+ * AFILE-04 / AFILE-06 / AVAR-04 / ANAME-07 / AMIG-01: one MCP config notice. It
+ * names fields and variables, never their values (AVAR-05).
+ */
+const MCP_CONFIG_NOTICE = Type.Union([
+  Type.Object(
+    { kind: MCP_CONFIG_FILE_NOTICE_KIND, scope: SCOPE, file: MCP_CONFIG_FILE },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    { kind: Type.Literal("override-kept"), ...MCP_NOTICE_SUBJECT_FIELDS, fields: STRINGS },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    { kind: Type.Literal("variables-missing"), ...MCP_NOTICE_SUBJECT_FIELDS, names: STRINGS },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    { kind: Type.Literal("credentials-blanked"), ...MCP_NOTICE_SUBJECT_FIELDS, names: STRINGS },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    { kind: Type.Literal("tool-rules-unenforced"), ...MCP_NOTICE_SUBJECT_FIELDS, fields: STRINGS },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    { kind: Type.Literal("leftover-removed"), ...MCP_NOTICE_SUBJECT_FIELDS },
+    { additionalProperties: false },
+  ),
+]);
+
+const MCP_ROW_OWNER_FIELDS = {
+  scope: SCOPE,
+  plugin: Type.String(),
+  marketplace: Type.String(),
+  servers: STRINGS,
+};
+
+/** AMIG-01 / AMIG-03 / AMIG-04: one row of the reload migration notice. */
+const MCP_MIGRATION_ROW = Type.Union([
+  Type.Object(
+    {
+      kind: Type.Literal("moved"),
+      scope: SCOPE,
+      plugin: Type.String(),
+      marketplace: Type.String(),
+      from: Type.String(),
+      to: Type.String(),
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      kind: Type.Literal("removed"),
+      scope: SCOPE,
+      plugin: Type.String(),
+      marketplace: Type.String(),
+      server: Type.String(),
+      cause: MCP_MIGRATION_REMOVAL_CAUSE,
+      feature: Type.Optional(Type.String()),
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    { kind: Type.Literal("stopped"), scope: SCOPE, detail: Type.String() },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    { kind: MCP_MIGRATION_OWNER_ROW_KIND, ...MCP_ROW_OWNER_FIELDS },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      kind: Type.Literal("collision"),
+      ...MCP_ROW_OWNER_FIELDS,
+      key: Type.String(),
+      source: Type.String(),
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    { kind: Type.Literal("file-unreadable"), scope: SCOPE, file: MCP_CONFIG_FILE },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      kind: Type.Literal("unfinished"),
+      ...MCP_ROW_OWNER_FIELDS,
+      file: MCP_MIGRATION_UNFINISHED_FILE,
+      detail: Type.String(),
+    },
+    { additionalProperties: false },
+  ),
+]);
+
+/** AFILE-04: one non-empty section of MCP config notices, all of one kind. */
+const MCP_CONFIG_NOTICES_PAYLOAD = Type.Object(
+  {
+    ...RAW_ENVELOPE_FIELDS,
+    kind: Type.Literal("mcp-config-notices"),
+    notices: Type.Array(MCP_CONFIG_NOTICE, { minItems: 1 }),
+  },
+  { additionalProperties: false },
+);
+
+/**
+ * AMIG-03 / D-14: the reload migration notice. `rows` hold the moved, then
+ * the removed, then the left-in-place rows; `notices` the config notices in
+ * section order. `needsReload` is true exactly when a row moved or was
+ * removed.
+ */
+const MCP_MIGRATION_PAYLOAD = Type.Object(
+  {
+    ...RAW_ENVELOPE_FIELDS,
+    kind: Type.Literal("mcp-migration"),
+    rows: Type.Array(MCP_MIGRATION_ROW, { minItems: 1 }),
+    notices: Type.Array(MCP_CONFIG_NOTICE),
+  },
+  { additionalProperties: false },
+);
+
 /**
  * WIRE-01 / D-01..D-03: the one payload union, keyed by `kind`. Kinds appear
  * in their declared order. D-12: production reads only its static type.
@@ -594,6 +816,8 @@ export const NOTIFICATION_PAYLOAD_SCHEMA = Type.Union([
   STOP_OVERRIDE_CAP_PAYLOAD,
   RECONCILE_ABORTED_PAYLOAD,
   PLUGIN_PATH_SKIPPED_PAYLOAD,
+  MCP_CONFIG_NOTICES_PAYLOAD,
+  MCP_MIGRATION_PAYLOAD,
   Type.Object(
     {
       schemaVersion: Type.Literal(1),

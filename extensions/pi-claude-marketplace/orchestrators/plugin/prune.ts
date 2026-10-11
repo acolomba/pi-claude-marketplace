@@ -5,7 +5,7 @@ import { pruneOrphans } from "../../domain/dependency-orphans.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import { errorMessage, StateLockHeldError } from "../../shared/errors.ts";
-import { notify } from "../../shared/notification-dispatch.ts";
+import { notify, notifyMcpConfigNotices } from "../../shared/notification-dispatch.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
 import { redactCauseChain } from "../../shared/redact-absolute-paths.ts";
 
@@ -14,7 +14,7 @@ import { preparePruneRollback } from "./prune-rollback.ts";
 import { UNINSTALL_CONTEXT } from "./uninstall.messaging.ts";
 import { finalizePrunedMembers, sweepOrphans } from "./uninstall.ts";
 
-import type { PruneRestoreFailure, PruneRestoreOps } from "./prune-rollback.ts";
+import type { PruneRestoreFailure, PruneRestoreOps, PruneRollback } from "./prune-rollback.ts";
 import type { PrunedMember, UninstallHooksRouting, UninstallTransaction } from "./uninstall.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
@@ -198,6 +198,21 @@ function notifyCommitted(
 }
 
 /**
+ * NFR-3: hands each member's MCP config writes to the rollback as the
+ * cascade returns, so a rollback can restore a file this prune rewrote.
+ */
+function recordingCascade(
+  cascade: UninstallTransaction["cascadeUnstagePlugin"],
+  backup: PruneRollback,
+): UninstallTransaction["cascadeUnstagePlugin"] {
+  return async (...args) => {
+    const outcome = await cascade(...args);
+    backup.recordMcpWrites(outcome.writtenMcpFiles ?? []);
+    return outcome;
+  };
+}
+
+/**
  * Binds the standalone sweep to uninstall's guarded removal capabilities and to
  * the backup operations its rollback snapshot uses.
  */
@@ -286,7 +301,10 @@ export function createPrunePlugin(
               initiallyGone: new Set<string>(),
               locations,
               keepData: false,
-              cascade: transaction.cascadeUnstagePlugin,
+              cascade:
+                backup === undefined
+                  ? transaction.cascadeUnstagePlugin
+                  : recordingCascade(transaction.cascadeUnstagePlugin, backup),
               transaction,
             });
             if (members.length > 0) {
@@ -346,5 +364,16 @@ export function createPrunePlugin(
           new Error(errorMessage(postCommitFailure.cause)),
       });
     }
+
+    // AFILE-04: a committed sweep rewrote the MCP config files for good, so
+    // the comments it dropped follow the rows. A rolled-back sweep never
+    // reaches this point: its rollback restores each MCP file it rewrote
+    // (NFR-3), or its failure row names the file and the recovery backup
+    // keeps the original bytes.
+    notifyMcpConfigNotices(
+      options.ctx,
+      options.run,
+      outcome.members.flatMap((member) => member.mcpConfigNotices),
+    );
   };
 }

@@ -16,6 +16,8 @@ import {
   notifyAsyncRewakeSummary,
   notifyDeviceFlowPrompt,
   notifyDiagnostic,
+  notifyMcpConfigNotices,
+  notifyMcpMigration,
   notifyPluginPathSkipped,
   notifyReconcileAborted,
   notifyStopHookOverrideCap,
@@ -37,7 +39,7 @@ import {
 
 import type {
   NotificationContext as HostNotificationContext,
-  ToolInventory,
+  PiInventory,
   ToolInventoryItem,
 } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { NotificationRun } from "../../extensions/pi-claude-marketplace/shared/notification-run.ts";
@@ -572,6 +574,25 @@ for (const { kind, outcome, emit } of [
       notifyStopHookOverrideCap(ctx, run, "one@demo", 3);
     },
   },
+  {
+    kind: "mcp-config-notices",
+    outcome: false,
+    emit: (ctx, run) => {
+      notifyMcpConfigNotices(ctx, run, [
+        { kind: "left-unchanged", scope: "user", file: "mcp.json" },
+      ]);
+    },
+  },
+  {
+    kind: "mcp-migration",
+    outcome: false,
+    emit: (ctx, run) => {
+      notifyMcpMigration(ctx, run, {
+        rows: [{ kind: "stopped", scope: "user", detail: "locked" }],
+        notices: [],
+      });
+    },
+  },
 ] satisfies Array<{
   kind: string;
   outcome: boolean;
@@ -843,15 +864,19 @@ test("keeps mixed entries and duplicates ordered while reading live mode on the 
   const capture = createJsonCapture();
   let mode = "json";
   let tools: readonly ToolInventoryItem[] = [];
-  const inventory = mock<ToolInventory>({ exactParams: true, name: "inventory" });
+  const inventory = mock<PiInventory>({ exactParams: true, name: "inventory" });
   when(() => inventory.getAllTools())
     .thenReturn([])
     .times(3);
+  when(() => inventory.getCommands())
+    .thenReturn([])
+    .times(1);
   const pi = {
     getAllTools: () => {
       inventory.getAllTools();
       return tools;
     },
+    getCommands: () => inventory.getCommands(),
     appendEntry: capture.entrySink.appendEntry,
   };
   const run = openNotificationRun(pi, {
@@ -1075,12 +1100,16 @@ test("notify renders single installed plugin with empty deps under added marketp
   // arrange
   const ctx = createContext(t);
   const capture = createJsonCapture();
-  const inventory = mock<ToolInventory>({ exactParams: true, name: "tool inventory" });
+  const inventory = mock<PiInventory>({ exactParams: true, name: "Pi inventory" });
   when(() => inventory.getAllTools())
     .thenReturn([])
     .times(3);
+  when(() => inventory.getCommands())
+    .thenReturn([])
+    .times(1);
   const pi = {
     getAllTools: () => inventory.getAllTools(),
+    getCommands: () => inventory.getCommands(),
     appendEntry(customType: string, payload: unknown): void {
       assert.strictEqual(this, pi);
       capture.entrySink.appendEntry(customType, payload);
@@ -1228,7 +1257,7 @@ test("notify renders updated plugin with version arrow + mcp dep marker", (t) =>
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    `● demo [user] (added)\n  ● commit-commands v1.0.0 → v1.1.0 (updated) {requires pi-mcp}\n\n/reload to pick up changes`,
+    `● demo [user] (added)\n  ● commit-commands v1.0.0 → v1.1.0 (updated) {requires pi-mcp-adapter}\n\n/reload to pick up changes`,
   ]);
 });
 
@@ -4703,7 +4732,7 @@ test("SURF-02 / D-63-04: undefined hooks (field omitted) emits NO `hooks:` heade
       components: {
         agents: ["a"],
         commands: ["b"],
-        mcp: ["c"],
+        mcp: [{ name: "plugin:alpha:c" }],
         skills: ["d"],
       },
     },
@@ -4721,7 +4750,7 @@ test("SURF-02 / D-63-04: undefined hooks (field omitted) emits NO `hooks:` heade
       "  ● alpha v1.0.0 (installed)",
       "    agents: a",
       "    commands: b",
-      "    mcp: c",
+      "    mcp: plugin:alpha:c",
       "    skills: d",
     ].join("\n"),
   );
@@ -7034,6 +7063,364 @@ for (const mode of ["json", "rpc"]) {
     capture.assertValid();
   });
 }
+
+test("AFILE-04: an empty MCP config notice list sends nothing", (t) => {
+  // arrange
+  const ctx = createContext(t);
+
+  // act
+  notifyMcpConfigNotices(ctx, runWithNothingLoaded(), []);
+
+  // assert
+  assert.equal(ctx.ui.notify.mock.callCount(), 0);
+});
+
+test("AFILE-04: notices of every kind send one warning per kind in section order", (t) => {
+  // arrange
+  const ctx = createContext(t);
+
+  // act
+  notifyMcpConfigNotices(ctx, runWithNothingLoaded(), [
+    {
+      kind: "leftover-removed",
+      scope: "user",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "srv",
+    },
+    {
+      kind: "tool-rules-unenforced",
+      scope: "user",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "plugin_hello_srv_",
+      fields: ["toolPermissions"],
+    },
+    {
+      kind: "credentials-blanked",
+      scope: "user",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "plugin_hello_srv_",
+      names: ["ANTHROPIC_API_KEY"],
+    },
+    {
+      kind: "variables-missing",
+      scope: "user",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "plugin_hello_srv_",
+      names: ["DD_SITE"],
+    },
+    {
+      kind: "override-kept",
+      scope: "user",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "plugin_hello_srv_",
+      fields: ["env"],
+    },
+    { kind: "left-unchanged", scope: "user", file: "mcp.json" },
+    { kind: "comments-dropped", scope: "user", file: "mcp.json" },
+  ]);
+
+  // assert
+  assert.deepStrictEqual(
+    ctx.ui.notify.mock.calls.map((call) => call.arguments),
+    [
+      [
+        "MCP config comments removed.\n\nThe user-scope mcp.json was rewritten to update plugin MCP servers; its JSONC comments were removed and everything else in it was kept.",
+        "warning",
+      ],
+      [
+        "MCP config left unchanged.\n\nThe user-scope mcp.json is not a valid MCP config, so it was left unchanged. Fix it before you install or update a plugin that has MCP servers.",
+        "warning",
+      ],
+      [
+        'MCP server override kept.\n\nhello now provides "plugin_hello_srv_" in the user-scope mcp-adapter.json. Your override for "plugin_hello_srv_" is kept, but these fields of it stop applying: env. It comes back when you uninstall or disable hello.',
+        "warning",
+      ],
+      [
+        'MCP server variables not set.\n\nServer "plugin_hello_srv_" from hello in the user-scope mcp-adapter.json uses environment variables that were not set at install: DD_SITE.',
+        "warning",
+      ],
+      [
+        'MCP server credentials withheld.\n\nServer "plugin_hello_srv_" from hello in the user-scope mcp-adapter.json references credential variables that Claude Code never sends to a remote server: ANTHROPIC_API_KEY. They were written as empty values.',
+        "warning",
+      ],
+      [
+        'MCP server tool rules not enforced.\n\nServer "plugin_hello_srv_" from hello in the user-scope mcp-adapter.json declares tool permission rules that pi-mcp-adapter does not enforce: toolPermissions. Its tools run without these rules.',
+        "warning",
+      ],
+      [
+        'Old MCP server settings removed.\n\nRemoved "srv" from the user-scope mcp-adapter.json: pi-mcp-adapter had written it under the old name of a server from hello, for example for /mcp-adapter disable, and it no longer applies.',
+        "warning",
+      ],
+    ],
+  );
+});
+
+for (const mode of ["json", "rpc"]) {
+  test(`AFILE-04: MCP config notices append one mcp-config-notices entry per section in ${mode}`, () => {
+    // arrange
+    const capture = createJsonCapture();
+    const ctx = {
+      mode,
+      get ui() {
+        return capture.ui;
+      },
+    };
+    const run = { ...runWithNothingLoaded(), entrySink: capture.entrySink };
+
+    // act
+    notifyMcpConfigNotices(ctx, run, [
+      { kind: "left-unchanged", scope: "user", file: "mcp.json" },
+      { kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" },
+      { kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" },
+    ]);
+
+    // assert
+    assert.deepStrictEqual(capture.entries, [
+      {
+        customType: "claude-plugin",
+        payload: {
+          schemaVersion: 1,
+          origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+          severity: "warning",
+          needsReload: false,
+          kind: "mcp-config-notices",
+          notices: [{ kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" }],
+        },
+      },
+      {
+        customType: "claude-plugin",
+        payload: {
+          schemaVersion: 1,
+          origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+          severity: "warning",
+          needsReload: false,
+          kind: "mcp-config-notices",
+          notices: [{ kind: "left-unchanged", scope: "user", file: "mcp.json" }],
+        },
+      },
+    ]);
+    assert.deepStrictEqual(run.commandState, {
+      hasOutcome: false,
+      needsReload: false,
+      settled: false,
+      delivery: "open",
+    });
+    capture.assertValid();
+  });
+}
+
+test("AMIG-03: a report with no row and no notice sends nothing", (t) => {
+  // arrange
+  const ctx = createContext(t);
+
+  // act
+  notifyMcpMigration(ctx, runWithNothingLoaded(), { rows: [], notices: [] });
+
+  // assert
+  assert.equal(ctx.ui.notify.mock.callCount(), 0);
+});
+
+test("AMIG-03: a report with notices but no row sends each notice section as its own warning", (t) => {
+  // arrange
+  const ctx = createContext(t);
+
+  // act
+  notifyMcpMigration(ctx, runWithNothingLoaded(), {
+    rows: [],
+    notices: [
+      {
+        kind: "variables-missing",
+        scope: "user",
+        file: "mcp-adapter.json",
+        plugin: "hello",
+        server: "plugin_hello_srv_",
+        names: ["DD_SITE"],
+      },
+    ],
+  });
+
+  // assert
+  assert.deepStrictEqual(
+    ctx.ui.notify.mock.calls.map((call) => call.arguments),
+    [
+      [
+        'MCP server variables not set.\n\nServer "plugin_hello_srv_" from hello in the user-scope mcp-adapter.json uses environment variables that were not set at install: DD_SITE.',
+        "warning",
+      ],
+    ],
+  );
+});
+
+test("AMIG-03: a report with rows sends one notice with the reload hint at its severity", (t) => {
+  // arrange
+  const ctx = createContext(t);
+
+  // act
+  notifyMcpMigration(ctx, runWithNothingLoaded(), {
+    rows: [
+      {
+        kind: "removed",
+        scope: "project",
+        plugin: "hello",
+        marketplace: "mp",
+        server: "gone",
+        cause: "not-declared",
+      },
+    ],
+    notices: [],
+  });
+
+  // assert
+  assert.deepStrictEqual(
+    ctx.ui.notify.mock.calls.map((call) => call.arguments),
+    [
+      [
+        "Plugin MCP servers removed from mcp.json.\n\nRemoved from mcp.json:\n  gone (hello) [project] hello no longer declares it.\n/reload to pick up changes",
+        "info",
+      ],
+    ],
+  );
+});
+
+for (const mode of ["json", "rpc"]) {
+  test(`AMIG-03: a migration report appends one load-origin mcp-migration entry in ${mode}`, () => {
+    // arrange
+    const capture = createJsonCapture();
+    const ctx = {
+      mode,
+      get ui() {
+        return capture.ui;
+      },
+    };
+    const run: NotificationRun = {
+      origin: { kind: "load" },
+      softDeps: {
+        piSubagentsLoaded: false,
+        piMcpAdapterLoaded: false,
+        workflowEngineLoaded: false,
+      },
+      entrySink: capture.entrySink,
+    };
+
+    // act
+    notifyMcpMigration(ctx, run, {
+      rows: [
+        { kind: "stopped", scope: "user", detail: "state.json is locked" },
+        {
+          kind: "moved",
+          scope: "project",
+          plugin: "acme",
+          marketplace: "mp",
+          from: "srv",
+          to: "plugin_acme_srv_",
+        },
+      ],
+      notices: [{ kind: "comments-dropped", scope: "project", file: "mcp.json" }],
+    });
+
+    // assert
+    assert.deepStrictEqual(capture.entries, [
+      {
+        customType: "claude-plugin",
+        payload: {
+          schemaVersion: 1,
+          kind: "mcp-migration",
+          origin: { kind: "load" },
+          severity: "warning",
+          needsReload: true,
+          rows: [
+            {
+              kind: "moved",
+              scope: "project",
+              plugin: "acme",
+              marketplace: "mp",
+              from: "srv",
+              to: "plugin_acme_srv_",
+            },
+            { kind: "stopped", scope: "user", detail: "state.json is locked" },
+          ],
+          notices: [{ kind: "comments-dropped", scope: "project", file: "mcp.json" }],
+        },
+      },
+    ]);
+    capture.assertValid();
+  });
+}
+
+test("PMOD-04: a credential in a server name and a migration detail is redacted in text and JSON", (t) => {
+  // arrange
+  const ctx = createContext(t);
+  const capture = createJsonCapture();
+  const jsonContext = {
+    mode: "json",
+    get ui() {
+      return capture.ui;
+    },
+  };
+  const report = {
+    rows: [
+      {
+        kind: "unfinished",
+        scope: "user",
+        plugin: "hello",
+        marketplace: "mp",
+        servers: ["https://u:tok@h/srv"],
+        file: "mcp.json",
+        detail: "write https://u:tok@h/d failed",
+      },
+    ],
+    notices: [],
+  } as const;
+
+  // act
+  notifyMcpMigration(ctx, runWithNothingLoaded(), report);
+  notifyMcpMigration(
+    jsonContext,
+    { ...runWithNothingLoaded(), entrySink: capture.entrySink },
+    report,
+  );
+
+  // assert
+  assert.deepStrictEqual(
+    ctx.ui.notify.mock.calls.map((call) => call.arguments),
+    [
+      [
+        "Plugin MCP servers in mcp.json need attention.\n\nLeft in mcp.json:\n  https://***@h/srv (hello) [user] The new entries are written, but mcp.json could not be updated: write https://***@h/d failed. The next /reload finishes the move.",
+        "warning",
+      ],
+    ],
+  );
+  assert.deepStrictEqual(capture.entries, [
+    {
+      customType: "claude-plugin",
+      payload: {
+        schemaVersion: 1,
+        kind: "mcp-migration",
+        origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+        severity: "warning",
+        needsReload: false,
+        rows: [
+          {
+            kind: "unfinished",
+            scope: "user",
+            plugin: "hello",
+            marketplace: "mp",
+            servers: ["https://***@h/srv"],
+            file: "mcp.json",
+            detail: "write https://***@h/d failed",
+          },
+        ],
+        notices: [],
+      },
+    },
+  ]);
+  capture.assertValid();
+});
 
 test("usage info dispatch preserves usage message at info severity", (t) => {
   // arrange

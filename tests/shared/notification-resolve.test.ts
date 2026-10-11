@@ -6,6 +6,7 @@ import { ManualRecoveryError } from "../../extensions/pi-claude-marketplace/shar
 import { composeReconcileAppliedBody } from "../../extensions/pi-claude-marketplace/shared/notification-grammar.ts";
 import {
   CENTRAL_ROW_POLICY,
+  mcpConfigNoticeSurfaces,
   resolveEnvelope,
   resolveNotAddedReason,
   resolveRawSurface,
@@ -25,6 +26,8 @@ import type {
   CascadeNotificationMessage,
   MarketplaceNotAddedMessage,
   MarketplaceNotificationMessage,
+  McpConfigNotice,
+  McpMigrationRow,
   NotificationMessage,
   PluginFailedMessage,
   PluginNotificationMessage,
@@ -1197,7 +1200,7 @@ describe("resolveRows", () => {
       policy: "on",
       companion: "missing",
       snapshot: noneLoaded(),
-      expectedReasons: ["orphan rewake", "requires pi-mcp"],
+      expectedReasons: ["orphan rewake", "requires pi-mcp-adapter"],
     },
     {
       dependency: "mcp",
@@ -1308,7 +1311,7 @@ describe("resolveRows", () => {
           "orphan rewake",
           "malformed skill",
           "requires pi-subagents",
-          "requires pi-mcp",
+          "requires pi-mcp-adapter",
           "requires pi-dynamic-workflows",
         ],
       },
@@ -1325,7 +1328,7 @@ describe("resolveRows", () => {
       expectedRow: {
         status: "partially-installed",
         name: "alpha",
-        reasons: ["lsp", "lsp", "requires pi-mcp"],
+        reasons: ["lsp", "lsp", "requires pi-mcp-adapter"],
       },
     },
     {
@@ -1559,6 +1562,1160 @@ describe("resolveRawSurface", () => {
       assert.strictEqual(resolved, expectedSurface);
     });
   }
+
+  for (const { requirement, notice } of [
+    {
+      requirement: "AFILE-04",
+      notice: { kind: "left-unchanged", scope: "project", file: "mcp-adapter.json" },
+    },
+    {
+      requirement: "AFILE-06",
+      notice: {
+        kind: "override-kept",
+        scope: "project",
+        file: "mcp-adapter.json",
+        plugin: "hello",
+        server: "srv",
+        fields: ["env", "headers"],
+      },
+    },
+    {
+      requirement: "AVAR-04",
+      notice: {
+        kind: "variables-missing",
+        scope: "project",
+        file: "mcp-adapter.json",
+        plugin: "hello",
+        server: "plugin_hello_srv_",
+        names: ["DD_SITE"],
+      },
+    },
+    {
+      requirement: "AVAR-05",
+      notice: {
+        kind: "credentials-blanked",
+        scope: "project",
+        file: "mcp-adapter.json",
+        plugin: "hello",
+        server: "plugin_hello_srv_",
+        names: ["ANTHROPIC_API_KEY"],
+      },
+    },
+    {
+      requirement: "ANAME-07",
+      notice: {
+        kind: "tool-rules-unenforced",
+        scope: "project",
+        file: "mcp-adapter.json",
+        plugin: "hello",
+        server: "plugin_hello_srv_",
+        fields: ["toolPermissions"],
+      },
+    },
+    {
+      requirement: "AMIG-01",
+      notice: {
+        kind: "leftover-removed",
+        scope: "project",
+        file: "mcp-adapter.json",
+        plugin: "hello",
+        server: "srv",
+      },
+    },
+  ] as const) {
+    test(`${requirement}: a repeated ${notice.kind} notice resolves once`, () => {
+      // arrange
+      const surface = {
+        kind: "mcp-config-notices",
+        section: notice.kind,
+        notices: [notice, notice],
+      } as const;
+
+      // act
+      const resolved = resolveRawSurface(surface);
+
+      // assert
+      assert.deepStrictEqual(resolved, {
+        kind: "mcp-config-notices",
+        section: notice.kind,
+        notices: [notice],
+      });
+    });
+  }
+
+  test("PMOD-04 redacts a credential in each name a config notice carries", () => {
+    // arrange
+    const surface = {
+      kind: "mcp-config-notices",
+      section: "override-kept",
+      notices: [
+        {
+          kind: "override-kept",
+          scope: "user",
+          file: "mcp-adapter.json",
+          plugin: "https://u:tok@h/p",
+          server: "https://u:tok@h/s",
+          fields: ["https://u:tok@h/f"],
+        },
+      ],
+    } as const;
+
+    // act
+    const resolved = resolveRawSurface(surface);
+
+    // assert
+    assert.deepStrictEqual(resolved, {
+      kind: "mcp-config-notices",
+      section: "override-kept",
+      notices: [
+        {
+          kind: "override-kept",
+          scope: "user",
+          file: "mcp-adapter.json",
+          plugin: "https://***@h/p",
+          server: "https://***@h/s",
+          fields: ["https://***@h/f"],
+        },
+      ],
+    });
+  });
+
+  test("AMIG-03: moved rows sort project first, then by plugin and old name in code-unit order, at info", () => {
+    // arrange
+    const userAcme = {
+      kind: "moved",
+      scope: "user",
+      plugin: "acme",
+      marketplace: "mp",
+      from: "srv",
+      to: "plugin_acme_srv_",
+    } as const;
+    const projectBeta = {
+      kind: "moved",
+      scope: "project",
+      plugin: "beta",
+      marketplace: "mp",
+      from: "alpha",
+      to: "plugin_beta_alpha_",
+    } as const;
+    const projectAcmeWeb = {
+      kind: "moved",
+      scope: "project",
+      plugin: "acme",
+      marketplace: "mp",
+      from: "web",
+      to: "plugin_acme_web_",
+    } as const;
+    const projectAcmeApi = {
+      kind: "moved",
+      scope: "project",
+      plugin: "acme",
+      marketplace: "mp",
+      from: "api",
+      to: "plugin_acme_api_",
+    } as const;
+    const projectZed = {
+      kind: "moved",
+      scope: "project",
+      plugin: "Zed",
+      marketplace: "mp",
+      from: "srv",
+      to: "plugin_Zed_srv_",
+    } as const;
+
+    // act
+    const resolved = resolveRawSurface({
+      kind: "mcp-migration",
+      rows: [userAcme, projectBeta, projectAcmeWeb, projectAcmeApi, projectZed],
+      notices: [],
+    });
+
+    // assert
+    assert.deepStrictEqual(resolved, {
+      kind: "mcp-migration",
+      rows: [projectZed, projectAcmeApi, projectAcmeWeb, projectBeta, userAcme],
+      notices: [],
+      severity: "info",
+      needsReload: true,
+    });
+  });
+
+  test("AMIG-03: a stopped row with nothing moved is a warning that needs no reload", () => {
+    // arrange
+    const stopped = { kind: "stopped", scope: "user", detail: "state.json is locked" } as const;
+
+    // act
+    const resolved = resolveRawSurface({ kind: "mcp-migration", rows: [stopped], notices: [] });
+
+    // assert
+    assert.deepStrictEqual(resolved, {
+      kind: "mcp-migration",
+      rows: [stopped],
+      notices: [],
+      severity: "warning",
+      needsReload: false,
+    });
+  });
+
+  test("AMIG-03: moved and stopped rows share one warning, stopped rows sorted by scope then detail", () => {
+    // arrange
+    const userB = { kind: "stopped", scope: "user", detail: "b@mp: denied" } as const;
+    const projectZ = { kind: "stopped", scope: "project", detail: "z@mp: denied" } as const;
+    const moved = {
+      kind: "moved",
+      scope: "user",
+      plugin: "acme",
+      marketplace: "mp",
+      from: "srv",
+      to: "plugin_acme_srv_",
+    } as const;
+    const projectA = { kind: "stopped", scope: "project", detail: "a@mp: denied" } as const;
+
+    // act
+    const resolved = resolveRawSurface({
+      kind: "mcp-migration",
+      rows: [userB, projectZ, moved, projectA],
+      notices: [],
+    });
+
+    // assert
+    assert.deepStrictEqual(resolved, {
+      kind: "mcp-migration",
+      rows: [moved, projectA, projectZ, userB],
+      notices: [],
+      severity: "warning",
+      needsReload: true,
+    });
+  });
+
+  test("AMIG-03: config notices resolve to their distinct notices in section order, at warning", () => {
+    // arrange
+    const moved = {
+      kind: "moved",
+      scope: "project",
+      plugin: "acme",
+      marketplace: "mp",
+      from: "srv",
+      to: "plugin_acme_srv_",
+    } as const;
+    const variablesMissing = {
+      kind: "variables-missing",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "acme",
+      server: "plugin_acme_srv_",
+      names: ["TOKEN"],
+    } as const;
+    const commentsDropped = {
+      kind: "comments-dropped",
+      scope: "project",
+      file: "mcp.json",
+    } as const;
+
+    // act
+    const resolved = resolveRawSurface({
+      kind: "mcp-migration",
+      rows: [moved],
+      notices: [variablesMissing, commentsDropped, variablesMissing],
+    });
+
+    // assert
+    assert.deepStrictEqual(resolved, {
+      kind: "mcp-migration",
+      rows: [moved],
+      notices: [commentsDropped, variablesMissing],
+      severity: "warning",
+      needsReload: true,
+    });
+  });
+
+  test("AMIG-03: a tool-rules-unenforced notice resolves after the credentials-withheld notice, at warning", () => {
+    // arrange
+    const moved = {
+      kind: "moved",
+      scope: "project",
+      plugin: "acme",
+      marketplace: "mp",
+      from: "srv",
+      to: "plugin_acme_srv_",
+    } as const;
+    const toolRules = {
+      kind: "tool-rules-unenforced",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "acme",
+      server: "plugin_acme_srv_",
+      fields: ["tools[].permission_policy", "toolPermissions"],
+    } as const;
+    const credentials = {
+      kind: "credentials-blanked",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "acme",
+      server: "plugin_acme_srv_",
+      names: ["NPM_TOKEN"],
+    } as const;
+
+    // act
+    const resolved = resolveRawSurface({
+      kind: "mcp-migration",
+      rows: [moved],
+      notices: [toolRules, credentials],
+    });
+
+    // assert
+    assert.deepStrictEqual(resolved, {
+      kind: "mcp-migration",
+      rows: [moved],
+      notices: [credentials, toolRules],
+      severity: "warning",
+      needsReload: true,
+    });
+  });
+
+  for (const { notice, severity } of [
+    {
+      notice: {
+        kind: "variables-missing",
+        scope: "project",
+        file: "mcp-adapter.json",
+        plugin: "acme",
+        server: "plugin_acme_srv_",
+        names: ["TOKEN"],
+      },
+      severity: "warning",
+    },
+    {
+      notice: {
+        kind: "credentials-blanked",
+        scope: "project",
+        file: "mcp-adapter.json",
+        plugin: "acme",
+        server: "plugin_acme_srv_",
+        names: ["NPM_TOKEN"],
+      },
+      severity: "warning",
+    },
+    {
+      notice: {
+        kind: "tool-rules-unenforced",
+        scope: "project",
+        file: "mcp-adapter.json",
+        plugin: "acme",
+        server: "plugin_acme_srv_",
+        fields: ["toolPermissions"],
+      },
+      severity: "warning",
+    },
+    {
+      notice: { kind: "comments-dropped", scope: "project", file: "mcp.json" },
+      severity: "info",
+    },
+  ] as const) {
+    test(`AMIG-03: a ${notice.kind} notice alone resolves an all-moved report at ${severity}`, () => {
+      // arrange
+      const moved = {
+        kind: "moved",
+        scope: "project",
+        plugin: "acme",
+        marketplace: "mp",
+        from: "srv",
+        to: "plugin_acme_srv_",
+      } as const;
+
+      // act
+      const resolved = resolveRawSurface({
+        kind: "mcp-migration",
+        rows: [moved],
+        notices: [notice],
+      });
+
+      // assert
+      assert.deepStrictEqual(resolved, {
+        kind: "mcp-migration",
+        rows: [moved],
+        notices: [notice],
+        severity,
+        needsReload: true,
+      });
+    });
+  }
+
+  test("AMIG-03: a leftover-removed notice makes an all-moved report a warning, its notice last", () => {
+    // arrange
+    const moved = {
+      kind: "moved",
+      scope: "project",
+      plugin: "acme",
+      marketplace: "mp",
+      from: "srv",
+      to: "plugin_acme_srv_",
+    } as const;
+    const leftover = {
+      kind: "leftover-removed",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "acme",
+      server: "srv",
+    } as const;
+    const toolRules = {
+      kind: "tool-rules-unenforced",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "acme",
+      server: "plugin_acme_srv_",
+      fields: ["toolPermissions"],
+    } as const;
+
+    // act
+    const resolved = resolveRawSurface({
+      kind: "mcp-migration",
+      rows: [moved],
+      notices: [leftover, toolRules],
+    });
+
+    // assert
+    assert.deepStrictEqual(resolved, {
+      kind: "mcp-migration",
+      rows: [moved],
+      notices: [toolRules, leftover],
+      severity: "warning",
+      needsReload: true,
+    });
+  });
+
+  test("AMIG-03: left-in-place rows sort with the stopped rows by scope, then plugin, then first old name", () => {
+    // arrange
+    const unownedB = {
+      kind: "unowned",
+      scope: "project",
+      plugin: "b",
+      marketplace: "mp",
+      servers: ["x"],
+    } as const;
+    const stopped = { kind: "stopped", scope: "project", detail: "a@mp: denied" } as const;
+    const unownedA = {
+      kind: "unowned",
+      scope: "project",
+      plugin: "a",
+      marketplace: "mp",
+      servers: ["z", "b"],
+    } as const;
+    const userUnownedA = {
+      kind: "unowned",
+      scope: "user",
+      plugin: "a",
+      marketplace: "mp",
+      servers: ["a"],
+    } as const;
+    const sourceUnreadable = {
+      kind: "source-unreadable",
+      scope: "project",
+      plugin: "a",
+      marketplace: "other",
+      servers: ["m"],
+    } as const;
+    const fileUnreadable = { kind: "file-unreadable", scope: "project", file: "mcp.json" } as const;
+
+    // act
+    const resolved = resolveRawSurface({
+      kind: "mcp-migration",
+      rows: [unownedB, stopped, unownedA, userUnownedA, sourceUnreadable, fileUnreadable],
+      notices: [],
+    });
+
+    // assert
+    assert.deepStrictEqual(resolved, {
+      kind: "mcp-migration",
+      rows: [fileUnreadable, sourceUnreadable, unownedA, stopped, unownedB, userUnownedA],
+      notices: [],
+      severity: "warning",
+      needsReload: false,
+    });
+  });
+
+  test("AMIG-03: owner rows of every kind sort by plugin, then first old name", () => {
+    // arrange
+    const collision = {
+      kind: "collision",
+      scope: "user",
+      plugin: "e",
+      marketplace: "mp",
+      servers: ["e1"],
+      key: "plugin_e_e1_",
+      source: "the user-scope mcp-adapter.json",
+    } as const;
+    const unfinished = {
+      kind: "unfinished",
+      scope: "user",
+      plugin: "d",
+      marketplace: "mp",
+      servers: ["d1"],
+      file: "mcp.json",
+      detail: "permission denied",
+    } as const;
+    const sourceOutdated = {
+      kind: "source-outdated",
+      scope: "user",
+      plugin: "c",
+      marketplace: "mp",
+      servers: ["c1"],
+    } as const;
+    const notListed = {
+      kind: "not-listed",
+      scope: "user",
+      plugin: "b",
+      marketplace: "mp",
+      servers: ["b1"],
+    } as const;
+    const marketplaceUnreadable = {
+      kind: "marketplace-unreadable",
+      scope: "user",
+      plugin: "a",
+      marketplace: "mp",
+      servers: ["a1"],
+    } as const;
+
+    // act
+    const resolved = resolveRawSurface({
+      kind: "mcp-migration",
+      rows: [collision, unfinished, sourceOutdated, notListed, marketplaceUnreadable],
+      notices: [],
+    });
+
+    // assert
+    assert.deepStrictEqual(resolved, {
+      kind: "mcp-migration",
+      rows: [marketplaceUnreadable, notListed, sourceOutdated, unfinished, collision],
+      notices: [],
+      severity: "warning",
+      needsReload: false,
+    });
+  });
+
+  test("AMIG-03: removed rows sort project first, then by plugin and old name", () => {
+    // arrange
+    const rows = [
+      { scope: "user", plugin: "a", server: "x" },
+      { scope: "project", plugin: "b", server: "y" },
+      { scope: "project", plugin: "a", server: "z" },
+      { scope: "project", plugin: "a", server: "w" },
+    ].map(({ scope, plugin, server }): McpMigrationRow => ({
+      kind: "removed",
+      scope: scope === "user" ? "user" : "project",
+      plugin,
+      marketplace: "mp",
+      server,
+      cause: "not-declared",
+    }));
+
+    // act
+    const resolved = resolveRawSurface({ kind: "mcp-migration", rows, notices: [] });
+
+    // assert
+    assert.deepStrictEqual(resolved, {
+      kind: "mcp-migration",
+      rows: [rows[3], rows[2], rows[1], rows[0]],
+      notices: [],
+      severity: "info",
+      needsReload: true,
+    });
+  });
+
+  test("AMIG-03: not-declared and disabled removals alone stay info and need a reload", () => {
+    // arrange
+    const gone = {
+      kind: "removed",
+      scope: "project",
+      plugin: "hello",
+      marketplace: "mp",
+      server: "gone",
+      cause: "not-declared",
+    } as const;
+    const disabled = {
+      kind: "removed",
+      scope: "project",
+      plugin: "acme",
+      marketplace: "mp",
+      server: "srv",
+      cause: "disabled",
+    } as const;
+
+    // act
+    const resolved = resolveRawSurface({
+      kind: "mcp-migration",
+      rows: [gone, disabled],
+      notices: [],
+    });
+
+    // assert
+    assert.deepStrictEqual(resolved, {
+      kind: "mcp-migration",
+      rows: [disabled, gone],
+      notices: [],
+      severity: "info",
+      needsReload: true,
+    });
+  });
+
+  test("AMIG-03: a move with a not-declared removal stays info", () => {
+    // arrange
+    const moved = {
+      kind: "moved",
+      scope: "user",
+      plugin: "hello",
+      marketplace: "mp",
+      from: "srv",
+      to: "plugin_hello_srv_",
+    } as const;
+    const removed = {
+      kind: "removed",
+      scope: "user",
+      plugin: "hello",
+      marketplace: "mp",
+      server: "gone",
+      cause: "not-declared",
+    } as const;
+
+    // act
+    const resolved = resolveRawSurface({
+      kind: "mcp-migration",
+      rows: [moved, removed],
+      notices: [],
+    });
+
+    // assert
+    assert.deepStrictEqual(resolved, {
+      kind: "mcp-migration",
+      rows: [moved, removed],
+      notices: [],
+      severity: "info",
+      needsReload: true,
+    });
+  });
+
+  for (const row of [
+    {
+      kind: "removed",
+      scope: "project",
+      plugin: "hello",
+      marketplace: "mp",
+      server: "live",
+      cause: "unsupported-feature",
+      feature: "sdk",
+    },
+    {
+      kind: "removed",
+      scope: "project",
+      plugin: "hello",
+      marketplace: "mp",
+      server: "live",
+      cause: "malformed",
+    },
+  ] as const) {
+    test(`AMIG-03: a removal for ${row.cause} alone is a warning that needs a reload`, () => {
+      // act
+      const resolved = resolveRawSurface({ kind: "mcp-migration", rows: [row], notices: [] });
+
+      // assert
+      assert.deepStrictEqual(resolved, {
+        kind: "mcp-migration",
+        rows: [row],
+        notices: [],
+        severity: "warning",
+        needsReload: true,
+      });
+    });
+  }
+
+  test("PMOD-04 redacts a credential in each name and detail a migration row or notice carries", () => {
+    // arrange
+    const rows: readonly McpMigrationRow[] = [
+      {
+        kind: "moved",
+        scope: "project",
+        plugin: "https://u:tok@h/p",
+        marketplace: "https://u:tok@h/m",
+        from: "https://u:tok@h/from",
+        to: "https://u:tok@h/to",
+      },
+      {
+        kind: "removed",
+        scope: "project",
+        plugin: "https://u:tok@h/p",
+        marketplace: "https://u:tok@h/m",
+        server: "https://u:tok@h/s",
+        cause: "unsupported-feature",
+        feature: "https://u:tok@h/f",
+      },
+      { kind: "stopped", scope: "project", detail: "clone https://u:tok@h/r failed" },
+      { kind: "file-unreadable", scope: "user", file: "mcp.json" },
+      {
+        kind: "unowned",
+        scope: "user",
+        plugin: "https://u:tok@h/a",
+        marketplace: "https://u:tok@h/m",
+        servers: ["https://u:tok@h/s"],
+      },
+      {
+        kind: "collision",
+        scope: "user",
+        plugin: "https://u:tok@h/b",
+        marketplace: "m",
+        servers: ["s"],
+        key: "https://u:tok@h/k",
+        source: "https://u:tok@h/src",
+      },
+      {
+        kind: "unfinished",
+        scope: "user",
+        plugin: "https://u:tok@h/c",
+        marketplace: "m",
+        servers: ["s"],
+        file: "mcp.json",
+        detail: "write https://u:tok@h/d failed",
+      },
+    ];
+    const notices: readonly McpConfigNotice[] = [
+      {
+        kind: "variables-missing",
+        scope: "user",
+        file: "mcp-adapter.json",
+        plugin: "https://u:tok@h/p",
+        server: "https://u:tok@h/s",
+        names: ["https://u:tok@h/n"],
+      },
+    ];
+
+    // act
+    const resolved = resolveRawSurface({ kind: "mcp-migration", rows, notices });
+
+    // assert
+    assert.deepStrictEqual(resolved, {
+      kind: "mcp-migration",
+      rows: [
+        {
+          kind: "moved",
+          scope: "project",
+          plugin: "https://***@h/p",
+          marketplace: "https://***@h/m",
+          from: "https://***@h/from",
+          to: "https://***@h/to",
+        },
+        {
+          kind: "removed",
+          scope: "project",
+          plugin: "https://***@h/p",
+          marketplace: "https://***@h/m",
+          server: "https://***@h/s",
+          cause: "unsupported-feature",
+          feature: "https://***@h/f",
+        },
+        { kind: "stopped", scope: "project", detail: "clone https://***@h/r failed" },
+        { kind: "file-unreadable", scope: "user", file: "mcp.json" },
+        {
+          kind: "unowned",
+          scope: "user",
+          plugin: "https://***@h/a",
+          marketplace: "https://***@h/m",
+          servers: ["https://***@h/s"],
+        },
+        {
+          kind: "collision",
+          scope: "user",
+          plugin: "https://***@h/b",
+          marketplace: "m",
+          servers: ["s"],
+          key: "https://***@h/k",
+          source: "https://***@h/src",
+        },
+        {
+          kind: "unfinished",
+          scope: "user",
+          plugin: "https://***@h/c",
+          marketplace: "m",
+          servers: ["s"],
+          file: "mcp.json",
+          detail: "write https://***@h/d failed",
+        },
+      ],
+      notices: [
+        {
+          kind: "variables-missing",
+          scope: "user",
+          file: "mcp-adapter.json",
+          plugin: "https://***@h/p",
+          server: "https://***@h/s",
+          names: ["https://***@h/n"],
+        },
+      ],
+      severity: "warning",
+      needsReload: true,
+    });
+  });
+});
+
+describe("mcpConfigNoticeSurfaces", () => {
+  test("AFILE-04: mixed MCP config notices group comments-dropped first, then left-unchanged", () => {
+    // arrange
+    const leftUnchanged = {
+      kind: "left-unchanged",
+      scope: "user",
+      file: "mcp-adapter.json",
+    } as const;
+    const commentsDropped = {
+      kind: "comments-dropped",
+      scope: "project",
+      file: "mcp.json",
+    } as const;
+
+    // act
+    const surfaces = mcpConfigNoticeSurfaces([leftUnchanged, commentsDropped]);
+
+    // assert
+    assert.deepStrictEqual(surfaces, [
+      { kind: "mcp-config-notices", section: "comments-dropped", notices: [commentsDropped] },
+      { kind: "mcp-config-notices", section: "left-unchanged", notices: [leftUnchanged] },
+    ]);
+  });
+
+  test("AFILE-06: override-kept notices for two servers share one section, in list order", () => {
+    // arrange
+    const alpha = {
+      kind: "override-kept",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "alpha",
+      fields: ["env"],
+    } as const;
+    const beta = {
+      kind: "override-kept",
+      scope: "user",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "beta",
+      fields: ["cwd"],
+    } as const;
+
+    // act
+    const surfaces = mcpConfigNoticeSurfaces([alpha, beta]);
+
+    // assert
+    assert.deepStrictEqual(surfaces, [
+      { kind: "mcp-config-notices", section: "override-kept", notices: [alpha, beta] },
+    ]);
+  });
+
+  test("AFILE-06: a later override-kept notice for a server replaces the earlier one in its first position", () => {
+    // arrange
+    const helloSrv = {
+      kind: "override-kept",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "srv",
+      fields: ["env"],
+    } as const;
+    const helloOther = {
+      kind: "override-kept",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "other",
+      fields: ["cwd"],
+    } as const;
+    const betaSrv = {
+      kind: "override-kept",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "beta",
+      server: "srv",
+      fields: ["headers"],
+    } as const;
+
+    // act
+    const surfaces = mcpConfigNoticeSurfaces([helloSrv, helloOther, betaSrv]);
+
+    // assert
+    assert.deepStrictEqual(surfaces, [
+      { kind: "mcp-config-notices", section: "override-kept", notices: [betaSrv, helloOther] },
+    ]);
+  });
+
+  test("AFILE-06: mixed MCP config notices group comments-dropped, then left-unchanged, then override-kept", () => {
+    // arrange
+    const overrideKept = {
+      kind: "override-kept",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "srv",
+      fields: ["env", "headers"],
+    } as const;
+    const leftUnchanged = {
+      kind: "left-unchanged",
+      scope: "project",
+      file: "mcp-adapter.json",
+    } as const;
+    const commentsDropped = {
+      kind: "comments-dropped",
+      scope: "user",
+      file: "mcp-adapter.json",
+    } as const;
+
+    // act
+    const surfaces = mcpConfigNoticeSurfaces([overrideKept, leftUnchanged, commentsDropped]);
+
+    // assert
+    assert.deepStrictEqual(surfaces, [
+      { kind: "mcp-config-notices", section: "comments-dropped", notices: [commentsDropped] },
+      { kind: "mcp-config-notices", section: "left-unchanged", notices: [leftUnchanged] },
+      { kind: "mcp-config-notices", section: "override-kept", notices: [overrideKept] },
+    ]);
+  });
+
+  test("AFILE-06: an override-restored notice alone yields no section", () => {
+    // act
+    const surfaces = mcpConfigNoticeSurfaces([
+      { kind: "override-restored", scope: "project", file: "mcp-adapter.json", server: "srv" },
+    ]);
+
+    // assert
+    assert.deepStrictEqual(surfaces, []);
+  });
+
+  test("AFILE-06: an override-restored notice cancels an earlier override-kept notice for the same server", () => {
+    // act
+    const surfaces = mcpConfigNoticeSurfaces([
+      {
+        kind: "override-kept",
+        scope: "project",
+        file: "mcp-adapter.json",
+        plugin: "hello",
+        server: "srv",
+        fields: ["env", "headers"],
+      },
+      { kind: "override-restored", scope: "project", file: "mcp-adapter.json", server: "srv" },
+    ]);
+
+    // assert
+    assert.deepStrictEqual(surfaces, []);
+  });
+
+  test("AFILE-06: an override-kept notice after an override-restored notice for the same server stands", () => {
+    // arrange
+    const overrideKept = {
+      kind: "override-kept",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "srv",
+      fields: ["env", "headers"],
+    } as const;
+
+    // act
+    const surfaces = mcpConfigNoticeSurfaces([
+      { kind: "override-restored", scope: "project", file: "mcp-adapter.json", server: "srv" },
+      overrideKept,
+    ]);
+
+    // assert
+    assert.deepStrictEqual(surfaces, [
+      { kind: "mcp-config-notices", section: "override-kept", notices: [overrideKept] },
+    ]);
+  });
+
+  test("AFILE-06: a restore for another server, scope or file leaves the override-kept notice standing", () => {
+    // arrange
+    const overrideKept = {
+      kind: "override-kept",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "srv",
+      fields: ["env", "headers"],
+    } as const;
+
+    // act
+    const surfaces = mcpConfigNoticeSurfaces([
+      overrideKept,
+      { kind: "override-restored", scope: "project", file: "mcp-adapter.json", server: "other" },
+      { kind: "override-restored", scope: "user", file: "mcp-adapter.json", server: "srv" },
+      { kind: "override-restored", scope: "project", file: "mcp.json", server: "srv" },
+    ]);
+
+    // assert
+    assert.deepStrictEqual(surfaces, [
+      { kind: "mcp-config-notices", section: "override-kept", notices: [overrideKept] },
+    ]);
+  });
+
+  test("AFILE-06: comments-dropped notices still form a section beside a cancelled override", () => {
+    // arrange
+    const commentsDropped = {
+      kind: "comments-dropped",
+      scope: "user",
+      file: "mcp-adapter.json",
+    } as const;
+
+    // act
+    const surfaces = mcpConfigNoticeSurfaces([
+      commentsDropped,
+      {
+        kind: "override-kept",
+        scope: "project",
+        file: "mcp-adapter.json",
+        plugin: "hello",
+        server: "srv",
+        fields: ["env", "headers"],
+      },
+      { kind: "override-restored", scope: "project", file: "mcp-adapter.json", server: "srv" },
+    ]);
+
+    // assert
+    assert.deepStrictEqual(surfaces, [
+      { kind: "mcp-config-notices", section: "comments-dropped", notices: [commentsDropped] },
+    ]);
+  });
+
+  test("AVAR-04: a variables-missing notice listed first still groups after the override-kept section", () => {
+    // arrange
+    const variablesMissing = {
+      kind: "variables-missing",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "plugin_hello_srv_",
+      names: ["DD_SITE"],
+    } as const;
+    const overrideKept = {
+      kind: "override-kept",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "plugin_hello_srv_",
+      fields: ["env"],
+    } as const;
+
+    // act
+    const surfaces = mcpConfigNoticeSurfaces([variablesMissing, overrideKept]);
+
+    // assert
+    assert.deepStrictEqual(surfaces, [
+      { kind: "mcp-config-notices", section: "override-kept", notices: [overrideKept] },
+      { kind: "mcp-config-notices", section: "variables-missing", notices: [variablesMissing] },
+    ]);
+  });
+
+  test("AVAR-05: a credentials-blanked notice listed first still groups after the variables-missing section", () => {
+    // arrange
+    const credentials = {
+      kind: "credentials-blanked",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "plugin_hello_srv_",
+      names: ["ANTHROPIC_API_KEY"],
+    } as const;
+    const variablesMissing = {
+      kind: "variables-missing",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "plugin_hello_srv_",
+      names: ["DD_SITE"],
+    } as const;
+
+    // act
+    const surfaces = mcpConfigNoticeSurfaces([credentials, variablesMissing]);
+
+    // assert
+    assert.deepStrictEqual(surfaces, [
+      { kind: "mcp-config-notices", section: "variables-missing", notices: [variablesMissing] },
+      { kind: "mcp-config-notices", section: "credentials-blanked", notices: [credentials] },
+    ]);
+  });
+
+  test("ANAME-07: tool-rules-unenforced notices group after the credentials-withheld section, with a notice each", () => {
+    // arrange
+    const helloRules = {
+      kind: "tool-rules-unenforced",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "plugin_hello_alpha_",
+      fields: ["tools[].permission_policy", "toolPermissions"],
+    } as const;
+    const credentials = {
+      kind: "credentials-blanked",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "plugin_hello_alpha_",
+      names: ["ANTHROPIC_API_KEY"],
+    } as const;
+    const acmeRules = {
+      kind: "tool-rules-unenforced",
+      scope: "user",
+      file: "mcp-adapter.json",
+      plugin: "acme",
+      server: "plugin_acme_beta_",
+      fields: ["tools[].permission_policy"],
+    } as const;
+
+    // act
+    const surfaces = mcpConfigNoticeSurfaces([helloRules, credentials, acmeRules]);
+
+    // assert
+    assert.deepStrictEqual(surfaces, [
+      { kind: "mcp-config-notices", section: "credentials-blanked", notices: [credentials] },
+      {
+        kind: "mcp-config-notices",
+        section: "tool-rules-unenforced",
+        notices: [helloRules, acmeRules],
+      },
+    ]);
+  });
+
+  test("AMIG-01: leftover-removed notices group after the tool-rules section, with a notice each", () => {
+    // arrange
+    const acmeLeftover = {
+      kind: "leftover-removed",
+      scope: "user",
+      file: "mcp-adapter.json",
+      plugin: "acme",
+      server: "github",
+    } as const;
+    const toolRules = {
+      kind: "tool-rules-unenforced",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "plugin_hello_srv_",
+      fields: ["toolPermissions"],
+    } as const;
+    const helloLeftover = {
+      kind: "leftover-removed",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "srv",
+    } as const;
+
+    // act
+    const surfaces = mcpConfigNoticeSurfaces([acmeLeftover, toolRules, helloLeftover]);
+
+    // assert
+    assert.deepStrictEqual(surfaces, [
+      { kind: "mcp-config-notices", section: "tool-rules-unenforced", notices: [toolRules] },
+      {
+        kind: "mcp-config-notices",
+        section: "leftover-removed",
+        notices: [acmeLeftover, helloLeftover],
+      },
+    ]);
+  });
 });
 
 test("an inherited prototype-name policy cannot authorize a malformed row", () => {
@@ -1615,7 +2772,7 @@ test("equal neighboring rows and same-name scopes retain order and duplicate rea
     "lsp",
     "lsp",
     "requires pi-subagents",
-    "requires pi-mcp",
+    "requires pi-mcp-adapter",
     "requires pi-dynamic-workflows",
   ];
   assert.deepStrictEqual(resolved, [
@@ -1631,7 +2788,7 @@ test("equal neighboring rows and same-name scopes retain order and duplicate rea
     { name: "a-first", scope: "project", plugins: [] },
   ]);
   assert.deepStrictEqual(text, [
-    "● z-last [user]\n  ◉ same [project] (partially-installed) {lsp, lsp, requires pi-subagents, requires pi-mcp, requires pi-dynamic-workflows}\n  ◉ same [project] (partially-installed) {lsp, lsp, requires pi-subagents, requires pi-mcp, requires pi-dynamic-workflows}\n  ◉ same (partially-installed) {lsp, lsp, requires pi-subagents, requires pi-mcp, requires pi-dynamic-workflows}",
+    "● z-last [user]\n  ◉ same [project] (partially-installed) {lsp, lsp, requires pi-subagents, requires pi-mcp-adapter, requires pi-dynamic-workflows}\n  ◉ same [project] (partially-installed) {lsp, lsp, requires pi-subagents, requires pi-mcp-adapter, requires pi-dynamic-workflows}\n  ◉ same (partially-installed) {lsp, lsp, requires pi-subagents, requires pi-mcp-adapter, requires pi-dynamic-workflows}",
     "● a-first [project]",
   ]);
 });

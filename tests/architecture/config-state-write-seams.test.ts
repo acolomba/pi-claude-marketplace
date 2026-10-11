@@ -49,7 +49,7 @@ const EXTENSION_ROOT = path.join(REPO_ROOT, EXTENSION_ROOT_REL);
  *
  * Why path-name-specific patterns and not a coarse `atomicWriteJson(` walk:
  * the codebase has SEVEN legitimate `atomicWriteJson` callsites that write
- * other JSON files entirely (mcp.json, agents-index.json, completion
+ * other JSON files entirely (mcp-adapter.json, agents-index.json, completion
  * caches): `bridges/mcp/{stage,unstage}.ts`, `persistence/agents-index-io.ts`,
  * `shared/completion-cache.ts` (3 sites). A coarse walk forbidding any
  * `atomicWriteJson(` callsite outside the SPLIT-02 allow-list would
@@ -111,6 +111,7 @@ const FORBIDDEN_CONFIG_JSON_PATTERN = /atomicWriteJson\(\s*(?:\w+\.)?configJsonP
 const FORBIDDEN_CONFIG_LOCAL_JSON_PATTERN = /atomicWriteJson\(\s*(?:\w+\.)?configLocalJsonPath\b/;
 
 test("SPLIT-02: only saveConfig writes claude-plugins.json / claude-plugins.local.json", async () => {
+  // arrange
   assert.ok(
     STATE_WRITE_SEAM_TARGETS.length > 0,
     "D-07-03: an empty STATE_WRITE_SEAM_TARGETS leaves both allow-lists empty, so the walk below would flag every file or exempt none of the real seams.",
@@ -118,6 +119,8 @@ test("SPLIT-02: only saveConfig writes claude-plugins.json / claude-plugins.loca
 
   const offenders: string[] = [];
   let walked = 0;
+
+  // act
   for await (const file of walkTsFiles(EXTENSION_ROOT)) {
     walked += 1;
     const rel = path.relative(REPO_ROOT, file);
@@ -135,11 +138,12 @@ test("SPLIT-02: only saveConfig writes claude-plugins.json / claude-plugins.loca
     }
   }
 
+  // assert
   assert.ok(
     walked > 0,
     `D-07-03: walked ${EXTENSION_ROOT_REL} and found no .ts files -- a walk over zero files is a gate reporting success over nothing.`,
   );
-  assert.deepEqual(
+  assert.deepStrictEqual(
     offenders,
     [],
     `SPLIT-02 violation: an atomicWriteJson(...) call targets claude-plugins.json or claude-plugins.local.json outside persistence/config-io.ts::saveConfig:\n  ${offenders.join("\n  ")}\n  (saveConfig is the SOLE sanctioned writer -- it runs assertPathInside(scopeRoot, filePath, ...) BEFORE atomicWriteJson per NFR-10. Bypassing it would open the path-traversal hole the seam was designed to close. If you intentionally need a new writer, add it to ALLOWED_CONFIG_JSON_WRITERS above AND update the matching 'exactly N' sibling assertion in this file in the same commit.)`,
@@ -149,6 +153,8 @@ test("SPLIT-02: only saveConfig writes claude-plugins.json / claude-plugins.loca
 test("SPLIT-02: only saveState / persistMigratedState write state.json", async () => {
   const offenders: string[] = [];
   let walked = 0;
+
+  // act
   for await (const file of walkTsFiles(EXTENSION_ROOT)) {
     walked += 1;
     const rel = path.relative(REPO_ROOT, file);
@@ -162,11 +168,12 @@ test("SPLIT-02: only saveState / persistMigratedState write state.json", async (
     }
   }
 
+  // assert
   assert.ok(
     walked > 0,
     `D-07-03: walked ${EXTENSION_ROOT_REL} and found no .ts files -- a walk over zero files is a gate reporting success over nothing.`,
   );
-  assert.deepEqual(
+  assert.deepStrictEqual(
     offenders,
     [],
     `SPLIT-02 violation: an atomicWriteJson(...) call targets state.json outside persistence/state-io.ts::saveState or persistence/migrate.ts::persistMigratedState:\n  ${offenders.join("\n  ")}\n  (saveState revalidates the in-memory state against STATE_SCHEMA before writing; persistMigratedState is the IL-3 best-effort persist for the legacy-shape migration. Bypassing either would either skip schema revalidation or duplicate the IL-3 warn-on-failure contract. If you intentionally need a new writer, add it to ALLOWED_STATE_JSON_WRITERS above AND update the matching 'exactly N' sibling assertion in this file in the same commit.)`,
@@ -181,14 +188,16 @@ test("SPLIT-02: only saveState / persistMigratedState write state.json", async (
 // against the same registry group it was built from would pin nothing.
 
 test("SPLIT-02 whitelist: exactly the named writers may write state.json", () => {
-  assert.deepEqual(
+  // act & assert
+  assert.deepStrictEqual(
     [...ALLOWED_STATE_JSON_WRITERS].map((rel) => path.relative(EXTENSION_ROOT_REL, rel)).sort(),
     ["persistence/migrate.ts", "persistence/state-io.ts"],
   );
 });
 
 test("SPLIT-02 whitelist: exactly one file may write claude-plugins.json files", () => {
-  assert.deepEqual(
+  // act & assert
+  assert.deepStrictEqual(
     [...ALLOWED_CONFIG_JSON_WRITERS].map((rel) => path.relative(EXTENSION_ROOT_REL, rel)).sort(),
     ["persistence/config-io.ts"],
   );

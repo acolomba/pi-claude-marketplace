@@ -187,7 +187,7 @@ test("renders an installed row with its durable reasons and resolved markers", (
     name: "epsilon",
     version: "sha-123456789abc",
     scope: "project",
-    reasons: ["not in manifest", "requires pi-subagents", "requires pi-mcp"],
+    reasons: ["not in manifest", "requires pi-subagents", "requires pi-mcp-adapter"],
     description: "Installed description stays outside the command-owned row.",
     severity: "info",
     needsReload: false,
@@ -202,14 +202,14 @@ test("renders an installed row with its durable reasons and resolved markers", (
     name: "epsilon",
     version: "sha-123456789abc",
     scope: "project",
-    reasons: ["not in manifest", "requires pi-subagents", "requires pi-mcp"],
+    reasons: ["not in manifest", "requires pi-subagents", "requires pi-mcp-adapter"],
     description: "Installed description stays outside the command-owned row.",
     severity: "info",
     needsReload: false,
   });
   assert.strictEqual(
     renderedRow,
-    "● epsilon [project] v#1234567 (installed) {not in manifest, requires pi-subagents, requires pi-mcp}",
+    "● epsilon [project] v#1234567 (installed) {not in manifest, requires pi-subagents, requires pi-mcp-adapter}",
   );
 });
 

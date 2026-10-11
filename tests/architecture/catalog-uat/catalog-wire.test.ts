@@ -35,6 +35,8 @@ import {
   notifyCommandError,
   notifyDeviceFlowPrompt,
   notifyDiagnostic,
+  notifyMcpConfigNotices,
+  notifyMcpMigration,
   notifyPluginPathSkipped,
   notifyReconcileAborted,
   notifyStopHookOverrideCap,
@@ -163,6 +165,12 @@ const RAW_ORIGINS: Readonly<Record<RawSurface["kind"], NotificationOrigin>> = {
   "stop-override-cap": { kind: "hook" },
   "reconcile-aborted": { kind: "load" },
   "plugin-path-skipped": { kind: "load" },
+  "mcp-config-notices": {
+    kind: "command",
+    commandId: "plugin install",
+    invocationId: "raw-mcp-config-notices",
+  },
+  "mcp-migration": { kind: "load" },
 };
 
 /**
@@ -199,6 +207,34 @@ const RAW_SAMPLES: { readonly [K in RawSurface["kind"]]: Extract<RawSurface, { k
     kind: "plugin-path-skipped",
     scope: "user",
     reason: "EACCES: permission denied, open '/home/user/.pi/agent/bin'",
+  },
+  "mcp-config-notices": {
+    kind: "mcp-config-notices",
+    section: "variables-missing",
+    notices: [
+      {
+        kind: "variables-missing",
+        scope: "project",
+        file: "mcp-adapter.json",
+        plugin: "hello",
+        server: "plugin_hello_srv_",
+        names: ["DD_SITE"],
+      },
+    ],
+  },
+  "mcp-migration": {
+    kind: "mcp-migration",
+    rows: [
+      {
+        kind: "moved",
+        scope: "user",
+        plugin: "acme",
+        marketplace: "official",
+        from: "slack",
+        to: "plugin_acme_slack_",
+      },
+    ],
+    notices: [],
   },
 };
 
@@ -271,6 +307,12 @@ function emitRawSample(ctx: NotificationContext, run: NotificationRun, surface: 
       return;
     case "plugin-path-skipped":
       notifyPluginPathSkipped(ctx, run, surface.scope, surface.reason);
+      return;
+    case "mcp-config-notices":
+      notifyMcpConfigNotices(ctx, run, surface.notices);
+      return;
+    case "mcp-migration":
+      notifyMcpMigration(ctx, run, { rows: surface.rows, notices: surface.notices });
       return;
   }
 }
@@ -416,7 +458,7 @@ const CATALOG_PRESENTED = EXAMPLES.map((example) => presentExample(example, FIXT
 const RAW_PRESENTED = presentRawSamples();
 const PRESENTED: readonly PresentedSource[] = [...CATALOG_PRESENTED, ...RAW_PRESENTED];
 
-test("WIRE-02: the retained inventory and separate command error cover all 19 kinds", () => {
+test("WIRE-02: the retained inventory and separate command error cover all 21 kinds", () => {
   // arrange
   const error = resolveCommandError(new Error("operation failed"), false);
   const origin = {
@@ -438,6 +480,8 @@ test("WIRE-02: the retained inventory and separate command error cover all 19 ki
     "marketplace-info",
     "marketplace-info-cascade",
     "marketplace-not-added",
+    "mcp-config-notices",
+    "mcp-migration",
     "plugin-info",
     "plugin-info-cascade",
     "plugin-path-skipped",
@@ -450,7 +494,7 @@ test("WIRE-02: the retained inventory and separate command error cover all 19 ki
     "usage-error",
     "usage-info",
   ]);
-  assert.strictEqual(PRESENTED.length, 268);
+  assert.strictEqual(PRESENTED.length, 280);
 
   for (const payload of payloads) {
     assert.ok(PAYLOAD_VALIDATOR.Check(payload));
@@ -655,7 +699,7 @@ for (const mode of ["json", "rpc"] as const) {
 
     // assert
     assert.deepStrictEqual(emittedKeys, tupleKeys(EXAMPLES));
-    assert.strictEqual(new Set(emittedKeys).size, 260);
+    assert.strictEqual(new Set(emittedKeys).size, 270);
     assert.deepStrictEqual(
       capture.entries.map(({ customType }) => customType),
       EXAMPLES.map(() => "claude-plugin"),

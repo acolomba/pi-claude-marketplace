@@ -67,7 +67,7 @@ Pi wraps each notification in an `entry_appended` event. Its `entry` has `type: 
 
 The payload's `origin.kind` identifies `command`, `load`, or `hook` output. For a command, `origin.commandId` names the operation, such as `plugin list`. `origin.invocationId` identifies one run. Two runs of `plugin list` have the same command ID and different invocation IDs. For a file with several runs, set `invocation_id` to the run you need instead of using the single-run selector. The examples exclude load and hook entries.
 
-Real CLI tests passed on Pi 0.86.1 and 0.87.1 with stdin closed. Both emitted a command-origin `cascade` with `marketplaces: []` for an empty installation. The tests load the production extension in temporary directories without operator credentials. See [the runtime tests](../tests/e2e/pi-json-output.test.ts).
+Real CLI tests passed on Pi 1.0.0, both the installed runtime and the exact-floor fixture, with stdin closed. Both runs emitted a command-origin `cascade` with `marketplaces: []` for an empty installation. The tests load the production extension in temporary directories without operator credentials. See [the runtime tests](../tests/e2e/pi-json-output.test.ts).
 
 ## Prepare one command for the examples
 
@@ -171,13 +171,13 @@ Every kind includes these fields. The `internal-error` kind narrows origin and s
 
 <!-- fields: common-fields -->
 
-| Field path      | Type              | Presence | Meaning                                             |
-| --------------- | ----------------- | -------- | --------------------------------------------------- |
-| `schemaVersion` | integer `1`       | required | Payload compatibility version.                      |
-| `kind`          | string            | required | Payload kind from the nineteen kind sections below. |
-| `origin`        | [Origin](#origin) | required | Source of this notification.                        |
-| `severity`      | string            | required | `info`, `warning`, or `error`, in increasing order. |
-| `needsReload`   | boolean           | required | Whether completed changes need `/reload`.           |
+| Field path      | Type              | Presence | Meaning                                               |
+| --------------- | ----------------- | -------- | ----------------------------------------------------- |
+| `schemaVersion` | integer `1`       | required | Payload compatibility version.                        |
+| `kind`          | string            | required | Payload kind from the twenty-one kind sections below. |
+| `origin`        | [Origin](#origin) | required | Source of this notification.                          |
+| `severity`      | string            | required | `info`, `warning`, or `error`, in increasing order.   |
+| `needsReload`   | boolean           | required | Whether completed changes need `/reload`.             |
 
 <!-- /fields -->
 
@@ -508,6 +508,36 @@ A load pass could not refresh one scope's plugin PATH.
 
 <!-- /fields -->
 
+#### mcp-config-notices
+
+One section of facts about the MCP config files that a command or the load pass rewrote or left unchanged. Severity is always `warning`, and `needsReload` is always `false`. One operation emits one entry for each section that has a notice, in this order: `comments-dropped`, `left-unchanged`, `override-kept`, `variables-missing`, `credentials-blanked`, `tool-rules-unenforced`, `leftover-removed`.
+
+<!-- fields: kind:mcp-config-notices -->
+
+<!-- use: common-fields -->
+
+| Field path | Type                                      | Presence | Meaning                                                                  |
+| ---------- | ----------------------------------------- | -------- | ------------------------------------------------------------------------ |
+| `notices`  | [MCP config notice](#mcp-config-notice)[] | required | At least one notice, all of the section's kind, each distinct line once. |
+
+<!-- /fields -->
+
+#### mcp-migration
+
+The one notice of a load pass that moved plugin MCP servers from `mcp.json` to `mcp-adapter.json`, for both scopes. Its origin is `load`. Severity is `warning` when a row stayed in `mcp.json`, a server was removed as unsupported or malformed, or a notice warns, and `info` otherwise. A load pass that has notices but no rows emits `mcp-config-notices` entries instead.
+
+<!-- fields: kind:mcp-migration -->
+
+<!-- use: common-fields -->
+
+| Field path    | Type                                      | Presence | Meaning                                                                                 |
+| ------------- | ----------------------------------------- | -------- | --------------------------------------------------------------------------------------- |
+| `needsReload` | boolean                                   | required | `true` exactly when a server moved or was removed.                                      |
+| `rows`        | [MCP migration row](#mcp-migration-row)[] | required | At least one row: moved rows, then removed rows, then rows left in `mcp.json`.          |
+| `notices`     | [MCP config notice](#mcp-config-notice)[] | required | Notices about the files the migration wrote, in section order. An empty array is valid. |
+
+<!-- /fields -->
+
 #### internal-error
 
 An unexpected command failure or a final outcome when ordinary delivery failed. Its origin is always `command`, severity is always `error`, and `summary` is required.
@@ -622,19 +652,20 @@ Each source has exactly one branch. Branch-specific fields are absent from the o
 
 <!-- fields: plugin-info-row -->
 
-| Field path           | Type                      | Presence    | Meaning                                                                              |
-| -------------------- | ------------------------- | ----------- | ------------------------------------------------------------------------------------ |
-| `status`             | PluginInfoStatus          | required    | Plugin information state.                                                            |
-| `name`               | string                    | required    | Plugin name.                                                                         |
-| `id`                 | string                    | required    | Qualified address, `<name>@<marketplaceName>`.                                       |
-| `reasons`            | Reason[]                  | required    | Resolved reasons. Empty means no reasons.                                            |
-| `version`            | string                    | optional    | Plugin version.                                                                      |
-| `scope`              | Scope                     | optional    | Plugin installation scope.                                                           |
-| `description`        | string                    | optional    | Plugin description.                                                                  |
-| `notes`              | string[]                  | optional    | Ordered advisory lines about component files.                                        |
-| `dependencies`       | string[]                  | optional    | Dependency addresses with any version or SHA constraints, sorted by dependency name. |
-| `componentsResolved` | boolean                   | required    | Selects the resolved (`true`) or unresolved (`false`) branch.                        |
-| `components`         | [Components](#components) | conditional | Required when `componentsResolved` is `true`. Absent when it is `false`.             |
+| Field path           | Type                                              | Presence    | Meaning                                                                                                                                 |
+| -------------------- | ------------------------------------------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `status`             | PluginInfoStatus                                  | required    | Plugin information state.                                                                                                               |
+| `name`               | string                                            | required    | Plugin name.                                                                                                                            |
+| `id`                 | string                                            | required    | Qualified address, `<name>@<marketplaceName>`.                                                                                          |
+| `reasons`            | Reason[]                                          | required    | Resolved reasons. Empty means no reasons.                                                                                               |
+| `version`            | string                                            | optional    | Plugin version.                                                                                                                         |
+| `scope`              | Scope                                             | optional    | Plugin installation scope.                                                                                                              |
+| `description`        | string                                            | optional    | Plugin description.                                                                                                                     |
+| `notes`              | string[]                                          | optional    | Ordered advisory lines about component files.                                                                                           |
+| `dependencies`       | string[]                                          | optional    | Dependency addresses with any version or SHA constraints, sorted by dependency name.                                                    |
+| `componentsResolved` | boolean                                           | required    | Selects the resolved (`true`) or unresolved (`false`) branch.                                                                           |
+| `components`         | [Components](#components)                         | conditional | Required when `componentsResolved` is `true`. Absent when it is `false`.                                                                |
+| `requires`           | [Companion requirement](#companion-requirement)[] | optional    | Companion extensions the resolved components need, sorted by name. Absent when none is needed and when `componentsResolved` is `false`. |
 
 <!-- /fields -->
 
@@ -644,14 +675,41 @@ Component names are sorted alphabetically. A missing component field means that 
 
 <!-- fields: components -->
 
-| Field path  | Type                        | Presence | Meaning                                            |
-| ----------- | --------------------------- | -------- | -------------------------------------------------- |
-| `agents`    | string[]                    | optional | Agent names.                                       |
-| `commands`  | string[]                    | optional | Command names.                                     |
-| `hooks`     | [Hook entry](#hook-entry)[] | optional | Hook events and matchers.                          |
-| `mcp`       | string[]                    | optional | MCP server names.                                  |
-| `skills`    | string[]                    | optional | Skill names.                                       |
-| `workflows` | string[]                    | optional | Admitted workflow names in `<plugin>:<name>` form. |
+| Field path  | Type                        | Presence | Meaning                                                          |
+| ----------- | --------------------------- | -------- | ---------------------------------------------------------------- |
+| `agents`    | string[]                    | optional | Agent names.                                                     |
+| `commands`  | string[]                    | optional | Command names.                                                   |
+| `hooks`     | [Hook entry](#hook-entry)[] | optional | Hook events and matchers.                                        |
+| `mcp`       | [MCP server](#mcp-server)[] | optional | MCP servers, in Claude Code's `plugin:<plugin>:<server>` naming. |
+| `skills`    | string[]                    | optional | Skill names.                                                     |
+| `workflows` | string[]                    | optional | Admitted workflow names in `<plugin>:<name>` form.               |
+
+<!-- /fields -->
+
+### MCP server
+
+A server that a partial install leaves out has `unsupportedFeature` and no state. A server that the plugin writes can have its state and its variable names.
+
+<!-- fields: mcp-server -->
+
+| Field path           | Type            | Presence | Meaning                                                                     |
+| -------------------- | --------------- | -------- | --------------------------------------------------------------------------- |
+| `name`               | string          | required | Server name, `plugin:<plugin>:<server>`.                                    |
+| `unsupportedFeature` | string          | optional | Claude Code MCP feature that pi-mcp-adapter cannot run.                     |
+| `unsetVariables`     | string[]        | optional | Referenced environment variables that are not set. Names only.              |
+| `withheldVariables`  | string[]        | optional | Credential variables written as empty values. Names only.                   |
+| `status`             | McpServerStatus | optional | pi-mcp-adapter's last known state of a server that an install record lists. |
+
+<!-- /fields -->
+
+### Companion requirement
+
+<!-- fields: companion-requirement -->
+
+| Field path  | Type      | Presence | Meaning                                     |
+| ----------- | --------- | -------- | ------------------------------------------- |
+| `companion` | Companion | required | Companion extension that a component needs. |
+| `missing`   | boolean   | required | Whether the companion was not loaded.       |
 
 <!-- /fields -->
 
@@ -667,6 +725,49 @@ The plain branch has `event` and an optional `matcher`. The lenient branch adds 
 | `matcher`   | string           | optional    | Hook matcher when specified.                                    |
 | `kind`      | string `lenient` | conditional | Required in the lenient branch. Absent in the plain branch.     |
 | `supported` | boolean          | conditional | Required in the lenient branch. Whether this hook is supported. |
+
+<!-- /fields -->
+
+### MCP config notice
+
+`kind` selects the branch. Branch-specific fields are absent from the other branches. Notices name fields and variables, never their values.
+
+<!-- fields: mcp-config-notice -->
+
+| Field path | Type     | Presence    | Meaning                                                                                                |
+| ---------- | -------- | ----------- | ------------------------------------------------------------------------------------------------------ |
+| `kind`     | string   | required    | McpConfigNoticeKind.                                                                                   |
+| `scope`    | Scope    | required    | Scope of the config file.                                                                              |
+| `file`     | string   | required    | `mcp-adapter.json`, or `mcp.json` for `comments-dropped` and `left-unchanged`.                         |
+| `plugin`   | string   | conditional | Required for every kind except `comments-dropped` and `left-unchanged`. Plugin that provides `server`. |
+| `server`   | string   | conditional | Required where `plugin` is. Server key in `file`.                                                      |
+| `fields`   | string[] | conditional | Required for `override-kept` and `tool-rules-unenforced`. Field names, in their file order.            |
+| `names`    | string[] | conditional | Required for `variables-missing` and `credentials-blanked`. Variable names, in first-seen order.       |
+
+<!-- /fields -->
+
+### MCP migration row
+
+`kind` selects the branch. Branch-specific fields are absent from the other branches.
+
+<!-- fields: mcp-migration-row -->
+
+| Field path    | Type            | Presence    | Meaning                                                                                                                              |
+| ------------- | --------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `kind`        | string          | required    | McpMigrationRowKind.                                                                                                                 |
+| `scope`       | Scope           | required    | Scope the row belongs to.                                                                                                            |
+| `plugin`      | string          | conditional | Required except for `stopped` and `file-unreadable`. Plugin that owns the servers.                                                   |
+| `marketplace` | string          | conditional | Required where `plugin` is. Marketplace of the plugin.                                                                               |
+| `from`        | string          | conditional | Required for `moved`. Server key in `mcp.json`.                                                                                      |
+| `to`          | string          | conditional | Required for `moved`. Server key in `mcp-adapter.json`.                                                                              |
+| `server`      | string          | conditional | Required for `removed`. Server key that was removed from `mcp.json`.                                                                 |
+| `cause`       | McpRemovalCause | conditional | Required for `removed`. Why the server was removed without a move.                                                                   |
+| `feature`     | string          | optional    | Only for `removed` with cause `unsupported-feature`. The Claude Code feature that blocks the server.                                 |
+| `detail`      | string          | conditional | Required for `stopped` and `unfinished`. Why the move stopped or did not finish. It has no absolute path.                            |
+| `servers`     | string[]        | conditional | Required for every kind except `moved`, `removed`, `stopped`, and `file-unreadable`. Server keys in `mcp.json`.                      |
+| `key`         | string          | conditional | Required for `collision`. Server key that another config source already defines.                                                     |
+| `source`      | string          | conditional | Required for `collision`. That config source, as a scope file or a home-relative path.                                               |
+| `file`        | string          | conditional | Required for `file-unreadable` (`mcp.json` or `mcp-adapter.json`) and `unfinished` (`mcp.json` or `project-scope mcp-adapter.json`). |
 
 <!-- /fields -->
 
@@ -741,7 +842,17 @@ These are native wire values, including spaces and hyphens. They are not the lab
 
 `RowHint`: `partial-install`, `partial-update`, `stale-gate-update`, `enable`.
 
-`Reason`: `up-to-date`, `not found`, `already installed`, `not installed`, `not in manifest`, `invalid manifest`, `no longer installable`, `unsupported source`, `unsupported component`, `unsupported hooks`, `lsp`, `requires pi-subagents`, `requires pi-mcp`, `rollback partial`, `unreadable`, `unparseable`, `unreadable manifest`, `source mismatch`, `plugins remain`, `concurrently uninstalled`, `concurrently updated`, `stale clone`, `duplicate name`, `lock held`, `already autoupdate`, `already no autoupdate`, `already enabled`, `already disabled`, `permission denied`, `source missing`, `network unreachable`, `marketplace not added`, `marketplace not added to user scope`, `marketplace not added to project scope`, `orphan rewake`, `authentication required`, `dangling reference`, `malformed mcp`, `malformed skill`, `malformed command`, `installs disabled`, `marketplace in user scope`, `marketplace in project scope`, `data kept`, `no matching version`, `version conflict`, `constraint too complex`, `invalid version constraint`, `dependency marketplace not added`, `dependency cycle`, `dependency failed`, `dependency promoted`, `dependency pruned`, `dependency unsatisfied`, `dependency version unsatisfied`, `dependents unsatisfied`, `dependency current copy`, `dependency enabled`, `dependents remain`, `dependency installed`, `dependents constrain`, `cross-marketplace`, `stale workflow command`, `requires pi-dynamic-workflows`, `components now supported`.
+`Reason`: `up-to-date`, `not found`, `already installed`, `not installed`, `not in manifest`, `invalid manifest`, `no longer installable`, `unsupported source`, `unsupported component`, `unsupported hooks`, `lsp`, `requires pi-subagents`, `requires pi-mcp-adapter`, `rollback partial`, `unreadable`, `unparseable`, `unreadable manifest`, `source mismatch`, `plugins remain`, `concurrently uninstalled`, `concurrently updated`, `stale clone`, `duplicate name`, `lock held`, `already autoupdate`, `already no autoupdate`, `already enabled`, `already disabled`, `permission denied`, `source missing`, `network unreachable`, `marketplace not added`, `marketplace not added to user scope`, `marketplace not added to project scope`, `orphan rewake`, `authentication required`, `dangling reference`, `malformed mcp`, `malformed skill`, `malformed command`, `installs disabled`, `marketplace in user scope`, `marketplace in project scope`, `data kept`, `no matching version`, `version conflict`, `constraint too complex`, `invalid version constraint`, `dependency marketplace not added`, `dependency cycle`, `dependency failed`, `dependency promoted`, `dependency pruned`, `dependency unsatisfied`, `dependency version unsatisfied`, `dependents unsatisfied`, `dependency current copy`, `dependency enabled`, `dependents remain`, `dependency installed`, `dependents constrain`, `cross-marketplace`, `stale workflow command`, `requires pi-dynamic-workflows`, `components now supported`, `unsupported mcp`.
+
+`McpServerStatus`: `connected`, `cached, connects on first use`, `needs authentication`, `pending approval`, `disabled`, `not connected`, `failed`, `status unknown`, `not loaded`, `overridden by project scope`.
+
+`Companion`: `pi-dynamic-workflows`, `pi-mcp-adapter`, `pi-subagents`.
+
+`McpConfigNoticeKind`: `comments-dropped`, `left-unchanged`, `override-kept`, `variables-missing`, `credentials-blanked`, `tool-rules-unenforced`, `leftover-removed`.
+
+`McpMigrationRowKind`: `moved`, `removed`, `stopped`, `unowned`, `not-listed`, `source-unreadable`, `source-outdated`, `marketplace-unreadable`, `collision`, `file-unreadable`, `unfinished`.
+
+`McpRemovalCause`: `not-declared`, `disabled`, `unsupported-feature`, `malformed`.
 
 ## Limitations
 
@@ -753,7 +864,7 @@ RPC front-ends receive custom `claude-plugin` entries through the JSON strategy.
 
 A slash-command-only run does not create its initial session file until an assistant message exists. This applies even when persistence is enabled. The independent `--no-session` flag disables persistence altogether. An entry in session memory or the event stream therefore does not prove that Pi wrote a session file.
 
-The [real-runtime tests](../tests/e2e/pi-json-output.test.ts) passed on installed Pi 0.87.1 and the separate exact-floor fixture, Pi 0.86.1. Both runs verified schema-valid command output, startup memory without streaming, RPC retrieval, and slash-only persistence timing. The [execution record](../.planning/milestones/json-output-phases/07-mode-refusals-real-pi-verification-and-docs/07-03-SUMMARY.md#verification-evidence) records the commands, versions, and results. These tests use fresh directories and no operator credentials.
+The [real-runtime tests](../tests/e2e/pi-json-output.test.ts) passed on installed Pi 1.0.0 and on the separate exact-floor fixture, also Pi 1.0.0. Both runs verified schema-valid command output, startup memory without streaming, RPC retrieval, and slash-only persistence timing. An earlier [execution record](../.planning/milestones/json-output-phases/07-mode-refusals-real-pi-verification-and-docs/07-03-SUMMARY.md#verification-evidence) records the same checks on Pi 0.87.1 and the earlier 0.86.1 floor. These tests use fresh directories and no operator credentials.
 
 Output delivery has four accepted limits:
 

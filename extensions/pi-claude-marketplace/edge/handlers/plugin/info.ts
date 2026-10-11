@@ -14,6 +14,7 @@ import { parseFlagNames } from "../../flag-catalog.ts";
 
 import { splitPluginMarketplaceRef, withParsedArgs } from "./shared.ts";
 
+import type { McpStatusReader } from "../../../platform/mcp-status.ts";
 import type { SubcommandHandler } from "../../router.ts";
 
 const USAGE = "Usage: /claude:plugin info <plugin>@<marketplace> [--fetch] [--scope user|project]";
@@ -23,10 +24,12 @@ const ACCEPTED_FLAGS = parseFlagNames("info");
 
 /**
  * Factory: returns the async handler, which forwards the router's command run
- * to `getPluginInfo` (D-05). `register.ts` wires this into the
- * `SubcommandHandlers` map under the `pluginInfo` key.
+ * to `getPluginInfo` (D-05) with the extension load's MCP status tracker
+ * (ASTAT-01), whose last snapshot info stamps on each written MCP server.
+ * `register.ts` wires this into the `SubcommandHandlers` map under the
+ * `pluginInfo` key.
  */
-export function makePluginInfoHandler(): SubcommandHandler {
+export function makePluginInfoHandler(mcpStatus: McpStatusReader): SubcommandHandler {
   return withParsedArgs(parseArgs, USAGE, async (parsed, ctx, run): Promise<void> => {
     // FTCH-03: `info` accepts the single boolean `--fetch` flag (the catalog-owned
     // accepted set); every other long flag is rejected inline.
@@ -67,6 +70,7 @@ export function makePluginInfoHandler(): SubcommandHandler {
     await getPluginInfo({
       ctx,
       run,
+      mcpStatus,
       marketplace: ref.marketplace,
       plugin: ref.plugin,
       cwd: ctx.cwd,

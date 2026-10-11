@@ -1880,7 +1880,7 @@ test("ENBL-06 / ENBL-16: a manifest-absent disabled PARTIAL renders `(disabled) 
 // `dependencies` field and list's `disabled` row policy turns markers off.
 // `makeCtx` seeds BOTH companions as UNLOADED, which is exactly the
 // condition under which a leak would render `{requires pi-subagents, requires
-// pi-mcp}` -- so a bare row here is evidence, not an accident of the harness.
+// pi-mcp-adapter}` -- so a bare row here is evidence, not an accident of the harness.
 const DISABLED_BARE_ROW = ["● mp1 [user]", "  ◍ alpha v1.0.0 (disabled)"].join("\n");
 
 /**
@@ -3596,7 +3596,7 @@ test("plugin list manifest absent: INV-02: a manifest-absent degraded record kee
       scopeRoot: userRoot,
       cwd,
       mpName: "mp1",
-      // Manifest LOADS and simply does not declare `plug`.
+      // Manifest LOADS and does not declare `plug`.
       manifest: { name: "mp1", plugins: [] },
       installed: { plug: { version: "1.0.0", unsupported: ["lspServers"] } },
     });
@@ -4277,7 +4277,8 @@ test("listPlugins renders the installed MCP dependency marker after inventory re
     // assert
     assert.deepStrictEqual(notifications, [
       {
-        message: "● mp1 [user]\n  ● mcpplug v1.0.0 (installed) {not in manifest, requires pi-mcp}",
+        message:
+          "● mp1 [user]\n  ● mcpplug v1.0.0 (installed) {not in manifest, requires pi-mcp-adapter}",
       },
     ]);
     verify(ctx);

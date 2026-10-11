@@ -5,7 +5,7 @@
 // present in this suite.
 
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, test, type TestContext } from "node:test";
@@ -16,11 +16,13 @@ import {
 } from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
 import {
   makePresenceProbe,
+  makeRecordedShaPresenceProbe,
   probeManifestEntry,
   probeUpgradeCandidate,
   readMirrorHeadSha,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/git-source-probe.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { PathContainmentError } from "../../../extensions/pi-claude-marketplace/shared/path-containment.ts";
 
 import type {
   GitHubSource,
@@ -82,6 +84,11 @@ async function mirrorDirectory(locations: ScopedLocations, cloneUrl: string): Pr
 async function writeDetachedHead(mirrorDir: string, sha: string): Promise<void> {
   await mkdir(path.join(mirrorDir, ".git"), { recursive: true });
   await writeFile(path.join(mirrorDir, ".git", "HEAD"), `${sha}\n`);
+}
+
+async function writeHeadlessMirror(mirrorDir: string): Promise<void> {
+  await mkdir(path.join(mirrorDir, ".git"), { recursive: true });
+  await writeFile(path.join(mirrorDir, ".git", "HEAD"), "ref: refs/heads/main\n");
 }
 
 async function writeLooseHead(mirrorDir: string, refPath: string, sha: string): Promise<void> {
@@ -293,6 +300,221 @@ describe("makePresenceProbe", () => {
     // assert
     assert.equal(errorCode(failure), "ENOENT");
     assert.equal(errorPath(failure), path.join(mirrorDir, ".git", "HEAD"));
+  });
+});
+
+describe("makeRecordedShaPresenceProbe", () => {
+  test("AMIG-01: an unpinned source reads a present mirror before the recorded-sha clone", async (testContext) => {
+    // arrange
+    const { locations } = await freshLocations(testContext);
+    const cloneUrl = "https://example.com/recorded-plugin";
+    const mirrorDir = await mirrorDirectory(locations, cloneUrl);
+    await writeDetachedHead(mirrorDir, SHA_B);
+    await cloneDirectory(locations, cloneUrl, SHA_A);
+    const source: UrlSource = { kind: "url", raw: cloneUrl, url: cloneUrl };
+
+    // act
+    const result = await makeRecordedShaPresenceProbe(locations, SHA_A)(source);
+
+    // assert
+    assert.deepStrictEqual(result, {
+      kind: "materialized",
+      pluginRoot: mirrorDir,
+      resolvedSha: SHA_B,
+    });
+  });
+
+  test("AMIG-01: an unpinned source with no mirror reads the recorded-sha clone", async (testContext) => {
+    // arrange
+    const { locations } = await freshLocations(testContext);
+    const cloneUrl = "https://example.com/recorded-plugin";
+    const cloneDir = await cloneDirectory(locations, cloneUrl, SHA_A);
+    const source: UrlSource = { kind: "url", raw: cloneUrl, url: cloneUrl };
+
+    // act
+    const result = await makeRecordedShaPresenceProbe(locations, SHA_A)(source);
+
+    // assert
+    assert.deepStrictEqual(result, {
+      kind: "materialized",
+      pluginRoot: cloneDir,
+      resolvedSha: SHA_A,
+    });
+  });
+
+  test("D-08-05: an unpinned source behind a headless mirror reads the warm recorded-sha clone", async (testContext) => {
+    // arrange
+    const { locations } = await freshLocations(testContext);
+    const cloneUrl = "https://example.com/recorded-plugin";
+    const mirrorDir = await mirrorDirectory(locations, cloneUrl);
+    await writeHeadlessMirror(mirrorDir);
+    const cloneDir = await cloneDirectory(locations, cloneUrl, SHA_A);
+    const source: UrlSource = { kind: "url", raw: cloneUrl, url: cloneUrl };
+
+    // act
+    const result = await makeRecordedShaPresenceProbe(locations, SHA_A)(source);
+
+    // assert
+    assert.deepStrictEqual(result, {
+      kind: "materialized",
+      pluginRoot: cloneDir,
+      resolvedSha: SHA_A,
+    });
+  });
+
+  test("D-08-05: an unpinned source behind a headless mirror with no recorded-sha clone is not-cached", async (testContext) => {
+    // arrange
+    const { locations } = await freshLocations(testContext);
+    const cloneUrl = "https://example.com/recorded-plugin";
+    const mirrorDir = await mirrorDirectory(locations, cloneUrl);
+    await writeHeadlessMirror(mirrorDir);
+    const source: UrlSource = { kind: "url", raw: cloneUrl, url: cloneUrl };
+
+    // act
+    const result = await makeRecordedShaPresenceProbe(locations, SHA_A)(source);
+
+    // assert
+    assert.deepStrictEqual(result, { kind: "not-cached" });
+  });
+
+  test("NFR-10: an unpinned source whose mirror path the cache refuses propagates the refusal", async (testContext) => {
+    // arrange
+    const { locations, marketplaceRoot } = await freshLocations(testContext);
+    const cloneUrl = "https://example.com/recorded-plugin";
+    const mirrorDir = await locations.pluginCloneDir(pluginMirrorKey(cloneUrl));
+    await cloneDirectory(locations, cloneUrl, SHA_A);
+    await symlink(marketplaceRoot, mirrorDir);
+    const source: UrlSource = { kind: "url", raw: cloneUrl, url: cloneUrl };
+
+    // act & assert
+    await assert.rejects(
+      makeRecordedShaPresenceProbe(locations, SHA_A)(source),
+      (error: unknown) => {
+        assert.ok(error instanceof PathContainmentError);
+        assert.deepStrictEqual(
+          { parent: error.parent, child: error.child },
+          { parent: path.dirname(mirrorDir), child: mirrorDir },
+        );
+        return true;
+      },
+    );
+  });
+
+  test("AMIG-01: a pinned source reads the recorded-sha clone when the manifest sha differs", async (testContext) => {
+    // arrange
+    const { locations } = await freshLocations(testContext);
+    const cloneUrl = "https://github.com/owner/repo";
+    const cloneDir = await cloneDirectory(locations, cloneUrl, SHA_A);
+    await mirrorDirectory(locations, cloneUrl);
+    const source: GitHubSource = {
+      kind: "github",
+      raw: "owner/repo",
+      owner: "owner",
+      repo: "repo",
+      sha: SHA_B,
+    };
+
+    // act
+    const result = await makeRecordedShaPresenceProbe(locations, SHA_A)(source);
+
+    // assert
+    assert.deepStrictEqual(result, {
+      kind: "materialized",
+      pluginRoot: cloneDir,
+      resolvedSha: SHA_A,
+    });
+  });
+
+  test("AMIG-01: a pinned source with no recorded-sha clone is not-cached when the manifest-sha clone exists", async (testContext) => {
+    // arrange
+    const { locations } = await freshLocations(testContext);
+    const cloneUrl = "https://example.com/recorded-plugin";
+    await cloneDirectory(locations, cloneUrl, SHA_B);
+    const source: UrlSource = { kind: "url", raw: cloneUrl, url: cloneUrl, sha: SHA_B };
+
+    // act
+    const result = await makeRecordedShaPresenceProbe(locations, SHA_A)(source);
+
+    // assert
+    assert.deepStrictEqual(result, { kind: "not-cached" });
+  });
+
+  test("NFR-5: a cold cache is not-cached and creates no directory", async (testContext) => {
+    // arrange
+    const { locations } = await freshLocations(testContext);
+    const cloneUrl = "https://example.com/cold-recorded-plugin";
+    const source: UrlSource = { kind: "url", raw: cloneUrl, url: cloneUrl };
+
+    // act
+    const result = await makeRecordedShaPresenceProbe(locations, SHA_A)(source);
+
+    // assert
+    assert.deepStrictEqual(result, { kind: "not-cached" });
+    assert.deepStrictEqual(await readdir(locations.extensionRoot), []);
+  });
+
+  test("AMIG-01: a git-subdir source anchors under the recorded-sha clone", async (testContext) => {
+    // arrange
+    const { locations } = await freshLocations(testContext);
+    const cloneDir = await cloneDirectory(locations, SUBDIR_URL, SHA_A);
+    const pluginRoot = path.join(cloneDir, "plugins", "canva");
+    await mkdir(pluginRoot, { recursive: true });
+    const source: GitSubdirSource = {
+      kind: "git-subdir",
+      raw: `${SUBDIR_URL}#main:plugins/canva`,
+      url: SUBDIR_URL,
+      path: "plugins/canva",
+      sha: SHA_B,
+    };
+
+    // act
+    const result = await makeRecordedShaPresenceProbe(locations, SHA_A)(source);
+
+    // assert
+    assert.deepStrictEqual(result, { kind: "materialized", pluginRoot, resolvedSha: SHA_A });
+  });
+
+  test("AMIG-01: a git-subdir path outside the recorded-sha clone escapes", async (testContext) => {
+    // arrange
+    const { locations } = await freshLocations(testContext);
+    const cloneDir = await cloneDirectory(locations, SUBDIR_URL, SHA_A);
+    const source: GitSubdirSource = {
+      kind: "git-subdir",
+      raw: `${SUBDIR_URL}#main:../escape`,
+      url: SUBDIR_URL,
+      path: "../escape",
+      sha: SHA_A,
+    };
+
+    // act
+    const result = await makeRecordedShaPresenceProbe(locations, SHA_A)(source);
+
+    // assert
+    assert.deepStrictEqual(result, {
+      kind: "escapes",
+      detail: `git-subdir path "../escape" escapes ${cloneDir} (resolved: ${path.resolve(cloneDir, "../escape")}).`,
+    });
+  });
+
+  test("AMIG-01: a git-subdir path absent from the recorded-sha clone is missing-subdir", async (testContext) => {
+    // arrange
+    const { locations } = await freshLocations(testContext);
+    await cloneDirectory(locations, SUBDIR_URL, SHA_A);
+    const source: GitSubdirSource = {
+      kind: "git-subdir",
+      raw: `${SUBDIR_URL}#main:plugins/missing`,
+      url: SUBDIR_URL,
+      path: "plugins/missing",
+    };
+
+    // act
+    const result = await makeRecordedShaPresenceProbe(locations, SHA_A)(source);
+
+    // assert
+    assert.deepStrictEqual(result, {
+      kind: "missing-subdir",
+      detail: 'git-subdir path "plugins/missing" does not exist in the plugin clone',
+    });
   });
 });
 

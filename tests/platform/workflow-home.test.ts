@@ -7,21 +7,26 @@ import { test, type TestContext } from "node:test";
 import { workflowHomeDir } from "../../extensions/pi-claude-marketplace/platform/workflow-home.ts";
 
 /**
- * Relocate the home directory `os.homedir()` reads, and hand the new home back
- * so the caller never re-reads the global it just wrote: a caller reading
- * `process.env.HOME` back needs a `?? ""` to satisfy `strictNullChecks`, and
- * that fallback turns a broken precondition into a silent cwd-relative probe
- * instead of a failure.
+ * Relocate the home directory `os.homedir()` reads, clear `PI_CODING_AGENT_DIR`,
+ * and hand the new home back so the caller never re-reads the global it just
+ * wrote: a caller reading `process.env.HOME` back needs a `?? ""` to satisfy
+ * `strictNullChecks`, and that fallback turns a broken precondition into a
+ * silent cwd-relative probe instead of a failure.
  *
- * The previous value is saved and its restoration registered before anything
- * is mutated, so a failing assertion cannot leave the variable relocated. A
- * variable that was absent is deleted rather than reassigned, because
- * `process.env` stringifies every assignment and an absent variable restored by
- * assignment would come back as the four letters `undefined`.
+ * With the variable cleared, the root takes the engine's home default. A case
+ * that sets the variable does so after this call, so the restore registered
+ * here covers its value too.
+ *
+ * The previous values are saved and their restoration registered before
+ * anything is mutated, so a failing assertion cannot leave either variable
+ * relocated. A variable that was absent is deleted rather than reassigned,
+ * because `process.env` stringifies every assignment and an absent variable
+ * restored by assignment would come back as the four letters `undefined`.
  */
 async function hermeticHome(t: TestContext, label: string): Promise<string> {
   const home = await mkdtemp(path.join(tmpdir(), `workflow-home-${label}-`));
   const previousHome = process.env.HOME;
+  const previousAgentDirectory = process.env.PI_CODING_AGENT_DIR;
 
   t.after(async () => {
     if (previousHome === undefined) {
@@ -30,13 +35,20 @@ async function hermeticHome(t: TestContext, label: string): Promise<string> {
       process.env.HOME = previousHome;
     }
 
+    if (previousAgentDirectory === undefined) {
+      delete process.env.PI_CODING_AGENT_DIR;
+    } else {
+      process.env.PI_CODING_AGENT_DIR = previousAgentDirectory;
+    }
+
     await rm(home, { recursive: true, force: true });
   });
   process.env.HOME = home;
+  delete process.env.PI_CODING_AGENT_DIR;
   return home;
 }
 
-test("joins `.pi/workflows` onto the home directory", async (t) => {
+test("joins `.pi/workflows` onto the home directory when PI_CODING_AGENT_DIR is unset", async (t) => {
   // arrange
   const home = await hermeticHome(t, "join");
 
@@ -99,4 +111,45 @@ test("reads the home directory again on every call instead of caching one root",
       secondRoot: path.join(secondHome, ".pi", "workflows"),
     },
   );
+});
+
+test("WPTH-04 roots storage under PI_CODING_AGENT_DIR when the variable is set", async (t) => {
+  // arrange
+  await hermeticHome(t, "agent-dir");
+  const agentDirectory = path.join(
+    path.parse(process.cwd()).root,
+    "workflow-home-fixture",
+    "agent",
+  );
+  process.env.PI_CODING_AGENT_DIR = agentDirectory;
+
+  // act
+  const workflowHome = workflowHomeDir();
+
+  // assert
+  assert.strictEqual(workflowHome, path.join(agentDirectory, "workflows"));
+});
+
+test("WPTH-04 expands a leading `~` in PI_CODING_AGENT_DIR as Pi's getAgentDir does", async (t) => {
+  // arrange
+  const home = await hermeticHome(t, "agent-dir-tilde");
+  process.env.PI_CODING_AGENT_DIR = "~/profile";
+
+  // act
+  const workflowHome = workflowHomeDir();
+
+  // assert
+  assert.strictEqual(workflowHome, path.join(home, "profile", "workflows"));
+});
+
+test("WPTH-04 takes the home default when PI_CODING_AGENT_DIR is empty", async (t) => {
+  // arrange
+  const home = await hermeticHome(t, "agent-dir-empty");
+  process.env.PI_CODING_AGENT_DIR = "";
+
+  // act
+  const workflowHome = workflowHomeDir();
+
+  // assert
+  assert.strictEqual(workflowHome, path.join(home, ".pi", "workflows"));
 });

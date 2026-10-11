@@ -1092,7 +1092,7 @@ test("keeps content reasons before markers, one multi-word token per element", (
           name: "alpha",
           severity: "info",
           needsReload: true,
-          reasons: ["unsupported hooks", "requires pi-subagents", "requires pi-mcp"],
+          reasons: ["unsupported hooks", "requires pi-subagents", "requires pi-mcp-adapter"],
         },
       ],
     },
@@ -1117,7 +1117,7 @@ test("keeps content reasons before markers, one multi-word token per element", (
             status: "installed",
             name: "alpha",
             id: "alpha@mp",
-            reasons: ["unsupported hooks", "requires pi-subagents", "requires pi-mcp"],
+            reasons: ["unsupported hooks", "requires pi-subagents", "requires pi-mcp-adapter"],
             scope: "user",
           },
         ],
@@ -1652,10 +1652,23 @@ test("converts a resolved installed plugin-info row with every component and opt
             { kind: "lenient", event: "Custom", supported: false },
             { kind: "lenient", event: "PostToolUse", supported: true, matcher: "Edit" },
           ],
-          mcp: ["alpha-server"],
+          mcp: [
+            {
+              name: "plugin:alpha:full",
+              unsupportedFeature: "ws",
+              unsetVariables: ["A"],
+              withheldVariables: ["B"],
+              status: "connected",
+            },
+            { name: "plugin:alpha:bare" },
+          ],
           skills: ["alpha:skill"],
           workflows: ["alpha:flow"],
         },
+        requires: [
+          { companion: "pi-mcp-adapter", missing: true },
+          { companion: "pi-subagents", missing: false },
+        ],
         dependencies: ["beta@mp"],
       },
     },
@@ -1698,10 +1711,23 @@ test("converts a resolved installed plugin-info row with every component and opt
           { kind: "lenient", event: "Custom", supported: false },
           { kind: "lenient", event: "PostToolUse", supported: true, matcher: "Edit" },
         ],
-        mcp: ["alpha-server"],
+        mcp: [
+          {
+            name: "plugin:alpha:full",
+            unsupportedFeature: "ws",
+            unsetVariables: ["A"],
+            withheldVariables: ["B"],
+            status: "connected",
+          },
+          { name: "plugin:alpha:bare" },
+        ],
         skills: ["alpha:skill"],
         workflows: ["alpha:flow"],
       },
+      requires: [
+        { companion: "pi-mcp-adapter", missing: true },
+        { companion: "pi-subagents", missing: false },
+      ],
     },
   });
 });
@@ -2086,6 +2112,39 @@ const RAW_CASES: {
       reason: "EACCES",
     },
   },
+  "mcp-config-notices": {
+    surface: {
+      kind: "mcp-config-notices",
+      section: "left-unchanged",
+      notices: [{ kind: "left-unchanged", scope: "user", file: "mcp.json" }],
+    },
+    expected: {
+      schemaVersion: 1,
+      origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+      kind: "mcp-config-notices",
+      severity: "warning",
+      needsReload: false,
+      notices: [{ kind: "left-unchanged", scope: "user", file: "mcp.json" }],
+    },
+  },
+  "mcp-migration": {
+    surface: {
+      kind: "mcp-migration",
+      rows: [{ kind: "stopped", scope: "user", detail: "state.json is locked" }],
+      notices: [],
+      severity: "warning",
+      needsReload: false,
+    },
+    expected: {
+      schemaVersion: 1,
+      origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+      kind: "mcp-migration",
+      severity: "warning",
+      needsReload: false,
+      rows: [{ kind: "stopped", scope: "user", detail: "state.json is locked" }],
+      notices: [],
+    },
+  },
 };
 
 for (const [kind, { surface, expected }] of Object.entries(RAW_CASES)) {
@@ -2104,6 +2163,134 @@ for (const [kind, { surface, expected }] of Object.entries(RAW_CASES)) {
     assert.deepStrictEqual(payload, expectedPayload);
   });
 }
+
+test("AFILE-04: converts every MCP config notice kind field by field", () => {
+  // arrange
+  const subject = {
+    scope: "project",
+    file: "mcp-adapter.json",
+    plugin: "hello",
+    server: "srv",
+  } as const;
+  const notices = [
+    { kind: "comments-dropped", scope: "user", file: "mcp.json" },
+    { kind: "left-unchanged", scope: "user", file: "mcp-adapter.json" },
+    { kind: "override-kept", ...subject, fields: ["env"] },
+    { kind: "variables-missing", ...subject, names: ["A"] },
+    { kind: "credentials-blanked", ...subject, names: ["B"] },
+    { kind: "tool-rules-unenforced", ...subject, fields: ["toolPermissions"] },
+    { kind: "leftover-removed", ...subject },
+  ] as const;
+
+  // act
+  const payload = toWirePayload(
+    { kind: "mcp-config-notices", section: "comments-dropped", notices },
+    { kind: "load" },
+  );
+
+  // assert
+  assert.deepStrictEqual(payload, {
+    schemaVersion: 1,
+    origin: { kind: "load" },
+    kind: "mcp-config-notices",
+    severity: "warning",
+    needsReload: false,
+    notices: [
+      { kind: "comments-dropped", scope: "user", file: "mcp.json" },
+      { kind: "left-unchanged", scope: "user", file: "mcp-adapter.json" },
+      { kind: "override-kept", ...subject, fields: ["env"] },
+      { kind: "variables-missing", ...subject, names: ["A"] },
+      { kind: "credentials-blanked", ...subject, names: ["B"] },
+      { kind: "tool-rules-unenforced", ...subject, fields: ["toolPermissions"] },
+      { kind: "leftover-removed", ...subject },
+    ],
+  });
+});
+
+test("AMIG-03: converts a migration surface with its resolved severity and reload, every row kind field by field", () => {
+  // arrange
+  const owner = { scope: "user", plugin: "p", marketplace: "m", servers: ["s"] } as const;
+  const rows = [
+    { kind: "moved", scope: "project", plugin: "p", marketplace: "m", from: "s", to: "t" },
+    {
+      kind: "removed",
+      scope: "project",
+      plugin: "p",
+      marketplace: "m",
+      server: "s",
+      cause: "unsupported-feature",
+      feature: "ws",
+    },
+    {
+      kind: "removed",
+      scope: "project",
+      plugin: "p",
+      marketplace: "m",
+      server: "s",
+      cause: "not-declared",
+    },
+    { kind: "stopped", scope: "user", detail: "locked" },
+    { kind: "file-unreadable", scope: "user", file: "mcp.json" },
+    { kind: "unowned", ...owner },
+    { kind: "not-listed", ...owner },
+    { kind: "source-unreadable", ...owner },
+    { kind: "source-outdated", ...owner },
+    { kind: "marketplace-unreadable", ...owner },
+    { kind: "collision", ...owner, key: "k", source: "~/.config/mcp/mcp.json" },
+    { kind: "unfinished", ...owner, file: "project-scope mcp-adapter.json", detail: "denied" },
+  ] as const;
+
+  // act
+  const payload = toWirePayload(
+    {
+      kind: "mcp-migration",
+      rows,
+      notices: [{ kind: "comments-dropped", scope: "user", file: "mcp.json" }],
+      severity: "warning",
+      needsReload: true,
+    },
+    { kind: "load" },
+  );
+
+  // assert
+  assert.deepStrictEqual(payload, {
+    schemaVersion: 1,
+    kind: "mcp-migration",
+    origin: { kind: "load" },
+    severity: "warning",
+    needsReload: true,
+    rows: [
+      { kind: "moved", scope: "project", plugin: "p", marketplace: "m", from: "s", to: "t" },
+      {
+        kind: "removed",
+        scope: "project",
+        plugin: "p",
+        marketplace: "m",
+        server: "s",
+        cause: "unsupported-feature",
+        feature: "ws",
+      },
+      {
+        kind: "removed",
+        scope: "project",
+        plugin: "p",
+        marketplace: "m",
+        server: "s",
+        cause: "not-declared",
+      },
+      { kind: "stopped", scope: "user", detail: "locked" },
+      { kind: "file-unreadable", scope: "user", file: "mcp.json" },
+      { kind: "unowned", ...owner },
+      { kind: "not-listed", ...owner },
+      { kind: "source-unreadable", ...owner },
+      { kind: "source-outdated", ...owner },
+      { kind: "marketplace-unreadable", ...owner },
+      { kind: "collision", ...owner, key: "k", source: "~/.config/mcp/mcp.json" },
+      { kind: "unfinished", ...owner, file: "project-scope mcp-adapter.json", detail: "denied" },
+    ],
+    notices: [{ kind: "comments-dropped", scope: "user", file: "mcp.json" }],
+  });
+});
 
 test("converts a diagnostic with no lines to an empty line list", () => {
   // arrange

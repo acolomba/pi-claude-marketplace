@@ -29,6 +29,11 @@ import { homedir } from "node:os";
 import path from "node:path";
 
 import { discoverPluginWorkflows } from "../../bridges/workflows/index.ts";
+import {
+  scanClaudeServerVariables,
+  type ClaudeEnv,
+  type ServerVariableScan,
+} from "../../domain/claude-mcp-variables.ts";
 import { BUCKET_A_EVENTS } from "../../domain/components/hook-events.ts";
 import {
   hookSummaryEntriesFromPersisted,
@@ -45,6 +50,8 @@ import {
 import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
 import { MANIFEST_CANDIDATES } from "../../domain/manifest-path.ts";
 import { loadMarketplaceManifest, type MarketplaceManifest } from "../../domain/manifest.ts";
+import { type DroppedMcpServer } from "../../domain/mcp-server-features.ts";
+import { mcpServerDisplayName } from "../../domain/name.ts";
 import { resolveStrict } from "../../domain/plugin-resolver.ts";
 import {
   parsePluginSource,
@@ -54,7 +61,13 @@ import {
 } from "../../domain/source.ts";
 import { rowClaimsInstallDisabled } from "../../domain/unsupported-components.ts";
 import { locationsFor, type ScopedLocations } from "../../persistence/locations.ts";
-import { isRecordedButDisabled, type ExtensionState } from "../../persistence/state-io.ts";
+import {
+  isRecordedButDisabled,
+  loadState,
+  type ExtensionState,
+  type PluginInstallRecord,
+} from "../../persistence/state-io.ts";
+import { companionRequirements } from "../../shared/concerns/soft-dep.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage, isErrnoException } from "../../shared/errors.ts";
 import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
@@ -62,6 +75,7 @@ import { notify } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import {
   type MarketplaceDetails,
+  type McpServerSummaryEntry,
   type NotificationMessage,
   type PluginInfoMessage,
   type PluginInfoRow,
@@ -71,6 +85,7 @@ import {
   type MarketplaceRows,
   type Plural,
 } from "../../shared/notify-context.ts";
+import { ownValue } from "../../shared/own-key.ts";
 import { PathContainmentError, assertPathInside } from "../../shared/path-safety.ts";
 import {
   narrowProbeError,
@@ -80,7 +95,7 @@ import {
 import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import { DEFAULT_CREDENTIAL_OPS, buildCloneAuth } from "../auth-host.ts";
 import { crossScopeFlag } from "../marketplace/shared.ts";
-import { collectMarketplaceRecordsByScope } from "../scope-fanout.ts";
+import { collectMarketplaceRecordsByScope, type ScopedMarketplaceRecord } from "../scope-fanout.ts";
 
 import {
   canonicalCloneUrl,
@@ -91,6 +106,7 @@ import {
   resolvePluginPin,
 } from "./clone-cache.ts";
 import { makePresenceProbe } from "./git-source-probe.ts";
+import { withMcpServerStatus } from "./info-mcp-status.ts";
 import { PLUGIN_INFO_CONTEXT, type PluginInfoCascadeMsg } from "./info.messaging.ts";
 
 import type {
@@ -99,7 +115,8 @@ import type {
   ResolvedPluginUnavailable,
   ResolvedPluginPartiallyAvailable,
 } from "../../domain/resolver-types.ts";
-import type { NotificationContext } from "../../platform/pi-api.ts";
+import type { McpStatusReader } from "../../platform/mcp-status.ts";
+import type { NotificationContext, SoftDepStatus } from "../../platform/pi-api.ts";
 import type { HookSummaryEntry } from "../../shared/concerns/hooks.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -116,9 +133,18 @@ export interface GetPluginInfoOptions {
   /**
    * D-05: the command run. Info surfaces carry no soft-dependency markers;
    * the run keeps every emission of the command, including the multi-block
-   * fan-out and the failure loop, on one snapshot.
+   * fan-out and the failure loop, on one snapshot. ADET-01: that snapshot
+   * also stamps the `requires:` entries on every resolved row.
    */
   readonly run: NotificationRun;
+  /**
+   * ASTAT-01 / ASTAT-02: the extension load's status tracker. Info reads
+   * pi-mcp-adapter's last snapshot from it and stamps each written server's
+   * state. It never connects a server and never asks the adapter for a
+   * snapshot. Under `--scope user` info also reads the project scope's
+   * installation record, read-only, to mark the servers it overrides.
+   */
+  readonly mcpStatus: McpStatusReader;
   readonly marketplace: string;
   readonly plugin: string;
   /** When omitted, fan-out across BOTH scopes (project-first per INFO-03). */
@@ -672,6 +698,9 @@ function projectDroppedHookEntries(dropped: readonly DroppedHook[]): readonly Ho
  */
 function parseHooksForInfo(raw: string, cwd: string): HookConfigParseResult<null> {
   const ifCtx = { homedir: homedir(), cwd, projectRoot: cwd };
+  // `skipIfMap: true` means the compiler is never invoked, so a bound builtin
+  // stands in for it: an arrow literal here would be a function no test can
+  // reach, and direct coverage counts functions.
   const noopCompileIf = JSON.parse.bind(JSON, "null") as () => null;
   return parseHooksConfig(raw, ifCtx, noopCompileIf, { skipIfMap: true });
 }
@@ -683,7 +712,7 @@ function parseHooksForInfo(raw: string, cwd: string): HookConfigParseResult<null
  * re-open the file at info-render time. Returns `undefined` when the
  * file has no `hooksConfigPath` (the plugin declares no hooks). A defensive
  * re-parse failure projects through empty defaults, so the renderer omits the
- * hooks block just as it did before this private coverage simplification.
+ * hooks block.
  *
  * PHOOK-05 / D-71-05: `parseHooksConfig` returns the FILTERED supported
  * subset as `value` plus the `dropped` enumeration. For a partially-available
@@ -928,12 +957,17 @@ function parseLenientHooksJson(raw: string): unknown {
 /**
  * Compose the resolved-components field of a `PluginInfoRow`. Walks
  * `resolved.componentPaths` to discover per-kind component names on
- * disk; for mcpServers, the `resolved.mcpServers` keys ARE the names.
+ * disk; for mcpServers, the `resolved.mcpServers` keys are the declared
+ * names, and the servers a partial install leaves out ride beside them.
  * For hooks, re-parses `<pluginRoot>/<resolved.hooksConfigPath>` and
  * projects the result to `HookSummaryEntry[]` (the resolver discards
  * the parsed value -- info.ts must re-open the file). Empty per-kind
  * arrays return `undefined` so the renderer omits the line (the
  * renderer assumes pre-sorted input and does not sort defensively).
+ *
+ * AVAR-04 / AVAR-05: each written server's raw config is scanned against
+ * `env` for its unset and withheld variable names. The scan is read-only and
+ * returns names only. A left-out server is not scanned.
  *
  * WFLW-04: `workflows` is the one kind whose names cannot be read off the
  * directory listing -- each command is named by its script's own `meta.name`,
@@ -952,6 +986,7 @@ function parseLenientHooksJson(raw: string): unknown {
  */
 async function composeResolvedComponents(
   reader: PluginInfoReader,
+  env: ClaudeEnv,
   pluginRoot: string,
   resolved: {
     readonly componentPaths: {
@@ -966,6 +1001,7 @@ async function composeResolvedComponents(
       readonly workflows: readonly string[];
     };
     readonly mcpServers: Record<string, unknown>;
+    readonly droppedMcpServers?: readonly DroppedMcpServer[];
     readonly hooksConfigPath?: string;
   },
   pluginName: string,
@@ -974,7 +1010,7 @@ async function composeResolvedComponents(
     readonly agents?: readonly string[];
     readonly commands?: readonly string[];
     readonly hooks?: readonly HookSummaryEntry[];
-    readonly mcp?: readonly string[];
+    readonly mcp?: readonly McpServerSummaryEntry[];
     readonly skills?: readonly string[];
     readonly workflows?: readonly string[];
   };
@@ -998,8 +1034,17 @@ async function composeResolvedComponents(
     resolved.componentPaths.skills,
     "skills",
   );
-  const mcp = Object.keys(resolved.mcpServers).sort((a, b) =>
-    a.localeCompare(b, undefined, { sensitivity: "base" }),
+  const scans = new Map(
+    Object.entries(resolved.mcpServers).map(([server, config]) => [
+      server,
+      scanClaudeServerVariables(config, env),
+    ]),
+  );
+  const mcp = composeMcpEntries(
+    pluginName,
+    Object.keys(resolved.mcpServers),
+    resolved.droppedMcpServers,
+    scans,
   );
 
   // SURF-01 / D-63-07: hooks branch. Read-and-project happens ONCE at
@@ -1143,6 +1188,8 @@ interface InfoBlock {
  */
 async function buildBlock(args: {
   reader: PluginInfoReader;
+  /** AVAR-04: the environment the MCP variable lists are computed from. */
+  readonly env: ClaudeEnv;
   marketplace: string;
   pluginName: string;
   scope: Scope;
@@ -1160,6 +1207,7 @@ async function buildBlock(args: {
 }): Promise<InfoBlock> {
   const {
     reader,
+    env,
     marketplace,
     pluginName,
     scope,
@@ -1213,7 +1261,7 @@ async function buildBlock(args: {
   // rescue that block (BOUND-01) -- which is why `lookupDeclaredPlugin`
   // (D-99-02a) is reachable only on the successful-read path and answers
   // `declared` or `absent`, never "unknown".
-  const installed = mpRecord.plugins[pluginName];
+  const installed = ownValue(mpRecord.plugins, pluginName);
   const lookup = lookupDeclaredPlugin(manifest, pluginName);
   if (lookup.kind === "absent") {
     if (installed !== undefined) {
@@ -1308,6 +1356,7 @@ async function buildBlock(args: {
     const blockFetchCtx = isRecordedButDisabled(installed) ? undefined : fetchCtx;
     const row = await buildInstalledRow({
       reader,
+      env,
       pluginName,
       version: installed.version,
       description,
@@ -1332,6 +1381,7 @@ async function buildBlock(args: {
   // partially-available / unavailable.
   const row = await buildNotInstalledRow({
     reader,
+    env,
     pluginName,
     version: manifestVersion,
     description,
@@ -1627,7 +1677,13 @@ async function buildStateOnlyInstalledRow(
   locations: ScopedLocations,
   cwd: string,
 ): Promise<PluginInfoRow> {
-  const { components, degraded } = await composeStateOnlyComponents(reader, record, locations, cwd);
+  const { components, degraded } = await composeStateOnlyComponents(
+    reader,
+    pluginName,
+    record,
+    locations,
+    cwd,
+  );
   return {
     status: derivePersistedInstalledStatus(record),
     name: pluginName,
@@ -1690,6 +1746,7 @@ function derivePersistedInstalledStatus(
  */
 async function composeStateOnlyComponents(
   reader: PluginInfoReader,
+  pluginName: string,
   record: MarketplaceRecord["plugins"][string],
   locations: ScopedLocations,
   cwd: string,
@@ -1699,7 +1756,7 @@ async function composeStateOnlyComponents(
 }> {
   const agents = sortComponentNames(record.resources.agents);
   const commands = sortComponentNames(record.resources.prompts);
-  const mcp = sortComponentNames(record.resources.mcpServers);
+  const mcp = composeMcpEntries(pluginName, record.resources.mcpServers);
   const skills = sortComponentNames(record.resources.skills);
   const workflows = sortComponentNames(record.resources.workflows);
   // D-100-03 / ENBL-12 read ladder: the record wins when it carries the key,
@@ -1738,7 +1795,51 @@ async function composeStateOnlyComponents(
 
 /** The `discoverComponentNames` ordering, applied to a persisted name list. */
 function sortComponentNames(names: readonly string[]): readonly string[] {
-  return [...names].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+  return [...names].sort(compareComponentNames);
+}
+
+function compareComponentNames(a: string, b: string): number {
+  return a.localeCompare(b, undefined, { sensitivity: "base" });
+}
+
+/**
+ * ANAME-01 / ANAME-07: the `mcp:` entries for both info arms. Every server is
+ * shown by the name Claude Code gives it, and a server a partial install
+ * leaves out also carries the feature that blocks it. The record arm passes
+ * no dropped servers: the record lists only the servers install wrote.
+ *
+ * AVAR-04 / AVAR-05: `scans` holds each written server's unset and withheld
+ * variable names, which the entry carries only when non-empty. The record arm
+ * passes no scans, because the record holds no server configs.
+ */
+function composeMcpEntries(
+  pluginName: string,
+  servers: readonly string[],
+  dropped: readonly DroppedMcpServer[] = [],
+  scans?: ReadonlyMap<string, ServerVariableScan>,
+): readonly McpServerSummaryEntry[] {
+  const written: readonly McpServerSummaryEntry[] = servers.map((server) => ({
+    name: mcpServerDisplayName(pluginName, server),
+    ...variableFields(scans?.get(server)),
+  }));
+  const leftOut: readonly McpServerSummaryEntry[] = dropped.map(({ server, feature }) => ({
+    name: mcpServerDisplayName(pluginName, server),
+    unsupportedFeature: feature,
+  }));
+  return [...written, ...leftOut].sort((a, b) => compareComponentNames(a.name, b.name));
+}
+
+function variableFields(
+  scan: ServerVariableScan | undefined,
+): Pick<McpServerSummaryEntry, "unsetVariables" | "withheldVariables"> {
+  if (scan === undefined) {
+    return {};
+  }
+
+  return {
+    ...(scan.unset.length > 0 && { unsetVariables: scan.unset }),
+    ...(scan.withheld.length > 0 && { withheldVariables: scan.withheld }),
+  };
 }
 
 /**
@@ -1762,8 +1863,9 @@ function sortComponentNames(names: readonly string[]): readonly string[] {
  */
 async function buildNotInstallablePathRowFields(
   reader: PluginInfoReader,
+  env: ClaudeEnv,
   pluginName: string,
-  resolved: Parameters<typeof composeResolvedComponents>[2],
+  resolved: Parameters<typeof composeResolvedComponents>[3],
   resolverReasons: readonly ContentReason[],
   marketplaceRoot: string,
   parsedSource: PathSource,
@@ -1790,6 +1892,7 @@ async function buildNotInstallablePathRowFields(
   try {
     const resolvedComponents = await composeResolvedComponents(
       reader,
+      env,
       pluginRoot,
       resolved,
       pluginName,
@@ -1868,6 +1971,7 @@ function asDeclaredList(raw: unknown): readonly unknown[] {
  */
 function buildNonInstallableRowFields(
   reader: PluginInfoReader,
+  env: ClaudeEnv,
   pluginName: string,
   resolved: ResolvedPluginPartiallyAvailable | ResolvedPluginUnavailable,
   entry: MarketplaceManifest["plugins"][number],
@@ -1880,6 +1984,7 @@ function buildNonInstallableRowFields(
     case "partially-available":
       return buildNotInstallablePathRowFields(
         reader,
+        env,
         pluginName,
         resolved,
         narrowUnsupportedKinds(resolved.unsupported),
@@ -1889,6 +1994,7 @@ function buildNonInstallableRowFields(
     case "unavailable":
       return buildNotInstallablePathRowFields(
         reader,
+        env,
         pluginName,
         {
           componentPaths: deriveLenientComponentPaths(entry),
@@ -2032,6 +2138,7 @@ function foldFetchOrProbeError(err: unknown): ContentReason {
  */
 async function buildInstalledGitRow(opts: {
   reader: PluginInfoReader;
+  readonly env: ClaudeEnv;
   pluginName: string;
   version: string | undefined;
   description: string | undefined;
@@ -2045,6 +2152,7 @@ async function buildInstalledGitRow(opts: {
 }): Promise<PluginInfoRow> {
   const {
     reader,
+    env,
     pluginName,
     version,
     description,
@@ -2074,6 +2182,7 @@ async function buildInstalledGitRow(opts: {
       if (resolved.state === "installable") {
         const composed = await composeResolvedComponents(
           reader,
+          env,
           presence.pluginRoot,
           resolved,
           pluginName,
@@ -2122,6 +2231,7 @@ async function buildInstalledGitRow(opts: {
  */
 async function buildInstalledRow(opts: {
   reader: PluginInfoReader;
+  readonly env: ClaudeEnv;
   pluginName: string;
   version: string | undefined;
   description: string | undefined;
@@ -2135,6 +2245,7 @@ async function buildInstalledRow(opts: {
 }): Promise<PluginInfoRow> {
   const {
     reader,
+    env,
     pluginName,
     version,
     description,
@@ -2155,6 +2266,7 @@ async function buildInstalledRow(opts: {
     if (isGitSource(parsedSource)) {
       return buildInstalledGitRow({
         reader,
+        env,
         pluginName,
         version,
         description,
@@ -2180,6 +2292,7 @@ async function buildInstalledRow(opts: {
     if (resolved.state === "installable") {
       const composed = await composeResolvedComponents(
         reader,
+        env,
         resolved.pluginRoot,
         resolved,
         pluginName,
@@ -2210,6 +2323,7 @@ async function buildInstalledRow(opts: {
     // re-derives independently (D-64-05).
     const fields = await buildNonInstallableRowFields(
       reader,
+      env,
       pluginName,
       resolved,
       entry,
@@ -2263,6 +2377,7 @@ async function buildNotInstalledPathRow(
   reader: PluginInfoReader,
   resolved: ResolvedPluginPartiallyAvailable | ResolvedPluginUnavailable,
   opts: {
+    readonly env: ClaudeEnv;
     pluginName: string;
     version: string | undefined;
     description: string | undefined;
@@ -2271,10 +2386,11 @@ async function buildNotInstalledPathRow(
     parsedSource: PathSource;
   },
 ): Promise<PluginInfoRow> {
-  const { pluginName, version, description, entry, mpRecord, parsedSource } = opts;
+  const { env, pluginName, version, description, entry, mpRecord, parsedSource } = opts;
   try {
     const fields = await buildNonInstallableRowFields(
       reader,
+      env,
       pluginName,
       resolved,
       entry,
@@ -2346,6 +2462,7 @@ function buildRemoteNotInstalledRow(
  */
 async function buildGitNotInstalledRow(opts: {
   reader: PluginInfoReader;
+  readonly env: ClaudeEnv;
   pluginName: string;
   version: string | undefined;
   description: string | undefined;
@@ -2358,6 +2475,7 @@ async function buildGitNotInstalledRow(opts: {
 }): Promise<PluginInfoRow> {
   const {
     reader,
+    env,
     pluginName,
     version,
     description,
@@ -2410,6 +2528,7 @@ async function buildGitNotInstalledRow(opts: {
       // is caught by THIS try/catch and folds to the unreadable arm below.
       return await buildWarmGitNonInstallableRow(resolved, {
         reader,
+        env,
         pluginName,
         version,
         description,
@@ -2419,6 +2538,7 @@ async function buildGitNotInstalledRow(opts: {
 
     return await buildAvailableRow({
       reader,
+      env,
       pluginName,
       version,
       description,
@@ -2452,13 +2572,14 @@ async function buildWarmGitNonInstallableRow(
   resolved: ResolvedPluginPartiallyAvailable | ResolvedPluginUnavailable,
   opts: {
     reader: PluginInfoReader;
+    readonly env: ClaudeEnv;
     pluginName: string;
     version: string | undefined;
     description: string | undefined;
     pluginRoot: string;
   },
 ): Promise<PluginInfoRow> {
-  const { reader, pluginName, version, description, pluginRoot } = opts;
+  const { reader, env, pluginName, version, description, pluginRoot } = opts;
   const status = resolved.state === "partially-available" ? "partially-available" : "unavailable";
   const resolverReasons =
     resolved.state === "partially-available"
@@ -2481,7 +2602,13 @@ async function buildWarmGitNonInstallableRow(
           mcpServers: {},
         };
   try {
-    const composed = await composeResolvedComponents(reader, pluginRoot, forComponents, pluginName);
+    const composed = await composeResolvedComponents(
+      reader,
+      env,
+      pluginRoot,
+      forComponents,
+      pluginName,
+    );
     return {
       status,
       name: pluginName,
@@ -2512,6 +2639,7 @@ async function buildWarmGitNonInstallableRow(
  */
 async function buildNotInstalledRow(opts: {
   reader: PluginInfoReader;
+  readonly env: ClaudeEnv;
   pluginName: string;
   version: string | undefined;
   description: string | undefined;
@@ -2524,6 +2652,7 @@ async function buildNotInstalledRow(opts: {
 }): Promise<PluginInfoRow> {
   const { reader, pluginName, version, description, dependencies, entry, mpRecord, parsedSource } =
     opts;
+  const { env } = opts;
   const { locations, fetchCtx } = opts;
   // RSTA-01 / RSTA-05 / D-80-04: a NOT-installed git-source entry (url /
   // git-subdir / github) is classified from its clone/mirror presence. Bare info
@@ -2537,6 +2666,7 @@ async function buildNotInstalledRow(opts: {
   if (isGitSource(parsedSource)) {
     return buildGitNotInstalledRow({
       reader,
+      env,
       pluginName,
       version,
       description,
@@ -2576,6 +2706,7 @@ async function buildNotInstalledRow(opts: {
   if (resolved.state !== "installable") {
     return buildNotInstalledNonInstallableRow(resolved, {
       reader,
+      env,
       pluginName,
       version,
       description,
@@ -2592,6 +2723,7 @@ async function buildNotInstalledRow(opts: {
   // source short-circuit.
   return buildAvailableRow({
     reader,
+    env,
     pluginName,
     version,
     description,
@@ -2612,6 +2744,7 @@ function buildNotInstalledNonInstallableRow(
   resolved: ResolvedPluginPartiallyAvailable | ResolvedPluginUnavailable,
   opts: {
     reader: PluginInfoReader;
+    readonly env: ClaudeEnv;
     pluginName: string;
     version: string | undefined;
     description: string | undefined;
@@ -2620,7 +2753,7 @@ function buildNotInstalledNonInstallableRow(
     parsedSource: ParsedSource;
   },
 ): Promise<PluginInfoRow> | PluginInfoRow {
-  const { reader, pluginName, version, description, entry, mpRecord, parsedSource } = opts;
+  const { reader, env, pluginName, version, description, entry, mpRecord, parsedSource } = opts;
   const reasons =
     resolved.state === "unavailable"
       ? narrowResolverNotes(resolved.notes)
@@ -2641,6 +2774,7 @@ function buildNotInstalledNonInstallableRow(
   // (D-64-05); the partially-available arm carries its component payload into
   // the same builder.
   return buildNotInstalledPathRow(reader, resolved, {
+    env,
     pluginName,
     version,
     description,
@@ -2660,18 +2794,20 @@ function buildNotInstalledNonInstallableRow(
  */
 async function buildAvailableRow(opts: {
   readonly reader: PluginInfoReader;
+  readonly env: ClaudeEnv;
   readonly pluginName: string;
   readonly version: string | undefined;
   readonly description: string | undefined;
   readonly dependencies: readonly string[] | undefined;
   readonly pluginRoot: string;
-  readonly resolvedForComponents: Parameters<typeof composeResolvedComponents>[2];
+  readonly resolvedForComponents: Parameters<typeof composeResolvedComponents>[3];
 }): Promise<PluginInfoRow> {
-  const { reader, pluginName, version, description, dependencies } = opts;
+  const { reader, env, pluginName, version, description, dependencies } = opts;
 
   try {
     const composed = await composeResolvedComponents(
       reader,
+      env,
       opts.pluginRoot,
       opts.resolvedForComponents,
       pluginName,
@@ -2833,8 +2969,80 @@ function emitFetchSkip(
   notifyWithContext(opts.ctx, opts.run, PLUGIN_INFO_CONTEXT, rows, undefined, "single");
 }
 
+/**
+ * ADET-01: stamps the companions that the components the install writes need
+ * onto the block's plugin row, each tagged missing per the command run's one
+ * soft-dependency snapshot (D-05). A server that a partial install leaves out needs no adapter.
+ * An unresolved row and a row that needs no companion keep their shape. A
+ * disabled row keeps its component inventory (ENBL-18), so it carries the line
+ * too: the line states what the plugin needs, not what is running.
+ */
+function withCompanionRequirements(built: InfoBlock, softDeps: SoftDepStatus): InfoBlock {
+  const plugin = built.block.plugin;
+  if (!plugin.componentsResolved) {
+    return built;
+  }
+
+  const requires = companionRequirements(
+    (plugin.components.agents?.length ?? 0) > 0,
+    (plugin.components.mcp ?? []).some((server) => server.unsupportedFeature === undefined),
+    (plugin.components.workflows?.length ?? 0) > 0,
+    softDeps,
+  );
+  return {
+    ...built,
+    block: { ...built.block, plugin: { ...plugin, ...(requires.length > 0 && { requires }) } },
+  };
+}
+
+/**
+ * ASTAT-01: stamps the block's written MCP servers with the state
+ * pi-mcp-adapter last reported, read against the block's own scope record and
+ * the same plugin's project-scope record.
+ */
+function withServerStatus(
+  built: InfoBlock,
+  record: PluginInstallRecord | undefined,
+  mcpStatus: McpStatusReader,
+  projectRecord: PluginInstallRecord | undefined,
+): InfoBlock {
+  return { ...built, block: withMcpServerStatus(built.block, record, mcpStatus, projectRecord) };
+}
+
+/**
+ * ASTAT-01: the plugin's installation record in the project scope, which
+ * decides whether a user row's MCP servers are overridden. The fan-out already
+ * read it; under `--scope user` it is read here without persisting a
+ * migration, so info writes nothing (NFR-5: a local read only).
+ */
+async function readProjectInstallRecord(
+  opts: GetPluginInfoOptions,
+  found: readonly ScopedMarketplaceRecord[],
+): Promise<PluginInstallRecord | undefined> {
+  const project = found.find((f) => f.scope === "project");
+  if (project !== undefined) {
+    return ownValue(project.record.plugins, opts.plugin);
+  }
+
+  if (opts.scope !== "user") {
+    return undefined;
+  }
+
+  try {
+    const state = await loadState(locationsFor("project", opts.cwd).extensionRoot, {
+      persistMigration: false,
+    });
+    return ownValue(ownValue(state.marketplaces, opts.marketplace)?.plugins, opts.plugin);
+  } catch {
+    // A project state that cannot be read counts as not overriding, so it can
+    // never fail a user-scope info.
+    return undefined;
+  }
+}
+
 async function getPluginInfoWithReader(
   reader: PluginInfoReader,
+  env: ClaudeEnv,
   opts: GetPluginInfoOptions,
 ): Promise<void> {
   // INFO-03 iteration order: project-first per MSG-GR-3 when both
@@ -2886,6 +3094,8 @@ async function getPluginInfoWithReader(
     return;
   }
 
+  const projectRecord = await readProjectInstallRecord(opts, found);
+
   // D-100-08 / ENBL-17: every found scope goes to `buildBlock`, including a
   // recorded-but-disabled one. A disabled record its manifest still declares
   // resolves exactly as an uninstalled one does, and a disabled record the
@@ -2899,8 +3109,9 @@ async function getPluginInfoWithReader(
   // undefined)` has under `noUncheckedIndexedAccess`.
   const [sole, ...rest] = found;
   if (sole !== undefined && rest.length === 0) {
-    const built = await buildBlock({
+    const soleBlock = await buildBlock({
       reader,
+      env,
       marketplace: opts.marketplace,
       pluginName: opts.plugin,
       scope: sole.scope,
@@ -2910,6 +3121,12 @@ async function getPluginInfoWithReader(
       cwd: opts.cwd,
       ...(fetchCtx !== undefined && { fetchCtx }),
     });
+    const built = withServerStatus(
+      withCompanionRequirements(soleBlock, opts.run.softDeps),
+      ownValue(sole.record.plugins, opts.plugin),
+      opts.mcpStatus,
+      projectRecord,
+    );
     notify(opts.ctx, opts.run, built.block);
     emitFetchSkip(opts, scopes, [built]);
     return;
@@ -2931,9 +3148,10 @@ async function getPluginInfoWithReader(
   // behind a healthy other-scope render; callers wanting strict IL-2 must pass
   // `--scope`. Block order follows the project-first scope iteration (MSG-GR-3).
   const built = await Promise.all(
-    found.map((f) =>
-      buildBlock({
+    found.map(async (f) => {
+      const scopeBlock = await buildBlock({
         reader,
+        env,
         marketplace: opts.marketplace,
         pluginName: opts.plugin,
         scope: f.scope,
@@ -2942,8 +3160,14 @@ async function getPluginInfoWithReader(
         declaredEnabled: f.declaredEnabled,
         cwd: opts.cwd,
         ...(fetchCtx !== undefined && { fetchCtx }),
-      }),
-    ),
+      });
+      return withServerStatus(
+        withCompanionRequirements(scopeBlock, opts.run.softDeps),
+        ownValue(f.record.plugins, opts.plugin),
+        opts.mcpStatus,
+        projectRecord,
+      );
+    }),
   );
   const blocks = built.map((b) => b.block);
   const infoBlocks = blocks.filter((b) => b.plugin.status !== "failed");
@@ -2975,9 +3199,15 @@ async function getPluginInfoWithReader(
   }
 }
 
-/** Creates the plugin-info command with an explicit read-only filesystem capability. */
+/**
+ * Creates the plugin-info command with an explicit read-only filesystem
+ * capability. `env` is the environment the MCP server variable lists are
+ * computed from (AVAR-04, AVAR-05); production passes Pi's process
+ * environment.
+ */
 export function createGetPluginInfo(
   reader: PluginInfoReader,
+  env: ClaudeEnv = process.env,
 ): (opts: GetPluginInfoOptions) => Promise<void> {
-  return (opts) => getPluginInfoWithReader(reader, opts);
+  return (opts) => getPluginInfoWithReader(reader, env, opts);
 }

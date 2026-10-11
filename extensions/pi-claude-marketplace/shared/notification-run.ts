@@ -2,7 +2,7 @@ import { softDepStatus } from "../platform/pi-api.ts";
 
 import { UnsupportedModeError } from "./errors.ts";
 
-import type { ExtensionMode, SoftDepStatus, ToolInventory } from "../platform/pi-api.ts";
+import type { ExtensionMode, PiInventory, SoftDepStatus } from "../platform/pi-api.ts";
 
 /** The host entry capability used by the notification dispatcher. */
 export interface NotificationEntrySink {
@@ -65,17 +65,17 @@ export function createCommandRunState(): CommandRunState {
 }
 
 /** Takes the presentation snapshot used by commands and read-only tools. */
-export function openNotificationSnapshot(pi: ToolInventory): NotificationSnapshot {
+export function openNotificationSnapshot(pi: PiInventory): NotificationSnapshot {
   return { softDeps: softDepStatus(pi) };
 }
 
 /**
- * Opens a notification run over `pi`'s tool inventory. D-05: this is the one
- * soft-dependency probe per run; the snapshot does not follow later changes
- * to the inventory.
+ * Opens a notification run over `pi`'s tool and command inventory. D-05: this
+ * is the one soft-dependency probe per run; the snapshot does not follow later
+ * changes to the inventory.
  */
 export function openNotificationRun(
-  pi: ToolInventory & NotificationEntrySink,
+  pi: PiInventory & NotificationEntrySink,
   origin: NotificationOrigin,
   commandState?: CommandRunState,
 ): NotificationRun {

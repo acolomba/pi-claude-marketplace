@@ -25,7 +25,7 @@
 // `PluginInstalledMessage` carries `dependencies: readonly Dependency[]`
 // derived from the plugin's installed resources (state-recorded).
 // The command run carries the one soft-dependency snapshot (D-05), and resolve
-// composes the `{requires pi-subagents}` / `{requires pi-mcp}` markers from it
+// composes the `{requires pi-subagents}` / `{requires pi-mcp-adapter}` markers from it
 // when (declares AND companion unloaded). RLD-04: the list orchestrator
 // stamps the steady-state inventory row `installed` with `needsReload: false`,
 // so the OR-reduce reload-hint (RLD-02) does NOT fire the `/reload to pick up
@@ -68,6 +68,7 @@ import {
   type MarketplaceRows,
   type Plural,
 } from "../../shared/notify-context.ts";
+import { ownValue } from "../../shared/own-key.ts";
 import { narrowProbeError as sharedNarrowProbeError } from "../../shared/probe-classifiers.ts";
 
 import { availableRowMessage, type FilterBucket } from "./list-candidate-row.ts";
@@ -385,7 +386,7 @@ async function enumerateMarketplacePlugins(args: {
       manifestEntry,
       { marketplaceRoot: mpRecord.marketplaceRoot, marketplaceName: mpName },
       locationsFor(pluginScope, opts.cwd),
-      pluginScopeConfig.plugins[`${manifestEntry.name}@${mpName}`]?.entry.enabled,
+      ownValue(pluginScopeConfig.plugins, `${manifestEntry.name}@${mpName}`)?.entry.enabled,
     );
     if (shouldShow(opts, row.status, bucket)) {
       rows.push(row);
@@ -655,7 +656,7 @@ export async function loadPluginListPayload(
       continue;
     }
 
-    const userMp = userState.marketplaces[mpName];
+    const userMp = ownValue(userState.marketplaces, mpName);
     // Orphan-fold rule: if the project-scope record is a CLONE of the
     // user-scope record (same marketplaceRoot), DO NOT emit a separate
     // project-scope block. The project-scope plugins fold under the
@@ -670,7 +671,7 @@ export async function loadPluginListPayload(
       mpName,
       mpScope: "project",
       mpRecord,
-      autoupdate: projectMerged.marketplaces[mpName]?.entry.autoupdate ?? false,
+      autoupdate: ownValue(projectMerged.marketplaces, mpName)?.entry.autoupdate ?? false,
       scopeConfig: projectMerged,
       extraPlugins: [],
     });
@@ -685,7 +686,7 @@ export async function loadPluginListPayload(
 
     // Fold orphan project plugins iff the matching project-scope record
     // is a clone (per D-13-17 semantics) and exists.
-    const projectMp = projectState.marketplaces[mpName];
+    const projectMp = ownValue(projectState.marketplaces, mpName);
     const { folded, foldedNames } = isOrphanMarketplaceClone(projectMp, mpRecord)
       ? // eslint-disable-next-line no-await-in-loop -- bounded by the user marketplaces, one orphan fold each
         await computeOrphanFold(opts, mpName, projectMp, projectMerged)
@@ -697,7 +698,7 @@ export async function loadPluginListPayload(
       mpName,
       mpScope: "user",
       mpRecord,
-      autoupdate: userMerged.marketplaces[mpName]?.entry.autoupdate ?? false,
+      autoupdate: ownValue(userMerged.marketplaces, mpName)?.entry.autoupdate ?? false,
       scopeConfig: userMerged,
       extraPlugins: folded,
       excludeFromAvailable: foldedNames,
@@ -747,7 +748,7 @@ function narrowListFailReason(err: unknown): ListReason {
  * `notifyWithContext(ctx, run, ...)` call per orchestration arm (success or
  * failure). The command run carries the soft-dependency snapshot (D-05), and
  * resolve composes the per-row `{requires pi-subagents}` /
- * `{requires pi-mcp}` markers from it when (declares AND companion unloaded).
+ * `{requires pi-mcp-adapter}` markers from it when (declares AND companion unloaded).
  */
 export async function listPlugins(opts: ListPluginsOptions): Promise<void> {
   const { ctx, run } = opts;

@@ -39,6 +39,7 @@
 //                  known plugin.
 
 import { ManifestSoftFailError } from "../../shared/completion-cache.ts";
+import { ownValue } from "../../shared/own-key.ts";
 import { SCOPES } from "../../shared/types.ts";
 
 import type { LocationsResolverLike } from "../../orchestrators/edge-deps.ts";
@@ -179,6 +180,7 @@ export function splitCompletionInput(input: string): { tokens: string[]; current
     return { tokens: allTokens, current: "" };
   }
 
+  // Non-empty input without trailing whitespace always yields at least one token.
   const [current] = allTokens.slice(-1) as [string];
   return { tokens: allTokens.slice(0, -1), current };
 }
@@ -348,7 +350,7 @@ async function installedNamesInTarget(
   marketplace: string,
 ): Promise<ReadonlySet<string>> {
   const state = await resolver.loadStateForScope(targetScope);
-  const plugins = state.marketplaces[marketplace]?.plugins ?? {};
+  const plugins = ownValue(state.marketplaces, marketplace)?.plugins ?? {};
   return new Set(Object.keys(plugins));
 }
 

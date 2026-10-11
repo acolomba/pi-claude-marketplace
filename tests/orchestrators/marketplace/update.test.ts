@@ -346,6 +346,7 @@ for (const mode of ["json", "rpc"]) {
       const run = openNotificationRun(
         {
           getAllTools: () => [],
+          getCommands: () => [],
           appendEntry(customType, payload) {
             capture.entrySink.appendEntry(customType, payload);
             events.push({ customType, payload });
@@ -2371,6 +2372,140 @@ test("UXG-05 (UAT Test-3 gap) regression guard: autoupdate-ON cascade where a pl
   });
 });
 
+test("AFILE-04: a marketplace update whose autoupdate cascade rewrites a commented mcp-adapter.json shows the notice after its cascade", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange -- the updated plugin and the failed one each report a rewrite of
+    // the same adapter file, and the failed one also of mcp.json.
+    await seedGithubMarketplace({
+      cwd,
+      name: "official",
+      ref: "main",
+      autoupdate: true,
+      plugins: { alpha: makePluginRecord(), beta: makePluginRecord() },
+    });
+    const { ctx, run, notifications } = makeCtx();
+    const { gitOps } = createGitOps({
+      remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000010" },
+    });
+    const adapterNotice = {
+      kind: "comments-dropped",
+      scope: "project",
+      file: "mcp-adapter.json",
+    } as const;
+    const pluginUpdate: PluginUpdateFn = async (plugin) =>
+      Promise.resolve(
+        plugin === "alpha"
+          ? {
+              partition: "updated",
+              name: plugin,
+              fromVersion: "0.0.1",
+              toVersion: "0.0.2",
+              stagedAgentNames: [],
+              stagedMcpServerNames: [],
+              declaresAgents: false,
+              declaresMcp: false,
+              constraint: undefined,
+              declaresWorkflows: false,
+              mcpConfigNotices: [adapterNotice],
+            }
+          : {
+              partition: "failed",
+              name: plugin,
+              notes: ["plugin update phase 3 failed"],
+              reasons: ["permission denied"],
+              declaresAgents: false,
+              declaresMcp: false,
+              declaresWorkflows: false,
+              mcpConfigNotices: [
+                adapterNotice,
+                { kind: "comments-dropped", scope: "project", file: "mcp.json" },
+              ],
+            },
+      );
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      name: "official",
+      scope: "project",
+      cwd,
+      gitOps,
+      pluginUpdate,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n\n" +
+          "● official [project] (updated)\n" +
+          "  ● alpha v0.0.1 → v0.0.2 (updated)\n" +
+          "  ⊘ beta (failed) {permission denied}\n\n" +
+          "/reload to pick up changes",
+        severity: "error",
+      },
+      {
+        message:
+          "MCP config comments removed.\n\n" +
+          "The project-scope mcp-adapter.json was rewritten to update plugin MCP servers; its JSONC comments were removed and everything else in it was kept.\n" +
+          "The project-scope mcp.json was rewritten to update plugin MCP servers; its JSONC comments were removed and everything else in it was kept.",
+        severity: "warning",
+      },
+    ]);
+  });
+});
+
+test("AFILE-04: a no-op marketplace update over a commented mcp-adapter.json sends no notice", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    await seedGithubMarketplace({
+      cwd,
+      name: "noupd",
+      ref: "main",
+      autoupdate: true,
+      plugins: { p: makePluginRecord() },
+    });
+    const adapter = '// user note\n{"mcpServers":{}}\n';
+    const adapterPath = locationsFor("project", cwd).mcpAdapterJsonPath;
+    await writeFile(adapterPath, adapter);
+    const { ctx, run, notifications } = makeCtx();
+    const { gitOps } = createGitOps({
+      remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000011" },
+    });
+    const pluginUpdate: PluginUpdateFn = async (plugin) =>
+      Promise.resolve({
+        partition: "unchanged",
+        name: plugin,
+        fromVersion: "0.0.1",
+        toVersion: "0.0.1",
+        declaresAgents: false,
+        declaresMcp: false,
+        constraint: undefined,
+        declaresWorkflows: false,
+      });
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      name: "noupd",
+      scope: "project",
+      cwd,
+      gitOps,
+      pluginUpdate,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      { message: "● noupd [project] (skipped) {up-to-date}" },
+    ]);
+    assert.equal(await readFile(adapterPath, "utf8"), adapter);
+  });
+});
+
 test("NFR-5: path-source update calls zero gitOps methods", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
@@ -3228,11 +3363,13 @@ test("updateMarketplace: explicit-scope missing marketplace -> standalone {marke
 // direction: the container sits in project, the operator named user.
 test("CMP-4 / SCOPE-01: explicit --scope user against a project-only marketplace renders the user-direction qualified row", async () => {
   await withHermeticHome(async ({ cwd }) => {
+    // arrange
     // seedGithubMarketplace seeds the PROJECT scope; ask for USER explicitly.
     await seedGithubMarketplace({ cwd, name: "mp" });
     const { ctx, run, notifications } = makeCtx();
     const { gitOps } = createGitOps();
 
+    // act
     await updateMarketplace({
       completionCache: createCompletionCache(),
       ctx,
@@ -3243,6 +3380,7 @@ test("CMP-4 / SCOPE-01: explicit --scope user against a project-only marketplace
       gitOps,
     });
 
+    // assert
     assert.equal(notifications.length, 1);
     assert.equal(
       notifications[0]?.message,

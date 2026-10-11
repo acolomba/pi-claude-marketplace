@@ -5,6 +5,7 @@ import {
   PluginShapeError,
   StateLockHeldError,
 } from "../../shared/errors.ts";
+import { ownValue, setOwn } from "../../shared/own-key.ts";
 
 import { retiresWorkflowCommand } from "./shared.ts";
 
@@ -145,8 +146,8 @@ function failedOutcome(input: RecordFailedOutcomeInput): ReinstallFailedOutcome 
 function recordReinstalledOutcome(
   input: RecordReinstalledOutcomeInput,
 ): ReinstallReinstalledOutcome {
-  const marketplace = input.state.marketplaces[input.marketplace];
-  if (marketplace?.plugins[input.name] === undefined) {
+  const marketplace = ownValue(input.state.marketplaces, input.marketplace);
+  if (marketplace === undefined || ownValue(marketplace.plugins, input.name) === undefined) {
     throw new Error(
       `Plugin "${input.name}" was concurrently removed from marketplace "${input.marketplace}".`,
     );
@@ -158,7 +159,7 @@ function recordReinstalledOutcome(
     input.name,
     input.installable,
   );
-  marketplace.plugins[input.name] = {
+  setOwn(marketplace.plugins, input.name, {
     version: input.oldRecord.version,
     resolvedSource: input.installable.pluginRoot,
     ...(input.isGitSource &&
@@ -190,7 +191,7 @@ function recordReinstalledOutcome(
     provenance: input.oldRecord.provenance,
     installedAt: input.oldRecord.installedAt,
     updatedAt: new Date().toISOString(),
-  };
+  });
 
   // WR-06: `[]` stated HERE rather than defaulted, because the reasoning that
   // makes it safe is local to this site: this projection feeds only

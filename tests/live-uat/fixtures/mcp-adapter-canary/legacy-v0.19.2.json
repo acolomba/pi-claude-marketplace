@@ -1,0 +1,75 @@
+{
+  "$comment": "The legacy files pi-claude-marketplace 0.19.2 wrote into the agent directory after adding the canary-mkt marketplace and installing echo: the marked mcp.json entry, the state.json record and claude-plugins.json. Every mcp-adapter-canary run seeds them with @@SANDBOX@@ replaced by its sandbox root. Regenerate with captureCommand.",
+  "capturedWith": "pi-claude-marketplace 0.19.2 on @earendil-works/pi-coding-agent 1.0.0, 2026-10-09",
+  "captureCommand": "npm install --prefix <prefix> pi-claude-marketplace@0.19.2 --legacy-peer-deps --ignore-scripts --no-audit --no-fund && TMPDIR=<directory outside the repository> node tests/live-uat/mcp-adapter-canary.mjs --capture-legacy <prefix>",
+  "sandboxRoot": "@@SANDBOX@@",
+  "files": {
+    "mcp.json": {
+      "mcpServers": {
+        "echo": {
+          "command": "node",
+          "args": ["@@SANDBOX@@/mkt/plugins/echo/server.mjs"],
+          "env": {
+            "CLAUDE_PLUGIN_ROOT": "@@SANDBOX@@/mkt/plugins/echo",
+            "CLAUDE_PLUGIN_DATA": "@@SANDBOX@@/agent/pi-claude-marketplace/data/canary-mkt/echo"
+          },
+          "_piClaudeMarketplace": {
+            "plugin": "echo",
+            "marketplace": "canary-mkt"
+          }
+        }
+      }
+    },
+    "pi-claude-marketplace/state.json": {
+      "schemaVersion": 2,
+      "marketplaces": {
+        "canary-mkt": {
+          "name": "canary-mkt",
+          "scope": "user",
+          "source": {
+            "kind": "path",
+            "raw": "@@SANDBOX@@/mkt",
+            "logical": "@@SANDBOX@@/mkt"
+          },
+          "addedFromCwd": "@@SANDBOX@@/cwd",
+          "manifestPath": "@@SANDBOX@@/mkt/.claude-plugin/marketplace.json",
+          "marketplaceRoot": "@@SANDBOX@@/mkt",
+          "lastUpdatedAt": "2026-10-09T22:06:58.369Z",
+          "plugins": {
+            "echo": {
+              "version": "1.0.0",
+              "resolvedSource": "@@SANDBOX@@/mkt/plugins/echo",
+              "compatibility": {
+                "installable": true,
+                "notes": [],
+                "supported": [],
+                "unsupported": []
+              },
+              "resources": {
+                "skills": [],
+                "prompts": [],
+                "agents": [],
+                "mcpServers": ["echo"],
+                "hooks": []
+              },
+              "enabled": true,
+              "installedAt": "2026-10-09T22:06:58.475Z",
+              "updatedAt": "2026-10-09T22:06:58.475Z"
+            }
+          }
+        }
+      }
+    },
+    "claude-plugins.json": {
+      "schemaVersion": 1,
+      "marketplaces": {
+        "canary-mkt": {
+          "source": "@@SANDBOX@@/mkt"
+        }
+      },
+      "plugins": {
+        "echo@canary-mkt": {}
+      }
+    }
+  }
+}

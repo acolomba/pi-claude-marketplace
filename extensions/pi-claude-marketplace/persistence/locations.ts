@@ -54,8 +54,16 @@ export interface ScopedLocations {
   readonly agentsStagingDir: string;
   /** `<extensionRoot>/agents-index.json` -- on-disk agent ownership index (D-07). */
   readonly agentsIndexPath: string;
-  /** `<scopeRoot>/mcp.json` -- MCP server registry (SC-2). */
+  /**
+   * `<scopeRoot>/mcp.json` -- the legacy MCP server registry (SC-2). Nothing
+   * is staged into it; it stays in the NFR-10 write set for legacy entries.
+   */
   readonly mcpJsonPath: string;
+  /**
+   * `<scopeRoot>/mcp-adapter.json` -- pi-mcp-adapter's own config file, where
+   * plugin MCP servers are staged (AFILE-01, NFR-10).
+   */
+  readonly mcpAdapterJsonPath: string;
   /** `<scopeRoot>/claude-plugins.json` -- declarative config base (CFG-01). */
   readonly configJsonPath: string;
   /** `<scopeRoot>/claude-plugins.local.json` -- per-machine override layer (CFG-02). */
@@ -104,12 +112,12 @@ export interface ScopedLocations {
    */
   readonly marketplaceNamesCacheFile: string;
   /**
-   * `~/.pi/workflows/` -- the host workflow engine's storage root
-   * (WPTH-04). NOT under `scopeRoot`, NOT relocated by `PI_CODING_AGENT_DIR`,
-   * and scope-INDEPENDENT: this member is byte-identical for
-   * `locationsFor("user", cwd)` and `locationsFor("project", cwd)`. The engine
-   * derives the root from the home directory and honors no override, so a
-   * relocated value would put artifacts where it never looks.
+   * The host workflow engine's storage root (WPTH-04), from `workflowHomeDir`:
+   * `<agent dir>/workflows/` when `PI_CODING_AGENT_DIR` is non-empty, else
+   * `~/.pi/workflows/`. It follows the engine's rule, not `scopeRoot`, so it
+   * is scope-INDEPENDENT: this member is byte-identical for
+   * `locationsFor("user", cwd)` and `locationsFor("project", cwd)`. Any other
+   * root would put artifacts where the engine never looks.
    */
   readonly workflowsHomeDir: string;
   /**
@@ -201,11 +209,13 @@ export function locationsFor(scope: Scope, cwd: string): ScopedLocations {
   const agentsStagingDir = path.join(extensionRoot, "agents-staging");
   const agentsIndexPath = path.join(extensionRoot, "agents-index.json");
   const mcpJsonPath = path.join(scopeRoot, "mcp.json");
+  const mcpAdapterJsonPath = path.join(scopeRoot, "mcp-adapter.json");
   // CFG-01 / CFG-02: declarative config base + per-machine override sit under
-  // scopeRoot at the same tier as agentsDir and mcpJsonPath. NFR-10 containment
+  // scopeRoot at the same tier as agentsDir, mcpJsonPath and mcpAdapterJsonPath
+  // (AFILE-01). NFR-10 containment
   // is enforced at the WRITE site (saveConfig) rather than here; both paths are
-  // composed from hard-coded suffixes on scopeRoot so the locations.ts comment
-  // block below (lines 134-143) covering the suffix-only construction applies.
+  // composed from hard-coded suffixes on scopeRoot so the T-03-04 disposition
+  // below covering the suffix-only construction applies.
   const configJsonPath = path.join(scopeRoot, "claude-plugins.json");
   const configLocalJsonPath = path.join(scopeRoot, "claude-plugins.local.json");
   const skillsStagingDir = path.join(extensionRoot, "skills-staging");
@@ -228,10 +238,10 @@ export function locationsFor(scope: Scope, cwd: string): ScopedLocations {
   // D-03: completion cache root. Sibling of dataRoot, sourcesDir.
   const cacheDir = path.join(extensionRoot, "cache");
   const marketplaceNamesCacheFile = path.join(cacheDir, "marketplace-names.json");
-  // WPTH-04: the host workflow engine's storage root. Unlike every other base
-  // in this factory it does NOT hang off scopeRoot -- the engine derives it
-  // from the home directory and honors no override, so it reaches the bundle
-  // through the platform seam and nowhere else.
+  // WPTH-04: the host workflow engine's storage root. Every other base in this
+  // factory hangs off scopeRoot. This one follows the engine's own rule, which
+  // `workflowHomeDir` copies, so it reaches the bundle through that platform
+  // seam and nowhere else.
   const workflowsHomeDir = workflowHomeDir();
   // WPTH-01: the only workflows member that branches on scope, mirroring the
   // scopeRoot branch at the top of this function. The project arm's middle
@@ -280,6 +290,7 @@ export function locationsFor(scope: Scope, cwd: string): ScopedLocations {
     agentsStagingDir,
     agentsIndexPath,
     mcpJsonPath,
+    mcpAdapterJsonPath,
     configJsonPath,
     configLocalJsonPath,
     skillsStagingDir,

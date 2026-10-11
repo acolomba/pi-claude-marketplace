@@ -136,6 +136,39 @@ describe("narrowResolverNotes", () => {
     assert.deepStrictEqual(reasons, ["malformed mcp"]);
   });
 
+  test("ANAME-07: classifies a malformed MCP server note as malformed mcp", () => {
+    // arrange
+    const notes = ['malformed mcp server "db": /timeout: must be integer'];
+
+    // act
+    const reasons = narrowResolverNotes(notes);
+
+    // assert
+    assert.deepStrictEqual(reasons, ["malformed mcp"]);
+  });
+
+  test("ANAME-07: prefers a malformed MCP server prefix over an author-controlled lspServers name", () => {
+    // arrange
+    const notes = ['malformed mcp server "lspServers": /timeout: must be integer'];
+
+    // act
+    const reasons = narrowResolverNotes(notes);
+
+    // assert
+    assert.deepStrictEqual(reasons, ["malformed mcp"]);
+  });
+
+  test("ANAME-07: does not match a malformed MCP server prefix without its trailing space", () => {
+    // arrange
+    const notes = ["malformed mcp servers: shape mismatch"];
+
+    // act
+    const reasons = narrowResolverNotes(notes);
+
+    // assert
+    assert.deepStrictEqual(reasons, ["unsupported source"]);
+  });
+
   test("classifies an inline malformed mcpServers note as unsupported source", () => {
     // arrange
     const notes = ["malformed mcpServers: shape mismatch"];
@@ -249,6 +282,17 @@ describe("narrowUnsupportedKinds", () => {
 
     // assert
     assert.deepStrictEqual(reasons, []);
+  });
+
+  test("ANAME-07: classifies mcpServers as unsupported mcp", () => {
+    // arrange
+    const kinds = ["mcpServers"];
+
+    // act
+    const reasons = narrowUnsupportedKinds(kinds);
+
+    // assert
+    assert.deepStrictEqual(reasons, ["unsupported mcp"]);
   });
 
   test("classifies hooks as unsupported hooks", () => {

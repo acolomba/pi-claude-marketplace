@@ -31,6 +31,9 @@ for (const mode of ["json", "rpc"]) {
       getAllTools: (): never => {
         throw new Error("Inventory failed.");
       },
+      getCommands: (): never => {
+        throw new Error("Inventory failed.");
+      },
       appendEntry(customType: string, payload: unknown): never {
         assert.strictEqual(this, pi);
         attempts.push({ customType, payload });
@@ -85,7 +88,7 @@ test("retains committed local state and earlier output after a command throws", 
   const store = path.join(directory, "state.json");
   await writeFile(store, '{"installed":false}');
   const capture = createJsonCapture();
-  const pi = { ...capture.entrySink, getAllTools: () => [] };
+  const pi = { ...capture.entrySink, getAllTools: () => [], getCommands: () => [] };
   const ctx = {
     mode: "json",
     get ui() {
@@ -132,7 +135,7 @@ for (const { start, finish } of [
   test(`delivers the error using live ${finish} after starting in ${start}`, async () => {
     // arrange
     const capture = createJsonCapture();
-    const pi = { ...capture.entrySink, getAllTools: () => [] };
+    const pi = { ...capture.entrySink, getAllTools: () => [], getCommands: () => [] };
     const ctx = {
       mode: start,
       get ui() {
@@ -165,7 +168,7 @@ for (const { start, finish } of [
   test(`preserves the original throw using live ${finish} after starting in ${start}`, async () => {
     // arrange
     const capture = createJsonCapture();
-    const pi = { ...capture.entrySink, getAllTools: () => [] };
+    const pi = { ...capture.entrySink, getAllTools: () => [], getCommands: () => [] };
     const ctx = {
       mode: start,
       get ui() {
@@ -219,7 +222,7 @@ for (const directoryName of [
       });
       const absentFile = path.join(directory, "missing", directoryName, "secret.json");
       const capture = createJsonCapture();
-      const pi = { ...capture.entrySink, getAllTools: () => [] };
+      const pi = { ...capture.entrySink, getAllTools: () => [], getCommands: () => [] };
       const ctx = {
         mode,
         get ui() {
@@ -314,7 +317,7 @@ for (const { message, safeMessage, disclosure } of [
     test(`hides ${message} at the ${mode} command boundary`, async () => {
       // arrange
       const capture = createJsonCapture();
-      const pi = { ...capture.entrySink, getAllTools: () => [] };
+      const pi = { ...capture.entrySink, getAllTools: () => [], getCommands: () => [] };
       const ctx = {
         mode,
         get ui() {
@@ -345,7 +348,7 @@ for (const mode of ["json", "rpc"]) {
   test(`reports a silent command before settlement in ${mode}`, async () => {
     // arrange
     const capture = createJsonCapture();
-    const pi = { ...capture.entrySink, getAllTools: () => [] };
+    const pi = { ...capture.entrySink, getAllTools: () => [], getCommands: () => [] };
     const ctx = {
       mode,
       get ui() {
@@ -374,7 +377,7 @@ for (const { title, cause, message } of [
     test(`delivers a schema-valid error for thrown ${title} in ${mode}`, async () => {
       // arrange
       const capture = createJsonCapture();
-      const pi = { ...capture.entrySink, getAllTools: () => [] };
+      const pi = { ...capture.entrySink, getAllTools: () => [], getCommands: () => [] };
       const ctx = {
         mode,
         get ui() {
@@ -396,7 +399,7 @@ for (const { title, cause, message } of [
     test(`preserves thrown ${title} identity in ${mode}`, async () => {
       // arrange
       const capture = createJsonCapture();
-      const pi = { ...capture.entrySink, getAllTools: () => [] };
+      const pi = { ...capture.entrySink, getAllTools: () => [], getCommands: () => [] };
       const ctx = {
         mode,
         get ui() {
@@ -496,6 +499,7 @@ for (const { failsTwice, expected } of [
     const attempts: Array<{ customType: string; payload: unknown }> = [];
     const pi = {
       getAllTools: () => [],
+      getCommands: () => [],
       appendEntry(customType: string, payload: unknown) {
         assert.strictEqual(this, pi);
         attempts.push({ customType, payload });
@@ -568,6 +572,7 @@ test("does not retry or roll back committed work when its notification fails", a
   const attempts: Array<{ customType: string; payload: unknown }> = [];
   const pi = {
     getAllTools: () => [],
+    getCommands: () => [],
     appendEntry(customType: string, payload: unknown) {
       attempts.push({ customType, payload });
       if (attempts.length === 1) {
@@ -660,7 +665,7 @@ for (const { name, emit, earlier } of [
   test(`does not accept ${name} as completion and suppresses retained output`, async () => {
     // arrange
     const capture = createJsonCapture();
-    const pi = { ...capture.entrySink, getAllTools: () => [] };
+    const pi = { ...capture.entrySink, getAllTools: () => [], getCommands: () => [] };
     const ctx = {
       mode: "json",
       get ui() {
@@ -709,7 +714,7 @@ for (const { name, emit, earlier } of [
 test("retains reload knowledge after a later false outcome and an escaped throw", async () => {
   // arrange
   const capture = createJsonCapture();
-  const pi = { ...capture.entrySink, getAllTools: () => [] };
+  const pi = { ...capture.entrySink, getAllTools: () => [], getCommands: () => [] };
   const ctx = {
     mode: "json",
     get ui() {
@@ -773,7 +778,7 @@ for (const mode of ["tui", "print"]) {
   test(`allows silent text completion in ${mode}`, async () => {
     // arrange
     const capture = createJsonCapture();
-    const pi = { ...capture.entrySink, getAllTools: () => [] };
+    const pi = { ...capture.entrySink, getAllTools: () => [], getCommands: () => [] };
     const ctx = {
       mode,
       get ui() {
@@ -793,7 +798,7 @@ for (const mode of ["tui", "print"]) {
 test("does not finalize delivery that was already closed", async () => {
   // arrange
   const capture = createJsonCapture();
-  const pi = { ...capture.entrySink, getAllTools: () => [] };
+  const pi = { ...capture.entrySink, getAllTools: () => [], getCommands: () => [] };
   const ctx = {
     get mode(): string {
       throw new Error("Unexpected mode access");
@@ -841,6 +846,10 @@ for (const mode of ["json", "rpc"]) {
         events.push("inventory");
         return [];
       },
+      getCommands: () => {
+        events.push("commands");
+        return [];
+      },
       appendEntry(customType: string, payload: unknown) {
         assert.strictEqual(this, pi);
         capture.entrySink.appendEntry(customType, payload);
@@ -872,6 +881,7 @@ for (const mode of ["json", "rpc"]) {
     assert.deepStrictEqual(events, [
       "id",
       "inventory",
+      "commands",
       "inventory",
       "inventory",
       "handler",
@@ -899,6 +909,9 @@ for (const mode of ["json", "rpc"]) {
     const pi = {
       ...capture.entrySink,
       getAllTools: () => {
+        throw new Error("Unexpected inventory");
+      },
+      getCommands: () => {
         throw new Error("Unexpected inventory");
       },
     };
@@ -935,6 +948,9 @@ for (const mode of ["json", "rpc"]) {
       getAllTools: () => {
         events.push("inventory");
         throw new Error("Inventory failed");
+      },
+      getCommands: () => {
+        throw new Error("Unexpected inventory");
       },
     };
     const ctx = {
@@ -975,7 +991,7 @@ for (const mode of ["tui", "print"]) {
       const failure = new Error("setup failed");
       const capture = createJsonCapture();
       const ids = createIds();
-      const pi = { ...capture.entrySink, getAllTools: () => [] };
+      const pi = { ...capture.entrySink, getAllTools: () => [], getCommands: () => [] };
       const fail = () => {
         throw failure;
       };
@@ -1015,7 +1031,7 @@ for (const mode of ["tui", "print"]) {
     // arrange
     const failure = new Error("handler failed");
     const capture = createJsonCapture();
-    const pi = { ...capture.entrySink, getAllTools: () => [] };
+    const pi = { ...capture.entrySink, getAllTools: () => [], getCommands: () => [] };
     const ctx = {
       mode,
       get ui() {
@@ -1040,6 +1056,9 @@ test("surfaces a broken recovery allocator as its original synchronous failure",
   const pi = {
     ...capture.entrySink,
     getAllTools: () => {
+      throw new Error("Unexpected inventory");
+    },
+    getCommands: () => {
       throw new Error("Unexpected inventory");
     },
   };
@@ -1080,7 +1099,7 @@ test("surfaces a broken recovery allocator as its original synchronous failure",
 test("surfaces an unsupported live mode after the handler fails", async () => {
   // arrange
   const capture = createJsonCapture();
-  const pi = { ...capture.entrySink, getAllTools: () => [] };
+  const pi = { ...capture.entrySink, getAllTools: () => [], getCommands: () => [] };
   const ctx = {
     mode: "json",
     get ui() {
@@ -1114,7 +1133,7 @@ test("surfaces the original stale mode getter failure after handler work", async
   // arrange
   const failure = new Error("stale mode");
   const capture = createJsonCapture();
-  const pi = { ...capture.entrySink, getAllTools: () => [] };
+  const pi = { ...capture.entrySink, getAllTools: () => [], getCommands: () => [] };
   const ctx = {
     get mode(): string {
       throw failure;
@@ -1142,7 +1161,7 @@ test("surfaces the original stale mode getter failure after handler work", async
 test("awaits deferred handler output before fulfilling", async () => {
   // arrange
   const capture = createJsonCapture();
-  const pi = { ...capture.entrySink, getAllTools: () => [] };
+  const pi = { ...capture.entrySink, getAllTools: () => [], getCommands: () => [] };
   const ctx = {
     mode: "json",
     get ui() {

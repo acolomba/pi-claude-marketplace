@@ -21,6 +21,7 @@ import { withStateGuard } from "../../transaction/with-state-guard.ts";
 import { createReinstallOperation } from "../plugin/operations.ts";
 
 import {
+  carriedMcpConfigNotices,
   classifyOrchestratorThrow,
   classifyReadPassThrow,
   dependenciesFromInstall,
@@ -482,6 +483,9 @@ async function maybeBackfillPlugin(
     ...(resolved.orphanRewake === true && { orphanRewake: true }),
     ...(outcome.degradedKinds !== undefined &&
       outcome.degradedKinds.length > 0 && { degradedKinds: outcome.degradedKinds }),
+    // AFILE-04: the re-materialize rewrote the MCP config; `apply.ts` shows
+    // the notices after the applied cascade.
+    ...carriedMcpConfigNotices(outcome),
   });
   return false;
 }

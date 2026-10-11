@@ -19,10 +19,16 @@ import type {
 } from "../orchestrators/import/index.ts";
 import type { GitOps } from "../orchestrators/marketplace/shared.ts";
 import type { PluginUpdateFn } from "../orchestrators/types.ts";
+import type { McpStatusReader } from "../platform/mcp-status.ts";
 import type { CompletionCache } from "../shared/completion-cache.ts";
 
 export interface EdgeDeps {
   readonly completionCache: CompletionCache;
+  /**
+   * ASTAT-01: the factory-owned tracker of pi-mcp-adapter's status snapshots,
+   * one per extension load, that the plugin info handler reads.
+   */
+  readonly mcpStatus: McpStatusReader;
   readonly gitOps: GitOps;
   /**
    * Autoupdate-cascade injection seam, allocated per command invocation:

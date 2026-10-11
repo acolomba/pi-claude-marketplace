@@ -1,441 +1,455 @@
-# Architecture Research: json-output (Mode-Keyed Presentation Strategies)
+# Architecture Research: mcp-4 (Pi 1.0 baseline + pi-mcp-adapter 5 delivery)
 
-**Domain:** Brownfield Pi extension. The work adds a JSON presentation strategy next to the text renderer for `/claude:plugin`, selected by `ctx.mode`.
-**Researched:** 2026-09-28
-**Confidence:** HIGH for the inventory and the Pi runtime facts. Both were checked with grep and by reading source in the installed `@earendil-works/pi-coding-agent@0.86.1`. MEDIUM for the proposed layout, which is a design recommendation.
+**Domain:** Brownfield Pi extension -- retarget the MCP bridge from Pi's `mcp.json` to the adapter-native `mcp-adapter.json`, migrate existing entries on `/reload`, and surface adapter runtime state
+**Researched:** 2026-10-01
+**Confidence:** HIGH for seams, gates and adapter behavior (read from this repo at `8b6ac3bc` and from the published `pi-mcp-adapter@5.0.0` / `@earendil-works/pi-coding-agent@1.0.0` tarballs). MEDIUM for the hooks/agents naming ripple (depends on a naming decision that is still open).
 
-Terms used below:
+## Executive Recommendation
 
-- **Producer**: an orchestrator or edge handler that builds a `NotificationMessage`.
-- **Report**: the new resolved, serializable presentation model. It is also the typebox wire schema.
-- **Strategy**: a pure formatter from Report to one output form (text or JSON).
-- **Sink**: the single call that emits output. Today that is `ctx.ui.notify`. After this work it can also be `pi.appendEntry`.
+Almost all of this milestone lands on seams that already exist. The MCP bridge
+(`bridges/mcp/*`) keeps its prepare/commit/abort triplet, its `_piClaudeMarketplace`
+marker (MC-5), and its replacement handles. The file it writes changes. The entry
+it writes gains adapter fields. The collision walk is rewritten to the adapter's
+real precedence. Three things are genuinely new:
 
-## Standard Architecture
+1. **A legacy-move step** in reconcile (`orchestrators/reconcile/`), shaped like
+   the existing `backfill.ts` sibling step. It calls a new bridge function that
+   moves marked entries out of `<scopeRoot>/mcp.json`.
+2. **A status tracker** in `platform/` that subscribes to the adapter's
+   `pi-mcp-adapter/status/v1` event-bus channel at factory time. It is created in
+   `index.ts`, like `createCompletionCache`, and injected through `EdgeDeps` into
+   `orchestrators/plugin/info.ts`.
+3. **A pure entry translator** in `bridges/mcp/`. It runs the generated name,
+   `directTools: "search"`, and Claude-rule variable expansion with adapter
+   escaping. Stage and migration share it, so they cannot drift.
 
-### System Overview (target)
+Use the file location as the version discriminator. An entry in legacy `mcp.json`
+was written by old code and is untranslated. An entry in `mcp-adapter.json` was
+written by new code and is translated. Applying the translator exactly once per
+move is then structural, with no marker version field and no persisted flag.
+COMPAT-01 forbids a new persisted record key without a sanctioned route.
 
+Build order: **floor bump first** (it moves contract pins and peer gates that every
+later phase touches). Then the adapter-file foundation, then the translator, then
+migration (which needs the final translator). Live status can run in parallel with
+migration once the naming is final.
+
+## System Overview (new = `+`, modified = `~`)
+
+```text
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ index.ts (entry)                                                               │
+│   ~ createMcpStatusTracker(pi.events)  ── factory-time subscribe (before the  │
+│     adapter's async init publishes its first snapshot)                         │
+│   ~ EdgeDeps gains `mcpStatus` (same route as completionCache)                 │
+└──────────┬───────────────────────────────┬───────────────────────────────────┘
+           │ resources_discover             │ /claude:plugin info
+           ▼                                ▼
+┌───────────────────────────────┐  ┌──────────────────────────────────────────┐
+│ orchestrators/reconcile/       │  │ orchestrators/plugin/info.ts  ~           │
+│  apply.ts ~ per scope:         │  │  joins generated server names to the       │
+│   + mcp-migration.ts (FIRST,   │  │  tracker snapshot; manifest arm maps raw   │
+│     before applyPlan)          │  │  keys through generatedMcpServerName       │
+│   applyPlan / backfill / ...   │  └──────────────┬───────────────────────────┘
+└──────────┬────────────────────┘                 │ reads
+           │ calls                                ▼
+           ▼                         ┌──────────────────────────────────────────┐
+┌─────────────────────────────────┐ │ platform/                                  │
+│ bridges/mcp/                     │ │  + mcp-status.ts  (consumer-owned mirror,  │
+│  ~ stage.ts   → mcp-adapter.json │ │    typebox-checked, latest snapshot only)  │
+│     + legacy sweep of own        │ │  ~ pi-api.ts hasLoadedPiMcpAdapter         │
+│       entries in mcp.json        │ │    (exclude `builtin:` sources)            │
+│  ~ unstage.ts → both files       │ └──────────────────────────────────────────┘
+│  ~ collision-slots.ts            │
+│     nine-source, last-wins,      │ ┌──────────────────────────────────────────┐
+│     overlay-aware (MCPSRC-01)    │ │ domain/name.ts                             │
+│  ~ substitute.ts ${VAR:-d} +     │ │  + generatedMcpServerName(plugin, server)  │
+│     adapter escaping             │ │    (sibling of generatedAgentName)         │
+│  + adapter-entry.ts (translator) │ └──────────────────────────────────────────┘
+│  + migrate.ts (legacy move)      │
+│  + adapter-doc.ts (JSONC read,   │ ┌──────────────────────────────────────────┐
+│     mcpServers|mcp-servers key)  │ │ persistence/locations.ts ~                 │
+│  = marker.ts (unchanged, MC-5)   │ │  + mcpAdapterJsonPath                      │
+└─────────────────────────────────┘ │  = mcpJsonPath (now legacy: read + sweep)  │
+                                    └──────────────────────────────────────────┘
+Disk (per scope):  <scopeRoot>/mcp-adapter.json  (+ write target)
+                   <scopeRoot>/mcp.json          (~ sweep-only: our marked entries leave)
+                   <scopeRoot>/pi-claude-marketplace/state.json (resources.mcpServers renamed)
+Event bus:         pi.events "pi-mcp-adapter/status/v1"  (adapter → us, read-only)
 ```
- producers (orchestrators/*, edge/handlers/*, bridges/hooks, index.ts, auth-host)
-   | build NotificationMessage (unchanged vocabulary, shared/notification-types.ts)
-   | + per-command ROW POLICY map (was: per-command RenderFn string map)
-   v
- shared/notification-dispatch.ts  -- public notify-family API (thin)
-   | resolve(): ONE softDepStatus probe, severity, summary facts, tally counts,
-   |            reload flag, {requires ...} markers, cause chains, leaks,
-   |            hints, not-added reason        (shared/notification-resolve.ts)
-   v
- Report  (typebox Static; schemaVersion)       (shared/notification-model.ts)
-   | presentationFor(ctx.mode)  exhaustive     (shared/notification-mode.ts)
-   +--------------------------+------------------------------+
-   | tui / print              | json / rpc                   | other -> UnsupportedModeError
-   v                          v
- text strategy             JSON strategy
- (notification-grammar.ts) (notification-json.ts)
-   |                          |
-   v                          v
- ctx.ui.notify(text[,sev])  pi.appendEntry("claude-plugin", {schemaVersion,...})
-   \______ both calls live ONLY in shared/notification-dispatch.ts ______/
+
+## Mapping Table: New Behavior → Existing Seam → True Delta
+
+| New behavior | Existing seam that carries it | Delta (what actually changes) |
+|---|---|---|
+| Write marked entries to `<scopeRoot>/mcp-adapter.json` | `ScopedLocations` path bundle; `prepareStageMcpServers` / `commitPreparedMcp` read-partition-merge-`atomicWriteJson` | **MOD** `persistence/locations.ts`: add `mcpAdapterJsonPath` (hard-coded suffix on `scopeRoot`, same containment-by-construction disposition as `mcpJsonPath`). **MOD** `stage.ts` / `unstage.ts` / `types.ts`: target `mcpAdapterJsonPath`; `StagedMcpRecord.targetPath` follows automatically (W-05). |
+| NFR-10 write set | `PROJECT.md` Constraints + `locations.ts` containment comment | The set **grows**, it does not swap: `mcp-adapter.json` is added, and `mcp.json` stays because the legacy move and sweep rewrite it. Retiring `mcp.json` from the write set is a later decision, made after the migration window. |
+| Read the adapter file the way the adapter does | `readScopedDoc` + `classifyMcpServers` in `stage.ts` | **NEW** `bridges/mcp/adapter-doc.ts`. (a) JSONC: comments, trailing commas and a BOM are legal in `mcp-adapter.json` (`readValidatedConfig` uses `parseJsonWithComments`). (b) The server map key is `mcpServers` **or** the legacy `mcp-servers`. Write back into whichever key exists, as the adapter's own `writeProjectServerDisabledOverride` does. (c) An unparseable adapter file is **refused**, not "treated as empty and replaced". Today's malformed-overwrite tolerance would destroy the user's `settings`/`imports`/`claudePlugins`. |
+| Collision walk = adapter 5 precedence (MCPSRC-01) | `bridges/mcp/collision-slots.ts::loadEffectiveServerNames` | **MOD**: the slot list becomes the adapter's `getConfigSources()` order. The rule becomes LAST-wins (the current code is first-declarer-wins, which is the inversion BACKLOG records). Our own target file sits at position 5 (user) or 9 (project). The ancestor slot (6) appears only when `settings.ancestorConfigRoots` is set in a user-global source. Partial **overlay** entries (no `command`/`url`/`socket`) are not collisions; see Pattern 3. Non-file sources (`pi.mcp` packages, `agentPluginPaths`, `claudePlugins`, runtime registrations, host discovery) are documented as outside the contract. |
+| Server name `plugin:<plugin>:<server>`, normalized | `domain/name.ts` generators (`generatedAgentName`, `declaredAgentName`, ...) | **NEW** `generatedMcpServerName(plugin, server)`. Called from the translator. Output must match `[A-Za-z0-9_-]+`: that is the class Pi's `mcp.json` translation accepts and the class the adapter's `sanitizeServerPrefix` leaves unencoded. Otherwise `:` becomes `_3a_` in every tool name. `StagedMcpRecord.generatedName` stops being "== input key". `state.json` picks the new name up through the existing `recorded` hand-off; there is no new state code. |
+| `directTools: "search"` | `stampServers` in `stage.ts` | **NEW** field set by the translator. Only on entries the plugin did not set `directTools` on. Whether a plugin-declared value is honored is a FEATURES decision. |
+| `${VAR:-default}` parity + escape adapter re-expansion (MENVX-01, ENVLIT-01) | `bridges/mcp/substitute.ts` (bridge-local by design; `shared/vars.ts` owns content substitution and stays untouched) | **MOD** `substitute.ts`: add a Claude-rule expansion pass and an escaping pass for what the adapter would expand again. A leading `!` becomes `!!` in env/secret fields. `${NAME}` / `$env:NAME` / `{env:NAME}` are re-interpolated by `interpolateEnvVars`; for `env`, `literalEnv: true` is the only lever. The rules are a FEATURES/PITFALLS question. Architecturally they live here and nowhere else. |
+| Move existing marked entries out of both `mcp.json` files on `/reload` | `applyReconcileWithReader` per-scope loop; `backfill.ts` as the template for a version-agnostic sibling step with its own `withStateGuard` (CR-01: no outer lock, `proper-lockfile` is not re-entrant) | **NEW** `orchestrators/reconcile/mcp-migration.ts` (thin: lock, call bridge, rename record names, `tx.save`). **NEW** `bridges/mcp/migrate.ts` (the move itself, reusing the adapter-doc reader, marker partition, translator, collision walk and replacement-handle rollback). **MOD** `apply.ts`: call it first in each scope, before `applyPlan`, so every later step in the same pass sees the adapter file. |
+| A lifecycle op on a not-yet-migrated plugin must not leave a duplicate | `unstageMcpServers` (marker-keyed, not name-keyed) and the replacement handles in `stage.ts` | **MOD** unstage sweeps own marked entries from BOTH files. **MOD** stage commit also removes this plugin's own marked entries from legacy `mcp.json`. After the rename, a leftover legacy copy has a DIFFERENT name and both copies would run. The replacement handle snapshots two files instead of one. |
+| Prune rollback covers the new file | `orchestrators/plugin/prune-rollback.ts` snapshots `locations.mcpJsonPath` | **MOD**: snapshot `mcpAdapterJsonPath` too (unstage now writes both). |
+| Live adapter runtime status in `info` | `GetPluginInfoOptions` already threads `pi: ToolInventory`; `HookSummaryEntry` is the precedent for a richer per-component entry; the `EdgeDeps` → handler route is how `completionCache` reaches handlers | **NEW** `platform/mcp-status.ts` (tracker). **MOD** `index.ts` (create + inject), `orchestrators/edge-deps.ts`, `edge/handlers/plugin/info.ts`, `orchestrators/plugin/info.ts` (join), `shared/notification-types.ts` (`components.mcp` → entry with optional runtime token), `shared/notification-grammar.ts` (render), `docs/output-catalog.md`. |
+| Adapter-only detection | `platform/pi-api.ts::hasLoadedPiMcpAdapter` (RH-4) | **MOD**: ignore tools whose source is Pi's built-in (`sourceInfo.source`/`path` with the `builtin:` prefix, `BUILTIN_PATH_PREFIX` in Pi 1.0 `core/source-info.d.ts`). Keep the `name === "mcp"` arm only for a non-builtin source. `ToolInventoryItem` widens by `sourceInfo.path` if the check needs it. The marker vocabulary (`{requires pi-mcp}`) does not change. |
+| Pi 1.0 floor | `platform/pi-api.ts` (sole Pi import site), `tests/architecture/peer-floor.test.ts`, `scripts/check-unused-type-members.contracts.json` external-mirror pins | Re-apply `74162ca6` (typing + pins), `5b1d8ef6`/`dac3a245`/`69e0870a` (pi-subagents peer tests), `4f82096f` (Stop canary) at `>=1.0.0`. Mechanical, but it moves pins that later phases also move. |
+| Hooks and agents that name MCP tools | `domain/components/hooks/matcher.ts` keeps `mcp__<S>__<T>` literals; `bridges/agents/convert.ts` drops `mcp__*` tool tokens and points users to pi-subagents `mcp:<server>` overrides | **No code change is required for the listed features.** The rename changes the names users type in `/mcp-adapter`, pi-subagents `mcp:<server>` overrides and approvals. Literal hook matchers do not match adapter tool names today, and still will not. See the open decision under "Integration Points". |
+
+## Component Responsibilities
+
+### New
+
+| Component | File | Responsibility | Talks to |
+|---|---|---|---|
+| Adapter doc model | `bridges/mcp/adapter-doc.ts` | JSONC-tolerant read of `mcp-adapter.json`; `mcpServers` vs `mcp-servers` key selection; refuse-not-replace on unparseable input; preserve every other top-level key (`settings`, `imports`, `claudePlugins`) verbatim | `stage.ts`, `unstage.ts`, `migrate.ts`, `collision-slots.ts` |
+| Entry translator | `bridges/mcp/adapter-entry.ts` | Pure: `(sourceKey, entry, ctx) → { name, entry, warnings }`. Composes `substituteAndInject`, the variable-expansion/escape pass, `generatedMcpServerName`, and adapter defaults (`directTools: "search"`). The marker is NOT applied here; the caller stamps it, as today | `stage.ts::stampServers`, `migrate.ts` |
+| Legacy move | `bridges/mcp/migrate.ts` | Given `ScopedLocations` + `cwd`: read legacy `mcp.json`, take every marked entry, translate, collision-check against the new walk, write `mcp-adapter.json` then `mcp.json`, return `{ renamed: Map<(mp,plugin), old→new[]>, skipped, warnings }`. Owns a two-file rollback via the replacement-handle pattern | reconcile `mcp-migration.ts` |
+| Reconcile migration step | `orchestrators/reconcile/mcp-migration.ts` | Per scope, under its own `withStateGuard`: pristine gate (no `state.json` → skip, WR-05), call `migrateLegacyMcpEntries`, rewrite `resources.mcpServers` names of the affected records, `tx.save()` through `saveState` (SPLIT-02). Coerce throws into `invalid-block`-style outcomes (WR-01 isolation) | `apply.ts`, `bridges/mcp`, `transaction/with-state-guard.ts` |
+| Status tracker | `platform/mcp-status.ts` | `createMcpStatusTracker(events: McpStatusEventSource)`: subscribe to `"pi-mcp-adapter/status/v1"`, validate the payload with a typebox schema of ONLY the fields we read, keep the latest snapshot, expose `lookup(name) → runtime state | "unknown"` and `received: boolean`. Holds the unsubscribe and drops it on `session_shutdown` | `index.ts` (creates), `info.ts` (reads) |
+| MCP name generator | `domain/name.ts::generatedMcpServerName` | The one place the Claude Code `plugin:<plugin>:<server>` key is normalized into the adapter-safe name | translator, `info.ts` manifest arm |
+
+### Modified
+
+| Component | File | Change |
+|---|---|---|
+| Path bundle | `persistence/locations.ts` | `+ mcpAdapterJsonPath`; doc comment marks `mcpJsonPath` as legacy (read + sweep only) |
+| Stage | `bridges/mcp/stage.ts` | Target the adapter file; overlay-aware partition; translator call; two-file commit/rollback (adapter write + legacy sweep of own entries) |
+| Unstage | `bridges/mcp/unstage.ts` | Sweep own marked entries from both files; the legacy file tolerates malformed input with a warning (it is no longer the authoritative store) |
+| Collision walk | `bridges/mcp/collision-slots.ts` | Nine-source list, last-wins, overlay-aware, owning-path reporting corrected; rewrite of the "four slots" MC-4/RN-5 contract text |
+| Substitution | `bridges/mcp/substitute.ts` | `${VAR:-default}` expansion and adapter escaping |
+| Types | `bridges/mcp/types.ts` | `RawMcpDoc` gains the server-key discriminant; `StagedMcpRecord.generatedName` doc; replacement internals hold two `oldText`s |
+| Reconcile apply | `orchestrators/reconcile/apply.ts` | Call the migration step first in each scope |
+| Prune rollback | `orchestrators/plugin/prune-rollback.ts` | Snapshot `mcpAdapterJsonPath` as well |
+| Info | `orchestrators/plugin/info.ts` | Manifest arm maps raw keys through `generatedMcpServerName` so both arms show the same names; join runtime state from the injected tracker |
+| Edge wiring | `orchestrators/edge-deps.ts`, `edge/register.ts`, `edge/handlers/plugin/info.ts`, `index.ts` | Thread `mcpStatus` the way `completionCache` is threaded |
+| Notification vocabulary | `shared/notification-types.ts`, `shared/notification-grammar.ts`, `docs/output-catalog.md` | `components.mcp` becomes an entry list carrying an optional runtime token; the renderer formats it; the catalog is amended deliberately |
+| Detection | `platform/pi-api.ts` | Adapter-only probe; Pi 1.0 typing |
+
+### Unchanged (deliberately)
+
+`bridges/mcp/marker.ts` (MC-5 key and shape: a byte-stable user contract), `bridges/mcp/safe-set.ts`, `domain/mcp-resolution.ts` (it still resolves raw plugin servers; naming is a stage-time concern), `shared/vars.ts`, `transaction/*`, the state schema (`resources.mcpServers: string[]` keeps its shape, and only its values change).
+
+## Recommended Project Structure (delta only)
+
+```text
+extensions/pi-claude-marketplace/
+├── bridges/mcp/
+│   ├── adapter-doc.ts        # + JSONC read, server-key alias, refuse-not-replace
+│   ├── adapter-entry.ts      # + pure translator shared by stage and migrate
+│   ├── migrate.ts            # + legacy mcp.json → mcp-adapter.json move
+│   ├── collision-slots.ts    # ~ nine-source, last-wins, overlay-aware
+│   ├── stage.ts              # ~ new target, two-file commit, translator
+│   ├── unstage.ts            # ~ sweep both files
+│   ├── substitute.ts         # ~ ${VAR:-default} + adapter escaping
+│   ├── types.ts              # ~
+│   ├── marker.ts             # = MC-5 unchanged
+│   └── index.ts              # ~ export migrateLegacyMcpEntries
+├── domain/name.ts            # ~ + generatedMcpServerName
+├── orchestrators/reconcile/
+│   ├── mcp-migration.ts      # + per-scope locked step
+│   └── apply.ts              # ~ call it first
+├── orchestrators/plugin/{info,prune-rollback}.ts   # ~
+├── orchestrators/edge-deps.ts                      # ~ + mcpStatus
+├── persistence/locations.ts  # ~ + mcpAdapterJsonPath
+├── platform/
+│   ├── mcp-status.ts         # + event-bus tracker
+│   └── pi-api.ts             # ~ Pi 1.0 types, adapter-only probe, McpStatusEventSource view
+└── index.ts                  # ~ create tracker, inject
+tests/ mirrors every new module (test:corresponding requires pairs)
 ```
 
-`browse` has a third "interactive" capability, but only in `tui`. It is not a strategy over Report. It is a mode gate in `edge/handlers/plugin/browse.ts` that asks the same `presentationFor(mode)` selector (see section 6).
+### Structure Rationale
 
-### Component Responsibilities
+- **The move belongs in `bridges/mcp/`, the trigger in `orchestrators/reconcile/`.**
+  Only the bridge knows the marker, the partition, the adapter document shape and
+  the rollback handles. Reconcile owns "when" and the `state.json` write. This
+  matches the fallow zones (orchestrators → bridges-mcp is allowed; bridges-mcp →
+  persistence/domain/shared/platform is allowed) and keeps `reconcile/plan.ts` pure
+  (RECONCILE_PURITY_TARGETS).
+- **The tracker belongs in `platform/`.** It is the only module that knows an
+  external extension's event channel name and payload shape. That is the same job
+  `pi-api.ts` does for Pi, and `platform` → `shared` is the only import it needs.
+  Do not import from `pi-mcp-adapter`. Its `.` export is TypeScript source that
+  pulls in `@earendil-works/pi-ai` (whose peer range stops at `^0.99.0`, the
+  recorded upstream gap). Even a type-only import turns a soft dependency into a
+  build dependency.
+- **The translator is its own module** because two callers need the identical
+  transform and `stage.ts` (436 lines) already sits near the fallow
+  `maxUnitSize: 60` / cognitive-15 ceilings per function.
 
-| Component | Responsibility | New / Modified | Zone |
-|-----------|----------------|----------------|------|
-| `shared/notification-model.ts` | typebox schemas, `Static` types, `SCHEMA_VERSION`. The Report is the wire schema. | NEW | shared |
-| `shared/notification-resolve.ts` | Turns `NotificationMessage` plus row policy plus probe into a Report. Owns every presentation decision. | NEW (absorbs the computation half of `notification-summary.ts` and the derivations in grammar) | shared |
-| `shared/notification-mode.ts` | Exhaustive `switch (mode)` that returns `{ strategy: "text" \| "json"; interactive: boolean }`. Unknown mode throws `UnsupportedModeError`. | NEW | shared |
-| `shared/notification-json.ts` | JSON strategy. Makes a deep plain-data copy of the Report and adds `schemaVersion`. | NEW | shared |
-| `shared/notification-grammar.ts` | Text strategy. Formats a Report into `{ text, severity? }`. It takes no probe and walks no `Error` objects. | MODIFIED (big) | shared |
-| `shared/notification-summary.ts` | Returns structured facts (counts, subject, reload) and no longer returns phrases. The phrases move to grammar. It can also be folded into resolve. | MODIFIED | shared |
-| `shared/notification-dispatch.ts` | Stays the SOLE sink module. `present(ctx, host, report)` makes exactly one `ctx.ui.notify` or `host.appendEntry` call. The public notify functions become resolvers. | MODIFIED | shared |
-| `shared/notify-context.ts` | `CommandContext.render` (a string map) becomes a total map of row policies (data). `RenderFn` and `dispatchRow` string fallback are deleted. | MODIFIED | shared |
-| `platform/pi-api.ts` | Adds `ExtensionMode = ExtensionContext["mode"]` (the package root does not export `ExtensionMode`), adds `NotificationContext.mode`, and adds `EntrySink` / `PresentationHost`. | MODIFIED | platform |
-| `shared/errors.ts` | Adds `UnsupportedModeError`. Adds the browse-outside-tui error, either as a typed error or as a Report kind (see section 6). | MODIFIED | shared |
-| `domain/github-auth.ts` | Replaces the raw `NotifyFn` string callback with a structured device-code callback. | MODIFIED | domain |
-| 16 `orchestrators/**/*.messaging.ts` | Render arms (strings) become row policies (data). | MODIFIED | orchestrators |
-| `edge/handlers/plugin/browse.ts` | Replaces the list fallback at `:140` with the D6 typed error. | MODIFIED | edge |
+## Architectural Patterns
 
-All new modules go in `shared/`. That zone already matches `extensions/pi-claude-marketplace/shared/**` and may import `platform` (`.fallowrc.json` rule `shared -> [platform]`). typebox is already a runtime dependency. **So `.fallowrc.json` needs no change.** A new top-level folder such as `presentation/` would need a new zone, allow-list edges, the ESLint `import-x/no-restricted-paths` zone, and updates to `tests/architecture/import-boundaries.test.ts`. The reason is `boundaries.coverage.requireAllFiles: true`. Do not create one.
+### Pattern 1: File location is the version discriminator
 
-## 1. Output-surface inventory (complete)
+**What:** Entries in legacy `mcp.json` are untranslated by construction (old code
+wrote them). Entries in `mcp-adapter.json` are translated by construction. The
+migration translates exactly the entries it moves, once.
+**When to use:** Any transform that is not idempotent. `!` → `!!` escaping is the
+example: applied twice it gives `!!!`.
+**Trade-offs:** No marker field or persisted flag is needed, so COMPAT-01's
+persisted-key clause stays quiet and MC-5 stays byte-stable. The cost: the
+translator must also be total over legacy entries. The old stage already
+substituted `${CLAUDE_*}`, so the expansion pass must accept an
+already-substituted entry. It does, because the substituted values are absolute
+paths that contain no `${`.
 
-**Search method.** Re-run this to check the numbers:
+### Pattern 2: One translator, two callers
 
-```
-rg -n "\b(notify|notifyWithContext|notifyUpdateWithContext|notifyUpdateNoOpWithContext|notifyReconcileAppliedWithContext|notifyUsageError|notifyUsageInfo|notifyDiagnostic|makeRawNotifyFn|notifyAsyncRewakeSummary|notifyStopHookOverrideCap|renderReinstallPartitionAndNotify)\(" extensions/pi-claude-marketplace -g '*.ts' \
- | rg -v "export function " | rg -v '^\S+:[0-9]+:\s*(//|\*|/\*)' \
- | rg -v "shared/notification-dispatch.ts|shared/notify-context.ts|platform/pi-api.ts"
-```
-
-I also checked that `rg -n "\.notify\(" extensions/` finds no direct `ctx.ui.notify` outside `notification-dispatch.ts`. The only other `ctx.ui.*` uses are `addAutocompleteProvider` (`edge/register.ts:149`, `edge/skill-aliases.ts:78`) and `ctx.ui.custom` (`edge/handlers/plugin/browse.ts:178`). None of these is output.
-
-**Totals: 119 call sites in 45 production files.** Two more files define the family: `notification-dispatch.ts` has 9 internal `ctx.ui.notify` calls and `notify-context.ts` has 4 emit calls. That makes **47 production files**, which matches the estimate of about 50.
-
-| Function | Call sites | Files | Kind |
-|----------|-----------:|------:|------|
-| `notifyWithContext` | 44 | 18 | structured cascade (per-command render map) |
-| `notifyUsageError` | 40 | 18 | raw string |
-| `notify` | 20 | 12 | structured (legacy central switch + standalone kinds) |
-| `notifyDiagnostic` | 3 | 3 | raw string (header + lines) |
-| `makeRawNotifyFn` | 3 | 2 | raw callback |
-| `notifyUpdateNoOpWithContext` | 2 | 2 | structured |
-| `notifyUsageInfo` | 2 | 1 | raw string |
-| `notifyUpdateWithContext` | 1 | 1 | structured |
-| `notifyReconcileAppliedWithContext` | 1 | 1 | structured |
-| `notifyAsyncRewakeSummary` | 1 | 1 | raw string |
-| `notifyStopHookOverrideCap` | 1 | 1 | raw string |
-| `renderReinstallPartitionAndNotify` (wraps `notifyWithContext`) | 1 | 1 | structured |
-
-### By layer and file (line:function)
-
-**entry (1 file, 2)**
-- `index.ts` 128:`makeRawNotifyFn` ("reconcile aborted: ..."). 149:`makeRawNotifyFn` ("plugin PATH not refreshed ..."). Both run inside `resources_discover` and are wrapped in NFR-2 try/catch.
-
-**bridges/hooks (2 files, 2)**
-- `bridges/hooks/async-rewake/registry.ts` 434:`notifyAsyncRewakeSummary`. It has `ctx: ExtensionContext` and `pi: ExtensionAPI` in scope (`spawnAndRegister`, :187).
-- `bridges/hooks/settle.ts` 378:`notifyStopHookOverrideCap`. It has `pi` and `ctx` in scope (`reenterBounded`).
-
-**edge (21 files, 46)**
-- `edge/router.ts` 192, 207, 237, 246: `notifyUsageError`. **The router has no `pi`.** `routeClaudePlugin(args, handlers, ctx)` is called from `edge/register.ts:131`.
-- `edge/handlers/shared.ts` 80: `notifyUsageError` (the flag parser, ctx only).
-- `edge/handlers/plugin/shared.ts` 76, 119, 153, 163, 195: `notifyUsageError` (arg-parse helpers, ctx only).
-- `edge/handlers/marketplace/shared.ts` 61, 122: `notifyUsageError`.
-- `edge/handlers/plugin/help.ts` 18, 23: `notifyUsageInfo`. 27: `notifyUsageError`. **`makeHelpHandler()` takes no `pi`.**
-- `edge/handlers/plugin/bootstrap.ts` 41, 46, 52: `notifyUsageError`. 77: `notify` (cascade, marketplace `failed`, no plugins).
-- `edge/handlers/plugin/browse.ts` 134: `notifyUsageError`. 159: `notify` (cascade with a `(browse)` failed row, `cause: err as Error`). 172: `notify` (empty cascade, "(no marketplaces)").
-- `edge/handlers/plugin/enable-disable.ts` 71: `notify` (cascade failed row).
-- `notifyUsageError` only, one or more sites each: `fetch.ts` 53, 60, 68, 100. `import.ts` 35, 43. `info.ts` 44, 53, 62. `install.ts` 70, 82. `list.ts` 54, 62. `pending.ts` 41, 43. `reinstall.ts` 45, 51, 85. `update.ts` 52, 65. `marketplace/autoupdate.ts` 44. `marketplace/list.ts` 34. `marketplace/update.ts` 43.
-
-**orchestrators (21 files, 69)**
-- `auth-host.ts` 112: `makeRawNotifyFn`. This is the device-flow prompt. The bound fn goes to `domain/github-auth.ts:436` (`Open <uri> and enter: <code>`).
-- `import/execute.ts` 1255: `notifyDiagnostic` (import diagnostics). 1307: `notifyWithContext`.
-- `marketplace/add.ts` 507, 657. `list.ts` 106. `remove.ts` 322, 604, 869. `update.ts` 283, 752, 818, 826, 854, 880. All are `notifyWithContext`.
-- `marketplace/autoupdate.ts` 250, 574, 640: `notifyWithContext`. 554: `notify` (`marketplace-not-added`).
-- `marketplace/info.ts` 168: `notify` (not-added). 191: marketplace-info. 193: marketplace-info-cascade. 201: per-scope failure loop (**several emissions per invocation**).
-- `marketplace/shared.ts` 597, 617: `notify` (not-added).
-- `plugin/enable-disable.ts` 1173, 1182, 1367, 1380. `fetch.ts` 205. `list-flow.ts` 755, 800. `uninstall.ts` 291, 335, 603, 921. `update-swap.ts` 1234. All are `notifyWithContext`.
-- `plugin/info.ts` 2469: `notifyWithContext`. 2521: not-added. 2549: plugin-info. 2593: plugin-info. 2595: plugin-info-cascade. 2610: failure loop (**several emissions**).
-- `plugin/install-flow.ts` 459, 526, 1053, 1103: `notifyWithContext`. 1029: `notify` (not-added).
-- `plugin/reinstall-flow.ts` 307, 377, 394, 491, 537, 663: `notifyWithContext`. 570: `renderReinstallPartitionAndNotify` (-> `reinstall.messaging.ts:202`).
-- `plugin/shared.ts` 1292, 1372: `notify` (not-added). 1347: `notifyWithContext`. 1462: `notifyDiagnostic` (discovery warnings).
-- `plugin/update-cascade.ts` 204: `notifyUpdateNoOpWithContext`. 212: `notifyUpdateWithContext`.
-- `plugin/update-flow.ts` 251: `notifyUpdateNoOpWithContext`. 659, 766: `notifyWithContext`.
-- `reconcile/apply.ts` 860: `notifyReconcileAppliedWithContext`. 978: `notifyDiagnostic` (post-install warnings).
-- `reconcile/pending.ts` 264: `notify` (`reconcile-pending-empty`). 318: `notifyWithContext`.
-
-**Not output surfaces (checked and excluded):**
-- MCP tool results (`edge/handlers/tools.ts`) go to the LLM, not to the user.
-- `hookDebugLog` (`shared/debug-log.ts`) is an env-gated debug channel.
-- The IL-3 `console.warn` in `persistence/migrate.ts`.
-- `pi.sendMessage` in `async-rewake/registry.ts:461` and `settle.ts:395` is model context. It is not presentation.
-
-Requirements should state these exclusions on purpose so that "total coverage" (D2) has a closed boundary.
-
-### Raw-string surfaces (D2): what each becomes in the Report
-
-| Surface | Today (`notification-dispatch.ts`) | Arity | Report kind (proposed) |
-|---------|-------------------------------------|-------|------------------------|
-| `notifyUsageError` :112 | `` `${message}\n\n${usage}` ``, "error" | 2 | `usage-error { message, usage }` |
-| `notifyUsageInfo` :119 | `usage`, "info" (**explicit**) | 2 | `usage-info { usage }` |
-| `notifyDiagnostic` :142 | `` `${header}\n\n${lines}` ``, "warning". Empty is a no-op. | 2 | `diagnostic { topic: "import" \| "discovery" \| "reconcile-post-install", subject?, lines[] }`. The **header English moves from 3 producers into text**. Import diagnostics also carry a `code` (`ImportDiagnosticCode`) worth exposing. |
-| `makeRawNotifyFn` :347 | severity optional, so 1 or 2 args | 1\|2 | `device-code { host, verificationUri, userCode }` (auth-host) and `lifecycle-warning { topic: "reconcile-aborted" \| "path-not-refreshed", scope?, detail }` (index.ts) |
-| `notifyAsyncRewakeSummary` :167 | summary, "info" (**explicit**). Empty is a no-op. | 2 | `hook-rewake-summary { pluginId, summary }` |
-| `notifyStopHookOverrideCap` :200 | fixed text with `8`, "warning" | 2 | `stop-hook-cap { pluginId, cap: 8 }` |
-
-**Arity is part of the byte contract.** The catalog harness records `argumentCount` (`tests/architecture/catalog-uat/mock-pi.ts`). Structured info-severity emissions call `ctx.ui.notify(body)` with **one** argument (`emitWithSummary` :96-100). The raw info surfaces pass `"info"` **explicitly**. The text strategy must keep this per-kind rule. The Report carries `severity: "info"` in both cases, so the rule is a text-formatting rule keyed on kind.
-
-## 2. Per-verb renderers and what each derives at render time
-
-There are **19 `CommandContext` consts across 16 `*.messaging.ts` files, with 64 status arms**. There is also the central `renderPluginRow` switch in `notification-grammar.ts:902` (19 statuses). Legacy `notify()` still uses that switch, and `tests/architecture/catalog-uat` drives it. Every arm is a composition of grammar primitives over `(row, probe, mpScope)`.
-
-What the arms decide, and where each decision goes:
-
-| Derivation | Where it happens today | Absorbed by | Notes |
-|------------|------------------------|-------------|-------|
-| `{requires pi-subagents / pi-mcp / pi-dynamic-workflows}` markers | `composeReasons(..., declaresX, probe)` (`grammar:500`) -> `softDepMarkers` (`shared/concerns/soft-dep.ts:54`) | **resolve** | Only arms built on `installedLikeRow` / `partiallyInstalledRow` / an explicit `dependencies.includes(...)` include markers. That covers installed, updated, reinstalled, and partially-installed. Every `pluginRow` / `render*Row` arm passes `false,false,false`. The Report row carries the **final** reasons list: content reasons first, then markers in the fixed order agents, mcp, workflows. |
-| Content reasons shown or suppressed | per arm | **row policy** | Divergences that must be kept (see the table below). |
-| Scope bracket elision | `renderScopeBracket(pScope, mpScope)` (`grammar:456`). Candidate rows (available, remote, unavailable, partially-available) force `undefined`. | **text** | Report keeps the real scope. Elision is lossy formatting. |
-| Version display (`hash-`/`sha-` to `#abcdef0`, `v` prefix, `from -> to` arrow) | `renderVersion` :425, `composeVersionArrow` :476 | **text** | JSON carries raw `version` / `from` / `to`. |
-| Icon glyph | a literal per arm | **text** | This is a pure function of `status` across all 64 arms plus the central switch (checked). It is one table in text. |
-| Status token text, e.g. `(will partially install)` versus `(will install)` | `renderPendingRow` :835, `reconcile.messaging.ts:91` | **text** from the Report field `partial` | |
-| Description truncation and wrapping | `truncateDescription` :113, `wrapDescription` :146, `DESCRIPTION_BEARING_STATUS` :1526 | **text** (truncation). **resolve** (which statuses bear a description). | JSON gets the full description. |
-| Partial / stale-gate / enable hint trailers | `partialHintTrailerFor` :1591, `ENABLE_HINT_TRAILER` | **resolve** chooses `hints: ("partial-install"\|"partial-update"\|"stale-gate-update"\|"enable")[]`. **text** chooses the English. | |
-| Cause chain | `renderIndentedCauseChain` :1069 -> `causeChainTrailer(Error)` (`shared/errors.ts:149`) walks a **live `Error`** at render time | **resolve** gives `cause: { chain: string[], truncated: boolean }` | An `Error` is not JSON-serializable. `CleanupContextError` links render cleanup details (`errors.ts` `linkMessage`). |
-| Manual-recovery leaks | `manualRecoveryLeaks(p.cause)` (`errors.ts:598`), an `instanceof ManualRecoveryError` walk at render time | **resolve** gives `leaked: string[]` | |
-| Rollback-partial lines | `composeRollbackPartialLines` :1085 (phase causes are live Errors) | **resolve** gives `rollbackPartial: { phase, cause? }[]` with serialized causes | |
-| Not-added reason | `notAddedReasonFor` :1398 derives a `Reason` from `presentInOtherScope` + `scope` | **resolve** | |
-| Marketplace header marker | `renderMpHeader` :229. A `skipped` header with reason `already autoupdate` renders `<autoupdate>` in place of `(skipped)`. A list header renders `<autoupdate>` from `details`. | **text** (data is already present) | |
-| Plugin-info glyph and `(${status})` | `pluginInfoStatusGlyph` :1260, `renderPluginInfo` :1434 | **text** | |
-| Hard-coded bodies | `"Pending: next reload will apply 0 actions."` (dispatch :243), `UPDATE_NO_OP_HEADLINE`, `"(no marketplaces)"` | **text**. Report kinds are `reconcile-pending { actions: 0 }` and `update-no-op`, plus an empty cascade. | |
-
-**Per-verb divergences the row policies must keep** (checked arm by arm; each is a text byte difference pinned by an owner test):
-
-| Status | Default (central switch) | Divergent command | Divergence |
-|--------|--------------------------|-------------------|------------|
-| `partially-installed` | markers ON (`partiallyInstalledRow`) | `plugin list` (`list.messaging.ts:126`) | `pluginRow`, so markers OFF |
-| `available`, `remote` | content reasons OFF (`undefined`) | `plugin list` (`list.messaging.ts:115`, `:151`) | reasons ON (`p.reasons`) |
-| `uninstalled` | reasons ON (`renderUninstalledRow`) | reconcile-applied (`reconcile.messaging.ts:177`) | reasons OFF (`composeReasons(undefined, ...)`) |
-| `will *` | no version, no reasons, no probe | (all) | pending arms ignore `probe` |
-| `unavailable` | `renderUnavailableRow` | import (`execute.messaging.ts:97`) | byte-identical duplicate, so no policy needed |
-
-A row policy can therefore be small data, for example `{ markers: boolean; contentReasons: boolean }` per status. It lives in a **total** map per command, which keeps the D-04/D-10 `satisfies CommandContext` exhaustiveness anchor. It does not keep the `(row, probe, mpScope) => string` function.
-
-Per-file arm inventory (status arms per const):
-- `plugin/list` 11
-- `plugin/install` 6
-- `plugin/fetch` 6
-- `plugin/update` 5
-- `reconcile` PENDING 5 and RECONCILE_APPLIED 5
-- `plugin/enable-disable` ENABLE 4 and DISABLE 3
-- `plugin/reinstall` 4
-- `import/execute` 4
-- `marketplace/update` 4
-- `plugin/uninstall` 2
-- `marketplace/remove` 2
-- `marketplace/autoupdate` AUTOUPDATE 1 and NOAUTOUPDATE 1
-- `plugin/info` 1
-- `marketplace/add` 0 (label only)
-- `marketplace/list` 0 (label only)
-
-Tests call these arms directly **70 times in 12 test files** (`rg -n "\.render\.|render\[" tests`). Those calls are the byte locks for the divergences above.
-
-## 3. Render-time state probes
-
-| Probe | Where | Moves to |
-|-------|-------|----------|
-| `softDepStatus(pi)` (3 `getAllTools()` reads) | `notification-dispatch.ts:280` (`notify`), `:387` (`emitCascadeWith`), `:433` (`emitUpdateNoOpCascade`) | `resolve()`. It is still one probe per emission and runs before strategy selection. |
-| `softDepStatus(pi)` for **severity** (a second probe of the same state) | `plugin/install-flow.ts:406`, `plugin/update-cascade.ts:190`, `plugin/enable-disable.ts:1347`, all via `companionSeverity` (`notify-reasons.ts:84`) | Recommended: take the probe **once per command invocation** and pass the same snapshot to severity stamping and to `resolve()`. Today severity and markers read two snapshots that can disagree in principle. |
-| `causeChainTrailer` / `manualRecoveryLeaks` over live `Error` | grammar :1069, :1616-1641 | `resolve()` (serialized) |
-| `crossScopeFlag` (a filesystem probe) | producers (`install-flow.ts:1029`, `plugin/shared.ts:1372`, `autoupdate.ts:554`, `plugin/info.ts:2505`) | Already upstream. No change. |
-| `redactAbsolutePaths` | producers (`reconcile/apply.ts:177,187,811,962`, `backfill.ts:156`, `plugin/shared.ts:1457`) | Already upstream. The JSON strategy inherits it. No redaction may move into text only. |
-| `pluginScopeOrFallback`, `pluginVersion` | `edge/browser/plugin-browser.ts` (a browse TUI consumer of producer types) | Out of scope (browse polish). |
-
-Test cost: the strict boundary helper (`tests/edge/notification-boundary.ts`, used by **31** suites) and `catalog-uat/mock-pi.ts` pin `getAllTools().times(3)` per emission. If one probe per invocation is adopted, those counts change. If the probe stays in `resolve()`, they do not.
-
-## 4. Proposed layout and gate impact
-
-### Report shape (sketch, typebox)
+**What:** `stampServers` (stage) and `migrateLegacyMcpEntries` call the same pure
+`translateForAdapter`. The marker is stamped by the caller afterwards, as today
+("the marker never enters the walk", D-92-01).
 
 ```typescript
-// shared/notification-model.ts
-export const SCHEMA_VERSION = 1;
-const PluginRow = Type.Object({
-  name: Type.String(), status: PluginStatus, scope: Type.Optional(Scope),
-  version: Type.Optional(Type.String()), from: Type.Optional(Type.String()), to: Type.Optional(Type.String()),
-  reasons: Type.Array(ReasonLiteral),          // FINAL: content + soft-dep markers
-  severity: Severity, needsReload: Type.Boolean(),
-  description: Type.Optional(Type.String()),   // full; text truncates
-  hints: Type.Array(HintLiteral), partial: Type.Optional(Type.Boolean()),
-  cause: Type.Optional(Type.Object({ chain: Type.Array(Type.String()), truncated: Type.Boolean() })),
-  leaked: Type.Optional(Type.Array(Type.String())),
-  rollbackPartial: Type.Optional(Type.Array(RollbackPhase)),
-});
-export const Report = Type.Union([CascadeReport, MarketplaceInfoReport, PluginInfoReport,
-  InfoCascadeReports, MarketplaceNotAddedReport, ReconcilePendingReport, ReconcileAppliedReport,
-  UpdateNoOpReport, UsageErrorReport, UsageInfoReport, DiagnosticReport, DeviceCodeReport,
-  LifecycleWarningReport, HookRewakeSummaryReport, StopHookCapReport, UnsupportedModeReport /* browse */]);
-// every variant: { kind, severity, summary?: {count, subject: "plugin"|"marketplace"|null},
-//                  tally?: {label, operation, failures, warnings, successes | {verb,count}},
-//                  reloadHint: boolean, advisories: string[] }
+// bridges/mcp/adapter-entry.ts (shape, not final code)
+export function translateForAdapter(
+  plugin: string,
+  sourceKey: string,
+  entry: Record<string, unknown>,
+  ctx: McpSubstitutionContext,
+): { readonly name: string; readonly entry: Record<string, unknown>; readonly warnings: readonly string[] } {
+  const name = generatedMcpServerName(plugin, sourceKey);
+  const expanded = expandAndEscape(substituteAndInject(entry, ctx)); // substitute.ts
+  return { name, entry: withAdapterDefaults(expanded), warnings: [] };
+}
 ```
 
-Design rules:
+**Trade-offs:** The legacy move needs `pluginRoot`/`pluginData` for the
+substitution context, but legacy entries are already substituted. Give the move
+a context-free variant (expansion/escape + name + defaults only) instead of
+reconstructing paths. Name the two entry points distinctly so a reviewer sees
+which steps run on which path.
 
-1. **Report is the wire schema** (`Static<typeof Report>`), so a type change reaches both strategies (D1).
-2. Resolve computes **facts**. Text turns facts into English. The summary phrase, the tally text, and the diagnostic headers are formatting. Counts, subjects, and severity are decisions.
-3. Lossy formatting stays in text: truncation, `#sha7`, scope elision, glyphs.
-4. Add a machine `operation` id (for example `"plugin.install"`) beside `Messaging.label`. Consumers should not parse English labels.
+### Pattern 3: Overlay-aware ownership partition
 
-### Gates and tests that must change (check each one)
+**What:** `mcp-adapter.json` is a shared file. The adapter itself writes into it:
+`/mcp-adapter disable` adds `disabled: true` to the project file, and panel Save
+persists `directTools` changes. Both use `{ ...existing, field }`, so the adapter
+can modify OUR marked entry in place (the marker survives the spread), and it can
+add an unmarked partial entry under our name in the other scope's file.
+**Rules:**
+- A same-name entry with no transport key (`command`/`url`/`socket`) is an
+  **overlay**, not a collision. Neither the stage collision check nor the
+  partition's `theirs` arm may throw on it.
+- On re-stage (update/reinstall/enable), carry forward adapter-owned user
+  preference fields from our existing marked entry (at minimum `disabled`;
+  decide on `directTools`, `includeTools`, `excludeTools`, `approveTools`).
+  Otherwise an update silently re-enables a server the user disabled.
+- On unstage, drop the whole marked entry, overlay fields included (the plugin
+  is gone). Leave unmarked overlays in the other file alone. They are the
+  user's, and the adapter ignores an overlay with no base.
 
-| Gate | Why it is hit | Action |
-|------|---------------|--------|
-| `.fallowrc.json` boundaries | — | **No change** if all new modules stay in `shared/`. |
-| `eslint.config.js` BLOCK A/B (`:96-150`) | `ctx.ui.notify` is banned outside `notification-dispatch.ts` | Keep it. **Add** a selector `CallExpression[callee.property.name='appendEntry']` with the same single-file exemption. Plant a violation in a test, following the house rule: "a gate wants a test that plants the violation". |
-| `rule-packs/architecture.json` | Bans stdio | Optionally add an `appendEntry` banned-call. The ESLint selector is enough and is name-independent. |
-| `tests/architecture/eslint-effective-config.test.ts` | Enumerates exemptions | Extend it for the `appendEntry` sink. |
-| **unused-type-member gate** (`npm run lint:type-members`) | A declared member that no runtime code reads **fails** | (a) Land `NotificationContext.mode` **together with** its first reader (the selector). (b) Land `EntrySink.appendEntry` together with the JSON sink. (c) JSON-only Report fields (`operation`, `code`, `leaked` if text does not read it) are unread unless the JSON strategy performs a *recognized* whole-object read. A deep `JSON.parse(JSON.stringify(report))` counts as "JSON serialization" in the gate's read model and also guarantees plain data. Also, `contracts.json` line:col pins move with every edit. |
-| `no-test-only-production-surface.test.ts` / fallow dead-code | Temporary compatibility adapters | Any adapter kept "for tests" (for example `render = format ∘ project`) must be removed in the same phase that migrates its 70 test calls. |
-| `unit-suite-glob-completeness`, `test:corresponding`, direct coverage at 100% | New `shared/notification-{model,resolve,mode,json}.ts` | Each needs a mirrored `tests/shared/*.test.ts` at 100% line, branch, and function coverage. |
-| `catalog-uat/*` (20 fixture modules, drives `notify()` against `docs/output-catalog.md`) | The text byte lock | Keep it green at every step. It is the regression harness. Add `mode` to `mock-pi.ts` `makeCtx`. Later, add a schema-conformance pass: every fixture's Report validates against `Report`. |
-| `notify-grammar-invariant`, `notify-will-reload-agreement`, `hooks-cap-notify`, `hooks-async-rewake`, `notify-producer-wire-coverage`, `cross-surface-reason-parity` | Drive the notify family with strict `MockCtx` | Add `mode` expectations. The bytes do not change. |
-| `no-credential-leak.test.ts` (`:162-164`, `:230`) | Regex-scans `notifyFn(\`...\`)` in `domain/github-auth.ts` | Retarget it at the new structured device-code callback. Keep AUTH-09: the user code may be surfaced, and the access token must never be. |
-| `notify-closed-set-locks`, `messaging-guide-doc-pins` | Pin `notification-types.ts` closed sets and the style-guide claims | Unaffected while `NotificationMessage` stays the producer vocabulary. Update them if the guide gains a Report section. |
+**Trade-offs:** The field list is a contract with the adapter. Record it with a
+decision ID and pin it against `ServerEntry` in the adapter's `types.ts`.
 
-## 5. How `mode` and `appendEntry` reach every output site
+### Pattern 4: Consumer-owned mirror of an external event, injected, not global
 
-Facts from Pi 0.86.1 (`dist/core/extensions/types.d.ts`):
+**What:** `platform/pi-api.ts` already declares consumer-owned views
+(`ToolInventory`, `NotificationContext`). Add `McpStatusEventSource { on(channel,
+handler): () => void }` (structurally satisfied by Pi's `EventBus`). The tracker
+owns a typebox schema with only `servers[].name`, `.status`, `.disabled`, and
+`blockedReason`/`failedAgoSeconds` if rendered. `version` is checked against
+`1`. The tracker is created once in the factory and passed down, the same as
+`createCompletionCache()`. There is no module-global and no `_setForTest` seam
+(no-test-only-production-surface).
+**When:** Any cross-extension read-only data.
+**Trade-offs:** Mirroring only the read fields keeps `lint:type-members` from
+demanding `external-input` pins for `totalTools`, `listenState` and the other
+unread fields. The snapshot is push-only: there is no "give me the current state"
+request. Hence factory-time subscription, and an explicit `"unknown"` when no
+snapshot has arrived. The adapter withholds its first snapshot until direct-tool
+sync finishes, so an early `info` races it, and an empty snapshot arrives on
+session shutdown.
 
-- `mode: ExtensionMode` is on **`ExtensionContext`** (:214), and `ExtensionCommandContext` extends it (:255). So the command `ctx`, the lifecycle `ctx`, and the hook `ctx` all have it.
-- `appendEntry(customType, data?)` is on **`ExtensionAPI`** (:991), the factory `pi`. It is **not** on any ctx.
-- Before binding, `appendEntry` is `notInitialized`, and it throws on a stale extension instance (`loader.js:119, 288-290`, `assertActive`).
+### Pattern 5: Names are generated in `domain/name.ts`, consumed everywhere else
 
-Recommended plumbing, driven by types and with the least churn:
+**What:** As with `generatedAgentName`/`declaredAgentName`, the MCP server name
+is minted in one domain function. `stage.ts` records it (W-05 `recorded`),
+`state.json` stores it, `info.ts` displays it (both arms), and the tracker
+lookup joins on it.
+**Trade-offs:** `info`'s state-only arm already says "MCP servers are the sole
+exception by data shape, holding their raw source keys". After this milestone
+that sentence is false and must be rewritten. The two arms then agree for the
+first time.
 
-1. `platform/pi-api.ts`:
-   - `export type ExtensionMode = ExtensionContext["mode"]` (the package root does not re-export it).
-   - `NotificationContext { ui; readonly mode: ExtensionMode }`.
-   - `EntrySink { appendEntry(customType: string, data?: unknown): void }`.
-   - `PresentationHost = ToolInventory & EntrySink`.
+## Data Flow
 
-   Pi's real `ctx` and `pi` already satisfy these structurally. So the **~70 structured call sites that already pass `(ctx, pi)` need no edits**.
-2. The raw-string surfaces take only `ctx` today, so they gain a `host: PresentationHost` parameter. Threading cost:
-   - `router.ts` (`routeClaudePlugin`/`routeMarketplace` gain `pi`, passed from `edge/register.ts:131`).
-   - `makeHelpHandler(pi)`.
-   - The arg-parse helpers in `edge/handlers/shared.ts` and `edge/handlers/{plugin,marketplace}/shared.ts` (about 7 helpers).
-   - Other edge handler factories already close over `pi`.
-   - Orchestrators: `surfaceDiscoveryWarnings` (`plugin/shared.ts:1445`) and `surfaceImportDiagnostics` (`import/execute.ts:1242`).
-   - The auth bags: `buildAuthForHost` / `buildCloneAuth` (`auth-host.ts:97,152`) and their 7 callers (`fetch.ts:387,398`, `install-clone-probe.ts:57`, `reinstall-clone-probe.ts:63`, `info.ts:1627,1640`, `update-preflight.ts:165`, `marketplace/add.ts:785,830`, `marketplace/update.ts:408,459`).
-   - Hooks (`registry.ts`, `settle.ts`) and `index.ts` already have `pi`.
-3. Rejected alternative: wrapping `ctx` at `register.ts` into a ctx-plus-sink object. Pi's ctx is a runtime object with getters and methods, so spreading it is unsafe, and `browse` needs the real `ctx.ui.custom`.
-4. Rejected alternative: a factory-bound presenter injected through `EdgeDeps`. It needs more churn than threading `pi`, because orchestrators already take `pi`.
-5. **Naming collision:** orchestrators already use `opts.notifications?.mode === "orchestrated"` (`install-flow.ts:660`, `uninstall.ts:645`, `enable-disable.ts:815`, `add.ts:549`, `remove.ts:711`, `autoupdate.ts:419`). The new concept must **not** be spelled `mode` in orchestrator options. Read it only as `ctx.mode` and call it "presentation" everywhere else.
+### Install / update / reinstall / enable (modified)
 
-Lifecycle and hook sites:
-- `resources_discover` (`index.ts:81-176`): reconcile-applied cascade, diagnostics, reconcile-aborted, PATH warnings. `ctx.mode` is available. **NFR-2:** `UnsupportedModeError` and `appendEntry` throws must be caught there (hookDebugLog). They must never propagate.
-- Hooks: rewake summary and Stop cap already run inside try/catch (`registry.ts:433-437`). `settle.ts:377` has **no try/catch** around `notifyStopHookOverrideCap`. Add one when the sink can throw.
-- Device flow: change `NotifyFn` (`domain/github-auth.ts:115`) to `onDeviceCode({ verificationUri, userCode })`. The English moves to text. In json/rpc mode this makes the code **visible for the first time**, because `ctx.ui.notify` is a no-op in json mode. Today a device flow under `--mode json` polls without ever showing the code.
-
-**Critical runtime finding (HIGH, source-verified): startup emissions are not streamed in json or rpc mode.** In both `print-mode.js` (`rebindSession`, about lines 52-88) and `rpc/rpc-mode.js` (:228-270), `session.bindExtensions()` runs first. It awaits `session_start` and then `resources_discover` (`agent-session.js:2009-2031`). Only after that does `session.subscribe(...)` start writing events. So any `appendEntry` made during the **first** `resources_discover` is saved to the session file but never emitted as an `entry_appended` line. That covers the load-time reconcile cascade, PATH warnings, and reconcile-aborted. With `--no-session`, those entries exist only in memory.
-
-A `/reload` inside the session runs after subscription and does stream. In rpc mode, today's `ctx.ui.notify` at startup **is** forwarded (the RPC UI context), so moving rpc to appendEntry **regresses startup visibility in rpc**. Requirements need an explicit decision: accept it and document it, or keep a startup-only fallback. D3/D4 are locked, so this is a documentation or acceptance item, not a re-litigation.
-
-## 6. Browse interactive strategy boundary
-
-- Today `browse.ts:140` does `if (ctx.mode !== "tui") { await handlers.list("", ctx); return; }`.
-- Target (D6): `presentationFor(ctx.mode).interactive === false` emits a **Report** (`kind: "unsupported-in-mode"` or a typed error mapped to a usage-error-shaped Report) that names `/claude:plugin list`, at `error` severity. It goes through the normal strategy:
-  - JSON in json/rpc mode, where it is visible.
-  - Text in print mode, where Pi discards it (D5).
-
-  Prefer emitting a Report over throwing. A thrown error in print/json becomes `Extension error (...)` on stderr (`print-mode.js` `onError`), and in rpc it becomes an `extension_error` event. That path bypasses the schema.
-- The picker (`ctx.ui.custom`, `edge/browser/plugin-browser.ts`) stays **outside** the Report. It is an interactive component that consumes producer types (`PluginNotificationMessage`) and is out of scope (browse polish).
-- The two `notify()` calls in browse (`:159`, `:172`) run only in tui after the gate. They use the text strategy through the normal path.
-- One selector module owns the mode switch for both the output strategy and the interactive capability. Keep `ctx.mode` comparisons out of edge handlers. `browse.ts` currently has the only one (`:140`).
-
-## 7. Data flow changes
-
-### Before
-```
-producer -> NotificationMessage [+ render map of (row, probe, mpScope)=>string]
-  -> notify*/notifyWithContext(ctx, pi, ...) -> softDepStatus(pi) (render-time)
-  -> grammar (strings; walks Error causes) + summary (severity/phrases/tally/reload)
-  -> ctx.ui.notify(string[, severity])          [no-op in print/json]
-```
-### After
-```
-producer -> NotificationMessage [+ row-policy map]  (unchanged vocabulary)
-  -> notify*(ctx, host, ...) -> resolve(message, policy, probe) -> Report
-  -> presentationFor(ctx.mode):
-       text -> grammar.format(Report) -> ctx.ui.notify(text[, sev])   (bytes unchanged)
-       json -> json.format(Report)    -> host.appendEntry("claude-plugin", payload)
-       other-> UnsupportedModeError (caught at lifecycle/hook boundaries; NFR-2)
+```text
+mcpPhase (install-outcome.ts) / update-swap.ts / reinstall-replace.ts
+  → prepareStageMcpServers(input)
+      read mcp-adapter.json (adapter-doc: JSONC, key alias; unparseable → refuse)
+      partition: ours (marker) | overlays | theirs
+      translate each server (adapter-entry) → generated names
+      collision walk (nine sources, last-wins, overlay-aware)   ── throws McpServerCollisionError
+      read legacy mcp.json → own marked entries to sweep (tolerant)
+      build next adapter doc + next legacy doc IN MEMORY
+  → commitPreparedMcp: atomicWriteJson(adapter) then atomicWriteJson(legacy, only if it changed)
+  → recorded[].generatedName → state.json resources.mcpServers (unchanged plumbing)
 ```
 
-Several emissions per invocation stay possible:
-- the `info` failure loops
-- import cascade plus diagnostics
-- install plus discovery warnings
-- the reconcile cascade plus post-install warnings
+### `/reload` legacy move (new)
 
-In JSON each one becomes a separate `entry_appended`. **Gap:** there is no correlation id today. Consider an `invocation` or `origin: "command" | "reload" | "hook"` field so consumers can group entries and tell command replies apart from lifecycle output.
+```text
+resources_discover → applyReconcile → for scope in [project, user]:
+  readPassForScope (unchanged)
+  + applyMcpMigrationForScopeIsolated            (WR-01 isolation, own lock)
+      no state.json → skip (WR-05, no unsolicited files)
+      legacy mcp.json absent / no marked entries → return (RECON-05: zero writes)
+      bridges/mcp/migrate.ts:
+        snapshot both files (replacement handles)
+        write mcp-adapter.json (moved + translated)       ┐ crash here → next /reload
+        write mcp.json without moved entries             ┘ finds the same marked entries,
+                                                           re-translates to the same names,
+                                                           partition sees them as "ours" → idempotent
+      rename resources.mcpServers in affected records → tx.save()
+      failure → restore snapshots, structured outcome row
+  applyPlan / backfill / routing rebuild (unchanged order after it)
+```
 
-## Suggested build order
+Orphans: a marked legacy entry whose `(plugin, marketplace)` has no record in
+that scope. Recommend leaving it in place with a warning: moving an entry no
+record owns makes it unremovable by any lifecycle op. This is a decision to
+record.
 
-Each step keeps `npm run check` green and leaves the text bytes unchanged. The steps are ordered so that no declared member exists without a reader (the unused-type-member gate) and no temporary adapter outlives its phase (the test-only-surface gate).
+### `info` runtime status (new)
 
-1. **Model and resolve behind the text strategy (cascade family).**
-   - Add `notification-model.ts` (typebox) and `notification-resolve.ts`.
-   - `notify()` / `emitCascadeWith` / `emitUpdateNoOpCascade` resolve first. Grammar formats the Report.
-   - Move the probe, markers, cause-chain and leak serialization, hints, not-added reason, severity, summary facts, tally counts, and reload flag into resolve.
-   - Keep the `RenderFn` call shape temporarily as `formatRow ∘ projectRow`, so the 70 direct arm calls in 12 test files stay green.
-   - Gates: catalog-uat and the owner tests stay unchanged.
-   - *Risk: grammar is 1655 lines. This step has the largest byte-drift risk.*
-2. **Per-command render maps become row policies.**
-   - Edit 16 messaging files and `notify-context.ts` (`CommandContext.render` becomes a policy map).
-   - Migrate the 70 test calls to assert projections plus text formatting.
-   - Delete the adapter, the central `renderPluginRow`, and the `dispatchRow` string fallback.
-   - *Largest blast radius in production code and owner tests (about 5.6k lines of messaging tests).*
-3. **Raw-string surfaces into the Report (still text only).**
-   - Add the usage-error, usage-info, diagnostic (structured topics; the headers move from 3 producers into text), device-code (structured domain callback; retarget `no-credential-leak`), lifecycle-warning (index.ts), rewake, and stop-cap kinds.
-   - Every public function routes through one `present()`.
-   - Pins: `hooks-cap-notify` and `hooks-async-rewake` byte pins stay. The arity rule is pinned.
-4. **JSON strategy as a pure function.**
-   - `notification-json.ts`: Report to payload with `schemaVersion`, using a deep JSON round-trip.
-   - Add a unit test and a schema-conformance test over all catalog fixtures.
-   - Nothing is wired to a sink yet. The only reader is the strategy function, which production must reach. Wire it in step 5 of the same phase if the dead-code gate objects.
-5. **Mode selection, host widening, and sink.**
-   - `pi-api.ts` gets `mode`, `EntrySink`, and `PresentationHost`.
-   - `notification-mode.ts` exhaustive switch and `UnsupportedModeError`.
-   - `present()` selects the strategy and calls `appendEntry("claude-plugin", ...)` for json/rpc.
-   - Thread `pi` into the raw surfaces (router, help, parse helpers, auth bags, 2 diagnostic helpers).
-   - ESLint `appendEntry` single-site selector with a planted-violation test.
-   - NFR-2 catches in `index.ts` and `settle.ts:377`.
-   - Fakes carry `mode` (D7): `tests/edge/notification-boundary.ts` (31 suites), `catalog-uat/mock-pi.ts`, `tests/e2e/_helpers.ts:85`, and the other about 59 files that fake `ui.notify` or 50 that fake `getAllTools`.
-   - **The 23 `as unknown as ExtensionContext` casts in 9 files hide a missing `mode` from the compiler**, so they fail only at runtime with the new default arm. Grep for them explicitly.
-   - Add a JSON capture helper.
-   - *Largest blast radius in tests.*
-6. **Browse typed error (D6)** through the Report and the `interactive` capability. Delete the list fallback.
-7. **Documentation.**
-   - JSON schema reference, generated from or checked against the typebox schema.
-   - The print-mode limitation (D5) and the startup-emission non-streaming finding.
-   - The IL-2 amendment in AGENTS.md "Output channel" (D8).
-   - An ADR next to `docs/adr/v2-001-structured-notify.md`.
-   - `docs/output-catalog.md` does not change.
+```text
+factory: tracker = createMcpStatusTracker(pi.events)   ← adapter publishes after init, on change, on shutdown
+/claude:plugin info p@m → edge handler (deps.mcpStatus) → getPluginInfo({..., mcpStatus})
+  names = record.resources.mcpServers  |  manifest keys → generatedMcpServerName
+  entry = { name, runtime: tracker.lookup(name) }    // connected | cached | failed | needs-auth |
+                                                     // not-connected | blocked | disabled | unknown
+  softDepStatus(pi).piMcpAdapterLoaded === false → no runtime token; the existing {requires pi-mcp} path applies
+```
 
-Steps 1 and 2 could run in the other order: policies first, and then the model. Policies first would still format strings, so the probe would stay in rendering. The chosen order puts the D1 invariant (no probe in rendering) in the very first phase.
+The status data is display-only. It is never persisted and never decides
+severity. Severity stays with the command (memory: "notify.ts is a dumb
+renderer").
 
-**Largest-blast-radius changes (flag for the roadmap):**
-- Step 2: render maps to policies (16 production files, 12 test files, 70 assertions).
-- Step 5: test fakes (strict `strong-mock` fakes fail on any unexpected `ctx.mode` read) and `pi` threading (about 50 raw call sites, about 15 signatures).
-- Step 1: the grammar refactor under byte lock.
+## Architecture Gates That Will Fire
+
+| Gate | Fires because | Do this |
+|---|---|---|
+| `tests/architecture/peer-floor.test.ts` | Literal `">=0.86.1"` | Update the literal and the lock in the floor phase (as `74162ca6` did for 0.99.2) |
+| `npm run lint:type-members` + `scripts/check-unused-type-members.contracts.json` | `external-mirror` pin `node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/types.d.ts:414:5` moves on 1.0. Line:col pins in `platform/pi-api.ts` (100, 106-108, 124), `persistence/locations.ts:41`, `bridges/mcp/stage.ts` (49, 371, 416), `bridges/mcp/types.ts:94` shift with any edit above them | Run prettier first, then repin by shifting the LINE only (memory: prettier invalidates pins). New mirror interfaces declare only the fields that are read |
+| Same gate, `UNUSED_TYPE_MEMBER_GATE_TARGETS` (includes `orchestrators/edge-deps.ts`) | New `EdgeDeps.mcpStatus` member | It must be read on a production path (the info handler) |
+| `no-orchestrator-network.test.ts` / `NETWORK_FREE_TARGETS` | `info.ts` and reconcile `pending/plan/notify` are targets | The tracker and the migration modules name no git surface. Consider registering `reconcile/mcp-migration.ts` in `NETWORK_FREE_TARGETS` (full literal path, D-07-05/D-07-06) |
+| `reconcile-planner-purity.test.ts` | Anything I/O in `plan.ts` | The migration is a sibling step in `apply.ts`, never in the planner |
+| `import-boundaries.test.ts` + fallow `boundaries` | New cross-zone edges | `entry → platform` (tracker), `orchestrators → bridges-mcp` (migration), `bridges-mcp → domain` (name generator): all allowed. The tracker must not import `orchestrators/` |
+| `config-state-write-seams.test.ts` | The migration rewrites record names | Through `withStateGuard`/`tx.save` → `saveState` only, never `atomicWriteJson(stateJsonPath)` |
+| `compat-01-no-expansion.test.ts` | Any new `Reason`/`StatusToken`/glyph, any grammar-owner declaration growth, any persisted record key | The runtime token is a new sub-vocabulary on the info component line, NOT a `StatusToken`. A new reason for a migration failure would amend `Reason`. Either is a deliberate amendment with a decision ID and an output-catalog edit. Do not add a record key |
+| `notify-closed-set-locks`, `closed-set-enrollment`, `messaging-guide-doc-pins`, `VOCABULARY_GUARD_DOC_TARGETS` | `components.mcp` shape and rendering change | Amend `docs/output-catalog.md` with the code |
+| `integration-materialization-gate.test.ts` | Reads `locations.mcpJsonPath` after commit | Point it at `mcpAdapterJsonPath` |
+| `tests/bridges/mcp/collision-slots.test.ts` (frozen slot order snapshot) | Deliberate reorder (BACKLOG: "a deliberate reorder plus a comment rewrite plus a snapshot update") | Rewrite with the nine-source order and last-wins assertions |
+| `tests/e2e/install-soft-deps.test.ts` | Mocks `{ name: "mcp", sourceInfo: { source: "pi-mcp-adapter" } }` | Must stay green under the adapter-only probe; add a `builtin:` negative case |
+| `no-test-only-production-surface.test.ts` | A test hook on the tracker | Inject the event source instead |
+| `test:corresponding` | Each new `extensions/**` module | Add paired tests |
+| `workflows-doc-pins.test.ts`, `workflows-marker-coverage.test.ts` | Touched by `74162ca6` (Pi version prose) | Re-apply with the 1.0 numbers |
+| fallow `health` (cognitive 15, unit 60) and ESLint `sonarjs/cognitive-complexity` 15 | `stage.ts` growth (two-file commit, overlay carry-forward) | Extract into `adapter-doc.ts` / `adapter-entry.ts` up front, not after a red run |
+
+## Suggested Build Order
+
+| # | Phase | Depends on | Contents | Why here |
+|---|---|---|---|---|
+| 1 | **Pi 1.0 floor + adapter-only detection** | -- | Peer/dev bumps (Pi, pi-tui, pi-subagents `>=0.74.0`, all devDeps); re-apply `74162ca6`, `5b1d8ef6`, `dac3a245`, `69e0870a`, `4f82096f` at 1.0; repin contracts; workflow-engine 3.13.1 canary on Pi 1.0; `hasLoadedPiMcpAdapter` adapter-only; document `pi-mcp-adapter >=5.0.0` as the MCP soft dependency (decide optional-peer vs docs-only); record the `@earendil-works/pi-ai ^0.99.0` peer gap | Moves pins and gates every later phase touches; detection lives in the same file (`pi-api.ts`), so the pins move once |
+| 2 | **Adapter-file foundation** | 1 | `mcpAdapterJsonPath`; `adapter-doc.ts`; stage/unstage retarget; legacy sweep in stage and unstage; overlay-aware partition + carry-forward; nine-source collision walk (closes MCPSRC-01); prune-rollback snapshot; NFR-10 text | Highest-risk core. It must be correct before any entry content changes, so failures stay attributable |
+| 3 | **Entry translation** | 2 | `generatedMcpServerName`; `adapter-entry.ts`; `directTools: "search"`; `${VAR:-default}` + escaping (closes MENVX-01, ENVLIT-01); info manifest-arm name mapping | Fixes what "translated" means before the migration bakes it into users' files |
+| 4 | **Auto migration** | 2, 3 | `bridges/mcp/migrate.ts`; `reconcile/mcp-migration.ts`; `apply.ts` ordering; record renames; outcome/notify wording | Needs the final translator (Pattern 1 relies on running it exactly once) |
+| 5 | **Live status in `info`** | 1 (event bus types), 3 (final names for the join) | `platform/mcp-status.ts`; `EdgeDeps` wiring; info join; grammar + catalog amendment | Independent of 4; can run in parallel with it |
+| 6 | **Close-out** | all | `docs/env-vars.md` (ENVDOC-01 overlap), README/docs NFR-10 text, live UAT canary: real adapter 5 reads our `mcp-adapter.json`, `/reload` migration on a seeded legacy file, `info` shows `connected`/`cached` | Live proof that the adapter accepts what we write; unit tests can only prove we wrote it |
+
+Research flags: Phase 3 (the exact Claude Code normalization and expansion
+rules, the escape set) and Phase 2 (the overlay carry-forward field list)
+need targeted research. Phase 1 and Phase 5 follow established patterns.
 
 ## Anti-Patterns
 
-### Keeping the probe or Error walks in the text strategy "because JSON doesn't need markers"
-**Why it is wrong:** It breaks D1. JSON would then lack `{requires ...}` markers that text shows, and the two outputs would disagree. **Instead:** resolve puts the final reasons into the Report, and both strategies format them.
+### Treating an unparseable `mcp-adapter.json` as empty
 
-### JSON strategy re-deriving severity or reload from rows
-**Why it is wrong:** It creates two computations that can drift. The catalog locks only text. **Instead:** the Report carries `severity` and `reloadHint`. The strategies only read them.
+**What people do:** Reuse `readScopedDoc`'s "malformed → `{}` → overwrite with a
+warning" tolerance.
+**Why it's wrong:** The adapter accepts JSONC. A file with one comment is valid to
+the adapter and "malformed" to `JSON.parse`. Overwriting it deletes the user's
+`settings`, `imports`, `claudePlugins` and every hand-written server.
+**Do this instead:** Parse JSONC. If parsing still fails, refuse with a typed error
+and write nothing.
 
-### Reading `ctx.mode` in handlers or orchestrators
-**Why it is wrong:** The switch is no longer exhaustive in one place, and the name collides with `notifications.mode`. **Instead:** only `notification-mode.ts` switches on mode. `browse` asks it for `interactive`.
+### Writing `mcpServers` next to an existing `mcp-servers`
 
-### Leaving `Error` objects in the Report
-**Why it is wrong:** `appendEntry` data is JSON-serialized by Pi, and an Error becomes `{}`. **Instead:** resolve serializes cause chains and leaks. The deep JSON round-trip in the strategy catches regressions.
+**Why it's wrong:** The adapter reads `raw.mcpServers ?? raw["mcp-servers"]`. Adding
+`mcpServers` hides every server under the legacy key.
+**Do this instead:** Write into whichever key exists, and choose `mcpServers` only
+when neither does.
 
-### A new top-level `presentation/` folder
-**Why it is wrong:** `requireAllFiles` forces a new fallow zone, ESLint zone changes, and boundary-test amendments for no gain. **Instead:** put the modules in `shared/`.
+### Delivering through the adapter's `claudePlugins` option or Pi's `registerMcpServer()`
+
+**Why it's wrong:** `claudePlugins` reads only the root `.mcp.json` (not inline
+`mcpServers` or custom paths), keeps names as written, has no `CLAUDE_PLUGIN_DATA`,
+sits below every normal source, and a higher-precedence `claudePlugins` array
+REPLACES a lower one, which would clobber the user's own. `registerMcpServer()`
+servers are proxy-only (no `directTools: "search"`). PROJECT.md already rejects
+the latter.
+**Do this instead:** Write full translated entries into `mcp-adapter.json`.
+
+### A migration flag in `state.json` or in the marker
+
+**Why it's wrong:** It trips COMPAT-01's persisted-key clause and changes a
+byte-stable MC-5 contract, for information the file location already carries.
+
+### Moving the snapshot cache into `shared/` as a module global
+
+**Why it's wrong:** It is process-lifetime state with an external lifecycle
+(reload, shutdown). Conventions prefer an injected collaborator, and a global
+invites a test seam.
+
+### Name-keyed unstage
+
+**Why it's wrong:** After the rename, legacy and new copies have different names.
+**Do this instead:** Stay marker-keyed (MC-5), as today. That is why unstage needs
+no rename awareness.
 
 ## Integration Points
 
-### External (Pi runtime, 0.86.1)
+### External
 
-| Service | Integration | Notes |
-|---------|-------------|-------|
-| `ctx.ui.notify` | text sink | No-op in print/json (`runner.js:114-118` `noOpUIContext`). Forwarded in rpc today. |
-| `pi.appendEntry(customType, data)` | JSON sink | `agent-session.js:2131-2136`: `appendCustomEntry` then `_emit({type:"entry_appended", entry})`. Serialized by `print-mode.js:84-86` and `rpc-mode.js:265-266`. Not in LLM context. **Not streamed during the first `resources_discover`.** Throws before bind or when stale. |
-| `ctx.mode` | selector input | `ExtensionContext.mode: "tui"\|"rpc"\|"json"\|"print"` (`types.d.ts:209-214`). |
-| Command handler throws | fallback | print/json: `console.error("Extension error ...")`. rpc: `extension_error` event. No schema. |
+| Service | Integration pattern | Notes |
+|---|---|---|
+| pi-mcp-adapter 5 config loader | Files: we write `<agentDir>/mcp-adapter.json` (precedence 5) and `<cwd>/.pi/mcp-adapter.json` (precedence 9); `/reload` re-reads | Merge is **per field** (`mergeServerMaps`), so a same-name full definition elsewhere merges with ours rather than replacing it (except transport switches, which strip the other transport's fields). Project-file servers need project trust plus a per-definition approval. A rename or a `directTools` change re-prompts. OAuth credentials are keyed by server name: **the rename forces re-sign-in** for OAuth servers |
+| pi-mcp-adapter status channel | `pi.events.on("pi-mcp-adapter/status/v1", h)`; payload `{version:1, servers:[{name,status,toolCount,directToolCount,disabled,listenState,...}], ...}` | Statuses: `connected`, `cached`, `failed`, `needs-auth`, `not-connected`, `blocked`, `disabled`. Adapter 5 stops lazy servers after discovery, so `cached`/`not-connected` is the normal resting state, not a fault |
+| pi-mcp-adapter as a concurrent writer | It rewrites `mcp-adapter.json` with tmp+rename under no lock we share | Lost-update window between our read and our rename. Keep the read-modify-write span short (read inside commit, not at prepare time), or accept and document it. Our `proper-lockfile` guard serializes only our own processes |
+| Pi 1.0 | `pi.events` (`EventBus.on` returns an unsubscribe), `SourceInfo` with `builtin:` paths, `getAllTools()` | Built-in MCP is turned off by adapter 5 (`-builtin:mcp`); when the adapter is absent and the built-in is on, the built-in serves only Pi's `mcp.json`, which no longer contains our entries after migration. Detection must therefore report `{requires pi-mcp}` |
+| Project config dir | We hard-code `<cwd>/.pi`; the adapter uses `getConfigDirName()` (`piConfig.configDir`) | Same CFGDIR-01 gap as today; not widened by this milestone |
 
-### Internal boundaries
+### Internal Boundaries
 
 | Boundary | Communication | Notes |
-|----------|---------------|-------|
-| orchestrators -> shared/notify-context | `notifyWithContext(ctx, pi, context, rows, kind, cardinality)` | Signature stable. `context` becomes a policy map. |
-| edge -> shared/notification-dispatch | `notifyUsageError(ctx, host, msg)` | Gains `host`. |
-| domain/github-auth -> orchestrators/auth-host | structured device-code callback | Replaces the raw string. AUTH-09 gate is retargeted. |
-| edge/browse -> shared/notification-mode | `presentationFor(ctx.mode).interactive` | The single mode switch. |
-| shared -> platform | `pi-api.ts` types and `softDepStatus` | Already allowed. |
+|---|---|---|
+| reconcile `apply.ts` ↔ `mcp-migration.ts` | Direct call, own lock (CR-01) | Runs before `applyPlan` in each scope; WR-01 isolation |
+| `mcp-migration.ts` ↔ `bridges/mcp/migrate.ts` | Barrel export | Bridge returns the rename map; orchestrator writes state |
+| stage ↔ legacy sweep | Same prepare/commit, two-file replacement handle | Rollback restores both files |
+| `index.ts` → `EdgeDeps` → info handler → `info.ts` | Injected tracker | Mirrors `completionCache` |
+| hooks matchers / agents tool tokens ↔ adapter tool names | None today | **Open decision.** Literal `mcp__<S>__<T>` matchers (`domain/components/hooks/matcher.ts`) compare against Pi's `event.toolName`, which under the adapter is `mcp` (proxy) or `<prefix>_<tool>` (direct, default prefix = sanitized server name). They do not match today. Exact Claude names are reachable with a per-entry `toolPrefix: "mcp"` plus a server name that ends in `_`: `formatToolName` yields `mcp__<server>_<tool>`, so server `plugin_<p>_<s>_` gives `mcp__plugin_<p>_<s>__<tool>`. If Claude Code's plugin tool form is `mcp__plugin_<p>_<s>__<tool>` (MEDIUM: assumed, not re-verified this session; confirm with `claude-code-compat-research`), that would make matchers, `PreToolUse` `tool_name`, and agent `tools:` tokens line up with no translation layer. Not in the listed features. Decide at naming time, because changing names twice costs users two OAuth re-sign-ins |
+
+## Open Questions for Requirements
+
+1. Overlay carry-forward field list (`disabled` at least; `directTools`/`includeTools`/`excludeTools`/`approveTools`?).
+2. Orphan marked legacy entries (no owning record in scope): leave with a warning (recommended) or move.
+3. Whether a successful migration is silent (RECON-05 style) or announced once, given that it can force OAuth re-sign-in and project re-approval.
+4. Whether to adopt the exact-Claude tool-name alignment (the `toolPrefix: "mcp"` + trailing-`_` naming) as part of "upstream server naming".
+5. `pi-mcp-adapter` as an optional peer dependency (pi-subagents precedent) or docs-only.
+6. When `mcp.json` leaves the NFR-10 write set (a future milestone, after the migration window).
 
 ## Sources
 
-- Codebase at `features/json` HEAD `ab3d9c31`. All file:line references were checked with `rg` and `sed` in this worktree.
-- `node_modules/@earendil-works/pi-coding-agent@0.86.1`: `dist/core/extensions/types.d.ts` (:209-216, :255, :991), `dist/core/extensions/loader.js` (:110-125, :280-295), `dist/core/extensions/runner.js` (:114-125), `dist/core/agent-session.js` (:2009-2036, :2131-2136), `dist/modes/print-mode.js` (:15-130), `dist/modes/rpc/rpc-mode.js` (:225-275).
-- `.fallowrc.json`, `eslint.config.js` (:96-150), `rule-packs/architecture.json`, `docs/unused-type-member-gate.md`, `tests/edge/notification-boundary.ts`, `tests/architecture/catalog-uat/mock-pi.ts`, `tests/architecture/no-credential-leak.test.ts`.
+- Repo at `8b6ac3bc` (features/mcp-4): `bridges/mcp/{stage,unstage,collision-slots,marker,substitute,safe-set,types,index}.ts`, `persistence/locations.ts`, `platform/pi-api.ts`, `orchestrators/reconcile/{apply,backfill}.ts`, `orchestrators/plugin/{info,prune-rollback}.ts`, `index.ts`, `domain/name.ts`, `domain/components/hooks/matcher.ts`, `bridges/agents/convert.ts`, `.fallowrc.json`, `scripts/check-unused-type-members.contracts.json`, `tests/architecture/{peer-floor,gate-targets,compat-01-no-expansion,config-state-write-seams,integration-materialization-gate}.test.ts` -- HIGH
+- `.planning/BACKLOG.md` MCPSRC-01, MENVX-01, ENVLIT-01, ENVDOC-01, CFGDIR-01 -- HIGH (cross-checked against 5.0.0 source)
+- `pi-mcp-adapter@5.0.0` tarball: `docs/configuration.md` (file layout, nine-source precedence, built-in replacement, project trust), `docs/extension-api.md` (Runtime status snapshots, runtime registration, `claudePlugins`), `docs/tools.md` (`directTools: "search"`), `config.ts` (`getConfigSources`, `mergeServerMaps`, `translatePiMcpServer`, `readValidatedConfig` JSONC, `writeProjectServerDisabledOverride`), `types.ts` (`MCP_STATUS_EVENT`, `McpStatusSnapshot`, `formatToolName`, `sanitizeServerPrefix`), `mcp-status.ts`, `index.ts` (publication timing), `utils.ts` (`interpolateEnvVars`, `resolveCommandSecret`), `CHANGELOG.md` 5.0.0 -- HIGH
+- `@earendil-works/pi-coding-agent@1.0.0` tarball: `dist/core/source-info.d.ts` (`BUILTIN_PATH_PREFIX`), `dist/core/event-bus.d.ts`, `dist/core/extensions/types.d.ts` (`events`, `registerMcpServer`), `dist/extensions/mcp/*` (the built-in registers no tool named `mcp`), `CHANGELOG.md` (`builtin:<name>` naming) -- HIGH
+- Commits `74162ca6`, `5b1d8ef6`, `dac3a245`, `69e0870a`, `4f82096f` (file lists only) -- HIGH for scope, not re-verified against 1.0
 
 ---
-*Architecture research for: json-output (mode-keyed presentation strategies)*
-*Researched: 2026-09-28*
+*Architecture research for: mcp-4 (MCP 4)*
+*Researched: 2026-10-01*

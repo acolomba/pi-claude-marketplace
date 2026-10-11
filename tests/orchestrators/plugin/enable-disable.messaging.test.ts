@@ -52,10 +52,10 @@ test("the disable context renders a complete bare disabled transition", () => {
   } as const satisfies ResolvedRow<DisableMsg>;
 
   // act
-  const actual = composePluginLines(row, "user")[0]!.slice(2);
+  const renderedRow = composePluginLines(row, "user")[0]!.slice(2);
 
   // assert
-  assert.equal(actual, "◍ alpha [project] v1.2.3 (disabled)");
+  assert.equal(renderedRow, "◍ alpha [project] v1.2.3 (disabled)");
   assert.deepStrictEqual(row, {
     status: "disabled",
     severity: "info",
@@ -88,10 +88,10 @@ test("the disable context renders a complete failed row without leaking its fail
   } as const satisfies ResolvedRow<DisableMsg>;
 
   // act
-  const actual = composePluginLines(row, "user")[0]!.slice(2);
+  const renderedRow = composePluginLines(row, "user")[0]!.slice(2);
 
   // assert
-  assert.equal(actual, "⊘ beta v2.0.0 (failed) {permission denied, rollback partial}");
+  assert.equal(renderedRow, "⊘ beta v2.0.0 (failed) {permission denied, rollback partial}");
   assert.deepStrictEqual(row, {
     status: "failed",
     severity: "error",
@@ -118,10 +118,10 @@ test("the disable context renders a complete idempotent skipped row", () => {
   } as const satisfies ResolvedRow<DisableMsg>;
 
   // act
-  const actual = composePluginLines(row, "project")[0]!.slice(2);
+  const renderedRow = composePluginLines(row, "project")[0]!.slice(2);
 
   // assert
-  assert.equal(actual, "⊘ gamma [user] v3.0.0 (skipped) {already disabled}");
+  assert.equal(renderedRow, "⊘ gamma [user] v3.0.0 (skipped) {already disabled}");
   assert.deepStrictEqual(row, {
     status: "skipped",
     severity: "info",
@@ -154,10 +154,10 @@ test("the enable context renders a complete failed stale-gate row body", () => {
   } as const satisfies ResolvedRow<EnableMsg>;
 
   // act
-  const actual = composePluginLines(row, "user")[0]!.slice(2);
+  const renderedRow = composePluginLines(row, "user")[0]!.slice(2);
 
   // assert
-  assert.equal(actual, "⊘ delta v4.0.0 (failed) {lsp}");
+  assert.equal(renderedRow, "⊘ delta v4.0.0 (failed) {lsp}");
   assert.deepStrictEqual(row, {
     status: "failed",
     severity: "error",
@@ -183,10 +183,10 @@ test("the enable context renders a complete bare installed transition", () => {
   } as const satisfies ResolvedRow<EnableMsg>;
 
   // act
-  const actual = composePluginLines(row, "project")[0]!.slice(2);
+  const renderedRow = composePluginLines(row, "project")[0]!.slice(2);
 
   // assert
-  assert.equal(actual, "● epsilon v5.0.0 (installed)");
+  assert.equal(renderedRow, "● epsilon v5.0.0 (installed)");
   assert.deepStrictEqual(row, {
     status: "installed",
     severity: "info",
@@ -208,16 +208,16 @@ test("the enable context renders installed content reasons before the resolved m
     name: "eta",
     version: "6.0.0",
     scope: "project",
-    reasons: ["malformed skill", "requires pi-subagents", "requires pi-mcp"],
+    reasons: ["malformed skill", "requires pi-subagents", "requires pi-mcp-adapter"],
   } as const satisfies ResolvedRow<EnableMsg>;
 
   // act
-  const actual = composePluginLines(row, "user")[0]!.slice(2);
+  const renderedRow = composePluginLines(row, "user")[0]!.slice(2);
 
   // assert
   assert.equal(
-    actual,
-    "● eta [project] v6.0.0 (installed) {malformed skill, requires pi-subagents, requires pi-mcp}",
+    renderedRow,
+    "● eta [project] v6.0.0 (installed) {malformed skill, requires pi-subagents, requires pi-mcp-adapter}",
   );
   assert.deepStrictEqual(row, {
     status: "installed",
@@ -226,7 +226,7 @@ test("the enable context renders installed content reasons before the resolved m
     name: "eta",
     version: "6.0.0",
     scope: "project",
-    reasons: ["malformed skill", "requires pi-subagents", "requires pi-mcp"],
+    reasons: ["malformed skill", "requires pi-subagents", "requires pi-mcp-adapter"],
   });
 });
 
@@ -239,14 +239,14 @@ test("the enable context renders a partially-installed row with its resolved mar
     name: "theta",
     version: "7.0.0",
     scope: "user",
-    reasons: ["lsp", "requires pi-mcp"],
+    reasons: ["lsp", "requires pi-mcp-adapter"],
   } as const satisfies ResolvedRow<EnableMsg>;
 
   // act
-  const actual = composePluginLines(row, "user")[0]!.slice(2);
+  const renderedRow = composePluginLines(row, "user")[0]!.slice(2);
 
   // assert
-  assert.equal(actual, "◉ theta v7.0.0 (partially-installed) {lsp, requires pi-mcp}");
+  assert.equal(renderedRow, "◉ theta v7.0.0 (partially-installed) {lsp, requires pi-mcp-adapter}");
   assert.deepStrictEqual(row, {
     status: "partially-installed",
     severity: "info",
@@ -254,7 +254,7 @@ test("the enable context renders a partially-installed row with its resolved mar
     name: "theta",
     version: "7.0.0",
     scope: "user",
-    reasons: ["lsp", "requires pi-mcp"],
+    reasons: ["lsp", "requires pi-mcp-adapter"],
   });
   assert.equal(Object.hasOwn(row, "description"), false);
 });
@@ -271,10 +271,10 @@ test("the enable context renders a complete idempotent skipped row with optional
   } as const satisfies ResolvedRow<EnableMsg>;
 
   // act
-  const actual = composePluginLines(row, "user")[0]!.slice(2);
+  const renderedRow = composePluginLines(row, "user")[0]!.slice(2);
 
   // assert
-  assert.equal(actual, "⊘ zeta [project] (skipped) {already enabled}");
+  assert.equal(renderedRow, "⊘ zeta [project] (skipped) {already enabled}");
   assert.deepStrictEqual(row, {
     status: "skipped",
     severity: "info",
@@ -293,10 +293,10 @@ test("narrowDisableFailure classifies EACCES as permission denied", () => {
   cause.code = "EACCES";
 
   // act
-  const actual = narrowDisableFailure(cause);
+  const reasons = narrowDisableFailure(cause);
 
   // assert
-  assert.deepStrictEqual(actual, ["permission denied"]);
+  assert.deepStrictEqual(reasons, ["permission denied"]);
 });
 
 test("narrowDisableFailure classifies ENOENT as source missing", () => {
@@ -305,10 +305,10 @@ test("narrowDisableFailure classifies ENOENT as source missing", () => {
   cause.code = "ENOENT";
 
   // act
-  const actual = narrowDisableFailure(cause);
+  const reasons = narrowDisableFailure(cause);
 
   // assert
-  assert.deepStrictEqual(actual, ["source missing"]);
+  assert.deepStrictEqual(reasons, ["source missing"]);
 });
 
 test("narrowDisableFailure classifies EPERM as permission denied", () => {
@@ -317,10 +317,10 @@ test("narrowDisableFailure classifies EPERM as permission denied", () => {
   cause.code = "EPERM";
 
   // act
-  const actual = narrowDisableFailure(cause);
+  const reasons = narrowDisableFailure(cause);
 
   // assert
-  assert.deepStrictEqual(actual, ["permission denied"]);
+  assert.deepStrictEqual(reasons, ["permission denied"]);
 });
 
 test("narrowDisableFailure classifies an unsupported errno as unreadable", () => {
@@ -329,10 +329,10 @@ test("narrowDisableFailure classifies an unsupported errno as unreadable", () =>
   cause.code = "EIO";
 
   // act
-  const actual = narrowDisableFailure(cause);
+  const reasons = narrowDisableFailure(cause);
 
   // assert
-  assert.deepStrictEqual(actual, ["unreadable"]);
+  assert.deepStrictEqual(reasons, ["unreadable"]);
 });
 
 test("narrowDisableFailure classifies a nested errno by the outer Error fallback", () => {
@@ -342,10 +342,10 @@ test("narrowDisableFailure classifies a nested errno by the outer Error fallback
   const cause = new Error("cascade failed", { cause: nested });
 
   // act
-  const actual = narrowDisableFailure(cause);
+  const reasons = narrowDisableFailure(cause);
 
   // assert
-  assert.deepStrictEqual(actual, ["unreadable"]);
+  assert.deepStrictEqual(reasons, ["unreadable"]);
 });
 
 test("narrowEnableFailure gives a direct ENOENT precedence over its nested cause", () => {
@@ -356,10 +356,10 @@ test("narrowEnableFailure gives a direct ENOENT precedence over its nested cause
   cause.code = "ENOENT";
 
   // act
-  const actual = narrowEnableFailure(cause);
+  const reasons = narrowEnableFailure(cause);
 
   // assert
-  assert.deepStrictEqual(actual, ["source missing"]);
+  assert.deepStrictEqual(reasons, ["source missing"]);
 });
 
 test("narrowEnableFailure classifies a nested ENOENT as source missing", () => {
@@ -369,10 +369,10 @@ test("narrowEnableFailure classifies a nested ENOENT as source missing", () => {
   const cause = new Error("enable failed", { cause: nested });
 
   // act
-  const actual = narrowEnableFailure(cause);
+  const reasons = narrowEnableFailure(cause);
 
   // assert
-  assert.deepStrictEqual(actual, ["source missing"]);
+  assert.deepStrictEqual(reasons, ["source missing"]);
 });
 
 test("narrowEnableFailure keeps an unsupported direct errno brace-less", () => {
@@ -381,10 +381,10 @@ test("narrowEnableFailure keeps an unsupported direct errno brace-less", () => {
   cause.code = "EACCES";
 
   // act
-  const actual = narrowEnableFailure(cause);
+  const reasons = narrowEnableFailure(cause);
 
   // assert
-  assert.deepStrictEqual(actual, []);
+  assert.deepStrictEqual(reasons, []);
 });
 
 test("narrowEnableFailure keeps an unsupported nested errno brace-less", () => {
@@ -394,10 +394,10 @@ test("narrowEnableFailure keeps an unsupported nested errno brace-less", () => {
   const cause = new Error("enable failed", { cause: nested });
 
   // act
-  const actual = narrowEnableFailure(cause);
+  const reasons = narrowEnableFailure(cause);
 
   // assert
-  assert.deepStrictEqual(actual, []);
+  assert.deepStrictEqual(reasons, []);
 });
 
 test("narrowEnableFailure keeps a non-Error nested throw brace-less", () => {
@@ -405,10 +405,10 @@ test("narrowEnableFailure keeps a non-Error nested throw brace-less", () => {
   const cause = new Error("enable failed", { cause: "thrown string" });
 
   // act
-  const actual = narrowEnableFailure(cause);
+  const reasons = narrowEnableFailure(cause);
 
   // assert
-  assert.deepStrictEqual(actual, []);
+  assert.deepStrictEqual(reasons, []);
 });
 
 test("narrowEnableFailure keeps a plain Error brace-less", () => {
@@ -416,10 +416,10 @@ test("narrowEnableFailure keeps a plain Error brace-less", () => {
   const cause = new Error("enable failed");
 
   // act
-  const actual = narrowEnableFailure(cause);
+  const reasons = narrowEnableFailure(cause);
 
   // assert
-  assert.deepStrictEqual(actual, []);
+  assert.deepStrictEqual(reasons, []);
 });
 
 test("narrowEnableFailure classifies a missing clone directory as source missing", () => {
@@ -433,10 +433,10 @@ test("narrowEnableFailure classifies a missing clone directory as source missing
   });
 
   // act
-  const actual = narrowEnableFailure(cause);
+  const reasons = narrowEnableFailure(cause);
 
   // assert
-  assert.deepStrictEqual(actual, ["source missing"]);
+  assert.deepStrictEqual(reasons, ["source missing"]);
 });
 
 test("narrowEnableFailure keeps an unrelated not-installable shape brace-less", () => {
@@ -450,10 +450,10 @@ test("narrowEnableFailure keeps an unrelated not-installable shape brace-less", 
   });
 
   // act
-  const actual = narrowEnableFailure(cause);
+  const reasons = narrowEnableFailure(cause);
 
   // assert
-  assert.deepStrictEqual(actual, []);
+  assert.deepStrictEqual(reasons, []);
 });
 
 test("staleGateDropped ignores an empty unsupported-kind list", () => {
@@ -467,10 +467,10 @@ test("staleGateDropped ignores an empty unsupported-kind list", () => {
   });
 
   // act
-  const actual = staleGateDropped(cause);
+  const renderedRow = staleGateDropped(cause);
 
   // assert
-  assert.equal(actual, undefined);
+  assert.equal(renderedRow, undefined);
 });
 
 test("staleGateDropped ignores a missing unsupported-kind list", () => {
@@ -483,10 +483,10 @@ test("staleGateDropped ignores a missing unsupported-kind list", () => {
   });
 
   // act
-  const actual = staleGateDropped(cause);
+  const renderedRow = staleGateDropped(cause);
 
   // assert
-  assert.equal(actual, undefined);
+  assert.equal(renderedRow, undefined);
 });
 
 test("staleGateDropped ignores a no-longer-installable shape", () => {
@@ -500,10 +500,10 @@ test("staleGateDropped ignores a no-longer-installable shape", () => {
   });
 
   // act
-  const actual = staleGateDropped(cause);
+  const renderedRow = staleGateDropped(cause);
 
   // assert
-  assert.equal(actual, undefined);
+  assert.equal(renderedRow, undefined);
 });
 
 test("staleGateDropped ignores a non-partialable structural failure", () => {
@@ -517,10 +517,10 @@ test("staleGateDropped ignores a non-partialable structural failure", () => {
   });
 
   // act
-  const actual = staleGateDropped(cause);
+  const renderedRow = staleGateDropped(cause);
 
   // assert
-  assert.equal(actual, undefined);
+  assert.equal(renderedRow, undefined);
 });
 
 test("staleGateDropped ignores a plain Error", () => {
@@ -528,10 +528,10 @@ test("staleGateDropped ignores a plain Error", () => {
   const cause = new Error("enable failed");
 
   // act
-  const actual = staleGateDropped(cause);
+  const renderedRow = staleGateDropped(cause);
 
   // assert
-  assert.equal(actual, undefined);
+  assert.equal(renderedRow, undefined);
 });
 
 test("staleGateDropped preserves first-seen unsupported-kind order and deduplicates reasons", () => {
@@ -545,10 +545,15 @@ test("staleGateDropped preserves first-seen unsupported-kind order and deduplica
   });
 
   // act
-  const actual = staleGateDropped(cause);
+  const renderedRow = staleGateDropped(cause);
 
   // assert
-  assert.deepStrictEqual(actual, ["lsp", "unsupported hooks", "unsupported component"]);
+  assert.deepStrictEqual(renderedRow, [
+    "lsp",
+    "unsupported hooks",
+    "unsupported mcp",
+    "unsupported component",
+  ]);
 });
 
 test("ENABLE_CONTEXT declares complete row policies", () => {
@@ -666,10 +671,10 @@ test("the disable context renders the dependents-remain refusal reason", () => {
     runWithNothingLoaded().softDeps,
     DISABLE_CONTEXT.rowPolicies,
   );
-  const actual = composePluginLines(resolved!.plugins[0]!, "user")[0]!.slice(2);
+  const renderedRow = composePluginLines(resolved!.plugins[0]!, "user")[0]!.slice(2);
 
   // assert
-  assert.equal(actual, "⊘ shared-lib (failed) {dependents remain}");
+  assert.equal(renderedRow, "⊘ shared-lib (failed) {dependents remain}");
 });
 
 describe("composeDisableRefusalCause", () => {

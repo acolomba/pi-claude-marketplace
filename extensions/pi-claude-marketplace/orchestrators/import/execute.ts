@@ -23,7 +23,7 @@ import {
   errorMessage,
   PluginShapeError,
 } from "../../shared/errors.ts";
-import { notifyDiagnostic } from "../../shared/notification-dispatch.ts";
+import { notifyDiagnostic, notifyMcpConfigNotices } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import {
   type MarketplaceStatus,
@@ -37,6 +37,7 @@ import {
   type MarketplaceRows,
   type Plural,
 } from "../../shared/notify-context.ts";
+import { ownValue, setOwn } from "../../shared/own-key.ts";
 import { redactAbsolutePaths, redactCauseChain } from "../../shared/redact-absolute-paths.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 
@@ -61,6 +62,7 @@ import type { ExtensionContext } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
+import type { McpConfigNotice } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 
 export interface MarketplaceAddedOutcome {
@@ -205,6 +207,12 @@ interface MutableImportResult {
   unexpectedPluginFailures: UnexpectedPluginFailureOutcome[];
   diagnostics: ImportDiagnostic[];
   changedResources: boolean;
+  /**
+   * AFILE-04: the MCP config notices the installs returned, in install order.
+   * `importClaudeSettings` shows them after the cascade and leaves them off
+   * the returned result.
+   */
+  mcpConfigNotices: McpConfigNotice[];
 }
 
 export interface ImportDeps {
@@ -247,6 +255,7 @@ function emptyResult(): MutableImportResult {
     unexpectedPluginFailures: [],
     diagnostics: [],
     changedResources: false,
+    mcpConfigNotices: [],
   };
 }
 
@@ -872,6 +881,10 @@ async function installOnePlannedPlugin(
     return "unexpected-failure";
   }
 
+  // AFILE-04: both arms carry notices; a failed install can still have
+  // rewritten the MCP config through a dependency that committed first.
+  result.mcpConfigNotices.push(...(outcome.mcpConfigNotices ?? []));
+
   // CR-01: a third `InstallPluginOutcome` arm must become a compile error here,
   // not get counted as a successful install in the cascade totals. The
   // mechanism is the DECLARED RETURN TYPE, not the switch: TypeScript proves a
@@ -998,7 +1011,7 @@ async function executeScopedPlan(
   const blockedMarketplaces = new Set<string>();
 
   for (const marketplace of scopePlan.marketplacesToEnsure) {
-    const existing = state.marketplaces[marketplace.marketplace];
+    const existing = ownValue(state.marketplaces, marketplace.marketplace);
     if (existing !== undefined) {
       reconcileExistingMarketplace(
         result,
@@ -1034,7 +1047,10 @@ async function executeScopedPlan(
     // flips the record to a direct install and returns `installed` with no
     // resource change. Every other existing record is already what the
     // settings ask for and is skipped here.
-    const existingPlugin = state.marketplaces[plugin.ref.marketplace]?.plugins[plugin.ref.plugin];
+    const existingPlugin = ownValue(
+      ownValue(state.marketplaces, plugin.ref.marketplace)?.plugins,
+      plugin.ref.plugin,
+    );
     if (existingPlugin !== undefined && existingPlugin.provenance !== "dependency") {
       result.skippedExistingPlugins.push({
         kind: "plugin-skip",
@@ -1189,7 +1205,7 @@ async function stampReenabledWhereLocalDeclares(
     const key = `${installed.plugin}@${installed.marketplace}`;
     // eslint-disable-next-line no-await-in-loop -- each stamp reads the previous stamp's write
     const localCfg = await loadConfig(locations.configLocalJsonPath);
-    if (localCfg.status !== "valid" || localCfg.config.plugins?.[key] === undefined) {
+    if (localCfg.status !== "valid" || ownValue(localCfg.config.plugins, key) === undefined) {
       continue;
     }
 
@@ -1202,7 +1218,7 @@ async function stampReenabledWhereLocalDeclares(
       installed.marketplace,
       { enabled: true },
     );
-    plugins[key] = {};
+    setOwn(plugins, key, {});
   }
 
   return { ...ensure, plugins };
@@ -1234,7 +1250,7 @@ function buildBatchedPatchForScope(
       continue;
     }
 
-    marketplaces[added.marketplace] = { source: rawSource };
+    setOwn(marketplaces, added.marketplace, { source: rawSource });
   }
 
   const plugins: Record<string, Partial<PluginConfigEntry>> = {};
@@ -1246,7 +1262,7 @@ function buildBatchedPatchForScope(
     const key = `${installed.plugin}@${installed.marketplace}`;
     // D-04-07: a promotion that enabled a disabled record declares it the way
     // the enable path does; every other install declares the bare key.
-    plugins[key] = installed.reenabled === true ? { enabled: true } : {};
+    setOwn(plugins, key, installed.reenabled === true ? { enabled: true } : {});
   }
 
   return {
@@ -1277,7 +1293,7 @@ function buildRepairPatchForScope(
       continue;
     }
 
-    marketplaces[skipped.marketplace] = { source: rawSource };
+    setOwn(marketplaces, skipped.marketplace, { source: rawSource });
   }
 
   const plugins: Record<string, Record<string, never>> = {};
@@ -1286,7 +1302,7 @@ function buildRepairPatchForScope(
       continue;
     }
 
-    plugins[`${skipped.plugin}@${skipped.marketplace}`] = {};
+    setOwn(plugins, `${skipped.plugin}@${skipped.marketplace}`, {});
   }
 
   return { marketplaces, plugins };
@@ -1306,15 +1322,18 @@ function mergeEnsureAndRepairs(
 ): ImportConfigPatch {
   const marketplaces = { ...ensure.marketplaces };
   for (const [name, patch] of Object.entries(repair.marketplaces)) {
-    if (current.marketplaces?.[name] === undefined && marketplaces[name] === undefined) {
-      marketplaces[name] = patch;
+    if (
+      ownValue(current.marketplaces, name) === undefined &&
+      ownValue(marketplaces, name) === undefined
+    ) {
+      setOwn(marketplaces, name, patch);
     }
   }
 
   const plugins = { ...ensure.plugins };
   for (const [key, patch] of Object.entries(repair.plugins)) {
-    if (current.plugins?.[key] === undefined && plugins[key] === undefined) {
-      plugins[key] = patch;
+    if (ownValue(current.plugins, key) === undefined && ownValue(plugins, key) === undefined) {
+      setOwn(plugins, key, patch);
     }
   }
 
@@ -1499,6 +1518,8 @@ export async function importClaudeSettings(
   // per-operation tally under the `Import` label.
   notifyWithContext(opts.ctx, opts.run, IMPORT_CONTEXT, marketplaces, undefined, "plural");
   surfaceImportDiagnostics(opts.ctx, opts.run, result.diagnostics);
+  const { mcpConfigNotices, ...executionResult } = result;
+  notifyMcpConfigNotices(opts.ctx, opts.run, mcpConfigNotices);
 
-  return result;
+  return executionResult;
 }

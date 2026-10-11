@@ -273,7 +273,7 @@ test("applied installed renders content reasons before the resolved markers", ()
   const message = {
     name: "alpha",
     needsReload: true,
-    reasons: ["orphan rewake", "requires pi-subagents", "requires pi-mcp"],
+    reasons: ["orphan rewake", "requires pi-subagents", "requires pi-mcp-adapter"],
     scope: "project",
     severity: "info",
     status: "installed",
@@ -286,7 +286,7 @@ test("applied installed renders content reasons before the resolved markers", ()
   // assert
   assert.equal(
     rendered,
-    "● alpha [project] v1.2.3 (installed) {orphan rewake, requires pi-subagents, requires pi-mcp}",
+    "● alpha [project] v1.2.3 (installed) {orphan rewake, requires pi-subagents, requires pi-mcp-adapter}",
   );
 });
 
@@ -359,7 +359,7 @@ test("applied partially-installed renders content reasons before the resolved ma
   const message = {
     name: "alpha",
     needsReload: true,
-    reasons: ["lsp", "requires pi-subagents", "requires pi-mcp"],
+    reasons: ["lsp", "requires pi-subagents", "requires pi-mcp-adapter"],
     scope: "project",
     severity: "info",
     status: "partially-installed",
@@ -372,7 +372,7 @@ test("applied partially-installed renders content reasons before the resolved ma
   // assert
   assert.equal(
     rendered,
-    "◉ alpha [project] v1.2.3 (partially-installed) {lsp, requires pi-subagents, requires pi-mcp}",
+    "◉ alpha [project] v1.2.3 (partially-installed) {lsp, requires pi-subagents, requires pi-mcp-adapter}",
   );
 });
 

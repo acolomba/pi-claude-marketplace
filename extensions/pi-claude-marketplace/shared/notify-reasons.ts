@@ -36,9 +36,8 @@ import type { SoftDepStatus } from "../platform/pi-api.ts";
 
 /**
  * D-09: idempotent / already-in-requested-state reasons. The resource already
- * matches the exact state the command requested. (These are also today's
- * benign-skip reasons; the benign-skip SET itself is a later-phase concern --
- * only the reason literals are grouped here.)
+ * matches the exact state the command requested. These are also the benign-skip
+ * reasons; only the reason literals are grouped here.
  */
 const IDEMPOTENT_REASONS = [
   "up-to-date",
@@ -105,13 +104,15 @@ type UnsupportedReason =
   | "unsupported hooks"
   | "lsp"
   | "requires pi-subagents"
-  | "requires pi-mcp"
+  | "requires pi-mcp-adapter"
   // WDEP-04: the host workflow engine soft-dep marker.
   | "requires pi-dynamic-workflows"
   | "unsupported source"
   // D-90-05: the truthful marker for a dropped non-carve-out component kind.
   | "unsupported component"
-  | "no longer installable";
+  | "no longer installable"
+  // ANAME-07: a server needs a Claude Code MCP feature the adapter lacks.
+  | "unsupported mcp";
 
 /**
  * D-09: failure-class reasons -- an operation could not complete (permission /
@@ -195,7 +196,7 @@ export type DegradeKind = "skill" | "command";
  * command-private reasons + the structural marker must be EXACTLY the closed
  * `Reason` set. The two `Exclude` expressions resolve to `never` only when the
  * partition is total (no shared literal missing a home, no stray literal that is
- * not a `Reason`). `_AssertNever` pins each to `never` through a default-type
+ * not a `Reason`). `AssertNever` pins each to `never` through a default-type
  * constraint, so a non-`never` result is a TS2344 compile error where the proof
  * is declared.
  *
@@ -205,10 +206,10 @@ export type DegradeKind = "skill" | "command";
  * consumed by the mapping it guards rather than exported for a caller who has no
  * use for it. Both are type-only, with no runtime footprint.
  */
-type _AssertNever<T extends never> = T;
-type _UncoveredReason = Exclude<Reason, SharedTopicReason | CommandPrivateReason>;
-type _ExtraReason = Exclude<SharedTopicReason | CommandPrivateReason, Reason>;
-type ReasonsCoverageProof = [_AssertNever<_UncoveredReason>, _AssertNever<_ExtraReason>];
+type AssertNever<T extends never> = T;
+type UncoveredReason = Exclude<Reason, SharedTopicReason | CommandPrivateReason>;
+type ExtraReason = Exclude<SharedTopicReason | CommandPrivateReason, Reason>;
+type ReasonsCoverageProof = [AssertNever<UncoveredReason>, AssertNever<ExtraReason>];
 type Proven<T> = ReasonsCoverageProof extends [never, never] ? T : never;
 
 /**

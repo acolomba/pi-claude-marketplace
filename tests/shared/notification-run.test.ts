@@ -10,11 +10,12 @@ import {
   requireNotificationMode,
   createCommandRunState,
 } from "../../extensions/pi-claude-marketplace/shared/notification-run.ts";
+import { adapterCommand } from "../platform/pi-inventory-seed.ts";
 
 import { runWithNothingLoaded } from "./notification-run-seeds.ts";
 
 import type {
-  ToolInventory,
+  PiInventory,
   ToolInventoryItem,
 } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type {
@@ -42,10 +43,13 @@ void (null satisfies NotificationOrigin);
 
 test("takes a snapshot without an entry sink or command identity", () => {
   // arrange
-  const inventory = mock<ToolInventory>({ exactParams: true, name: "tool inventory" });
+  const inventory = mock<PiInventory>({ exactParams: true, name: "Pi inventory" });
   when(() => inventory.getAllTools())
     .thenReturn([])
     .times(3);
+  when(() => inventory.getCommands())
+    .thenReturn([])
+    .times(1);
 
   // act
   const snapshot = openNotificationSnapshot(inventory);
@@ -61,7 +65,7 @@ test("keeps the root identity when the supplied origin later changes", () => {
   // arrange
   const origin = { kind: "command", commandId: "plugin list", invocationId: "run-a" } as const;
   const supplied = { ...origin };
-  const pi = { getAllTools: () => [], appendEntry: () => {} };
+  const pi = { getAllTools: () => [], getCommands: () => [], appendEntry: () => {} };
   const run = openNotificationRun(pi, supplied);
 
   // act
@@ -76,15 +80,18 @@ test("keeps the root identity when the supplied origin later changes", () => {
   assert.strictEqual(run.entrySink, pi);
 });
 
-test("D-05: opening a run reads the tool inventory exactly three times", () => {
+test("D-05: opening a run reads the tools three times and the commands once", () => {
   // arrange
-  const pi = mock<ToolInventory & NotificationEntrySink>({
+  const pi = mock<PiInventory & NotificationEntrySink>({
     exactParams: true,
-    name: "tool inventory",
+    name: "Pi inventory",
   });
   when(() => pi.getAllTools())
-    .thenReturn([{ name: "subagent" }, { name: "mcp" }])
+    .thenReturn([{ name: "subagent" }])
     .times(3);
+  when(() => pi.getCommands())
+    .thenReturn([adapterCommand()])
+    .times(1);
 
   // act
   const run = openNotificationRun(pi, {
@@ -112,6 +119,7 @@ test("allocates independent command state and preserves supplied state before in
       state.needsReload = true;
       return [];
     },
+    getCommands: () => [],
     appendEntry: () => {},
   };
 
@@ -138,7 +146,7 @@ test("allocates independent command state and preserves supplied state before in
 for (const kind of ["load", "hook"] as const) {
   test(`opens ${kind} without command completion state`, () => {
     // arrange
-    const pi = { getAllTools: () => [], appendEntry: () => {} };
+    const pi = { getAllTools: () => [], getCommands: () => [], appendEntry: () => {} };
 
     // act
     const run = openNotificationRun(pi, { kind });
@@ -161,10 +169,11 @@ test("D-05: a run keeps its snapshot when the inventory later answers differentl
   let tools: readonly ToolInventoryItem[] = [];
   const pi = {
     getAllTools: () => tools,
+    getCommands: () => [],
     appendEntry: (customType, payload) => {
       runWithNothingLoaded().entrySink.appendEntry(customType, payload);
     },
-  } satisfies ToolInventory & NotificationEntrySink;
+  } satisfies PiInventory & NotificationEntrySink;
   const run = openNotificationRun(pi, {
     kind: "command",
     commandId: "plugin",

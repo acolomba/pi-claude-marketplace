@@ -74,46 +74,46 @@ async function seedMarketplace(
 
 function createMockActionHandlers(): {
   readonly handlers: BrowseActionHandlers;
-  readonly mockInstall: SubcommandHandler;
-  readonly mockUninstall: SubcommandHandler;
-  readonly mockPluginInfo: SubcommandHandler;
-  readonly mockEnable: SubcommandHandler;
-  readonly mockDisable: SubcommandHandler;
+  readonly installHandler: SubcommandHandler;
+  readonly uninstallHandler: SubcommandHandler;
+  readonly pluginInfoHandler: SubcommandHandler;
+  readonly enableHandler: SubcommandHandler;
+  readonly disableHandler: SubcommandHandler;
 } {
-  const mockInstall = mock<SubcommandHandler>({
+  const installHandler = mock<SubcommandHandler>({
     exactParams: true,
     name: "install handler",
   });
-  const mockUninstall = mock<SubcommandHandler>({
+  const uninstallHandler = mock<SubcommandHandler>({
     exactParams: true,
     name: "uninstall handler",
   });
-  const mockPluginInfo = mock<SubcommandHandler>({
+  const pluginInfoHandler = mock<SubcommandHandler>({
     exactParams: true,
     name: "pluginInfo handler",
   });
-  const mockEnable = mock<SubcommandHandler>({
+  const enableHandler = mock<SubcommandHandler>({
     exactParams: true,
     name: "enable handler",
   });
-  const mockDisable = mock<SubcommandHandler>({
+  const disableHandler = mock<SubcommandHandler>({
     exactParams: true,
     name: "disable handler",
   });
 
   return {
     handlers: {
-      install: mockInstall,
-      uninstall: mockUninstall,
-      pluginInfo: mockPluginInfo,
-      enable: mockEnable,
-      disable: mockDisable,
+      install: installHandler,
+      uninstall: uninstallHandler,
+      pluginInfo: pluginInfoHandler,
+      enable: enableHandler,
+      disable: disableHandler,
     },
-    mockInstall,
-    mockUninstall,
-    mockPluginInfo,
-    mockEnable,
-    mockDisable,
+    installHandler,
+    uninstallHandler,
+    pluginInfoHandler,
+    enableHandler,
+    disableHandler,
   };
 }
 
@@ -262,37 +262,37 @@ for (const { action, local, expectedHandler, expectedArgs } of [
   {
     action: "install" as const,
     local: true,
-    expectedHandler: "mockInstall" as const,
+    expectedHandler: "installHandler" as const,
     expectedArgs: "my-plugin@official --scope project --local",
   },
   {
     action: "install" as const,
     local: false,
-    expectedHandler: "mockInstall" as const,
+    expectedHandler: "installHandler" as const,
     expectedArgs: "my-plugin@official --scope user",
   },
   {
     action: "uninstall" as const,
     local: false,
-    expectedHandler: "mockUninstall" as const,
+    expectedHandler: "uninstallHandler" as const,
     expectedArgs: "my-plugin@official --scope project",
   },
   {
     action: "info" as const,
     local: false,
-    expectedHandler: "mockPluginInfo" as const,
+    expectedHandler: "pluginInfoHandler" as const,
     expectedArgs: "my-plugin@official --scope user",
   },
   {
     action: "enable" as const,
     local: false,
-    expectedHandler: "mockEnable" as const,
+    expectedHandler: "enableHandler" as const,
     expectedArgs: "my-plugin@official --scope project",
   },
   {
     action: "disable" as const,
     local: false,
-    expectedHandler: "mockDisable" as const,
+    expectedHandler: "disableHandler" as const,
     expectedArgs: "my-plugin@official --scope project",
   },
 ]) {
@@ -404,13 +404,13 @@ test("TUI mode exercises custom UI factory, render, invalidate, handleInput, and
   const factory = customFactory.value;
   assert.ok(factory !== undefined);
   let capturedResult: unknown;
-  const mockTui = { requestRender: () => {} } as unknown as Parameters<typeof factory>[0];
-  const mockTheme = {
+  const tui = { requestRender: () => {} } as unknown as Parameters<typeof factory>[0];
+  const theme = {
     fg: (_c: string, s: string) => s,
     bold: (s: string) => s,
   } as unknown as Parameters<typeof factory>[1];
-  const mockKb = {} as unknown as Parameters<typeof factory>[2];
-  const comp = factory(mockTui, mockTheme, mockKb, (r: unknown) => {
+  const keybindings = {} as unknown as Parameters<typeof factory>[2];
+  const comp = factory(tui, theme, keybindings, (r: unknown) => {
     capturedResult = r;
   });
   assert.ok(comp !== null && typeof comp === "object" && !(comp instanceof Promise));
@@ -432,7 +432,7 @@ test("TUI mode exercises custom UI factory, render, invalidate, handleInput, and
 
   // Also exercise onCancel -> done(null) on the marketplaces screen
   let cancelResult: unknown;
-  const comp2 = factory(mockTui, mockTheme, mockKb, (r: unknown) => {
+  const comp2 = factory(tui, theme, keybindings, (r: unknown) => {
     cancelResult = r;
   });
   assert.ok(comp2 !== null && typeof comp2 === "object" && !(comp2 instanceof Promise));
@@ -466,13 +466,13 @@ test("TUI mode pluginLoader fallback when marketplace block is missing", async (
 
   const factory = customFactory.value;
   assert.ok(factory !== undefined);
-  const mockTui = { requestRender: () => {} } as unknown as Parameters<typeof factory>[0];
-  const mockTheme = {
+  const tui = { requestRender: () => {} } as unknown as Parameters<typeof factory>[0];
+  const theme = {
     fg: (_c: string, s: string) => s,
     bold: (s: string) => s,
   } as unknown as Parameters<typeof factory>[1];
-  const mockKb = {} as unknown as Parameters<typeof factory>[2];
-  const comp = factory(mockTui, mockTheme, mockKb, () => {});
+  const keybindings = {} as unknown as Parameters<typeof factory>[2];
+  const comp = factory(tui, theme, keybindings, () => {});
   assert.ok(comp !== null && typeof comp === "object" && !(comp instanceof Promise));
 
   // Remove state so loadPluginListPayload returns empty payload []

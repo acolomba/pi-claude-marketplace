@@ -108,6 +108,7 @@ import {
   errorMessage,
 } from "../../shared/errors.ts";
 import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
+import { notifyMcpConfigNotices } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import { type PluginFailedMessage } from "../../shared/notification-types.ts";
 import {
@@ -116,6 +117,7 @@ import {
   type Plural,
   type Single,
 } from "../../shared/notify-context.ts";
+import { ownValue } from "../../shared/own-key.ts";
 import {
   withLockedStateTransaction,
   type LockedStateTransactionDeps,
@@ -528,11 +530,11 @@ async function snapshotAfterRefresh(args: RefreshOneArgs): Promise<RefreshSnapsh
   // state. Read it OUTSIDE the lock (read-only seam; mergeScopeConfigs is a
   // pure reducer over loadConfig, which never throws).
   const { merged } = await loadMergedScopeConfig(locations);
-  const autoupdate = merged.marketplaces[name]?.entry.autoupdate ?? false;
+  const autoupdate = ownValue(merged.marketplaces, name)?.entry.autoupdate ?? false;
   return withLockedStateTransaction(
     locations,
     async (tx) => {
-      const record = tx.state.marketplaces[name];
+      const record = ownValue(tx.state.marketplaces, name);
       if (record === undefined) {
         // TOCTOU race: the marketplace was removed between
         // `resolveScopeOrNotifyNotAdded`'s pre-guard `loadState` and this guard's
@@ -877,6 +879,17 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
     },
   ];
   notifyWithContext(ctx, run, UPDATE_CONTEXT, cascadeRows, undefined, cardinality);
+  // AFILE-04: the notices of the cascade's updates, shown after the rows they
+  // explain. A failed update can carry them too: its MCP commit succeeded
+  // before a later bridge or the finalize failed. The no-op paths above have
+  // only `unchanged` outcomes, which carry none.
+  notifyMcpConfigNotices(
+    ctx,
+    run,
+    outcomes.flatMap((o) =>
+      o.partition === "updated" || o.partition === "failed" ? (o.mcpConfigNotices ?? []) : [],
+    ),
+  );
 }
 
 /**

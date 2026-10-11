@@ -5,40 +5,35 @@
 // pi-subagents' own `resolveSkillsWithFallback`, and that the resolved
 // skill never enters the parent/global catalog (invocation-private).
 //
-// pi-subagents is an OPTIONAL peer -- never a `dependencies` or
-// `devDependencies` entry -- and its package.json `exports` map exposes
-// only ".", "./background-work", and "./delegation". The resolver lives in
-// the un-exported internal skills module, so it cannot be imported by a
-// bare specifier subpath (that throws ERR_PACKAGE_PATH_NOT_EXPORTED even
-// when the package is installed).
+// pi-subagents is an optional peer -- never a `dependencies` or
+// `devDependencies` entry. The resolver lives in its internal skills module,
+// which the package's `exports` map does not expose, so the test imports the
+// compiled `src/agents/skills.js` in place through the shared loader in
+// pi-subagents-peer.ts.
 //
-// It also cannot be imported directly from its installed location: Node
-// refuses native TypeScript type-stripping for any file whose resolved
-// path contains a `node_modules` segment
-// (ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING), and an npm-installed
-// package -- global or local -- always lives under one. This test copies
-// the installed package's real, unmodified `src/` tree into a scratch
-// directory outside node_modules and imports the internal module from
-// there by an absolute file path via `pathToFileURL`. The test skips only
-// when the peer is absent: no root resolves, or the resolved root has no
-// `src/` tree and no `package.json`. An explicit `PI_SUBAGENTS_ROOT` that
-// names an existing directory also counts as present. A present peer with
-// no `src/` tree fails the test, and so does a present peer that fails to
-// copy or import, because either one means the check silently stopped
-// running.
+// The test skips when the peer is not installed, so `npm run check` stays
+// green there. It also skips when the installed version is below the declared
+// peer floor, because a pass there proves nothing about a supported version.
+// An at-or-above-floor package whose module is missing or fails to import
+// fails the test, and so does a `PI_SUBAGENTS_ROOT` that names no
+// pi-subagents package. A run reports the proven version as a diagnostic.
 
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
-import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { test } from "node:test";
-import { pathToFileURL } from "node:url";
 
 import { emitGeneratedAgentFile } from "../../extensions/pi-claude-marketplace/bridges/agents/frontmatter.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { createHermeticEnvironment } from "../platform/hermetic-environment.ts";
+
+import {
+  findPiSubagentsPackage,
+  isBelowPeerFloor,
+  loadPiSubagentsModule,
+  readPeerFloor,
+} from "./pi-subagents-peer.ts";
 
 interface ResolvedSkillLike {
   readonly name: string;
@@ -59,93 +54,32 @@ interface PiSubagentsSkillsModule {
   readonly discoverAvailableSkills: (cwd: string) => DiscoveredSkillLike[];
 }
 
-interface PiSubagentsRoot {
-  readonly dir: string;
-  /** True when `PI_SUBAGENTS_ROOT` named the root, so the operator opted in. */
-  readonly explicit: boolean;
-}
-
-/**
- * Locates the installed pi-subagents package root. Checks an env override
- * first, then falls back to the conventional global npm install location
- * (`npm root -g`) so the test works across machines without hardcoding a
- * platform-specific path.
- */
-function resolvePiSubagentsPackageRoot(): PiSubagentsRoot | undefined {
-  const override = process.env.PI_SUBAGENTS_ROOT;
-  if (override) {
-    return { dir: override, explicit: true };
-  }
-
-  try {
-    const globalNodeModules = execFileSync("npm", ["root", "-g"], {
-      encoding: "utf8",
-      timeout: 5000,
-    }).trim();
-    return globalNodeModules
-      ? { dir: path.join(globalNodeModules, "pi-subagents"), explicit: false }
-      : undefined;
-  } catch {
-    // Global npm root lookup is best-effort; treated as "not reachable".
-    return undefined;
-  }
-}
-
-/**
- * Copies the package's real `src/` tree into `<scratchRoot>/pi-subagents-src`
- * (outside node_modules, sidestepping Node's node_modules type-stripping
- * restriction) and dynamically imports the internal skills module from
- * there by absolute file path. Returns undefined only when the peer is
- * absent, so the caller can skip. Throws when a present peer has no `src/`
- * tree (the root holds a `package.json`, or an explicit `PI_SUBAGENTS_ROOT`
- * names an existing directory), and when the copy, the module lookup, or
- * the import fails.
- */
-async function loadPiSubagentsSkillsModule(
-  root: PiSubagentsRoot | undefined,
-  scratchRoot: string,
-): Promise<PiSubagentsSkillsModule | undefined> {
-  if (!root) {
-    return undefined;
-  }
-
-  const installedSrcDir = path.join(root.dir, "src");
-  if (!existsSync(installedSrcDir)) {
-    const installed = existsSync(path.join(root.dir, "package.json"));
-    if (installed || (root.explicit && existsSync(root.dir))) {
-      assert.fail(`pi-subagents at ${root.dir} is present but has no src/ tree`);
-    }
-
-    return undefined;
-  }
-
-  const scratchSrcDir = path.join(scratchRoot, "pi-subagents-src");
-  await cp(installedSrcDir, scratchSrcDir, { recursive: true });
-
-  const internalModulePath = path.join(scratchSrcDir, "agents", "skills.ts");
-  assert.ok(
-    existsSync(internalModulePath),
-    `pi-subagents at ${root.dir} has a src/ tree but no agents/skills.ts`,
-  );
-
-  return (await import(pathToFileURL(internalModulePath).href)) as PiSubagentsSkillsModule;
-}
-
 test("SC-2 / AGSK-06: emitted skillPath resolves the staged skill via pi-subagents' resolveSkillsWithFallback and stays out of the global catalog", async (t) => {
-  // npm reads its global prefix from ~/.npmrc, so the lookup runs before the
-  // hermetic environment repoints HOME.
-  const piSubagentsRoot = resolvePiSubagentsPackageRoot();
+  // Find the peer before the hermetic HOME hides the operator's npm config,
+  // which can move the `npm root -g` prefix.
+  const peer = await findPiSubagentsPackage();
+  const belowFloor = peer !== undefined && (await isBelowPeerFloor(peer.version));
   const originalOffline = process.env.PI_OFFLINE;
   const { root: tmpRoot } = await createHermeticEnvironment(t, "skillpath-sc2-");
   const runtimeCwd = path.join(tmpRoot, "runtime-cwd");
   const generatedName = `skillpath-sc2-${randomUUID().slice(0, 8)}`;
 
   try {
-    const skillsModule = await loadPiSubagentsSkillsModule(piSubagentsRoot, tmpRoot);
-    if (!skillsModule) {
-      t.skip("pi-subagents resolver module not reachable in this environment");
+    if (!peer) {
+      t.skip("pi-subagents is not installed in this environment");
       return;
     }
+
+    if (belowFloor) {
+      t.skip(
+        `pi-subagents ${peer.version} at ${peer.root} is below the peer floor ${await readPeerFloor()}`,
+      );
+      return;
+    }
+
+    // arrange
+    t.diagnostic(`pi-subagents ${peer.version} at ${peer.root}`);
+    const skillsModule = await loadPiSubagentsModule<PiSubagentsSkillsModule>(peer, "skills");
 
     const { resolveSkillsWithFallback, discoverAvailableSkills } = skillsModule;
 
@@ -211,8 +145,9 @@ test("SC-2 / AGSK-06: emitted skillPath resolves the staged skill via pi-subagen
       "utf8",
     );
 
-    // localBaseDir = dirname(agent.filePath), mirroring pi-subagents' own
-    // foreground/background call sites (0.35.1 execution.ts).
+    // act
+    // localBaseDir = dirname(agent.filePath), mirroring how pi-subagents
+    // resolves an agent's skills for both foreground and background runs.
     const { resolved, missing } = resolveSkillsWithFallback(
       [generatedName],
       runtimeCwd,
@@ -221,6 +156,7 @@ test("SC-2 / AGSK-06: emitted skillPath resolves the staged skill via pi-subagen
       path.dirname(agentFilePath),
     );
 
+    // assert
     assert.ok(
       resolved.some((skill) => skill.name === generatedName),
       "resolveSkillsWithFallback must resolve the generated skill by name via the emitted skillPath",

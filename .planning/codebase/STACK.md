@@ -29,9 +29,10 @@ last_mapped_at: 2026-10-05
 
 **Core:**
 - No web/app framework -- this is a Pi extension (library-style), not a server or SPA
-- `@earendil-works/pi-coding-agent` (peer dep `>=0.86.1`, dev dep `^0.86.1`) - the Pi extension host API (`ctx.ui.notify`, `resources_discover`, `session_start`, tool registration)
-- `@earendil-works/pi-tui` (peer dep `*`, dev dep `^0.84.2`) - Pi terminal UI primitives
-- `pi-subagents` (optional peer dep `>=0.35.0`) - soft-dependency companion extension for agent artifact rendering; degrades gracefully when absent
+- `@earendil-works/pi-coding-agent` (peer dep `>=1.0.0`, dev dep `^1.0.0`) - the Pi extension host API (`ctx.ui.notify`, `resources_discover`, `session_start`, tool registration)
+- `@earendil-works/pi-tui` (peer dep `*`, dev dep `^1.0.0`) - Pi terminal UI primitives
+- `pi-subagents` (optional peer dep `>=0.74.0`) - soft-dependency companion extension for agent artifact rendering; degrades gracefully when absent
+- `pi-mcp-adapter` (optional peer dep `>=5.2.0 <6`) - soft-dependency companion extension that serves MCP servers; never installed into this repository
 
 **Testing:**
 - `node:test` (Node's built-in test runner) - suites under `tests/{architecture,bridges,domain,edge,orchestrators,persistence,platform,shared,transaction}/**/*.test.ts` plus `tests/index.test.ts` (`npm test`; `npm run test:modules` is the same minus `architecture`; `npm run test:unpaired` runs `tests/architecture/**` plus `tests/{domain,platform}/**/*-fake.test.ts`, the tests with no source pair), plus a separate `tests/integration/**/*.test.ts` suite (`npm run test:integration`) and `tests/e2e/**/*.test.ts` (`npm run test:e2e`, pinned ref; `npm run test:e2e:nightly` runs against floating `main`)
@@ -41,13 +42,13 @@ last_mapped_at: 2026-10-05
 **Build/Dev:**
 - No bundler/build step -- TypeScript is type-checked only (`tsc --noEmit`); Node runs `.ts` sources natively
 - `eslint` `^10.4.0` with flat config (`eslint.config.js`, ~520 lines; `npm run lint` passes `--max-warnings 0` and covers `extensions tests scripts eslint.config.js`), including the architecture-boundary rules (BLOCK C) and the NFR-5 git-surface rules (BLOCK F); the output and import bans live in the fallow rule pack
-- `prettier` `^3.8.3` for formatting (`npm run format` / `format:check`)
-- `fallow` `^3.27.0` - whole-graph static analysis (`.fallowrc.json`). `npm run fallow` first fails on any rule-pack `WARN` that `fallow rule-pack test` prints, then chains four subcommands, each `--fail-on-issues --format human`:
+- `prettier` `^3.9.9` for formatting (`npm run format` / `format:check`)
+- `fallow` `^3.31.0` - whole-graph static analysis (`.fallowrc.json`). `npm run fallow` first fails on any rule-pack `WARN` that `fallow rule-pack test` prints, then chains four subcommands, each `--fail-on-issues --format human`:
   - `fallow dead-code` (entry point `extensions/pi-claude-marketplace/index.ts`), scoped to production reachability by `production.deadCode`
   - `fallow dead-code --no-production --circular-deps --re-export-cycles`, which carries the two cycle classes across `tests/` and `scripts/`
   - `fallow health` (`maxCyclomatic: 20`, `maxCognitive: 15`, plus `maxCrap: 0`, which switches CRAP OFF -- see the CRAP note in TESTING.md before touching it)
   - `.fallowrc.json` also loads `rulePacks: ["rule-packs/architecture.json"]` (11 rules: `no-stdio`, `no-console`, `migrate-console-warn-only`, `debug-log-console-error-only`, `notify-chokepoint`, `pi-peer-chokepoint`, `isomorphic-git-chokepoint`, `proper-lockfile-chokepoint`, `write-file-atomic-chokepoint`, `no-network-modules`, `fetch-chokepoint`) enforcing output and import chokepoints
-  - `fallow dupes` (`threshold: 3`, with one ignored-clone ID pre-approved in `duplicates.ignoredClones`)
+  - `fallow dupes` (`threshold: 3`, with no `duplicates.ignoredClones` entry; reviewed clone groups carry inline `fallow-ignore-next-line code-duplication` markers)
   - `.fallowrc.json`'s `boundaries` block defines 14 architecture zones (`entry`, `edge`, `orchestrators`, `bridges-agents`, `bridges-commands`, `bridges-mcp`, `bridges-skills`, `bridges-hooks`, `bridges-workflows`, `domain`, `transaction`, `persistence`, `platform`, `shared`) with an explicit allow-list of legal import edges between zones -- finer-grained than the ESLint `no-restricted-paths` gate and the only mechanism enforcing that cross-bridge imports (e.g. `bridges-agents` -> `bridges-commands`) are forbidden. `rulePacks` loads `rule-packs/architecture.json`, the call and import bans for `extensions/pi-claude-marketplace/**` (stdio, console, direct `ctx.ui.notify`, the Pi peer, `isomorphic-git`, `proper-lockfile`, `write-file-atomic`, network modules, and `fetch`), each limited to its sanctioned files and reported as `policy-violation`
   - CI runs a separate `fallow-audit` job (`.github/workflows/lint.yml`) using the vendor action `fallow-rs/fallow@v3` with `command: audit`, `format: github-annotations` -- this gates PRs on newly-introduced findings only, distinct from the full `npm run fallow` gate that `npm run check` runs. The job installs the npm dependencies first, and it fails on a `warn` verdict or a degraded analysis as well as on `fail`
 - `pre-commit` framework (`.pre-commit-config.yaml`) runs trufflehog, gitlint, yamllint (with `--strict`, so a warning fails), yamlfmt, mdformat, markdownlint-cli2, zizmor, texthooks (smartquotes/dashes/ligatures/bidi-control fixers), plus two local hooks: `prettier` (formats staged files) and `npm-check` (`pass_filenames: false`), which runs `npm run check:commit` when a staged file is a build input. Its `files:` pattern names the same build inputs as the `paths` list in `ci.yml`, which the `pull_request` trigger reuses through a YAML anchor, so a docs-only commit skips it
@@ -74,7 +75,7 @@ last_mapped_at: 2026-10-05
 
 **Build:**
 - `tsconfig.json` - strict TypeScript compiler options (`exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`, `noUnusedLocals`, etc.), includes `extensions/**/*.ts` and `tests/**/*.ts`
-- `eslint.config.js` - flat ESLint config with `typescript-eslint`, `@stylistic/eslint-plugin`, `eslint-plugin-import-x`, `eslint-plugin-sonarjs`, plus project-specific architecture-boundary rules
+- `eslint.config.js` - flat ESLint config with `typescript-eslint` `^8.71.0`, `@stylistic/eslint-plugin`, `eslint-plugin-import-x` `^4.17.1`, `eslint-plugin-sonarjs` `^4.2.2` and `globals` `^17.13.0`, plus project-specific architecture-boundary rules
 - `.fallowrc.json` - fallow zone/boundary/health/dupes configuration (see Build/Dev above)
 - `.prettierrc.json` / `.prettierignore` - formatting config
 - `sonar-project.properties` - SonarCloud project settings (`sonar.projectKey=acolomba_pi-claude-marketplace`, `sonar.organization=acolomba`), coverage report paths, and a documented `sonar.cpd.exclusions` list for deliberately-parallel-structure files (agents/commands bridge `stage.ts`, `orchestrators/plugin/shared.ts`, several `*.messaging.ts` files)

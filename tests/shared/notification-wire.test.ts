@@ -405,3 +405,123 @@ test("rejects an async-rewake-summary payload that carries summary", () => {
   ]);
   assert.strictEqual(valid, false);
 });
+
+function mcpConfigNoticesPayload(notices: readonly unknown[]): Record<string, unknown> {
+  return {
+    schemaVersion: 1,
+    origin: { kind: "load" },
+    kind: "mcp-config-notices",
+    severity: "warning",
+    needsReload: false,
+    notices,
+  };
+}
+
+for (const { title, notices, expectedValid } of [
+  {
+    title: "accepts an mcp-config-notices payload with one notice",
+    notices: [{ kind: "left-unchanged", scope: "user", file: "mcp.json" }],
+    expectedValid: true,
+  },
+  {
+    title: "rejects an mcp-config-notices payload with no notice",
+    notices: [],
+    expectedValid: false,
+  },
+  {
+    title: "rejects an override-kept notice that names mcp.json",
+    notices: [
+      {
+        kind: "override-kept",
+        scope: "user",
+        file: "mcp.json",
+        plugin: "p",
+        server: "s",
+        fields: ["env"],
+      },
+    ],
+    expectedValid: false,
+  },
+]) {
+  test(`AFILE-04: ${title}`, () => {
+    // act
+    const valid = Compile(NOTIFICATION_PAYLOAD_SCHEMA).Check(mcpConfigNoticesPayload(notices));
+
+    // assert
+    assert.strictEqual(valid, expectedValid);
+  });
+}
+
+for (const { title, cause, expectedValid } of [
+  {
+    title: "accepts a removed row with a closed-set cause",
+    cause: "malformed",
+    expectedValid: true,
+  },
+  {
+    title: "rejects a removed row whose cause is outside its closed set",
+    cause: "gone",
+    expectedValid: false,
+  },
+]) {
+  test(`AMIG-03: ${title}`, () => {
+    // arrange
+    const payload = {
+      schemaVersion: 1,
+      origin: { kind: "load" },
+      kind: "mcp-migration",
+      severity: "warning",
+      needsReload: true,
+      rows: [{ kind: "removed", scope: "user", plugin: "p", marketplace: "m", server: "s", cause }],
+      notices: [],
+    };
+
+    // act
+    const valid = Compile(NOTIFICATION_PAYLOAD_SCHEMA).Check(payload);
+
+    // assert
+    assert.strictEqual(valid, expectedValid);
+  });
+}
+
+for (const { title, status, expectedValid } of [
+  {
+    title: "accepts an MCP server with a closed-set status",
+    status: "pending approval",
+    expectedValid: true,
+  },
+  {
+    title: "rejects an MCP server whose status is outside its closed set",
+    status: "online",
+    expectedValid: false,
+  },
+]) {
+  test(`ASTAT-01: ${title}`, () => {
+    // arrange
+    const payload = {
+      schemaVersion: 1,
+      origin: { kind: "load" },
+      kind: "plugin-info",
+      severity: "info",
+      needsReload: false,
+      marketplaceName: "mp",
+      marketplaceScope: "user",
+      marketplaceDetails: { autoupdate: false },
+      plugin: {
+        status: "installed",
+        name: "p",
+        id: "p@mp",
+        reasons: [],
+        componentsResolved: true,
+        components: { mcp: [{ name: "plugin:p:s", status }] },
+        requires: [{ companion: "pi-mcp-adapter", missing: false }],
+      },
+    };
+
+    // act
+    const valid = Compile(NOTIFICATION_PAYLOAD_SCHEMA).Check(payload);
+
+    // assert
+    assert.strictEqual(valid, expectedValid);
+  });
+}

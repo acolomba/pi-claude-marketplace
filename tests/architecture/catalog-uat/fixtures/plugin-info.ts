@@ -1,6 +1,16 @@
-import { piWithAllLoaded, piWithBothLoaded } from "../mock-pi.ts";
+import { piWithAllLoaded, piWithBothLoaded, piWithSubagentsLoaded } from "../mock-pi.ts";
 
 import type { FixtureMap } from "../fixture-types.ts";
+
+const COMMIT_COMMANDS_INSTALLED = {
+  status: "installed",
+  name: "commit-commands",
+  version: "1.2.0",
+  description: "Helpful git commit commands for everyday use.",
+  componentsResolved: true,
+  components: { agents: ["review-bot"], commands: ["c1", "c2"], skills: ["commit-summary"] },
+  requires: [{ companion: "pi-subagents", missing: false }],
+} as const;
 
 /** Catalog fixtures for the plugin info command surface. */
 export const PLUGIN_INFO_FIXTURES: FixtureMap = {
@@ -13,16 +23,7 @@ export const PLUGIN_INFO_FIXTURES: FixtureMap = {
         marketplaceScope: "user",
         marketplaceDetails: { autoupdate: true },
         plugin: {
-          status: "installed",
-          name: "commit-commands",
-          version: "1.2.0",
-          description: "Helpful git commit commands for everyday use.",
-          componentsResolved: true,
-          components: {
-            agents: ["review-bot"],
-            commands: ["c1", "c2"],
-            skills: ["commit-summary"],
-          },
+          ...COMMIT_COMMANDS_INSTALLED,
         },
       },
     },
@@ -35,16 +36,7 @@ export const PLUGIN_INFO_FIXTURES: FixtureMap = {
         marketplaceScope: "user",
         marketplaceDetails: { autoupdate: true },
         plugin: {
-          status: "installed",
-          name: "commit-commands",
-          version: "1.2.0",
-          description: "Helpful git commit commands for everyday use.",
-          componentsResolved: true,
-          components: {
-            agents: ["review-bot"],
-            commands: ["c1", "c2"],
-            skills: ["commit-summary"],
-          },
+          ...COMMIT_COMMANDS_INSTALLED,
           dependencies: ["helper@utils-mp"],
         },
       },
@@ -58,6 +50,29 @@ export const PLUGIN_INFO_FIXTURES: FixtureMap = {
         marketplaceScope: "user",
         marketplaceDetails: { autoupdate: true },
         plugin: {
+          ...COMMIT_COMMANDS_INSTALLED,
+          // Pre-rendered and pre-sorted on the dependency NAME (D-01-04):
+          // `both`, `helper`, `pinned`. The renderer does not sort.
+          dependencies: [
+            "both@utils-mp (^2.0.0, sha def5678)",
+            "helper@utils-mp (^1.0.0)",
+            "pinned@utils-mp (sha abc1234)",
+          ],
+        },
+      },
+    },
+
+    // ADET-01: the `requires:` line names every companion the components need,
+    // sorted by name, and tags the one the probe reports not loaded. The info
+    // command stamps the entries; the renderer only formats them.
+    "installed-with-missing-companion": {
+      pi: piWithSubagentsLoaded(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "claude-plugins-official",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: true },
+        plugin: {
           status: "installed",
           name: "commit-commands",
           version: "1.2.0",
@@ -65,15 +80,40 @@ export const PLUGIN_INFO_FIXTURES: FixtureMap = {
           componentsResolved: true,
           components: {
             agents: ["review-bot"],
-            commands: ["c1", "c2"],
-            skills: ["commit-summary"],
+            mcp: [{ name: "plugin:commit-commands:github", status: "status unknown" }],
           },
-          // Pre-rendered and pre-sorted on the dependency NAME (D-01-04):
-          // `both`, `helper`, `pinned`. The renderer does not sort.
-          dependencies: [
-            "both@utils-mp (^2.0.0, sha def5678)",
-            "helper@utils-mp (^1.0.0)",
-            "pinned@utils-mp (sha abc1234)",
+          requires: [
+            { companion: "pi-mcp-adapter", missing: true },
+            { companion: "pi-subagents", missing: false },
+          ],
+        },
+      },
+    },
+
+    // ADET-01: all three companions in package-name order. The probe finds
+    // pi-subagents and pi-mcp-adapter but not the host workflow engine.
+    "installed-with-every-companion": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "claude-plugins-official",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: true },
+        plugin: {
+          status: "installed",
+          name: "commit-commands",
+          version: "1.2.0",
+          description: "Helpful git commit commands for everyday use.",
+          componentsResolved: true,
+          components: {
+            agents: ["review-bot"],
+            mcp: [{ name: "plugin:commit-commands:github", status: "connected" }],
+            workflows: ["commit-commands:changelog"],
+          },
+          requires: [
+            { companion: "pi-dynamic-workflows", missing: true },
+            { companion: "pi-mcp-adapter", missing: false },
+            { companion: "pi-subagents", missing: false },
           ],
         },
       },
@@ -102,6 +142,10 @@ export const PLUGIN_INFO_FIXTURES: FixtureMap = {
             skills: ["commit-summary"],
             workflows: ["commit-commands:changelog", "commit-commands:release"],
           },
+          requires: [
+            { companion: "pi-dynamic-workflows", missing: false },
+            { companion: "pi-subagents", missing: false },
+          ],
         },
       },
     },
@@ -132,6 +176,7 @@ export const PLUGIN_INFO_FIXTURES: FixtureMap = {
             skills: ["commit-summary"],
             workflows: ["commit-commands:changelog"],
           },
+          requires: [{ companion: "pi-dynamic-workflows", missing: false }],
         },
       },
     },
@@ -165,6 +210,7 @@ export const PLUGIN_INFO_FIXTURES: FixtureMap = {
             skills: ["commit-summary"],
             workflows: ["commit-commands:changelog", "commit-commands:greet"],
           },
+          requires: [{ companion: "pi-dynamic-workflows", missing: false }],
         },
       },
     },
@@ -209,6 +255,7 @@ export const PLUGIN_INFO_FIXTURES: FixtureMap = {
             skills: ["alpha-skill"],
             workflows: ["alpha:changelog", "alpha:release"],
           },
+          requires: [{ companion: "pi-dynamic-workflows", missing: false }],
         },
       },
     },
@@ -461,6 +508,137 @@ export const PLUGIN_INFO_FIXTURES: FixtureMap = {
       },
     },
 
+    // ANAME-07: a left-out server is named with the feature that blocks it,
+    // beside the supported server, all sorted by name.
+    "partially-available-with-unsupported-mcp": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "community-mp",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: false },
+        plugin: {
+          status: "partially-available",
+          name: "db-tools",
+          version: "1.0.0",
+          description: "Database tools for everyday queries.",
+          reasons: ["unsupported mcp"],
+          componentsResolved: true,
+          components: {
+            mcp: [
+              { name: "plugin:db-tools:db" },
+              { name: "plugin:db-tools:live", unsupportedFeature: "ws" },
+            ],
+          },
+          requires: [{ companion: "pi-mcp-adapter", missing: false }],
+        },
+      },
+    },
+
+    // AVAR-04 / AVAR-05: a written server names its unset and withheld
+    // variables in one pair of parentheses.
+    "installed-with-mcp-variables": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "community-mp",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: false },
+        plugin: {
+          status: "installed",
+          name: "analytics",
+          version: "1.0.0",
+          description: "Product analytics tools.",
+          componentsResolved: true,
+          components: {
+            mcp: [
+              {
+                name: "plugin:analytics:api",
+                unsetVariables: ["ANALYTICS_TOKEN"],
+                withheldVariables: ["ANTHROPIC_API_KEY"],
+                status: "needs authentication",
+              },
+            ],
+          },
+          requires: [{ companion: "pi-mcp-adapter", missing: false }],
+        },
+      },
+    },
+
+    // ASTAT-01: each written server shows the adapter's state; the left-out
+    // server keeps only its unsupported feature.
+    "partially-installed-with-mcp-status": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "community-mp",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: false },
+        plugin: {
+          status: "partially-installed",
+          name: "ops-tools",
+          version: "1.0.0",
+          description: "Operations tools for everyday use.",
+          reasons: ["unsupported mcp"],
+          componentsResolved: true,
+          components: {
+            mcp: [
+              { name: "plugin:ops-tools:alerts", status: "cached, connects on first use" },
+              { name: "plugin:ops-tools:builds", status: "failed" },
+              { name: "plugin:ops-tools:live", unsupportedFeature: "ws" },
+              { name: "plugin:ops-tools:logs", status: "not connected" },
+              { name: "plugin:ops-tools:metrics", status: "disabled" },
+            ],
+          },
+          requires: [{ companion: "pi-mcp-adapter", missing: false }],
+        },
+      },
+    },
+
+    // ASTAT-01: a blocked project server reads `pending approval`.
+    "installed-with-mcp-pending-approval": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "community-mp",
+        marketplaceScope: "project",
+        marketplaceDetails: { autoupdate: false },
+        plugin: {
+          status: "installed",
+          name: "deploy-tools",
+          version: "1.0.0",
+          description: "Deployment tools for this project.",
+          componentsResolved: true,
+          components: {
+            mcp: [{ name: "plugin:deploy-tools:deploys", status: "pending approval" }],
+          },
+          requires: [{ companion: "pi-mcp-adapter", missing: false }],
+        },
+      },
+    },
+
+    // ASTAT-02: a usable snapshot that does not list the server reads `not loaded`.
+    "installed-with-mcp-not-loaded": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "community-mp",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: false },
+        plugin: {
+          status: "installed",
+          name: "ticket-tools",
+          version: "1.0.0",
+          description: "Ticket tools for everyday use.",
+          componentsResolved: true,
+          components: {
+            mcp: [{ name: "plugin:ticket-tools:tickets", status: "not loaded" }],
+          },
+          requires: [{ companion: "pi-mcp-adapter", missing: false }],
+        },
+      },
+    },
+
     "installed-both-scopes-fan-out": {
       pi: piWithBothLoaded(),
       message: {
@@ -490,6 +668,47 @@ export const PLUGIN_INFO_FIXTURES: FixtureMap = {
               version: "2.0.0",
               componentsResolved: true,
               components: { agents: ["a1"] },
+              requires: [{ companion: "pi-subagents", missing: false }],
+            },
+          },
+        ],
+      },
+    },
+
+    // ASTAT-01: the adapter runs the project entry, so the user row's server is overridden.
+    "installed-both-scopes-mcp-overridden": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "plugin-info-cascade",
+        blocks: [
+          {
+            kind: "plugin-info",
+            marketplaceName: "mp",
+            marketplaceScope: "project",
+            marketplaceDetails: { autoupdate: false },
+            plugin: {
+              status: "installed",
+              name: "ops-tools",
+              version: "1.0.0",
+              componentsResolved: true,
+              components: { mcp: [{ name: "plugin:ops-tools:alerts", status: "connected" }] },
+              requires: [{ companion: "pi-mcp-adapter", missing: false }],
+            },
+          },
+          {
+            kind: "plugin-info",
+            marketplaceName: "mp",
+            marketplaceScope: "user",
+            marketplaceDetails: { autoupdate: false },
+            plugin: {
+              status: "installed",
+              name: "ops-tools",
+              version: "1.0.0",
+              componentsResolved: true,
+              components: {
+                mcp: [{ name: "plugin:ops-tools:alerts", status: "overridden by project scope" }],
+              },
+              requires: [{ companion: "pi-mcp-adapter", missing: false }],
             },
           },
         ],

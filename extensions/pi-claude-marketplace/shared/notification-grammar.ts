@@ -1,5 +1,6 @@
 import { appendHooksBlock } from "./concerns/hooks.ts";
 import { formatCauseChain } from "./errors.ts";
+import { composeMcpConfigNoticesText, composeMcpMigrationText } from "./notification-mcp.ts";
 import { RAW_SURFACE_SEVERITY } from "./notification-resolve.ts";
 import { tallyCategory } from "./notification-summary.ts";
 
@@ -18,6 +19,7 @@ import type {
   MarketplaceInfoCascadeMessage,
   MarketplaceInfoMessage,
   MarketplaceNotAddedMessage,
+  McpServerSummaryEntry,
   PluginInfoCascadeMessage,
   PluginInfoComponentsResolved,
   PluginInfoMessage,
@@ -201,8 +203,8 @@ export function renderMpHeader(mp: ResolvedMarketplace): string {
       // `(skipped) {up-to-date}`, the idempotent autoupdate no-ops, etc.). The
       // reasons brace is formatted via composeReasons, the helper that backs
       // plugin-level skipped rows. mp-level skipped never emits
-      // {requires pi-subagents} / {requires pi-mcp} markers; resolve composes
-      // those on plugin rows only. composeReasons returns "" when mp.reasons is undefined
+      // {requires pi-subagents} / {requires pi-mcp-adapter} markers; resolve
+      // composes those on plugin rows only. composeReasons returns "" when mp.reasons is undefined
       // or empty, so the conditional join collapses cleanly with no trailing
       // space.
       const reasonsBrace = composeReasons(mp.reasons);
@@ -693,8 +695,9 @@ const COMPONENT_KINDS = COMPONENT_KIND_NAMES satisfies readonly Exclude<
 >[];
 
 /**
- * Append the per-kind component lines + optional dependencies line
- * for a resolved `PluginInfoRow`. Per-kind order is alphabetical
+ * Append the per-kind component lines, the optional `requires:` line and the
+ * optional dependencies line for a resolved `PluginInfoRow`, in that order.
+ * Per-kind order is alphabetical
  * (`agents`, `commands`, `hooks`, `mcp`, `skills`, `workflows`); within each
  * kind, names render in the caller-supplied order. The orchestrator pre-sorts;
  * the renderer does not.
@@ -707,11 +710,17 @@ const COMPONENT_KINDS = COMPONENT_KIND_NAMES satisfies readonly Exclude<
 function appendResolvedComponentLines(
   lines: string[],
   components: PluginInfoComponentsResolved["components"],
+  requires: PluginInfoComponentsResolved["requires"],
   dependencies: readonly string[] | undefined,
 ): void {
   for (const kind of COMPONENT_KINDS) {
     if (kind === "hooks") {
       appendHooksBlock(lines, components.hooks);
+      continue;
+    }
+
+    if (kind === "mcp") {
+      appendMcpLine(lines, components.mcp);
       continue;
     }
 
@@ -721,14 +730,67 @@ function appendResolvedComponentLines(
     }
   }
 
+  appendRequiresLine(lines, requires);
   appendDependenciesLine(lines, dependencies);
 }
 
 /**
+ * ANAME-07 / AVAR-04 / AVAR-05 / ASTAT-01: appends the optional
+ * `    mcp: <list>` line. Each entry is the server's Claude name. A left-out
+ * server adds ` (unsupported <feature>)` and never a state. A written server
+ * adds its state first, then its unset and withheld variable names, as
+ * ` (state; unset A, B; withheld C)`, each part only when present or
+ * non-empty. The entries arrive stamped and sorted.
+ */
+function appendMcpLine(
+  lines: string[],
+  entries: PluginInfoComponentsResolved["components"]["mcp"],
+): void {
+  if (entries !== undefined && entries.length > 0) {
+    lines.push(`    mcp: ${entries.map((entry) => mcpEntryText(entry)).join(", ")}`);
+  }
+}
+
+function mcpEntryText(entry: McpServerSummaryEntry): string {
+  if (entry.unsupportedFeature !== undefined) {
+    return `${entry.name} (unsupported ${entry.unsupportedFeature})`;
+  }
+
+  const parts = [
+    ...(entry.status === undefined ? [] : [entry.status]),
+    ...variablePart("unset", entry.unsetVariables),
+    ...variablePart("withheld", entry.withheldVariables),
+  ];
+  return parts.length === 0 ? entry.name : `${entry.name} (${parts.join("; ")})`;
+}
+
+function variablePart(label: string, names: readonly string[] | undefined): string[] {
+  return names === undefined || names.length === 0 ? [] : [`${label} ${names.join(", ")}`];
+}
+
+/**
+ * ADET-01: appends the optional `    requires: <list>` line. Each entry is the
+ * companion name, followed by ` (missing)` when the orchestrator tagged it
+ * missing. The orchestrator stamps and sorts the entries; the renderer only
+ * formats them and takes no probe of its own.
+ */
+function appendRequiresLine(
+  lines: string[],
+  requires: PluginInfoComponentsResolved["requires"],
+): void {
+  if (requires !== undefined && requires.length > 0) {
+    const entries = requires.map(({ companion, missing }) =>
+      missing ? `${companion} (missing)` : companion,
+    );
+    lines.push(`    requires: ${entries.join(", ")}`);
+  }
+}
+
+/**
  * Appends the optional `    dependencies: <list>` line. Both `renderPluginInfo`
- * arms end with this line, so it is LAST: after every per-kind line on the
- * resolved arm and after the `components: not resolved` marker on the
- * unresolved arm (INFO-02 / D-01-32).
+ * arms end with this line, so it is LAST: after every per-kind line and the
+ * optional `requires:` line on the resolved arm, and after the
+ * `components: not resolved` marker on the unresolved arm (INFO-02 / D-01-32).
  */
 function appendDependenciesLine(
   lines: string[],
@@ -804,18 +866,22 @@ export function renderPruneCommittedWarning(
  * bracket + version + (status) + optional reasons brace); optional
  * description block wrapped via `wrapDescription(text, 4, 66)`; then
  * either per-kind component lists at 4-space indent + optional
- * `dependencies:` line (componentsResolved: true), or the single
- * marker line `    components: not resolved` followed by the same
- * optional `dependencies:` line (componentsResolved: false, D-01-32).
+ * `requires:` line + optional `dependencies:` line
+ * (componentsResolved: true), or the single marker line
+ * `    components: not resolved` followed by the same optional
+ * `dependencies:` line (componentsResolved: false, D-01-32). The resolved
+ * line order is components, `requires:`, `dependencies:`, then `note:`.
  *
  * Reasons brace via `composeReasons`, which formats `plugin.reasons` as
- * given -- info messages NEVER emit soft-dep markers.
+ * given -- info messages NEVER emit soft-dep markers. ADET-01: the companions
+ * a resolved row needs render once, on the `requires:` line the orchestrator
+ * stamped.
  *
  * WR-09: `notes` renders LAST -- after the component block and after any
  * `dependencies:` line -- as one `    note: <text>` line per entry. A row that
  * carries none is byte-unchanged.
  *
- * SORT PRECONDITION: per-kind arrays and `dependencies` MUST be
+ * SORT PRECONDITION: per-kind arrays, `requires` and `dependencies` MUST be
  * pre-sorted at message construction. The renderer does not sort.
  */
 export function renderPluginInfo(message: PluginInfoMessage): string {
@@ -848,7 +914,7 @@ export function renderPluginInfo(message: PluginInfoMessage): string {
   // INFO-02 / INFO-05: per-kind components OR the unresolved marker.
   switch (plugin.componentsResolved) {
     case true:
-      appendResolvedComponentLines(lines, plugin.components, plugin.dependencies);
+      appendResolvedComponentLines(lines, plugin.components, plugin.requires, plugin.dependencies);
       break;
 
     case false:
@@ -1129,8 +1195,9 @@ export function formatEnvelopeArguments(envelope: ResolvedEnvelope, body: string
 
 /**
  * D-15: formats one resolved raw surface as its notify arguments. Every raw kind
- * passes its severity explicitly, read from `RAW_SURFACE_SEVERITY` (PMOD-01),
- * so each emitting arm yields two arguments.
+ * passes its severity explicitly, read from `RAW_SURFACE_SEVERITY` (PMOD-01) or,
+ * for the migration notice, from its resolved severity, so each emitting arm
+ * yields two arguments.
  * `undefined` means nothing is emitted. The diagnostic arm reads the line count
  * and the async-rewake arm reads the summary length, so only a zero-length line
  * list or summary is a no-op (D-05, D-08). Producer strings pass through
@@ -1173,5 +1240,15 @@ export function formatRawSurface(surface: ResolvedRawSurface): NotifyArguments |
         `plugin PATH not refreshed for ${surface.scope} scope (install state unreadable): ${surface.reason}`,
         RAW_SURFACE_SEVERITY[surface.kind],
       ];
+    case "mcp-config-notices":
+      return [
+        composeMcpConfigNoticesText(surface.section, surface.notices),
+        RAW_SURFACE_SEVERITY[surface.kind],
+      ];
+    case "mcp-migration": {
+      // AMIG-03: the reload hint is the notice's last line.
+      const text = composeMcpMigrationText(surface.rows, surface.notices);
+      return [surface.needsReload ? `${text}\n${RELOAD_HINT_TRAILER}` : text, surface.severity];
+    }
   }
 }

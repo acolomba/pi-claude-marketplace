@@ -1151,7 +1151,7 @@ void test("PROV-03: a private mirror forwards auth through clone and refresh fet
   };
 
   // act
-  const result = await materializeOrRefreshPluginMirror({
+  const mirror = await materializeOrRefreshPluginMirror({
     locations,
     cloneUrl: "https://gitlab.example.com/o/r",
     networkUrl: "https://gitlab.example.com/o/r",
@@ -1160,7 +1160,7 @@ void test("PROV-03: a private mirror forwards auth through clone and refresh fet
   });
 
   // assert
-  assert.deepEqual(result, {
+  assert.deepEqual(mirror, {
     pluginRoot: await locations.pluginCloneDir(pluginMirrorKey("https://gitlab.example.com/o/r")),
     resolvedSha: MIRROR_HEAD,
   });
@@ -1735,7 +1735,7 @@ void test("materializeMarketplaceTagClone: materializes the tag's tree without m
   await git.tag({ fs, dir: marketplaceRoot, ref: "foo--v1.0.0", object: tagOid });
 
   // act
-  const result = await materializeMarketplaceTagClone({
+  const tagClone = await materializeMarketplaceTagClone({
     locations,
     marketplaceRoot,
     marketplaceSource: GITHUB_REPO_URL,
@@ -1745,11 +1745,11 @@ void test("materializeMarketplaceTagClone: materializes the tag's tree without m
   });
 
   // assert
-  assert.equal(result.kind, "materialized");
-  if (result.kind === "materialized") {
-    assert.equal(result.resolvedSha, tagOid);
+  assert.equal(tagClone.kind, "materialized");
+  if (tagClone.kind === "materialized") {
+    assert.equal(tagClone.resolvedSha, tagOid);
     const pluginJson: unknown = JSON.parse(
-      await readFile(path.join(result.pluginRoot, ".claude-plugin", "plugin.json"), "utf8"),
+      await readFile(path.join(tagClone.pluginRoot, ".claude-plugin", "plugin.json"), "utf8"),
     );
     assert.deepEqual(pluginJson, { name: "foo" });
   }
@@ -1777,7 +1777,7 @@ void test("materializeMarketplaceTagClone: a warm-cache key skips re-copy and re
   );
 
   // act
-  const result = await materializeMarketplaceTagClone({
+  const tagClone = await materializeMarketplaceTagClone({
     locations,
     marketplaceRoot,
     marketplaceSource: GITHUB_REPO_URL,
@@ -1787,10 +1787,10 @@ void test("materializeMarketplaceTagClone: a warm-cache key skips re-copy and re
   });
 
   // assert: the sentinel content proves the warm key was never overwritten.
-  assert.equal(result.kind, "materialized");
-  if (result.kind === "materialized") {
+  assert.equal(tagClone.kind, "materialized");
+  if (tagClone.kind === "materialized") {
     const pluginJson: unknown = JSON.parse(
-      await readFile(path.join(result.pluginRoot, ".claude-plugin", "plugin.json"), "utf8"),
+      await readFile(path.join(tagClone.pluginRoot, ".claude-plugin", "plugin.json"), "utf8"),
     );
     assert.deepEqual(pluginJson, { name: "sentinel" });
   }
@@ -1918,7 +1918,7 @@ void test("materializeMarketplaceTagClone: no directory at the path source's rel
   await git.tag({ fs, dir: marketplaceRoot, ref: "foo--v1.0.0", object: tagOid });
 
   // act
-  const result = await materializeMarketplaceTagClone({
+  const tagClone = await materializeMarketplaceTagClone({
     locations,
     marketplaceRoot,
     marketplaceSource: GITHUB_REPO_URL,
@@ -1928,12 +1928,12 @@ void test("materializeMarketplaceTagClone: no directory at the path source's rel
   });
 
   // assert
-  assert.equal(result.kind, "missing-subdir");
+  assert.equal(tagClone.kind, "missing-subdir");
   // WR-07: the detail must name the source kind the user actually used
   // (`path`), not `git-subdir` -- a kind this install never touched.
-  assert.ok(result.kind === "missing-subdir");
-  assert.match(result.detail, /^path path "/u);
-  assert.doesNotMatch(result.detail, /git-subdir/u);
+  assert.ok(tagClone.kind === "missing-subdir");
+  assert.match(tagClone.detail, /^path path "/u);
+  assert.doesNotMatch(tagClone.detail, /git-subdir/u);
 });
 
 void test("materializeMarketplaceTagClone: a marketplace checkout with no discoverable origin remote still derives a key (RESEARCH A2)", async (t) => {
@@ -1944,7 +1944,7 @@ void test("materializeMarketplaceTagClone: a marketplace checkout with no discov
   await git.tag({ fs, dir: marketplaceRoot, ref: "foo--v1.0.0", object: tagOid });
 
   // act
-  const result = await materializeMarketplaceTagClone({
+  const tagClone = await materializeMarketplaceTagClone({
     locations,
     marketplaceRoot,
     marketplaceSource: marketplaceRoot,
@@ -1954,5 +1954,5 @@ void test("materializeMarketplaceTagClone: a marketplace checkout with no discov
   });
 
   // assert: materialization still succeeds off the name-keyed fallback.
-  assert.equal(result.kind, "materialized");
+  assert.equal(tagClone.kind, "materialized");
 });

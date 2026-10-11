@@ -11,7 +11,9 @@
 // orchestrators receive that run and never probe. The probe count therefore
 // belongs to the tests of those two roots, tests/edge/register.test.ts and
 // tests/index.test.ts, which each build their own strict Pi mock. This boundary
-// holds no Pi mock and sizes only emissions and `cwd`.
+// holds no Pi mock and sizes only emissions and `cwd`. `expectSoftDepProbes` is
+// the one place that says how many Pi reads a snapshot makes, so a change to the
+// probe's read shape breaks once instead of in every strict Pi mock.
 //
 // Every count is stated by the caller, never derived here. `ctx.cwd` is stated
 // only by a case whose path forwards it: a handler that rejects its input before
@@ -31,8 +33,11 @@ import { runWithNothingLoaded } from "../shared/notification-run-seeds.ts";
 import { createJsonCapture } from "./json-capture.ts";
 
 import type {
+  CommandInventoryItem,
   ExtensionCommandContext,
   ExtensionContext,
+  PiInventory,
+  ToolInventoryItem,
 } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { NotificationRun } from "../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 
@@ -51,6 +56,31 @@ export interface NotificationBoundary {
   readonly ctx: ExtensionCommandContext;
   readonly notifications: readonly Notification[];
   readonly verifyBoundary: () => void;
+}
+
+/**
+ * States `probes` soft-dependency probes on `pi`, each answering with `tools`
+ * and `commands`. A notification run takes one `softDepStatus(pi)` snapshot
+ * when it opens (D-05), and this is the one place that says how many Pi reads
+ * one snapshot makes: three `getAllTools()` reads (one per companion target)
+ * and one `getCommands()` read (the pi-mcp-adapter command arm). A change to
+ * the probe's read shape breaks here once (WR-08). A `probes` of 0 states nothing,
+ * because `times(0)` is no limit.
+ */
+export function expectSoftDepProbes(
+  pi: PiInventory,
+  probes: number,
+  tools: readonly ToolInventoryItem[] = [],
+  commands: readonly CommandInventoryItem[] = [],
+): void {
+  if (probes > 0) {
+    when(() => pi.getAllTools())
+      .thenReturn(tools)
+      .times(probes * 3);
+    when(() => pi.getCommands())
+      .thenReturn(commands)
+      .times(probes);
+  }
 }
 
 /**

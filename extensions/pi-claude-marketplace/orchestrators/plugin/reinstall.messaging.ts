@@ -168,7 +168,7 @@ function isManualRecoveryOutcome(
  *
  * CMC-13: `declaresAgents` / `declaresMcp` are required booleans, mapped to the
  * `dependencies: Dependency[]` tuple per SNM-06. The row's `dependencies` feed
- * `resolveRows`, which composes `{requires pi-subagents}` / `{requires pi-mcp}`
+ * `resolveRows`, which composes `{requires pi-subagents}` / `{requires pi-mcp-adapter}`
  * when the companion extension is unloaded (D-12).
  *
  * WARN-01 / WR-09 / D-86-03: a component this ledger degraded names its kind and
@@ -302,7 +302,7 @@ function outcomeToPluginMessage(outcome: ReinstallPluginOutcome): ReinstallMsg {
  * `declaresWorkflows` predicate flags to the `Dependency[]` tuple consumed by
  * `PluginReinstalledMessage.dependencies` per SNM-06. `resolveRows`
  * iterates this array to compose the `{requires pi-subagents}` /
- * `{requires pi-mcp}` / `{requires pi-dynamic-workflows}` markers when the
+ * `{requires pi-mcp-adapter}` / `{requires pi-dynamic-workflows}` markers when the
  * companion extension is unloaded (MSG-SD-1..2, D-12).
  *
  * WDEP-02: `workflows` pushes LAST, so a reinstall that declares agents and mcp

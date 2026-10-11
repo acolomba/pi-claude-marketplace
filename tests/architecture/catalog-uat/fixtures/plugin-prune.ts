@@ -372,8 +372,10 @@ export const PLUGIN_PRUNE_FIXTURES: FixtureMap = {
                 ),
                 rollbackPartial: [
                   {
-                    phase: "mcp",
-                    cause: new Error("Prune rollback found an occupied metadata path at mcp.json."),
+                    phase: "mcp adapter",
+                    cause: new Error(
+                      "Prune rollback found an occupied metadata path at mcp-adapter.json.",
+                    ),
                   },
                 ],
                 severity: "error",
@@ -409,8 +411,10 @@ export const PLUGIN_PRUNE_FIXTURES: FixtureMap = {
                 ),
                 rollbackPartial: [
                   {
-                    phase: "mcp",
-                    cause: new Error("Prune rollback found an occupied metadata path at mcp.json."),
+                    phase: "mcp adapter",
+                    cause: new Error(
+                      "Prune rollback found an occupied metadata path at mcp-adapter.json.",
+                    ),
                   },
                 ],
                 severity: "error",

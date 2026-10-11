@@ -1,830 +1,401 @@
-# Pitfalls Research: json-output (Mode-Keyed Presentation Strategies)
+# Pitfalls Research
 
-**Domain:** Adding a second (JSON) presentation strategy to a mature Pi extension,
-by pulling a presentation model out of a byte-locked text renderer, and selecting
-the strategy with Pi's `ctx.mode`
-**Researched:** 2026-09-28
-**Confidence:** HIGH for the Pi runtime facts (read from the installed
-`@earendil-works/pi-coding-agent` 0.86.1 `dist/`) and the repo gate facts (read
-from the tree at `ab3d9c31`). MEDIUM for the typebox 1.x behavior (training data
-plus the local usage pattern) and for the size estimates. LOW for anything
-marked "inferred".
+**Domain:** Brownfield Pi extension: Pi 1.0 floor bump, and plugin MCP delivery moved from `mcp.json` to pi-mcp-adapter 5's `mcp-adapter.json` (milestone `mcp-4`)
+**Researched:** 2026-10-01
+**Confidence:** HIGH for adapter and Pi behavior read from the published tarballs (`pi-mcp-adapter@5.0.0`, `@earendil-works/pi-coding-agent@1.0.0`) and from the `features/mcp` branch records. MEDIUM where a runtime behavior was read in source but not observed. Claude Code facts come from code.claude.com/docs/en/mcp through WebFetch; the research seam rates that tier LOW. The `features/mcp` spike's binary grep backs the naming facts.
 
-Locked decisions D1-D8 in `.planning/MILESTONE-CONTEXT.md` are taken as given.
-Where a pitfall shows that a locked decision has a consequence nobody has decided
-yet, it says **needs decision** and does not re-open the lock.
+## Phase vocabulary used below
+
+The roadmap does not exist yet. This file names phases by concern, in the order the pitfalls suggest:
+
+| Tag | Concern |
+| --- | --- |
+| **FLOOR** | Pi `>=1.0.0`, pi-subagents `>=0.74.0`, adapter 5 as the documented soft dep, all devDeps bumped, canaries re-run |
+| **DETECT** | Adapter-only detection: `{requires pi-mcp}` when the adapter is absent, even if Pi's built-in MCP is active |
+| **DELIVER** | Stage and unstage in `<scopeRoot>/mcp-adapter.json`, the NFR-10 write set, the 9-source collision walk, `directTools: "search"` |
+| **NAME** | Server keys from Claude Code's `plugin:<plugin>:<server>`, normalized |
+| **VARS** | `${VAR:-default}` parity and escaping against the adapter's second expansion pass |
+| **MIGRATE** | Reconcile moves marked entries out of both `mcp.json` files on `/reload` |
+| **STATUS** | Live adapter status in `/claude:plugin info` |
+| **DOCS** | Docs, live UAT, milestone close |
+
+**Ordering consequence (the most important one):** MIGRATE must ship in the same release as, and plan after, DELIVER + NAME + VARS. Every change to an entry's shape (name, `directTools`, escaping) also changes the adapter's project-approval hash, OAuth key and cache key. If migration moves entries before the final shape exists, a second rewrite follows, and users pay for re-approvals and re-sign-ins twice. Cut no release between DELIVER and MIGRATE: a user on that build gets new installs in `mcp-adapter.json` and old ones still in `mcp.json`.
 
 ---
 
 ## Critical Pitfalls
 
-### Pitfall 1: Pi binds extensions before the JSON/RPC writer subscribes, so lifecycle-time payloads never reach the stream
+### Pitfall 1: A commented `mcp-adapter.json` is read as malformed and wiped on the next install
 
 **What goes wrong:**
-In both non-interactive writers, Pi runs `session.bindExtensions(...)` first. That
-call emits `session_start` and then `resources_discover`. Pi calls
-`session.subscribe(...)` only after it returns:
-
-- `dist/modes/print-mode.js`: `await rebindSession()` binds first, then subscribes
-- `dist/modes/rpc/rpc-mode.js:230` binds, and `:265` subscribes
-
-`pi.appendEntry` emits `entry_appended` synchronously
-(`dist/core/agent-session.js:2131-2136`). So every payload appended during the
-startup `resources_discover` never appears on stdout in `--mode json` or RPC. That
-covers the reconcile-applied cascade, the `notifyDiagnostic` post-commit warnings
-(`orchestrators/reconcile/apply.ts:978`), the `reconcile aborted:` last-ditch line
-and the `plugin PATH not refreshed` warnings (`index.ts:128`, `:149`). The payloads
-still go into the in-memory session entries.
-
-Today this is a **regression for RPC**. The RPC UI context writes `notify`
-straight to stdout as `extension_ui_request`, with no subscription involved
-(`rpc-mode.js:87-95`), so RPC clients currently DO see startup reconcile output.
-Session replacement (new, fork, switch) has the same gap: `rebindSession` binds
-the new session before it moves the subscription. `/reload` behaves differently,
-because the subscription on the same session stays live. So reload-time payloads
-arrive and startup-time payloads do not.
+`bridges/mcp/stage.ts::readScopedDoc` parses with `JSON.parse`. On any parse failure it returns `{ doc: {}, malformed: true }`, and the commit then **replaces the whole file** ("non-plugin entries in it are lost"). `mcp.json` is strict JSON, so this tolerance was mostly theoretical. `mcp-adapter.json` is different: the adapter reads it with `parseJsonWithComments` = `strip-json-comments` with `trailingCommas: true` plus a UTF-8 BOM strip (`utils.ts:13-15`). A user file with one `//` comment or a trailing comma loads fine in the adapter, but our extension would treat it as malformed. It would then drop the user's `settings`, `imports`, `claudePlugins` and every hand-written server. `unstage.ts` throws `malformed JSON` instead, so uninstall would fail on every retry.
 
 **Why it happens:**
-The obvious mental model is "appendEntry is an event, and events stream". The
-bind-then-subscribe order is an internal detail of Pi's mode runners. No Pi doc
-covers it, and `entry_appended` is not in Pi's `docs/` or `CHANGELOG.md` at all.
+Stage and unstage are retargeted by swapping the `mcpJsonPath` getter. The parse step looks like plumbing, so nobody revisits it.
 
 **How to avoid:**
-- Treat lifecycle-time emission as a named design question. Write it into the
-  requirements before the JSON strategy is built. **Needs decision**: either
-  (a) accept the gap, document it in the JSON schema reference, and pin it with a
-  real-Pi e2e case that shows the entry is in the session but not on stdout, or
-  (b) find a Pi-sanctioned channel. Do not use timer deferral
-  (`setImmediate`/`setTimeout` from inside the handler) to "land after the
-  subscribe". Whether it wins the race depends on how many awaits are left inside
-  `bindExtensions`, and that changes between Pi patch releases.
-- Give the RPC regression its own CHANGELOG line. It is a user-visible behavior
-  change for RPC clients.
-- Add a real-Pi e2e case under `tests/e2e/` that runs `pi --mode json` with a
-  reconcile action pending, and asserts which entries do and do not appear. The
-  mock-Pi helpers (`tests/e2e/_helpers.ts` `makePi`) cannot show this ordering.
+- Parse with the adapter's exact grammar: BOM strip, comments, trailing commas. Add a test that feeds the same fixture to both parsers.
+- Never treat an unparseable `mcp-adapter.json` as empty. Refuse the stage with a typed error that names the file (fail-clean, NFR-3), the way `unstage` already does.
+- Decide what happens to comments on rewrite. Our `atomicWriteJson` drops them, and so do the adapter's own writers (`writeRawConfigObject`, `config.ts:1648`). Either accept that with a one-time warning when the source text had comments, or patch only the `mcpServers.<name>` paths with a comment-preserving editor (`jsonc-parser`'s `modify` and `applyEdits`). A new runtime dependency is a STACK decision. Silently dropping comments without saying so is not an option.
 
-**Warning signs:**
-The in-process tests (fake `pi.appendEntry` capture) show a startup reconcile
-payload, but `pi --mode json` stdout has none. RPC users report that "install on
-reload" feedback disappeared.
+**Warning signs:** a test fixture for `mcp-adapter.json` that has no comment, trailing comma or BOM. The `malformed ... it will be replaced` warning text survives into the new bridge.
 
-**Phase to address:**
-The JSON strategy / transport phase decides and documents. The e2e phase pins the
-behavior against real Pi.
+**Phase to address:** DELIVER (before any write lands). MIGRATE reuses the same reader.
 
 ---
 
-### Pitfall 2: Text byte drift during model extraction, hidden by fixtures that move with the code
+### Pitfall 2: The adapter's `mcp-servers` alias makes user servers disappear when we add `mcpServers`
 
 **What goes wrong:**
-D1 moves two things out of the renderers and into the model. The first is the
-per-verb `renderPluginRowBody` callbacks (`*.messaging.ts`, reached through
-`emitContextCascade` / `emitUpdateNoOpCascade` /
-`emitReconcileAppliedContextCascade` in `shared/notification-dispatch.ts`). The
-second is the render-time `softDepStatus(pi)` probe (`notification-dispatch.ts`
-`notify()` and `emitCascadeWith`). Each has a byte-level trap:
+The adapter reads `raw.mcpServers ?? raw["mcp-servers"]` (`config.ts:1288`, `getServersObject`). A user file that uses the legacy `mcp-servers` key works today. If our stage adds a top-level `mcpServers`, the `??` chooses ours, and every user server under `mcp-servers` stops loading. Nothing reports it.
 
-- **Per-verb arms are not uniform.** One status renders through different helpers
-  depending on the verb. `disabled` is `pluginRow(ICON_DISABLED, ...)` in
-  `install.messaging.ts:137`, but `renderDisabledRow(...)` in
-  `enable-disable.messaging.ts:106` and `list.messaging.ts:137`. A single
-  status-to-row text converter picks one and silently changes the other verbs'
-  bytes, unless the model carries the fact that tells them apart.
-- **Soft-dep markers are suppressed per verb and per status, not derived
-  uniformly.** Several arms pass hard-coded `false` soft-dep flags into
-  `composeReasons` (ENBL-15 / ENBL-18 on `disabled`, MSG-SD-3 on `uninstalled`,
-  marketplace headers at `notification-grammar.ts:246`, `:273`). A model that
-  computes "declares agents && pi-subagents not loaded" for every row adds
-  `{requires pi-subagents}` to rows that must never carry it.
-- **Marker position inside the brace is part of the bytes.** `composeReasons`
-  appends markers AFTER the caller's `reasons[]` ("orphan rewake" leads,
-  `docs/output-catalog.md` state `success-with-orphan-rewake-and-soft-dep`). A
-  model that merges markers into `reasons[]` before sorting, or that dedupes
-  them, reorders the brace.
-- **Whitespace folds.** `foldAdvisories`, `foldTallyAndHint`, `composeWithSummary`,
-  the `(no marketplaces)` sentinel for an empty cascade (but not for the update
-  no-op path), and the `\n\n` blocks in `notifyUsageError`, `notifyDiagnostic` and
-  `notifyStopHookOverrideCap` each own exact separators. A model that computes
-  "summary present" and "reload needed" but lets the text converter recompose
-  the joins is where a doubled or missing blank line appears.
-- **Text-only presentation.** The 66-column description truncation and wrapping
-  (`truncateDescription`, `notification-grammar.ts:113`), glyphs, and the
-  4-space and 6-space cause-chain indents are text decisions. If they move into
-  the model, the JSON carries truncated descriptions and indent strings.
+**How to avoid:** Mirror the adapter's own writer, `setServersObject`: fold `mcp-servers` into `mcpServers` and delete the alias in the same atomic write, or write into whichever key exists. The partition (ours/theirs by marker) must enumerate both keys. Add a fixture with `mcp-servers` only.
 
-The catalog gate (`tests/architecture/catalog-uat/catalog-contract.test.ts`,
-205 states, `EXPECTED_UTF8_BYTES = 26_619`) is the oracle. But it drives
-`NotificationMessage` **fixtures** through `notify()`, and the probe comes from
-`mock-pi.ts`. Once markers are resolved upstream, the fixtures must carry
-resolved markers. If a fixture and the renderer change in the same commit, the
-catalog stays green while the probe-to-marker derivation it used to cover moves
-into a module the catalog never drives.
+**Warning signs:** `classifyMcpServers` still looks only at `mcpServers`.
 
-**Why it happens:**
-"Byte form unchanged" is checked against one corpus (205 catalog states), but the
-extraction touches ~59 files that call the notify family. Per-verb differences
-live in arms nobody reads side by side.
-
-**How to avoid:**
-- **Characterize before moving.** Before extraction, capture a wire corpus: every
-  `(message, severity)` pair that `notification-dispatch.ts` emits across the
-  unit and integration suites. Use a throwaway, branch-local instrumentation
-  commit that is never merged, because test-only production seams are banned
-  (`no-test-only-production-surface.test.ts`). Key each pair by test file and
-  call order. Re-capture after extraction and diff. This covers the raw surfaces
-  and diagnostic headers that are not among the 205 catalog states. It is the
-  "characterize first, then change" pattern from the v1.18 retrospective.
-- `docs/output-catalog.md` must have an empty `git diff` for the whole extraction
-  phase, and `EXPECTED_UTF8_BYTES` / `EXPECTED_STATE_COUNT` must not move. Put
-  that in the phase's success criteria.
-- Give the probe-to-marker derivation its own owner test in the model module,
-  with the per-verb suppression table stated as data. Also keep
-  `tests/architecture/workflows-marker-coverage.test.ts`: its derived site scan
-  over `orchestrators/` must be re-pointed at wherever derivation now lives, not
-  deleted when it goes red.
-- Carry per-verb differences as explicit model facts (for example "markers
-  suppressed on this row" or "enable hint"). Do not have the text converter infer
-  the verb.
-
-**Warning signs:**
-A catalog fixture file changes in the same commit as `notification-grammar.ts`.
-A `*.messaging.test.ts` owner test is deleted rather than moved. The model module
-has one row builder per status, with no verb input.
-
-**Phase to address:**
-The model-extraction phase. The wire corpus is captured in a characterization step
-at the start of that phase, or in a phase before it.
+**Phase to address:** DELIVER.
 
 ---
 
-### Pitfall 3: The JSON payload persists what the text channel only displayed (paths, credentials-adjacent strings, untrusted text)
+### Pitfall 3: Adapter-written overlays on our names cause false collisions and get clobbered on update
 
 **What goes wrong:**
-`ctx.ui.notify` text is ephemeral. `appendEntry` data is appended to the session
-tree (`session-manager.js:855-866`) and written to the session JSONL once the
-session has an assistant message (`_persist`, `session-manager.js:740-769`). From
-there it flows into Pi's HTML export (`core/export-html/template.js` walks all
-entries) and into the bug-report bundle, which can attach `session.jsonl`
-(`core/bug-report.js:199-200`). Content that was acceptable to show once becomes
-data at rest and data a user may share:
+The adapter writes into the files we now own, keyed by our server names:
+- `/mcp-adapter disable|enable <server>` always writes the **project** `.pi/mcp-adapter.json` (`writeProjectServerDisabledOverride`, `config.ts:1715`). For a user-scope plugin server, that produces a marker-less stub `{ "disabled": true }`. For a project-scope one, it produces `{ ...ourEntry, disabled: true }`, which keeps our marker.
+- The `/mcp-adapter` panel's direct-tools toggle writes `directTools` into the entry (`writeDirectToolsConfig`, `config.ts:1961`). For a server that came from Pi's `mcp.json` (an "import" provenance), it **copies the whole translated definition** into `mcp-adapter.json` without our marker. Translation dropped the `_piClaudeMarketplace` key as an "ignored setting".
 
-- **Absolute paths on purpose.** `MarketplaceInfoMessage.source.absPath` renders
-  as `path: <abs>` (`notification-grammar.ts:1179`). It is correct for a local
-  info display, but it discloses the home directory in a shared session file.
-- **Absolute paths by accident.** Redaction happens only at some composition
-  sites (`orchestrators/reconcile/apply.ts:177,187,811,962`,
-  `plugin/shared.ts:1457`, `plugin/info.ts:830`, `reconcile/backfill.ts:156`,
-  `enable-disable.ts:1206`). Several raw paths are not redacted:
-  `index.ts:128` (`reconcile aborted: ${errorMessage(err)}`), `index.ts:149`
-  (`skip.reason`), and every `cause?: Error` chain that `causeChainTrailer`
-  walks (`shared/errors.ts:149`). `ManualRecoveryError.leaks` are file paths by
-  design (`errors.ts:529`).
-- **Credential-adjacent strings.** The device-flow line
-  `Open ${verification_uri} and enter: ${user_code}` (`domain/github-auth.ts:436`,
-  through `makeRawNotifyFn` from `orchestrators/auth-host.ts:112`) would be
-  persisted. The user code is short-lived, but it now lives in a file. A
-  `url`-source marketplace renders `url: ${source.url}` verbatim
-  (`notification-grammar.ts:1174`). A URL with embedded `user:token@` userinfo
-  would be written to the session. Nothing in `extensions/` strips URL userinfo
-  today.
-- **Untrusted third-party text.** Plugin `description` from marketplace
-  manifests, hook `rewakeSummary` (`bridges/hooks/async-rewake/registry.ts:434`)
-  and cause messages are not scrubbed of control characters.
-  `JSON.stringify` escapes them, so the JSON stays valid, but a consumer that
-  prints the field to a terminal gets ANSI and OSC injection. Text is safe today
-  mostly because Pi's TUI owns rendering.
-- **Error objects.** `PluginFailedMessage.cause?: Error` and
-  `rollbackPartial[].cause?: Error` (`notification-types.ts`) serialize as `{}`
-  (lossy), because `message` and `stack` are non-enumerable. The "fix" of
-  serializing `stack` leaks every absolute `node_modules` and home path.
-
-**Why it happens:**
-The redaction discipline (NFR-9, `redactAbsolutePaths`) was built for a display
-surface, where missing a site cost little. The AUTH-09 gate
-(`tests/architecture/no-credential-leak.test.ts`) guards state-write paths
-(`persistence/state-io.ts`, `migrate.ts`, `with-state-guard.ts`), not a session
-write path, because none existed.
+Consequences:
+1. The new 9-source collision walk sees the marker-less stub or the copied definition as another declarer of our name. It then **refuses update or reinstall of a user-scope plugin** whenever cwd is that project, and refuses a migration into `mcp-adapter.json` when a pre-migration panel copy exists. Under NFR-3, a fail-clean refusal on every `/reload` is a loop the user cannot break without hand-editing.
+2. Our "ours" partition replaces the whole entry on update or reinstall, so the user's `disabled: true` or `directTools` choice silently reverts. Claude Code keeps a user's `/mcp` disable of a plugin server across plugin updates. Parity says preserve it.
 
 **How to avoid:**
-- The model carries causes as already-projected, redacted string arrays: a
-  cause chain plus leaks. It never carries an `Error`. The wire schema has no
-  slot typed as an object that could hold one.
-- Redact once, at the model boundary, for every free-text field, and prove it
-  with a whole-payload walk test. That test serializes every catalog fixture's
-  JSON payload and asserts that no substring matches the absolute-path regex from
-  `redact-absolute-paths.ts`. Keep `absPath` only where the command's purpose is
-  to show the path, and decide that per field (**needs decision** for
-  `marketplace info` path sources).
-- Add the JSON sink module to `CREDENTIAL_LEAK_TARGETS`
-  (`tests/architecture/gate-targets.ts`) so AUTH-09 scans the new write path.
-- Carry device-flow data as structured fields (`verificationUri`, `userCode`),
-  not the English sentence. This means changing the `notifyFn` callback contract
-  in `domain/github-auth.ts`, which is itself an AUTH-09 target, so that gate
-  must be re-proved.
-- Treat control characters with a deliberate choice. Strip C0/C1 (except `\n`)
-  in the JSON converter only, so the text bytes cannot drift, or document the
-  fields as untrusted raw text. Do not sanitize in the model; that changes the
-  text output.
+- In the collision walk, treat an entry with no transport (`command`, `url`, `socket`) as an **overlay**, not a declarer. That matches the adapter's per-field `mergeServerMaps`.
+- On re-stage, carry forward user-owned overlay fields from the previous "ours" entry. The list to decide in the plan: `disabled`, `directTools`, `approveTools`, `includeTools`, `excludeTools`, `lifecycle`, `idleTimeout`, `requestTimeoutMs`, `toolPrefix`, `debug`. Write down which fields we own and which the user owns.
+- Before writing, MIGRATE must look for marker-less panel copies of our servers in `mcp-adapter.json` and reconcile them. Deleting a user-authored entry needs a decision, not a default.
 
-**Warning signs:**
-`JSON.stringify(payload)` contains `/home/` or `/Users/` in any test. A schema has
-`Type.Unknown()` or `Type.Any()` for a cause. The device-flow payload has a
-`message` string and no structured fields.
+**Warning signs:** collision tests use only full server definitions as "theirs", and no test plants `{ "disabled": true }`.
 
-**Phase to address:**
-The model-extraction phase (causes as projected strings, redaction at the
-boundary). The JSON-strategy phase adds the payload-walk test and the AUTH-09
-target. The raw-surfaces phase handles device flow.
+**Phase to address:** DELIVER (walk and overlay rule), MIGRATE (panel copies).
 
 ---
 
-### Pitfall 4: `appendEntry` and `ctx.mode` throw where `ctx.ui.notify` never did
+### Pitfall 4: Half-migrated state runs every plugin server twice, under two names
 
 **What goes wrong:**
-In json and print mode, `ctx.ui.notify` is the runner's `noOpUIContext.notify`
-(`dist/core/extensions/runner.js:114-118`) and cannot throw. The new calls can:
+MIGRATE touches up to four files per run: user and project `mcp.json` and `mcp-adapter.json`, plus `state.json`. They cannot change in one atomic step. With NAME in the same release, the migrated entry has a **new** key (`plugin_<p>_<s>`), and the leftover `mcp.json` entry keeps the old key. The adapter loads both, from source 4 (`<agentDir>/mcp.json`) and source 5 (`mcp-adapter.json`). Two processes start for one server, the tools appear twice under different names, and an OAuth server asks for sign-in under the new name.
 
-- `pi.appendEntry` throws `Extension runtime not initialized` during extension
-  loading (`core/extensions/loader.js:119`). It also throws the stale-context
-  message after session replacement or `/reload` (`loader.js:288-290`, via
-  `assertActive`).
-- The `ctx.mode` getter itself calls `runner.assertActive()`
-  (`runner.js:539-541`). A stale captured `ctx` therefore throws when the mode is
-  read, before any strategy is chosen.
+If the remove happens before the add, a crash loses the server instead: the record says installed, but no file has it.
 
-The long-lived callbacks capture a `ctx` and emit later. In
-`bridges/hooks/async-rewake/registry.ts:434` the notify is wrapped in try/catch.
-In `bridges/hooks/settle.ts:378` (`notifyStopHookOverrideCap`) it is not. With
-the JSON strategy, a stale capture that used to fail quietly inside a no-op can
-now throw out of a hook dispatcher. The existing generation guard
-(`capturedGeneration !== runtime.currentGeneration()`) covers async-rewake only.
-
-**Why it happens:**
-The notify family has been infallible in non-TUI modes for the project's whole
-history. Nothing in the code treats "emit output" as an operation that can fail.
+**Why it happens:** It looks like a move. In fact it is a cross-file transaction with no shared lock. The adapter does not take our `proper-lockfile`, and Pi's `pi mcp add` rewrites `mcp.json` with a plain `writeFileSync`.
 
 **How to avoid:**
-- The strategy sink wraps `appendEntry` and records a failure on the debug seam
-  (`hookDebugLog`), consistent with NFR-2. It never lets the failure escape from a
-  hook dispatcher or lifecycle handler. Decide whether command handlers let it
-  propagate: Pi routes a command-handler throw to `emitError`, which is visible
-  in every mode (`agent-session.js:1073-1078`).
-- Resolve the strategy per invocation from the live `ctx`. Never cache it at
-  module level or factory time. The only sanctioned process-lifetime state is
-  `completion-cache.ts` and `bridges/hooks/routing-state.ts`.
-- Add a test per long-lived emitter (async-rewake, settle cap) in which a stale
-  `ctx.mode` getter throws, and assert that nothing propagates.
+- Order: **add to `mcp-adapter.json` first, then remove from `mcp.json`**. A crash in between leaves a duplicate, which is recoverable, never a loss.
+- Make the pass a fixed point keyed by content, not by a version stamp. Every `/reload` scans both `mcp.json` files for `_piClaudeMarketplace` entries. "Already present in `mcp-adapter.json` with the same marker" means "only remove the old one". A retry after any crash converges (NFR-3).
+- Do **not** hang it on the backfill gate. `orchestrators/reconcile/backfill.ts` stamps `lastReconciledExtensionVersion` unconditionally once the gate opens (D-68-03). A migration that failed halfway would never run again.
+- Take the per-scope locks in a fixed order (user, then project) to avoid self-deadlock. `proper-lockfile` is configured `retries: 0` and is not re-entrant.
+- Decide orphans explicitly: a marked `mcp.json` entry with no matching enabled record in that scope (stale, disabled, or the other scope's). Moving it brings a dead server back. Leaving it keeps the adapter's per-start "Ignored settings" warning.
 
-**Warning signs:**
-`extension_error` events in the RPC stream after `/new` or `/reload`. The
-strategy is resolved in `index.ts` factory scope.
+**Warning signs:** the migration test injects no failure between the two writes. The plan says "move".
 
-**Phase to address:**
-The raw-surfaces / lifecycle phase (async-rewake, settle, device flow). The
-mode-selection phase decides where the strategy is resolved.
+**Phase to address:** MIGRATE.
 
 ---
 
-### Pitfall 5: The "unknown mode" typed error is thrown after the mutation committed, or out of a handler that must never throw
+### Pitfall 5: Migration needs two `/reload`s, and nothing says so
 
 **What goes wrong:**
-D3 requires an exhaustive switch over `ExtensionMode` with a typed error for any
-other value. There are three traps.
+Pi emits `session_start` **before** `resources_discover` (Pi 1.0 `types.d.ts`: "Fired after session_start", also noted in our `index.ts`). The adapter reads its config at factory load (`earlyConfig`, `index.ts:368`) and initializes servers in `session_start` (`core.initializeMcp`, `index.ts:1086`). Our reconcile runs in `resources_discover`, which is too late for the session that triggered it. The first `/reload` after the upgrade still runs the old `mcp.json` entries. Their `_piClaudeMarketplace` key appears in the adapter's per-start "Ignored settings" warning (`getLegacyMcpMigrationNotices`). Only the second `/reload` runs the migrated, renamed entries. The order between extensions at load is set by settings order, which we do not control.
 
-1. **Timing.** If the mode is first read inside `notify()`, the typed error
-   fires after `withLockedStateTransaction` has saved `state.json`. The install
-   succeeded, but the command reports a thrown error. The user retries, and the
-   retry hits `already installed`.
-2. **Lifecycle handlers.** Reached from `resources_discover`, the error is caught
-   by the existing NFR-2 wrapper (`index.ts:114-135`). But that wrapper's fallback
-   calls `makeRawNotifyFn(ctx)`, which re-reads the mode and throws again. Only
-   the inner catch saves it, so all output is lost silently into `hookDebugLog`.
-3. **Lint and coverage conflict.** `eslint.config.js:55-61` sets
-   `@typescript-eslint/switch-exhaustiveness-check` with
-   `allowDefaultCaseForExhaustiveSwitch: false`. A `default: throw` arm on an
-   exhaustive `ExtensionMode` switch is a lint **error**. A throw after the switch
-   is unreachable under the type, but the 100% branch threshold
-   (`test:coverage:unit`) still needs it covered. The obvious test forges the
-   mode with `as unknown as`, which is exactly what the unit-test anti-pattern
-   rules discourage (see the `compiler-forced-unreachable-branches` memory; no
-   pragma is allowed under D-116-01a).
+**How to avoid:** Accept a two-step convergence (NFR-2 says `/reload` must suffice, not one `/reload`), and make the migration notification end with the reload hint, so the user knows a second `/reload` is needed. Do not try to win the race by mutating files in our factory: there is no `ctx`, no notify, and no stable order. The live UAT must count reloads: after the first one the old names still run, after the second only the new ones.
 
-**Why it happens:**
-The mode is ambient on every `ctx`, so it gets read wherever it is first needed.
-"Exhaustive switch plus typed error" reads naturally as `default: throw`.
+**Warning signs:** the UAT script does one `/reload` and checks `/mcp`. The notification says "migrated" with no reload trailer.
 
-**How to avoid:**
-- Parse the mode once, at the start of the invocation and before any side
-  effect. Use a function like `parseExtensionMode(value: unknown): ExtensionMode`
-  that checks membership against a `Set`. It throws the typed error on an unknown
-  string, so a plain string literal reaches that branch in a test, with no cast.
-  Then switch exhaustively over the parsed union, with no `default`.
-- Command handlers validate the mode in the edge handler, before calling the
-  orchestrator. Lifecycle handlers (`resources_discover`, `session_start`, hook
-  dispatch) catch the typed error and log it, and never rethrow. The fallback
-  path must not depend on the mode it just failed to parse.
-- Import `ExtensionMode` from the peer through `platform/pi-api.ts` rather than
-  hand-mirroring the union. Then a peer upgrade that adds a mode becomes a compile
-  error at the switch (wanted), and an older build under a newer Pi hits the
-  runtime typed error (D3).
-
-**Warning signs:**
-The first `ctx.mode` read is in `shared/notification-dispatch.ts`. The typed-error
-test uses `as unknown as ExtensionMode`. A `// eslint-disable` sits next to a
-switch default.
-
-**Phase to address:**
-The mode-selection phase. Its success criteria should include "the typed error is
-raised before any state mutation" (an ordering assertion, not an end-state one).
+**Phase to address:** MIGRATE (behavior and message), DOCS (UAT).
 
 ---
 
-### Pitfall 6: Implicit mode fallbacks in fakes and in production hide missing plumbing
+### Pitfall 6: Renaming servers silently orphans sign-ins, approvals, overrides and allow-lists
 
 **What goes wrong:**
-39 test files build a `{ ui: { notify } }` fake. Nine cast to `ExtensionContext`
-with `as unknown as`, which compiles whatever fields are missing. The e2e
-`makeCtx` (`tests/e2e/_helpers.ts:85`) has no `mode`. When the parse/switch lands,
-every fake without `mode` starts failing at once. Two tempting "fixes" each undo
-D7:
+In adapter 5, almost every piece of per-server state is keyed by the **server name**:
 
-- `ctx.mode ?? "tui"` in production. That also hides real plumbing gaps. For
-  example, Pi's own runner defaults to `"print"` when `setUIContext` is called
-  without a mode (`runner.js:296-298`).
-- A helper default such as `makeCtx(cwd, mode = "tui")`. Every existing call site
-  then silently tests only text, and the JSON path of each verb has no test.
+| Adapter state | Key | Effect of a rename |
+| --- | --- | --- |
+| OAuth tokens (OS keyring, or `mcp-oauth*/`) | `sha256(serverName)` (`mcp-auth.ts:652`) | Signed-in HTTP servers ask to sign in again |
+| `mcp-cache.json` metadata | server name + `configHash` | Entries for old names never expire: `saveMetadataCache` never prunes. New names need discovery, so `directTools: "search"` tools are missing until discovery finishes |
+| `mcp-project-approvals.json` | `projectRoot` + `serverName` + `definitionHash` of the **whole** canonicalized entry | Every project-scope plugin server needs approval again. Any later shape change (marker, `directTools`, escaping) does the same |
+| `/mcp-adapter disable` overrides | name in `.pi/mcp-adapter.json` | The disable no longer applies, and the server comes back |
+| User settings | `settings.jev.allowedServers`, `approveTools`, `includeTools` patterns, pi-subagents `agentOverrides[...].tools` with `mcp:<server>` (our own `bridges/agents/convert.ts` warning tells users to write this) | All stop matching |
 
-A generic JSON converter also reaches 100% line coverage from a single test. So
-the coverage threshold cannot show that each verb's payload was ever converted.
+Pi 1.0 also moved its built-in OAuth store to per-name+URL keys. That matters only for adapter sign-in imports, which match by exact URL.
 
-**Why it happens:**
-The churn is large (about 90 `NotificationContext` references in `extensions/`,
-59 files in the notify family), and a default parameter is the smallest diff.
+**Why it happens:** NAME is treated as a string transform. The keys live in files outside our NFR-10 write set (`<agentDir>/mcp-cache.json`, the keyring, `mcp-project-approvals.json`), so we cannot fix them up, and must not try.
 
 **How to avoid:**
-- Declare `mode` **required** on the widened `NotificationContext` in
-  `platform/pi-api.ts`, so a missing field is a compile error. Test helpers take
-  `mode` as a required parameter.
-- Add per-verb JSON conformance cases driven by the existing catalog fixtures (the
-  20 fixture maps in `catalog-contract.test.ts`). Every fixture goes through the
-  JSON strategy and is validated against the wire schema, so every catalog state
-  has a JSON twin. Reuse the fixtures; do not copy them (see Pitfall 11 on dupes).
-- Add a planted control: a fixture whose model omits a required field must fail
-  schema validation. Otherwise a permissive schema makes the conformance suite a
-  green run that checked nothing.
+- Rename once. Land NAME with DELIVER and VARS, before MIGRATE, so users pay these costs once.
+- In the migration notification, list the renamed servers (`old -> new`) and say that signed-in servers need `/mcp-adapter` sign-in again and that project servers need approval again.
+- Never write `mcp-cache.json`, the keyring or approval files (NFR-10). Document the stale cache entries as harmless.
+- Keep every written entry byte-stable across reloads when nothing changed. A rewrite that only reorders keys still changes `definitionHash` for project servers, so approval prompts come back.
 
-**Warning signs:**
-`?? "tui"` or `?? "print"` anywhere under `extensions/`. A `mode = ` default in a
-test helper. JSON conformance tests that pass after the converter body is replaced
-with `return {}`.
+**Warning signs:** the rename lands with no message listing old and new names. A reconcile pass rewrites `mcp-adapter.json` on every load.
 
-**Phase to address:**
-The mode-plumbing phase (required field, fakes). The JSON-strategy phase adds the
-conformance and control cases.
+**Phase to address:** NAME (decision and message), MIGRATE (the one-time rename), DOCS.
 
 ---
 
-### Pitfall 7: Wire-schema versioning without a compatibility policy, and closed sets that grow silently
+### Pitfall 7: The adapter expands values a second time, and several fields have no escape
 
 **What goes wrong:**
-`schemaVersion` exists (D1), but nothing says what bumps it. The vocabularies are
-closed sets that grow regularly. `Reason` gained `stale workflow command`,
-`requires pi-dynamic-workflows` and `components now supported` in the last two
-milestones (`notification-types.ts`). For text, an added token is additive. For a
-JSON consumer that validates enums strictly, an added token is a breaking change.
-There are two failure directions:
+Whatever we write, the adapter interpolates again when it connects:
 
-- **Silent omission (the `optional-field-silent-omission` class).** The row
-  fields are mostly optional (`reasons?`, `scope?`, `partialHint?`,
-  `enableHint?`, `description?`). A converter that picks fields by name compiles
-  clean when a new optional field is added, and the JSON drops it. This shape
-  shipped three times in the workflows milestone.
-- **Silent inclusion.** A converter that spreads the row (`{ ...row }`) emits
-  any new member, including presentation-only fields (`label`, `cardinality`) and
-  non-serializable ones (`cause: Error` becomes `{}`).
+| Field | Adapter processing (5.0.0 source) | Escape available? |
+| --- | --- | --- |
+| `command`, `cwd` | `resolveConfigPath`: `${NAME}`, `$env:NAME`, `{env:NAME}` (each `\w+`), then leading `~/` to home | **None** |
+| `args[]` | `interpolateEnvVars` then `expandHomePath` per element | **None** |
+| `env` values | `resolveCommandSecret`: leading `!` **runs a shell command** (10 s, 1 MiB). `!!` runs nothing: the leading `!` is stripped and env refs are interpolated. Otherwise it interpolates | `!!` for a leading `!`, but refs are still interpolated. `literalEnv: true` makes the **whole record** literal, which also turns off `${VAR}` |
+| `headers` values | Same as `env` (`resolveCommandSecretsRecord`), unless OAuth is on (`resolveOAuthHeaders`) | `!!` only |
+| `url` | `resolveServerUrl`: interpolates, **throws** on a missing var | **None** |
+| `bearerToken` | `interpolateSecretExpression` (`!` and `!!` rules) | `!!` only |
 
-`notify-closed-set-locks.test.ts` and `compat-01-no-expansion.test.ts` pin the
-TypeScript unions. A second enumeration of the same tokens as typebox
-`Type.Literal` unions is a fifth copy that neither gate reads.
+Three properties matter:
+- The adapter's pattern is `\$\{(\w+)\}`. It does **not** match `${VAR:-default}`, so text like that passes through literally. The adapter never applies a default.
+- A missing variable becomes `""` in `args`, `env` and `headers`, and is an error in `url`. Claude Code instead "uses the unexpanded `${VAR}` text as-is" and warns.
+- A literal `$env:FOO`, `{env:FOO}` or leading `~/` in a Claude plugin config is plain text under Claude Code (no shell is involved), but the adapter rewrites it.
 
-**Why it happens:**
-The text renderer tolerates additive change by construction, so the project has
-never needed a compatibility policy.
+So "escape what the adapter would expand again" cannot be exact for `command`, `args`, `cwd` and `url`. Those fields have no escape syntax.
 
 **How to avoid:**
-- Write the policy into the schema reference doc before the first release. For
-  example: additive enum members and new optional fields keep `schemaVersion`;
-  consumers MUST ignore unknown tokens and fields; removing or renaming a token or
-  field, or changing a type, bumps it. Make the closed-set lock tests also require
-  a schema-reference entry when a member is added (the deliberate-bump tripwire,
-  extended).
-- Derive the TypeScript vocabulary from the typebox schema, or prove
-  bidirectional equality with a `Record<Reason, true>`-style enrollment against
-  the schema's literal list. Do not keep two independent lists.
-- Build the JSON converter as a total map (`satisfies Record<Status, ...>`) that
-  names every field explicitly. Pin each row type's key set with a compile-time
-  proof, so adding a member to a row interface is a type error at the converter.
-- Use the catalog tokens verbatim on the wire (`"manual recovery"`,
-  `"will install"`), not a re-cased second vocabulary. A second spelling is a
-  permanent translation table that drifts.
-- **typebox specifics.** (a) `Type.Object` admits extra properties by default.
-  Set `additionalProperties: false` on every wire object in the schema used by
-  tests, or a leaked field (a stray `cause`, a presentation flag) validates
-  green. (b) The current model has unions whose discriminant is optional:
-  `CascadeNotificationMessage.kind?: "cascade"` (dispatch treats `undefined` as
-  cascade) and `MpList.status?: undefined`. Give every wire union a required
-  literal tag. An untagged `Type.Union` validates by trying each arm, and its
-  errors do not say which arm was meant. (c) Make the converter's return type
-  `Static<typeof WireSchema>`, so schema and code cannot drift at compile time.
-  Also run `Compile(...).Check` on every conformance fixture, so runtime-only
-  constraints (formats, `additionalProperties`) are exercised. Under
-  `exactOptionalPropertyTypes`, the converter must omit absent keys and not
-  assign `undefined`.
+- Write a per-field matrix like the table above into the VARS plan, and test each cell against the adapter's real functions. Pin `pi-mcp-adapter@5.0.0` in a scratch prefix and call `interpolateEnvVars`, `resolveCommandSecret` and `expandHomePath` with fixtures. Do not test against a re-typed copy of them.
+- Where no escape exists, detect the collision at stage time and surface it as a degradation reason or warning. MENVX-01's "Warn" disposition is the honest default there. Do not claim parity.
+- Use `!!` for a leading `!` in `env`, `headers` and `bearerToken` (MENVX-01 "Escape"). Remember that `!!x` still interpolates `x`.
+- Evaluate `literalEnv: true` (ENVLIT-01) only with this table in hand. It fixes `!` and `$env:` in `env`, but turns off runtime `${VAR}`, so we would then have to expand env ourselves, which leads to Pitfall 8.
 
-**Warning signs:**
-The converter uses object spread. The schema file has its own `Type.Literal`
-list, and no test compares it to `Reason`. A PR adds a reason token and does not
-touch the schema docs.
+**Warning signs:** a single "escape" helper applied to every string leaf. `bridges/mcp/substitute.ts` today walks every string at every depth, while Claude Code expands only `command`, `args`, `env`, `url` and `headers`. Tests compare against our own re-implementation of the adapter.
 
-**Phase to address:**
-The JSON-strategy / schema phase. The docs phase publishes the policy.
+**Phase to address:** VARS.
 
 ---
 
-### Pitfall 8: Presentation decisions leak into the wire as English strings that become de-facto API
+### Pitfall 8: Expanding `${VAR}` ourselves writes secrets to disk and defeats Claude Code's credential guard
 
 **What goes wrong:**
-D1 says the model computes "severity, reload-needed, tally, summary line". If the
-model carries **rendered strings**, JSON consumers start parsing English: the
-summary line (`N plugin operations failed.`, the grammar pinned by
-`notify-grammar-invariant.test.ts`), the `/reload to pick up changes` trailer
-(`RELOAD_HINT_TRAILER`), `UPDATE_NO_OP_HEADLINE`, the cascade `label`, the
-usage block, the `notifyDiagnostic` header, and the device-flow sentence. After
-that, any wording fix in `docs/output-catalog.md` is a breaking JSON change.
-Glyphs (`●○⊘◌◉◍⊖`) and indent-carrying rows are worse: they make the text
-grammar part of the JSON contract. There is also already a third structured
-projection: the LLM tool `details` in `edge/handlers/tools.ts`, which maps
-`upgradable` to `[installed]`. A JSON payload that says `upgradable` for the same
-plugin contradicts it.
+The simplest way to support `${VAR:-default}` is to resolve every variable at write time. That writes the **value** of `${GITHUB_TOKEN}` into `mcp-adapter.json`. A project-scope `.pi/mcp-adapter.json` is often committed to git. The value is also frozen until the next reconcile, while Claude Code expands at load and connection time.
 
-**Why it happens:**
-The fastest way to reach "total coverage" (D2) is to wrap each existing string in
-`{ message: string }`.
+The reverse mistake is just as bad: passing `${ANTHROPIC_API_KEY}` through to the adapter. In a remote server's `url` and `headers`, Claude Code reads `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `AWS_BEARER_TOKEN_BEDROCK`, `HTTPS_PROXY` and `NPM_TOKEN` **as empty, ignoring any `:-default`**, so a plugin cannot send those credentials to a server it names. The adapter has no such list, so a pass-through would send the real key.
 
 **How to avoid:**
-- The model carries decisions and counts: `reloadNeeded: boolean`,
-  `summary: { failed, skipped, subject }`, `tally: { verb, count }` as a
-  machine-readable verb id, and `hints: ["partial" | "enable"]`. The text
-  converter owns every English word and glyph.
-- Mark the free-text fields that have to remain free text (`advisories`,
-  `notes`, usage text, diagnostic lines, `rewakeSummary`) as "human text,
-  unstable" in the schema doc, in a separate property family.
-- Record, as a decision, whether the tool-surface projection
-  (`edge/handlers/tools.ts`) stays independent or is aligned. Otherwise the two
-  structured surfaces will be found to disagree in review.
+- Never persist the value of an environment variable. The features/mcp Phase 3 D-06 rule ("no environment value is saved") still applies.
+- One workable design to evaluate in VARS: re-render at reconcile time. If `VAR` is set, write `${VAR}` and let the adapter expand it at runtime, so no value is persisted. If it is unset, write the plugin-authored `default` literal. This tracks env changes at `/reload` granularity. Its cost: the file is rewritten whenever env changes, and each rewrite invalidates the project-approval hash (Pitfall 6). Two terminals with different env also flip the file back and forth.
+- Apply Claude Code's credential deny-list in `url` and `headers`, and test it as a security control.
+- `headersHelper` (Claude Code) has no adapter equivalent. The adapter's `requestHeadersCommand` has a different shape. Do not map one onto the other silently.
 
-**Warning signs:**
-Schema properties named `text`, `line`, `rendered` or `message` on structured
-rows. A JSON golden file that contains `●`.
+**Warning signs:** a fixture `mcp-adapter.json` that contains a literal token value. No test plants `${ANTHROPIC_API_KEY}` in a header.
 
-**Phase to address:**
-The model-extraction phase (decisions, not strings). The JSON-strategy phase
-(schema shape).
+**Phase to address:** VARS (with a threat model). The security review gate should flag the phase.
 
 ---
 
-### Pitfall 9: Gates that grep named files break when the notification modules split
+### Pitfall 9: Normalized names still collide, overflow, and miss hook matchers
 
 **What goes wrong:**
-Many architecture gates name the exact files this milestone will split:
-
-- `notification-dispatch.ts`: `NO_CONSOLE_EXEMPT_TARGETS`
-  (`gate-targets.ts:223-227`), the ESLint per-file override
-  (`eslint.config.js:152-165`), and direct imports in `hooks-cap-notify`,
-  `notify-grammar-invariant`, `notify-will-reload-agreement`,
-  `cross-surface-reason-parity` and `workflows-marker-coverage`
-- `notification-grammar.ts`: `COMPAT_NO_EXPANSION_TARGETS`, which reads glyph
-  code points
-- `notification-types.ts`: `SCOPE_FENCE_TARGETS`, and COMPAT-01, which reads
-  declaration order "as data"
-- `*.messaging.ts`: `sonar.cpd.exclusions` in `sonar-project.properties:93`, and
-  the no-orchestrator-network `FORBIDDEN_TARGETS`
-- `docs/messaging-style-guide.md`: `messaging-guide-doc-pins.test.ts` derives the
-  allowed variant set from the types and compares it to the guide
-
-Moving a function breaks 2-3 gates at once. The fixes that are tempting under
-time pressure all weaken the gates. D-07-03 requires a missing target to FAIL, so
-at least the gates go red rather than green over nothing.
-
-`no-probe-in-workflows-bridge.test.ts` is a special case. If the soft-dep marker
-derivation (now "in the model") is called from any `bridges/workflows/` file, the
-capability ban fires. That is correct, but it shows the model builder must live
-above the bridges.
-
-**Why it happens:**
-The gates are deliberately path-anchored (D-07-05) so that they cannot pass
-vacuously. The cost is that every relocation is a gate edit.
+Claude Code calls the server `plugin:<plugin>:<server>` and its tools `mcp__plugin_<plugin>_<server>__<tool>`, after replacing every character outside `[A-Za-z0-9_-]` with `_`. The adapter names things differently:
+- A direct or search tool is `formatToolName(tool, server, toolPrefix)`. With the default `toolPrefix: "server"` that is `plugin_<p>_<s>_<tool>`: one underscore before the tool, no `mcp__`. With `"mcp"` it is `mcp__plugin_<p>_<s>_<tool>`. **No mode produces Claude Code's `mcp__X__tool`.** A user's global `settings.toolPrefix` (`short`, `none`, `mcp`) changes our tool names unless each entry pins `toolPrefix`.
+- If the raw key keeps `:`, `sanitizeServerPrefix` encodes it as `_3a_` (`plugin_3a_foo_3a_bar_tool`). Pi's `mcp.json` translation also rejects names outside `[A-Za-z0-9_-]` (`translatePiMcpServer`). So write the normalized form, never the raw key.
+- The Pi deferred-tool namespace is `mcp__${server.replace(/-/g, "_")}`. Past 59 characters it becomes a hashed `_mcpns__h_...` (`formatServerNamespace`). Names that differ only in `-` versus `_` collide (`plugin_my-tool_docs` and `plugin_my_tool_docs`). This is the same folding D-09 handled on features/mcp.
+- Tool names: `plugin_<p>_<s>_<tool>` easily passes 64 characters. The adapter applies no length cap to direct-tool names. Whether Pi 1.0 truncates an extension-registered name, or a provider rejects the request, was **not verified** (MEDIUM). If the provider rejects it, every request in the session could fail.
+- Hook matchers and `if:` predicates (`domain/components/hooks/matcher.ts`, `bridges/hooks/if-field/index.ts`) match `mcp__<server>__<tool>` by exact name. Under the adapter they never matched. `docs/hooks-compatibility.md:107` claims they do. After the rename a plugin's own Claude-style matcher could be mapped, but only at hook staging time, using the plugin's known server names. The string cannot be split back afterwards (`plugin_a_b_c`). Proxied calls arrive as tool `mcp` with `{ tool }` in the input.
 
 **How to avoid:**
-- Before each extraction plan, run `fallow dead-code --symbol-impact` and grep
-  `tests/architecture/` for the file name. Put the list of gates to re-point in
-  the plan, with the new target named. Do not discover them at `npm run check`.
-- Where a gate states a claim ("the sole sanctioned user-visible output
-  surface"), change the claim to match the new structure, for example "the two
-  sinks: `ctx.ui.notify` and `pi.appendEntry`". Do not quietly re-point it at one
-  of them.
-- Keep the text strategy's grammar in a file the COMPAT-01 group can name, and
-  update that group in the same commit as the move.
+- Put one shared pure name builder in `domain/` (normalize, then fold for collision checks). DELIVER, NAME, MIGRATE, STATUS and hook mapping must all call it. An architecture gate should forbid a second copy, in the style of the existing source-walk gates.
+- Pin `toolPrefix` on every entry we write, or decide explicitly to honor the user's global prefix.
+- Extend the PI-6 cross-plugin guard to folded MCP names (features/mcp Phase 3 D-08 and D-09).
+- Measure the 64-character question on Pi 1.0 with a long fixture name before NAME is planned. The features/mcp spike only measured Pi's built-in MCP, which hashes at 64.
+- Correct or scope the `hooks-compatibility.md` claim.
 
-**Warning signs:**
-A plan that moves `composeReasons` or `softDepStatus` and lists no gate files. An
-architecture test edited only to change a path string, with no change to the
-claim it states.
+**Warning signs:** two name builders exist. No fixture plugin has a hyphen or a 40-character name.
 
-**Phase to address:**
-Every extraction plan. Put the gate inventory in the model-extraction phase's
-research.
+**Phase to address:** NAME (needs a measurement step first). DOCS fixes the hooks doc.
 
 ---
 
-### Pitfall 10: `lint:type-members` pins, JSON serialization, and newly declared-but-unread members
+### Pitfall 10: Detection probe: false positives from any `mcp` tool, false negatives with `disableProxyTool`
 
 **What goes wrong:**
-There are three separate traps in `scripts/check-unused-type-members.*`:
+`platform/pi-api.ts::hasLoadedPiMcpAdapter` returns true for a tool named `mcp`, or a `sourceInfo.source` that contains `pi-mcp-adapter`.
+- Pi 1.0's built-in does **not** cause a false positive. It registers `mcp__<server>__<tool>` tools with source `builtin`, and a `/mcp` command. Any **third-party** extension that registers a tool named `mcp` does.
+- False negatives: adapter 5 unregisters the `mcp` proxy tool when `settings.disableProxyTool` is true and every tool is eager-direct (`syncProxyTool`, `index.ts:2270`). A local-path or fork install has a `sourceInfo.source` without `pi-mcp-adapter`. An adapter with zero servers and the proxy disabled leaves no tool at all.
+- `/mcp` ownership is no longer a usable signal. The abandoned features/mcp Phase 2 probe (D-01: `/mcp` from `builtin:mcp`) now points the wrong way, because adapter 5 registers `/mcp` itself on Pi 0.99+ (`index.ts:1700`).
 
-1. **Coordinate drift.** About 25 contract pins sit in files this milestone
-   rewrites: every `*.messaging.ts`, `notification-dispatch.ts:216`,
-   `notification-grammar.ts:838,1562`, `notification-summary.ts:41`,
-   `notification-types.ts:459`, `notify-context.ts:66,283,346`,
-   `reconcile/notify.ts:694,790`, and `platform/pi-api.ts:100-124`. Any edit
-   above a pin moves its `line:col`. The gate then refuses with exit 2, and
-   empty stdout is possible (memory: `contracts-json-line-pinned`). Prettier
-   reflow moves pins too (memory: `prettier-invalidates-type-member-pins`).
-2. **JSON serialization counts as a read of every member.** The gate settles
-   `JSON.stringify` as a whole-object read (`docs/unused-type-member-gate.md`,
-   "What counts as a read"). Once the JSON converter serializes model objects,
-   every model member reads as `runtime-observed`, and the gate can no longer
-   find dead model fields. With a replacer function or a `toJSON` member, the
-   serialized keys become `unsupported-analysis`, which **fails the gate and
-   cannot be excused**.
-3. **Declared before read.** Adding `mode` and `appendEntry` to
-   `NotificationContext` / `ToolInventory` in `platform/pi-api.ts` before the
-   strategy reads them gives an `unread` finding. The peer-mirror entries also
-   carry `upstream` coordinates into `node_modules/.../types.d.ts`, which move on
-   any peer bump.
+**How to avoid:** Probe `pi.getCommands()` for `mcp-adapter`. The adapter always registers that command, and it is the adapter's own name. Keep the `mcp` tool check only as a fallback. Keep the house rule from features/mcp D-04: a probe that throws means "not loaded" (a possible false warning, never a false all-clear). Rename `ToolInventory` when it widens to commands (features/mcp IN-02). Unit-test four states (adapter, built-in only, neither, a third-party `mcp` tool), plus one real-Pi RPC run.
 
-**Why it happens:**
-The gate is whole-program and exact. The JSON converter is precisely the
-whole-object read the gate treats as a credit.
+**Warning signs:** the probe still keys on `/mcp`. No test plants a foreign `mcp` tool.
 
-**How to avoid:**
-- Serialize an explicitly built plain object (the total-map converter from
-  Pitfall 7), never the model object itself, and never with a replacer. Then the
-  model's own members are credited only by real reads.
-- Land each new interface member in the same commit as its first reader.
-- Run Prettier, then `lint:type-members`, then re-pin by shifting the line only,
-  as the last step of every plan that touches these files. Budget about 85 seconds
-  per run, and seven minutes for `:negative`.
-- If the payload crosses to Pi (`appendEntry` data), consider the
-  `external-output` contract category for members that exist only to be read by
-  the consumer.
-
-**Warning signs:**
-The gate exits 2 with no findings listed. `JSON.stringify(model, (k, v) => ...)`
-in the converter. A new `readonly mode` member with no reader in the same diff.
-
-**Phase to address:**
-Every phase touching `shared/notif*` or `platform/pi-api.ts`. The rule "no
-replacer, serialize a built DTO" belongs in the JSON-strategy phase.
+**Phase to address:** DETECT.
 
 ---
 
-### Pitfall 11: Complexity, dead-code, duplication, zone and coverage gates bite parallel converters
+### Pitfall 11: Live status reads an event stream, not a query, and lazy servers look broken
 
 **What goes wrong:**
-
-- **Complexity.** A JSON converter written as a `switch` over the 19
-  `PluginStatus` values plus 8 marketplace arms plus 8 message kinds exceeds
-  fallow `maxCyclomatic: 20` and `maxCognitive: 15` (`.fallowrc.json`). ESLint
-  `sonarjs/cognitive-complexity: 15` is scored independently, and the two tools
-  disagree. The text side already avoids this with per-status render maps.
-- **Duplication.** Current duplication is 1.41% (measured: 1,327 duplicated
-  lines) against `duplicates.threshold: 3`. Headroom is about 1,500 lines
-  repo-wide, tests included. Two mirrored converters, or JSON test fixtures
-  copied from the catalog fixtures, can use it up. SonarCloud CPD scores new code
-  separately, and the existing `sonar.cpd.exclusions` names `*.messaging.ts`
-  paths that may be renamed.
-- **Dead code in the middle.** Migrating verb by verb leaves the legacy
-  `notify()` central switches (`notification-dispatch.ts`, "keeps serving
-  not-yet-migrated call sites", `notify-context.ts` header) and the render maps
-  half-used. Fallow in production dead-code mode fails as soon as an export's last
-  reader moves. The escape (`fallow-ignore`) is counted: CONVENTIONS records
-  exactly 11 markers.
-- **Zones.** A new top-level directory such as `extensions/.../presentation/` is
-  in none of the 14 fallow zones and none of the 8 ESLint `ZONE_FOLDER_TARGETS`.
-  An unzoned folder escapes the boundary matrix without any error.
-  `shared/` may import only `platform/`, so a model in `shared/` that needs
-  domain types (`Dependency`, `HookSummaryEntry` are already in
-  `shared/concerns/`) must stay in the leaf layer or move up. Cycles between
-  new `shared/` model files and `notification-*.ts` are caught only by the fallow
-  circular-deps run (ESLint `import-x/no-cycle` was removed).
-- **Coverage.** `test:coverage:unit` enforces 100% lines, functions and branches
-  on `extensions/**`. The corresponding-test gate requires a mirrored owner test
-  per new module, and `unowned-exports-census` (empty record) rejects exports
-  read only by tests. A converter helper exported "for testing" fails.
-
-**Why it happens:**
-Each gate is reasonable on its own. A two-strategy design doubles the surface
-every gate measures.
+Adapter 5 exposes status only as a push event, `pi-mcp-adapter/status/v1` on `pi.events` (`mcp-status.ts`). It publishes at init and on changes, and publishes an **empty** server list at shutdown. No request/response exists. In adapter 5 most servers are stopped by design: "discovered at startup and then stopped until you use them". So the normal state is `cached` or `not-connected`, not `connected`. Project servers waiting for approval are `blocked`, with a `blockedReason`.
 
 **How to avoid:**
-- Use total `Record<Status, fn>` maps for both converters, so complexity is per
-  arm. Keep the two converters structurally unlike (the JSON arm builds an
-  object, the text arm composes tokens) so CPD has nothing to match.
-- Drive JSON conformance from the existing catalog fixtures (import them; do not
-  copy them).
-- Migrate through the dispatch seam: the model is introduced **under** the
-  existing `notify` / `notifyWithContext` signatures. Callers stay unchanged
-  until one sweep retires the old paths within a single phase. No intermediate
-  commit leaves an export with no reader.
-- If a new folder is created, add its zone to `.fallowrc.json`, to the ESLint
-  zones and to the expected matrix in `import-boundaries.test.ts` in the same
-  commit, with a planted cross-zone import proving the rule fires.
+- Subscribe in the factory, before any `session_start` handler runs, and cache the last snapshot per session. Treat the empty shutdown snapshot as "unknown", not "every server gone".
+- Map snapshot names with the shared name builder from Pitfall 9.
+- Render `cached` and `not-connected` as normal resting states. A reader must not take them as failures.
+- Do the lookup in the orchestrator, not in the renderer ("notify is a dumb renderer"). The `info` path stays network-free (NFR-5): reading the cached snapshot never connects anything.
+- Version-gate on `MCP_STATUS_SNAPSHOT_VERSION === 1`. Any other version renders "status unavailable".
+- Decide whether the LLM `info` tool gets the same field, and pin its payload so it does not drift.
 
-**Warning signs:**
-`fallow dupes` percentage rises by more than 0.3 points in one plan. Check the
-exit code, not the red glyph (memory: `fallow-dupes-red-glyph-green-exit`). A
-`fallow-ignore` count above 11. A new directory that no test names.
+**Warning signs:** `info` shows "not connected" for every lazy server in the UAT. A test emits a snapshot before subscribing.
 
-**Phase to address:**
-The model-extraction phase (seam strategy, zones). The JSON-strategy phase
-(converter shape, dupes budget).
+**Phase to address:** STATUS.
 
 ---
 
-### Pitfall 12: New sink without a matching ban leaves `appendEntry` open to every producer
+### Pitfall 12: The `features/mcp` fixes are lost or misapplied when replayed at Pi 1.0
 
 **What goes wrong:**
-The IL-2 enforcement bans the `ctx.ui.notify` call shape outside the dispatch
-file (`eslint.config.js:141-143`) and bans `process.stdout.*` / `process.stderr.*`
-in `rule-packs/architecture.json`. Nothing bans `pi.appendEntry`. After this
-milestone, any orchestrator or bridge can call `pi.appendEntry("claude-plugin", ...)`
-directly. That bypasses the model, the redaction and the schema. It is the exact
-bypass the notify ban exists to prevent. The existing notify selector matches
-only the `X.ui.notify(...)` member-call shape, so `const { notify } = ctx.ui`
-already slips past it. The new ban should not copy that gap.
+The Pi 0.99 work on `features/mcp` holds fixes that main does not have. Each has a trap:
 
-**Why it happens:**
-D8 amends IL-2 in prose. The enforcement is a separate artifact that has to be
-amended too, and both lint messages still say "Use ctx.ui.notify via
-shared/notification-dispatch.ts wrappers".
+| Finding | Status on main | Trap |
+| --- | --- | --- |
+| `74162ca6`: `ToolInfo.exposure` is required, so three `toolInfo()` fixtures need `exposure: "direct"`. `tests/edge/handlers/tools.test.ts` types `ctx` as `ExtensionToolContext`. Re-derived upstream type-member pins | Not on main (main is at 0.87.1, pins `types.d.ts:406:5` and `:414:5`) | Pins are `line:col` and must be **re-derived from the installed file**, not cherry-picked. Pi 1.0's `ResourcesDiscoverEvent.type` / `reason` / `themePaths` sit at 525 / 527 / 533, the same as 0.99.2, but check after `npm install`. Prettier formatting moves pins (memory note). IN-03: the `toolInfo` fixture is copied three times, so a seed module saves the next bump |
+| `5b1d8ef6`, `dac3a245`, `69e0870a`: pi-subagents ships compiled `.js` (0.73.1+), so the loaders import `src/agents/*.js` in place. Fail on a broken peer, skip below the floor | Not on main: main's `provenance-invisibility` / `skill-path-resolution` still copy `.ts` and **skip silently** against 0.74 | The floor constant is duplicated in two files with no gate against `package.json` (IN-05). Prereleases compare wrong (IN-06). A wrong `PI_SUBAGENTS_ROOT` reads as "not installed" (IN-07). The operator's global pi-subagents is 0.47.1, so locally these tests skip by design. CI has no global peer, so they skip there too. Only a scratch-prefix run with `PI_SUBAGENTS_ROOT` proves the 0.74.0 floor |
+| `4f82096f` + `0febc4ea` + `4460d902` + `e0ccc16e`: Stop canary floor and `capBoundFailure` routing | Not on main | `4f82096f` **deleted two README sections**, and `0febc4ea` restored them. Replaying the first without the second loses the engine canary docs. IN-08..IN-10 (exit code not read, regressions share exit 1 with the normal headless result) are still open |
+| `tests/e2e/_rpc.ts` RPC harness (cwd/realpath sandbox check, process-group kill) | Not on main | IN-05: a clean exit does not sweep the process group. With adapter 5 discovering and spawning stdio servers at startup, grandchildren outlive the run or hold stderr until the hard stop (`timedOut: true` on a passing run). IN-04: `realpath` throws a raw ENOENT for a missing sandbox dir. `ctx.ui.notify` prints nothing in print and json mode (D-20), so marker and status assertions need RPC |
+| Spike sandbox finding: the repo's `.agents/skills` makes Pi ask for trust in **every directory under the repo** | Unrecorded on main | An e2e sandbox under the repo is untrusted, so the adapter **blocks project servers**. Write a trust entry, or put the sandbox outside the repo |
+| `/tmp` ran out of inodes during the bump (clone-cache temp-dir leak, fixed on main by #232) | Fixed | Still run `npm run check` with `TMPDIR` outside `/tmp`, and an unpiped log ending in `CHECK_EXIT` |
 
-**How to avoid:**
-- Add a `no-restricted-syntax` selector for `CallExpression[callee.property.name='appendEntry']`
-  with a single-file exemption for the JSON sink. Add a planted-violation test in
-  `tests/architecture/`: a gate is proved by planting, not by re-reading the
-  config (CONVENTIONS).
-- Update both lint messages, the rule-pack message and AGENTS.md's Output channel
-  line in the same change (D8 already flags AGENTS.md).
+**How to avoid:** Re-implement against the current tree. Use the features/mcp commits as specifications, not patches: `features/mcp` merged a different `main`, and the contracts pins and test hubs have moved since. Port the open Info findings that cheapen the next bump (IN-03, IN-04, IN-05) as deliberate scope, or record them as deferred.
 
-**Warning signs:**
-`grep -rn appendEntry extensions/` returns more than one file.
+**Warning signs:** a `git cherry-pick 74162ca6`. `lint:type-members` exits 2 with empty stdout after a merge (memory: contracts pins are merge-fragile). The pi-subagents tests report `skipped` in the "green" floor run.
 
-**Phase to address:**
-The JSON-strategy phase.
+**Phase to address:** FLOOR.
+
+---
+
+### Pitfall 13: Dev and CI environments that cannot show the feature
+
+**What goes wrong:**
+- `scripts/pi.sh` pins `pi-mcp-adapter@2.37.0` and `pi-subagents@0.71.0`, and launches with `--no-extensions`. On Pi 0.99+ that flag also removes `builtin:tool-search` (spike SD-5). Adapter 5's `directTools: "search"` tools are Pi deferred tools that "Pi's `tool_search` finds" (adapter CHANGELOG 5.0.0), so the dev launcher can hide the exposure this milestone adds. Check it on 1.0 (MEDIUM).
+- Adapter 5 on first start writes `"-builtin:mcp"` into Pi's **user** `settings.json` and records the version in its onboarding state. A live UAT run without a sandboxed `PI_CODING_AGENT_DIR` edits the operator's real settings. (The harness refuses a `HOME` override, but `getAgentDir` honors `PI_CODING_AGENT_DIR`.)
+- The adapter stores OAuth in the OS keyring (`@napi-rs/keyring`). Headless CI may have no secret service. The adapter's own tests set `PI_MCP_ADAPTER_TEST_AUTH_STORE=memory` (MEDIUM: whether a non-test run needs it was not checked).
+- Pi 1.0 runs fullscreen by default. tmux or pexpect-driven live checks may need `--tui-mode regular`.
+
+**How to avoid:** Bump the `scripts/pi.sh` pins in FLOOR. Keep `builtin:tool-search` loaded, as the spike's Phase 7 criterion 3 already required. Sandbox `PI_CODING_AGENT_DIR` in every real-Pi run. Set the memory auth store in e2e.
+
+**Phase to address:** FLOOR (launcher pins), DELIVER (the search-exposure check), DOCS (UAT recipe).
 
 ---
 
 ## Technical Debt Patterns
 
 | Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
-|---|---|---|---|
-| Wrap each existing string as `{ message }` for "total coverage" | D2 done in a day | JSON is text in quotes; wording fixes break consumers; no structured tests possible | Only for the fields that ARE human text (usage, advisories, rewake summary), and marked unstable |
-| `ctx.mode ?? "tui"` / defaulted fake `mode` | Existing tests pass unchanged | Hides missing plumbing; JSON path of each verb untested; contradicts D7 | Never |
-| `JSON.stringify(model)` instead of building a DTO | No converter code | Leaks presentation-only fields and `Error` as `{}`; neutralizes the type-member gate | Never |
-| Keep the render-time `softDepStatus(pi)` probe alongside the new model-time probe | Smaller diff | Two probes can disagree; the text keeps a render-time decision D1 removed | Only within one plan, never across a phase boundary |
-| Timer-deferred `appendEntry` to beat Pi's subscribe | Startup reconcile appears on stdout | Race on Pi internals; breaks on patch releases | Never |
-| Hand-written typebox literal list beside the TS `Reason` union | Quick schema | Fifth unguarded copy of the vocabulary | Never, unless a bidirectional enrollment proof ties them |
-| Verb-by-verb migration with temporary `fallow-ignore` | Small PRs | Suppression count drifts; half-migrated state lingers | Only if each marker is removed in the same phase and the count returns to 11 |
+| --- | --- | --- | --- |
+| Import `pi-mcp-adapter/config` (`getServerProvenance`, `loadMcpConfig`) for the collision walk (MCPSRC-01's "third direction") | Precedence cannot drift | Makes the adapter a real dependency. Its optional peer `@earendil-works/pi-ai` stops at `^0.99.0` while Pi 1.0 pulls pi-ai `^1.0.0`, so an install can hit ERESOLVE. The milestone says to record that gap, not work around it | Never in this milestone. Re-implement the 9-source order and pin it with a test that reads the adapter's `getConfigSources` order from a scratch install |
+| Add `pi-mcp-adapter` to `devDependencies` for tests | Easy fixtures | Same peer conflict inside `npm ci`. Breaks the "companions pinned only in `scripts/pi.sh`" rule (NFR-5, D-98-10) | Never. Use a scratch `npm install --prefix ... --no-save --ignore-scripts` |
+| Verbatim-move `mcp.json` entries in MIGRATE | No plugin source needed | Old name, no `directTools`, no escaping, so a second rewrite follows | Only as the fallback when the plugin clone is gone. The default is a re-stage from the cached plugin source, offline (NFR-5) |
+| Mirror the adapter's expansion functions in our tests | Fast, hermetic | Silently drifts from the real adapter | For unit tests only. Pair them with one conformance test against the pinned adapter |
+| Version-gate migration via backfill | Reuses machinery | Partial failure is never retried | Never (Pitfall 4) |
 
 ## Integration Gotchas
 
 | Integration | Common Mistake | Correct Approach |
-|---|---|---|
-| Pi `--mode json` / RPC writers | Assume every `entry_appended` reaches stdout | Bind-then-subscribe ordering drops startup/replacement-time entries; decide and document (Pitfall 1) |
-| Pi session persistence | Assume "saved to the session file" always | Entries flush to disk only after the first assistant message (`_persist`); `--no-session` keeps them in memory; `-p "/claude:plugin list"` usually writes nothing |
-| Pi session tree | Treat custom entries as side-channel | `appendCustomEntry` sets `parentId: leafId` and advances `leafId` (`session-manager.js:855-866,770-775`); every payload is a tree node visible in `/tree`, forks and HTML export |
-| RPC clients | Assume they read `extension_ui_request` notify | In `rpc` mode (D3) they receive no notify strings from `/claude:plugin`; they must handle `entry_appended` with `customType: "claude-plugin"`. CHANGELOG-worthy |
-| Pi exit status | Script consumers test `$?` | Pi exits 0 in print/json regardless (D5); only payload severity tells success. Command-handler throws go to Pi's `emitError` (stderr in print, `extension_error` in RPC) |
-| Device flow in `print` mode | Assume a silent failure | Print mode is silent (D5), so the user code is never shown and the flow polls until the code expires. **Needs decision**: fail fast with a typed error when auth is needed in `print` |
-| `entry_appended` contract | Rely on it as documented API | Declared only in `agent-session.d.ts:57`; absent from Pi docs and CHANGELOG. Pin it in `peer-floor.test.ts` and a real-Pi e2e case |
-| Existing `notifications.mode` option | Name the new concept `mode` too | `opts.notifications?.mode === "orchestrated"` already exists in 7 orchestrators (`install-flow.ts:660`, `uninstall.ts:645`, ...). Name the new one `extensionMode`/`strategy`; orchestrated sub-ops must still emit exactly once, at the cascade owner |
+| --- | --- | --- |
+| Adapter precedence | Assume first-declarer-wins (today's `collision-slots.ts` does, which is MCPSRC-01's inverted direction) | Later sources win, and merging is **per field** (`mergeServerMaps`). `.pi/mcp.json` replaces a global Pi entry whole. `.mcp.json` and `.pi/mcp-adapter.json` beat the user `mcp-adapter.json` we write. `claudePlugins` defaults, `pi.mcp` package entries and agent plugins sit below |
+| Exclusive mode and `--mcp-config` | Assume `<agentDir>/mcp-adapter.json` is always read | `PI_MCP_CONFIG_MODE=exclusive` reads only the global file. `--mcp-config <path>` replaces it. Document both. Do not parse `process.argv` |
+| Pi's `mcp.json` during FLOOR→DELIVER | Leave the interim unexamined | On Pi 1.0 + adapter 5, our `mcp.json` entries load through translation, with a `_piClaudeMarketplace` "Ignored settings" warning every start, and SSE skipped. Usable but noisy. No release in that window |
+| `registerMcpServer` | Use it to avoid file writes | Adapter 5 treats runtime registrations as proxy-only (`direct`/`deferred` ignored), so `directTools: "search"` cannot work. That is why the milestone writes the file |
+| Pi's built-in MCP | Count it as satisfying the MCP soft dep | Out of scope by decision. A missing adapter shows `{requires pi-mcp}` even when the built-in runs |
+| `MCP_DIRECT_TOOLS` env | Assume `directTools: "search"` always applies | The adapter's env override (`parseEnvDirectToolOverride`, `__none__`) can override per-server settings. Mention it in docs |
+| Symlinked config files | Assume NFR-10's `assertPathInside` guards the real write | `write-file-atomic` follows `realpath`, as the adapter's `writeConfigText` does. A dotfiles symlink is written through. Decide whether the check runs on the real path |
+| pi-subagents 0.74 / engine 3.13.1 | Assume peer ranges accept Pi 1.0 | Checked: pi-subagents 0.74.0 peers `pi-coding-agent: "*"`, engine 3.13.1 peers `>=0.80.8`, both fine. Re-run the engine canaries on 1.0 anyway. Open ledger 84 (engine subagents get no tools) is still unexplained |
 
 ## Performance Traps
 
 | Trap | Symptoms | Prevention | When It Breaks |
-|---|---|---|---|
-| Full `list` payload per invocation in a persisted RPC session | Session JSONL grows by tens of KB per `list`; slower resume (whole file parsed into `fileEntries`) | Lean DTO: no rendered strings, no duplicated rows, no stacks; untruncated descriptions only once | Inferred: official marketplace has ~180+ plugins, so an estimated 40-80 KB per `list`; noticeable after dozens of lists in one session |
-| Synchronous `appendFileSync` per entry once flushed | Hook-driven emissions (async-rewake summary, stop cap) add sync I/O on the turn path | One entry per invocation; diagnostics folded into the same payload where the model allows | Many hook events per turn |
-| Two probes per invocation (model + leftover render probe) | Double `pi.getAllTools()` walk | Probe once in the model | Negligible cost; the correctness risk (Pitfall 2) matters more |
+| --- | --- | --- | --- |
+| A rename invalidates every cache entry, and adapter 5 discovers missing ones at startup, 10 at a time, spawning each stdio server | The first `/reload` after the upgrade is slow, `npx` servers download, HTTP servers ask for sign-in, and search tools are absent until discovery ends | Say so in the migration message. Rename once | Users with 10+ plugin MCP servers |
+| Rewriting `mcp-adapter.json` on every reconcile (unstable key order, or env-driven re-render) | Approval prompts on every `/reload` for project servers. mtime churn, cache misses | Write only when bytes change. Keep key order stable | Any project-scope plugin with MCP |
+| Pi 1.0 brings many new packages (`pi-server`, `pi-client`, `chord`, `pi-codemode`, `pi-mcp`) | Slower `npm ci`. Lint job near its 10-minute cap (memory) | Watch CI timings after FLOOR | Cold CI caches |
 
 ## Security Mistakes
 
 | Mistake | Risk | Prevention |
-|---|---|---|
-| Persisting unredacted cause chains / raw error messages | Home directory and repo layout disclosed in shared session files, exports and bug reports | Redact at the model boundary; whole-payload absolute-path walk test (Pitfall 3) |
-| Persisting `url:` sources with userinfo | Token written to session JSONL and HTML export | Strip URL userinfo in the model for all URL fields (**needs decision**: text parity, since text shows it today) |
-| Serializing `Error.stack` | Absolute `node_modules` and home paths | Causes are projected string arrays; schema has no `unknown` slot |
-| Raw control characters in untrusted fields | Terminal injection in consumers that print JSON fields | Strip C0/C1 in the JSON converter, or document fields as untrusted |
-| JSON sink not in AUTH-09 targets | A future change interpolates a credential into a payload unseen | Add the sink to `CREDENTIAL_LEAK_TARGETS` |
+| --- | --- | --- |
+| Persisting resolved `${VAR}` values | Tokens written into `mcp-adapter.json`, and committed to git at project scope | Never persist env values (Pitfall 8) |
+| Passing `${ANTHROPIC_API_KEY}` and the other deny-listed credentials through `url` and `headers` | A plugin sends the user's model or cloud key to a server it chose. Claude Code blocks this | Apply the deny-list at write time. Test it |
+| A literal leading `!` in plugin `env` or `headers` | Runs as a shell command under the adapter, while Claude Code treats it as a plain string. Not an escalation (hooks can already run code), but invisible at install | Escape with `!!`, or warn (MENVX-01) |
+| Cleaning up adapter caches, tokens or approvals after a rename | Writes outside the NFR-10 set. Risk of deleting the user's credentials | Do not touch them. Document instead |
+| Moving a project-scope `.pi/mcp.json` entry | Teammates on an older extension version add it back to `mcp.json`, so the files flip between versions | Document a version floor for teams sharing `.pi/` |
 
 ## UX Pitfalls
 
 | Pitfall | User Impact | Better Approach |
-|---|---|---|
-| Several entries per invocation with no correlation | Consumer cannot group the cascade, `notifyDiagnostic` and device-flow entries of one command | Each payload names its command/verb and an invocation discriminator; one terminal payload per invocation |
-| A path that emits nothing in JSON (for example standalone mode swallowing post-commit warnings, D-19-01) | Consumer cannot tell "succeeded quietly" from "never ran" | Every command invocation emits exactly one terminal payload; assert it per verb |
-| Browse typed error thrown to Pi in json/rpc | Arrives as `extension_error`, not a schema payload | Emit the D6 error through the JSON strategy as a usage-class payload; throw only when no strategy exists (unknown mode) |
-| Summary/tally only as English | Consumers regex the text | Structured counts (Pitfall 8) |
+| --- | --- | --- |
+| A silent rename | Hook matchers, `mcp:<server>` agent overrides, `allowedServers` and sign-ins break with no explanation | One migration notice: `old -> new` per server, what needs re-doing, and the second `/reload` hint |
+| `info` reads "not connected" for a lazy server | Looks broken | Words that show a resting state, with `cached` and `not-connected` distinct from `failed` and `needs-auth` |
+| The adapter's per-start "Ignored settings: _piClaudeMarketplace" warning before migration | Users think our extension corrupted their file | Migrate on the first reload, and mention it in the CHANGELOG |
+| Comments dropped from a hand-edited `mcp-adapter.json` | Lost notes | Warn once, or preserve (Pitfall 1) |
+| `/mcp-adapter disable` undone by `update` | User intent lost | Carry overlay fields forward (Pitfall 3) |
 
 ## "Looks Done But Isn't" Checklist
 
-- [ ] **Model extraction:** `git diff` on `docs/output-catalog.md` is empty for the whole phase, and the wire corpus diff (every emitted `(message, severity)` across unit and integration) is empty. Verify both, not just the catalog.
-- [ ] **Soft-dep markers:** per-verb suppression (disabled, uninstalled, mp headers) is data in the model. Verify that `workflows-marker-coverage` still scans the live derivation site and was not deleted.
-- [ ] **JSON strategy:** every one of the 205 catalog fixtures converts and validates. A planted invalid fixture fails. Replacing the converter body with `return {}` turns the suite red.
-- [ ] **Redaction:** a whole-payload walk finds no absolute path in any fixture's JSON, and no `Error` survives into a payload.
-- [ ] **Raw surfaces (D2):** all six raw functions (`notifyUsageError`, `notifyUsageInfo`, `notifyDiagnostic`, `makeRawNotifyFn`, `notifyAsyncRewakeSummary`, `notifyStopHookOverrideCap`) plus the two `index.ts` lifecycle strings have a JSON test in `json` mode and a byte test in `tui` mode.
-- [ ] **Mode:** the typed-error test uses an unknown plain string (no cast), and an ordering assertion shows no state write happens first.
-- [ ] **Lifecycle:** a stale `ctx.mode` getter or throwing `appendEntry` in `resources_discover`, `session_start`, async-rewake and settle propagates nothing.
-- [ ] **Gates:** a planted `pi.appendEntry` outside the sink fails lint. `NO_CONSOLE_EXEMPT_TARGETS`, COMPAT-01 and SCOPE_FENCE targets name the files that now hold the claims.
-- [ ] **Type-members:** `lint:type-members` exits 0 (not 2) after Prettier. No replacer or `toJSON` in the converter.
-- [ ] **Real Pi:** `pi -p --mode json --no-session --offline "/claude:plugin list"` produces exactly one `entry_appended` with `customType: "claude-plugin"`, and the startup-reconcile behavior matches the documented decision.
-- [ ] **Docs:** the schema reference states the compatibility policy, the print-mode silence, the RPC notify change and the lifecycle-time gap. AGENTS.md IL-2 is amended.
+- [ ] **DELIVER:** a fixture with comments, a trailing comma, a BOM and the `mcp-servers` alias round-trips with every foreign entry and top-level key intact.
+- [ ] **DELIVER:** a marker-less `{ "disabled": true }` stub in the project `.pi/mcp-adapter.json` does not block a user-scope update.
+- [ ] **DELIVER:** `directTools: "search"` tools can be reached through Pi's `tool_search` on real Pi 1.0 with `builtin:tool-search` loaded. Checked after discovery fills `mcp-cache.json`, not before.
+- [ ] **DELIVER:** the NFR-10 write set, `persistence/locations.ts`, `persistence/README.md`, AGENTS.md's Containment line and the `config-state-write-seams` gate all name `mcp-adapter.json`. New gate-referenced files are registered in `tests/architecture/gate-targets.ts` (D-07-06).
+- [ ] **NAME:** the 64-character tool-name behavior was measured on Pi 1.0, not assumed.
+- [ ] **NAME:** a `-`/`_` folding collision is refused at install, before any write (RN-3).
+- [ ] **VARS:** a conformance test runs every escape case through the pinned adapter's real functions.
+- [ ] **VARS:** no fixture or test output contains a resolved secret value.
+- [ ] **MIGRATE:** a fault injected between "add" and "remove" converges on the next `/reload`, with no duplicate servers left.
+- [ ] **MIGRATE:** state, `mcp.json` and `mcp-adapter.json` agree after a crash at each step. The hub-split warning in memory applies: assert order and call counts, not only the end state.
+- [ ] **DETECT:** a third-party `mcp` tool, and an adapter running with `disableProxyTool`, are both classified correctly.
+- [ ] **STATUS:** a snapshot published before our subscription, and the empty shutdown snapshot, are both handled.
+- [ ] **FLOOR:** the pi-subagents floor tests ran with zero skips against 0.74.0 in a scratch prefix, and the Stop canary ran on 1.0.
+- [ ] **FLOOR:** `scripts/pi.sh` pins adapter 5.0.0, pi-subagents 0.74.0 and engine 3.13.1.
+- [ ] **ALL:** `npm run check` ran unpiped, with `CHECK_EXIT` written to the log (memory: green runs that checked nothing).
 
 ## Recovery Strategies
 
 | Pitfall | Recovery Cost | Recovery Steps |
-|---|---|---|
-| Text drift discovered after extraction | MEDIUM | Diff the wire corpus against the baseline to find the verb and status, restore the per-verb fact in the model, and add the missing corpus case to the owning `*.messaging` test |
-| Secrets or paths already persisted in users' session files | HIGH (cannot be recalled) | Fix redaction, bump `schemaVersion` if a field is removed, and publish a CHANGELOG advisory telling users to review exported sessions |
-| Type-member gate exit 2 after a merge or format | LOW | Prettier first, then re-derive pins by line shift from the gate's own report (never transcribe old coordinates) |
-| Wire schema shipped without a compat policy | MEDIUM | Declare the policy retroactively at the current `schemaVersion`, and treat the next non-additive change as a bump |
-| Half-migrated surfaces failing dead-code | LOW-MEDIUM | Finish the sweep in one plan, or reintroduce the old signature as a thin adapter over the model until the sweep lands |
+| --- | --- | --- |
+| A user's `mcp-adapter.json` wiped (Pitfall 1) | HIGH | No backup exists. Before the first write to a file we did not create, keep a sibling `.bak`. A user-visible file justifies the copy |
+| Duplicate servers after a half migration | LOW | The fixed-point pass removes the `mcp.json` copy on the next `/reload` |
+| Lost sign-ins after the rename | LOW (per server) | Sign in again with `/mcp-adapter`. The notice lists which servers |
+| Wrong name builder shipped | HIGH | A second rename repeats every Pitfall 6 cost. Measure first (Pitfall 9) |
+| Pins broken by a merge | LOW | Remap from the pre-merge revision once, as the memory notes describe |
 
 ## Pitfall-to-Phase Mapping
 
-Stage names are topical. The roadmapper assigns numbers.
-
-| Pitfall | Prevention Stage | Verification |
-|---|---|---|
-| 1 Bind-then-subscribe loss | JSON transport (decide), e2e (pin) | Real-Pi `--mode json` case with pending reconcile; documented outcome |
-| 2 Text byte drift | Characterization baseline, then model extraction | Empty catalog diff and empty wire-corpus diff |
-| 3 Persisted leaks | Model extraction (causes, redaction), JSON strategy (walk test, AUTH-09), raw surfaces (device flow) | Absolute-path walk test; AUTH-09 names the sink |
-| 4 New throw sites | Raw surfaces / lifecycle | Stale-ctx tests for async-rewake and settle |
-| 5 Unknown-mode timing and lint | Mode selection | No-cast typed-error test; ordering assertion before mutation |
-| 6 Implicit fallbacks | Mode plumbing (first), JSON strategy | Required `mode`; grep finds no `??` fallback; per-fixture JSON conformance with planted control |
-| 7 Schema versioning and closed sets | JSON schema, docs | Enrollment proof between schema literals and TS unions; policy doc exists |
-| 8 English as API | Model extraction, JSON schema | Schema has no rendered-text properties on structured rows |
-| 9 Named-file gates | Every extraction plan | Plan lists the gates it re-points; each claim restated |
-| 10 Type-member pins and JSON reads | Every plan touching `shared/notif*` / `pi-api.ts`; JSON strategy | Gate exits 0; no replacer; member lands with its reader |
-| 11 Complexity, dupes, dead code, zones, coverage | Model extraction, JSON strategy | Fallow exit 0; dupes delta measured; zones added with planted control |
-| 12 Unbanned sink | JSON strategy | Planted `appendEntry` violation fails lint |
+| Pitfall | Prevention Phase | Verification |
+| --- | --- | --- |
+| 1 JSONC wipe | DELIVER | Round-trip fixture. Refusal test for unparseable input |
+| 2 `mcp-servers` alias | DELIVER | Alias fixture |
+| 3 Adapter overlays | DELIVER, MIGRATE | Planted stub and panel-copy tests |
+| 4 Half migration | MIGRATE | Fault injection between writes. Lock-order test |
+| 5 Two-reload convergence | MIGRATE, DOCS | Live UAT counts reloads. Notice carries the reload hint |
+| 6 Rename orphans | NAME, MIGRATE, DOCS | The notice lists renames. Bytes stable across reloads |
+| 7 Second expansion | VARS | Per-field conformance against the pinned adapter |
+| 8 Secret persistence and deny-list | VARS | Security tests. Phase threat model |
+| 9 Name collisions, length, hooks | NAME | Long and hyphenated fixtures. Measured length behavior |
+| 10 Probe false positives and negatives | DETECT | Four-state unit tests plus a real-Pi RPC run |
+| 11 Status stream | STATUS | Pre-subscribe and shutdown snapshot tests. RPC check |
+| 12 features/mcp replay | FLOOR | Zero-skip floor run. Re-derived pins. Restored README sections |
+| 13 Dev and CI environment | FLOOR, DELIVER, DOCS | Launcher pins. Sandboxed agent dir. Tool-search check |
 
 ## Sources
 
-- Pi 0.86.1 installed dist (primary source, HIGH):
-  `dist/core/agent-session.js:2005-2036,2131-2136,1073-1078`;
-  `dist/core/session-manager.js:740-775,855-866`;
-  `dist/core/extensions/loader.js:106-145,288-290`;
-  `dist/core/extensions/runner.js:114-130,296-298,423-432,535-545`;
-  `dist/core/extensions/types.d.ts:209-214,991`;
-  `dist/modes/print-mode.js`; `dist/modes/rpc/rpc-mode.js:84-100,225-273`;
-  `dist/core/export-html/template.js`; `dist/core/bug-report.js:152-200`;
-  `CHANGELOG.md` (no `entry_appended` entry; `ctx.mode` added around line 1347)
-- Repo at `ab3d9c31` (HIGH): `shared/notification-dispatch.ts`,
-  `shared/notification-types.ts`, `shared/notification-grammar.ts`,
-  `shared/notify-context.ts`, `shared/redact-absolute-paths.ts`,
-  `shared/errors.ts`, `platform/pi-api.ts`, `index.ts`,
-  `orchestrators/plugin/{install,enable-disable,list,uninstall}.messaging.ts`,
-  `edge/handlers/tools.ts`, `domain/github-auth.ts:436`,
-  `bridges/hooks/{settle.ts,async-rewake/registry.ts}`, `eslint.config.js`,
-  `.fallowrc.json`, `rule-packs/architecture.json`, `sonar-project.properties`,
-  `tests/architecture/{gate-targets.ts,catalog-uat/catalog-contract.test.ts,compat-01-no-expansion,notify-*,no-probe-in-workflows-bridge,workflows-marker-coverage,no-credential-leak,no-test-only-production-surface}.test.ts`,
-  `docs/unused-type-member-gate.md`, `scripts/check-unused-type-members.contracts.json`
-- Measured: `fallow dupes` = 1.41% (1,327 lines) against threshold 3
-- Project memory and retrospectives (MEDIUM, lessons not re-measured here):
-  optional-field silent omission, compiler-forced unreachable branches,
-  source-walk gates follow code, green runs that checked nothing, type-member
-  pins and Prettier, hub splits dropping sequence assertions,
-  `.planning/RETROSPECTIVE.md` (v1.18 characterize-first, v1.14 hand-mirrored
-  classifiers)
-- typebox 1.3.31 behavior (MEDIUM): `Type.Object` admits additional properties
-  unless `additionalProperties: false`; union errors do not name the
-  discriminant, so give every union a literal `kind`/`status` tag; `Static`
-  optional fields interact with `exactOptionalPropertyTypes` (converters must
-  omit keys, not assign `undefined`)
+- `pi-mcp-adapter@5.0.0` tarball, read in source: `config.ts` (`getConfigSources`, `mergeServerMaps`, `readPiMcpConfig`, `translatePiMcpServer`, `writeProjectServerDisabledOverride`, `writeDirectToolsConfig`, `setServersObject`), `utils.ts` (`parseJsonWithComments`, `interpolateEnvVars`, `resolveCommandSecret`, `expandHomePath`, `resolveServerUrl`), `server-manager.ts` (`resolveEnv`, stdio and HTTP field resolution), `types.ts` (`formatServerNamespace`, `formatToolName`, `ServerEntry`, the status types), `direct-tool-surface.ts`, `metadata-cache.ts`, `mcp-auth.ts`, `project-server-trust.ts`, `mcp-status.ts`, `pi-builtin-mcp.ts`, `index.ts`, `CHANGELOG.md`, `docs/configuration.md`. HIGH.
+- `@earendil-works/pi-coding-agent@1.0.0` tarball: `CHANGELOG.md`, `dist/core/extensions/types.d.ts` (`ToolInfo.exposure`, `ResourcesDiscoverEvent` at 524-534, "Fired after session_start"), `dist/extensions/mcp/*`, `package.json` (pi-ai `^1.0.0`, node `>=22.19.0`). HIGH.
+- `features/mcp` branch (`git show features/mcp:.planning/phases/...`): 01-01 and 01-02 SUMMARY, 01-05 SUMMARY, 01-REVIEW, 01-REVIEW-FIX, 01-REVIEW-DISPOSITION, 01-VERIFICATION, 02-CONTEXT, 02-REVIEW, 03-CONTEXT, and `.planning/spikes/028-pi-099-builtin-mcp/README.md` (Setup, Tool names, Consequences). HIGH.
+- Current tree: `bridges/mcp/{stage,unstage,marker,substitute}.ts`, `platform/pi-api.ts`, `orchestrators/reconcile/backfill.ts`, `scripts/pi.sh`, `scripts/check-unused-type-members.contracts.json`, `tests/integration/provenance-invisibility.test.ts`, `.planning/BACKLOG.md` (MCPSRC-01, ENVLIT-01, MENVX-01, ENVDOC-01, CFGDIR-01). HIGH.
+- code.claude.com/docs/en/mcp (WebFetch): `${VAR}` / `${VAR:-default}` fields, unset-variable behavior, the credential deny-list, plugin naming `plugin:<plugin>:<server>` and `mcp__plugin_<plugin>_<server>__<tool>`, tool search on by default. Official docs; the research seam tiers WebFetch as LOW. The naming matches the features/mcp binary grep (Claude Code 2.1.285/2.1.287).
+- `npm view`: pi-subagents 0.74.0 peers, `@quintinshaw/pi-dynamic-workflows@3.13.1` peers, adapter dist-tag `latest` = 5.0.0. HIGH.
+- Project memory notes: source-walk gates follow code, contracts pins are line:col and merge-fragile, Prettier invalidates pins, pi-subagents tests use the global peer, green runs that checked nothing, the hub-split sequence-assertion loss, notify is a dumb renderer.
 
 ---
-*Pitfalls research for: json-output (mode-keyed presentation strategies)*
-*Researched: 2026-09-28*
+*Pitfalls research for: mcp-4 (Pi 1.0 baseline + pi-mcp-adapter 5 delivery)*
+*Researched: 2026-10-01*

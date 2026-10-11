@@ -55,7 +55,7 @@ describe("INSTALL_CONTEXT", () => {
       name: "helper",
       version: "1.2.3",
       scope: "user",
-      reasons: ["orphan rewake", "requires pi-subagents", "requires pi-mcp"],
+      reasons: ["orphan rewake", "requires pi-subagents", "requires pi-mcp-adapter"],
       severity: "warning",
       needsReload: true,
     } satisfies ResolvedRow<InstallMsg>;
@@ -66,7 +66,7 @@ describe("INSTALL_CONTEXT", () => {
     // assert
     assert.strictEqual(
       row,
-      "● helper v1.2.3 (installed) {orphan rewake, requires pi-subagents, requires pi-mcp}",
+      "● helper v1.2.3 (installed) {orphan rewake, requires pi-subagents, requires pi-mcp-adapter}",
     );
   });
 
@@ -894,6 +894,39 @@ describe("resolver reason narrowing through the install failure row", () => {
 
     // assert
     assert.deepStrictEqual(narrowedReasons, ["malformed mcp"]);
+  });
+
+  test("ANAME-07: maps a malformed MCP server note to malformed mcp", () => {
+    // arrange
+    const reasons = ['malformed mcp server "db": /timeout: must be integer'];
+
+    // act
+    const narrowedReasons = installFailureReasons(reasons);
+
+    // assert
+    assert.deepStrictEqual(narrowedReasons, ["malformed mcp"]);
+  });
+
+  test("ANAME-07: gives malformed MCP precedence over a server named source", () => {
+    // arrange
+    const reasons = ['malformed mcp server "source": /url: must be string'];
+
+    // act
+    const narrowedReasons = installFailureReasons(reasons);
+
+    // assert
+    assert.deepStrictEqual(narrowedReasons, ["malformed mcp"]);
+  });
+
+  test("ANAME-07: maps a typed mcpServers kind to unsupported mcp", () => {
+    // arrange
+    const unsupportedKinds = ["mcpServers"];
+
+    // act
+    const narrowedReasons = installFailureReasons([], unsupportedKinds, true);
+
+    // assert
+    assert.deepStrictEqual(narrowedReasons, ["unsupported mcp"]);
   });
 
   test("maps a source note to unsupported source", () => {

@@ -60,6 +60,7 @@ import {
   errorMessage,
   errorWithManualRecovery,
 } from "../../shared/errors.ts";
+import { notifyMcpConfigNotices } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import {
   type PluginFailedMessage,
@@ -70,6 +71,7 @@ import {
 } from "../../shared/notification-types.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
 import { skipSeverity } from "../../shared/notify-reasons.ts";
+import { ownValue } from "../../shared/own-key.ts";
 import {
   type LockedStateTransaction,
   type LockedStateTransactionDeps,
@@ -97,6 +99,7 @@ import {
 } from "./shared.ts";
 
 import type { HooksRouting } from "../../bridges/hooks/index.ts";
+import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
 import type { PluginEntry } from "../../domain/components/plugin.ts";
 import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
 import type { GitBackedSource } from "../../domain/source.ts";
@@ -104,6 +107,7 @@ import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
+import type { McpConfigNotice } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
 import type { ReinstallFailedOutcome, ReinstallPluginOutcome } from "../types.ts";
@@ -207,11 +211,18 @@ const REINSTALL_FLOW_OWNERS: ReinstallFlowOwners = {
   selectReinstallTargets,
 };
 
-/** Binds one reinstall operation to a required semantic transaction owner. */
+/**
+ * Binds one reinstall operation to a required semantic transaction owner.
+ *
+ * D-08-06: `env` is the environment the reinstall stages MCP servers with. It
+ * defaults to Pi's process environment here, at the entry point, the way
+ * `createGetPluginInfo` binds it.
+ */
 export function createReinstallPlugin(
   transaction: ReinstallTransaction,
   hooksRouting: ReinstallHooksRouting,
   completionCache: CompletionCache,
+  env: ClaudeEnv = process.env,
 ): ReinstallPluginFn {
   return (options) =>
     reinstallPluginWithTransaction(
@@ -219,6 +230,7 @@ export function createReinstallPlugin(
       transaction,
       hooksRouting,
       completionCache,
+      env,
       options,
     );
 }
@@ -257,6 +269,8 @@ interface LockedSuccess {
    * Orchestrated-only per D-19-01.
    */
   readonly bridgeWarnings: readonly string[];
+  /** AFILE-04: the MCP replace's file notices; empty for a skipped reinstall. */
+  readonly mcpConfigNotices: readonly McpConfigNotice[];
   /**
    * S5: when the config-back loadConfig returned `invalid`, the write-back
    * was skipped while the success notify proceeded. The single-plugin caller
@@ -279,6 +293,7 @@ async function reinstallPluginWithTransaction(
   transaction: ReinstallTransaction,
   hooksRouting: ReinstallHooksRouting,
   completionCache: CompletionCache,
+  env: ClaudeEnv,
   opts: ReinstallPluginOptions,
 ): Promise<ReinstallPluginOutcome> {
   const { ctx, run, scope, cwd, marketplace, plugin } = opts;
@@ -289,7 +304,7 @@ async function reinstallPluginWithTransaction(
   try {
     locked = await transaction.withLockedStateTransaction(
       locations,
-      (tx) => runLockedReinstall(owners, transaction, hooksRouting, tx, locations, opts),
+      (tx) => runLockedReinstall(owners, transaction, hooksRouting, tx, locations, env, opts),
       opts.stateTransaction,
     );
   } catch (err) {
@@ -334,19 +349,16 @@ async function reinstallPluginWithTransaction(
       ...locked.bridgeWarnings,
       ...maintenanceWarnings,
     ].map((w) => `warning: ${w}`);
-    if (notes.length === 0) {
-      return locked.outcome;
-    }
-
-    // A non-empty `discoveryWarnings` always makes `notes` non-empty, so the
-    // early return above cannot drop the carrier. NREG-01: both keys stay
-    // absent on a clean reinstall.
+    // NREG-01: each carrier key stays absent when it is empty, so a clean
+    // reinstall's outcome shape is unchanged. AFILE-04: an MCP notice needs no
+    // note to travel with it.
     return {
       ...locked.outcome,
-      notes,
+      ...(notes.length > 0 && { notes }),
       ...(locked.discoveryWarnings.length > 0 && {
         discoveryWarnings: locked.discoveryWarnings,
       }),
+      ...(locked.mcpConfigNotices.length > 0 && { mcpConfigNotices: locked.mcpConfigNotices }),
     };
   }
 
@@ -388,6 +400,9 @@ async function reinstallPluginWithTransaction(
     undefined,
     "single",
   );
+  // AFILE-04: this arm renders its own row, so it shows the MCP config file
+  // notices after it.
+  notifyMcpConfigNotices(ctx, run, locked.mcpConfigNotices);
 
   // S5: when the config write-back loadConfig returned `invalid`, emit a
   // separate warning row so the user sees that the on-disk artifacts were
@@ -576,7 +591,28 @@ async function reinstallPluginsWith(
 
   renderReinstallPartitionAndNotify(ctx, run, outcomes, cardinality);
   surfaceReinstallDiscoveryWarnings(ctx, run, outcomes);
+  surfaceReinstallMcpConfigNotices(ctx, run, outcomes);
   return Object.freeze(outcomes);
+}
+
+/**
+ * AFILE-04: show the MCP config file notices of every reinstalled plugin, in
+ * outcome order, after the cascade and the discovery diagnostics. A failed
+ * reinstall restores the file's exact bytes, so only reinstalled outcomes
+ * carry notices.
+ */
+function surfaceReinstallMcpConfigNotices(
+  ctx: NotificationContext,
+  run: NotificationRun,
+  outcomes: readonly ReinstallPluginOutcome[],
+): void {
+  notifyMcpConfigNotices(
+    ctx,
+    run,
+    outcomes.flatMap((outcome) =>
+      outcome.partition === "reinstalled" ? (outcome.mcpConfigNotices ?? []) : [],
+    ),
+  );
 }
 
 /**
@@ -684,11 +720,12 @@ async function runLockedReinstall(
   hooksRouting: ReinstallHooksRouting,
   tx: LockedStateTransaction,
   locations: ScopedLocations,
+  env: ClaudeEnv,
   opts: ReinstallPluginOptions,
 ): Promise<LockedSuccess> {
   const { scope, cwd, marketplace, plugin } = opts;
-  const mp = tx.state.marketplaces[marketplace];
-  const oldRecord = mp?.plugins[plugin];
+  const mp = ownValue(tx.state.marketplaces, marketplace);
+  const oldRecord = ownValue(mp?.plugins, plugin);
   if (mp === undefined || oldRecord === undefined) {
     return {
       outcome: owners.recordReinstallOutcome({
@@ -700,6 +737,7 @@ async function runLockedReinstall(
       }),
       discoveryWarnings: [],
       bridgeWarnings: [],
+      mcpConfigNotices: [],
     };
   }
 
@@ -728,6 +766,7 @@ async function runLockedReinstall(
       }),
       discoveryWarnings: [],
       bridgeWarnings: [],
+      mcpConfigNotices: [],
     };
   }
 
@@ -768,6 +807,7 @@ async function runLockedReinstall(
       agentsDirs: generated.agentsDirs,
       referenceNames: generated,
       workflowNames: generated.workflows,
+      env,
     },
     transaction.replaceOperations,
   );
@@ -874,6 +914,7 @@ async function runLockedReinstall(
     outcome,
     discoveryWarnings: replacement.discoveryWarnings,
     bridgeWarnings,
+    mcpConfigNotices: replacement.mcpConfigNotices,
     ...(invalidConfigWriteBack && { invalidConfigWriteBack: true }),
   };
 }

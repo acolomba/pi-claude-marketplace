@@ -33,7 +33,7 @@ import type { CredentialSpawn } from "../../extensions/pi-claude-marketplace/pla
 import type {
   ExtensionContext,
   NotificationContext,
-  ToolInventory,
+  PiInventory,
 } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
 /** Narrows a bundle the case expects to run a Device Flow, and fails the case otherwise. */
@@ -264,6 +264,7 @@ describe("buildAuthForHost", () => {
       const run = openNotificationRun(
         {
           getAllTools: () => [],
+          getCommands: () => [],
           appendEntry(customType, payload) {
             capture.entrySink.appendEntry(customType, payload);
             events.push({ customType, payload });
@@ -366,12 +367,16 @@ describe("buildAuthForHost", () => {
         return capture.ui;
       },
     };
-    const inventory = mock<ToolInventory>({ exactParams: true, name: "inventory" });
+    const inventory = mock<PiInventory>({ exactParams: true, name: "inventory" });
     when(() => inventory.getAllTools())
       .thenReturn([])
       .times(3);
+    when(() => inventory.getCommands())
+      .thenReturn([])
+      .once();
     const pi = {
       getAllTools: () => inventory.getAllTools(),
+      getCommands: () => inventory.getCommands(),
       appendEntry: capture.entrySink.appendEntry,
     };
     const run = openNotificationRun(pi, {
