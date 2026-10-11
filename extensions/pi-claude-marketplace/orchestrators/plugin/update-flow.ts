@@ -133,11 +133,12 @@ type UpdateCascadeComposer = (
  * forceUpdateRef + checkout (the D-14 sequence), as `marketplace update`
  * does. Throws on git-side failures.
  *
- * AUTH-02: the fetch carries the same GitHub auth bundle as `marketplace
- * update`, so a private marketplace reaches the credential helper and, on a
- * miss, the Device Flow. `updatePluginsWith` allocates the run's `authMemo` when
- * the caller supplies none and passes it here (D-79-02), so that flow runs at
- * most once per host across the marketplace syncs and the plugin clones.
+ * AUTH-02: the fetch carries the GitHub auth bundle that `marketplace update`
+ * uses, plus the run's `authMemo`, so a private marketplace reaches the
+ * credential helper and, on a miss, the Device Flow. `updatePluginsWith`
+ * allocates the `authMemo` when the caller supplies none and passes it here
+ * (D-79-02), so that flow runs at most once per host across the marketplace
+ * syncs and the plugin clones.
  */
 function makeSyncCloneOnce(
   opts: UpdatePluginsOptions,
@@ -328,8 +329,9 @@ async function updatePluginsWith(
       // the typed cause (Option B). Abort the whole
       // batch -- a syncClone failure means we cannot read the refreshed
       // manifest for ANY plugin in that marketplace and the rest of the
-      // batch is suspect. The renderer composes the 4-space cause-chain
-      // trailer.
+      // batch is suspect. `abortUpdateBatch` still reports the targets that
+      // already committed (CR-01). The renderer composes the 4-space
+      // cause-chain trailer.
       notifyDirectFailure({
         ctx,
         pi,
@@ -549,26 +551,6 @@ function isPhase3aAggregateFailure(
 }
 
 /**
- * CR-01 helper: emit the cascade notification ONLY when at least one
- * outcome accumulated. Empty accumulators skip the call so we do not
- * emit an empty-marketplaces sentinel after an aborted batch.
- */
-function renderUpdateCascadeIfAny(
-  ctx: NotificationContext,
-  pi: PiInventory,
-  outcomes: readonly UpdateCascadeOutcome[],
-  cardinality: "single" | "plural",
-  composeCascade: UpdateCascadeComposer,
-  // WR-01: the abort path sets this so the never-silent no-op headline
-  // is suppressed when the accumulated outcomes contain no realized transition.
-  abortedByFailure = false,
-): void {
-  if (outcomes.length > 0) {
-    composeCascade(ctx, pi, outcomes, cardinality, abortedByFailure);
-  }
-}
-
-/**
  * CR-01 / AFILE-04: close a batch that stopped on a failure its own
  * `notifyDirectFailure` already reported. Earlier targets committed to disk
  * through their own `withStateGuard` closures and may have rewritten
@@ -577,7 +559,13 @@ function renderUpdateCascadeIfAny(
  * WR-01: the cascade is flagged aborted-by-failure so the never-silent no-op
  * headline is suppressed. If every accumulated outcome was `unchanged`, the
  * bulk-suppressed cascade is empty and the headline would otherwise emit a
- * contradictory `nothing to update` line right after the failure.
+ * contradictory `nothing to update` line right after the failure. An empty
+ * accumulator skips the cascade so no empty-marketplaces sentinel follows the
+ * failure.
+ *
+ * `failed` is the phase-3a aggregate outcome, when the abort came from one.
+ * Its MCP notices follow the cascade, because its MCP commit may have
+ * rewritten the file before a later bridge failed.
  */
 function abortUpdateBatch(
   ctx: NotificationContext,
@@ -587,7 +575,10 @@ function abortUpdateBatch(
   composeCascade: UpdateCascadeComposer,
   failed?: UpdatePhase3FailedOutcome,
 ): void {
-  renderUpdateCascadeIfAny(ctx, pi, outcomes, cardinality, composeCascade, true);
+  if (outcomes.length > 0) {
+    composeCascade(ctx, pi, outcomes, cardinality, true);
+  }
+
   surfaceUpdateMcpConfigNotices(ctx, outcomes, failed);
 }
 
