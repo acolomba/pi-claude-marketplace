@@ -46,13 +46,13 @@
     {
       "number": "9",
       "name": "Address tech debt: redact LLM tool error text",
-      "status": "pending"
+      "status": "complete"
     }
   ],
   "next": {
-    "command": "/gsd:progress --next",
-    "label": "Advance to the next step (verify)",
-    "reason": "Phase 09 of 9 · ready to verify"
+    "command": "/gsd:new-milestone",
+    "label": "Start a new milestone",
+    "reason": "All phases complete — start a new milestone"
   },
-  "updated_at": "2026-10-11T04:37:45.513Z"
+  "updated_at": "2026-10-11T04:49:14.130Z"
 }

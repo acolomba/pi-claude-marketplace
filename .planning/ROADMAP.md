@@ -22,7 +22,7 @@ Earlier milestones remain in [MILESTONES.md](MILESTONES.md).
 - [x] **Phase 6: Command-Run Contract** — Payloads carry their origin and invocation, and every command run emits a complete set of payloads, even when it throws (completed 2026-10-09)
 - [x] **Phase 7: Mode Refusals, Real-Pi Verification, and Docs** — Browse and device-flow refuse clearly by mode, a real headless Pi run proves the contract, and the schema is documented (completed 2026-10-10)
 - [x] **Phase 8: Address tech debt: ledger dispositions and advisory** — Give every open WINDOWS.md ledger entry a disposition and resolve the carried advisory (completed 2026-10-10)
-- [ ] **Phase 9: Address tech debt: redact LLM tool error text** — Close the phase 04 deferred item: the LLM plugin tool error text bypasses credential redaction
+- [x] **Phase 9: Address tech debt: redact LLM tool error text** — Close the phase 04 deferred item: the LLM plugin tool error text bypasses credential redaction (completed 2026-10-11)
 
 Phases run in order, 1 through 9.
 
@@ -337,7 +337,7 @@ Plans:
 4. The `04/` deferred item reads `status: resolved` with a pointer to `09/` and its two fixing commits, `audit-open` no longer lists it, and REQUIREMENTS.md gains no ID.
 5. `docs/output-catalog.md` and the frozen notify corpus diff empty, no suppression is added, `npm run check` exits 0, and `fallow audit` reads pass.
 
-**Plans:** 1/1 plans executed, in the main checkout
+**Plans:** 1/1 plans complete, in the main checkout
 
 Plans:
 **Wave 1**
@@ -355,7 +355,7 @@ Plans:
 | 6. Command-Run Contract | 4/4 | Complete    | 2026-10-09 |
 | 7. Mode Refusals, Real-Pi Verification, and Docs | 6/6 | Complete    | 2026-10-10 |
 | 8. Address tech debt: ledger dispositions and advisory | 4/4 | Complete    | 2026-10-10 |
-| 9. Address tech debt: redact LLM tool error text | 1/1 | In Progress | - |
+| 9. Address tech debt: redact LLM tool error text | 1/1 | Complete    | 2026-10-11 |
 
 ## Carried Forward
 
