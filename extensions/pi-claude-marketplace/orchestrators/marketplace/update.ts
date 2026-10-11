@@ -100,7 +100,6 @@ import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import {
-  CrossOriginChallengeError,
   InvalidMarketplaceManifestError,
   MarketplaceUpdateError,
   PluginShapeError,
@@ -122,12 +121,7 @@ import {
   withLockedStateTransaction,
   type LockedStateTransactionDeps,
 } from "../../transaction/with-state-guard.ts";
-import {
-  DEFAULT_CREDENTIAL_OPS,
-  NO_STORED_CREDENTIAL_CAUSE,
-  buildAuthForHost,
-  hostFromCloneUrl,
-} from "../auth-host.ts";
+import { DEFAULT_CREDENTIAL_OPS, buildAuthForHost, hostFromCloneUrl } from "../auth-host.ts";
 // WR-12 / WR-03: the `(updated)` row composer, imported from the LEAF module
 // that holds it rather than from the plugin-update ledger. The ledger stays
 // behind the injected `pluginUpdate` seam -- and now stays out of this module's
@@ -137,6 +131,7 @@ import {
 import {
   DEFAULT_GIT_OPS,
   refreshGitHubClone,
+  refreshUrlClone,
   resolveScopeOrNotifyNotAdded,
   type GitOps,
 } from "./shared.ts";
@@ -147,7 +142,7 @@ import {
 } from "./update.messaging.ts";
 
 import type { DeviceFlowHttp } from "../../domain/github-auth.ts";
-import type { ParsedSource, UrlSource } from "../../domain/source.ts";
+import type { ParsedSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { CredentialOps } from "../../platform/git-credential.ts";
@@ -372,56 +367,6 @@ async function manifestContentKey(
   }
 }
 
-/**
- * MURL-03 url-source refresh via the on-disk `origin` remote (same D-14
- * sequence as github; refreshGitHubClone fetches by remote name, so the
- * original clone URL is irrelevant). GAUTH-03: the host extracted from
- * source.url carries its own auth bundle, so the user's git credential helper
- * is consulted on every host; a registry host adds that provider's Device Flow
- * on a helper miss (PROV-03).
- *
- * D-1-02 / GAUTH-04: an auth failure on a host whose only auth path is a
- * stored credential carries exactly one extra cause line telling the user WHY
- * authentication cannot proceed. Attached as the chain TAIL, which keeps the
- * code-bearing transport error at cause-depth 1 where `transportReason`'s
- * one-level unwrap classifies it as `authentication required`. GAUTH-05: a
- * `device-flow` bundle is excluded -- there the story is a declined or expired
- * Device Flow, and the bare closed-set token is the whole truth. A challenge
- * after a cross-origin redirect keeps its own cause text, because a credential
- * stored for `host` cannot answer it (Q-02).
- */
-async function refreshUrlClone(
-  cloneDir: string,
-  source: UrlSource,
-  args: RefreshOneArgs,
-  onFetchSucceeded: () => void,
-): Promise<void> {
-  const { ctx, credentialOps, deviceFlowHttp, gitOps } = args;
-  const host = hostFromCloneUrl(source.url, "url");
-  const auth = buildAuthForHost({
-    host,
-    credentialOps,
-    ctx,
-    ...(deviceFlowHttp !== undefined && { deviceFlowHttp }),
-  });
-
-  try {
-    await refreshGitHubClone(cloneDir, source.ref, gitOps, onFetchSucceeded, auth);
-  } catch (err) {
-    if (
-      err instanceof Error &&
-      err.cause === undefined &&
-      classifyGitTransportFailure(err) === "authentication required" &&
-      auth.kind === "stored-credential" &&
-      !(err instanceof CrossOriginChallengeError)
-    ) {
-      err.cause = new Error(NO_STORED_CREDENTIAL_CAUSE(host));
-    }
-
-    throw err;
-  }
-}
-
 async function refreshRecord(
   record: ExtensionState["marketplaces"][string],
   args: RefreshOneArgs,
@@ -474,8 +419,17 @@ async function refreshRecord(
       await validateManifestAtRoot(record, cloneDir);
     } else if (source.kind === "url") {
       const cloneDir = await locations.sourceCloneDir(name);
-      await refreshUrlClone(cloneDir, source, args, () => {
-        cloneAdvanced = true;
+      const { ctx, credentialOps, deviceFlowHttp } = args;
+      await refreshUrlClone({
+        cloneDir,
+        source,
+        gitOps,
+        ctx,
+        credentialOps,
+        ...(deviceFlowHttp !== undefined && { deviceFlowHttp }),
+        onFetchSucceeded: () => {
+          cloneAdvanced = true;
+        },
       });
       await validateManifestAtRoot(record, cloneDir);
     } else if (source.kind === "path") {

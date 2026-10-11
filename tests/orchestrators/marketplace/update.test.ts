@@ -1300,6 +1300,82 @@ test("MU-5: clone advances + manifest re-validation fails -- 'Retry the command.
   });
 });
 
+test("CR-05 / MU-5: url-source pre-fetch failure (gitOps.fetch throws) does NOT append 'Retry the command.'", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    await seedUrlMarketplace({ cwd, name: "urloffline" });
+    const { ctx, pi, notifications } = makeCtx();
+    const { credOps: credentialOps } = createCredentialOps();
+    // cloneAdvanced stays false because onFetchSucceeded never fires.
+    const { gitOps } = createGitOps({
+      fetchThrows: new Error("mock: ENETUNREACH https://gitlab.example.com"),
+    });
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      pi,
+      name: "urloffline",
+      scope: "project",
+      cwd,
+      gitOps,
+      credentialOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          'Some operations have failed.\n\n⊘ urloffline [project] (failed)\n  ⊘ urloffline (failed) {network unreachable}\n    cause: Failed to update marketplace "urloffline". -> mock: ENETUNREACH https://gitlab.example.com',
+        severity: "error",
+      },
+    ]);
+  });
+});
+
+test("MU-5: url-source clone advances + manifest re-validation fails -- 'clone advanced' diagnostic", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const { cloneDir } = await seedUrlMarketplace({ cwd, name: "urlbroken" });
+    const { ctx, pi, notifications } = makeCtx();
+    const { credOps: credentialOps } = createCredentialOps();
+    const { gitOps } = createGitOps({
+      remoteRefs: { "refs/remotes/origin/HEAD": "abcdef0000000000000000000000000000000003" },
+      localRefs: { HEAD: "abcdef0000000000000000000000000000000003" },
+    });
+    const brokenGitOps: typeof gitOps = {
+      ...gitOps,
+      async checkout(opts): Promise<void> {
+        await gitOps.checkout(opts);
+        // The fetch succeeded (cloneAdvanced via onFetchSucceeded), then the
+        // working-tree manifest turns INVALID so the POST re-validation throws.
+        await cp(fixtureMarketplaceDir("invalid-manifest"), cloneDir, { recursive: true });
+      },
+    };
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      pi,
+      name: "urlbroken",
+      scope: "project",
+      cwd,
+      gitOps: brokenGitOps,
+      credentialOps,
+    });
+
+    // assert
+    assert.equal(notifications.length, 1);
+    const first = notifications[0];
+    assert.ok(first !== undefined);
+    assert.equal(first.severity, "error");
+    assert.match(first.message, /^⊘ urlbroken \[project\] \(failed\)$/m);
+    assert.match(first.message, /cause:.*clone advanced but manifest could not be persisted/);
+  });
+});
+
 test("WR-02: corrupt pre-existing manifest routes to (failed), never a silent no-op (UAT Test-3 robustness fold-in)", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange

@@ -42,21 +42,30 @@ import * as defaultGit from "../../platform/git.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { McpUnstagePartialError, type McpWrittenFile } from "../../shared/errors-bridges.ts";
 import {
+  CrossOriginChallengeError,
   errorMessage,
   InvalidMarketplaceManifestError,
   isErrnoException,
   MarketplaceNotFoundError,
   PluginShapeError,
 } from "../../shared/errors.ts";
+import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
 import { notify } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import { ownValue } from "../../shared/own-key.ts";
+import { NO_STORED_CREDENTIAL_CAUSE, buildAuthForHost, hostFromCloneUrl } from "../auth-host.ts";
 
 import type { UnstageAgentFailure } from "../../bridges/agents/types.ts";
 import type { UnstageWorkflowFailure } from "../../bridges/workflows/types.ts";
+import type { DeviceFlowHttp } from "../../domain/github-auth.ts";
+import type { UrlSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
-import type { BuildAuthCallbacksOpts } from "../../platform/git-auth-callbacks.ts";
+import type {
+  AuthAttemptResult,
+  BuildAuthCallbacksOpts,
+} from "../../platform/git-auth-callbacks.ts";
+import type { CredentialOps } from "../../platform/git-credential.ts";
 import type { ListRemotesResult } from "../../platform/git.ts";
 import type { NotificationContext, PiInventory } from "../../platform/pi-api.ts";
 import type { McpConfigNotice } from "../../shared/notification-dispatch.ts";
@@ -307,6 +316,73 @@ export async function refreshGitHubClone(
       value: remoteSha,
     });
     await gitOps.checkout({ dir: cloneDir, ref: storedRef });
+  }
+}
+
+/**
+ * MURL-03 url-source refresh via the on-disk `origin` remote (same D-14
+ * sequence as github; refreshGitHubClone fetches by remote name, so the
+ * original clone URL is irrelevant). GAUTH-03: the host extracted from
+ * source.url carries its own auth bundle, so the user's git credential helper
+ * is consulted on every host; a registry host adds that provider's Device Flow
+ * on a helper miss (PROV-03). Shared by `marketplace update` and the PUP-2
+ * sync of `plugin update`, whose run-scoped `authMemo` caps the Device Flow at
+ * once per host (D-79-02). `authMemo` is optional: `marketplace update` passes
+ * none.
+ *
+ * D-1-02 / GAUTH-04: an auth failure on a host whose only auth path is a
+ * stored credential carries exactly one extra cause line telling the user WHY
+ * authentication cannot proceed. Attached as the chain TAIL, which keeps the
+ * code-bearing transport error at cause-depth 1 where `transportReason`'s
+ * one-level unwrap classifies it as `authentication required`. GAUTH-05: a
+ * `device-flow` bundle is excluded -- there the story is a declined or expired
+ * Device Flow, and the bare closed-set token is the whole truth. A challenge
+ * after a cross-origin redirect keeps its own cause text, because a credential
+ * stored for `host` cannot answer it (Q-02).
+ */
+export async function refreshUrlClone(args: {
+  readonly cloneDir: string;
+  readonly source: UrlSource;
+  readonly gitOps: GitOps;
+  readonly ctx: NotificationContext;
+  readonly credentialOps: CredentialOps;
+  readonly deviceFlowHttp?: DeviceFlowHttp;
+  readonly authMemo?: Map<string, AuthAttemptResult>;
+  readonly onFetchSucceeded?: () => void;
+}): Promise<void> {
+  const {
+    cloneDir,
+    source,
+    gitOps,
+    ctx,
+    credentialOps,
+    deviceFlowHttp,
+    authMemo,
+    onFetchSucceeded,
+  } = args;
+  const host = hostFromCloneUrl(source.url, "url");
+  const auth = buildAuthForHost({
+    host,
+    credentialOps,
+    ctx,
+    ...(deviceFlowHttp !== undefined && { deviceFlowHttp }),
+    ...(authMemo !== undefined && { authMemo }),
+  });
+
+  try {
+    await refreshGitHubClone(cloneDir, source.ref, gitOps, onFetchSucceeded, auth);
+  } catch (err) {
+    if (
+      err instanceof Error &&
+      err.cause === undefined &&
+      classifyGitTransportFailure(err) === "authentication required" &&
+      auth.kind === "stored-credential" &&
+      !(err instanceof CrossOriginChallengeError)
+    ) {
+      err.cause = new Error(NO_STORED_CREDENTIAL_CAUSE(host));
+    }
+
+    throw err;
   }
 }
 

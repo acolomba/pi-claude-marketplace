@@ -12,11 +12,11 @@ A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/r
 
 ## Current Milestone: none
 
-No active milestone. mcp-4 closed 2026-10-10 on `features/mcp-4`; PR #250 is open
-and not yet merged. Its UAT check, `/gsd-cleanup` and the 0.20.0 version bump are
-done. Start the next milestone with `/gsd-new-milestone`.
+No active milestone. mcp-4 closed 2026-10-10 and merged the same day (PR #250,
+squash `94160614`); it shipped as npm 0.20.0. Start the next milestone with
+`/gsd-new-milestone`.
 
-## Previous Milestone: mcp-4 -- MCP 4 (branch: features/mcp-4, completed 2026-10-10, PR #250 open, not yet merged, no npm release)
+## Previous Milestone: mcp-4 -- MCP 4 (completed 2026-10-10, merged as PR #250 squash `94160614`, released as npm 0.20.0)
 
 **Goal:** Make Pi 1.0 the baseline and deliver plugin MCP servers through pi-mcp-adapter 5,
 using its tool search, naming, status and variable features at Claude Code parity -- without

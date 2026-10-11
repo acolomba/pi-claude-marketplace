@@ -2,19 +2,19 @@
 gsd_state_version: "1.0"
 milestone: mcp-4
 status: completed
-stopped_at: mcp-4 milestone closed and archived; PR #250 open, awaiting merge
-last_updated: "2026-10-10T13:22:09.180Z"
-last_activity: 2026-10-10
-last_activity_desc: Completed quick task 261010-cfi — Accept Node 24 and 26 EISDIR text in mcp-migration test
-state_head: e34cec12effe85649c6164b5184944da4d2e3482
+stopped_at: mcp-4 merged (PR #250) and released as 0.20.0; PR #252 open, awaiting merge
+last_updated: "2026-10-11T16:34:35.328Z"
+last_activity: 2026-10-11
+last_activity_desc: Hardened PR #252 through review and SonarCloud
+state_head: a9d8f9ad2eb73b4e48a181463db1486e8a80f9ba
+milestone_name: MCP 4
+current_phase: 08
 progress:
   total_phases: 8
   completed_phases: 8
   total_plans: 73
   completed_plans: 73
   percent: 100
-milestone_name: MCP 4
-current_phase: 08
 ---
 
 # Project State
@@ -26,19 +26,18 @@ See: `.planning/PROJECT.md` (updated 2026-10-10 after mcp-4 milestone close)
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** mcp-4 closed; PR #250 is open and awaits review and merge.
-All 8 phases (01/ to 08/) and 41/41 requirements are complete, and the
-re-audit passed. The archive is `.planning/milestones/mcp-4-*`; the phase
-directories stay under `.planning/phases/` until `/gsd-cleanup`. The 02/ to
-05/ work still goes out in one release, because every entry-shape change
-costs users new sign-ins and approvals.
+**Current focus:** no active milestone. mcp-4 merged to main on 2026-10-10
+(PR #250, squash `94160614`) and shipped as npm 0.20.0 (tag `v0.20.0`). The
+archive is `.planning/milestones/mcp-4-*`. PR #252 carries two quick tasks
+that fix `/claude:plugin update` marketplace refresh (261011-h5m, 261011-jgu)
+and awaits merge.
 
 ## Current Position
 
-Phase: Milestone mcp-4 complete
+Phase: No active milestone (mcp-4 merged and released as 0.20.0)
 Plan: —
-Status: Milestone complete; UAT check, `/gsd-cleanup` and the 0.20.0 version bump done; PR #250 open, awaiting merge
-Last activity: 2026-10-10 — Completed quick task 261010-cfi: Accept Node 24 and 26 EISDIR text in mcp-migration test
+Status: PR #252 open on `features/plugin-update-marketplace-auth`, review-clean, SonarCloud gate passed, awaiting merge
+Last activity: 2026-10-11 — Hardened PR #252: one authMemo per plugin update run, earlier updates reported when a later target aborts
 
 ### workflows-replay closeout (merged from main)
 
@@ -803,6 +802,8 @@ See [task summary](./milestones/any-git-host-quick/260917-hfp-clear-the-phase-5-
 | #          | Description                                                                                                 | Date       | Commit   | Directory                                                                                            |
 | ---------- | ----------------------------------------------------------------------------------------------------------- | ---------- | -------- | ---------------------------------------------------------------------------------------------------- |
 | 261010-cfi | Accept Node 24 and 26 EISDIR text in mcp-migration test | 2026-10-10 | e34cec12 | [261010-cfi-accept-node-24-and-26-eisdir-text-in-mcp](./quick/261010-cfi-accept-node-24-and-26-eisdir-text-in-mcp/) |
+| 261011-h5m | Authenticate the plugin update marketplace sync (#249) | 2026-10-11 | a9d8f9ad | [261011-h5m-fix-plugin-update-marketplace-sync-auth](./quick/261011-h5m-fix-plugin-update-marketplace-sync-auth/) |
+| 261011-jgu | Refresh url-source marketplaces on plugin update | 2026-10-11 | 63a6efdc | [261011-jgu-url-source-marketplace-refresh-on-plugin](./quick/261011-jgu-url-source-marketplace-refresh-on-plugin/) |
 
 ## Deferred Items
 
@@ -893,11 +894,20 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Phase 08 complete — all phases complete
+**Stopped at:** PR #252 open and review-clean; awaiting merge
+
+Last session: 2026-10-11
+PR #252 ran three review rounds and one SonarCloud pass. Fixes: a per-run
+`authMemo` in `updatePluginsWith`, so the marketplace syncs and the plugin
+clones share one Device Flow per host (D-79-02); `abortUpdateBatch`, so a
+sync failure or a phase-2 throw still reports the targets already committed
+(CR-01); url-source tests for the clone-advanced hint and the 401 cause
+line. `npm run check` green; SonarCloud gate passed (0 issues, 100% new-code
+coverage, 0% duplication).
 
 **Resume file:** None
 
-Last session: 2026-10-10T07:19:12.527Z
+Previous session: 2026-10-10T07:19:12.527Z
 Phase 7 closed: 5/5 plans; Nyquist validated; security verified (0 open);
 review 8/8 fixed; verifier 3/3, re-running the live canary against
 pi-mcp-adapter 5.2.0. `/gsd-autonomous --from 7` ran the transition, then
@@ -1091,8 +1101,7 @@ The workstream archive removed the old routing blocker.
 
 ## Operator Next Steps
 
-- Run the mcp-4 UAT check (`/gsd-audit-uat`), then `/gsd-cleanup` to archive
-  the phase directories to `milestones/mcp-4-phases/`.
-- Offer the 0.20.0 version bump (D-07-11), add the CHANGELOG lines for the
-  debt-clearing changes, and open the mcp-4 PR.
-- After the merge, start the next milestone with `/gsd-new-milestone`.
+- Decide on a version bump for PR #252 (the CHANGELOG `[Unreleased]` section
+  has three `/claude:plugin update` fixes), then merge it with
+  `gh pr merge 252 --squash`.
+- Start the next milestone with `/gsd-new-milestone`.
