@@ -9,6 +9,7 @@
   - `browse` outside `tui`, and a new device-flow login in `print` mode, now refuse with a message that names the mode and the alternative.
   - The two LLM tools return the same structured rows as their `details`.
   - Credentials no longer appear in any output, including JSON entries and the text the LLM tools return to the model.
+  - Internal: integration tests now install the optional peers at their declared floors, so they run the same locally and in CI, with no skips.
 
 ## [0.20.0] - 2026-10-10
 
