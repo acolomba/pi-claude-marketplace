@@ -1767,10 +1767,11 @@ test("PUP-2 / GAUTH-03: two plugins in one url marketplace -> one sync fetch car
       assert.equal(state.fetchCalls.length, 1);
       assert.equal(state.forceUpdateRefCalls.length, 1);
       assert.equal(state.checkoutCalls.length, 1);
-      assert.deepStrictEqual(state.fetchCalls[0]?.auth, {
-        credentialOps,
-        host: "example.com",
-        kind: "stored-credential",
+      assert.deepStrictEqual(state.fetchCalls[0], {
+        dir: await locationsFor("project", cwd).sourceCloneDir("mp"),
+        remote: "origin",
+        ref: "main",
+        auth: { credentialOps, host: "example.com", kind: "stored-credential" },
       });
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -1814,6 +1815,44 @@ test("PUP-2 / D-79-02: a url marketplace on a Device Flow host shares a supplied
       assert.equal(auth.host, "gitlab.com");
       assert.equal(auth.credentialOps, credentialOps);
       assert.deepEqual(await auth.onAuthRequired(), memoized);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("syncClone-fail / GAUTH-04: an HTTP 401 on a url marketplace sync names the missing credential", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-url-sync-401-");
+    try {
+      // arrange
+      await seedUrlMarketplaceForSync(cwd, { hello: "1.0.0" });
+      const unauthorized = Object.assign(new Error("HTTP Error: 401 Unauthorized"), {
+        code: "HttpError",
+        data: { statusCode: 401, statusMessage: "Unauthorized" },
+      });
+      const { gitOps } = createGitOps({ fetchThrows: unauthorized });
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "marketplace", marketplace: "mp" },
+        gitOps,
+        credentialOps: makeCredentialOps(),
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ mp (failed) {authentication required}\n    cause: HTTP Error: 401 Unauthorized -> no credential was obtained for example.com; store one with: printf 'protocol=https\\nhost=example.com\\nusername=<user>\\npassword=<token>\\n\\n' | git credential approve\n\nPlugin update: 1 failure",
+          severity: "error",
+        },
+      ]);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
