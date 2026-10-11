@@ -1,47 +1,38 @@
 ---
 gsd_state_version: "1.0"
 milestone: json-output
-current_phase: 09
-status: completed
-stopped_at: Phase 09 complete — all phases complete
-last_updated: "2026-10-11T04:49:14.068Z"
+status: Awaiting next milestone
+stopped_at: Milestone json-output completed and archived (override close)
+last_updated: "2026-10-11T04:55:56.850Z"
 last_activity: 2026-10-11
-last_activity_desc: Phase 09 complete
-state_head: 1ef10fc482bfe526babf2fe05be585388803ad73
+last_activity_desc: Milestone json-output completed and archived
+state_head: fe47119cc2a130f4596ea8425fbb1e752343fc04
 progress:
   total_phases: 9
   completed_phases: 9
   total_plans: 50
   completed_plans: 50
-  percent: 100
 milestone_name: Mode-Keyed Presentation Strategies
+current_phase: 09
 ---
 
 # Project State
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-10-11 after json-output Phase 9 completion)
+See: `.planning/PROJECT.md` (updated 2026-10-11 after the json-output milestone close)
 
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Milestone close — re-run the milestone audit (D-07), then complete json-output
+**Current focus:** json-output complete and archived; merge `features/json`, then plan the next milestone
 
 ## Current Position
 
-Phase: 09
-Plan: 1 of 1 complete (09-01)
-Status: All phases complete
-Last activity: 2026-10-11 — Phase 09 complete
-
-Progress: [██████████] 100% (9 of 9 phases complete; 50 of 50 plans complete)
-
-Phase 1's first plan captures the text wire-corpus baseline (every emitted
-`(message, severity)` pair and its argument count) before any renderer change;
-every later phase re-diffs against it. Each phase leaves `npm run check` green
-and the text bytes unchanged, except for PMOD-04 credential redaction in
-Phase 4.
+Phase: Milestone json-output complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-10-11 — Milestone json-output completed and archived
 
 ### workflows-replay closeout
 
@@ -116,6 +107,8 @@ Items acknowledged and deferred at milestone close, most recent first.
 
 | Category       | Item                                                                                                                                                                                          | Status          | Deferred At          | Milestone |
 | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- | -------------------- | --------- |
+| deferred_items | 07/deferred-items.md: DEP-07-03-01 brace-expansion advisory in the root Pi tree; TEST-07-06-01 optional pi-subagents resolver skip | acknowledged — carried as BACKLOG DEPADV-01; WINDOWS #89 | 2026-10-11 | json-output |
+| deferred_items | 08/deferred-items.md: DEF-08-04-01 `windows status --pick` fails when stdout is a pipe | acknowledged — upstream gsd-tools, out of scope | 2026-10-11 | json-output |
 | deferred_items | 05/deferred-items.md: the record (five open comment-drift items, three closed; the scanner reads the file as one entry)                                                                | acknowledged    | 2026-09-18           | test-backlog |
 | deferred_items | 06/deferred-items.md: Six ledger notes name a witness coordinate the fresh report no longer holds (table converted to bullets at this close; item 1 was resolved by the #196 hermetic merge)  | acknowledged    | 2026-09-18           | test-backlog |
 | quick_tasks    | 260907-qqo-hkps-01-if-field-powershell-rule-prefix-                                                                                                                                           | unknown (work is complete; scanner misreads it) | 2026-09-13 | refine-unit-tests |
@@ -159,18 +152,11 @@ hit the same wall; convert it rather than re-disclosing it.
 
 | # | Description | Date | Commit | Status | Directory |
 | --- | --- | --- | --- | --- | --- |
-| 260920-qx0 | Reject `--local` on the merged-read marketplace verbs (info, list, update) | 2026-09-20 | f2fbd402 | complete | [260920-qx0-remove-local-from-marketplace-info](./milestones/any-git-host-quick/260920-qx0-remove-local-from-marketplace-info/) |
-| 260921-t5t | Suppress success-count lines for empty cascades and non-bulk operations | 2026-09-21 | ffdecc5f | shipped in PR #209 | [260921-t5t-when-a-command-returns-an-empty-result-a](./milestones/any-git-host-quick/260921-t5t-when-a-command-returns-an-empty-result-a/) |
-| 260922-ckn | Read the Claude Code compatibility skill during discuss phases; fix a racy coverage test | 2026-09-22 | 0b0623a3 | complete | [260922-ckn-implement-upstream-informed-discuss-phas](./milestones/any-git-host-quick/260922-ckn-implement-upstream-informed-discuss-phas/) |
-| 260923-vk3 | Restore Pi-valid skill names and prepare 0.19.1 | 2026-09-23 | 4a710359 | complete | [260923-vk3-fix-issue-211-generate-pi-valid-skill-na](./milestones/any-git-host-quick/260923-vk3-fix-issue-211-generate-pi-valid-skill-na/) |
-| 260924-bvi | Add bare skill aliases and rewrite plugin Markdown references | 2026-09-24 | b07ae35c | complete | [260924-bvi-add-bare-skill-aliases-and-centrally-rew](./milestones/any-git-host-quick/260924-bvi-add-bare-skill-aliases-and-centrally-rew/) |
-| 260924-q0m | Keep only plugin-qualified interactive skill aliases | 2026-09-24 | 1bae7cd6 | complete | [260924-q0m-keep-only-plugin-qualified-interactive-s](./milestones/any-git-host-quick/260924-q0m-keep-only-plugin-qualified-interactive-s/) |
-| 261002-dys | Make prune rollback backup naming deterministic in tests | 2026-10-02 | 741581f8 | complete | [261002-dys-make-prune-rollback-backup-naming-determ](./quick/261002-dys-make-prune-rollback-backup-naming-determ/) |
 
 ## Session Continuity
 
 **Last session:** 2026-10-11T04:37:47.633Z
-**Stopped at:** Phase 09 complete — all phases complete
+**Stopped at:** Milestone json-output completed and archived (override close)
 **Resume file:** None
 
 **Earlier work:** json-output on `features/json`. Phases 1 and 2 are complete
@@ -227,26 +213,15 @@ archived milestone artifacts.
 
 ## Operator Next Steps
 
-- Phase 5 is complete: all seven plans, six requirements, and two human
-  judgments pass. User response "approve" explicitly approved P-05-01 and
-  P-05-02; `05-UAT.md` records both. Canonical verification is `passed`.
-- Code review and security have no open findings. Review fixes `cd569d2a`
-  and `191f75e8` guard hook dispatch and bookkeeping before state changes.
-  The independent root audit covers all 11 registered callbacks.
-- The full combined-tree check passed at `191f75e8` on Node v26.10.0 with
-  264 direct pairs. Strict corpus verification passed with 3149 entries,
-  zero extras; catalog and schema are unchanged. No production input has
-  changed during approval closeout.
-- Final approval handoff: `npm run check` exited 0 at `d25a3a09` on
-  Node v26.10.0, with all 264 direct pairs. Evidence:
-  `/tmp/json-phase5-approved-handoff-check.log`. Canonical verification and
-  the UAT completion predicate both pass with no blockers.
-- Phase 6 (Command-Run Contract) is next and has not started. Execution's
-  `--no-transition` scope stops here; plan or discuss it when continuing.
-- Phase-close file warnings are parser false positives: abbreviated source
-  paths resolve under `extensions/pi-claude-marketplace/`, and shell commands
-  quoted in summaries are checks, not missing files. Artifact verification
-  and the independent code review checked the actual paths.
+- json-output is archived under `.planning/milestones/json-output-*` on
+  `features/json`, which is not yet merged. Next: open the PR for
+  `features/json` (offer the version bump and CHANGELOG entry first, per
+  AGENTS.md), then squash-merge.
+- Optional before merge: live-runtime UAT of the json/rpc output and the
+  LLM tools in a sandboxed Pi (`/gsd-verify-work`).
+- Open user choice (Phase 9 D-03): keep the returned `isError: true` that
+  Pi 0.87.1 ignores, or throw a redacted Error so Pi flags the failure.
+- Start the next milestone with /gsd-new-milestone.
 
 ## Performance Metrics
 

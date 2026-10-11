@@ -1,5 +1,58 @@
 # Milestones: pi-claude-marketplace
 
+## json-output -- Mode-Keyed Presentation Strategies (Completed: 2026-10-11; branch `features/json`, not yet merged, not yet in an npm release)
+
+**Phases completed:** 9 phases (1-9), 50 plans, 72 tasks; 36/36 requirements
+
+**Delivered:** `/claude:plugin` output now comes from one of two presentation
+strategies chosen by Pi's `ctx.mode`. Text serves `tui` and `print` with its
+byte form unchanged. JSON serves `json` and `rpc` as versioned, schema-valid
+`claude-plugin` session entries delivered through `pi.appendEntry`.
+
+**Key accomplishments:**
+
+- Every presentation decision (severity, summary line, reload hint, tally,
+  `{requires ...}` markers, failure detail) is computed once, upstream of the
+  renderers. Each command opens one notification run, which is its only
+  soft-dependency probe. Per-verb render callbacks became a row-policy map of data.
+- Every raw output surface (load warnings, usage errors and help,
+  diagnostics, the hook warnings, the Device Flow prompt) is a typed model
+  kind, so text is a pure formatter of the model.
+- A versioned typebox wire schema covers all 19 payload kinds. It is
+  generated, packaged, drift-tested, and validated against all 260 catalog
+  examples. Credentials are redacted at every serialization site, including
+  names and LLM tool text (PMOD-04).
+- JSON and RPC consumers receive every command, load-time, and hook output
+  as session entries. Each entry carries its origin, a canonical command
+  identity, an invocation ID, and an explicit outcome, and this holds even
+  when a command throws.
+- Browse and new device-flow logins refuse clearly outside `tui`. A real
+  headless Pi run at 0.87.1 and at the 0.86.1 peer floor proves the contract.
+  A JSON reference documents every payload kind with working `jq` recipes.
+- The text corpus (3,149 records) and `docs/output-catalog.md` stayed
+  byte-identical through the whole milestone, apart from the user-approved
+  ledgered exceptions and PMOD-04 redaction.
+
+**Closeout:** override close. The re-audit after Phase 9 reads `tech_debt`
+with no blockers: 36/36 requirements, 15/15 seams, and 8/8 flows. The
+WINDOWS.md ledger reads 0 open. Phase 9 closed the last undecided audit
+item, the LLM tool error text that bypassed redaction. Phases 1-7 keep
+`passed` reports whose digests read `stale`, because later phases edited the
+files those reports cover (decision 08 D-12). Phase 1 stays Nyquist-partial
+by decision (08 D-11).
+Known verification overrides: 2 newly acknowledged (DEP-07-03-01, carried as
+BACKLOG DEPADV-01; DEF-08-04-01, upstream tooling), 17 carried forward from
+prior closes (see STATE.md Deferred Items).
+
+**Open user choice:** Pi 0.87.1 ignores the `isError: true` that the LLM
+tools return on failure (Phase 9 D-03). Throwing a redacted Error instead
+would set Pi's error flag.
+
+**Archive:** `.planning/milestones/json-output-{ROADMAP,REQUIREMENTS,MILESTONE-AUDIT}.md`,
+`json-output-phases/`, and `json-output-quick/`.
+
+---
+
 ## any-git-host -- Any Git Host (Completed: 2026-09-30; merged to main 2026-09-30 via PR #221, not yet in an npm release)
 
 **Phases completed:** 3 phases (1-3), 11 plans, 29 tasks

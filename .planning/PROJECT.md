@@ -10,7 +10,7 @@
 
 A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artifact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install.
 
-## Current Milestone: json-output -- Mode-Keyed Presentation Strategies (branch: features/json, started 2026-09-28)
+## Previous Milestone: json-output -- Mode-Keyed Presentation Strategies (branch: features/json, started 2026-09-28, completed 2026-10-11, not yet merged, no npm release)
 
 **Goal:** `/claude:plugin` output is produced by one of two architecturally
 uniform presentation strategies selected by Pi's `ctx.mode` -- text for `tui` and
@@ -512,7 +512,17 @@ gate on first load. No `0.19.x` tag contains the bridge, by design: those were c
 `releases/v0.19.2`, which PR #216 merged back into `main`. The next release off `main` carries
 workflows with no extra step.
 
-**Current:** v1.20 transitive-dependencies closed 2026-09-24 with 45/45
+**Completed on a branch, unmerged:** milestone `json-output` (2026-10-11, Phases 1-9,
+50 plans, 72 tasks, 36/36 requirements; archived to `.planning/milestones/json-output-*`).
+`/claude:plugin` output comes from a text or a JSON presentation strategy chosen
+by `ctx.mode`. JSON and RPC consumers receive versioned, schema-valid
+`claude-plugin` session entries through `pi.appendEntry`, and the text byte form
+is unchanged. Credentials are redacted at every serialization site, including
+LLM tool text. The re-audit reads `tech_debt` with no blockers; it is an
+override close (phases 1-7 digests stale by decision 08 D-12). The milestone
+lives on `features/json` and is not yet merged to `main`.
+
+**Earlier:** v1.20 transitive-dependencies closed 2026-09-24 with 45/45
 requirements and all 12 phase verifications passed. The clean committed tree
 passed `npm run check`: 7,760 unit tests, 63 integration tests, and 100%
 aggregate production coverage. One successful live private-repository
@@ -575,10 +585,10 @@ operator decision. Workstream `milestone` (force-install closeout) remains open.
 
 ## Requirements
 
-### Active — json-output
+### Active
 
-All json-output requirements are validated in [REQUIREMENTS.md](REQUIREMENTS.md).
-Milestone audit and archival remain pending.
+No milestone is active. All 36 json-output requirements are validated and
+archived in [milestones/json-output-REQUIREMENTS.md](milestones/json-output-REQUIREMENTS.md).
 
 ### Validated
 
@@ -1198,6 +1208,7 @@ _Last updated: 2026-10-09 after json-output Phase 6: four plans, four
 requirements, 15/15 verification truths, both human judgments accepted,
 clean code review and zero open security threats. Phase 7 discussion is next._
 
-_Last updated: 2026-10-11 after json-output Phase 9: LLM tool text is
-redacted and tool load failures no longer reach Pi. All nine phases are
-complete; milestone re-audit and archival remain._
+_Last updated: 2026-10-11 after the json-output milestone: 9 phases and
+36/36 requirements complete, re-audit `tech_debt` with no blockers, archived
+under `.planning/milestones/json-output-*`. Merge of `features/json` and the
+next milestone remain._
