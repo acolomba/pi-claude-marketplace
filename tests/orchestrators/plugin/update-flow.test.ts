@@ -1518,17 +1518,17 @@ test("PUP-2 / D-79-02: two marketplaces on one Device Flow host without a suppli
           },
         },
       });
-      const fake = createGitOps({
+      const { gitOps: recordingGitOps, state } = createGitOps({
         remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000001" },
       });
-      const gitOps: typeof fake.gitOps = {
-        ...fake.gitOps,
+      const gitOps: typeof recordingGitOps = {
+        ...recordingGitOps,
         async fetch(fetchOptions) {
           if (fetchOptions.auth?.kind === "device-flow") {
             await fetchOptions.auth.onAuthRequired();
           }
 
-          await fake.gitOps.fetch(fetchOptions);
+          await recordingGitOps.fetch(fetchOptions);
         },
       };
       const deviceFlow = createDeviceFlowFake({
@@ -1552,7 +1552,7 @@ test("PUP-2 / D-79-02: two marketplaces on one Device Flow host without a suppli
       });
 
       // assert
-      assert.equal(fake.state.fetchCalls.length, 2, "each marketplace syncs once");
+      assert.equal(state.fetchCalls.length, 2, "each marketplace syncs once");
       assert.equal(deviceFlow.calls.requestCode.length, 1, "the Device Flow runs once per host");
     } finally {
       await rm(cwd, { recursive: true, force: true });

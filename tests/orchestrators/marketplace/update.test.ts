@@ -1324,13 +1324,13 @@ test("CR-05 / MU-5: url-source pre-fetch failure (gitOps.fetch throws) does NOT 
     });
 
     // assert
-    assert.equal(notifications.length, 1);
-    const first = notifications[0];
-    assert.ok(first !== undefined);
-    assert.equal(first.severity, "error");
-    assert.match(first.message, /^⊘ urloffline \[project\] \(failed\)$/m);
-    assert.match(first.message, /cause:.*ENETUNREACH/);
-    assert.doesNotMatch(first.message, /Retry the command\./);
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          'Some operations have failed.\n\n⊘ urloffline [project] (failed)\n  ⊘ urloffline (failed) {network unreachable}\n    cause: Failed to update marketplace "urloffline". -> mock: ENETUNREACH https://gitlab.example.com',
+        severity: "error",
+      },
+    ]);
   });
 });
 

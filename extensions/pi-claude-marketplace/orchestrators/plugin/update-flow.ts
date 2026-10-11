@@ -421,9 +421,8 @@ async function updatePluginsWith(
  * discovery half on `notes` and nothing else; the hygiene half never reaches
  * here. That is the same property install's standalone arm relies on.
  *
- * Deliberately NOT called from the `renderUpdateCascadeIfAny` early-abort
- * path: an aborted batch has a failure to explain, and a skipped-component
- * note is noise against it.
+ * Deliberately NOT called from `abortUpdateBatch`: an aborted batch has a
+ * failure to explain, and a skipped-component note is noise against it.
  */
 function surfaceUpdateDiscoveryWarnings(
   ctx: NotificationContext,
@@ -552,7 +551,7 @@ function isPhase3aAggregateFailure(
 /**
  * CR-01 helper: emit the cascade notification ONLY when at least one
  * outcome accumulated. Empty accumulators skip the call so we do not
- * emit an empty-marketplaces sentinel after a phase-3a abort.
+ * emit an empty-marketplaces sentinel after an aborted batch.
  */
 function renderUpdateCascadeIfAny(
   ctx: NotificationContext,
@@ -560,7 +559,7 @@ function renderUpdateCascadeIfAny(
   outcomes: readonly UpdateCascadeOutcome[],
   cardinality: "single" | "plural",
   composeCascade: UpdateCascadeComposer,
-  // WR-01: the phase-3a abort path sets this so the never-silent no-op headline
+  // WR-01: the abort path sets this so the never-silent no-op headline
   // is suppressed when the accumulated outcomes contain no realized transition.
   abortedByFailure = false,
 ): void {
