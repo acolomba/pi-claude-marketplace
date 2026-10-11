@@ -1451,6 +1451,83 @@ test("PUP-2: two plugins in SAME github marketplace -> syncCloneOnce calls fetch
   });
 });
 
+test("PUP-2 / AUTH-02: the github marketplace sync fetch carries the run's github.com auth bundle", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-sync-auth-");
+    try {
+      // arrange
+      await seedGithubMarketplaceForSync(cwd);
+      const { gitOps, state } = createGitOps({
+        remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000001" },
+      });
+      const credentialOps = makeCredentialOps();
+      const memoized: AuthAttemptResult = { ok: false, reason: "memoized authentication decline" };
+      const authMemo = new Map<string, AuthAttemptResult>([["github.com", memoized]]);
+      const { ctx, pi } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "marketplace", marketplace: "official" },
+        gitOps,
+        credentialOps,
+        deviceFlowHttp: makeDeviceFlowHttp(),
+        authMemo,
+      });
+
+      // assert
+      assert.equal(state.fetchCalls.length, 1);
+      const auth = state.fetchCalls[0]?.auth;
+      assert.equal(auth?.host, "github.com");
+      assert.equal(auth.credentialOps, credentialOps);
+      assert.ok(auth.kind === "device-flow");
+      assert.deepEqual(await auth.onAuthRequired(), memoized);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("syncClone-fail: an HTTP 401 on the marketplace sync renders {authentication required}", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-sync-401-");
+    try {
+      // arrange
+      await seedGithubMarketplaceForSync(cwd);
+      const unauthorized = Object.assign(new Error("HTTP Error: 401 Unauthorized"), {
+        code: "HttpError",
+        data: { statusCode: 401, statusMessage: "Unauthorized" },
+      });
+      const { gitOps } = createGitOps({ fetchThrows: unauthorized });
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "marketplace", marketplace: "official" },
+        gitOps,
+        credentialOps: makeCredentialOps(),
+      });
+
+      // assert
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0]?.severity, "error");
+      assert.match(
+        notifications[0]?.message ?? "",
+        /official \(failed\) \{authentication required\}/,
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 // ─── NFR-5: path-source update -> zero gitOps calls ────────────────────────────
 
 test("NFR-5: path-source marketplace update calls zero gitOps primitives", async () => {

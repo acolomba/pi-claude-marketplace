@@ -76,7 +76,8 @@ import { type ContentReason } from "../../shared/notification-types.ts";
 import { type PluginFailedMessage } from "../../shared/notification-types.ts";
 import { notifyUpdateNoOpWithContext, notifyWithContext } from "../../shared/notify-context.ts";
 import { ownValue } from "../../shared/own-key.ts";
-import { DEFAULT_GIT_OPS, refreshGitHubClone, type GitOps } from "../marketplace/shared.ts";
+import { DEFAULT_CREDENTIAL_OPS, GITHUB_HOST, buildAuthForHost } from "../auth-host.ts";
+import { DEFAULT_GIT_OPS, refreshGitHubClone } from "../marketplace/shared.ts";
 import { marketplaceInOtherScope } from "../marketplace/shared.ts";
 
 import { garbageCollectPluginClones } from "./clone-gc.ts";
@@ -129,10 +130,22 @@ type UpdateCascadeComposer = (
  * pair. Path-source marketplaces are noops (NFR-5: no network for path
  * sources); GitHub-source marketplaces refresh via gitOps.fetch +
  * forceUpdateRef + checkout (the D-14 sequence). Throws on git-side failures.
+ *
+ * AUTH-02: the fetch carries the same GitHub auth bundle as `marketplace
+ * update`, so a private marketplace reaches the credential helper and, on a
+ * miss, the Device Flow. The run's `authMemo` caps that flow at once per host.
  */
 function makeSyncCloneOnce(
-  gitOps: GitOps,
+  opts: UpdatePluginsOptions,
 ): (scope: Scope, mpName: string, locations: ScopedLocations) => Promise<void> {
+  const gitOps = opts.gitOps ?? DEFAULT_GIT_OPS;
+  const auth = buildAuthForHost({
+    host: GITHUB_HOST,
+    credentialOps: opts.credentialOps ?? DEFAULT_CREDENTIAL_OPS,
+    ctx: opts.ctx,
+    ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
+    ...(opts.authMemo !== undefined && { authMemo: opts.authMemo }),
+  });
   const synced = new Set<string>();
   return async (scope, mpName, locations) => {
     const key = `${scope}/${mpName}`;
@@ -151,7 +164,7 @@ function makeSyncCloneOnce(
     const source = mp.source as ParsedSource;
     if (source.kind === "github") {
       const cloneDir = await locations.sourceCloneDir(mpName);
-      await refreshGitHubClone(cloneDir, source.ref, gitOps);
+      await refreshGitHubClone(cloneDir, source.ref, gitOps, undefined, auth);
     }
     // path-source: NFR-5 noop. The manifest is re-read per-plugin.
   };
@@ -266,7 +279,7 @@ async function updatePluginsWith(
     return;
   }
 
-  const syncCloneOnce = makeSyncCloneOnce(opts.gitOps ?? DEFAULT_GIT_OPS);
+  const syncCloneOnce = makeSyncCloneOnce(opts);
   // D-10-18: one memo pair for this WHOLE bulk run, never exposed on
   // `UpdatePluginsOptions` -- it is a run-internal bound, not a caller knob,
   // and a caller-supplied memo would outlive the run and serve a stale

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- `/claude:plugin update` now authenticates when it refreshes a marketplace from a private GitHub repository, as `/claude:plugin marketplace update` does. Before, it always failed with `{authentication required}` ([#249](https://github.com/acolomba/pi-claude-marketplace/issues/249)).
+
 ## [0.20.0] - 2026-10-10
 
 - Pi Coding Agent 1.0.0 or newer is now required.
