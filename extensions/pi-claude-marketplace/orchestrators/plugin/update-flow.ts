@@ -342,8 +342,7 @@ async function updatePluginsWith(
         pluginName: t.marketplace,
         err,
       });
-      // AFILE-04: earlier targets already rewrote mcp-adapter.json.
-      surfaceUpdateMcpConfigNotices(ctx, outcomes);
+      abortUpdateBatch(ctx, pi, outcomes, cardinality, composeCascade);
       return;
     }
 
@@ -377,8 +376,7 @@ async function updatePluginsWith(
         pluginName: t.plugin,
         err,
       });
-      // AFILE-04: earlier targets already rewrote mcp-adapter.json.
-      surfaceUpdateMcpConfigNotices(ctx, outcomes);
+      abortUpdateBatch(ctx, pi, outcomes, cardinality, composeCascade);
       return;
     }
 
@@ -402,14 +400,7 @@ async function updatePluginsWith(
     // throw and are handled by the `catch` block above, never reaching
     // this branch.
     if (isPhase3aAggregateFailure(outcome)) {
-      // WR-01: the failing plugin already fired its own `notifyDirectFailure`
-      // and is NOT pushed into `outcomes`. Flag the cascade as aborted-by-failure
-      // so the never-silent no-op headline is suppressed: if every accumulated
-      // outcome was `unchanged`, the bulk-suppressed cascade is empty and the
-      // headline would otherwise emit a contradictory `nothing to update` line
-      // directly after the failure notification.
-      renderUpdateCascadeIfAny(ctx, pi, outcomes, cardinality, composeCascade, true);
-      surfaceUpdateMcpConfigNotices(ctx, outcomes, outcome);
+      abortUpdateBatch(ctx, pi, outcomes, cardinality, composeCascade, outcome);
       return;
     }
 
@@ -576,6 +567,29 @@ function renderUpdateCascadeIfAny(
   if (outcomes.length > 0) {
     composeCascade(ctx, pi, outcomes, cardinality, abortedByFailure);
   }
+}
+
+/**
+ * CR-01 / AFILE-04: close a batch that stopped on a failure its own
+ * `notifyDirectFailure` already reported. Earlier targets committed to disk
+ * through their own `withStateGuard` closures and may have rewritten
+ * mcp-adapter.json, so their cascade and MCP notices still render.
+ *
+ * WR-01: the cascade is flagged aborted-by-failure so the never-silent no-op
+ * headline is suppressed. If every accumulated outcome was `unchanged`, the
+ * bulk-suppressed cascade is empty and the headline would otherwise emit a
+ * contradictory `nothing to update` line right after the failure.
+ */
+function abortUpdateBatch(
+  ctx: NotificationContext,
+  pi: PiInventory,
+  outcomes: readonly UpdateCascadeOutcome[],
+  cardinality: "single" | "plural",
+  composeCascade: UpdateCascadeComposer,
+  failed?: UpdatePhase3FailedOutcome,
+): void {
+  renderUpdateCascadeIfAny(ctx, pi, outcomes, cardinality, composeCascade, true);
+  surfaceUpdateMcpConfigNotices(ctx, outcomes, failed);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

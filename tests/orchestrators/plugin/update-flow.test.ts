@@ -1598,6 +1598,75 @@ test("syncClone-fail: an HTTP 401 on the marketplace sync renders {authenticatio
   });
 });
 
+test("CR-01: an HTTP 401 on a later marketplace sync still reports the earlier target's update", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-sync-401-later-");
+    try {
+      // arrange
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.0.1", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      const locations = locationsFor("project", cwd);
+      const zzzClone = await locations.sourceCloneDir("zzz");
+      await cp(fixtureMarketplaceDir("valid-marketplace"), zzzClone, { recursive: true });
+      const seeded = await loadState(locations.extensionRoot);
+      await saveState(locations.extensionRoot, {
+        ...seeded,
+        marketplaces: {
+          ...seeded.marketplaces,
+          zzz: {
+            name: "zzz",
+            scope: "project",
+            source: githubSource("https://github.com/test/repo#main"),
+            addedFromCwd: cwd,
+            manifestPath: path.join(zzzClone, ".claude-plugin", "marketplace.json"),
+            marketplaceRoot: zzzClone,
+            plugins: { hello: makePluginRecord("1.0.0") },
+          },
+        },
+      });
+      const unauthorized = Object.assign(new Error("HTTP Error: 401 Unauthorized"), {
+        code: "HttpError",
+        data: { statusCode: 401, statusMessage: "Unauthorized" },
+      });
+      const { gitOps } = createGitOps({ fetchThrows: unauthorized });
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "all" },
+        gitOps,
+        credentialOps: makeCredentialOps(),
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n● zzz [project]\n  ⊘ zzz (failed) {authentication required}\n    cause: HTTP Error: 401 Unauthorized\n\nPlugin update: 1 failure",
+          severity: "error",
+        },
+        {
+          message:
+            "● mp [project]\n  ● hello v1.0.0 → v1.0.1 (updated)\n\nPlugin update: 1 updated\n\n/reload to pick up changes",
+        },
+      ]);
+      const after = await loadState(locations.extensionRoot);
+      assert.equal(after.marketplaces.mp?.plugins.hello?.version, "1.0.1");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 // ─── NFR-5: path-source update -> zero gitOps calls ────────────────────────────
 
 test("NFR-5: path-source marketplace update calls zero gitOps primitives", async () => {
@@ -4119,7 +4188,7 @@ test("dropCache-fail: captured cache failure stays silent after successful updat
 
 // ─── swapStateRecord: marketplace removed between sync and preflight ───────────
 
-test("a later marketplace removed during an earlier refresh aborts before its own sync", async () => {
+test("CR-01: a later marketplace removed during an earlier refresh aborts before its own sync and still reports the earlier target", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-later-marketplace-gone-");
     try {
@@ -4172,10 +4241,18 @@ test("a later marketplace removed during an earlier refresh aborts before its ow
       });
 
       // assert
-      assert.equal(notifications.length, 1);
-      assert.equal(notifications[0]?.severity, "error");
-      assert.match(notifications[0]?.message ?? "", /zzz/);
-      assert.match(notifications[0]?.message ?? "", /not found/);
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n" +
+            "● zzz [project]\n" +
+            "  ⊘ zzz (failed) {not found}\n" +
+            '    cause: Marketplace "zzz" not found in project scope.\n\n' +
+            "Plugin update: 1 failure",
+          severity: "error",
+        },
+        { message: "● aaa [project]\n  ⊘ hello v1.0.0 (skipped) {no longer installable}" },
+      ]);
       assert.equal((await loadState(locations.extensionRoot)).marketplaces["zzz"], undefined);
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -11525,7 +11602,7 @@ function failLoadsAfterHelloUpdate(): UpdatePluginsFn {
   ).updatePlugins;
 }
 
-test("AFILE-04: a bulk update that aborts on a later plugin's failure still reports the comments an earlier update removed", async () => {
+test("AFILE-04 / CR-01: a bulk update that aborts on a later plugin's failure still reports the earlier update and the comments it removed", async () => {
   await withHermeticHome(async () => {
     // arrange
     const cwd = await createCaseDir("update-afile04-later-throw-");
@@ -11565,6 +11642,15 @@ test("AFILE-04: a bulk update that aborts on a later plugin's failure still repo
             "Plugin update: 1 failure",
           severity: "error",
         },
+        {
+          message:
+            "A plugin operation needs attention.\n\n" +
+            "● mp [project]\n" +
+            "  ● hello v1.0.0 → v1.0.1 (updated) {requires pi-mcp-adapter}\n\n" +
+            "Plugin update: 1 warning, 1 updated\n\n" +
+            "/reload to pick up changes",
+          severity: "warning",
+        },
         PROJECT_COMMENTS_DROPPED_NOTICE,
       ]);
     } finally {
@@ -11573,7 +11659,7 @@ test("AFILE-04: a bulk update that aborts on a later plugin's failure still repo
   });
 });
 
-test("AFILE-04: a bulk update that aborts on a later marketplace sync still reports the comments an earlier update removed", async () => {
+test("AFILE-04 / CR-01: a bulk update that aborts on a later marketplace sync still reports the earlier update and the comments it removed", async () => {
   await withHermeticHome(async () => {
     // arrange
     const cwd = await createCaseDir("update-afile04-later-sync-");
@@ -11611,6 +11697,15 @@ test("AFILE-04: a bulk update that aborts on a later marketplace sync still repo
             "    cause: network: connection refused\n\n" +
             "Plugin update: 1 failure",
           severity: "error",
+        },
+        {
+          message:
+            "A plugin operation needs attention.\n\n" +
+            "● mp [project]\n" +
+            "  ● hello v1.0.0 → v1.0.1 (updated) {requires pi-mcp-adapter}\n\n" +
+            "Plugin update: 1 warning, 1 updated\n\n" +
+            "/reload to pick up changes",
+          severity: "warning",
         },
         PROJECT_COMMENTS_DROPPED_NOTICE,
       ]);
