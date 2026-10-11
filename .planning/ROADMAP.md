@@ -325,13 +325,23 @@ Plans:
 
 ### Phase 9: Address tech debt: redact LLM tool error text
 
-**Goal:** [To be planned]
+**Goal:** Credentials are absent from every text the two LLM tools return to the model, and neither tool lets a thrown error reach Pi. This closes the `04/` deferred item and the milestone audit's last undecided action item (Verdict item 1).
 **Requirements**: TBD
 **Depends on:** Phase 8
-**Plans:** 0 plans
+**Research flag:** no. 09-RESEARCH.md reproduced all three leak channels hermetically on the live tree. The work traces to PMOD-04 and the audit's Verdict item 1, with no new requirement ID (09-CONTEXT.md D-07).
+**Success Criteria** (what must be TRUE):
+
+1. Every `content` string that `pi_claude_marketplace_list` and `pi_claude_marketplace_plugin_list` return passes through `redactCredentials` in one module-private builder in `edge/handlers/tools.ts`. A marketplace recorded with url source `https://user:ghp_...@git.example.com/o/r.git` lists as `https://***@git.example.com/o/r`, and a credential the LLM types into the not-found line is redacted. `details` do not change.
+2. Neither tool's `execute` rejects. A failure anywhere in its body, the `marketplaceExists` lookup included, returns `{ content: [<redacted "Failed to load <plugin|marketplace> list: <message>">], isError: true, details: { marketplaces: [] } }`, and absolute paths stay in the text.
+3. `tests/edge/handlers/tools.test.ts` gains five owner cases (three redaction, two no-throw), every pre-existing case passes unmodified, `tools.ts` keeps 100% direct coverage, and the AUTH-09 gate file does not change.
+4. The `04/` deferred item reads `status: resolved` with a pointer to `09/` and its two fixing commits, `audit-open` no longer lists it, and REQUIREMENTS.md gains no ID.
+5. `docs/output-catalog.md` and the frozen notify corpus diff empty, no suppression is added, `npm run check` exits 0, and `fallow audit` reads pass.
+
+**Plans:** 1 plan, in the main checkout
 
 Plans:
-- [ ] TBD (run /gsd-plan-phase 9 to break down)
+**Wave 1**
+- [ ] 09-01-PLAN.md — Redact LLM tool text, catch every tool load failure, and resolve the `04/` deferred item (PMOD-04)
 
 ## Progress
 

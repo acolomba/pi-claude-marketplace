@@ -38,30 +38,25 @@ created: "2026-10-10"
 
 ## Per-Task Verification Map
 
-Decision-keyed (the phase has no REQUIREMENTS.md ID; it traces to PMOD-04 and the milestone audit's Verdict item 1). Task IDs are filled in by the planner.
+Decision-keyed (the phase has no REQUIREMENTS.md ID; it traces to PMOD-04 and the milestone audit's Verdict item 1). All three tasks are in plan 09-01 (wave 1), which runs in the main checkout. The exact commands are the `<automated>` elements of 09-01-PLAN.md.
 
-| Decision | Behavior | Test Type | Automated Command | File Exists | Status |
-|----------|----------|-----------|-------------------|-------------|--------|
-| D-01 | Every `content` text site passes through `redactCredentials` | static + unit | `grep -c 'type: "text"' extensions/pi-claude-marketplace/edge/handlers/tools.ts` -> `1`; `node --test tests/edge/handlers/tools.test.ts` | ❌ W0 (new cases) | ⬜ pending |
-| D-02 | `details` unchanged | unit | existing details expectations pass untouched | ✅ | ⬜ pending |
-| D-03 | Neither tool's `execute` rejects; error results use the TC-9 shape | unit | `node --test tests/edge/handlers/tools.test.ts` | ❌ W0 (new cases) | ⬜ pending |
-| D-04 | Seam in `edge/handlers/tools.ts`; boundaries clean | static | `npm run fallow` exit 0 | ✅ | ⬜ pending |
-| D-05 | Absolute paths not redacted | unit | TC-9 case passes unmodified | ✅ | ⬜ pending |
-| D-06 | Required owner cases + 100% direct pair coverage | unit + coverage | `npm run --silent test:coverage:direct -- tests/edge/handlers/tools.test.ts` exit 0 | ❌ W0 | ⬜ pending |
-| D-06 | AUTH-09 gate untouched | diff | `git diff --exit-code <base> -- tests/architecture/no-credential-leak.test.ts` | ✅ | ⬜ pending |
-| D-07 | Deferred item closed and not reported open | doc + tool | `grep -n 'status: resolved' .planning/phases/04-wire-schema-and-json-strategy/deferred-items.md` | ✅ | ⬜ pending |
-| D-08 | Catalog and frozen corpus unchanged | diff | `git diff --exit-code <base> -- docs/output-catalog.md .planning/phases/01-presentation-model/notify-corpus/` | ✅ | ⬜ pending |
-| D-08 | No new suppression; gate green | gate | `npm run check` exit 0 | ✅ | ⬜ pending |
+| Task ID | Plan | Wave | Decision | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
+|---------|------|------|----------|------------|-----------------|-----------|-------------------|-------------|--------|
+| 09-01-01 | 01 | 1 | PMOD-04 (D-01, D-02, D-04, D-05, D-06) | T-09-01, T-09-02, T-09-04 | Every content string passes through `redactCredentials` in `textContent`; the url-source line, the plugin load-failure line, and the not-found line carry `***` | unit + static | Owner TAP run with `# tests 39`, `# pass 39`, and three passing `redacts` cases; comment-stripped node count (`type: "text"` 1, `redactCredentials(` 1, `presentCascade(` 2, redact-credentials import 1); `git diff --numstat b30468c0 -- tests/edge/handlers/tools.test.ts` with 0 deletions; the commit holds exactly the pair | ❌ W0 (new cases) | ⬜ pending |
+| 09-01-02 | 01 | 1 | PMOD-04 (D-03, D-06) | T-09-02, T-09-03 | Neither execute rejects; every failure returns the redacted TC-9 shape | unit + static + coverage | Owner TAP run with `# tests 41`, `# pass 41`, three `redacts` and two `instead of throwing` cases; the node count adds two `return await build` and one `loadFailure(...)` per subject; `npm run --silent test:coverage:direct -- tests/edge/handlers/tools.test.ts` exits 0; two commits touch tools.ts since b30468c0 | ❌ W0 (new cases) | ⬜ pending |
+| 09-01-03 | 01 | 1 | PMOD-04, audit Verdict item 1 (D-06, D-07, D-08) | T-09-05, T-09-06, T-09-SC | The item is resolved with its pointer, audit-open no longer lists it, the invariants hold, and the gate is green | doc + tool + gate | Deferred-items node check (one `  status: resolved` line; a Resolved by line with `09/`, PMOD-04, and both commits); `query audit-open` without the item; `git diff --exit-code b30468c0 -- docs/output-catalog.md .planning/phases/01-presentation-model/notify-corpus/ tests/architecture/no-credential-leak.test.ts`; committed-scope check; no added suppression marker; `npx fallow audit --base b30468c0` verdict pass; `npm run check` exit 0 | ✅ | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
-`<base>` = the phase start commit, recorded when execution starts.
+The base for every diff is `b30468c0`, the HEAD at planning. Only planning Markdown lands after it before execution, and 09-01-01's precondition checks that.
 
 ---
 
 ## Wave 0 Requirements
 
-- [ ] New cases in `tests/edge/handlers/tools.test.ts`: channel-3 list line redaction, credential-bearing plugin-list failure, marketplace-list load failure resolves (does not reject), `marketplaceExists` failure resolves, LLM-supplied not-found-line redaction. Written RED first against the current tree.
+- [ ] New cases in `tests/edge/handlers/tools.test.ts`, written RED first against the current tree:
+  - 09-01-01: "redacts the credential of a url source on its marketplace line", "redacts a credential in the load failure it reports", and "redacts a credential in the marketplace name it reports as not found". RED: `# fail 3`.
+  - 09-01-02: "returns a redacted tool error instead of throwing when the load fails" and "returns a redacted tool error instead of throwing when the marketplace lookup fails". RED: `# fail 2`; both reject.
 
 Existing infrastructure (hermetic scope helpers, `strong-mock`) covers everything else.
 

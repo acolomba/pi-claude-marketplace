@@ -42,12 +42,17 @@
       "number": "8",
       "name": "Address tech debt: ledger dispositions and advisory",
       "status": "complete"
+    },
+    {
+      "number": "9",
+      "name": "Address tech debt: redact LLM tool error text",
+      "status": "pending"
     }
   ],
   "next": {
-    "command": "/gsd:new-milestone",
-    "label": "Start a new milestone",
-    "reason": "All phases complete — start a new milestone"
+    "command": "/gsd:progress",
+    "label": "Show progress",
+    "reason": "Unsure of state — showing progress"
   },
-  "updated_at": "2026-10-10T21:12:10.603Z"
+  "updated_at": "2026-10-11T04:24:25.947Z"
 }
