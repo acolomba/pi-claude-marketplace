@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+- Scripts can now read `/claude:plugin` output. In Pi's `json` and `rpc` modes, every message arrives as a `claude-plugin` session entry that matches `schema/claude-plugin.schema.json`. See [JSON output](docs/json-output.md). (#251)
+
+  - The `tui` and `print` modes keep their text output byte for byte.
+  - Each entry names its origin, its command and invocation ID, its severity, and whether `/reload` is needed. A command that throws still ends with an `internal-error` entry.
+  - `browse` outside `tui`, and a new device-flow login in `print` mode, now refuse with a message that names the mode and the alternative.
+  - The two LLM tools return the same structured rows as their `details`.
+  - Credentials no longer appear in any output, including JSON entries and the text the LLM tools return to the model.
+
 - More plugins with components that Pi cannot install are now partially available. Pass `--partial` to install the components that Pi supports. (#246)
 
   - A hooks module (a non-empty `modules` array in a hooks file) makes its plugin partially available. A `hooks.json` with only a module no longer makes its plugin unavailable.
