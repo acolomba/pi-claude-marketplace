@@ -49,6 +49,7 @@ export function makeInstallHandler(
   completionCache: CompletionCache,
 ): SubcommandHandler {
   const installPlugin = createInstallOperation(hooksRouting, completionCache);
+  // fallow-ignore-next-line code-duplication -- reviewed: install and update share the same --local and --map-model argument prologue on purpose, so each handler reads top to bottom
   return async (args, ctx, run): Promise<void> => {
     // Shared scanner; see edge/handlers/shared.ts. The catalog-derived
     // pass-through flags are downstream-consumed; pass through verbatim.

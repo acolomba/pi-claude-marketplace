@@ -35,6 +35,7 @@ const USAGE = "Usage: /claude:plugin bootstrap";
 export function makeBootstrapHandler(
   deps: Pick<EdgeDeps, "completionCache" | "gitOps">,
 ): SubcommandHandler {
+  // fallow-ignore-next-line code-duplication -- reviewed: bootstrap and import share the same parse-then-reject-positionals prologue on purpose, so each handler reads top to bottom
   return async (args, ctx, run): Promise<void> => {
     let parsed;
     try {

@@ -28,6 +28,7 @@ function usageFor(enable: boolean): string {
 
 export function makeAutoupdateHandler(enable: boolean): SubcommandHandler {
   const usage = usageFor(enable);
+  // fallow-ignore-next-line code-duplication -- reviewed: autoupdate and enable/disable share the same --local argument prologue on purpose, so each handler reads top to bottom
   return async (args, ctx, run): Promise<void> => {
     const localFlag = extractLocalFlag(args, { ctx, run, usage });
     if (localFlag === undefined) {
