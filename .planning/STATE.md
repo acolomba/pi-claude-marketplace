@@ -21,12 +21,12 @@ milestone_name: Mode-Keyed Presentation Strategies
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-10-10 after json-output Phase 7 completion)
+See: `.planning/PROJECT.md` (updated 2026-10-11 after json-output Phase 9 completion)
 
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 09 — Address tech debt: redact LLM tool error text
+**Current focus:** Milestone close — re-run the milestone audit (D-07), then complete json-output
 
 ## Current Position
 
@@ -357,6 +357,9 @@ archived milestone artifacts.
 - [Phase 09]: LLM tool content is redacted at the tool return through one module-private textContent builder (PMOD-04); details stay as presentCascade redacts them
 - [Phase 09]: D-03 kept: both LLM tools return the TC-9 isError shape instead of throwing, though Pi 0.87.1 ignores a returned isError; throwing a redacted Error is left for the user to decide
 - [Phase 09]: 04/ deferred item marked status: resolved (not closed) because audit-open treats only resolved or acknowledged as closed
+- [Phase 09]: Both LLM tools build every content string through one `textContent` helper that calls `redactCredentials`; each `execute` is one try whose catch returns the TC-9 error shape (D-01..D-04)
+- [Phase 09]: D-03 kept as written although Pi 0.87.1 ignores a returned `isError`; throwing a redacted Error instead is an open user choice
+- [Phase 09]: The phase 04 deferred item reads `status: resolved` (not `closed`), because GSD `audit-open` treats only resolved/acknowledged as closed
 
 ## Current Verification Checkpoint
 

@@ -582,6 +582,12 @@ Milestone audit and archival remain pending.
 
 ### Validated
 
+- ✓ Both LLM tools redact credentials in every text they return to the model,
+  and neither lets a thrown error reach Pi; the phase 04 deferred item is
+  resolved. Pi 0.87.1 ignores a returned `isError`, so the model sees the
+  redacted error text without an error flag (recorded, D-03) — json-output
+  Phase 9, 2026-10-11 (PMOD-04).
+
 - ✓ Mode refusals, real-Pi verification at installed and peer-floor versions,
   the complete JSON reference, and policy corrections are verified. All seven
   human reviews passed — json-output Phase 7, 2026-10-10
@@ -1192,6 +1198,6 @@ _Last updated: 2026-10-09 after json-output Phase 6: four plans, four
 requirements, 15/15 verification truths, both human judgments accepted,
 clean code review and zero open security threats. Phase 7 discussion is next._
 
-_Last updated: 2026-10-10 after json-output Phase 7: six plans and six
-requirements complete, all seven human reviews passed, and zero open security
-threats. All seven phases are complete; milestone audit and archival remain._
+_Last updated: 2026-10-11 after json-output Phase 9: LLM tool text is
+redacted and tool load failures no longer reach Pi. All nine phases are
+complete; milestone re-audit and archival remain._
