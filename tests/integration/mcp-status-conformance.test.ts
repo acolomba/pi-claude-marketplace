@@ -8,11 +8,10 @@
 // reads as no usable snapshot. A drift guard pins the channel, the version and
 // the status union in the adapter's `dist/types.d.ts`.
 //
-// pi-mcp-adapter is an optional peer. The test finds it through
-// `PI_MCP_ADAPTER_ROOT` only (pi-mcp-adapter-peer.ts) and imports its
-// `dist/types.js` constants in place. Each case skips only when that variable
-// is unset. The CI `integration` job installs the pinned peer and always sets
-// it, so CI runs every case.
+// pi-mcp-adapter is an optional peer. The test imports its compiled
+// `dist/types.js` constants in place from the declared floor that
+// `scripts/install-test-peers.mjs` installs, through pi-mcp-adapter-peer.ts. A
+// missing or wrong-version adapter fails every case.
 //
 // The adapter ships its snapshot builder only as TypeScript source under
 // `node_modules`, which Node does not type-strip, so the test builds the
@@ -49,20 +48,14 @@ import {
 import type { PiMcpAdapterTypes } from "./pi-mcp-adapter-peer.ts";
 import type { Scope } from "../../extensions/pi-claude-marketplace/shared/types.ts";
 
-const NOT_INSTALLED = "PI_MCP_ADAPTER_ROOT is not set";
-
 const CONTRACT_LINE_PREFIXES = [
   "export declare const MCP_STATUS_EVENT",
   "export declare const MCP_STATUS_SNAPSHOT_VERSION",
   "export type McpServerRuntimeStatus",
 ];
 
-async function loadAdapterTypes(): Promise<PiMcpAdapterTypes | undefined> {
+async function loadAdapterTypes(): Promise<PiMcpAdapterTypes> {
   const peer = await findPiMcpAdapterPackage();
-  if (peer === undefined) {
-    return undefined;
-  }
-
   return loadPiMcpAdapterModule<PiMcpAdapterTypes>(peer, "types");
 }
 
@@ -83,13 +76,8 @@ async function readAdapterKeys(cwd: string, scope: Scope): Promise<string[]> {
   return Object.keys(config.mcpServers);
 }
 
-test("ASTAT-01: a snapshot on pi-mcp-adapter's own channel, for the keys install wrote, reaches info through Pi's event bus", async (t) => {
+test("ASTAT-01: a snapshot on pi-mcp-adapter's own channel, for the keys install wrote, reaches info through Pi's event bus", async () => {
   const types = await loadAdapterTypes();
-  if (types === undefined) {
-    t.skip(NOT_INSTALLED);
-    return;
-  }
-
   await withHermeticEnvironment("mcp-status-conformance-", async ({ cwd }) => {
     // arrange
     await seedMcpPlugin(cwd, ["project", "user"]);
@@ -141,14 +129,9 @@ test("ASTAT-01: a snapshot on pi-mcp-adapter's own channel, for the keys install
   });
 });
 
-test("ASTAT-02: pi-mcp-adapter's shutdown snapshot leaves the tracker with no usable snapshot", async (t) => {
+test("ASTAT-02: pi-mcp-adapter's shutdown snapshot leaves the tracker with no usable snapshot", async () => {
   // arrange
   const types = await loadAdapterTypes();
-  if (types === undefined) {
-    t.skip(NOT_INSTALLED);
-    return;
-  }
-
   const events = createEventBus();
   const mcpStatus = createMcpStatusTracker(events);
   events.emit(types.MCP_STATUS_EVENT, {
@@ -185,14 +168,9 @@ test("ASTAT-02: pi-mcp-adapter's shutdown snapshot leaves the tracker with no us
   assert.strictEqual(mcpStatus.lookup("plugin_hello_srv_"), "no-snapshot");
 });
 
-test("ASTAT-01: pi-mcp-adapter's status union, channel and snapshot version are the ones info maps", async (t) => {
+test("ASTAT-01: pi-mcp-adapter's status union, channel and snapshot version are the ones info maps", async () => {
   // arrange
   const peer = await findPiMcpAdapterPackage();
-  if (peer === undefined) {
-    t.skip(NOT_INSTALLED);
-    return;
-  }
-
   // act
   const declarations = await readPiMcpAdapterDist(peer, "types.d.ts");
 

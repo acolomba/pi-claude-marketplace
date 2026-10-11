@@ -53,7 +53,7 @@ interface PeerManifest {
  * Reads the package at `root`. Throws when `root` holds no package.json, holds
  * a package other than `packageName`, or declares no string version.
  */
-export async function readOptionalPeer(root: string, packageName: string): Promise<OptionalPeer> {
+async function readOptionalPeer(root: string, packageName: string): Promise<OptionalPeer> {
   const packageJsonPath = path.join(root, "package.json");
   if (!existsSync(packageJsonPath)) {
     throw new Error(`${root} holds no package.json`);
@@ -70,7 +70,7 @@ export async function readOptionalPeer(root: string, packageName: string): Promi
 }
 
 /** Returns package.json `peerDependencies[packageName]`, or throws when it is absent. */
-export async function readDeclaredPeerRange(packageName: string): Promise<string> {
+async function readDeclaredPeerRange(packageName: string): Promise<string> {
   const manifest = JSON.parse(
     await readFile(new URL("../../package.json", import.meta.url), "utf8"),
   ) as PeerManifest;
@@ -83,7 +83,7 @@ export async function readDeclaredPeerRange(packageName: string): Promise<string
 }
 
 /** Returns the lowest version the declared `peerDependencies[packageName]` range admits. */
-export async function readPeerFloor(packageName: string): Promise<string> {
+async function readPeerFloor(packageName: string): Promise<string> {
   const range = await readDeclaredPeerRange(packageName);
   const floor = minVersion(range);
   if (floor === null) {

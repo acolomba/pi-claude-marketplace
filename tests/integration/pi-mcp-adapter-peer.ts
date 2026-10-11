@@ -6,14 +6,9 @@
 // against the adapter's own status channel, snapshot version and status union
 // (ASTAT-01).
 //
-// PIFL-03: pi-mcp-adapter is an optional peer and never a dependency of this
-// repository. `PI_MCP_ADAPTER_ROOT` is the only lookup; there is no global
-// npm fallback, because the global install on a developer machine is a stale
-// 2.x. Unset or empty means "not installed". A set root that holds no
-// package.json, holds another package, or holds a version outside the
-// declared peer range throws, so CI cannot pass by skipping.
-//
-// PIFL-02: the range is package.json `peerDependencies["pi-mcp-adapter"]`.
+// PIFL-02, PIFL-03: pi-mcp-adapter is an optional peer and never a
+// dependency, a devDependency, or a lockfile package. The tests read its
+// declared floor from the optional peer cache.
 //
 // The adapter's `exports` map does not expose `dist/utils.js`,
 // `dist/mcp-auth-flow.js`, `dist/mcp-auth-fetch.js` or `dist/config.js`, so
@@ -24,13 +19,9 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
-import { satisfies } from "semver";
-
-import { importPeerModule, readDeclaredPeerRange, readOptionalPeer } from "./optional-peer.ts";
+import { findCachedPeer, importPeerModule } from "./optional-peer.ts";
 
 import type { OptionalPeer } from "./optional-peer.ts";
-
-const PI_MCP_ADAPTER = "pi-mcp-adapter";
 
 /** The environment the adapter's interpolation reads. */
 type AdapterEnvironment = Readonly<Record<string, string | undefined>>;
@@ -86,25 +77,11 @@ export interface PiMcpAdapterTypes {
 }
 
 /**
- * Finds the pi-mcp-adapter package named by `PI_MCP_ADAPTER_ROOT`. Returns
- * undefined when the variable is unset or empty. Throws when the root holds
- * no pi-mcp-adapter package or a version outside the declared peer range.
+ * Returns pi-mcp-adapter at the declared floor from the optional peer cache.
+ * Throws, naming the repair command, when the cache does not hold it.
  */
-export async function findPiMcpAdapterPackage(): Promise<OptionalPeer | undefined> {
-  const root = process.env.PI_MCP_ADAPTER_ROOT;
-  if (!root) {
-    return undefined;
-  }
-
-  const peer = await readOptionalPeer(root, PI_MCP_ADAPTER);
-  const range = await readDeclaredPeerRange(PI_MCP_ADAPTER);
-  if (!satisfies(peer.version, range)) {
-    throw new Error(
-      `PI_MCP_ADAPTER_ROOT=${root} holds ${PI_MCP_ADAPTER} ${peer.version}, outside the declared peer range ${range}`,
-    );
-  }
-
-  return peer;
+export async function findPiMcpAdapterPackage(): Promise<OptionalPeer> {
+  return findCachedPeer("pi-mcp-adapter");
 }
 
 /** Imports `dist/<module>.js` from the peer in place. */

@@ -9,12 +9,10 @@
 // escape relies on. AVAR-05: no deny-listed credential reaches the adapter's
 // url or headers output.
 //
-// pi-mcp-adapter is an optional peer. The test finds it through
-// `PI_MCP_ADAPTER_ROOT` only (pi-mcp-adapter-peer.ts) and imports its compiled
-// `dist/` modules in place. It skips only when that variable is unset. The CI
-// `integration` job installs the pinned peer floor and always sets it, so CI
-// runs every case. A set root that is missing, another package, or outside
-// the declared peer range fails.
+// pi-mcp-adapter is an optional peer. The test imports its compiled `dist/`
+// modules in place from the declared floor that
+// `scripts/install-test-peers.mjs` installs, through pi-mcp-adapter-peer.ts. A
+// missing or wrong-version adapter fails every case.
 //
 // `resolveCommandSecret` runs a value with a single leading `!` as a shell
 // command, so the harness fails such a case before the call. The adapter's
@@ -51,8 +49,6 @@ import type {
 } from "../../extensions/pi-claude-marketplace/domain/claude-mcp-variables.ts";
 import type { ExpansionField } from "../bridges/mcp/expansion-cases.ts";
 
-const NOT_INSTALLED = "PI_MCP_ADAPTER_ROOT is not set";
-
 const EMPTY_ENV_NAME = "PI_CLAUDE_MARKETPLACE_EMPTY";
 
 type Environment = Readonly<Record<string, string>>;
@@ -72,12 +68,8 @@ interface Adapter {
   readonly authFlow: PiMcpAdapterAuthFlow;
 }
 
-async function loadAdapter(): Promise<Adapter | undefined> {
+async function loadAdapter(): Promise<Adapter> {
   const peer = await findPiMcpAdapterPackage();
-  if (peer === undefined) {
-    return undefined;
-  }
-
   return {
     peer,
     utils: await loadPiMcpAdapterModule<PiMcpAdapterUtils>(peer, "utils"),
@@ -159,14 +151,9 @@ function adapterOutput(
 }
 
 for (const row of EXPANSION_CASES) {
-  test(`AVAR-03: ${row.title} comes out of pi-mcp-adapter as Claude Code's value`, async (t) => {
+  test(`AVAR-03: ${row.title} comes out of pi-mcp-adapter as Claude Code's value`, async () => {
     // arrange
     const adapter = await loadAdapter();
-    if (adapter === undefined) {
-      t.skip(NOT_INSTALLED);
-      return;
-    }
-
     // act
     const output = adapterOutput(adapter, row.field, row.written, row.runtimeEnv);
 
@@ -175,14 +162,9 @@ for (const row of EXPANSION_CASES) {
   });
 }
 
-test("AVAR-03: a url split token needs PI_CLAUDE_MARKETPLACE_EMPTY set", async (t) => {
+test("AVAR-03: a url split token needs PI_CLAUDE_MARKETPLACE_EMPTY set", async () => {
   // arrange
   const adapter = await loadAdapter();
-  if (adapter === undefined) {
-    t.skip(NOT_INSTALLED);
-    return;
-  }
-
   const url = "https://mcp.example.test/{env:{env:PI_CLAUDE_MARKETPLACE_EMPTY}PI_CM_SECRET}";
 
   // act
@@ -333,14 +315,9 @@ function tallyValue(tally: PropertyTally, utils: PiMcpAdapterUtils, raw: string)
   }
 }
 
-test("AVAR-03: pi-mcp-adapter outputs Claude's value for every short adversarial value", async (t) => {
+test("AVAR-03: pi-mcp-adapter outputs Claude's value for every short adversarial value", async () => {
   // arrange
   const adapter = await loadAdapter();
-  if (adapter === undefined) {
-    t.skip(NOT_INSTALLED);
-    return;
-  }
-
   const raws = ADVERSARIAL_ALPHABETS.flatMap((alphabet) => sequencesOf(alphabet));
   const tally: PropertyTally = { checked: 0, mismatches: 0, first: [] };
 
@@ -379,14 +356,9 @@ const COMPLETION_ALPHABET: AdversarialAlphabet = {
 // 11 tails x (10 + 10^2 + 10^3) texts after `${R}`.
 const EXPECTED_CHECKED_TAIL_VALUES = 12_210;
 
-test("AVAR-05: plugin text after a reference cannot complete a marker that the reference's value begins", async (t) => {
+test("AVAR-05: plugin text after a reference cannot complete a marker that the reference's value begins", async () => {
   // arrange
   const adapter = await loadAdapter();
-  if (adapter === undefined) {
-    t.skip(NOT_INSTALLED);
-    return;
-  }
-
   const raws = sequencesOf(COMPLETION_ALPHABET).map((following) => `\${R}${following}`);
   const tally: PropertyTally = { checked: 0, mismatches: 0, first: [] };
 
@@ -502,14 +474,9 @@ function credentialLeaks(
     .map(([sink, output]) => `${credential.name} ${installState} ${form} ${sink}: ${output}`);
 }
 
-test("AVAR-05: no deny-listed credential reaches pi-mcp-adapter's url or headers output", async (t) => {
+test("AVAR-05: no deny-listed credential reaches pi-mcp-adapter's url or headers output", async () => {
   // arrange
   const adapter = await loadAdapter();
-  if (adapter === undefined) {
-    t.skip(NOT_INSTALLED);
-    return;
-  }
-
   const runs = CREDENTIALS.flatMap((credential) =>
     installEnvironments(credential).flatMap((installEnv) =>
       credentialForms(credential.name).map((form) => ({ credential, form, installEnv })),
@@ -586,14 +553,9 @@ function projectDirHeaderRun(
   });
 }
 
-test("AVAR-05: a cwd tail that plugin text after ${CLAUDE_PROJECT_DIR} completes into a marker leaks no credential", async (t) => {
+test("AVAR-05: a cwd tail that plugin text after ${CLAUDE_PROJECT_DIR} completes into a marker leaks no credential", async () => {
   // arrange
   const adapter = await loadAdapter();
-  if (adapter === undefined) {
-    t.skip(NOT_INSTALLED);
-    return;
-  }
-
   const expectedRuns = PARTIAL_TRIGGER_CWDS.map(({ cwd, completion }) => ({
     cwd,
     exported: false,
@@ -651,14 +613,9 @@ function passesInOrder(interpolate: string): boolean {
   return !indexes.includes(-1) && indexes.every((index, position) => index === sorted[position]);
 }
 
-test("AVAR-03: pi-mcp-adapter's call sites and interpolation passes are the ones the escape relies on", async (t) => {
+test("AVAR-03: pi-mcp-adapter's call sites and interpolation passes are the ones the escape relies on", async () => {
   // arrange
   const adapter = await loadAdapter();
-  if (adapter === undefined) {
-    t.skip(NOT_INSTALLED);
-    return;
-  }
-
   const serverManager = await readPiMcpAdapterDist(adapter.peer, "server-manager.js");
   const utils = await readPiMcpAdapterDist(adapter.peer, "utils.js");
   const authFlow = await readPiMcpAdapterDist(adapter.peer, "mcp-auth-flow.js");
@@ -685,14 +642,9 @@ test("AVAR-03: pi-mcp-adapter's call sites and interpolation passes are the ones
   );
 });
 
-test("AVAR-03: pi-mcp-adapter home-expands a leading ~/ after interpolation, so no split token protects it", async (t) => {
+test("AVAR-03: pi-mcp-adapter home-expands a leading ~/ after interpolation, so no split token protects it", async () => {
   // arrange
   const adapter = await loadAdapter();
-  if (adapter === undefined) {
-    t.skip(NOT_INSTALLED);
-    return;
-  }
-
   // act
   const output = adapter.utils.expandHomePath(
     adapter.utils.interpolateEnvVars("{env:PI_CLAUDE_MARKETPLACE_EMPTY}~/x", {
