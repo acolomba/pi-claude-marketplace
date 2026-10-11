@@ -5,10 +5,10 @@
 // (pi-subagents, pi-mcp-adapter).
 //
 // PIFL-03: an optional peer is never a `dependencies` or `devDependencies`
-// entry, so this repository never installs one. A test proves one install
-// that the operator names. A named root that holds no package.json, or holds
-// a package other than the expected peer, throws instead of reading as "not
-// installed".
+// entry and never a lockfile package. `scripts/install-test-peers.mjs` puts
+// each declared floor in a gitignored cache, and `findCachedPeer` returns it.
+// A missing package, another package, or a version other than the floor
+// throws with the repair command.
 //
 // PIFL-02: the declared range and floor come from package.json
 // `peerDependencies`, so the tests prove exactly the versions the extension
@@ -22,9 +22,17 @@
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { minVersion } from "semver";
+
+// scripts/install-test-peers.mjs fills this directory; the two paths change together.
+const PEER_CACHE_NODE_MODULES = fileURLToPath(
+  new URL("../../node_modules/.cache/optional-peers/node_modules/", import.meta.url),
+);
+
+const PEER_CACHE_REMEDY =
+  "Run `node scripts/install-test-peers.mjs` (`npm run test:integration` runs it first).";
 
 /** An installed optional peer: its package root directory and its version. */
 export interface OptionalPeer {
@@ -83,6 +91,31 @@ export async function readPeerFloor(packageName: string): Promise<string> {
   }
 
   return floor.version;
+}
+
+/**
+ * Returns `packageName` from the optional peer cache. Throws, naming the
+ * repair command, when the cache holds no such package or holds a version
+ * other than the declared floor.
+ */
+export async function findCachedPeer(packageName: string): Promise<OptionalPeer> {
+  const floor = await readPeerFloor(packageName);
+  const peer = await readOptionalPeer(
+    path.join(PEER_CACHE_NODE_MODULES, packageName),
+    packageName,
+  ).catch((error: unknown) => {
+    throw new Error(
+      `${PEER_CACHE_NODE_MODULES} holds no ${packageName} ${floor}. ${PEER_CACHE_REMEDY}`,
+      { cause: error },
+    );
+  });
+  if (peer.version !== floor) {
+    throw new Error(
+      `${PEER_CACHE_NODE_MODULES} holds ${packageName} ${peer.version}, not the declared floor ${floor}. ${PEER_CACHE_REMEDY}`,
+    );
+  }
+
+  return peer;
 }
 
 /**

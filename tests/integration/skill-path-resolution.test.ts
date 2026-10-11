@@ -11,12 +11,10 @@
 // compiled `src/agents/skills.js` in place through the shared loader in
 // pi-subagents-peer.ts.
 //
-// The test skips when the peer is not installed, so `npm run check` stays
-// green there. It also skips when the installed version is below the declared
-// peer floor, because a pass there proves nothing about a supported version.
-// An at-or-above-floor package whose module is missing or fails to import
-// fails the test, and so does a `PI_SUBAGENTS_ROOT` that names no
-// pi-subagents package. A run reports the proven version as a diagnostic.
+// The test reads the declared floor from the optional peer cache. A missing
+// or wrong-version package fails the test, and so does a module that is
+// missing or fails to import. A run reports the proven version as a
+// diagnostic.
 
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -28,12 +26,7 @@ import { emitGeneratedAgentFile } from "../../extensions/pi-claude-marketplace/b
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { createHermeticEnvironment } from "../platform/hermetic-environment.ts";
 
-import {
-  findPiSubagentsPackage,
-  isBelowPeerFloor,
-  loadPiSubagentsModule,
-  readPeerFloor,
-} from "./pi-subagents-peer.ts";
+import { findPiSubagentsPackage, loadPiSubagentsModule } from "./pi-subagents-peer.ts";
 
 interface ResolvedSkillLike {
   readonly name: string;
@@ -55,28 +48,13 @@ interface PiSubagentsSkillsModule {
 }
 
 test("SC-2 / AGSK-06: emitted skillPath resolves the staged skill via pi-subagents' resolveSkillsWithFallback and stays out of the global catalog", async (t) => {
-  // Find the peer before the hermetic HOME hides the operator's npm config,
-  // which can move the `npm root -g` prefix.
   const peer = await findPiSubagentsPackage();
-  const belowFloor = peer !== undefined && (await isBelowPeerFloor(peer.version));
   const originalOffline = process.env.PI_OFFLINE;
   const { root: tmpRoot } = await createHermeticEnvironment(t, "skillpath-sc2-");
   const runtimeCwd = path.join(tmpRoot, "runtime-cwd");
   const generatedName = `skillpath-sc2-${randomUUID().slice(0, 8)}`;
 
   try {
-    if (!peer) {
-      t.skip("pi-subagents is not installed in this environment");
-      return;
-    }
-
-    if (belowFloor) {
-      t.skip(
-        `pi-subagents ${peer.version} at ${peer.root} is below the peer floor ${await readPeerFloor()}`,
-      );
-      return;
-    }
-
     // arrange
     t.diagnostic(`pi-subagents ${peer.version} at ${peer.root}`);
     const skillsModule = await loadPiSubagentsModule<PiSubagentsSkillsModule>(peer, "skills");
