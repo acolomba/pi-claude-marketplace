@@ -1,19 +1,19 @@
 ---
 gsd_state_version: "1.0"
 milestone: json-output
-current_phase: 9
+current_phase: 09
 current_phase_name: "Address tech debt: redact LLM tool error text"
-status: completed
-stopped_at: Phase 9 planned
-last_updated: "2026-10-11T04:24:25.890Z"
+status: verifying
+stopped_at: Completed 09-01-PLAN.md
+last_updated: "2026-10-11T04:37:56.896Z"
 last_activity: 2026-10-11
-last_activity_desc: Phase 9 planned (1 plan)
-state_head: b30468c007478919cbd4e254768523d0263b23a1
+last_activity_desc: Phase 09 execution started
+state_head: 325c41be1dccfe754f15aca5c135bc50b98ce680
 progress:
   total_phases: 9
   completed_phases: 8
   total_plans: 50
-  completed_plans: 49
+  completed_plans: 50
 milestone_name: Mode-Keyed Presentation Strategies
 ---
 
@@ -26,14 +26,14 @@ See: `.planning/PROJECT.md` (updated 2026-10-10 after json-output Phase 7 comple
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 08 — Address tech debt: ledger dispositions and advisory
+**Current focus:** Phase 09 — Address tech debt: redact LLM tool error text
 
 ## Current Position
 
-Phase: 9 (Address tech debt: redact LLM tool error text) — READY TO EXECUTE
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-10-11 — Phase 9 planned (1 plan, 3 tasks)
+Phase: 09 (Address tech debt: redact LLM tool error text) — EXECUTING
+Plan: 1 of 1
+Status: Phase complete — ready for verification
+Last activity: 2026-10-11 — Phase 09 execution started
 
 Progress: [██████████] 100% (7 of 7 phases fully verified; 45 of 45 plans complete)
 
@@ -169,9 +169,9 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-10T21:20:31.481Z
-**Stopped at:** Phase 9 context gathered
-**Resume file:** .planning/phases/09-address-tech-debt-redact-llm-tool-error-text/09-CONTEXT.md
+**Last session:** 2026-10-11T04:37:47.633Z
+**Stopped at:** Completed 09-01-PLAN.md
+**Resume file:** None
 
 **Earlier work:** json-output on `features/json`. Phases 1 and 2 are complete
 and verified. Phase 2's review-fix loop closed after three iterations with ten
@@ -289,6 +289,7 @@ archived milestone artifacts.
 | Phase 08 P02 | 5 min | 2 tasks | 2 files |
 | Phase 08 P03 | 4 min | 2 tasks | 4 files |
 | Phase 08 P04 | 6 min | 3 tasks | 2 files |
+| Phase 09 P01 | 10 min | 3 tasks | 3 files |
 
 ## Decisions
 
@@ -353,6 +354,9 @@ archived milestone artifacts.
 - [Phase 08]: D-06: resolver integration cases look up the global pi-subagents root before the hermetic HOME swap and pass it into the loader
 - [Phase 08]: DEPADV-01 clears only once the lock resolves Pi >=1.0.1 (first release without npm-shrinkwrap.json); Pi 1.0.0 on origin/main still pins nested brace-expansion 5.0.9
 - [Phase 08]: 08-04: all 25 open WINDOWS.md entries disposed (23 waived with full [json-output] reasons, 85 and 89 fixed); ledger open 0 / waived 50 / fixed 39 / total 89
+- [Phase 09]: LLM tool content is redacted at the tool return through one module-private textContent builder (PMOD-04); details stay as presentCascade redacts them
+- [Phase 09]: D-03 kept: both LLM tools return the TC-9 isError shape instead of throwing, though Pi 0.87.1 ignores a returned isError; throwing a redacted Error is left for the user to decide
+- [Phase 09]: 04/ deferred item marked status: resolved (not closed) because audit-open treats only resolved or acknowledged as closed
 
 ## Current Verification Checkpoint
 

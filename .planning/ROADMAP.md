@@ -337,11 +337,11 @@ Plans:
 4. The `04/` deferred item reads `status: resolved` with a pointer to `09/` and its two fixing commits, `audit-open` no longer lists it, and REQUIREMENTS.md gains no ID.
 5. `docs/output-catalog.md` and the frozen notify corpus diff empty, no suppression is added, `npm run check` exits 0, and `fallow audit` reads pass.
 
-**Plans:** 1 plan, in the main checkout
+**Plans:** 1/1 plans executed, in the main checkout
 
 Plans:
 **Wave 1**
-- [ ] 09-01-PLAN.md — Redact LLM tool text, catch every tool load failure, and resolve the `04/` deferred item (PMOD-04)
+- [x] 09-01-PLAN.md — Redact LLM tool text, catch every tool load failure, and resolve the `04/` deferred item (PMOD-04)
 
 ## Progress
 
@@ -355,7 +355,7 @@ Plans:
 | 6. Command-Run Contract | 4/4 | Complete    | 2026-10-09 |
 | 7. Mode Refusals, Real-Pi Verification, and Docs | 6/6 | Complete    | 2026-10-10 |
 | 8. Address tech debt: ledger dispositions and advisory | 4/4 | Complete    | 2026-10-10 |
-| 9. Address tech debt: redact LLM tool error text | 0/0 | Not started | - |
+| 9. Address tech debt: redact LLM tool error text | 1/1 | In Progress | - |
 
 ## Carried Forward
 
