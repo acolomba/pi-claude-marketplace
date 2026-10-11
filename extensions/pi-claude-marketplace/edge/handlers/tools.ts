@@ -36,6 +36,10 @@
 // PMOD-04: tool `content` reaches the model without a presentation, so
 // `textContent` passes every content string through `redactCredentials`. The
 // `details` are wire blocks that `presentCascade` already redacts.
+//
+// TC-9: each execute catches every failure of its body and returns
+// `loadFailure`'s error result, because Pi relays a thrown error's message to
+// the model unredacted.
 
 import Type from "typebox";
 
@@ -82,6 +86,14 @@ const LIST_PLUGINS_PARAMS = Type.Object({
   ),
 });
 
+/** The result both tools return. */
+interface ListToolResult {
+  content: PiTextContentBlock[];
+  details: { marketplaces: ReturnType<typeof toWireMarketplaces> };
+  /** Set on the load-failure result only. */
+  isError?: true;
+}
+
 /**
  * Builds every content block both tools return. Tool text reaches the model
  * without a presentation, so the credential redaction runs here (PMOD-04).
@@ -91,7 +103,71 @@ function textContent(text: string): PiTextContentBlock[] {
   return [{ type: "text", text: redactCredentials(text) }];
 }
 
+/**
+ * Builds the error result for a failed tool body (TC-9). A failure becomes the
+ * tool's result instead of a throw, because Pi relays a thrown error's raw
+ * message to the model. The message goes through `textContent`, so a
+ * credential in it is redacted (PMOD-04). `errorMessage` from
+ * `shared/errors.ts` does the non-Error narrowing: no load this module calls
+ * throws a non-Error, so a local branch for one would stay uncovered.
+ */
+function loadFailure(subject: string, error: unknown): ListToolResult {
+  return {
+    content: textContent(`Failed to load ${subject}: ${errorMessage(error)}`),
+    isError: true,
+    details: { marketplaces: [] },
+  };
+}
+
 // ─── Tool 1: pi_claude_marketplace_list ──────────────────────────────────────
+
+/** Builds the marketplace list tool's result from both scopes' records. */
+async function buildMarketplaceListResult(
+  pi: ExtensionAPI,
+  ctx: ExtensionContext,
+): Promise<ListToolResult> {
+  // BLOCK C boundary: loadMarketplaceListEntries is the
+  // orchestrators/marketplace/list.ts loader. One read returns each
+  // record with its scope and its list block across both scopes (no
+  // scope filter on this tool), so the content lines and the details
+  // below come from the same state (LLMT-01).
+  const { cwd } = ctx;
+  const entries = await loadMarketplaceListEntries({ cwd });
+
+  if (entries.length === 0) {
+    return {
+      content: textContent("No marketplaces configured."),
+      details: { marketplaces: [] },
+    };
+  }
+
+  const lines: string[] = [];
+  for (const { scope, record } of entries) {
+    const source = record.source as ParsedSource;
+    const pluginCount = Object.keys(record.plugins).length;
+    const logical = sourceLogical(source);
+    // Line shape (D-02):
+    //   [<scope>] <name> -- <N> plugin(s) -- <source.logical>
+    lines.push(`[${scope}] ${record.name} -- ${pluginCount.toString()} plugin(s) -- ${logical}`);
+  }
+
+  // LLMT-01 / D-09: the details are the wire blocks of the blocks
+  // `/claude:plugin marketplace list` emits, under its row policies.
+  const run = openNotificationSnapshot(pi);
+  const listMessage: CascadeNotificationMessage = {
+    marketplaces: entries.map((entry) => entry.block),
+    label: MARKETPLACE_LIST_CONTEXT.Messaging.label,
+    cardinality: "plural",
+  };
+  const { rowPolicies } = MARKETPLACE_LIST_CONTEXT;
+  const payloadDetails = toWireMarketplaces(
+    presentCascade(run, listMessage, rowPolicies).marketplaces,
+  );
+  return {
+    content: textContent(lines.join("\n")),
+    details: { marketplaces: payloadDetails },
+  };
+}
 
 export function registerListMarketplacesTool(pi: ExtensionAPI): void {
   pi.registerTool({
@@ -102,49 +178,11 @@ export function registerListMarketplacesTool(pi: ExtensionAPI): void {
       "Use pi_claude_marketplace_list to inspect configured Claude plugin marketplaces.",
     parameters: LIST_MARKETPLACES_PARAMS,
     async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
-      // BLOCK C boundary: loadMarketplaceListEntries is the
-      // orchestrators/marketplace/list.ts loader. One read returns each
-      // record with its scope and its list block across both scopes (no
-      // scope filter on this tool), so the content lines and the details
-      // below come from the same state (LLMT-01).
-      const { cwd } = ctx;
-      const entries = await loadMarketplaceListEntries({ cwd });
-
-      if (entries.length === 0) {
-        return {
-          content: textContent("No marketplaces configured."),
-          details: { marketplaces: [] },
-        };
+      try {
+        return await buildMarketplaceListResult(pi, ctx);
+      } catch (error: unknown) {
+        return loadFailure("marketplace list", error);
       }
-
-      const lines: string[] = [];
-      for (const { scope, record } of entries) {
-        const source = record.source as ParsedSource;
-        const pluginCount = Object.keys(record.plugins).length;
-        const logical = sourceLogical(source);
-        // Line shape (D-02):
-        //   [<scope>] <name> -- <N> plugin(s) -- <source.logical>
-        lines.push(
-          `[${scope}] ${record.name} -- ${pluginCount.toString()} plugin(s) -- ${logical}`,
-        );
-      }
-
-      // LLMT-01 / D-09: the details are the wire blocks of the blocks
-      // `/claude:plugin marketplace list` emits, under its row policies.
-      const run = openNotificationSnapshot(pi);
-      const listMessage: CascadeNotificationMessage = {
-        marketplaces: entries.map((entry) => entry.block),
-        label: MARKETPLACE_LIST_CONTEXT.Messaging.label,
-        cardinality: "plural",
-      };
-      const { rowPolicies } = MARKETPLACE_LIST_CONTEXT;
-      const payloadDetails = toWireMarketplaces(
-        presentCascade(run, listMessage, rowPolicies).marketplaces,
-      );
-      return {
-        content: textContent(lines.join("\n")),
-        details: { marketplaces: payloadDetails },
-      };
     },
   });
 }
@@ -425,6 +463,73 @@ function renderPluginPayload(
   return { lines, marketplaces };
 }
 
+/** Builds the plugin list tool's result for the requested marketplaces and buckets. */
+async function buildPluginListResult(
+  pi: ExtensionAPI,
+  params: Type.Static<typeof LIST_PLUGINS_PARAMS>,
+  ctx: ExtensionContext,
+): Promise<ListToolResult> {
+  // PL-1 filter union: build the filter set ONCE so the orchestrator
+  // payload's per-status entries can be projected without re-deriving.
+  // The orchestrator already applies these filters internally, but we
+  // ALSO apply them again at the tool layer so the marketplace-not-found
+  // branch (which short-circuits the payload load) still respects the
+  // filter contract.
+  const buckets = applyFilter(params);
+
+  // Marketplace-existence check for the marketplace-not-found surface.
+  // Loaded VIA loadVisibleMarketplaces so the BLOCK C import boundary
+  // is preserved.
+  if (params.marketplace !== undefined) {
+    const exists = await marketplaceExists({
+      marketplace: params.marketplace,
+      cwd: ctx.cwd,
+      ...(params.scope !== undefined && { scope: params.scope }),
+    });
+    if (!exists) {
+      return {
+        content: textContent(`Marketplace "${params.marketplace}" not found.`),
+        details: { marketplaces: [] },
+      };
+    }
+  }
+
+  // Delegate to the payload loader for the data layer; we render text
+  // ourselves in the LLM-tool line format. The orchestrator's
+  // PluginListPayload carries enough structure to support both this
+  // line format AND `details.marketplaces`.
+  const payload = await loadToolPluginPayload(params, ctx, buckets);
+  const { lines, marketplaces } = renderPluginPayload(payload, buckets);
+
+  // `marketplaces` is populated only from inside `renderPluginPayload`'s
+  // loop over `payload`, so an empty payload already implies no blocks;
+  // testing both would be one condition asked twice.
+  if (payload.length === 0) {
+    return {
+      content: textContent("No marketplaces configured."),
+      details: { marketplaces: [] },
+    };
+  }
+
+  // LLMT-01 / D-09: the details are the wire blocks of the kept rows,
+  // resolved under the list command's row policies and this invocation's
+  // soft-dependency snapshot, so each row keeps its verbatim status.
+  const run = openNotificationSnapshot(pi);
+  const listMessage: CascadeNotificationMessage = {
+    marketplaces,
+    label: PLUGIN_LIST_CONTEXT.Messaging.label,
+    cardinality: "plural",
+  };
+  const { rowPolicies } = PLUGIN_LIST_CONTEXT;
+  const payloadDetails = toWireMarketplaces(
+    presentCascade(run, listMessage, rowPolicies).marketplaces,
+  );
+  return {
+    content: textContent(lines.join("\n")),
+    details: { marketplaces: payloadDetails },
+  };
+}
+
 export function registerListPluginsTool(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "pi_claude_marketplace_plugin_list",
@@ -433,82 +538,11 @@ export function registerListPluginsTool(pi: ExtensionAPI): void {
     promptSnippet: "Use pi_claude_marketplace_plugin_list to inspect plugins in a marketplace.",
     parameters: LIST_PLUGINS_PARAMS,
     async execute(_id, params, _signal, _onUpdate, ctx) {
-      // PL-1 filter union: build the filter set ONCE so the orchestrator
-      // payload's per-status entries can be projected without re-deriving.
-      // The orchestrator already applies these filters internally, but we
-      // ALSO apply them again at the tool layer so the marketplace-not-found
-      // branch (which short-circuits the payload load) still respects the
-      // filter contract.
-      const buckets = applyFilter(params);
-
-      // Marketplace-existence check for the marketplace-not-found surface.
-      // Loaded VIA loadVisibleMarketplaces so the BLOCK C import boundary
-      // is preserved.
-      if (params.marketplace !== undefined) {
-        const exists = await marketplaceExists({
-          marketplace: params.marketplace,
-          cwd: ctx.cwd,
-          ...(params.scope !== undefined && { scope: params.scope }),
-        });
-        if (!exists) {
-          return {
-            content: textContent(`Marketplace "${params.marketplace}" not found.`),
-            details: { marketplaces: [] },
-          };
-        }
-      }
-
-      // Delegate to the payload loader for the data layer; we render text
-      // ourselves in the LLM-tool line format. The orchestrator's
-      // PluginListPayload carries enough structure to support both this
-      // line format AND `details.marketplaces`.
-      let payload;
-      let rendered;
       try {
-        payload = await loadToolPluginPayload(params, ctx, buckets);
-        rendered = renderPluginPayload(payload, buckets);
-      } catch (err) {
-        // TC-9: state.json error propagates as a tool error surface (the
-        // agent should see a clear failure rather than an empty list). The
-        // non-Error narrowing is `shared/errors.ts`'s, not a second copy here:
-        // no seeded payload load can throw a non-Error, so a local copy would
-        // be a branch this module's own surface cannot reach.
-        return {
-          content: textContent(`Failed to load plugin list: ${errorMessage(err)}`),
-          isError: true,
-          details: { marketplaces: [] },
-        };
+        return await buildPluginListResult(pi, params, ctx);
+      } catch (error: unknown) {
+        return loadFailure("plugin list", error);
       }
-
-      const { lines, marketplaces } = rendered;
-
-      // `marketplaces` is populated only from inside `renderPluginPayload`'s
-      // loop over `payload`, so an empty payload already implies no blocks;
-      // testing both would be one condition asked twice.
-      if (payload.length === 0) {
-        return {
-          content: textContent("No marketplaces configured."),
-          details: { marketplaces: [] },
-        };
-      }
-
-      // LLMT-01 / D-09: the details are the wire blocks of the kept rows,
-      // resolved under the list command's row policies and this invocation's
-      // soft-dependency snapshot, so each row keeps its verbatim status.
-      const run = openNotificationSnapshot(pi);
-      const listMessage: CascadeNotificationMessage = {
-        marketplaces,
-        label: PLUGIN_LIST_CONTEXT.Messaging.label,
-        cardinality: "plural",
-      };
-      const { rowPolicies } = PLUGIN_LIST_CONTEXT;
-      const payloadDetails = toWireMarketplaces(
-        presentCascade(run, listMessage, rowPolicies).marketplaces,
-      );
-      return {
-        content: textContent(lines.join("\n")),
-        details: { marketplaces: payloadDetails },
-      };
     },
   });
 }

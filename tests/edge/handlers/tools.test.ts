@@ -582,6 +582,34 @@ describe("registerListMarketplacesTool", () => {
     assert.strictEqual(scope.networkCallCount(), 0);
     verifyBoundary();
   });
+
+  test("returns a redacted tool error instead of throwing when the load fails", async (t) => {
+    // arrange
+    const scope = await createHermeticScope(t, "list-load-failure");
+    await seedUrlSourceMarketplace(scope.cwd, "list-mp", FTP_SOURCE_WITH_TOKEN);
+    const { ctx, registration, verifyBoundary } = registerToolUnderTest(
+      registerListMarketplacesTool,
+      { value: scope.cwd, reads: 1 },
+    );
+    const expectedResult = {
+      content: [
+        {
+          type: "text",
+          text: 'Failed to load marketplace list: state.json marketplace "list-mp" has an invalid url source: ftp://***@git.example.com/o/r.git',
+        },
+      ],
+      isError: true,
+      details: { marketplaces: [] },
+    };
+
+    // act
+    const listed = await registration.execute("call-1", {}, undefined, undefined, ctx);
+
+    // assert
+    assert.deepStrictEqual(listed, expectedResult);
+    assert.strictEqual(scope.networkCallCount(), 0);
+    verifyBoundary();
+  });
 });
 
 interface VersionCase {
@@ -1734,6 +1762,40 @@ describe("registerListPluginsTool", () => {
     const listed = await registration.execute(
       "call-1",
       { marketplace: "https://user:ghp_abcdefghijklmnopqrstuv@git.example.com/o/r" },
+      undefined,
+      undefined,
+      ctx,
+    );
+
+    // assert
+    assert.deepStrictEqual(listed, expectedResult);
+    assert.strictEqual(scope.networkCallCount(), 0);
+    verifyBoundary();
+  });
+
+  test("returns a redacted tool error instead of throwing when the marketplace lookup fails", async (t) => {
+    // arrange
+    const scope = await createHermeticScope(t, "lookup-failure");
+    await seedUrlSourceMarketplace(scope.cwd, "lookup-mp", FTP_SOURCE_WITH_TOKEN);
+    const { ctx, registration, verifyBoundary } = registerToolUnderTest(registerListPluginsTool, {
+      value: scope.cwd,
+      reads: 1,
+    });
+    const expectedResult = {
+      content: [
+        {
+          type: "text",
+          text: 'Failed to load plugin list: state.json marketplace "lookup-mp" has an invalid url source: ftp://***@git.example.com/o/r.git',
+        },
+      ],
+      isError: true,
+      details: { marketplaces: [] },
+    };
+
+    // act
+    const listed = await registration.execute(
+      "call-1",
+      { marketplace: "lookup-mp" },
       undefined,
       undefined,
       ctx,
