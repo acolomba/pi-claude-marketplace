@@ -133,8 +133,9 @@ type UpdateCascadeComposer = (
  * forceUpdateRef + checkout (the D-14 sequence), as `marketplace update`
  * does. Throws on git-side failures.
  *
- * AUTH-02: the fetch carries the GitHub auth bundle that `marketplace update`
- * uses, plus the run's `authMemo`, so a private marketplace reaches the
+ * AUTH-02: the fetch carries the same host-keyed auth bundle as `marketplace
+ * update` (github.com for GitHub sources, the clone URL's host for url
+ * sources), plus the run's `authMemo`, so a private marketplace reaches the
  * credential helper and, on a miss, the Device Flow. `updatePluginsWith`
  * allocates the `authMemo` when the caller supplies none and passes it here
  * (D-79-02), so that flow runs at most once per host across the marketplace
