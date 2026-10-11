@@ -326,8 +326,9 @@ export async function refreshGitHubClone(
  * source.url carries its own auth bundle, so the user's git credential helper
  * is consulted on every host; a registry host adds that provider's Device Flow
  * on a helper miss (PROV-03). Shared by `marketplace update` and the PUP-2
- * sync of `plugin update`, whose `authMemo` caps the Device Flow at once per
- * host for the whole run (D-79-02).
+ * sync of `plugin update`, whose run-scoped `authMemo` caps the Device Flow at
+ * once per host (D-79-02). `authMemo` is optional: `marketplace update` passes
+ * none.
  *
  * D-1-02 / GAUTH-04: an auth failure on a host whose only auth path is a
  * stored credential carries exactly one extra cause line telling the user WHY

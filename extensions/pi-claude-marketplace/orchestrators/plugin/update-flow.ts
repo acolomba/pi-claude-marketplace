@@ -112,6 +112,7 @@ import type { NotificationContext, PiInventory } from "../../platform/pi-api.ts"
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { LockedStateTransactionDeps } from "../../transaction/with-state-guard.ts";
+import type { AuthAttemptResult } from "../auth-host.ts";
 import type { PluginUpdateFn, PluginUpdateOutcome } from "../types.ts";
 
 /** Runs one prepared update target for the update flow. */
@@ -134,7 +135,9 @@ type UpdateCascadeComposer = (
  *
  * AUTH-02: the fetch carries the same GitHub auth bundle as `marketplace
  * update`, so a private marketplace reaches the credential helper and, on a
- * miss, the Device Flow. The run's `authMemo` caps that flow at once per host.
+ * miss, the Device Flow. `updatePluginsWith` allocates the run's `authMemo` when
+ * the caller supplies none and passes it here (D-79-02), so that flow runs at
+ * most once per host across the marketplace syncs and the plugin clones.
  */
 function makeSyncCloneOnce(
   opts: UpdatePluginsOptions,
@@ -291,7 +294,14 @@ async function updatePluginsWith(
     return;
   }
 
-  const syncCloneOnce = makeSyncCloneOnce(opts);
+  // D-79-02: ONE authMemo for the whole run, shared by the marketplace syncs
+  // and every target's clone and probe auth, so a Device Flow host prompts at
+  // most once. A caller-supplied memo wins.
+  const runOpts: UpdatePluginsOptions = {
+    ...opts,
+    authMemo: opts.authMemo ?? new Map<string, AuthAttemptResult>(),
+  };
+  const syncCloneOnce = makeSyncCloneOnce(runOpts);
   // D-10-18: one memo pair for this WHOLE bulk run, never exposed on
   // `UpdatePluginsOptions` -- it is a run-internal bound, not a caller knob,
   // and a caller-supplied memo would outlive the run and serve a stale
@@ -342,7 +352,7 @@ async function updatePluginsWith(
       // eslint-disable-next-line no-await-in-loop -- each update locks the scope (retries: 0)
       outcome = await runPluginUpdate(
         buildDirectThreePhaseArgs(
-          opts,
+          runOpts,
           t,
           cardinality,
           bindings,

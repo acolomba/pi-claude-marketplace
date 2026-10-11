@@ -1453,7 +1453,7 @@ test("PUP-2: two plugins in SAME github marketplace -> syncCloneOnce calls fetch
   });
 });
 
-test("PUP-2 / AUTH-02: the github marketplace sync fetch carries the run's github.com auth bundle", async () => {
+test("PUP-2 / AUTH-02: the github marketplace sync fetch carries the github.com auth bundle and a supplied authMemo", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-sync-auth-");
     try {
@@ -1487,6 +1487,73 @@ test("PUP-2 / AUTH-02: the github marketplace sync fetch carries the run's githu
       assert.equal(auth.host, "github.com");
       assert.equal(auth.credentialOps, credentialOps);
       assert.deepEqual(await auth.onAuthRequired(), memoized);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("PUP-2 / D-79-02: two marketplaces on one Device Flow host without a supplied authMemo request one device code", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-sync-memo-");
+    try {
+      // arrange
+      await seedGithubMarketplaceForSync(cwd);
+      const locations = locationsFor("project", cwd);
+      const secondCloneDir = await locations.sourceCloneDir("second");
+      await cp(fixtureMarketplaceDir("valid-marketplace"), secondCloneDir, { recursive: true });
+      const seeded = await loadState(locations.extensionRoot);
+      const official = seeded.marketplaces.official;
+      assert.ok(official !== undefined);
+      await saveState(locations.extensionRoot, {
+        ...seeded,
+        marketplaces: {
+          ...seeded.marketplaces,
+          second: {
+            ...official,
+            name: "second",
+            source: githubSource("https://github.com/test/other#main"),
+            manifestPath: path.join(secondCloneDir, ".claude-plugin", "marketplace.json"),
+            marketplaceRoot: secondCloneDir,
+          },
+        },
+      });
+      const fake = createGitOps({
+        remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000001" },
+      });
+      const gitOps: typeof fake.gitOps = {
+        ...fake.gitOps,
+        async fetch(fetchOptions) {
+          if (fetchOptions.auth?.kind === "device-flow") {
+            await fetchOptions.auth.onAuthRequired();
+          }
+
+          await fake.gitOps.fetch(fetchOptions);
+        },
+      };
+      const deviceFlow = createDeviceFlowFake({
+        boundary: "memory",
+        network: "disabled",
+        deviceCode: DEVICE_CODE,
+        defaultPoll: { kind: "access_denied" },
+      });
+      const { ctx, pi } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "all" },
+        gitOps,
+        credentialOps: makeCredentialOps(),
+        deviceFlowHttp: deviceFlow.http,
+      });
+
+      // assert
+      assert.equal(fake.state.fetchCalls.length, 2, "each marketplace syncs once");
+      assert.equal(deviceFlow.calls.requestCode.length, 1, "the Device Flow runs once per host");
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -1642,7 +1709,7 @@ test("PUP-2 / GAUTH-03: two plugins in one url marketplace -> one sync fetch car
   });
 });
 
-test("PUP-2 / D-79-02: a url marketplace on a Device Flow host shares the run's authMemo", async () => {
+test("PUP-2 / D-79-02: a url marketplace on a Device Flow host shares a supplied authMemo", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-url-provider-");
     try {
