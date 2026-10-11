@@ -77,7 +77,7 @@ import { type PluginFailedMessage } from "../../shared/notification-types.ts";
 import { notifyUpdateNoOpWithContext, notifyWithContext } from "../../shared/notify-context.ts";
 import { ownValue } from "../../shared/own-key.ts";
 import { DEFAULT_CREDENTIAL_OPS, GITHUB_HOST, buildAuthForHost } from "../auth-host.ts";
-import { DEFAULT_GIT_OPS, refreshGitHubClone } from "../marketplace/shared.ts";
+import { DEFAULT_GIT_OPS, refreshGitHubClone, refreshUrlClone } from "../marketplace/shared.ts";
 import { marketplaceInOtherScope } from "../marketplace/shared.ts";
 
 import { garbageCollectPluginClones } from "./clone-gc.ts";
@@ -128,8 +128,9 @@ type UpdateCascadeComposer = (
 /**
  * PUP-2 syncCloneOnce memoization -- one refresh per (scope, marketplace)
  * pair. Path-source marketplaces are noops (NFR-5: no network for path
- * sources); GitHub-source marketplaces refresh via gitOps.fetch +
- * forceUpdateRef + checkout (the D-14 sequence). Throws on git-side failures.
+ * sources); GitHub- and url-source marketplaces refresh via gitOps.fetch +
+ * forceUpdateRef + checkout (the D-14 sequence), as `marketplace update`
+ * does. Throws on git-side failures.
  *
  * AUTH-02: the fetch carries the same GitHub auth bundle as `marketplace
  * update`, so a private marketplace reaches the credential helper and, on a
@@ -139,9 +140,10 @@ function makeSyncCloneOnce(
   opts: UpdatePluginsOptions,
 ): (scope: Scope, mpName: string, locations: ScopedLocations) => Promise<void> {
   const gitOps = opts.gitOps ?? DEFAULT_GIT_OPS;
+  const credentialOps = opts.credentialOps ?? DEFAULT_CREDENTIAL_OPS;
   const auth = buildAuthForHost({
     host: GITHUB_HOST,
-    credentialOps: opts.credentialOps ?? DEFAULT_CREDENTIAL_OPS,
+    credentialOps,
     ctx: opts.ctx,
     ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
     ...(opts.authMemo !== undefined && { authMemo: opts.authMemo }),
@@ -165,8 +167,18 @@ function makeSyncCloneOnce(
     if (source.kind === "github") {
       const cloneDir = await locations.sourceCloneDir(mpName);
       await refreshGitHubClone(cloneDir, source.ref, gitOps, undefined, auth);
+    } else if (source.kind === "url") {
+      await refreshUrlClone({
+        cloneDir: await locations.sourceCloneDir(mpName),
+        source,
+        gitOps,
+        ctx: opts.ctx,
+        credentialOps,
+        ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
+        ...(opts.authMemo !== undefined && { authMemo: opts.authMemo }),
+      });
     }
-    // path-source: NFR-5 noop. The manifest is re-read per-plugin.
+    // path-source: NFR-5 noop. The manifest is re-read in place per plugin.
   };
 }
 

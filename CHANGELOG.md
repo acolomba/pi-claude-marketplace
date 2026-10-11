@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 - `/claude:plugin update` now authenticates when it refreshes a marketplace from a private GitHub repository, as `/claude:plugin marketplace update` does. Before, it always failed with `{authentication required}` ([#249](https://github.com/acolomba/pi-claude-marketplace/issues/249)).
+- `/claude:plugin update` now fetches a marketplace that you added from a git URL before it reads the manifest, as it already did for a GitHub marketplace. Before, it read the clone from the last `marketplace add` or `marketplace update` and did not see new plugin versions.
 
 ## [0.20.0] - 2026-10-10
 

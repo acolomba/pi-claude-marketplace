@@ -33,6 +33,7 @@ import {
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import {
   githubSource,
+  parsePluginSource,
   pathSource,
 } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
@@ -62,6 +63,7 @@ import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
+import type { ParsedSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import type { AuthAttemptResult } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
 import type {
   GitAuthBundle,
@@ -1558,6 +1560,206 @@ test("NFR-5: path-source marketplace update calls zero gitOps primitives", async
       assert.equal(state.forceUpdateRefCalls.length, 0);
       assert.equal(state.checkoutCalls.length, 0);
       assert.equal(state.resolveRefCalls.length, 0);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// ─── PUP-2: url-source marketplaces refresh like github ones ───────────────────
+
+/**
+ * Seed a url-source marketplace whose clone holds `versions`. plugin.json
+ * carries no version, so a manifest rewrite moves the derived version.
+ */
+async function seedUrlMarketplaceForSync(
+  cwd: string,
+  versions: Readonly<Record<string, string>>,
+  source: ParsedSource = parsePluginSource("https://example.com/org/repo#main"),
+): Promise<{ readonly manifestPath: string }> {
+  const locations = locationsFor("project", cwd);
+  const cloneDir = await locations.sourceCloneDir("mp");
+  const { manifestPath } = await seedPathMarketplace({
+    cwd,
+    marketplaceRoot: cloneDir,
+    marketplaceName: "mp",
+    manifestPlugins: Object.fromEntries(
+      Object.entries(versions).map(([name, version]) => [
+        name,
+        { version, omitPluginJsonVersion: true },
+      ]),
+    ),
+    installedVersions: { ...versions },
+  });
+  const state = await loadState(locations.extensionRoot);
+  const record = state.marketplaces.mp;
+  assert.ok(record !== undefined);
+  await saveState(locations.extensionRoot, {
+    ...state,
+    marketplaces: {
+      mp: { ...record, source },
+    },
+  });
+  return { manifestPath };
+}
+
+test("PUP-2 / GAUTH-03: two plugins in one url marketplace -> one sync fetch carrying the url host's auth bundle", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-url-sync-");
+    try {
+      // arrange
+      await seedUrlMarketplaceForSync(cwd, { a: "1.0.0", b: "1.0.0" });
+      const { gitOps, state } = createGitOps({
+        remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000001" },
+      });
+      const credentialOps = makeCredentialOps();
+      const { ctx, pi } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "marketplace", marketplace: "mp" },
+        gitOps,
+        credentialOps,
+      });
+
+      // assert
+      assert.equal(state.fetchCalls.length, 1);
+      assert.equal(state.forceUpdateRefCalls.length, 1);
+      assert.equal(state.checkoutCalls.length, 1);
+      assert.deepStrictEqual(state.fetchCalls[0]?.auth, {
+        credentialOps,
+        host: "example.com",
+        kind: "stored-credential",
+      });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("PUP-2 / D-79-02: a url marketplace on a Device Flow host shares the run's authMemo", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-url-provider-");
+    try {
+      // arrange
+      await seedUrlMarketplaceForSync(
+        cwd,
+        { hello: "1.0.0" },
+        parsePluginSource("https://gitlab.com/org/repo#main"),
+      );
+      const seeded = await loadState(locationsFor("project", cwd).extensionRoot);
+      assert.equal((seeded.marketplaces.mp?.source as ParsedSource | undefined)?.kind, "url");
+      const { gitOps, state } = createGitOps({
+        remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000001" },
+      });
+      const credentialOps = makeCredentialOps();
+      const memoized: AuthAttemptResult = { ok: false, reason: "memoized authentication decline" };
+      const { ctx, pi } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "marketplace", marketplace: "mp" },
+        gitOps,
+        credentialOps,
+        deviceFlowHttp: makeDeviceFlowHttp(),
+        authMemo: new Map([["gitlab.com", memoized]]),
+      });
+
+      // assert
+      const auth = state.fetchCalls[0]?.auth;
+      assert.ok(auth?.kind === "device-flow");
+      assert.equal(auth.host, "gitlab.com");
+      assert.equal(auth.credentialOps, credentialOps);
+      assert.deepEqual(await auth.onAuthRequired(), memoized);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("PUP-2: a url marketplace whose remote advanced -> update reads the refreshed manifest", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-url-advance-");
+    try {
+      // arrange
+      const { manifestPath } = await seedUrlMarketplaceForSync(cwd, { hello: "1.0.0" });
+      const fake = createGitOps({
+        remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000001" },
+      });
+      // The fetch is what brings the new manifest into the clone.
+      const gitOps: typeof fake.gitOps = {
+        ...fake.gitOps,
+        async fetch(fetchOptions) {
+          await fake.gitOps.fetch(fetchOptions);
+          await rewriteManifest(manifestPath, "mp", { hello: { version: "1.0.10" } });
+        },
+      };
+      const { ctx, pi } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+        gitOps,
+        credentialOps: makeCredentialOps(),
+      });
+
+      // assert
+      const state = await loadState(locationsFor("project", cwd).extensionRoot);
+      assert.equal(state.marketplaces.mp?.plugins.hello?.version, "1.0.10");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("NFR-5: a path marketplace edited on disk -> update reads the edit in place with no git call", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-path-edit-");
+    try {
+      // arrange
+      const { manifestPath } = await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.0.0", omitPluginJsonVersion: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      const { gitOps, state } = createGitOps();
+      const { ctx, pi } = makeCtx();
+      const update = (): Promise<void> =>
+        updatePlugins({
+          ctx,
+          pi,
+          scope: "project",
+          cwd,
+          target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+          gitOps,
+        });
+      // A first run loads the manifest, so the second run proves the edit is
+      // not served from that earlier read.
+      await update();
+      await rewriteManifest(manifestPath, "mp", { hello: { version: "1.0.10" } });
+
+      // act
+      await update();
+
+      // assert
+      const recorded = await loadState(locationsFor("project", cwd).extensionRoot);
+      assert.equal(recorded.marketplaces.mp?.plugins.hello?.version, "1.0.10");
+      assert.equal(state.fetchCalls.length, 0);
+      assert.equal(state.checkoutCalls.length, 0);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
