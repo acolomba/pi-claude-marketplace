@@ -3,10 +3,10 @@ gsd_state_version: "1.0"
 milestone: json-output
 status: Awaiting next milestone
 stopped_at: Milestone json-output completed and archived (override close)
-last_updated: "2026-10-11T04:55:56.850Z"
+last_updated: "2026-10-11T14:49:20.903Z"
 last_activity: 2026-10-11
 last_activity_desc: Milestone json-output completed and archived
-state_head: fe47119cc2a130f4596ea8425fbb1e752343fc04
+state_head: f38ce0f47da2d6096f3b59d62bd7062cbecdd112
 progress:
   total_phases: 9
   completed_phases: 9
@@ -32,7 +32,7 @@ component as a working Pi artifact.
 Phase: Milestone json-output complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-10-11 — Milestone json-output completed and archived
+Last activity: 2026-10-11 - Completed quick task 261011-bsm: merged origin/main (#248, #250) into features/json; PR #251 mergeable
 
 ### mcp-4 closeout
 
@@ -174,6 +174,7 @@ hit the same wall; convert it rather than re-disclosing it.
 
 | # | Description | Date | Commit | Status | Directory |
 | --- | --- | --- | --- | --- | --- |
+| 261011-bsm | Merge origin/main (#248, #250) into features/json and port it to the notification run model | 2026-10-11 | f38ce0f4 | complete | [261011-bsm-merge-origin-main-into-features-json-and](./quick/261011-bsm-merge-origin-main-into-features-json-and/) |
 
 ## Session Continuity
 
