@@ -310,6 +310,32 @@ async function seedScope(
   await saveState(locations.extensionRoot, { schemaVersion: 2, marketplaces: records });
 }
 
+const FTP_SOURCE_WITH_TOKEN = "ftp://user:ghp_abcdefghijklmnopqrstuv@git.example.com/o/r.git";
+
+/**
+ * Write a project `state.json` holding one marketplace recorded with a `url`
+ * source. The loaders re-parse `raw` on every load (MURL-01), so a raw that
+ * does not parse as a url makes the load throw with the raw in its message.
+ */
+async function seedUrlSourceMarketplace(cwd: string, name: string, raw: string): Promise<void> {
+  const { extensionRoot } = locationsFor("project", cwd);
+  await mkdir(extensionRoot, { recursive: true });
+  await saveState(extensionRoot, {
+    schemaVersion: 2,
+    marketplaces: {
+      [name]: {
+        name,
+        scope: "project",
+        source: { kind: "url", raw },
+        addedFromCwd: cwd,
+        manifestPath: manifestPathIn(cwd, name),
+        marketplaceRoot: marketplaceRootIn(cwd, name),
+        plugins: {},
+      },
+    },
+  });
+}
+
 /**
  * The boundary one tool case needs, sized to that case exactly.
  *
@@ -514,6 +540,38 @@ describe("registerListMarketplacesTool", () => {
           },
         ],
       },
+    };
+
+    // act
+    const listed = await registration.execute("call-1", {}, undefined, undefined, ctx);
+
+    // assert
+    assert.deepStrictEqual(listed, expectedResult);
+    assert.strictEqual(scope.networkCallCount(), 0);
+    verifyBoundary();
+  });
+
+  test("redacts the credential of a url source on its marketplace line", async (t) => {
+    // arrange
+    const scope = await createHermeticScope(t, "list-url-credential");
+    await seedUrlSourceMarketplace(
+      scope.cwd,
+      "url-mp",
+      "https://user:ghp_abcdefghijklmnopqrstuv@git.example.com/o/r.git",
+    );
+    const { ctx, registration, verifyBoundary } = registerToolUnderTest(
+      registerListMarketplacesTool,
+      { value: scope.cwd, reads: 1 },
+      3,
+    );
+    const expectedResult = {
+      content: [
+        {
+          type: "text",
+          text: "[project] url-mp -- 0 plugin(s) -- https://***@git.example.com/o/r",
+        },
+      ],
+      details: { marketplaces: [{ name: "url-mp", scope: "project", plugins: [] }] },
     };
 
     // act
@@ -1625,6 +1683,61 @@ describe("registerListPluginsTool", () => {
 
     // act
     const listed = await registration.execute("call-1", {}, undefined, undefined, ctx);
+
+    // assert
+    assert.deepStrictEqual(listed, expectedResult);
+    assert.strictEqual(scope.networkCallCount(), 0);
+    verifyBoundary();
+  });
+
+  test("redacts a credential in the load failure it reports", async (t) => {
+    // arrange
+    const scope = await createHermeticScope(t, "plugin-load-credential");
+    await seedUrlSourceMarketplace(scope.cwd, "payload-mp", FTP_SOURCE_WITH_TOKEN);
+    const { ctx, registration, verifyBoundary } = registerToolUnderTest(registerListPluginsTool, {
+      value: scope.cwd,
+      reads: 1,
+    });
+    const expectedResult = {
+      content: [
+        {
+          type: "text",
+          text: 'Failed to load plugin list: state.json marketplace "payload-mp" has an invalid url source: ftp://***@git.example.com/o/r.git',
+        },
+      ],
+      isError: true,
+      details: { marketplaces: [] },
+    };
+
+    // act
+    const listed = await registration.execute("call-1", {}, undefined, undefined, ctx);
+
+    // assert
+    assert.deepStrictEqual(listed, expectedResult);
+    assert.strictEqual(scope.networkCallCount(), 0);
+    verifyBoundary();
+  });
+
+  test("redacts a credential in the marketplace name it reports as not found", async (t) => {
+    // arrange
+    const scope = await createHermeticScope(t, "not-found-credential");
+    const { ctx, registration, verifyBoundary } = registerToolUnderTest(registerListPluginsTool, {
+      value: scope.cwd,
+      reads: 1,
+    });
+    const expectedResult = {
+      content: [{ type: "text", text: 'Marketplace "https://***@git.example.com/o/r" not found.' }],
+      details: { marketplaces: [] },
+    };
+
+    // act
+    const listed = await registration.execute(
+      "call-1",
+      { marketplace: "https://user:ghp_abcdefghijklmnopqrstuv@git.example.com/o/r" },
+      undefined,
+      undefined,
+      ctx,
+    );
 
     // assert
     assert.deepStrictEqual(listed, expectedResult);

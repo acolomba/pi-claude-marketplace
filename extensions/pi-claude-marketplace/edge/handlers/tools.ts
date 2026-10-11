@@ -32,6 +32,10 @@
 // `(upgradable)` plugin variant shows as `[installed]` there (the plugin IS
 // installed; the upgrade status is for the slash-command surface per
 // MSG-PL-4). Its details carry each row's verbatim status (LLMT-01).
+//
+// PMOD-04: tool `content` reaches the model without a presentation, so
+// `textContent` passes every content string through `redactCredentials`. The
+// `details` are wire blocks that `presentCascade` already redacts.
 
 import Type from "typebox";
 
@@ -46,9 +50,10 @@ import { toWireMarketplaces } from "../../shared/notification-json.ts";
 import { presentCascade } from "../../shared/notification-present.ts";
 import { openNotificationSnapshot } from "../../shared/notification-run.ts";
 import { pluginVersion } from "../../shared/notification-types.ts";
+import { redactCredentials } from "../../shared/redact-credentials.ts";
 
 import type { ParsedSource } from "../../domain/source.ts";
-import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
+import type { ExtensionAPI, ExtensionContext, PiTextContentBlock } from "../../platform/pi-api.ts";
 import type { CascadeNotificationMessage } from "../../shared/notification-types.ts";
 
 // ─── LLM tool parameter schemas (TypeBox) ─────────────────────────────────
@@ -77,6 +82,15 @@ const LIST_PLUGINS_PARAMS = Type.Object({
   ),
 });
 
+/**
+ * Builds every content block both tools return. Tool text reaches the model
+ * without a presentation, so the credential redaction runs here (PMOD-04).
+ * Text without a credential keeps its bytes.
+ */
+function textContent(text: string): PiTextContentBlock[] {
+  return [{ type: "text", text: redactCredentials(text) }];
+}
+
 // ─── Tool 1: pi_claude_marketplace_list ──────────────────────────────────────
 
 export function registerListMarketplacesTool(pi: ExtensionAPI): void {
@@ -98,7 +112,7 @@ export function registerListMarketplacesTool(pi: ExtensionAPI): void {
 
       if (entries.length === 0) {
         return {
-          content: [{ type: "text", text: "No marketplaces configured." }],
+          content: textContent("No marketplaces configured."),
           details: { marketplaces: [] },
         };
       }
@@ -128,7 +142,7 @@ export function registerListMarketplacesTool(pi: ExtensionAPI): void {
         presentCascade(run, listMessage, rowPolicies).marketplaces,
       );
       return {
-        content: [{ type: "text", text: lines.join("\n") }],
+        content: textContent(lines.join("\n")),
         details: { marketplaces: payloadDetails },
       };
     },
@@ -438,7 +452,7 @@ export function registerListPluginsTool(pi: ExtensionAPI): void {
         });
         if (!exists) {
           return {
-            content: [{ type: "text", text: `Marketplace "${params.marketplace}" not found.` }],
+            content: textContent(`Marketplace "${params.marketplace}" not found.`),
             details: { marketplaces: [] },
           };
         }
@@ -460,12 +474,7 @@ export function registerListPluginsTool(pi: ExtensionAPI): void {
         // no seeded payload load can throw a non-Error, so a local copy would
         // be a branch this module's own surface cannot reach.
         return {
-          content: [
-            {
-              type: "text",
-              text: `Failed to load plugin list: ${errorMessage(err)}`,
-            },
-          ],
+          content: textContent(`Failed to load plugin list: ${errorMessage(err)}`),
           isError: true,
           details: { marketplaces: [] },
         };
@@ -478,7 +487,7 @@ export function registerListPluginsTool(pi: ExtensionAPI): void {
       // testing both would be one condition asked twice.
       if (payload.length === 0) {
         return {
-          content: [{ type: "text", text: "No marketplaces configured." }],
+          content: textContent("No marketplaces configured."),
           details: { marketplaces: [] },
         };
       }
@@ -497,7 +506,7 @@ export function registerListPluginsTool(pi: ExtensionAPI): void {
         presentCascade(run, listMessage, rowPolicies).marketplaces,
       );
       return {
-        content: [{ type: "text", text: lines.join("\n") }],
+        content: textContent(lines.join("\n")),
         details: { marketplaces: payloadDetails },
       };
     },
