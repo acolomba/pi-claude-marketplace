@@ -8626,6 +8626,89 @@ test("plugin update authentication: a pinned provider update threads auth to the
   });
 });
 
+test("plugin update authentication: a run without a supplied authMemo shares one Device Flow between the marketplace sync and the plugin clone", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-auth-run-memo-");
+    try {
+      // arrange
+      await seedGitUpdateMarketplace({
+        cwd,
+        cloneUrl: "https://github.com/org/repo",
+        entrySource: { source: "github", repo: "org/repo", sha: SHA_NEW },
+        recordedSha: SHA_OLD,
+        versionTag: "9.9.9",
+      });
+      const locations = locationsFor("project", cwd);
+      const seeded = await loadState(locations.extensionRoot);
+      const marketplace = seeded.marketplaces.mp;
+      assert.ok(marketplace !== undefined);
+      await saveState(locations.extensionRoot, {
+        ...seeded,
+        marketplaces: {
+          ...seeded.marketplaces,
+          mp: { ...marketplace, source: githubSource("https://github.com/test/mp#main") },
+        },
+      });
+      const { gitOps: recordingGitOps, state } = createGitOps({
+        fixtureSourceDir: path.join(cwd, "repo-fixture"),
+        remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000001" },
+      });
+      const gitOps: typeof recordingGitOps = {
+        ...recordingGitOps,
+        async fetch(fetchOptions) {
+          if (fetchOptions.auth?.kind === "device-flow") {
+            await fetchOptions.auth.onAuthRequired();
+          }
+
+          await recordingGitOps.fetch(fetchOptions);
+        },
+      };
+      const { seam, captured } = capturingUpdateSeam(gitOps);
+      const clonePullSeam: UpdateCloneCacheSeam = {
+        ...seam,
+        materializePluginClone: async (args) => {
+          if (args.auth?.kind === "device-flow") {
+            await args.auth.onAuthRequired();
+          }
+
+          return seam.materializePluginClone(args);
+        },
+      };
+      const deviceFlow = createDeviceFlowFake({
+        boundary: "memory",
+        network: "disabled",
+        deviceCode: DEVICE_CODE,
+        defaultPoll: { kind: "access_denied" },
+      });
+      const { ctx, pi } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "gp", marketplace: "mp" },
+        gitOps,
+        cloneCacheSeam: clonePullSeam,
+        credentialOps: makeCredentialOps(),
+        deviceFlowHttp: deviceFlow.http,
+      });
+
+      // assert
+      assert.equal(state.fetchCalls.length, 1, "the marketplace syncs once");
+      assert.ok(captured.cloneAuth?.kind === "device-flow", "the clone carries the auth bundle");
+      assert.equal(
+        deviceFlow.calls.requestCode.length,
+        1,
+        "the sync and the clone share one Device Flow",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("plugin update authentication: an unpinned provider update threads auth to the mirror", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-auth-mirror-");
