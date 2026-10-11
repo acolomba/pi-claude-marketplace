@@ -5,7 +5,7 @@ status: completed
 stopped_at: mcp-4 milestone closed and archived; PR #250 open, awaiting merge
 last_updated: "2026-10-11T16:34:35.328Z"
 last_activity: 2026-10-11
-last_activity_desc: Completed quick task 261011-h5m — Authenticate the plugin update marketplace sync (#249)
+last_activity_desc: Completed quick task 261011-jgu — Refresh url-source marketplaces on plugin update
 state_head: a9d8f9ad2eb73b4e48a181463db1486e8a80f9ba
 milestone_name: MCP 4
 current_phase: 08
@@ -38,7 +38,7 @@ costs users new sign-ins and approvals.
 Phase: Milestone mcp-4 complete
 Plan: —
 Status: Milestone complete; UAT check, `/gsd-cleanup` and the 0.20.0 version bump done; PR #250 open, awaiting merge
-Last activity: 2026-10-11 — Completed quick task 261011-h5m: Authenticate the plugin update marketplace sync (#249)
+Last activity: 2026-10-11 — Completed quick task 261011-jgu: Refresh url-source marketplaces on plugin update
 
 ### workflows-replay closeout (merged from main)
 
@@ -804,6 +804,7 @@ See [task summary](./milestones/any-git-host-quick/260917-hfp-clear-the-phase-5-
 | ---------- | ----------------------------------------------------------------------------------------------------------- | ---------- | -------- | ---------------------------------------------------------------------------------------------------- |
 | 261010-cfi | Accept Node 24 and 26 EISDIR text in mcp-migration test | 2026-10-10 | e34cec12 | [261010-cfi-accept-node-24-and-26-eisdir-text-in-mcp](./quick/261010-cfi-accept-node-24-and-26-eisdir-text-in-mcp/) |
 | 261011-h5m | Authenticate the plugin update marketplace sync (#249) | 2026-10-11 | a9d8f9ad | [261011-h5m-fix-plugin-update-marketplace-sync-auth](./quick/261011-h5m-fix-plugin-update-marketplace-sync-auth/) |
+| 261011-jgu | Refresh url-source marketplaces on plugin update | 2026-10-11 | 63a6efdc | [261011-jgu-url-source-marketplace-refresh-on-plugin](./quick/261011-jgu-url-source-marketplace-refresh-on-plugin/) |
 
 ## Deferred Items
 
