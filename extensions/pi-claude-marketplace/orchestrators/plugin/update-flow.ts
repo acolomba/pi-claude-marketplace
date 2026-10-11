@@ -178,7 +178,7 @@ function makeSyncCloneOnce(
         ...(opts.authMemo !== undefined && { authMemo: opts.authMemo }),
       });
     }
-    // path-source: NFR-5 noop. The manifest is re-read in place per plugin.
+    // path-source: NFR-5 noop. The manifest is re-read per-plugin.
   };
 }
 

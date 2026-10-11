@@ -6,7 +6,6 @@ import { test, type TestContext } from "node:test";
 import { mock, verify, when } from "strong-mock";
 
 import { GENERATED_AGENT_MARKER } from "../../../extensions/pi-claude-marketplace/bridges/agents/marker.ts";
-import { NO_STORED_CREDENTIAL_CAUSE } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
 import {
   AgentsUnstageFailureError,
   DEFAULT_GIT_OPS,
@@ -715,18 +714,20 @@ test("refreshUrlClone gives a provider host the Device Flow capped by the run's 
   boundary.verifyAll();
 });
 
-const unauthorized = (): Error =>
-  Object.assign(new Error("HTTP 401 from fetch"), {
+function unauthorized(): Error {
+  return Object.assign(new Error("HTTP 401 from fetch"), {
     code: "HttpError",
     data: { statusCode: 401 },
   });
+}
 
 for (const { title, url, makeError, expectedCause } of [
   {
     title: "adds the stored-credential cause line to an auth failure on a host with no Device Flow",
     url: "https://gitlab.example.com/team/mp.git",
     makeError: unauthorized,
-    expectedCause: NO_STORED_CREDENTIAL_CAUSE("gitlab.example.com"),
+    expectedCause:
+      "no credential was obtained for gitlab.example.com; store one with: printf 'protocol=https\\nhost=gitlab.example.com\\nusername=<user>\\npassword=<token>\\n\\n' | git credential approve",
   },
   {
     title: "keeps the cause an auth failure already carries",
@@ -783,10 +784,10 @@ for (const { title, url, makeError, expectedCause } of [
 
 test("refreshUrlClone rethrows a non-Error fetch rejection unchanged", async () => {
   // arrange
-  const rejectNonError = Promise.reject.bind(Promise);
   const gitOps: GitOps = {
     ...createGitOps({}).gitOps,
-    fetch: () => rejectNonError("socket closed"),
+    // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the case is a non-Error rejection
+    fetch: () => Promise.reject("socket closed"),
   };
   const { credentialOps } = createCredentialOpsFake({ boundary: "memory" });
   const boundary = notificationBoundary();

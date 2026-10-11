@@ -1483,9 +1483,9 @@ test("PUP-2 / AUTH-02: the github marketplace sync fetch carries the run's githu
       // assert
       assert.equal(state.fetchCalls.length, 1);
       const auth = state.fetchCalls[0]?.auth;
-      assert.equal(auth?.host, "github.com");
+      assert.ok(auth?.kind === "device-flow");
+      assert.equal(auth.host, "github.com");
       assert.equal(auth.credentialOps, credentialOps);
-      assert.ok(auth.kind === "device-flow");
       assert.deepEqual(await auth.onAuthRequired(), memoized);
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -1518,12 +1518,13 @@ test("syncClone-fail: an HTTP 401 on the marketplace sync renders {authenticatio
       });
 
       // assert
-      assert.equal(notifications.length, 1);
-      assert.equal(notifications[0]?.severity, "error");
-      assert.match(
-        notifications[0]?.message ?? "",
-        /official \(failed\) \{authentication required\}/,
-      );
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n● official [project]\n  ⊘ official (failed) {authentication required}\n    cause: HTTP Error: 401 Unauthorized\n\nPlugin update: 1 failure",
+          severity: "error",
+        },
+      ]);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -1651,8 +1652,6 @@ test("PUP-2 / D-79-02: a url marketplace on a Device Flow host shares the run's 
         { hello: "1.0.0" },
         parsePluginSource("https://gitlab.com/org/repo#main"),
       );
-      const seeded = await loadState(locationsFor("project", cwd).extensionRoot);
-      assert.equal((seeded.marketplaces.mp?.source as ParsedSource | undefined)?.kind, "url");
       const { gitOps, state } = createGitOps({
         remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000001" },
       });

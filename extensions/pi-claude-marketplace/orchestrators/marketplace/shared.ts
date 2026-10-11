@@ -349,7 +349,16 @@ export async function refreshUrlClone(args: {
   readonly authMemo?: Map<string, AuthAttemptResult>;
   readonly onFetchSucceeded?: () => void;
 }): Promise<void> {
-  const { cloneDir, source, gitOps, ctx, credentialOps, deviceFlowHttp, authMemo } = args;
+  const {
+    cloneDir,
+    source,
+    gitOps,
+    ctx,
+    credentialOps,
+    deviceFlowHttp,
+    authMemo,
+    onFetchSucceeded,
+  } = args;
   const host = hostFromCloneUrl(source.url, "url");
   const auth = buildAuthForHost({
     host,
@@ -360,7 +369,7 @@ export async function refreshUrlClone(args: {
   });
 
   try {
-    await refreshGitHubClone(cloneDir, source.ref, gitOps, args.onFetchSucceeded, auth);
+    await refreshGitHubClone(cloneDir, source.ref, gitOps, onFetchSucceeded, auth);
   } catch (err) {
     if (
       err instanceof Error &&
