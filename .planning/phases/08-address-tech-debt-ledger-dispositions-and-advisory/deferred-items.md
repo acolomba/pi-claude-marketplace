@@ -8,3 +8,4 @@
 - **Workaround:** redirect to a file and read the file, or parse `windows status` JSON with a reader (`| node -e ...`), which works.
 - **Ship gate unaffected:** `/gsd-ship` captures the full `windows status --raw` JSON and reads `.ledger.open_count` with `jq`, without `--pick`; that path reads `0` on the disposed ledger.
 - **Out of scope:** gsd-tools is upstream tooling that this project does not edit.
+  status: acknowledged

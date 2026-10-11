@@ -33,3 +33,4 @@
   resolve the pi-subagents root before the hermetic HOME swap, so the SC-2 /
   AGSK-06 case runs where the global peer is installed; CI installs no global
   peer and still skips it; WINDOWS #89 records the disposition.
+  status: acknowledged
