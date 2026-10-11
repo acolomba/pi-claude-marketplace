@@ -76,7 +76,8 @@ import { type ContentReason } from "../../shared/notification-types.ts";
 import { type PluginFailedMessage } from "../../shared/notification-types.ts";
 import { notifyUpdateNoOpWithContext, notifyWithContext } from "../../shared/notify-context.ts";
 import { ownValue } from "../../shared/own-key.ts";
-import { DEFAULT_GIT_OPS, refreshGitHubClone, type GitOps } from "../marketplace/shared.ts";
+import { DEFAULT_CREDENTIAL_OPS, GITHUB_HOST, buildAuthForHost } from "../auth-host.ts";
+import { DEFAULT_GIT_OPS, refreshGitHubClone, refreshUrlClone } from "../marketplace/shared.ts";
 import { marketplaceInOtherScope } from "../marketplace/shared.ts";
 
 import { garbageCollectPluginClones } from "./clone-gc.ts";
@@ -112,6 +113,7 @@ import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { LockedStateTransactionDeps } from "../../transaction/with-state-guard.ts";
+import type { AuthAttemptResult } from "../auth-host.ts";
 import type { PluginUpdateFn, PluginUpdateOutcome } from "../types.ts";
 
 /** Runs one prepared update target for the update flow. */
@@ -128,12 +130,31 @@ type UpdateCascadeComposer = (
 /**
  * PUP-2 syncCloneOnce memoization -- one refresh per (scope, marketplace)
  * pair. Path-source marketplaces are noops (NFR-5: no network for path
- * sources); GitHub-source marketplaces refresh via gitOps.fetch +
- * forceUpdateRef + checkout (the D-14 sequence). Throws on git-side failures.
+ * sources); GitHub- and url-source marketplaces refresh via gitOps.fetch +
+ * forceUpdateRef + checkout (the D-14 sequence), as `marketplace update`
+ * does. Throws on git-side failures.
+ *
+ * AUTH-02: the fetch carries the same host-keyed auth bundle as `marketplace
+ * update` (github.com for GitHub sources, the clone URL's host for url
+ * sources), plus the run's `authMemo`, so a private marketplace reaches the
+ * credential helper and, on a miss, the Device Flow. `updatePluginsWith`
+ * allocates the `authMemo` when the caller supplies none and passes it here
+ * (D-79-02), so that flow runs at most once per host across the marketplace
+ * syncs and the plugin clones.
  */
 function makeSyncCloneOnce(
-  gitOps: GitOps,
+  opts: UpdatePluginsOptions,
 ): (scope: Scope, mpName: string, locations: ScopedLocations) => Promise<void> {
+  const gitOps = opts.gitOps ?? DEFAULT_GIT_OPS;
+  const credentialOps = opts.credentialOps ?? DEFAULT_CREDENTIAL_OPS;
+  const auth = buildAuthForHost({
+    host: GITHUB_HOST,
+    credentialOps,
+    ctx: opts.ctx,
+    run: opts.run,
+    ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
+    ...(opts.authMemo !== undefined && { authMemo: opts.authMemo }),
+  });
   const synced = new Set<string>();
   return async (scope, mpName, locations) => {
     const key = `${scope}/${mpName}`;
@@ -152,7 +173,18 @@ function makeSyncCloneOnce(
     const source = mp.source as ParsedSource;
     if (source.kind === "github") {
       const cloneDir = await locations.sourceCloneDir(mpName);
-      await refreshGitHubClone(cloneDir, source.ref, gitOps);
+      await refreshGitHubClone(cloneDir, source.ref, gitOps, undefined, auth);
+    } else if (source.kind === "url") {
+      await refreshUrlClone({
+        cloneDir: await locations.sourceCloneDir(mpName),
+        source,
+        gitOps,
+        ctx: opts.ctx,
+        run: opts.run,
+        credentialOps,
+        ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
+        ...(opts.authMemo !== undefined && { authMemo: opts.authMemo }),
+      });
     }
     // path-source: NFR-5 noop. The manifest is re-read per-plugin.
   };
@@ -267,7 +299,14 @@ async function updatePluginsWith(
     return;
   }
 
-  const syncCloneOnce = makeSyncCloneOnce(opts.gitOps ?? DEFAULT_GIT_OPS);
+  // D-79-02: ONE authMemo for the whole run, shared by the marketplace syncs
+  // and every target's clone and probe auth, so a Device Flow host prompts at
+  // most once. A caller-supplied memo wins.
+  const runOpts: UpdatePluginsOptions = {
+    ...opts,
+    authMemo: opts.authMemo ?? new Map<string, AuthAttemptResult>(),
+  };
+  const syncCloneOnce = makeSyncCloneOnce(runOpts);
   // D-10-18: one memo pair for this WHOLE bulk run, never exposed on
   // `UpdatePluginsOptions` -- it is a run-internal bound, not a caller knob,
   // and a caller-supplied memo would outlive the run and serve a stale
@@ -294,8 +333,9 @@ async function updatePluginsWith(
       // the typed cause (Option B). Abort the whole
       // batch -- a syncClone failure means we cannot read the refreshed
       // manifest for ANY plugin in that marketplace and the rest of the
-      // batch is suspect. The renderer composes the 4-space cause-chain
-      // trailer.
+      // batch is suspect. `abortUpdateBatch` still reports the targets that
+      // already committed (CR-01). The renderer composes the 4-space
+      // cause-chain trailer.
       notifyDirectFailure({
         ctx,
         run,
@@ -308,8 +348,7 @@ async function updatePluginsWith(
         pluginName: t.marketplace,
         err,
       });
-      // AFILE-04: earlier targets already rewrote mcp-adapter.json.
-      surfaceUpdateMcpConfigNotices(ctx, run, outcomes);
+      abortUpdateBatch(ctx, run, outcomes, cardinality, composeCascade);
       return;
     }
 
@@ -318,7 +357,7 @@ async function updatePluginsWith(
       // eslint-disable-next-line no-await-in-loop -- each update locks the scope (retries: 0)
       outcome = await runPluginUpdate(
         buildDirectThreePhaseArgs(
-          opts,
+          runOpts,
           t,
           cardinality,
           bindings,
@@ -343,8 +382,7 @@ async function updatePluginsWith(
         pluginName: t.plugin,
         err,
       });
-      // AFILE-04: earlier targets already rewrote mcp-adapter.json.
-      surfaceUpdateMcpConfigNotices(ctx, run, outcomes);
+      abortUpdateBatch(ctx, run, outcomes, cardinality, composeCascade);
       return;
     }
 
@@ -368,14 +406,7 @@ async function updatePluginsWith(
     // throw and are handled by the `catch` block above, never reaching
     // this branch.
     if (isPhase3aAggregateFailure(outcome)) {
-      // WR-01: the failing plugin already fired its own `notifyDirectFailure`
-      // and is NOT pushed into `outcomes`. Flag the cascade as aborted-by-failure
-      // so the never-silent no-op headline is suppressed: if every accumulated
-      // outcome was `unchanged`, the bulk-suppressed cascade is empty and the
-      // headline would otherwise emit a contradictory `nothing to update` line
-      // directly after the failure notification.
-      renderUpdateCascadeIfAny(ctx, run, outcomes, cardinality, composeCascade, true);
-      surfaceUpdateMcpConfigNotices(ctx, run, outcomes, outcome);
+      abortUpdateBatch(ctx, run, outcomes, cardinality, composeCascade, outcome);
       return;
     }
 
@@ -396,9 +427,8 @@ async function updatePluginsWith(
  * discovery half on `notes` and nothing else; the hygiene half never reaches
  * here. That is the same property install's standalone arm relies on.
  *
- * Deliberately NOT called from the `renderUpdateCascadeIfAny` early-abort
- * path: an aborted batch has a failure to explain, and a skipped-component
- * note is noise against it.
+ * Deliberately NOT called from `abortUpdateBatch`: an aborted batch has a
+ * failure to explain, and a skipped-component note is noise against it.
  */
 function surfaceUpdateDiscoveryWarnings(
   ctx: NotificationContext,
@@ -527,23 +557,35 @@ function isPhase3aAggregateFailure(
 }
 
 /**
- * CR-01 helper: emit the cascade notification ONLY when at least one
- * outcome accumulated. Empty accumulators skip the call so we do not
- * emit an empty-marketplaces sentinel after a phase-3a abort.
+ * CR-01 / AFILE-04: close a batch that stopped on a failure its own
+ * `notifyDirectFailure` already reported. Earlier targets committed to disk
+ * through their own `withStateGuard` closures and may have rewritten
+ * mcp-adapter.json, so their cascade and MCP notices still render.
+ *
+ * WR-01: the cascade is flagged aborted-by-failure so the never-silent no-op
+ * headline is suppressed. If every accumulated outcome was `unchanged`, the
+ * bulk-suppressed cascade is empty and the headline would otherwise emit a
+ * contradictory `nothing to update` line right after the failure. An empty
+ * accumulator skips the cascade so no empty-marketplaces sentinel follows the
+ * failure.
+ *
+ * `failed` is the phase-3a aggregate outcome, when the abort came from one.
+ * Its MCP notices follow the cascade, because its MCP commit may have
+ * rewritten the file before a later bridge failed.
  */
-function renderUpdateCascadeIfAny(
+function abortUpdateBatch(
   ctx: NotificationContext,
   run: NotificationRun,
   outcomes: readonly UpdateCascadeOutcome[],
   cardinality: "single" | "plural",
   composeCascade: UpdateCascadeComposer,
-  // WR-01: the phase-3a abort path sets this so the never-silent no-op headline
-  // is suppressed when the accumulated outcomes contain no realized transition.
-  abortedByFailure = false,
+  failed?: UpdatePhase3FailedOutcome,
 ): void {
   if (outcomes.length > 0) {
-    composeCascade(ctx, run, outcomes, cardinality, abortedByFailure);
+    composeCascade(ctx, run, outcomes, cardinality, true);
   }
+
+  surfaceUpdateMcpConfigNotices(ctx, run, outcomes, failed);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

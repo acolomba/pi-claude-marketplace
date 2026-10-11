@@ -17,6 +17,7 @@ import {
   marketplaceInOtherScope,
   narrowCascadeFailure,
   refreshGitHubClone,
+  refreshUrlClone,
   resolveScopeOrNotifyNotAdded,
   WorkflowsUnstageFailureError,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
@@ -26,14 +27,17 @@ import * as defaultGit from "../../../extensions/pi-claude-marketplace/platform/
 import { atomicWriteJson } from "../../../extensions/pi-claude-marketplace/shared/atomic-json.ts";
 import { McpConfigFileError } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 import {
+  CrossOriginChallengeError,
   InvalidMarketplaceManifestError,
   MarketplaceNotFoundError,
   PluginShapeError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
+import type { UrlSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import type {
   AutoupdateFlipResult,
   GitAuthBundle,
@@ -631,6 +635,182 @@ test("refreshGitHubClone propagates fetch failure before callback and ref work",
       args: { dir: "/cache/fetch-failure", remote: "origin", ref: "main" },
     },
   ]);
+});
+
+function urlSource(url: string): UrlSource {
+  return { kind: "url", raw: `${url}#main`, url, ref: "main" };
+}
+
+test("refreshUrlClone refreshes through origin with a stored-credential bundle for the url host", async () => {
+  // arrange
+  const remoteSha = "5555555555555555555555555555555555555555";
+  const { gitOps, calls } = createGitOps({ resolveRefResult: remoteSha });
+  const { credentialOps } = createCredentialOpsFake({ boundary: "memory" });
+  const boundary = notificationBoundary();
+  const auth: GitAuthBundle = {
+    credentialOps,
+    host: "gitlab.example.com",
+    kind: "stored-credential",
+  };
+
+  // act
+  await refreshUrlClone({
+    cloneDir: "/cache/url",
+    source: urlSource("https://gitlab.example.com/team/mp.git"),
+    gitOps,
+    ctx: boundary.ctx,
+    run: boundary.run,
+    credentialOps,
+    onFetchSucceeded: () => {
+      calls.push({ operation: "fetchSucceeded" });
+    },
+  });
+
+  // assert
+  assert.deepStrictEqual(calls, [
+    { operation: "fetch", args: { dir: "/cache/url", remote: "origin", ref: "main", auth } },
+    { operation: "fetchSucceeded" },
+    { operation: "resolveRef", args: { dir: "/cache/url", ref: "refs/remotes/origin/main" } },
+    {
+      operation: "forceUpdateRef",
+      args: { dir: "/cache/url", ref: "refs/heads/main", value: remoteSha },
+    },
+    { operation: "checkout", args: { dir: "/cache/url", ref: "main" } },
+  ]);
+  boundary.verifyAll();
+});
+
+test("refreshUrlClone gives a provider host the Device Flow capped by the run's authMemo", async () => {
+  // arrange
+  const { gitOps, calls } = createGitOps({});
+  const { credentialOps } = createCredentialOpsFake({ boundary: "memory" });
+  const boundary = notificationBoundary();
+  const memoized: AuthAttemptResult = { ok: false, reason: "memoized authentication decline" };
+
+  // act
+  await refreshUrlClone({
+    cloneDir: "/cache/provider",
+    source: urlSource("https://gitlab.com/team/mp.git"),
+    gitOps,
+    ctx: boundary.ctx,
+    run: boundary.run,
+    credentialOps,
+    deviceFlowHttp: createDeviceFlowFake({
+      boundary: "memory",
+      network: "disabled",
+      deviceCode: {
+        device_code: "MOCK_DEVICE_CODE",
+        user_code: "ABCD-1234",
+        verification_uri: "https://gitlab.com/oauth/device",
+        expires_in: 900,
+        interval: 0,
+      },
+    }).http,
+    authMemo: new Map([["gitlab.com", memoized]]),
+  });
+
+  // assert
+  const fetchCall = calls[0];
+  const auth = fetchCall?.operation === "fetch" ? fetchCall.args.auth : undefined;
+  assert.ok(auth?.kind === "device-flow");
+  assert.strictEqual(auth.host, "gitlab.com");
+  assert.strictEqual(auth.credentialOps, credentialOps);
+  assert.deepStrictEqual(await auth.onAuthRequired(), memoized);
+  boundary.verifyAll();
+});
+
+function unauthorized(): Error {
+  return Object.assign(new Error("HTTP 401 from fetch"), {
+    code: "HttpError",
+    data: { statusCode: 401 },
+  });
+}
+
+for (const { title, url, makeError, expectedCause } of [
+  {
+    title: "adds the stored-credential cause line to an auth failure on a host with no Device Flow",
+    url: "https://gitlab.example.com/team/mp.git",
+    makeError: unauthorized,
+    expectedCause:
+      "no credential was obtained for gitlab.example.com; store one with: printf 'protocol=https\\nhost=gitlab.example.com\\nusername=<user>\\npassword=<token>\\n\\n' | git credential approve",
+  },
+  {
+    title: "keeps the cause an auth failure already carries",
+    url: "https://gitlab.example.com/team/mp.git",
+    makeError: (): Error =>
+      Object.assign(new Error("cancelled"), {
+        code: "UserCanceledError",
+        cause: new Error("helper exited 128"),
+      }),
+    expectedCause: "helper exited 128",
+  },
+  {
+    title: "adds no cause line to a cross-origin challenge",
+    url: "https://gitlab.example.com/team/mp.git",
+    makeError: (): Error => new CrossOriginChallengeError("https://sso.example.com"),
+    expectedCause: undefined,
+  },
+  {
+    title: "adds no cause line to a network failure",
+    url: "https://gitlab.example.com/team/mp.git",
+    makeError: (): Error => Object.assign(new Error("getaddrinfo"), { code: "ENOTFOUND" }),
+    expectedCause: undefined,
+  },
+  {
+    title: "adds no cause line to an auth failure on a Device Flow host",
+    url: "https://gitlab.com/team/mp.git",
+    makeError: unauthorized,
+    expectedCause: undefined,
+  },
+]) {
+  test(`refreshUrlClone ${title}`, async () => {
+    // arrange
+    const fetchError = makeError();
+    const { gitOps } = createGitOps({ fetchError });
+    const { credentialOps } = createCredentialOpsFake({ boundary: "memory" });
+    const boundary = notificationBoundary();
+
+    // act
+    const refresh = refreshUrlClone({
+      cloneDir: "/cache/url-failure",
+      source: urlSource(url),
+      gitOps,
+      ctx: boundary.ctx,
+      run: boundary.run,
+      credentialOps,
+    });
+
+    // assert
+    await assert.rejects(refresh, (error: unknown) => error === fetchError);
+    const cause = fetchError.cause instanceof Error ? fetchError.cause.message : undefined;
+    assert.strictEqual(cause, expectedCause);
+    boundary.verifyAll();
+  });
+}
+
+test("refreshUrlClone rethrows a non-Error fetch rejection unchanged", async () => {
+  // arrange
+  const gitOps: GitOps = {
+    ...createGitOps({}).gitOps,
+    // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the case is a non-Error rejection
+    fetch: () => Promise.reject("socket closed"),
+  };
+  const { credentialOps } = createCredentialOpsFake({ boundary: "memory" });
+  const boundary = notificationBoundary();
+
+  // act
+  const refresh = refreshUrlClone({
+    cloneDir: "/cache/url-reject",
+    source: urlSource("https://gitlab.example.com/team/mp.git"),
+    gitOps,
+    ctx: boundary.ctx,
+    run: boundary.run,
+    credentialOps,
+  });
+
+  // assert
+  await assert.rejects(refresh, (error: unknown) => error === "socket closed");
+  boundary.verifyAll();
 });
 
 for (const { title, scenario, storedRef, expectedCalls } of [

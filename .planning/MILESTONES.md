@@ -53,7 +53,7 @@ would set Pi's error flag.
 
 ---
 
-## mcp-4 -- MCP 4 (Completed: 2026-10-10; merged to main 2026-10-10 via PR #250, released in 0.20.0)
+## mcp-4 -- MCP 4 (Completed: 2026-10-10; merged 2026-10-10 as PR #250, squash `94160614`; released as 0.20.0)
 
 **Phases completed:** 8 phases (1-8), 73 plans, 176 tasks; 41/41 requirements.
 
@@ -85,8 +85,9 @@ compliant on all 8 phases; `threats_open: 0`. One minor item, ROOTKEY-01 (a
 misleading cause line for a root plugin name outside the dependency token
 alphabet), is carried in `BACKLOG.md`.
 
-**Release state:** merged to main on 2026-10-10 as PR #250 and released as
-0.20.0 (D-07-11), so phases 2 to 5 went out in one release.
+**Release state:** PR #250 squash-merged to main on 2026-10-10 (`94160614`)
+and shipped as npm 0.20.0 (tag `v0.20.0`, D-07-11). Phases 2 to 5 went out in
+one release.
 
 **Archive:** `.planning/milestones/mcp-4-{ROADMAP,REQUIREMENTS,MILESTONE-AUDIT}.md`;
 phase and quick-task records are under `.planning/milestones/mcp-4-phases/` and

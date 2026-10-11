@@ -49,7 +49,7 @@ browse TUI polish, migrating existing suites to JSON assertions, and writing new
 behavioral suites. Closes backlog MRO-01 and corrects two of its claims.
 Phase numbering restarts at 1.
 
-## Previous Milestone: mcp-4 -- MCP 4 (branch: features/mcp-4, completed 2026-10-10, merged via PR #250 on 2026-10-10, npm 0.20.0)
+## Previous Milestone: mcp-4 -- MCP 4 (completed 2026-10-10, merged as PR #250 squash `94160614`, released as npm 0.20.0)
 
 **Goal:** Make Pi 1.0 the baseline and deliver plugin MCP servers through pi-mcp-adapter 5,
 using its tool search, naming, status and variable features at Claude Code parity -- without

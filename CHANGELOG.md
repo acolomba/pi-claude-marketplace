@@ -11,6 +11,12 @@
   - Credentials no longer appear in any output, including JSON entries and the text the LLM tools return to the model.
   - Internal: integration tests now install the optional peers at their declared floors, so they run the same locally and in CI, with no skips.
 
+## [0.20.1] - 2026-10-11
+
+- `/claude:plugin update` now authenticates when it refreshes a marketplace from a private GitHub repository, as `/claude:plugin marketplace update` does. Before, the refresh failed with `{authentication required}` ([#249](https://github.com/acolomba/pi-claude-marketplace/issues/249)).
+- `/claude:plugin update` now fetches a marketplace that you added from a git URL before it reads the manifest, as it already did for a GitHub marketplace. It also authenticates to a private host. Before, it read the clone from the last `marketplace add` or `marketplace update` and did not see new plugin versions.
+- `/claude:plugin update` now reports the plugins that it updated before a later plugin or marketplace failed and stopped the run. Before, those updates took effect but the run did not report them.
+
 ## [0.20.0] - 2026-10-10
 
 - Pi Coding Agent 1.0.0 or newer is now required.

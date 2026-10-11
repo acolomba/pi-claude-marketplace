@@ -33,6 +33,7 @@ import {
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import {
   githubSource,
+  parsePluginSource,
   pathSource,
 } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
@@ -64,6 +65,7 @@ import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { runWithNothingLoaded, runWithSoftDeps } from "../../shared/notification-run-seeds.ts";
 
+import type { ParsedSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import type { AuthAttemptResult } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
 import type {
   GitAuthBundle,
@@ -1454,6 +1456,220 @@ test("PUP-2: two plugins in SAME github marketplace -> syncCloneOnce calls fetch
   });
 });
 
+test("PUP-2 / AUTH-02: the github marketplace sync fetch carries the github.com auth bundle and a supplied authMemo", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-sync-auth-");
+    try {
+      // arrange
+      await seedGithubMarketplaceForSync(cwd);
+      const { gitOps, state } = createGitOps({
+        remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000001" },
+      });
+      const credentialOps = makeCredentialOps();
+      const memoized: AuthAttemptResult = { ok: false, reason: "memoized authentication decline" };
+      const authMemo = new Map<string, AuthAttemptResult>([["github.com", memoized]]);
+      const { ctx, run } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "marketplace", marketplace: "official" },
+        gitOps,
+        credentialOps,
+        deviceFlowHttp: makeDeviceFlowHttp(),
+        authMemo,
+      });
+
+      // assert
+      assert.equal(state.fetchCalls.length, 1);
+      const auth = state.fetchCalls[0]?.auth;
+      assert.ok(auth?.kind === "device-flow");
+      assert.equal(auth.host, "github.com");
+      assert.equal(auth.credentialOps, credentialOps);
+      assert.deepEqual(await auth.onAuthRequired(), memoized);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("PUP-2 / D-79-02: two marketplaces on one Device Flow host without a supplied authMemo request one device code", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-sync-memo-");
+    try {
+      // arrange
+      await seedGithubMarketplaceForSync(cwd);
+      const locations = locationsFor("project", cwd);
+      const secondCloneDir = await locations.sourceCloneDir("second");
+      await cp(fixtureMarketplaceDir("valid-marketplace"), secondCloneDir, { recursive: true });
+      const seeded = await loadState(locations.extensionRoot);
+      const official = seeded.marketplaces.official;
+      assert.ok(official !== undefined);
+      await saveState(locations.extensionRoot, {
+        ...seeded,
+        marketplaces: {
+          ...seeded.marketplaces,
+          second: {
+            ...official,
+            name: "second",
+            source: githubSource("https://github.com/test/other#main"),
+            manifestPath: path.join(secondCloneDir, ".claude-plugin", "marketplace.json"),
+            marketplaceRoot: secondCloneDir,
+          },
+        },
+      });
+      const { gitOps: recordingGitOps, state } = createGitOps({
+        remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000001" },
+      });
+      const gitOps: typeof recordingGitOps = {
+        ...recordingGitOps,
+        async fetch(fetchOptions) {
+          if (fetchOptions.auth?.kind === "device-flow") {
+            await fetchOptions.auth.onAuthRequired();
+          }
+
+          await recordingGitOps.fetch(fetchOptions);
+        },
+      };
+      const deviceFlow = createDeviceFlowFake({
+        boundary: "memory",
+        network: "disabled",
+        deviceCode: DEVICE_CODE,
+        defaultPoll: { kind: "access_denied" },
+      });
+      const { ctx, run } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "all" },
+        gitOps,
+        credentialOps: makeCredentialOps(),
+        deviceFlowHttp: deviceFlow.http,
+      });
+
+      // assert
+      assert.equal(state.fetchCalls.length, 2, "each marketplace syncs once");
+      assert.equal(deviceFlow.calls.requestCode.length, 1, "the Device Flow runs once per host");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("syncClone-fail: an HTTP 401 on the marketplace sync renders {authentication required}", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-sync-401-");
+    try {
+      // arrange
+      await seedGithubMarketplaceForSync(cwd);
+      const unauthorized = Object.assign(new Error("HTTP Error: 401 Unauthorized"), {
+        code: "HttpError",
+        data: { statusCode: 401, statusMessage: "Unauthorized" },
+      });
+      const { gitOps } = createGitOps({ fetchThrows: unauthorized });
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "marketplace", marketplace: "official" },
+        gitOps,
+        credentialOps: makeCredentialOps(),
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n● official [project]\n  ⊘ official (failed) {authentication required}\n    cause: HTTP Error: 401 Unauthorized\n\nPlugin update: 1 failure",
+          severity: "error",
+        },
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("CR-01: an HTTP 401 on a later marketplace sync still reports the earlier target's update", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-sync-401-later-");
+    try {
+      // arrange
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.0.1", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      const locations = locationsFor("project", cwd);
+      const zzzClone = await locations.sourceCloneDir("zzz");
+      await cp(fixtureMarketplaceDir("valid-marketplace"), zzzClone, { recursive: true });
+      const seeded = await loadState(locations.extensionRoot);
+      await saveState(locations.extensionRoot, {
+        ...seeded,
+        marketplaces: {
+          ...seeded.marketplaces,
+          zzz: {
+            name: "zzz",
+            scope: "project",
+            source: githubSource("https://github.com/test/repo#main"),
+            addedFromCwd: cwd,
+            manifestPath: path.join(zzzClone, ".claude-plugin", "marketplace.json"),
+            marketplaceRoot: zzzClone,
+            plugins: { hello: makePluginRecord("1.0.0") },
+          },
+        },
+      });
+      const unauthorized = Object.assign(new Error("HTTP Error: 401 Unauthorized"), {
+        code: "HttpError",
+        data: { statusCode: 401, statusMessage: "Unauthorized" },
+      });
+      const { gitOps } = createGitOps({ fetchThrows: unauthorized });
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "all" },
+        gitOps,
+        credentialOps: makeCredentialOps(),
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n● zzz [project]\n  ⊘ zzz (failed) {authentication required}\n    cause: HTTP Error: 401 Unauthorized\n\nPlugin update: 1 failure",
+          severity: "error",
+        },
+        {
+          message:
+            "● mp [project]\n  ● hello v1.0.0 → v1.0.1 (updated)\n\nPlugin update: 1 updated\n\n/reload to pick up changes",
+        },
+      ]);
+      const after = await loadState(locations.extensionRoot);
+      assert.equal(after.marketplaces.mp?.plugins.hello?.version, "1.0.1");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 // ─── NFR-5: path-source update -> zero gitOps calls ────────────────────────────
 
 test("NFR-5: path-source marketplace update calls zero gitOps primitives", async () => {
@@ -1484,6 +1700,243 @@ test("NFR-5: path-source marketplace update calls zero gitOps primitives", async
       assert.equal(state.forceUpdateRefCalls.length, 0);
       assert.equal(state.checkoutCalls.length, 0);
       assert.equal(state.resolveRefCalls.length, 0);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// ─── PUP-2: url-source marketplaces refresh like github ones ───────────────────
+
+/**
+ * Seed a url-source marketplace whose clone holds `versions`. plugin.json
+ * carries no version, so a manifest rewrite moves the derived version.
+ */
+async function seedUrlMarketplaceForSync(
+  cwd: string,
+  versions: Readonly<Record<string, string>>,
+  source: ParsedSource = parsePluginSource("https://example.com/org/repo#main"),
+): Promise<{ readonly manifestPath: string }> {
+  const locations = locationsFor("project", cwd);
+  const cloneDir = await locations.sourceCloneDir("mp");
+  const { manifestPath } = await seedPathMarketplace({
+    cwd,
+    marketplaceRoot: cloneDir,
+    marketplaceName: "mp",
+    manifestPlugins: Object.fromEntries(
+      Object.entries(versions).map(([name, version]) => [
+        name,
+        { version, omitPluginJsonVersion: true },
+      ]),
+    ),
+    installedVersions: { ...versions },
+  });
+  const state = await loadState(locations.extensionRoot);
+  const record = state.marketplaces.mp;
+  assert.ok(record !== undefined);
+  await saveState(locations.extensionRoot, {
+    ...state,
+    marketplaces: {
+      mp: { ...record, source },
+    },
+  });
+  return { manifestPath };
+}
+
+test("PUP-2 / GAUTH-03: two plugins in one url marketplace -> one sync fetch carrying the url host's auth bundle", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-url-sync-");
+    try {
+      // arrange
+      await seedUrlMarketplaceForSync(cwd, { a: "1.0.0", b: "1.0.0" });
+      const { gitOps, state } = createGitOps({
+        remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000001" },
+      });
+      const credentialOps = makeCredentialOps();
+      const { ctx, run } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "marketplace", marketplace: "mp" },
+        gitOps,
+        credentialOps,
+      });
+
+      // assert
+      assert.equal(state.fetchCalls.length, 1);
+      assert.equal(state.forceUpdateRefCalls.length, 1);
+      assert.equal(state.checkoutCalls.length, 1);
+      assert.deepStrictEqual(state.fetchCalls[0], {
+        dir: await locationsFor("project", cwd).sourceCloneDir("mp"),
+        remote: "origin",
+        ref: "main",
+        auth: { credentialOps, host: "example.com", kind: "stored-credential" },
+      });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("PUP-2 / D-79-02: a url marketplace on a Device Flow host shares a supplied authMemo", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-url-provider-");
+    try {
+      // arrange
+      await seedUrlMarketplaceForSync(
+        cwd,
+        { hello: "1.0.0" },
+        parsePluginSource("https://gitlab.com/org/repo#main"),
+      );
+      const { gitOps, state } = createGitOps({
+        remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000001" },
+      });
+      const credentialOps = makeCredentialOps();
+      const memoized: AuthAttemptResult = { ok: false, reason: "memoized authentication decline" };
+      const { ctx, run } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "marketplace", marketplace: "mp" },
+        gitOps,
+        credentialOps,
+        deviceFlowHttp: makeDeviceFlowHttp(),
+        authMemo: new Map([["gitlab.com", memoized]]),
+      });
+
+      // assert
+      const auth = state.fetchCalls[0]?.auth;
+      assert.ok(auth?.kind === "device-flow");
+      assert.equal(auth.host, "gitlab.com");
+      assert.equal(auth.credentialOps, credentialOps);
+      assert.deepEqual(await auth.onAuthRequired(), memoized);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("syncClone-fail / GAUTH-04: an HTTP 401 on a url marketplace sync names the missing credential", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-url-sync-401-");
+    try {
+      // arrange
+      await seedUrlMarketplaceForSync(cwd, { hello: "1.0.0" });
+      const unauthorized = Object.assign(new Error("HTTP Error: 401 Unauthorized"), {
+        code: "HttpError",
+        data: { statusCode: 401, statusMessage: "Unauthorized" },
+      });
+      const { gitOps } = createGitOps({ fetchThrows: unauthorized });
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "marketplace", marketplace: "mp" },
+        gitOps,
+        credentialOps: makeCredentialOps(),
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ mp (failed) {authentication required}\n    cause: HTTP Error: 401 Unauthorized -> no credential was obtained for example.com; store one with: printf 'protocol=https\\nhost=example.com\\nusername=<user>\\npassword=<token>\\n\\n' | git credential approve\n\nPlugin update: 1 failure",
+          severity: "error",
+        },
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("PUP-2: a url marketplace whose remote advanced -> update reads the refreshed manifest", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-url-advance-");
+    try {
+      // arrange
+      const { manifestPath } = await seedUrlMarketplaceForSync(cwd, { hello: "1.0.0" });
+      const fake = createGitOps({
+        remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000001" },
+      });
+      // The fetch is what brings the new manifest into the clone.
+      const gitOps: typeof fake.gitOps = {
+        ...fake.gitOps,
+        async fetch(fetchOptions) {
+          await fake.gitOps.fetch(fetchOptions);
+          await rewriteManifest(manifestPath, "mp", { hello: { version: "1.0.10" } });
+        },
+      };
+      const { ctx, run } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+        gitOps,
+        credentialOps: makeCredentialOps(),
+      });
+
+      // assert
+      const state = await loadState(locationsFor("project", cwd).extensionRoot);
+      assert.equal(state.marketplaces.mp?.plugins.hello?.version, "1.0.10");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("NFR-5: a path marketplace edited on disk -> update reads the edit in place with no git call", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-path-edit-");
+    try {
+      // arrange
+      const { manifestPath } = await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.0.0", omitPluginJsonVersion: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      const { gitOps, state } = createGitOps();
+      const { ctx, run } = makeCtx();
+      const update = (): Promise<void> =>
+        updatePlugins({
+          ctx,
+          run,
+          scope: "project",
+          cwd,
+          target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+          gitOps,
+        });
+      // A first run loads the manifest, so the second run proves the edit is
+      // not served from that earlier read.
+      await update();
+      await rewriteManifest(manifestPath, "mp", { hello: { version: "1.0.10" } });
+
+      // act
+      await update();
+
+      // assert
+      const recorded = await loadState(locationsFor("project", cwd).extensionRoot);
+      assert.equal(recorded.marketplaces.mp?.plugins.hello?.version, "1.0.10");
+      assert.equal(state.fetchCalls.length, 0);
+      assert.equal(state.checkoutCalls.length, 0);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -3777,7 +4230,7 @@ test("dropCache-fail: captured cache failure stays silent after successful updat
 
 // ─── swapStateRecord: marketplace removed between sync and preflight ───────────
 
-test("a later marketplace removed during an earlier refresh aborts before its own sync", async () => {
+test("CR-01: a later marketplace removed during an earlier refresh aborts before its own sync and still reports the earlier target", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-later-marketplace-gone-");
     try {
@@ -3830,10 +4283,18 @@ test("a later marketplace removed during an earlier refresh aborts before its ow
       });
 
       // assert
-      assert.equal(notifications.length, 1);
-      assert.equal(notifications[0]?.severity, "error");
-      assert.match(notifications[0]?.message ?? "", /zzz/);
-      assert.match(notifications[0]?.message ?? "", /not found/);
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n" +
+            "● zzz [project]\n" +
+            "  ⊘ zzz (failed) {not found}\n" +
+            '    cause: Marketplace "zzz" not found in project scope.\n\n' +
+            "Plugin update: 1 failure",
+          severity: "error",
+        },
+        { message: "● aaa [project]\n  ⊘ hello v1.0.0 (skipped) {no longer installable}" },
+      ]);
       assert.equal((await loadState(locations.extensionRoot)).marketplaces["zzz"], undefined);
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -8168,6 +8629,89 @@ test("plugin update authentication: a pinned provider update threads auth to the
   });
 });
 
+test("plugin update authentication: a run without a supplied authMemo shares one Device Flow between the marketplace sync and the plugin clone", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-auth-run-memo-");
+    try {
+      // arrange
+      await seedGitUpdateMarketplace({
+        cwd,
+        cloneUrl: "https://github.com/org/repo",
+        entrySource: { source: "github", repo: "org/repo", sha: SHA_NEW },
+        recordedSha: SHA_OLD,
+        versionTag: "9.9.9",
+      });
+      const locations = locationsFor("project", cwd);
+      const seeded = await loadState(locations.extensionRoot);
+      const marketplace = seeded.marketplaces.mp;
+      assert.ok(marketplace !== undefined);
+      await saveState(locations.extensionRoot, {
+        ...seeded,
+        marketplaces: {
+          ...seeded.marketplaces,
+          mp: { ...marketplace, source: githubSource("https://github.com/test/mp#main") },
+        },
+      });
+      const { gitOps: recordingGitOps, state } = createGitOps({
+        fixtureSourceDir: path.join(cwd, "repo-fixture"),
+        remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000001" },
+      });
+      const gitOps: typeof recordingGitOps = {
+        ...recordingGitOps,
+        async fetch(fetchOptions) {
+          if (fetchOptions.auth?.kind === "device-flow") {
+            await fetchOptions.auth.onAuthRequired();
+          }
+
+          await recordingGitOps.fetch(fetchOptions);
+        },
+      };
+      const { seam, captured } = capturingUpdateSeam(gitOps);
+      const clonePullSeam: UpdateCloneCacheSeam = {
+        ...seam,
+        materializePluginClone: async (args) => {
+          if (args.auth?.kind === "device-flow") {
+            await args.auth.onAuthRequired();
+          }
+
+          return seam.materializePluginClone(args);
+        },
+      };
+      const deviceFlow = createDeviceFlowFake({
+        boundary: "memory",
+        network: "disabled",
+        deviceCode: DEVICE_CODE,
+        defaultPoll: { kind: "access_denied" },
+      });
+      const { ctx, run } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "gp", marketplace: "mp" },
+        gitOps,
+        cloneCacheSeam: clonePullSeam,
+        credentialOps: makeCredentialOps(),
+        deviceFlowHttp: deviceFlow.http,
+      });
+
+      // assert
+      assert.equal(state.fetchCalls.length, 1, "the marketplace syncs once");
+      assert.ok(captured.cloneAuth?.kind === "device-flow", "the clone carries the auth bundle");
+      assert.equal(
+        deviceFlow.calls.requestCode.length,
+        1,
+        "the sync and the clone share one Device Flow",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("plugin update authentication: an unpinned provider update threads auth to the mirror", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-auth-mirror-");
@@ -11290,7 +11834,7 @@ function failLoadsAfterHelloUpdate(): UpdatePluginsFn {
   ).updatePlugins;
 }
 
-test("AFILE-04: a bulk update that aborts on a later plugin's failure still reports the comments an earlier update removed", async () => {
+test("AFILE-04 / CR-01: a bulk update that aborts on a later plugin's failure still reports the earlier update and the comments it removed", async () => {
   await withHermeticHome(async () => {
     // arrange
     const cwd = await createCaseDir("update-afile04-later-throw-");
@@ -11330,6 +11874,15 @@ test("AFILE-04: a bulk update that aborts on a later plugin's failure still repo
             "Plugin update: 1 failure",
           severity: "error",
         },
+        {
+          message:
+            "A plugin operation needs attention.\n\n" +
+            "● mp [project]\n" +
+            "  ● hello v1.0.0 → v1.0.1 (updated) {requires pi-mcp-adapter}\n\n" +
+            "Plugin update: 1 warning, 1 updated\n\n" +
+            "/reload to pick up changes",
+          severity: "warning",
+        },
         PROJECT_COMMENTS_DROPPED_NOTICE,
       ]);
     } finally {
@@ -11338,7 +11891,7 @@ test("AFILE-04: a bulk update that aborts on a later plugin's failure still repo
   });
 });
 
-test("AFILE-04: a bulk update that aborts on a later marketplace sync still reports the comments an earlier update removed", async () => {
+test("AFILE-04 / CR-01: a bulk update that aborts on a later marketplace sync still reports the earlier update and the comments it removed", async () => {
   await withHermeticHome(async () => {
     // arrange
     const cwd = await createCaseDir("update-afile04-later-sync-");
@@ -11376,6 +11929,15 @@ test("AFILE-04: a bulk update that aborts on a later marketplace sync still repo
             "    cause: network: connection refused\n\n" +
             "Plugin update: 1 failure",
           severity: "error",
+        },
+        {
+          message:
+            "A plugin operation needs attention.\n\n" +
+            "● mp [project]\n" +
+            "  ● hello v1.0.0 → v1.0.1 (updated) {requires pi-mcp-adapter}\n\n" +
+            "Plugin update: 1 warning, 1 updated\n\n" +
+            "/reload to pick up changes",
+          severity: "warning",
         },
         PROJECT_COMMENTS_DROPPED_NOTICE,
       ]);

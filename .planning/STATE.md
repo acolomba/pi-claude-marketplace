@@ -176,6 +176,8 @@ hit the same wall; convert it rather than re-disclosing it.
 | --- | --- | --- | --- | --- | --- |
 | 261011-bsm | Merge origin/main (#248, #250) into features/json and port it to the notification run model | 2026-10-11 | f38ce0f4 | complete | [261011-bsm-merge-origin-main-into-features-json-and](./quick/261011-bsm-merge-origin-main-into-features-json-and/) |
 | 261011-gl6 | Install pinned optional test peers so integration tests run identically locally and in CI | 2026-10-11 | b7beb4e9 | complete | [261011-gl6-install-pinned-optional-test-peers-so-in](./quick/261011-gl6-install-pinned-optional-test-peers-so-in/) |
+| 261011-h5m | Authenticate the plugin update marketplace sync (#249), on main via PR #252 | 2026-10-11 | a9d8f9ad | complete | [261011-h5m-fix-plugin-update-marketplace-sync-auth](./quick/261011-h5m-fix-plugin-update-marketplace-sync-auth/) |
+| 261011-jgu | Refresh url-source marketplaces on plugin update, on main via PR #252 | 2026-10-11 | 63a6efdc | complete | [261011-jgu-url-source-marketplace-refresh-on-plugin](./quick/261011-jgu-url-source-marketplace-refresh-on-plugin/) |
 
 ## Session Continuity
 
