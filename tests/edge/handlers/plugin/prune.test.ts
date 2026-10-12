@@ -11,13 +11,12 @@ import { makePruneHandler } from "../../../../extensions/pi-claude-marketplace/e
 import { locationsFor } from "../../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { createCompletionCache } from "../../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { withHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
+import { runWithNothingLoaded } from "../../../shared/notification-run-seeds.ts";
+import { createMachineNotificationBoundary } from "../../notification-boundary.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
 
-import type { ExtensionAPI } from "../../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
-
-function handler(pi: ExtensionAPI) {
+function handler() {
   return makePruneHandler(
-    pi,
     createHooksRouting(createHooksRuntime(), { readHooksJson }),
     createCompletionCache(),
   );
@@ -30,12 +29,12 @@ async function assertBothScopesUnchanged(cwd: string): Promise<void> {
 
 test("defaults to the user scope with no target", async () => {
   await withHermeticEnvironment("prune-handler-user-", async ({ cwd }) => {
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 1, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
       value: cwd,
       reads: 1,
     });
 
-    await handler(pi)("", ctx);
+    await handler()("", ctx, runWithNothingLoaded());
 
     assert.equal((await stat(locationsFor("user", cwd).extensionRoot)).isDirectory(), true);
     await assert.rejects(stat(locationsFor("project", cwd).extensionRoot), { code: "ENOENT" });
@@ -48,12 +47,12 @@ test("defaults to the user scope with no target", async () => {
 
 test("selects the project scope", async () => {
   await withHermeticEnvironment("prune-handler-project-", async ({ cwd }) => {
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 1, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
       value: cwd,
       reads: 1,
     });
 
-    await handler(pi)("--scope project", ctx);
+    await handler()("--scope project", ctx, runWithNothingLoaded());
 
     assert.equal((await stat(locationsFor("project", cwd).extensionRoot)).isDirectory(), true);
     await assert.rejects(stat(locationsFor("user", cwd).extensionRoot), { code: "ENOENT" });
@@ -67,12 +66,12 @@ test("selects the project scope", async () => {
 for (const args of ["--dry-run --scope project", "--scope project --dry-run"]) {
   test(`previews the project scope with ${args}`, async () => {
     await withHermeticEnvironment("prune-handler-preview-", async ({ cwd }) => {
-      const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 1, {
+      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
         value: cwd,
         reads: 1,
       });
 
-      await handler(pi)(args, ctx);
+      await handler()(args, ctx, runWithNothingLoaded());
 
       await assertBothScopesUnchanged(cwd);
       assert.deepStrictEqual(notifications, [
@@ -87,12 +86,12 @@ for (const args of ["--dry-run --scope project", "--scope project --dry-run"]) {
 
 test("duplicate --dry-run previews once without writing", async () => {
   await withHermeticEnvironment("prune-handler-duplicate-", async ({ cwd }) => {
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 1, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
       value: cwd,
       reads: 1,
     });
 
-    await handler(pi)("--dry-run --scope project --dry-run", ctx);
+    await handler()("--dry-run --scope project --dry-run", ctx, runWithNothingLoaded());
 
     await assertBothScopesUnchanged(cwd);
     assert.deepStrictEqual(notifications, [
@@ -119,9 +118,9 @@ for (const { args, message } of [
 ]) {
   test(`rejects ${args} before touching either scope`, async () => {
     await withHermeticEnvironment("prune-handler-reject-", async ({ cwd }) => {
-      const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
 
-      await handler(pi)(args, ctx);
+      await handler()(args, ctx, runWithNothingLoaded());
 
       assert.deepStrictEqual(notifications, [
         { message: `${message}\n\n${USAGE}`, severity: "error" },
@@ -130,4 +129,53 @@ for (const { args, message } of [
       verifyBoundary();
     });
   });
+}
+
+for (const mode of ["json", "rpc"] as const) {
+  for (const { args, message } of [
+    {
+      args: "--scope bad",
+      message: 'Invalid --scope value: "bad". Must be "user" or "project".',
+    },
+    {
+      args: "--bogus",
+      message: 'Unknown flag: "--bogus".',
+    },
+    {
+      args: "alpha@official beta@official",
+      message: "Too many arguments.",
+    },
+    {
+      args: "--local",
+      message: 'Unknown flag: "--local".',
+    },
+  ]) {
+    test(`appends plugin/prune rejection for ${args} in ${mode} (enabled)`, async () => {
+      // arrange
+      const { ctx, run, capture, verifyBoundary } = createMachineNotificationBoundary(mode);
+
+      const commandHandler = handler();
+
+      // act
+      await commandHandler(args, ctx, run);
+
+      // assert
+      assert.deepStrictEqual(capture.entries, [
+        {
+          customType: "claude-plugin",
+          payload: {
+            schemaVersion: 1,
+            origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+            kind: "usage-error",
+            severity: "error",
+            needsReload: false,
+            message,
+            usage: "Usage: /claude:plugin prune [--scope user|project] [--dry-run]",
+          },
+        },
+      ]);
+      capture.assertValid();
+      verifyBoundary();
+    });
+  }
 }

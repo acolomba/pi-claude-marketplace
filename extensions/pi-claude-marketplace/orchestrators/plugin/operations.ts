@@ -19,7 +19,7 @@
 // nothing left for a caller to supply once the filesystem and status
 // capabilities are bound here.
 
-import { readdir, readFile, stat } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, stat } from "node:fs/promises";
 
 import { runPhases } from "../../transaction/phase-ledger.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
@@ -50,6 +50,7 @@ import type {
   InstallMissingDependencyOutcome,
   InstallTransaction,
 } from "./install-flow.ts";
+import type { PruneRestoreOps } from "./prune-rollback.ts";
 import type { PrunePluginOptions } from "./prune.ts";
 import type { ReinstallHooksRouting, ReinstallPluginFn } from "./reinstall-flow.ts";
 import type { UninstallHooksRouting, UninstallPluginOperation } from "./uninstall.ts";
@@ -133,12 +134,26 @@ export function createUninstallOperation(
   return createUninstallPlugin(REAL_UNINSTALL_TRANSACTION, hooksRouting, completionCache);
 }
 
-/** Composes the standalone orphan sweep with uninstall's transaction owner. */
+// The one concrete binding of the prune backup operations. `mkdtemp` appends
+// six random characters to the prefix `preparePruneRollback` passes, so every
+// sweep gets its own backup directory under the scope's extension root. `rm`
+// removes it.
+const NODE_PRUNE_RESTORE_OPS: PruneRestoreOps = { createBackupRoot: mkdtemp, removeBackup: rm };
+
+/**
+ * Composes the standalone orphan sweep with uninstall's transaction owner and
+ * the Node-backed backup operations.
+ */
 export function createPruneOperation(
   hooksRouting: UninstallHooksRouting,
   completionCache: CompletionCache,
 ): (options: PrunePluginOptions) => Promise<void> {
-  return createPrunePlugin(REAL_UNINSTALL_TRANSACTION, hooksRouting, completionCache);
+  return createPrunePlugin(
+    REAL_UNINSTALL_TRANSACTION,
+    hooksRouting,
+    completionCache,
+    NODE_PRUNE_RESTORE_OPS,
+  );
 }
 
 /**

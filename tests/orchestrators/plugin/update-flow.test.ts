@@ -58,10 +58,12 @@ import {
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
+import { createJsonCapture } from "../../edge/json-capture.ts";
 import { createNotificationBoundary } from "../../edge/notification-boundary.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+import { runWithNothingLoaded, runWithSoftDeps } from "../../shared/notification-run-seeds.ts";
 
 import type { ParsedSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import type { AuthAttemptResult } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
@@ -78,9 +80,9 @@ import type { PluginUpdateFn } from "../../../extensions/pi-claude-marketplace/o
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type {
   NotificationContext,
-  PiInventory,
-  ToolInventoryItem,
+  SoftDepStatus,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { NotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import type { GitHttpRequest, GitHttpResponse } from "isomorphic-git/http/node";
 
 function createUpdateOperations() {
@@ -271,24 +273,27 @@ async function createCaseDir(prefix: string): Promise<string> {
   return realpath(await mkdtemp(path.join(tmpdir(), prefix)));
 }
 
-function makeCtx(piOverrides?: { getAllTools?: () => readonly ToolInventoryItem[] }): {
+function makeCtx(softDeps?: Partial<SoftDepStatus>): {
   ctx: NotificationContext;
-  pi: PiInventory;
+  run: NotificationRun;
   notifications: NotifyRecord[];
 } {
   const notifications: NotifyRecord[] = [];
   const ctx = {
+    mode: "tui",
     ui: {
       notify: (m: string, s?: string): void => {
         notifications.push(s === undefined ? { message: m } : { message: m, severity: s });
       },
     },
   };
-  const pi: PiInventory = {
-    getAllTools: piOverrides?.getAllTools ?? (() => []),
-    getCommands: () => [],
-  };
-  return { ctx, pi, notifications };
+  const run = runWithSoftDeps({
+    piSubagentsLoaded: false,
+    piMcpAdapterLoaded: false,
+    workflowEngineLoaded: false,
+    ...softDeps,
+  });
+  return { ctx, run, notifications };
 }
 
 /**
@@ -763,8 +768,8 @@ test("PUP-1: a bare update against empty state reports its no-op headline", asyn
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-pup1-empty-");
     try {
-      const { ctx, pi, notifications } = makeCtx();
-      await updatePlugins({ ctx, pi, scope: "project", cwd, target: { kind: "all" } });
+      const { ctx, run, notifications } = makeCtx();
+      await updatePlugins({ ctx, run, scope: "project", cwd, target: { kind: "all" } });
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, undefined);
       assert.equal(notifications[0]?.message, "Plugin update: nothing to update");
@@ -799,10 +804,10 @@ test("PUP-3: version equality -> outcome.partition='unchanged'; no bridge state 
         completionCache,
       );
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await operations.updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -858,7 +863,7 @@ test("PUP-4: source overridden to unsupported npm -> outcome.partition='skipped'
         installedVersions: { hello: "1.0.0" },
       });
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       const completionCache = createCompletionCache();
       const drop = testContext.mock.method(completionCache, "dropMarketplaceCache");
       const operations = createPluginUpdateOperations(
@@ -869,7 +874,7 @@ test("PUP-4: source overridden to unsupported npm -> outcome.partition='skipped'
       // act
       await operations.updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -912,10 +917,10 @@ test("PUP-5: refreshed manifest no longer lists entry -> outcome.partition='skip
       // Simulate the marketplace dropping the entry after install.
       await rewriteManifest(seeded.manifestPath, "mp", {});
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -950,12 +955,12 @@ test("PUP-5: an accepted empty recorded version is omitted from the failed row",
         installedVersions: { hello: "" },
       });
       await rewriteManifest(seeded.manifestPath, "mp", {});
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -1020,7 +1025,7 @@ test("LIFE-05: marketplace-bulk target renders `(skipped) {not in manifest}`, an
       const firstRun = makeCtx();
       await updatePlugins({
         ctx: firstRun.ctx,
-        pi: firstRun.pi,
+        run: firstRun.run,
         scope: "project",
         cwd,
         target: { kind: "marketplace", marketplace: "mp" },
@@ -1036,7 +1041,7 @@ test("LIFE-05: marketplace-bulk target renders `(skipped) {not in manifest}`, an
       const secondRun = makeCtx();
       await updatePlugins({
         ctx: secondRun.ctx,
-        pi: secondRun.pi,
+        run: secondRun.run,
         scope: "project",
         cwd,
         target: { kind: "marketplace", marketplace: "mp" },
@@ -1074,8 +1079,8 @@ test("LIFE-05: global-bulk target renders `(skipped) {not in manifest}` and writ
       const before = await readRecord();
       assert.ok(before !== undefined);
 
-      const { ctx, pi, notifications } = makeCtx();
-      await updatePlugins({ ctx, pi, scope: "project", cwd, target: { kind: "all" } });
+      const { ctx, run, notifications } = makeCtx();
+      await updatePlugins({ ctx, run, scope: "project", cwd, target: { kind: "all" } });
 
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.message, MANIFEST_ABSENT_BULK_BODY);
@@ -1115,14 +1120,12 @@ test("updatePlugins preserves a generated skill preload in the staged agent", as
         network: "disabled",
         deviceCode: DEVICE_CODE,
       });
-      const { ctx, pi, notifications } = makeCtx({
-        getAllTools: () => [{ name: "subagent" }],
-      });
+      const { ctx, run, notifications } = makeCtx({ piSubagentsLoaded: true });
 
       // act
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -1297,11 +1300,11 @@ test("PDEF-01: update preview detects an agent conflict from a later resolved di
         },
       };
       await saveState(locations.extensionRoot, state);
-      const { ctx, pi, notifications } = makeCtx({ getAllTools: () => [{ name: "subagent" }] });
+      const { ctx, run, notifications } = makeCtx({ piSubagentsLoaded: true });
 
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -1427,14 +1430,14 @@ test("PUP-2: two plugins in SAME github marketplace -> syncCloneOnce calls fetch
         },
       });
 
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
       const { gitOps, state } = createGitOps({
         remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000001" },
       });
 
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "marketplace", marketplace: "official" },
@@ -1465,12 +1468,12 @@ test("PUP-2 / AUTH-02: the github marketplace sync fetch carries the github.com 
       const credentialOps = makeCredentialOps();
       const memoized: AuthAttemptResult = { ok: false, reason: "memoized authentication decline" };
       const authMemo = new Map<string, AuthAttemptResult>([["github.com", memoized]]);
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "marketplace", marketplace: "official" },
@@ -1537,12 +1540,12 @@ test("PUP-2 / D-79-02: two marketplaces on one Device Flow host without a suppli
         deviceCode: DEVICE_CODE,
         defaultPoll: { kind: "access_denied" },
       });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "all" },
@@ -1571,12 +1574,12 @@ test("syncClone-fail: an HTTP 401 on the marketplace sync renders {authenticatio
         data: { statusCode: 401, statusMessage: "Unauthorized" },
       });
       const { gitOps } = createGitOps({ fetchThrows: unauthorized });
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "marketplace", marketplace: "official" },
@@ -1634,12 +1637,12 @@ test("CR-01: an HTTP 401 on a later marketplace sync still reports the earlier t
         data: { statusCode: 401, statusMessage: "Unauthorized" },
       });
       const { gitOps } = createGitOps({ fetchThrows: unauthorized });
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "all" },
@@ -1681,12 +1684,12 @@ test("NFR-5: path-source marketplace update calls zero gitOps primitives", async
         installedVersions: { hello: "1.0.0" },
       });
 
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
       const { gitOps, state } = createGitOps();
 
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "marketplace", marketplace: "mp" },
@@ -1750,12 +1753,12 @@ test("PUP-2 / GAUTH-03: two plugins in one url marketplace -> one sync fetch car
         remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000001" },
       });
       const credentialOps = makeCredentialOps();
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "marketplace", marketplace: "mp" },
@@ -1794,12 +1797,12 @@ test("PUP-2 / D-79-02: a url marketplace on a Device Flow host shares a supplied
       });
       const credentialOps = makeCredentialOps();
       const memoized: AuthAttemptResult = { ok: false, reason: "memoized authentication decline" };
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "marketplace", marketplace: "mp" },
@@ -1832,12 +1835,12 @@ test("syncClone-fail / GAUTH-04: an HTTP 401 on a url marketplace sync names the
         data: { statusCode: 401, statusMessage: "Unauthorized" },
       });
       const { gitOps } = createGitOps({ fetchThrows: unauthorized });
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "marketplace", marketplace: "mp" },
@@ -1876,12 +1879,12 @@ test("PUP-2: a url marketplace whose remote advanced -> update reads the refresh
           await rewriteManifest(manifestPath, "mp", { hello: { version: "1.0.10" } });
         },
       };
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -1911,11 +1914,11 @@ test("NFR-5: a path marketplace edited on disk -> update reads the edit in place
         installedVersions: { hello: "1.0.0" },
       });
       const { gitOps, state } = createGitOps();
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
       const update = (): Promise<void> =>
         updatePlugins({
           ctx,
-          pi,
+          run,
           scope: "project",
           cwd,
           target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -1958,10 +1961,10 @@ test("PUP-1 @mp form: enumerates all installed plugins in the marketplace, parti
         installedVersions: { alpha: "1.0.0", beta: "1.0.0" },
       });
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "marketplace", marketplace: "mp" },
@@ -2017,10 +2020,10 @@ test("UGRM-02: bulk @mp update with TWO realized transitions tallies `2 updated`
         installedVersions: { alpha: "1.0.0", beta: "1.0.0" },
       });
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "marketplace", marketplace: "mp" },
@@ -2062,10 +2065,10 @@ test("PUP-8: no plugin updated -> no reload hint", async () => {
         installedVersions: { hello: "1.0.0" },
       });
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -2139,10 +2142,10 @@ test("PUP-9 cascade vs direct: catastrophic resolver failure routes differently"
       }
 
       // Direct: fires notifyError with the chained cause.
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -2402,12 +2405,12 @@ test("a hooks source corrupted after intent marking becomes an ordered phase fai
           writeFileSync(hooksPath, "{ invalid hooks");
         },
       );
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
       await stateWatch.updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -2455,12 +2458,12 @@ test("a marketplace removed after intent marking is not recreated during finaliz
           );
         },
       );
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
       await stateWatch.updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -2504,12 +2507,12 @@ test("a plugin removed after intent marking is not recreated during finalize", a
           writeFileSync(locations.stateJsonPath, JSON.stringify(state));
         },
       );
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
       await stateWatch.updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -2558,7 +2561,7 @@ test("a skills staging cleanup leak becomes a rollback partial and retry converg
       // act
       await stateWatch.updatePlugins({
         ctx: first.ctx,
-        pi: first.pi,
+        run: first.run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -2577,7 +2580,7 @@ test("a skills staging cleanup leak becomes a rollback partial and retry converg
       const retry = makeCtx();
       await updatePlugins({
         ctx: retry.ctx,
-        pi: retry.pi,
+        run: retry.run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -2625,7 +2628,7 @@ test("an agents staging cleanup leak becomes a rollback partial and retry conver
       // act
       await stateWatch.updatePlugins({
         ctx: first.ctx,
-        pi: first.pi,
+        run: first.run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -2644,7 +2647,7 @@ test("an agents staging cleanup leak becomes a rollback partial and retry conver
       const retry = makeCtx();
       await updatePlugins({
         ctx: retry.ctx,
-        pi: retry.pi,
+        run: retry.run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -2771,7 +2774,7 @@ test("an MCP commit permission failure becomes a rollback partial and retry conv
       // act
       await stateWatch.updatePlugins({
         ctx: first.ctx,
-        pi: first.pi,
+        run: first.run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -2787,7 +2790,7 @@ test("an MCP commit permission failure becomes a rollback partial and retry conv
       const retry = makeCtx();
       await updatePlugins({
         ctx: retry.ctx,
-        pi: retry.pi,
+        run: retry.run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -2840,7 +2843,7 @@ test("PUP-6 phase-3 failure: bridge commit throws -> aggregate error carries 'pl
       await mkdir(locations.skillsTargetDir, { recursive: true });
       await writeFile(path.join(locations.skillsTargetDir, "hello-tool"), "obstacle");
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       const completionCache = createCompletionCache();
       const drop = testContext.mock.method(completionCache, "dropMarketplaceCache");
       const operations = createPluginUpdateOperations(
@@ -2849,7 +2852,7 @@ test("PUP-6 phase-3 failure: bridge commit throws -> aggregate error carries 'pl
       );
       await operations.updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -2967,10 +2970,10 @@ test("WR-01: bulk update where an up-to-date plugin precedes a phase-3a failure 
       await mkdir(locations.skillsTargetDir, { recursive: true });
       await writeFile(path.join(locations.skillsTargetDir, "zzz-tool"), "obstacle");
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "marketplace", marketplace: "mp" },
@@ -3027,10 +3030,10 @@ test("WR-01: a CLEANLY-UPDATED predecessor before a phase-3a abort stays visible
       await mkdir(locations.skillsTargetDir, { recursive: true });
       await writeFile(path.join(locations.skillsTargetDir, "zzz-tool"), "obstacle");
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "marketplace", marketplace: "mp" },
@@ -3222,10 +3225,10 @@ test("XSURF-03 / SEV-04: the manual `update` path (no --partial) of a partially-
         JSON.stringify({ servers: {} }),
       );
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -3343,10 +3346,10 @@ test("PUP-1 pl@mp: targeting a plugin not in state -> partition='skipped' (not i
         // No installedVersions -> hello not in state.
       });
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -3389,10 +3392,10 @@ test("PUP-1 pl@mp: targeting a plugin not in state AND not in manifest -> partit
         manifestPlugins: {},
       });
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -3422,10 +3425,10 @@ test("ATTR-02 @<mp>: unknown marketplace with explicit scope -> standalone {mark
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-attr02-nomp-mp-");
     try {
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "marketplace", marketplace: "ghost-mp" },
@@ -3452,10 +3455,10 @@ test("ATTR-02 <plugin>@<mp>: unknown marketplace with explicit scope -> standalo
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-attr02-nomp-pl-");
     try {
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "user",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "ghost-mp" },
@@ -3480,10 +3483,10 @@ test("ATTR-02 @<mp> bare: unknown marketplace absent from both scopes -> standal
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-attr02-nomp-bare-");
     try {
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         // scope omitted -> bare form searches both scopes, misses both.
         cwd,
         target: { kind: "marketplace", marketplace: "ghost-mp" },
@@ -3517,10 +3520,10 @@ test("SCOPE-01 @<mp>: marketplace present only in other scope -> scope-qualified
         installedVersions: { hello: "1.0.0" },
       });
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         // Ask for USER explicitly; the marketplace lives only in project.
         scope: "user",
         cwd,
@@ -3563,10 +3566,10 @@ test("SCOPE-01 <plugin>@<mp>: marketplace present only in other scope -> (skippe
         installedVersions: { hello: "1.0.0" },
       });
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "user", // project has it; user doesn't
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -3599,10 +3602,10 @@ test("PUP-1 pl@mp: no explicit scope + plugin absent -> marketplace-fallback res
         // No installedVersions: plugin absent from state, triggering the ?? fallback.
       });
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         // scope omitted: resolveInstalledPluginTarget finds nothing → ?? fallback to
         // resolveInstalledMarketplaceTarget which locates the marketplace scope.
         cwd,
@@ -3652,7 +3655,7 @@ test("syncClone-fail: gitOps.fetch throws -> notifyError fired and updatePlugins
         },
       });
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       // fetchThrows causes refreshGitHubClone -> gitOps.fetch to throw,
       // which propagates through syncCloneOnce and is caught at lines 207-213.
       const { gitOps } = createGitOps({
@@ -3662,7 +3665,7 @@ test("syncClone-fail: gitOps.fetch throws -> notifyError fired and updatePlugins
 
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "marketplace", marketplace: "official" },
@@ -3692,12 +3695,12 @@ test("syncClone-fail: a non-Error injected rejection is normalized at the direct
         ...baseGitOps,
         fetch: () => rejectNonError("transport string rejection"),
       };
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "marketplace", marketplace: "official" },
@@ -3827,12 +3830,12 @@ for (const { title, makeFailure, reason } of [
             "refs/remotes/origin/main": "abcdef0000000000000000000000000000000001",
           },
         });
-        const { ctx, pi, notifications } = makeCtx();
+        const { ctx, run, notifications } = makeCtx();
 
         // act
         await updatePlugins({
           ctx,
-          pi,
+          run,
           scope: "project",
           cwd,
           target: { kind: "marketplace", marketplace: "official" },
@@ -3885,10 +3888,10 @@ test("manifest-load-fail: manifest with invalid entry name type -> notifyError o
         }),
       );
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -4047,10 +4050,10 @@ test("bare-form both-scopes: changed plugins render marketplace groups in presen
       });
 
       // bare form with no explicit scope -> enumerates both scopes (lines 816-819)
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         cwd,
         target: { kind: "all" },
         // No scope -> bare form enumerates both user and project scopes
@@ -4127,11 +4130,11 @@ test("successful update finalizes routes before dropping only its captured cache
       await rm(unrelatedPath, { force: true });
       await peerCache.getPluginIndex(targetPath, "project", "mp", () => Promise.resolve(stalePeer));
       await rm(targetPath, { force: true });
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       await operations.updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -4195,7 +4198,7 @@ test("dropCache-fail: captured cache failure stays silent after successful updat
       const cacheFile = await locations.pluginCacheFile("mp");
       await mkdir(cacheFile, { recursive: true });
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       const completionCache = createCompletionCache();
       const operations = createPluginUpdateOperations(
         createHooksRouting(createHooksRuntime(), { readHooksJson }),
@@ -4203,7 +4206,7 @@ test("dropCache-fail: captured cache failure stays silent after successful updat
       );
       await operations.updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -4267,12 +4270,12 @@ test("CR-01: a later marketplace removed during an earlier refresh aborts before
           await saveState(locations.extensionRoot, state);
         },
       };
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "all" },
@@ -4351,10 +4354,10 @@ test("swapState-mp-gone: marketplace removed via gitOps.fetch side-effect -> gra
         },
       };
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "marketplace", marketplace: "official" },
@@ -4440,10 +4443,10 @@ test("swapState-plugin-gone: plugin removed from state between enumerateTargets 
         },
       };
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "marketplace", marketplace: "official" },
@@ -4529,10 +4532,10 @@ test("swapState-version-advanced: version advanced during fetch -> update runs a
         },
       };
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "marketplace", marketplace: "official" },
@@ -4585,10 +4588,10 @@ test("phase3a-commands-fail: command target occupied by directory -> phase3aFail
       await mkdir(locations.promptsTargetDir, { recursive: true });
       await mkdir(path.join(locations.promptsTargetDir, "hello:deploy.md"), { recursive: true });
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -4664,10 +4667,10 @@ test("phase3a-agents-fail: agent target path is a directory -> commitPreparedAge
         recursive: true,
       });
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -4741,10 +4744,10 @@ test("TR-04 matrix: skills-fails-others-succeed", async () => {
       await mkdir(locations.skillsTargetDir, { recursive: true });
       await writeFile(path.join(locations.skillsTargetDir, "hello-tool"), "obstacle");
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -4800,10 +4803,10 @@ test("TR-04 matrix: commands-fails-others-succeed", async () => {
         recursive: true,
       });
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -4856,10 +4859,10 @@ test("TR-04 matrix: agents-fails-others-succeed", async () => {
         recursive: true,
       });
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -4929,10 +4932,10 @@ test("TR-04 retry: partial-success-state-converges-to-new-version", async () => 
       await mkdir(locations.skillsTargetDir, { recursive: true });
       await writeFile(path.join(locations.skillsTargetDir, "hello-tool"), "obstacle");
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -4958,10 +4961,10 @@ test("TR-04 retry: partial-success-state-converges-to-new-version", async () => 
 
       // Call 2: fresh notification recorder so we assert only the
       // second run's notifications.
-      const { ctx: ctx2, pi: pi2, notifications: notifications2 } = makeCtx();
+      const { ctx: ctx2, run: run2, notifications: notifications2 } = makeCtx();
       await updatePlugins({
         ctx: ctx2,
-        pi: pi2,
+        run: run2,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -5011,10 +5014,10 @@ test("WB-01 / A7: CHANGED update with ABSENT entry writes the implicit declarati
 
       // Pre-existing config has NO entry for hello@mp -> write-back fires
       // to add the implicit declaration.
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -5061,10 +5064,10 @@ test("WB-01 / A7: changed update with a DIFFERENT existing entry writes back (pr
       );
       const bytesBefore = await readFile(locations.configJsonPath);
 
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -5110,10 +5113,10 @@ test("WB-01: up-to-date update does NOT write the config (RECON-05 fixed-point p
       );
       const bytesBefore = await readFile(locations.configJsonPath);
 
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -5153,10 +5156,10 @@ test("WB-01: --local update targets the local file; base file untouched", async 
       );
       const baseBytesBefore = await readFile(locations.configJsonPath);
 
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -5203,7 +5206,7 @@ test("WR-02 / NFR-3: an already-current disabled record does not take the scope 
       const first = makeCtx();
       await updatePlugins({
         ctx: first.ctx,
-        pi: first.pi,
+        run: first.run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -5214,10 +5217,10 @@ test("WR-02 / NFR-3: an already-current disabled record does not take the scope 
         realpath: false,
       });
       try {
-        const { ctx, pi, notifications } = makeCtx();
+        const { ctx, run, notifications } = makeCtx();
         await updatePlugins({
           ctx,
-          pi,
+          run,
           scope: "project",
           cwd,
           target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -5282,7 +5285,7 @@ test("WR-08 / NFR-3: the lock-free skip survives multi-element compatibility lis
       const first = makeCtx();
       await updatePlugins({
         ctx: first.ctx,
-        pi: first.pi,
+        run: first.run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -5313,10 +5316,10 @@ test("WR-08 / NFR-3: the lock-free skip survives multi-element compatibility lis
         realpath: false,
       });
       try {
-        const { ctx, pi, notifications } = makeCtx();
+        const { ctx, run, notifications } = makeCtx();
         await updatePlugins({
           ctx,
-          pi,
+          run,
           scope: "project",
           cwd,
           target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -5357,10 +5360,10 @@ test("D-UPD: update on a disabled plugin refreshes version pin BUT keeps resourc
       state.marketplaces["mp"]!.plugins["hello"] = makeDisabledPluginRecord("1.0.0");
       await saveState(locations.extensionRoot, state);
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -5447,7 +5450,7 @@ test("DFEN-07 / D-103-10: update against a flipped defaultEnabled moves the vers
       );
       await installPlugin({
         ctx: seed.ctx,
-        pi: seed.pi,
+        run: runWithNothingLoaded(),
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -5472,10 +5475,10 @@ test("DFEN-07 / D-103-10: update against a flipped defaultEnabled moves the vers
         hello: { version: "2.0.0", entryDefaultEnabled: true },
       });
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -5571,7 +5574,7 @@ test("DFEN-08: a declared-true entry and a silent entry render identical update 
         const seed = makeCtx();
         await installPlugin({
           ctx: seed.ctx,
-          pi: seed.pi,
+          run: runWithNothingLoaded(),
           scope: "project",
           cwd,
           marketplace: "mp",
@@ -5611,10 +5614,10 @@ test("DFEN-08: a declared-true entry and a silent entry render identical update 
         gamma: { version: "2.0.0", entryDefaultEnabled: false },
       });
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "marketplace", marketplace: "mp" },
@@ -5723,10 +5726,10 @@ test("WR-04: a targeted update with NO partial flag reaches the disabled-record 
       state.marketplaces["mp"]!.plugins["hello"] = makeDisabledPartialPluginRecord("1.0.0");
       await saveState(locations.extensionRoot, state);
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -5785,10 +5788,10 @@ test("WR-01: a CLEAN disabled record whose candidate would newly degrade keeps t
       state.marketplaces["mp"]!.plugins["hello"] = makeDisabledPluginRecord("1.0.0");
       await saveState(locations.extensionRoot, state);
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -5839,10 +5842,10 @@ test("WR-01: an explicit --partial on the same clean disabled record consents to
       state.marketplaces["mp"]!.plugins["hello"] = makeDisabledPluginRecord("1.0.0");
       await saveState(locations.extensionRoot, state);
 
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -5881,10 +5884,10 @@ test("ENBL-09: the disabled-record refresh derives compatibility.installable fro
       state.marketplaces["mp"]!.plugins["hello"] = makeDisabledPartialPluginRecord("1.0.0");
       await saveState(locations.extensionRoot, state);
 
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -5932,10 +5935,10 @@ test("ENBL-09 counter-case: a candidate that resolves fully supported promotes t
       state.marketplaces["mp"]!.plugins["hello"] = makeDisabledPartialPluginRecord("1.0.0");
       await saveState(locations.extensionRoot, state);
 
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -5974,10 +5977,10 @@ test("ENBL-09: update --partial on a disabled PARTIAL refreshes the pin and stag
       state.marketplaces["mp"]!.plugins["hello"] = makeDisabledPartialPluginRecord("1.0.0");
       await saveState(locations.extensionRoot, state);
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -6059,10 +6062,10 @@ test("ENBL-09: update --partial on a disabled PARTIAL is idempotent -- two ident
       };
 
       const runOnce = async (): Promise<NotifyRecord[]> => {
-        const { ctx, pi, notifications } = makeCtx();
+        const { ctx, run, notifications } = makeCtx();
         await updatePlugins({
           ctx,
-          pi,
+          run,
           scope: "project",
           cwd,
           target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -6155,10 +6158,10 @@ test("D-99-05a: a disabled record whose source moved under an unchanged version 
       state.marketplaces["mp"]!.plugins["hello"] = makeDisabledPluginRecord("1.1.0");
       await saveState(locations.extensionRoot, state);
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -6209,7 +6212,7 @@ test("D-99-05a: a disabled record with nothing to move performs NO write", async
       const settling = makeCtx();
       await updatePlugins({
         ctx: settling.ctx,
-        pi: settling.pi,
+        run: settling.run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -6217,10 +6220,10 @@ test("D-99-05a: a disabled record with nothing to move performs NO write", async
       const settledBytes = await readFile(locations.stateJsonPath, "utf8");
       const settledStat = await stat(locations.stateJsonPath);
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -6273,10 +6276,10 @@ test("D-99-05a: an unsupported kind gained under an unchanged version degrades t
       state.marketplaces["mp"]!.plugins["hello"] = record;
       await saveState(locations.extensionRoot, state);
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -6329,10 +6332,10 @@ test("D-99-05a counter-case: an unsupported kind LOST under an unchanged version
       state.marketplaces["mp"]!.plugins["hello"] = record;
       await saveState(locations.extensionRoot, state);
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -6380,12 +6383,12 @@ for (const { title, local } of [
         const configPath = local ? locations.configLocalJsonPath : locations.configJsonPath;
         const configBasename = local ? "claude-plugins.local.json" : "claude-plugins.json";
         await writeFile(configPath, "{ not json ", "utf8");
-        const { ctx, pi, notifications } = makeCtx();
+        const { ctx, run, notifications } = makeCtx();
 
         // act
         await updatePlugins({
           ctx,
-          pi,
+          run,
           scope: "project",
           cwd,
           target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -6481,10 +6484,10 @@ test("WR-03: one update owner refreshes direct and cascade routes without leakin
       );
       await writeFile(path.join(pluginRoot, "hooks", "hooks.json"), JSON.stringify(newHooksJson));
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await operations.updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "user",
         cwd,
         target: { kind: "marketplace", marketplace: "mp" },
@@ -6590,10 +6593,10 @@ test("LIFE-01 (update): version A->B (both ship hooks) overwrites <hooksDir>/<pl
       );
       await writeFile(path.join(pluginRoot, "hooks", "hooks.json"), JSON.stringify(newHooksJson));
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -6659,10 +6662,10 @@ test("LIFE-01 (update): version A (with hooks) -> version B (no hooks) removes t
       );
       await rm(path.join(pluginRoot, "hooks"), { recursive: true, force: true });
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -6720,10 +6723,10 @@ test("LIFE-01 (update): version A (no hooks) -> version B (with hooks) writes th
       await mkdir(path.join(pluginRoot, "hooks"), { recursive: true });
       await writeFile(path.join(pluginRoot, "hooks", "hooks.json"), JSON.stringify(newHooksJson));
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -6785,10 +6788,10 @@ test("FORCE-02: --partial on a candidate that became partially available degrade
       });
       await makeCandidateUnsupported(seeded.marketplaceRoot, "hello", "1.1.0");
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -6842,10 +6845,10 @@ test("XSURF-03 / FORCE-03: without --partial the partially-upgradable candidate 
       });
       await makeCandidateUnsupported(seeded.marketplaceRoot, "hello", "1.1.0");
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         // No `--partial` -> the candidate gate stays `requireInstallable`.
@@ -6891,10 +6894,10 @@ test("XSURF-03 / SEV-04: bulk update skipping a partially-upgradable candidate -
       });
       await makeCandidateUnsupported(seeded.marketplaceRoot, "hello", "1.1.0");
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         // Bulk `@mp` form -> cardinality "plural" -> the decline is benign info.
@@ -6941,10 +6944,10 @@ test("FORCE-04: the partial-degrade update path emits no warning severity and no
       });
       await makeCandidateUnsupported(seeded.marketplaceRoot, "hello", "1.1.0");
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -6991,12 +6994,12 @@ test("FORCE-05: --partial cannot bypass an unavailable (non-path source) candida
         installedVersions: { hello: "1.0.0" },
       });
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -7020,10 +7023,10 @@ test("FORCE-05: --partial cannot bypass a missing marketplace", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-force05-nomp-");
     try {
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "ghost-mp" },
@@ -7066,10 +7069,10 @@ test("UGRM-02 / SEV-01: bulk @mp update of a plugin with an UNLOADED declared co
       // Default makeCtx probe (`getAllTools() -> []`) reports pi-subagents
       // UNLOADED, so the declared-agents companion is absent -> the success row
       // raises to warning (SEV-01).
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "marketplace", marketplace: "mp" },
@@ -7111,10 +7114,10 @@ test("UGRM-02 / FSTAT-07: bulk @mp --partial counts a partially-installed degrad
       });
       await makeCandidateUnsupported(seeded.marketplaceRoot, "degrade", "1.1.0");
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "marketplace", marketplace: "mp" },
@@ -7284,10 +7287,10 @@ test("PURL-06 / D-78-05 pinned sha-change: manifest sha differs from recorded ->
       });
 
       const { gitOps, state: gitState } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "gp", marketplace: "mp" },
@@ -7350,12 +7353,12 @@ test("a post-commit clone cleanup failure preserves the successful update", asyn
         },
       );
       const { gitOps } = createGitOps({ fixtureSourceDir: path.join(cwd, "repo-fixture") });
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
       await stateWatch.updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "gp", marketplace: "mp" },
@@ -7394,10 +7397,10 @@ test("PURL-06 / D-78-05 pinned unchanged: manifest sha equals recorded -> outcom
       });
 
       const { gitOps, state: gitState } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "gp", marketplace: "mp" },
@@ -7470,10 +7473,10 @@ test("ENBL-09 / PURL-09: refreshing a DISABLED git-source record moves resolvedS
       await saveState(locations.extensionRoot, seededState);
 
       const { gitOps } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "gp", marketplace: "mp" },
@@ -7714,12 +7717,12 @@ test("D-10-18: one bulk run lists the same repository's tags once", async (t) =>
         `${SHA_NEW} refs/tags/gitbar--v1.2.0`,
       ]);
       const { gitOps } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "marketplace", marketplace: "mp" },
@@ -7829,12 +7832,12 @@ test("D-10-18: one bulk run resolves two path-source siblings from the same mark
           },
         },
       });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "marketplace", marketplace: "mp" },
@@ -7866,12 +7869,12 @@ test("D-10-18: a failed listing is re-queried for the next plugin in the same ru
         { failFirstInfoRefs: true },
       );
       const { gitOps } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "marketplace", marketplace: "mp" },
@@ -7904,7 +7907,7 @@ test("D-10-18: two updatePlugins runs through one binding do not share a memo", 
         `${SHA_NEW} refs/tags/gitbar--v1.2.0`,
       ]);
       const { gitOps } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
       // ONE binding for both runs, the shape production has: the binding
       // lives for the whole extension load while each command is its own run.
       const operations = createUpdateOperations();
@@ -7912,7 +7915,7 @@ test("D-10-18: two updatePlugins runs through one binding do not share a memo", 
       // act -- two SEPARATE single-plugin runs.
       await operations.updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "gitfoo", marketplace: "mp" },
@@ -7920,7 +7923,7 @@ test("D-10-18: two updatePlugins runs through one binding do not share a memo", 
       });
       await operations.updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "gitbar", marketplace: "mp" },
@@ -8011,12 +8014,12 @@ test("D-10-13: an up-to-date constrained plugin discloses the range that admits 
       // carries no release tag, and the record already sits at the version
       // the current copy resolves to.
       await seedConstrainedPathTarget(cwd, "1.0.0");
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "pathfoo", marketplace: "mp" },
@@ -8102,12 +8105,12 @@ test("a disabled pin refresh swallows post-commit clone cleanup failure", async 
         },
       );
       const { gitOps } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
       await stateWatch.updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "gp", marketplace: "mp" },
@@ -8153,10 +8156,10 @@ test("MIRR-01/MIRR-03 unpinned update: refreshes the mirror in place and re-anch
         localRefs: { "refs/heads/main": SHA_NEW },
         remoteRefs: { "refs/remotes/origin/main": SHA_NEW },
       });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "gp", marketplace: "mp" },
@@ -8228,10 +8231,10 @@ test("PURL-06 / D-78-01 shared clone NOT GC'd: two git plugins share the old url
       });
 
       const { gitOps } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         // Update ONLY gp; "other" keeps referencing the SHA_OLD clone.
@@ -8283,10 +8286,10 @@ test("MIRR-01 / NFR-3 vanished repo: unpinned mirror update whose clone throws -
         fixtureSourceDir: fixtureRepoDir,
         cloneThrows: networkError,
       });
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "gp", marketplace: "mp" },
@@ -8404,10 +8407,10 @@ test("PURL-03 pinned git-subdir update: the new clone's subdir anchors the plugi
       });
 
       const { gitOps, state: gitState } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "gp", marketplace: "mp" },
@@ -8450,10 +8453,10 @@ test("PURL-03 pinned git-subdir update whose declared path is ABSENT in the new 
       });
 
       const { gitOps } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "gp", marketplace: "mp" },
@@ -8502,10 +8505,10 @@ test("MIRR-01 unpinned git-subdir update: the refreshed mirror's subdir anchors 
         localRefs: { "refs/heads/main": SHA_NEW },
         remoteRefs: { "refs/remotes/origin/main": SHA_NEW },
       });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "gp", marketplace: "mp" },
@@ -8548,10 +8551,10 @@ test("MIRR-01 unpinned git-subdir update whose declared path is ABSENT in the re
         localRefs: { "refs/heads/main": SHA_NEW },
         remoteRefs: { "refs/remotes/origin/main": SHA_NEW },
       });
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "gp", marketplace: "mp" },
@@ -8598,12 +8601,12 @@ test("plugin update authentication: a pinned provider update threads auth to the
         reason: "memoized authentication decline",
       };
       const authMemo = new Map<string, AuthAttemptResult>([["github.com", memoized]]);
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "gp", marketplace: "mp" },
@@ -8680,12 +8683,12 @@ test("plugin update authentication: a run without a supplied authMemo shares one
         deviceCode: DEVICE_CODE,
         defaultPoll: { kind: "access_denied" },
       });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "gp", marketplace: "mp" },
@@ -8730,12 +8733,12 @@ test("plugin update authentication: an unpinned provider update threads auth to 
       const { seam, captured } = capturingUpdateSeam(gitOps);
       const credentialOps = makeCredentialOps();
       const deviceFlowHttp = makeDeviceFlowHttp();
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "gp", marketplace: "mp" },
@@ -8814,10 +8817,10 @@ test("NFR-3 device-flow auth failure: a clone throw shaped UserCanceledError cla
         fixtureSourceDir: fixtureRepoDir,
         cloneThrows: authError,
       });
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "gp", marketplace: "mp" },
@@ -8894,10 +8897,10 @@ test("SUB-02: project-scope update substitutes ${CLAUDE_PROJECT_DIR} to the inst
         "---\nname: bot\ntools: Read,Grep\n---\n\nProject: ${CLAUDE_PROJECT_DIR}\nSkill: ${CLAUDE_SKILL_DIR}\n",
       );
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -9004,7 +9007,7 @@ test("MENV-04: project-scope update re-derives ${CLAUDE_PLUGIN_ROOT} in mcp.json
       const first = makeCtx();
       await updatePlugins({
         ctx: first.ctx,
-        pi: first.pi,
+        run: first.run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -9029,7 +9032,7 @@ test("MENV-04: project-scope update re-derives ${CLAUDE_PLUGIN_ROOT} in mcp.json
       const second = makeCtx();
       await updatePlugins({
         ctx: second.ctx,
-        pi: second.pi,
+        run: second.run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -9079,19 +9082,19 @@ test("WR-12: an update whose new source skill will not parse names the kind on t
         UNPARSEABLE_FRONTMATTER,
       );
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
       });
 
       // This is exercised through the public verb, not through the renderer function:
-      // `update` renders its rows through the verb-local `UPDATE_RENDER` map,
-      // so a fix applied only to the central `renderPluginRow` arm would raise
-      // the severity while still dropping the brace.
+      // `update` resolves its rows through its own row policies, so a fix
+      // applied only to the central row policy would raise the severity while
+      // still dropping the brace.
       assert.equal(notifications.length, 1);
       const body = notifications[0]?.message ?? "";
       assert.equal(
@@ -9129,10 +9132,10 @@ test("WR-12: an update whose new source command will not parse names the command
         UNPARSEABLE_FRONTMATTER,
       );
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -9174,10 +9177,10 @@ test("WR-12: an update that degrades BOTH kinds emits both reasons in the canoni
       await writeFile(path.join(pluginRoot, "skills", "tool", "SKILL.md"), UNPARSEABLE_FRONTMATTER);
       await writeFile(path.join(pluginRoot, "commands", "deploy.md"), UNPARSEABLE_FRONTMATTER);
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -9231,10 +9234,10 @@ test("WR-01 / SURF-05: an update that materializes an orphan-rewake handler name
         installedVersions: { hello: "1.0.0" },
       });
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -9283,10 +9286,10 @@ test("CR-01: a --partial update that drops a kind AND degrades a component names
         UNPARSEABLE_FRONTMATTER,
       );
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -9325,10 +9328,10 @@ test("NREG-01: a clean update row is byte-identical to before -- no brace, no ra
         installedVersions: { hello: "1.0.0" },
       });
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -9367,8 +9370,8 @@ test("WR-05: a bare-form update whose scope state is unreadable fails on the syn
       await mkdir(locations.extensionRoot, { recursive: true });
       await writeFile(locations.stateJsonPath, '{"schemaVersion": 1, "marketplaces": {');
 
-      const { ctx, pi, notifications } = makeCtx();
-      await updatePlugins({ ctx, pi, cwd, target: { kind: "all" } });
+      const { ctx, run, notifications } = makeCtx();
+      await updatePlugins({ ctx, run, cwd, target: { kind: "all" } });
 
       assert.equal(notifications.length, 1, "the enumerate failure emits exactly one notify");
       const body = notifications[0]?.message ?? "";
@@ -9399,12 +9402,12 @@ test("a marketplace target with unreadable state reports its marketplace identit
       const locations = locationsFor("project", cwd);
       await mkdir(locations.extensionRoot, { recursive: true });
       await writeFile(locations.stateJsonPath, '{"schemaVersion": 1, "marketplaces": {');
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
       await updatePlugins({
         ctx,
-        pi,
+        run,
         cwd,
         target: { kind: "marketplace", marketplace: "mp" },
       });
@@ -9429,12 +9432,12 @@ test("a plugin target with unreadable state reports its plugin identity", async 
       const locations = locationsFor("project", cwd);
       await mkdir(locations.extensionRoot, { recursive: true });
       await writeFile(locations.stateJsonPath, '{"schemaVersion": 1, "marketplaces": {');
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -9478,10 +9481,10 @@ test("D-03 fail-continue: a hooks write that cannot land is aggregated, not thro
 
       await mkdir(path.join(locations.hooksDir, "hello", "hooks.json"), { recursive: true });
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -9566,10 +9569,10 @@ test("ST-9: a version that advanced under an in-flight update aborts on the inte
       });
 
       const { gitOps } = createGitOps({ fixtureSourceDir: path.join(cwd, "repo-fixture-new") });
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "gp", marketplace: "mp" },
@@ -9626,10 +9629,10 @@ test("ST-9: a record uninstalled under an in-flight update aborts instead of res
       });
 
       const { gitOps } = createGitOps({ fixtureSourceDir: path.join(cwd, "repo-fixture-new") });
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "gp", marketplace: "mp" },
@@ -9682,12 +9685,12 @@ test("a marketplace removed under an in-flight update is not resurrected", async
       const { gitOps } = createGitOps({
         fixtureSourceDir: path.join(cwd, "repo-fixture-new"),
       });
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "gp", marketplace: "mp" },
@@ -9728,12 +9731,12 @@ test("a disabled update does not recreate a concurrently removed marketplace", a
       const { gitOps } = createGitOps({
         fixtureSourceDir: path.join(cwd, "repo-fixture-new"),
       });
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "gp", marketplace: "mp" },
@@ -9773,12 +9776,12 @@ test("a disabled update does not recreate a concurrently removed plugin", async 
       const { gitOps } = createGitOps({
         fixtureSourceDir: path.join(cwd, "repo-fixture-new"),
       });
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "gp", marketplace: "mp" },
@@ -9824,12 +9827,12 @@ test("a disabled update accepts a concurrent writer that already stored the next
       const { gitOps } = createGitOps({
         fixtureSourceDir: path.join(cwd, "repo-fixture-new"),
       });
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "gp", marketplace: "mp" },
@@ -9885,6 +9888,96 @@ async function seedCollidingSkills(marketplaceRoot: string, pluginName = "hello"
   }
 }
 
+for (const mode of ["json", "rpc"]) {
+  test(`appends update discovery diagnostics after the cascade in ${mode}`, async () => {
+    await withHermeticHome(async () => {
+      // arrange
+      const cwd = await createCaseDir("update-machine-diagnostics-");
+      try {
+        const seeded = await seedPathMarketplace({
+          cwd,
+          marketplaceRoot: path.join(cwd, "mp-src"),
+          marketplaceName: "mp",
+          manifestPlugins: { hello: { version: "1.0.1", hasSkill: true } },
+          installedVersions: { hello: "1.0.0" },
+        });
+        await seedCollidingSkills(seeded.marketplaceRoot);
+        const capture = createJsonCapture();
+        const ctx = {
+          mode,
+          get ui() {
+            return capture.ui;
+          },
+        };
+        const run = { ...runWithNothingLoaded(), entrySink: capture.entrySink };
+
+        // act
+        await updatePlugins({
+          ctx,
+          run,
+          scope: "project",
+          cwd,
+          target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+        });
+
+        // assert
+        assert.strictEqual(
+          (await loadState(locationsFor("project", cwd).extensionRoot)).marketplaces["mp"]?.plugins[
+            "hello"
+          ]?.version,
+          "1.0.1",
+        );
+        assert.deepStrictEqual(capture.entries, [
+          {
+            customType: "claude-plugin",
+            payload: {
+              schemaVersion: 1,
+              origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+              kind: "cascade",
+              severity: "info",
+              needsReload: true,
+              marketplaces: [
+                {
+                  name: "mp",
+                  scope: "project",
+                  plugins: [
+                    {
+                      name: "hello",
+                      id: "hello@mp",
+                      scope: "project",
+                      reasons: [],
+                      status: "updated",
+                      from: "1.0.0",
+                      to: "1.0.1",
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+          {
+            customType: "claude-plugin",
+            payload: {
+              schemaVersion: 1,
+              origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+              kind: "diagnostic",
+              severity: "warning",
+              needsReload: false,
+              header: 'Plugin "hello" updated; 1 declared component has a note.',
+              lines: [
+                'skill source "hello-foo" in "skills" elides to generated name "hello-foo", already produced by skill source "foo"; ignoring duplicate.',
+              ],
+            },
+          },
+        ]);
+        capture.assertValid();
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
+
 test("D-141-03: a standalone updatePlugins run surfaces the skills discovery warning after the row", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-discwarn-");
@@ -9899,10 +9992,10 @@ test("D-141-03: a standalone updatePlugins run surfaces the skills discovery war
       // The collision lives in the NEW version's tree, so the swap reaches it.
       await seedCollidingSkills(seeded.marketplaceRoot);
 
-      const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(2, 2);
+      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2);
       await updatePlugins({
         ctx,
-        pi,
+        run: runWithNothingLoaded(),
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -9973,10 +10066,10 @@ test("D-141-03: an updateSinglePlugin cascade emits no notification and carries 
         });
         await seedCollidingSkills(seeded2.marketplaceRoot);
 
-        const { ctx, pi, notifications } = makeCtx({ getAllTools: () => [{ name: "subagent" }] });
+        const { ctx, run, notifications } = makeCtx({ piSubagentsLoaded: true });
         await updatePlugins({
           ctx,
-          pi,
+          run,
           scope: "project",
           cwd: cwd2,
           target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -10019,10 +10112,10 @@ test("D-141-03: a bulk update surfaces one diagnostic per updated plugin", async
       await seedCollidingSkills(seeded.marketplaceRoot, "hello");
       await seedCollidingSkills(seeded.marketplaceRoot, "world");
 
-      const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(3, 2);
+      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(3);
       await updatePlugins({
         ctx,
-        pi,
+        run: runWithNothingLoaded(),
         scope: "project",
         cwd,
         target: { kind: "marketplace", marketplace: "mp" },
@@ -10169,7 +10262,7 @@ async function seedInstalledWorkflowPlugin(opts: {
   );
   await installPlugin({
     ctx: seed.ctx,
-    pi: seed.pi,
+    run: runWithNothingLoaded(),
     scope: "project",
     cwd: opts.cwd,
     marketplace: "mp",
@@ -10241,12 +10334,12 @@ test("WLIF-02: a plugin with no workflows and an empty inventory stages nothing"
         manifestPlugins: { hello: { version: "1.0.1", hasSkill: true } },
         installedVersions: { hello: "1.0.0" },
       });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -10290,14 +10383,12 @@ test("WLIF-02: a workflow version B cannot admit reaches the standalone diagnost
       await rewriteManifest(manifestPath, "mp", { hello: { version: "2.10.0" } });
       // The session exposes the host workflow engine, so the verb's own row
       // stays `info` and the severity filter below isolates the diagnostic.
-      const { ctx, pi, notifications } = makeCtx({
-        getAllTools: () => [{ name: "workflow_control" }],
-      });
+      const { ctx, run, notifications } = makeCtx({ workflowEngineLoaded: true });
 
       // act
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -10378,12 +10469,12 @@ test("WLIF-02: an update that adds a workflow writes its envelope and records th
         { sourceName: "wave" },
       ]);
       await rewriteManifest(manifestPath, "mp", { hello: { version: "2.10.0" } });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -10427,12 +10518,12 @@ test("WLIF-02: a workflow the new version withdrew loses its envelope and its re
       ]);
       await writeWorkflowScripts(marketplaceRoot, "hello", [{ sourceName: "greet" }]);
       await rewriteManifest(manifestPath, "mp", { hello: { version: "2.10.0" } });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -10469,12 +10560,12 @@ test("WLIF-02: a workflow the new version renamed lands under the new name with 
         { sourceName: "greet", body: versionBSource },
       ]);
       await rewriteManifest(manifestPath, "mp", { hello: { version: "2.10.0" } });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -10512,12 +10603,12 @@ test("WLIF-06: an update that withdrew a workflow names the reload remedy", asyn
       });
       await writeWorkflowScripts(marketplaceRoot, "hello", [{ sourceName: "greet" }]);
       await rewriteManifest(manifestPath, "mp", { hello: { version: "2.10.0" } });
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -10556,14 +10647,12 @@ test("WLIF-06: an update that re-placed every recorded workflow stamps nothing",
         workflows: [{ sourceName: "greet" }],
       });
       await rewriteManifest(manifestPath, "mp", { hello: { version: "2.10.0" } });
-      const { ctx, pi, notifications } = makeCtx({
-        getAllTools: () => [{ name: "workflow_control" }],
-      });
+      const { ctx, run, notifications } = makeCtx({ workflowEngineLoaded: true });
 
       // act
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -10614,12 +10703,12 @@ test("CR-02: the intent-mark window widens the recorded inventory to the union",
           ];
         },
       );
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
       await stateWatch.updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -10676,7 +10765,7 @@ test("WR-01: a workflows staging-cleanup leak is a recorded failure over a commi
       );
       await installPlugin({
         ctx: seed.ctx,
-        pi: seed.pi,
+        run: runWithNothingLoaded(),
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -10792,7 +10881,7 @@ test("CR-01: a phase-3 leak reaches the user with its path intact", async () => 
       );
       await installPlugin({
         ctx: seed.ctx,
-        pi: seed.pi,
+        run: runWithNothingLoaded(),
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -10824,10 +10913,10 @@ test("CR-01: a phase-3 leak reaches the user with its path intact", async () => 
       process.chdir(cwd);
 
       // act -- the DIRECT entrypoint, which is the arm that notifies.
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await stateWatch.updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -11047,12 +11136,12 @@ test("WR-03: a workflows failure reaches the rendered rollback-partial row", asy
     try {
       // arrange
       await seedRefusedWorkflowUpdate(cwd);
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -11145,7 +11234,7 @@ test("PUP-6 happy: flow composes preflight, swap, state, tree, and notification"
         },
         installedVersions: { hello: "1.0.0" },
       });
-      const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
       const operations = createPluginUpdateOperations(
         createHooksRouting(createHooksRuntime(), { readHooksJson }),
         createCompletionCache(),
@@ -11154,7 +11243,7 @@ test("PUP-6 happy: flow composes preflight, swap, state, tree, and notification"
       // act
       await operations.updatePlugins({
         ctx,
-        pi,
+        run: runWithNothingLoaded(),
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -11217,7 +11306,14 @@ test("AFILE-06: a disabled plugin MCP server stays disabled through update", asy
       await createInstallOperation(
         createHooksRouting(createHooksRuntime(), { readHooksJson }),
         createCompletionCache(),
-      )({ ctx: seed.ctx, pi: seed.pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+      )({
+        ctx: seed.ctx,
+        run: seed.run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
       const installed = JSON.parse(await readFile(locations.mcpAdapterJsonPath, "utf8")) as {
         mcpServers: Record<string, Record<string, unknown>>;
       };
@@ -11231,12 +11327,12 @@ test("AFILE-06: a disabled plugin MCP server stays disabled through update", asy
         JSON.stringify({ mcpServers: { server1: { command: "deno", args: ["v2.js"] } } }),
       );
       await rewriteManifest(manifestPath, "mp", { hello: { version: "1.0.1" } });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -11296,7 +11392,14 @@ test("ANAME-06: update writes the new version's description and timeout", async 
       await createInstallOperation(
         createHooksRouting(createHooksRuntime(), { readHooksJson }),
         createCompletionCache(),
-      )({ ctx: seed.ctx, pi: seed.pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+      )({
+        ctx: seed.ctx,
+        run: seed.run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
       await writeFile(pluginJsonPath, JSON.stringify({ name: "hello", description: "New" }));
       await writeFile(
         mcpJsonPath,
@@ -11305,12 +11408,12 @@ test("ANAME-06: update writes the new version's description and timeout", async 
         }),
       );
       await rewriteManifest(manifestPath, "mp", { hello: { version: "1.0.1" } });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -11376,7 +11479,14 @@ test("ANAME-07: a plugin-set timeout wins over a carried override and a dropped 
       await createInstallOperation(
         createHooksRouting(createHooksRuntime(), { readHooksJson }),
         createCompletionCache(),
-      )({ ctx: seed.ctx, pi: seed.pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+      )({
+        ctx: seed.ctx,
+        run: seed.run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
       const installed = JSON.parse(await readFile(locations.mcpAdapterJsonPath, "utf8")) as {
         mcpServers: Record<string, Record<string, unknown>>;
       };
@@ -11394,10 +11504,10 @@ test("ANAME-07: a plugin-set timeout wins over a carried override and a dropped 
       );
       await rewriteManifest(manifestPath, "mp", { hello: { version: "1.0.1" } });
       const target = { kind: "plugin", plugin: "hello", marketplace: "mp" } as const;
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
-      await updatePlugins({ ctx, pi, scope: "project", cwd, target });
+      await updatePlugins({ ctx, run, scope: "project", cwd, target });
       const afterTimeoutChange: unknown = JSON.parse(
         await readFile(locations.mcpAdapterJsonPath, "utf8"),
       );
@@ -11406,7 +11516,7 @@ test("ANAME-07: a plugin-set timeout wins over a carried override and a dropped 
         JSON.stringify({ mcpServers: { api: { type: "http", url: "https://api.example/mcp" } } }),
       );
       await rewriteManifest(manifestPath, "mp", { hello: { version: "1.0.2" } });
-      await updatePlugins({ ctx, pi, scope: "project", cwd, target });
+      await updatePlugins({ ctx, run, scope: "project", cwd, target });
       const afterTimeoutDrop: unknown = JSON.parse(
         await readFile(locations.mcpAdapterJsonPath, "utf8"),
       );
@@ -11485,12 +11595,12 @@ test("AFILE-04: update over a commented mcp-adapter.json shows the comments-remo
     const cwd = await createCaseDir("update-afile04-");
     try {
       await seedMcpUpdate(cwd, COMMENTED_ADAPTER_TEXT);
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -11529,12 +11639,12 @@ test("AFILE-04: an update that fails after its MCP commit still reports the remo
       await mkdir(locations.workflowsSavedDir, { recursive: true });
       await writeFile(foreignPath, "{}");
       const refusal = `Cannot replace workflow target with non-previous content at ${foreignPath}`;
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -11623,12 +11733,12 @@ for (const { label, env, notices } of [
           undefined,
           env,
         );
-        const { ctx, pi, notifications } = makeCtx();
+        const { ctx, run, notifications } = makeCtx();
 
         // act
         await operations.updatePlugins({
           ctx,
-          pi,
+          run,
           scope: "project",
           cwd,
           target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -11668,12 +11778,12 @@ test("AFILE-02: updating a plugin with no MCP servers over an unparseable mcp-ad
       const locations = locationsFor("project", cwd);
       await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
       await writeFile(locations.mcpAdapterJsonPath, "{ not json");
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
       await updatePlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -11742,12 +11852,12 @@ test("AFILE-04 / CR-01: a bulk update that aborts on a later plugin's failure st
       const locations = locationsFor("project", cwd);
       await writeFile(locations.mcpAdapterJsonPath, COMMENTED_ADAPTER_TEXT);
       const updateAll = failLoadsAfterHelloUpdate();
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
       await updateAll({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "marketplace", marketplace: "mp" },
@@ -11804,10 +11914,10 @@ test("AFILE-04 / CR-01: a bulk update that aborts on a later marketplace sync st
         fetchThrows: new Error("network: connection refused"),
         remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000001" },
       });
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
-      await updatePlugins({ ctx, pi, scope: "project", cwd, target: { kind: "all" }, gitOps });
+      await updatePlugins({ ctx, run, scope: "project", cwd, target: { kind: "all" }, gitOps });
 
       // assert
       assert.deepStrictEqual(notifications, [

@@ -53,21 +53,20 @@
 // restate a fact another pair owns at full direct coverage.
 //
 // The negative half of D-116-06 is proven in full. Every rejecting case sizes
-// the boundary at one emission, zero probes, and NO stated `cwd`, seeds both
+// the boundary at one emission and NO stated `cwd`, seeds both
 // scopes so a workflow that did run would have a marketplace to install from,
 // compares the whole notification list, and asserts an empty footprint beside
 // `verifyBoundary()`.
 //
 // Measured boundary counts, taken through a counting context before a case was
-// written, because the three paths disagree:
-//   * a rejection reads `ctx.ui` once, `ctx.cwd` never, and takes no
-//     soft-dependency probe -- `notifyUsageError` writes straight to the channel;
-//   * a delegating command that MATERIALISES reads `ctx.ui` once, `ctx.cwd`
-//     once, and takes TWO soft-dependency probes;
-//   * a delegating command that is refused by the install gate, or that lands
-//     disabled, takes ONE soft-dependency probe.
-// The count is a property of the emission the workflow reaches, not of the
-// module, so it is stated per row rather than shared.
+// written:
+//   * a rejection reads `ctx.ui` once and `ctx.cwd` never --
+//     `notifyUsageError` writes straight to the channel;
+//   * a delegating command reads `ctx.ui` once and `ctx.cwd` once, whether it
+//     materialises, is refused by the install gate, or lands disabled.
+// No path reads the tool list. The handler hands the install no tool
+// inventory, and D-05 has the install read the router's run for both its
+// severity stamp and its markers.
 //
 // Both scope roots are values this file chose: `<cwd>/.pi` for the project scope
 // and `<HOME>/.pi/agent` for the user scope, with the agent-directory variable
@@ -107,6 +106,8 @@ import { loadConfig } from "../../../../extensions/pi-claude-marketplace/persist
 import { loadState } from "../../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
+import { runWithNothingLoaded } from "../../../shared/notification-run-seeds.ts";
+import { createMachineNotificationBoundary } from "../../notification-boundary.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
 import { mergeMarketplaceIntoState } from "../marketplace-seed.ts";
 
@@ -125,11 +126,8 @@ import type { Scope } from "../../../../extensions/pi-claude-marketplace/shared/
 const MAP_MODEL_FLAG = "--map-model";
 const PARTIAL_FLAG = "--partial";
 
-function makeInstallHandler(
-  pi: Parameters<typeof makeRuntimeInstallHandler>[0],
-): ReturnType<typeof makeRuntimeInstallHandler> {
+function makeInstallHandler(): ReturnType<typeof makeRuntimeInstallHandler> {
   return makeRuntimeInstallHandler(
-    pi,
     createHooksRouting(createHooksRuntime(), { readHooksJson }),
     createCompletionCache(),
   );
@@ -393,26 +391,23 @@ const DEGRADED_USER_DECLARATION: ScopeConfig = {
 // The flag matrix: all four combinations of the two downstream booleans.
 // ---------------------------------------------------------------------------
 
-for (const { args, expectedFootprint, label, probes, summary } of [
+for (const { args, expectedFootprint, label, summary } of [
   {
     args: "degraded@mp",
     label: "matrix-neither",
     summary: "neither downstream flag",
-    probes: 1,
     expectedFootprint: NOTHING_MATERIALIZED,
   },
   {
     args: `degraded@mp ${MAP_MODEL_FLAG}`,
     label: "matrix-map-model",
     summary: "the model-mapping flag alone",
-    probes: 1,
     expectedFootprint: NOTHING_MATERIALIZED,
   },
   {
     args: `degraded@mp ${PARTIAL_FLAG}`,
     label: "matrix-partial",
     summary: "the gate-widening flag alone",
-    probes: 2,
     expectedFootprint: {
       project: EMPTY_SCOPE,
       user: {
@@ -427,7 +422,6 @@ for (const { args, expectedFootprint, label, probes, summary } of [
     args: `degraded@mp ${PARTIAL_FLAG} ${MAP_MODEL_FLAG}`,
     label: "matrix-both",
     summary: "both downstream flags",
-    probes: 2,
     expectedFootprint: {
       project: EMPTY_SCOPE,
       user: {
@@ -442,21 +436,22 @@ for (const { args, expectedFootprint, label, probes, summary } of [
   args: string;
   expectedFootprint: Footprint;
   label: string;
-  probes: number;
   summary: string;
 }[]) {
   test(`forwards ${summary} to the install workflow, leaving the unsupplied one off (D-65-05)`, async (t) => {
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, probes, {
+    // D-05: the install stamps severity and composes its markers from the
+    // run's snapshot, never from a probe of its own.
+    const { ctx, verifyBoundary } = createNotificationBoundary(1, {
       value: workspace.cwd,
       reads: 1,
     });
-    const installHandler = makeInstallHandler(pi);
+    const installHandler = makeInstallHandler();
 
     // act
-    await installHandler(args, ctx);
+    await installHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(await readFootprint(workspace), expectedFootprint);
@@ -522,14 +517,14 @@ for (const { args, expectedFootprint, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+    const { ctx, verifyBoundary } = createNotificationBoundary(1, {
       value: workspace.cwd,
       reads: 1,
     });
-    const installHandler = makeInstallHandler(pi);
+    const installHandler = makeInstallHandler();
 
     // act
-    await installHandler(args, ctx);
+    await installHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(await readFootprint(workspace), expectedFootprint);
@@ -570,14 +565,14 @@ for (const { args, expectedAgents, label, position } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+    const { ctx, verifyBoundary } = createNotificationBoundary(1, {
       value: workspace.cwd,
       reads: 1,
     });
-    const installHandler = makeInstallHandler(pi);
+    const installHandler = makeInstallHandler();
 
     // act
-    await installHandler(args, ctx);
+    await installHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(await readFootprint(workspace), {
@@ -597,14 +592,18 @@ test("honors a scope flag and the scope-target flag supplied together, narrowing
   // arrange
   const workspace = await createHermeticWorkspace(t, "both-selectors");
   await seedBothScopes(workspace);
-  const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+  const { ctx, verifyBoundary } = createNotificationBoundary(1, {
     value: workspace.cwd,
     reads: 1,
   });
-  const installHandler = makeInstallHandler(pi);
+  const installHandler = makeInstallHandler();
 
   // act
-  await installHandler(`alpha@mp --scope project ${SCOPE_TARGET_FLAG}`, ctx);
+  await installHandler(
+    `alpha@mp --scope project ${SCOPE_TARGET_FLAG}`,
+    ctx,
+    runWithNothingLoaded(),
+  );
 
   // assert
   assert.deepStrictEqual(await readFootprint(workspace), {
@@ -627,19 +626,14 @@ test("records a plugin declaring itself off by default as disabled, because the 
   // arrange
   const workspace = await createHermeticWorkspace(t, "default-enabled");
   await seedBothScopes(workspace);
-  // RESV-06: 2 companion probes, the count every other standalone install
-  // states. The install block takes one probe of its own before it composes its
-  // rows through the cascade composer, whichever arm produced the requesting
-  // plugin's row, and the renderer takes the second. The boundary states the
-  // two probes, and `expectSoftDepProbes` states the Pi reads each one makes.
-  const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+  const { ctx, verifyBoundary } = createNotificationBoundary(1, {
     value: workspace.cwd,
     reads: 1,
   });
-  const installHandler = makeInstallHandler(pi);
+  const installHandler = makeInstallHandler();
 
   // act
-  await installHandler("optout@mp", ctx);
+  await installHandler("optout@mp", ctx, runWithNothingLoaded());
 
   // assert
   assert.deepStrictEqual(await readFootprint(workspace), {
@@ -690,11 +684,11 @@ for (const { args, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-    const installHandler = makeInstallHandler(pi);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const installHandler = makeInstallHandler();
 
     // act
-    await installHandler(args, ctx);
+    await installHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -736,11 +730,11 @@ for (const { args, expectedMessage, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-    const installHandler = makeInstallHandler(pi);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const installHandler = makeInstallHandler();
 
     // act
-    await installHandler(args, ctx);
+    await installHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [{ message: expectedMessage, severity: "error" }]);
@@ -753,11 +747,11 @@ test("names an unrecognised long flag the first scan claims and never reaches th
   // arrange
   const workspace = await createHermeticWorkspace(t, "unknown-first-scan");
   await seedBothScopes(workspace);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-  const installHandler = makeInstallHandler(pi);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+  const installHandler = makeInstallHandler();
 
   // act
-  await installHandler("alpha@mp --frobnicate", ctx);
+  await installHandler("alpha@mp --frobnicate", ctx, runWithNothingLoaded());
 
   // assert
   assert.deepStrictEqual(notifications, [
@@ -775,11 +769,11 @@ test("names an unrecognised long flag that survives the first scan and is claime
   // arrange
   const workspace = await createHermeticWorkspace(t, "unknown-second-scan");
   await seedBothScopes(workspace);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-  const installHandler = makeInstallHandler(pi);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+  const installHandler = makeInstallHandler();
 
   // act
-  await installHandler('alpha@mp "--frobnicate"', ctx);
+  await installHandler('alpha@mp "--frobnicate"', ctx, runWithNothingLoaded());
 
   // assert
   assert.deepStrictEqual(notifications, [
@@ -813,15 +807,65 @@ for (const { args, expectedMessage, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-    const installHandler = makeInstallHandler(pi);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const installHandler = makeInstallHandler();
 
     // act
-    await installHandler(args, ctx);
+    await installHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [{ message: expectedMessage, severity: "error" }]);
     assert.deepStrictEqual(await readFootprint(workspace), NOTHING_MATERIALIZED);
     verifyBoundary();
   });
+}
+
+for (const mode of ["json", "rpc"] as const) {
+  for (const { args, message } of [
+    {
+      args: "--scope bad",
+      message: 'Invalid --scope value: "bad". Must be "user" or "project".',
+    },
+    {
+      args: "--bogus",
+      message: 'Unknown flag: "--bogus".',
+    },
+    {
+      args: "",
+      message: "install requires exactly one <plugin>@<marketplace> argument.",
+    },
+    {
+      args: "invalid",
+      message: 'Invalid <plugin>@<marketplace> ref: "invalid".',
+    },
+  ]) {
+    test(`appends plugin/install rejection for ${args} in ${mode} (enabled)`, async () => {
+      // arrange
+      const { ctx, run, capture, verifyBoundary } = createMachineNotificationBoundary(mode);
+
+      const commandHandler = makeInstallHandler();
+
+      // act
+      await commandHandler(args, ctx, run);
+
+      // assert
+      assert.deepStrictEqual(capture.entries, [
+        {
+          customType: "claude-plugin",
+          payload: {
+            schemaVersion: 1,
+            origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+            kind: "usage-error",
+            severity: "error",
+            needsReload: false,
+            message,
+            usage:
+              "Usage: /claude:plugin install <plugin>@<marketplace> [--scope user|project] [--map-model] [--partial] [--local]",
+          },
+        },
+      ]);
+      capture.assertValid();
+      verifyBoundary();
+    });
+  }
 }

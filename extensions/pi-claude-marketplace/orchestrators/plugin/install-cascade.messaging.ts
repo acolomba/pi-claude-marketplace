@@ -1,6 +1,5 @@
 import { compareByNameThenScope } from "../../shared/compare-name-scope.ts";
 import { DependencyCascadeError } from "../../shared/errors.ts";
-import { ICON_UNINSTALLABLE, pluginRow } from "../../shared/notification-grammar.ts";
 import { companionSeverity, skipSeverity } from "../../shared/notify-reasons.ts";
 
 import { INSTALL_CONTEXT } from "./install.messaging.ts";
@@ -15,7 +14,7 @@ import type {
   PluginFailedMessage,
   PluginSkippedMessage,
 } from "../../shared/notification-types.ts";
-import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
+import type { CommandContext } from "../../shared/notify-context.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { RollbackPartial } from "../../transaction/phase-ledger.ts";
 
@@ -26,9 +25,9 @@ import type { RollbackPartial } from "../../transaction/phase-ledger.ts";
  * The cascade's per-member statuses are COMMAND-PRIVATE and live here: a
  * cascade row is an install row plus the one RESV-05 skip, which is a fact about
  * how THIS command treated one closure member and not a new member of any shared
- * closed set. The shared presentation vocabulary stays central in
- * `shared/notification-grammar.ts` (D-notification-refactor-01-11); this module CALLS it and writes
- * no row builder of its own. The reason tokens the failure rows carry ARE shared
+ * closed set. The row layout stays central in `shared/notification-grammar.ts`
+ * (D-notification-refactor-01-11); this module declares only the per-status reason policy and writes no
+ * row builder of its own. The reason tokens the failure rows carry ARE shared
  * closed-set members, declared in `shared/notification-types.ts::REASONS` and
  * pinned by enumeration -- no row here composes prose of its own for the brace.
  *
@@ -82,30 +81,22 @@ type CascadeMemberStatus = InstallMsg["status"] | "skipped";
 export type CascadeMsg = InstallMsg | PluginSkippedMessage;
 
 /**
- * Render map total over the cascade's OWN statuses: omitting an arm is a TS2741
- * compile error at the `satisfies` site below.
- *
- * Install's map is SPREAD rather than re-declared, so every arm the requesting
- * plugin's row can take renders byte-identically whether or not the plugin
- * declared dependencies. The one added arm calls the shared `pluginRow`
- * composer, which is the same call the central switch's `skipped` arm makes.
- */
-const CASCADE_RENDER: {
-  [K in CascadeMemberStatus]: RenderFn<Extract<CascadeMsg, { status: K }>>;
-} = {
-  ...INSTALL_CONTEXT.render,
-  skipped: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(skipped)", probe),
-};
-
-/**
  * D-04 / D-05: the cascade's `CommandContext`. The label is install's own --
  * the cascade IS an install, and a second operation name would read as a second
  * command in the trailing tally the label feeds.
+ *
+ * Install's row policies are SPREAD rather than re-declared, so every status the
+ * requesting plugin's row can take resolves identically whether or not the
+ * plugin declared dependencies. The one added status takes the central
+ * `skipped` policy.
  */
 export const CASCADE_CONTEXT = {
   Messaging: { label: INSTALL_CONTEXT.Messaging.label },
-  render: CASCADE_RENDER,
-} as const satisfies CommandContext<CascadeMemberStatus, CascadeMsg>;
+  rowPolicies: {
+    ...INSTALL_CONTEXT.rowPolicies,
+    skipped: { markers: false, contentReasons: true },
+  },
+} as const satisfies CommandContext<CascadeMemberStatus>;
 
 /** One member the cascade materialized, as the row composer needs to read it. */
 export interface CascadeInstalledRow {

@@ -42,6 +42,7 @@ import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { RemoteTag } from "../../platform/git.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
+import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
 
 /**
@@ -80,7 +81,7 @@ export interface UpdateConstraintOptions {
   /** The path-source analogue of `tagMemo` (D-10-18), same status. */
   readonly marketplaceTagMemo?: Map<string, readonly ReleaseTagCandidate[]>;
   readonly auth: {
-    readonly ctx?: NotificationContext;
+    readonly notification?: { readonly ctx: NotificationContext; readonly run: NotificationRun };
     readonly credentialOps: CredentialOps;
     readonly deviceFlowHttp?: DeviceFlowHttp;
     readonly authMemo?: Map<string, AuthAttemptResult>;
@@ -360,7 +361,7 @@ function decodeTagProbe(
  * credential acquisition path (AUTH-09).
  *
  * Every REAL caller threads a `ctx` (`UpdatePluginsOptions.ctx` is required
- * the entire way down this call chain); `UpdateConstraintOptions.auth.ctx`
+ * the entire way down this call chain); `UpdateConstraintOptions.auth.notification`
  * stays optional only so a caller that never reaches this arm -- unconstrained,
  * or held before stage one -- needs none. Reaching here with no `ctx` at all
  * cannot safely authenticate a git host, so the query is skipped and the fold
@@ -374,7 +375,7 @@ async function probeGitStageOne(
   range: string,
   holders: readonly ConstraintHolder[],
 ): Promise<UpdateConstraintVerdict> {
-  if (options.auth.ctx === undefined) {
+  if (options.auth.notification === undefined) {
     return admitsRange(range, holders);
   }
 
@@ -383,7 +384,7 @@ async function probeGitStageOne(
     source,
     range,
     auth: {
-      ctx: options.auth.ctx,
+      ...options.auth.notification,
       credentialOps: options.auth.credentialOps,
       ...(options.auth.deviceFlowHttp !== undefined && {
         deviceFlowHttp: options.auth.deviceFlowHttp,

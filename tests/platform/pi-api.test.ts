@@ -130,6 +130,9 @@ void (true satisfies Same<
 >);
 void (true satisfies Same<PiBoundary.StopReason, PiBoundary.AssistantMessage["stopReason"]>);
 void (true satisfies PiBoundary.ExtensionAPI extends PiBoundary.PiInventory ? true : false);
+void (true satisfies Same<PiBoundary.ExtensionMode, "tui" | "rpc" | "json" | "print">);
+// @ts-expect-error the consumer context requires an explicit mode
+void ({ ui: { notify: () => undefined } } satisfies PiBoundary.NotificationContext);
 void (true satisfies PiBoundary.ExtensionContext extends PiBoundary.NotificationContext
   ? true
   : false);
@@ -138,6 +141,7 @@ void ({
   getCommands: () => [{ name: "mcp-adapter", source: "extension" }],
 } satisfies PiBoundary.PiInventory);
 void ({
+  mode: "tui",
   ui: { notify: (_message: string): void => undefined },
 } satisfies PiBoundary.NotificationContext);
 
@@ -162,7 +166,7 @@ void ({ getCommands: () => [] } satisfies PiBoundary.PiInventory);
 // @ts-expect-error a Pi inventory must expose getCommands
 void ({ getAllTools: () => [] } satisfies PiBoundary.PiInventory);
 // @ts-expect-error a notification context must expose ui.notify
-void ({ ui: {} } satisfies PiBoundary.NotificationContext);
+void ({ mode: "tui", ui: {} } satisfies PiBoundary.NotificationContext);
 
 describe("getAgentDir", () => {
   test("re-exports the peer binding", () => {

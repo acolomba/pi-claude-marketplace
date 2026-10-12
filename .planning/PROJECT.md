@@ -10,11 +10,44 @@
 
 A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artifact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install.
 
-## Current Milestone: none
+## Previous Milestone: json-output -- Mode-Keyed Presentation Strategies (branch: features/json, started 2026-09-28, completed 2026-10-11, not yet merged, no npm release)
 
-No active milestone. mcp-4 closed 2026-10-10 and merged the same day (PR #250,
-squash `94160614`); it shipped as npm 0.20.0. Start the next milestone with
-`/gsd-new-milestone`.
+**Goal:** `/claude:plugin` output is produced by one of two architecturally
+uniform presentation strategies selected by Pi's `ctx.mode` -- text for `tui` and
+`print`, JSON for `json` and `rpc` -- both formatting a single model that already
+carries every presentation decision.
+
+**Target features:**
+
+- Presentation model: severity, reload-needed, tally, summary, and the
+  `{requires ...}` soft-dep markers are computed upstream of rendering. The
+  per-verb `renderPluginRowBody` callbacks in orchestrators' `*.messaging.ts` and
+  the render-time `softDepStatus(pi)` probe in `shared/notification-dispatch.ts`
+  move out of the renderers.
+- Text strategy: today's output as a pure formatter of that model; byte form
+  unchanged and still locked by `docs/output-catalog.md`.
+- JSON strategy: a peer formatter emitting a versioned typebox wire schema via
+  `pi.appendEntry("claude-plugin", payload)`, which JSON and RPC consumers
+  receive as `entry_appended` session events, kept out of LLM context.
+- Total coverage: cascades, info, pending, usage errors, diagnostics, the
+  device-flow code, and the hook rewake and Stop-cap warnings.
+- Mode selection: an exhaustive switch over `ctx.mode`; any other value is a
+  typed error. `browse` outside `tui` is a typed error pointing at `list`.
+- Test enablement: a JSON capture helper for in-process tests, and test fakes
+  that carry an explicit `mode`.
+
+**Key context:** Verified against the pinned Pi 0.86.1. In `print` and `json`
+modes Pi installs a no-op UI stub, so `ctx.ui.notify` discards everything
+(`core/extensions/runner.js:114-118`), and non-interactive modes take over stdout
+(`core/output-guard.js`). `pi.appendEntry` emits `{type: "entry_appended"}`
+(`core/agent-session.js:2135`), which the JSON writer and the RPC forwarder both
+serialize. Print mode therefore stays silent -- a Pi limitation, accepted;
+scripted use is `--mode json`. Pi exits 0 in print/json regardless, so JSON
+consumers judge success from payload severity. No per-command `--json` flag
+(upstream has one on the `claude plugin` CLI, not on `/plugin`). Out of scope:
+browse TUI polish, migrating existing suites to JSON assertions, and writing new
+behavioral suites. Closes backlog MRO-01 and corrects two of its claims.
+Phase numbering restarts at 1.
 
 ## Previous Milestone: mcp-4 -- MCP 4 (completed 2026-10-10, merged as PR #250 squash `94160614`, released as npm 0.20.0)
 
@@ -498,8 +531,19 @@ Four distinct categories of unsupported Claude hook events. All cause plugin `(u
 
 ## Current State
 
-**Current:** mcp-4 closed 2026-10-10 on `features/mcp-4` (Phases 1-8, 73 plans; archived to
-`.planning/milestones/mcp-4-*`), not yet merged or released. Pi 1.0 is the floor, with
+**Completed on a branch, unmerged:** milestone `json-output` (2026-10-11, Phases 1-9,
+50 plans, 72 tasks, 36/36 requirements; archived to `.planning/milestones/json-output-*`).
+`/claude:plugin` output comes from a text or a JSON presentation strategy chosen
+by `ctx.mode`. JSON and RPC consumers receive versioned, schema-valid
+`claude-plugin` session entries through `pi.appendEntry`, and the text byte form
+is unchanged. Credentials are redacted at every serialization site, including
+LLM tool text. The re-audit reads `tech_debt` with no blockers; it is an
+override close (phases 1-7 digests stale by decision 08 D-12). The milestone
+lives on `features/json` and is not yet merged to `main`.
+
+**Merged and released:** mcp-4 closed 2026-10-10 on `features/mcp-4` (Phases 1-8, 73 plans;
+archived to `.planning/milestones/mcp-4-*`), merged to main via PR #250 on 2026-10-10 and
+released as npm 0.20.0. `features/json` merged it on 2026-10-11. Pi 1.0 is the floor, with
 pi-subagents `>=0.74.0` and pi-mcp-adapter `>=5.2.0 <6`. Plugin MCP servers are written to
 the adapter's own `mcp-adapter.json` under Claude Code's tool names, load through tool search,
 expand variables by Claude Code's rules without writing an environment value to disk, and show
@@ -528,7 +572,7 @@ gate on first load. No `0.19.x` tag contains the bridge, by design: those were c
 `releases/v0.19.2`, which PR #216 merged back into `main`. The next release off `main` carries
 workflows with no extra step.
 
-**Previously shipped:** v1.20 transitive-dependencies closed 2026-09-24 with 45/45
+**Earlier:** v1.20 transitive-dependencies closed 2026-09-24 with 45/45
 requirements and all 12 phase verifications passed. The clean committed tree
 passed `npm run check`: 7,760 unit tests, 63 integration tests, and 100%
 aggregate production coverage. The live private-repository credential
@@ -575,8 +619,8 @@ been declared in `package.json` and invoked by nothing, now run: the three fast 
 
 **Shipped:** url-source URL Sources (2026-07-13, Phases 76-79). Arbitrary public HTTPS git URLs are first-class sources for both marketplaces and plugins: `marketplace add/update/remove/info` clone `source.url` directly (no github.com reconstruction); the resolver classifies `url` / `git-subdir` / `github`-object plugin sources installable through a source-addressed refcounted clone cache (`plugin-clones/<urlhash12>-<sha12>/`, one external-monorepo clone serving every referencing plugin, warm-cache operations offline); the full plugin lifecycle works for git sources (sha-change atomic swaps, last-reference clone GC on uninstall/update/marketplace-remove, network-free list/info + install-completion parity); and the GitHub-only Device Flow generalized into a `GitAuthProvider` registry (public repos on any host clone unauthenticated, registered hosts run their flow host-keyed via `CredentialOps`, no-provider hosts fail clean, no-credential-leak gate covers every provider file). `npm run check` GREEN (2739 unit + 16 integration).
 
-**Next:** run the mcp-4 UAT check and `/gsd-cleanup`, offer the 0.20.0 version bump
-(D-07-11), and open the mcp-4 PR. Then define the next milestone (`/gsd-new-milestone`). The live credential
+**Next:** merge `features/json` into main through PR #251, then define the next
+milestone (`/gsd-new-milestone`). The live credential
 challenge deferred in the v1.20 audit passed on 2026-09-30. Earlier context carried forward, all
 deliberate: **two** accepted direct-coverage shortfalls, down from seven
 (`bridges/commands/discover.ts` and `orchestrators/plugin/install-outcome.ts`, both pinned
@@ -591,12 +635,42 @@ operator decision. Workstream `milestone` (force-install closeout) remains open.
 
 ## Requirements
 
-### Active — next milestone
+### Active
 
-No active requirements. `/gsd-new-milestone` defines the next set. The completed mcp-4
-requirements are in [the archive](milestones/mcp-4-REQUIREMENTS.md).
+No milestone is active. All 36 json-output requirements are validated and
+archived in [milestones/json-output-REQUIREMENTS.md](milestones/json-output-REQUIREMENTS.md).
+The completed mcp-4 requirements are in
+[milestones/mcp-4-REQUIREMENTS.md](milestones/mcp-4-REQUIREMENTS.md).
 
 ### Validated
+
+- ✓ Both LLM tools redact credentials in every text they return to the model,
+  and neither lets a thrown error reach Pi; the phase 04 deferred item is
+  resolved. Pi 0.87.1 ignores a returned `isError`, so the model sees the
+  redacted error text without an error flag (recorded, D-03) — json-output
+  Phase 9, 2026-10-11 (PMOD-04).
+
+- ✓ Mode refusals, real-Pi verification at installed and peer-floor versions,
+  the complete JSON reference, and policy corrections are verified. All seven
+  human reviews passed — json-output Phase 7, 2026-10-10
+  (MODE-03/04, TENB-03, JDOC-01/02/03).
+
+- ✓ Canonical command identities, per-run correlation, explicit origins,
+  outcome enforcement, and contained failure recovery pass all 15 verification
+  truths. Both human judgments are accepted; text output is unchanged —
+  json-output Phase 6, 2026-10-09 (WIRE-02/07, JOUT-03/04).
+
+- ✓ Live mode selection delivers JSON/RPC reports as session entries and
+  preserves text output. Unsupported modes are rejected before fresh command
+  and hook state changes; callback failures remain contained. All six criteria
+  and both user intent judgments pass — json-output Phase 5, 2026-10-07
+  (MODE-01/02, JOUT-01/05, TENB-01/02).
+
+- ✓ Versioned wire schema and format-only JSON conversion cover all model
+  kinds; both LLM tools expose wire details. Credentials are redacted before
+  text or JSON rendering. Schema drift, package inclusion, payload disclosure,
+  and output locks are verified — json-output Phase 4, 2026-10-06
+  (WIRE-01/03/04/05/06/08/09, JOUT-02, PMOD-04, LLMT-01).
 
 - ✓ Pi 1.0 is the baseline: peer `>=1.0.0`, Node `^22.22.2 || ^24.15.0 ||
   >=26.0.0`, every devDependency current except TypeScript, pi-subagents
@@ -748,6 +822,8 @@ requirements are in [the archive](milestones/mcp-4-REQUIREMENTS.md).
 
 <!-- Shipped and confirmed valuable via this GSD project. -->
 
+- ✓ json-output Phase 1 Presentation Model (PMOD-01, PMOD-03, completed 2026-09-30 on `features/json`): every presentation decision (severity, `needsReload`, tally, summary line, hints, and the final reasons list with its `{requires ...}` markers) resolves in `shared/notification-resolve.ts` before formatting; one `NotificationRun` snapshot per command, opened only in `edge/register.ts` and `index.ts`, drives both severity stamping and markers; failure detail reaches rendering as a serialized cause chain. Text bytes unchanged against the 2622-entry wire corpus and `docs/output-catalog.md`. Verified 5/5.
+- ✓ json-output Phase 3 Typed Raw Surfaces (RAWS-01..05, TEXT-01, completed 2026-10-03 on `features/json`): usage errors, help, diagnostics, the device-flow prompt, the two load-time warnings and the two hook messages are typed model kinds; `formatRawSurface`/`formatEnvelopeArguments` build every notify tuple and one private `deliver` makes the only two `ctx.ui.notify` calls (D-16 sink gate with planted controls). The domain passes `{verificationUri, userCode}` and `makeRawNotifyFn` is gone; AUTH-09 now counts every device-code mention. Text bytes unchanged; the corpus moved only by the user-approved D-17 ledger (2 removals, 3 additions, 3134 entries). Verified 11/11.
 - ✓ any-git-host Phases 1-3 Any Git Host (GAUTH-03..06, MURL-08/09, MA-12..14, GATE-01, completed 2026-09-30, merged in PR #221): private https sources authenticate on any git host from the git credential helper with no registry entry; credentials stay bound to their host, including across cross-origin redirects; `url` sources clone at the verbatim URL with one attempt per operation; `marketplace add` recovers from its own leftover clone and refuses anything else.
 - ✓ workflows-replay Phases 109-117 Workflow Bridge Replay onto main (WINV-01..05, WNAM-01..06, WPTH-01..05, WBRG-01..04, WLIF-01..06, WFLW-04, WDEP-01..04, WDOC-01..03, WGATE-01..05, WCONV-01..03, WEVID-01..02, WDOCS-01..02, completed 2026-09-21 on `features/workflow`, unmerged): `workflows` admitted as a supported kind; acorn-based script admission with engine-parity naming; prepare/commit/abort staging into the host engine's saved directory; envelopes owned by every lifecycle verb; the host engine as the third soft dependency; install-time gate warnings, load-time convergence, and the degrade-or-die claim measured against a real engine. Verified 9/9 phases, 46/46 requirements.
 - ✓ test-backlog Phases 1-2 Reliable Negative Controls and Sonar Rules for Tests (NEG-01/02, HIST-01, SONAR-01/02, completed 2026-09-14): the direct-coverage negative controls observe launch, signal, status and diagnostic independently on Node 26; four stale records were reconciled from live evidence; three Sonar assertion rules run as errors over `tests/` with nine type-only owners and five strict-mock controls explained, and 1,083 other flags dispositioned by cluster.
@@ -938,7 +1014,7 @@ test.ts` (43 V2 tests, +2 G-21-01 inventory-vs-transition regressions)
 - **Custom component-path arrays as supplemental** -- explicit declaration replaces the default
 - **Mutating LLM tools for install/update/remove** -- only listing tools exposed
 - **Rich interactive selectors** -- backlog
-- **JSON output / general dry-run modes** -- backlog; standalone `prune --dry-run` shipped in v1.20
+- **Dry-run modes** -- backlog (JSON output moved into scope with milestone json-output); standalone `prune --dry-run` landed in v1.20
 - **Session-start autoupdate run** -- Claude Code parity, deferred
 - **`--force` install with `incomplete` state** -- deferred
 - **Managed/allowlist/blocklist policies** -- no Pi equivalent
@@ -983,7 +1059,7 @@ test.ts` (43 V2 tests, +2 G-21-01 inventory-vs-transition regressions)
 - **Network policy (NFR-5, amended by url-source and by D-03-03):** Network is required only for git-source `marketplace add`/`update`, and for `install`/`update`/`reinstall` of git-source plugins **on cache miss only** -- warm sha-pinned cache operations stay offline. Resolving a dependency that carries a version constraint may additionally read that dependency's source repository tag list over the network, even when a cached or otherwise resolvable copy of that dependency already exists, because the constraint can demand a different tag than the cached one (D-03-03). `list`, `info`, `uninstall`, `marketplace remove`, and path-source operations MUST NOT touch the network
 - **Containment (NFR-10, re-anchored by url-source):** Refuse to write outside `<scopeRoot>/pi-claude-marketplace/`, `<scopeRoot>/agents/`, `<scopeRoot>/mcp-adapter.json`, or `<scopeRoot>/mcp.json` (kept for legacy entries); plugin roots must resolve inside their **owning clone root** (marketplace clone for `path` sources, `plugin-clones/<key>/` for git sources)
 - **Quality bar:** `npm run check` must stay green -- typecheck + ESLint + `fallow` (dead code, health, duplication) + Prettier + unit tests + integration tests (NFR-6)
-- **Output channel:** All user-visible messages MUST go through `ctx.ui.notify(message, severity)`; direct `process.stdout`/`process.stderr` writes forbidden in command/bridge code (IL-2). Single sanctioned `console.warn` is the load-time legacy migration save failure (IL-3)
+- **Output channel:** All user-visible messages MUST go through `ctx.ui.notify(message, severity)`; direct `process.stdout`/`process.stderr` writes forbidden in command/bridge code (IL-2). Single sanctioned `console.warn` is the load-time legacy migration save failure (IL-3). Amended by milestone json-output: in `json`/`rpc` modes the JSON strategy emits through `pi.appendEntry`; direct stdout/stderr writes stay forbidden
 - **No telemetry V1:** No metrics, no event sink, no analytics endpoint (IL-4)
 - **English only V1:** No message catalog, no locale negotiation (IL-1)
 - **Scope model:** Exactly two scopes -- `user` (`~/.pi/agent/`) and `project` (`<cwd>/.pi/`). Claude Code's `local` scope is not introduced (SC-1). Marketplace records and plugin install records are scoped independently per D-29 / CMP-1..8.
@@ -1097,6 +1173,9 @@ test.ts` (43 V2 tests, +2 G-21-01 inventory-vs-transition regressions)
 | **D-09-01..16 + review rulings (v1.20 Phase 9, 2026-09-22):** the reload's missing-dependency bucket derives from the verdict's `missing` arm for dependents that will be enabled once the pass applies (enabled, marker-held, or config-declared enabled; never a user-disabled record the config leaves alone, never one the plan uninstalls/disables); a disabled installed dependency is left alone (upstream installs only `not-found`); one cascade per missing key rooted at the dependency with the declarers' ranges folded once and every member `provenance: "dependency"`; the step runs after `install plugins`, only on an explicit `/reload` (upstream's session start never installs), and re-plans only the three toggle buckets when at least one dependency landed; the LOAD-02 lift is provenance-independent; rows are one `(installed) {dependency installed}` per materialized member, a cascade-wrapped failure renders `{dependency failed}` with the cause line (no per-kind classifier), an already-present member is silent, preview keeps the empty verdict default (PENDING-VERDICT-01 stays open); a failed install is retried on every reload; `marketplace add`/autoupdate are not wired (MISS-MPADD-01). Review rulings: the reload row carries the root's degradation signals and `{dependency current copy}` through one `ledgerDegradationSignals` derivation shared by both install projections. |
 | **D-10-01/09/12/17a/18 + review ruling (v1.20 Phase 10, 2026-09-22):** update constraint handling is a two-stage preflight: select the highest satisfying tag, then re-check the version that actually resolved before any write; the published held token is `{dependents constrain}` and stays outside the idempotent-reason set, so manual and automatic held rows are warnings; the constraint disclosure is required-but-nullable and atomically shaped on prepared, updated, and unchanged outcomes; tag listings are memoized once per repository or marketplace per run. The final review strengthened the commit-pinned git-source preflight test so it reaches the real source-kind branch instead of stubbing the verdict. | Keeps every update inside the ranges its same-scope installed dependents declare, preserves bulk progress and unconstrained behavior, prevents silent omission of user-visible constraint residue, and proves the sha-bearing git-source route through production logic rather than a test double. | -- Locked |
 | **D-11-01/02/03/04/05/06 (v1.20 Phase 11, 2026-09-23):** a missing foreign dependency requires exact membership in the governing root marketplace's validated allowlist before lookup or mutation; recorded dependencies remain exempt. Direct cascades keep their original root, while reload first checks every eligible original declarer and then uses the missing plugin's own policy for its children. Info displays the policy safely, and refusal names the policy root plus manual-install and allowlist-edit remedies. | Availability of a marketplace alone cannot authorize new code. Installed-first behavior and fail-clean retry remain intact across direct install and reload. | -- Locked |
+| **D-JO-01 (2026-09-30): one soft-dep snapshot per command** (json-output, Phase 1, D-05): `openNotificationRun(pi)` is the only `softDepStatus` caller and runs only at the command roots; every orchestrator and the notify family take the `NotificationRun` | Severity stamping and `{requires ...}` markers read the same snapshot, proven by a two-answer test through the registered command; renderers and grammar take no probe. | ✓ Good |
+| **D-JO-03 (2026-10-09): command correlation and failure semantics** (json-output, Phase 6): fresh per-command IDs may persist in Pi session entries; they carry no persistent user identity or cross-command tracking. Failure entries preserve completed changes and known reload requirements. | The user accepted both judgments; an unexpected failure never promises rollback. | ✓ Good |
+| **D-JO-02 (2026-09-30): a committed wire corpus is the byte oracle for the refactor** (json-output, Phase 1, D-01..D-04): an import-time hook records every `ctx.ui.notify` pair the unit and integration suites emit; each phase re-diffs it with `docs/output-catalog.md` | 2622 baseline entries stayed present across 16 plans; the scripts carry `fallow-ignore-file` markers and are deleted at milestone close. | — Pending (milestone close) |
 | **D-1-01 (2026-09-25): every host gets an auth bundle; the registry gates only Device Flow** (any-git-host, Phase 1): a host the registry does not claim takes the stored-credential path through `git credential fill` | One path serves Gitea, Forgejo, self-hosted GitLab and Bitbucket with no hostname literal; the host guard in `onAuth` replaces the two-host cap. | ✓ Good |
 | **D-2-01 (2026-09-26): clone at the verbatim URL, no retry and no fallback** (any-git-host, Phase 2): `.git` is appended only for a GitHub `owner/repo` source | Claude Code parity; a retry would absorb a 404 and mask a real failure. A suffix-less URL on a host that serves only `/repo.git` now fails, and the error names the URL sent (D-2-02). | ✓ Good |
 | **D-3-01 (2026-09-27): leftover recognition compares the canonical identity** (any-git-host, Phase 3): the leftover's `origin` is matched against `canonicalCloneUrl`, then removed and replaced by the fresh staging clone | Identity is `.git`- and fragment-insensitive, so the same source matches however it was typed; reuse-in-place was rejected because a crash leftover is likely partial. | ✓ Good |
@@ -1129,6 +1208,10 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
+
+_Last updated: 2026-10-11 after main (mcp-4 through PR #250, and PR #248) was merged
+into `features/json`. Both milestones' records are kept; json-output stays
+unmerged until PR #251. Prior updates follow._
 
 _Last updated: 2026-10-10 after mcp-4 milestone close. Eight phases, 73 plans,
 41/41 requirements; the re-audit passed after Phase 8 cleared the first audit's
@@ -1271,8 +1354,33 @@ _Last updated: 2026-09-14 after starting test-backlog._
 
 _Last updated: 2026-09-21 after the workflows-replay milestone closed in workstream `workflows`. Nine phases, 39 plans, 46/46 requirements; the `workflows` bridge replayed onto main on `features/workflow` and hardened; audit `tech_debt` cleared or carried before the archive; unmerged._
 
+_Last updated: 2026-09-28 after starting json-output._
+
+_Last updated: 2026-09-30 after json-output Phase 1 (Presentation Model): 16 plans, PMOD-01 and PMOD-03 validated, text bytes unchanged._
+
 _Last updated: 2026-09-30 after the any-git-host milestone closed in workstream `git-hosts`. Three phases, 11 plans, 10/10 requirements; private repos on any git host, verbatim-URL endpoints and leftover-clone recovery, reimplemented from PR #153 and merged to main in PR #221. Audit `passed` after PR #231 closed the review debt (GHRED-01, GHADD-01)._
 
 _Last updated: 2026-10-01 after the `git-hosts` workstream was archived to `milestones/ws-git-hosts-2026-10-01/`. No workstream is active; any-git-host is on main and in no npm release yet._
 
 _Last updated: 2026-10-01 after milestone mcp-4 started._
+
+_Last updated: 2026-10-01 after json-output Phase 1 verification. Both human checks passed. Test coverage validation passed, and the level 1 security review closed all 29 registered threats. Phase 2 awaits planning._
+
+_Last updated: 2026-10-03 after json-output Phase 3 (Typed Raw Surfaces): 4 plans, RAWS-01..05 and TEXT-01 validated, text bytes unchanged, review converged clean after three iterations._
+
+_Last updated: 2026-10-06 after json-output Phase 4: six plans, ten requirements,
+5/5 verified criteria and five human-confirmed prohibition assessments.
+Security records 18 mitigated and four accepted threats. Phase 5 is next._
+
+_Last updated: 2026-10-07 after json-output Phase 5: seven plans, six
+requirements, 6/6 verification, both human intent checks approved, clean
+code review and zero open security threats. Phase 6 has not started._
+
+_Last updated: 2026-10-09 after json-output Phase 6: four plans, four
+requirements, 15/15 verification truths, both human judgments accepted,
+clean code review and zero open security threats. Phase 7 discussion is next._
+
+_Last updated: 2026-10-11 after the json-output milestone: 9 phases and
+36/36 requirements complete, re-audit `tech_debt` with no blockers, archived
+under `.planning/milestones/json-output-*`. Merge of `features/json` and the
+next milestone remain._

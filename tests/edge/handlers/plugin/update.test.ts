@@ -58,7 +58,7 @@
 // restate a fact another pair owns.
 //
 // The negative half of D-116-06 is proven in full. Every rejecting case sizes
-// the boundary at one emission, zero probes and NO stated `cwd`, compares the
+// the boundary at one emission and NO stated `cwd`, compares the
 // whole notification list against a hand-authored value, asserts that the
 // seeded fixture is byte-unchanged, and calls `verifyBoundary()`. That
 // footprint assertion is a live gate rather than a vacuous negative: a
@@ -68,11 +68,12 @@
 // Measured boundary counts, taken through a counting context before a case was
 // written, because the two paths disagree and neither is a property of the
 // helper:
-//   * a rejection reads `ctx.ui` once, `ctx.cwd` never, and takes no
-//     soft-dependency probe -- `notifyUsageError` writes straight to the channel;
+//   * a rejection reads `ctx.ui` once and `ctx.cwd` never -- `notifyUsageError`
+//     writes straight to the channel;
 //   * every delegating case, whether the update succeeds, degrades or is
-//     refused by the candidate gate, reads `ctx.ui` once, `ctx.cwd` once, and
-//     takes TWO soft-dependency probes.
+//     refused by the candidate gate, reads `ctx.ui` once and `ctx.cwd` once.
+// Neither path reads the tool list: the update renders from the run the case
+// hands the handler (D-05).
 //
 // The network door is `https.request`, not `globalThis.fetch`: the git
 // transport reaches the wire through `simple-get`, and `fetch` has a single
@@ -120,6 +121,8 @@ import { loadConfig } from "../../../../extensions/pi-claude-marketplace/persist
 import { loadState } from "../../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
+import { runWithNothingLoaded } from "../../../shared/notification-run-seeds.ts";
+import { createMachineNotificationBoundary } from "../../notification-boundary.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
 import { mergeMarketplaceIntoState } from "../marketplace-seed.ts";
 
@@ -151,10 +154,10 @@ const USAGE =
 const SKILL_SOURCE = "---\nname: tool\ndescription: A tool skill.\n---\n\nBody.\n";
 
 /** Give each handler case its own production update owner. */
-function createUpdateHandler(pi: Parameters<typeof makeUpdateHandler>[0]) {
+function createUpdateHandler() {
   const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
   const { updatePlugins } = createPluginUpdateOperations(hooksRouting, createCompletionCache());
-  return makeUpdateHandler(pi, updatePlugins);
+  return makeUpdateHandler(updatePlugins);
 }
 
 /**
@@ -595,7 +598,7 @@ const PROJECT_ONE_UPDATED: ScopeFootprint = {
 test("forwards the exact direct update request through the required update operation", async (t) => {
   // arrange
   const workspace = await createHermeticWorkspace(t, "forward-operation");
-  const { ctx, pi } = createNotificationBoundary(1, 2, {
+  const { ctx } = createNotificationBoundary(1, {
     value: workspace.cwd,
     reads: 1,
   });
@@ -605,16 +608,17 @@ test("forwards the exact direct update request through the required update opera
     return Promise.resolve();
   };
 
-  const updateHandler = makeUpdateHandler(pi, updateOperation);
+  const updateHandler = makeUpdateHandler(updateOperation);
+  const run = runWithNothingLoaded();
 
   // act
-  await updateHandler("one@alpha --scope project --map-model --partial --local", ctx);
+  await updateHandler("one@alpha --scope project --map-model --partial --local", ctx, run);
 
   // assert
   assert.deepStrictEqual(calls, [
     {
       ctx,
-      pi,
+      run,
       cwd: workspace.cwd,
       target: { kind: "plugin", plugin: "one", marketplace: "alpha" },
       scope: "project",
@@ -673,14 +677,14 @@ for (const { args, expectedFootprint, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+    const { ctx, verifyBoundary } = createNotificationBoundary(1, {
       value: workspace.cwd,
       reads: 1,
     });
-    const updateHandler = createUpdateHandler(pi);
+    const updateHandler = createUpdateHandler();
 
     // act
-    await updateHandler(args, ctx);
+    await updateHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(await readFootprint(workspace), expectedFootprint);
@@ -725,14 +729,14 @@ for (const { args, expectedFootprint, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+    const { ctx, verifyBoundary } = createNotificationBoundary(1, {
       value: workspace.cwd,
       reads: 1,
     });
-    const updateHandler = createUpdateHandler(pi);
+    const updateHandler = createUpdateHandler();
 
     // act
-    await updateHandler(args, ctx);
+    await updateHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(await readFootprint(workspace), expectedFootprint);
@@ -820,14 +824,14 @@ for (const { args, expectedFootprint, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedDegraded(workspace);
-    const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+    const { ctx, verifyBoundary } = createNotificationBoundary(1, {
       value: workspace.cwd,
       reads: 1,
     });
-    const updateHandler = createUpdateHandler(pi);
+    const updateHandler = createUpdateHandler();
 
     // act
-    await updateHandler(args, ctx);
+    await updateHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(await readFootprint(workspace), expectedFootprint);
@@ -873,14 +877,14 @@ for (const { args, expectedAgents, label, position } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+    const { ctx, verifyBoundary } = createNotificationBoundary(1, {
       value: workspace.cwd,
       reads: 1,
     });
-    const updateHandler = createUpdateHandler(pi);
+    const updateHandler = createUpdateHandler();
 
     // act
-    await updateHandler(args, ctx);
+    await updateHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(await readFootprint(workspace), {
@@ -901,14 +905,14 @@ test("honors a scope flag and the scope-target flag supplied together, narrowing
   // arrange
   const workspace = await createHermeticWorkspace(t, "both-selectors");
   await seedBothScopes(workspace);
-  const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+  const { ctx, verifyBoundary } = createNotificationBoundary(1, {
     value: workspace.cwd,
     reads: 1,
   });
-  const updateHandler = createUpdateHandler(pi);
+  const updateHandler = createUpdateHandler();
 
   // act
-  await updateHandler(`--scope user one@alpha ${SCOPE_TARGET_FLAG}`, ctx);
+  await updateHandler(`--scope user one@alpha ${SCOPE_TARGET_FLAG}`, ctx, runWithNothingLoaded());
 
   // assert
   assert.deepStrictEqual(await readFootprint(workspace), {
@@ -941,11 +945,11 @@ for (const { args, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-    const updateHandler = createUpdateHandler(pi);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const updateHandler = createUpdateHandler();
 
     // act
-    await updateHandler(args, ctx);
+    await updateHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -980,11 +984,11 @@ for (const { args, expectedMessage, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-    const updateHandler = createUpdateHandler(pi);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const updateHandler = createUpdateHandler();
 
     // act
-    await updateHandler(args, ctx);
+    await updateHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [{ message: expectedMessage, severity: "error" }]);
@@ -1009,11 +1013,11 @@ for (const { args, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-    const updateHandler = createUpdateHandler(pi);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const updateHandler = createUpdateHandler();
 
     // act
-    await updateHandler(args, ctx);
+    await updateHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -1042,11 +1046,11 @@ for (const { args, label, offending, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-    const updateHandler = createUpdateHandler(pi);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const updateHandler = createUpdateHandler();
 
     // act
-    await updateHandler(args, ctx);
+    await updateHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -1058,4 +1062,54 @@ for (const { args, label, offending, summary } of [
     assert.deepStrictEqual(await readFootprint(workspace), NOTHING_UPDATED);
     verifyBoundary();
   });
+}
+
+for (const mode of ["json", "rpc"] as const) {
+  for (const { args, message } of [
+    {
+      args: "--scope bad",
+      message: 'Invalid --scope value: "bad". Must be "user" or "project".',
+    },
+    {
+      args: "--bogus",
+      message: 'Unknown flag: "--bogus".',
+    },
+    {
+      args: "alpha@official beta@official",
+      message: "Too many arguments.",
+    },
+    {
+      args: "invalid",
+      message: 'Invalid <plugin>@<marketplace> ref: "invalid".',
+    },
+  ]) {
+    test(`appends plugin/update rejection for ${args} in ${mode} (enabled)`, async () => {
+      // arrange
+      const { ctx, run, capture, verifyBoundary } = createMachineNotificationBoundary(mode);
+
+      const commandHandler = createUpdateHandler();
+
+      // act
+      await commandHandler(args, ctx, run);
+
+      // assert
+      assert.deepStrictEqual(capture.entries, [
+        {
+          customType: "claude-plugin",
+          payload: {
+            schemaVersion: 1,
+            origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+            kind: "usage-error",
+            severity: "error",
+            needsReload: false,
+            message,
+            usage:
+              "Usage: /claude:plugin update [<plugin>@<marketplace> | @<marketplace>] [--scope user|project] [--map-model] [--partial] [--local]",
+          },
+        },
+      ]);
+      capture.assertValid();
+      verifyBoundary();
+    });
+  }
 }

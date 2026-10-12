@@ -55,11 +55,10 @@ import { listPlugins } from "../../extensions/pi-claude-marketplace/orchestrator
 import { createInstallOperation } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { enterHermeticEnvironment } from "../platform/hermetic-environment.ts";
+import { runWithNothingLoaded } from "../shared/notification-run-seeds.ts";
 
-import type {
-  ExtensionAPI,
-  ExtensionContext,
-} from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { ExtensionContext } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { NotificationRun } from "../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 
 interface NotifyRecord {
   message: string;
@@ -68,16 +67,14 @@ interface NotifyRecord {
 
 interface TestCtx {
   ctx: ExtensionContext;
-  pi: ExtensionAPI;
+  run: NotificationRun;
   notifications: NotifyRecord[];
 }
 
 function makeCtx(cwd: string): TestCtx {
   const notifications: NotifyRecord[] = [];
-  const pi = {
-    getAllTools: (): ReturnType<ExtensionAPI["getAllTools"]> => [],
-  } as ExtensionAPI;
   const ctx = {
+    mode: "tui",
     cwd,
     ui: {
       notify(message: string, severity?: string): void {
@@ -85,7 +82,7 @@ function makeCtx(cwd: string): TestCtx {
       },
     },
   } as ExtensionContext;
-  return { ctx, pi, notifications };
+  return { ctx, run: runWithNothingLoaded(), notifications };
 }
 
 interface HermeticEnv {
@@ -179,7 +176,7 @@ test("CMC-21 / D-13-17 step 1: project-scope plugin installed from user-scope ma
     // act
     await addMarketplace({
       ctx: userAdd.ctx,
-      pi: userAdd.pi,
+      run: userAdd.run,
       scope: "user",
       cwd: env.cwd,
       completionCache,
@@ -187,13 +184,13 @@ test("CMC-21 / D-13-17 step 1: project-scope plugin installed from user-scope ma
     });
     await installPlugin({
       ctx: installCtx.ctx,
-      pi: installCtx.pi,
+      run: installCtx.run,
       scope: "project",
       cwd: env.cwd,
       marketplace: "official",
       plugin: "alpha",
     });
-    await listPlugins({ ctx: listCtx.ctx, pi: listCtx.pi, cwd: env.cwd });
+    await listPlugins({ ctx: listCtx.ctx, run: listCtx.run, cwd: env.cwd });
     const output = captureLastSuccess(listCtx.notifications);
 
     // assert
@@ -268,7 +265,7 @@ test("CMC-21 / D-13-17 step 2: when an INDEPENDENT project-scope marketplace is 
     // act
     await addMarketplace({
       ctx: userAdd.ctx,
-      pi: userAdd.pi,
+      run: userAdd.run,
       scope: "user",
       cwd: env.cwd,
       completionCache,
@@ -276,23 +273,23 @@ test("CMC-21 / D-13-17 step 2: when an INDEPENDENT project-scope marketplace is 
     });
     await installPlugin({
       ctx: installCtx.ctx,
-      pi: installCtx.pi,
+      run: installCtx.run,
       scope: "project",
       cwd: env.cwd,
       marketplace: "official-user",
       plugin: "alpha",
     });
-    await listPlugins({ ctx: beforeListCtx.ctx, pi: beforeListCtx.pi, cwd: env.cwd });
+    await listPlugins({ ctx: beforeListCtx.ctx, run: beforeListCtx.run, cwd: env.cwd });
     const beforeOutput = captureLastSuccess(beforeListCtx.notifications);
     await addMarketplace({
       ctx: projectAdd.ctx,
-      pi: projectAdd.pi,
+      run: projectAdd.run,
       scope: "project",
       cwd: env.cwd,
       completionCache,
       rawSource: projectOfficialRoot,
     });
-    await listPlugins({ ctx: afterListCtx.ctx, pi: afterListCtx.pi, cwd: env.cwd });
+    await listPlugins({ ctx: afterListCtx.ctx, run: afterListCtx.run, cwd: env.cwd });
     const afterOutput = captureLastSuccess(afterListCtx.notifications);
 
     // assert

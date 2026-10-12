@@ -69,7 +69,7 @@ import type {
   McpConfigFileNotice,
   McpConfigNotice,
   McpOverrideRestoredNotice,
-} from "../../shared/notification-dispatch.ts";
+} from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 
 /** One config file and the plugin's entries in it. */

@@ -1,24 +1,28 @@
 // tests/architecture/mcp-migration-notice.test.ts
 //
 // Byte-equality lock for the reload migration notice (AMIG-01, AMIG-03,
-// AMIG-04). `notifyMcpMigration` calls ctx.ui.notify directly, outside the
-// structured NotificationMessage entrypoint, so the catalog-uat walk never
-// drives it. This lock reads the `mcp-migration-moved`,
-// `mcp-migration-stopped`, `mcp-migration-left-in-place`,
-// `mcp-migration-removed` and `mcp-migration-unfinished` blocks from
-// docs/output-catalog.md and asserts that the seam emits each one byte for
-// byte, in one call at the documented severity, with a summary line followed
-// by a blank line.
+// AMIG-04). `notifyMcpMigration` emits the raw load-origin `mcp-migration`
+// kind (WIRE-01, D-14), outside the structured NotificationMessage
+// entrypoint, so the catalog-uat walk never drives it. This lock reads the
+// `mcp-migration-moved`, `mcp-migration-stopped`,
+// `mcp-migration-left-in-place`, `mcp-migration-removed` and
+// `mcp-migration-unfinished` blocks from docs/output-catalog.md and asserts
+// that the tui text strategy emits each one byte for byte, in one call at the
+// documented severity, with a summary line followed by a blank line. In json
+// mode each report arrives as one schema-valid entry at the same severity
+// (JOUT-01).
 
 import assert from "node:assert/strict";
 import test, { type TestContext } from "node:test";
 
 import { notifyMcpMigration } from "../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
+import { createJsonCapture } from "../edge/json-capture.ts";
 
 import { readCatalogBlock } from "./catalog-block.ts";
 
 import type { NotificationContext } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
-import type { McpMigrationReport } from "../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
+import type { NotificationRun } from "../../extensions/pi-claude-marketplace/shared/notification-run.ts";
+import type { McpMigrationReport } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
 interface CatalogReportRow {
   readonly state: string;
@@ -198,10 +202,26 @@ const CATALOG_REPORT_ROWS: readonly CatalogReportRow[] = [
 
 type NotifyArguments = [message: string, severity?: string];
 
+function loadRun(entrySink: NotificationRun["entrySink"]): NotificationRun {
+  return {
+    origin: { kind: "load" },
+    softDeps: { piSubagentsLoaded: false, piMcpAdapterLoaded: false, workflowEngineLoaded: false },
+    entrySink,
+  };
+}
+
 function emit(t: TestContext, report: McpMigrationReport): readonly NotifyArguments[] {
   const notify = t.mock.fn<(...args: NotifyArguments) => void>();
-  const ctx: NotificationContext = { ui: { notify } };
-  notifyMcpMigration(ctx, report);
+  const ctx: NotificationContext = { mode: "tui", ui: { notify } };
+  notifyMcpMigration(
+    ctx,
+    loadRun({
+      appendEntry(): never {
+        throw new Error("A text-mode load run cannot append entries");
+      },
+    }),
+    report,
+  );
   return notify.mock.calls.map((call) => call.arguments);
 }
 
@@ -234,5 +254,30 @@ for (const { state, severity, report } of CATALOG_REPORT_ROWS) {
 
     // assert
     assert.strictEqual(message, expectedMessage);
+  });
+
+  test(`JOUT-01: the ${state} report is one schema-valid ${severity} entry in json mode`, () => {
+    // arrange
+    const capture = createJsonCapture();
+    const ctx = {
+      mode: "json",
+      get ui() {
+        return capture.ui;
+      },
+    };
+
+    // act
+    notifyMcpMigration(ctx, loadRun(capture.entrySink), report);
+
+    // assert
+    capture.assertValid();
+    assert.deepStrictEqual(
+      capture.entries.map(({ customType, payload }) => {
+        assert.ok(typeof payload === "object" && payload !== null);
+        assert.ok("kind" in payload && "severity" in payload);
+        return [customType, payload.kind, payload.severity];
+      }),
+      [["claude-plugin", "mcp-migration", severity]],
+    );
   });
 }

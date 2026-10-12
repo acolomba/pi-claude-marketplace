@@ -33,6 +33,7 @@ import { createApplyReconcile } from "../../extensions/pi-claude-marketplace/orc
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { loadState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import { openNotificationRun } from "../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import { makeCtx, makeMockPi } from "../e2e/_helpers.ts";
 import { createGitOpsFake } from "../platform/git-ops-fake.ts";
 import { withHermeticEnvironment } from "../platform/hermetic-environment.ts";
@@ -235,7 +236,7 @@ for (const { marketplace, plugins, plugin } of [
       // act
       await applyReconcile({
         ctx,
-        pi: makeMockPi([]).pi,
+        run: openNotificationRun(makeMockPi([]).pi, { kind: "load" }),
         cwd,
         completionCache: createCompletionCache(),
         hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),

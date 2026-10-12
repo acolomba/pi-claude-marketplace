@@ -77,11 +77,15 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { test, type TestContext } from "node:test";
 
+import { mock, verify } from "strong-mock";
+
 import { makeAddHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/marketplace/add.ts";
 import { locationsFor } from "../../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { createCompletionCache } from "../../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { createGitOpsFake } from "../../../platform/git-ops-fake.ts";
 import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
+import { runWithNothingLoaded } from "../../../shared/notification-run-seeds.ts";
+import { createMachineNotificationBoundary } from "../../notification-boundary.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
 
 import type { GitOps } from "../../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
@@ -283,15 +287,15 @@ for (const { args, arity } of [{ args: URL_SOURCE, arity: "at the accepted arity
   test(`clones through the injected port into the user scope when no scope flag narrows the command ${arity}`, async (t) => {
     // arrange
     const { cwd, sourceTree, networkCallCount } = await createHermeticScope(t, "default-scope");
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 1, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
       value: cwd,
       reads: 1,
     });
     const git = createGitPort(sourceTree);
-    const addHandler = makeAddHandler(pi, createAddDeps(git.gitOps));
+    const addHandler = makeAddHandler(createAddDeps(git.gitOps));
 
     // act
-    await addHandler(args, ctx);
+    await addHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [{ message: USER_ADDED_ROW }]);
@@ -327,15 +331,15 @@ for (const { footprint, row, scope } of [
   test(`clones into the ${scope} scope when --scope ${scope} selects it`, async (t) => {
     // arrange
     const { cwd, sourceTree, networkCallCount } = await createHermeticScope(t, `scope-${scope}`);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 1, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
       value: cwd,
       reads: 1,
     });
     const git = createGitPort(sourceTree);
-    const addHandler = makeAddHandler(pi, createAddDeps(git.gitOps));
+    const addHandler = makeAddHandler(createAddDeps(git.gitOps));
 
     // act
-    await addHandler(`${URL_SOURCE} --scope ${scope}`, ctx);
+    await addHandler(`${URL_SOURCE} --scope ${scope}`, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [{ message: row }]);
@@ -356,15 +360,15 @@ for (const { args, position } of [
   test(`records the marketplace in the per-machine config when the scope-target flag is supplied ${position} the source`, async (t) => {
     // arrange
     const { cwd, sourceTree, networkCallCount } = await createHermeticScope(t, `local-${position}`);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 1, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
       value: cwd,
       reads: 1,
     });
     const git = createGitPort(sourceTree);
-    const addHandler = makeAddHandler(pi, createAddDeps(git.gitOps));
+    const addHandler = makeAddHandler(createAddDeps(git.gitOps));
 
     // act
-    await addHandler(args, ctx);
+    await addHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [{ message: USER_ADDED_ROW }]);
@@ -381,15 +385,15 @@ for (const { args, position } of [
 test("carries a scope flag and the scope-target flag through together rather than rejecting the pair", async (t) => {
   // arrange
   const { cwd, sourceTree, networkCallCount } = await createHermeticScope(t, "scope-and-target");
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 1, {
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
     value: cwd,
     reads: 1,
   });
   const git = createGitPort(sourceTree);
-  const addHandler = makeAddHandler(pi, createAddDeps(git.gitOps));
+  const addHandler = makeAddHandler(createAddDeps(git.gitOps));
 
   // act
-  await addHandler(`${URL_SOURCE} --scope project --local`, ctx);
+  await addHandler(`${URL_SOURCE} --scope project --local`, ctx, runWithNothingLoaded());
 
   // assert
   assert.deepStrictEqual(notifications, [{ message: PROJECT_ADDED_ROW }]);
@@ -408,15 +412,15 @@ test("carries a scope flag and the scope-target flag through together rather tha
 test("adds a path source without ever reaching the git port it was handed (NFR-5)", async (t) => {
   // arrange
   const { cwd, sourceTree, networkCallCount } = await createHermeticScope(t, "path-source");
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 1, {
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
     value: cwd,
     reads: 1,
   });
   const git = createGitPort(sourceTree);
-  const addHandler = makeAddHandler(pi, createAddDeps(git.gitOps));
+  const addHandler = makeAddHandler(createAddDeps(git.gitOps));
 
   // act
-  await addHandler(sourceTree, ctx);
+  await addHandler(sourceTree, ctx, runWithNothingLoaded());
 
   // assert
   assert.deepStrictEqual(notifications, [{ message: USER_ADDED_ROW }]);
@@ -429,12 +433,12 @@ test("adds a path source without ever reaching the git port it was handed (NFR-5
 test("collapses the duplicated usage block to one sentence when no source is supplied and adds nothing", async (t) => {
   // arrange
   const { cwd, sourceTree, networkCallCount } = await createHermeticScope(t, "no-source");
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
   const git = createGitPort(sourceTree);
-  const addHandler = makeAddHandler(pi, createAddDeps(git.gitOps));
+  const addHandler = makeAddHandler(createAddDeps(git.gitOps));
 
   // act
-  await addHandler("", ctx);
+  await addHandler("", ctx, runWithNothingLoaded());
 
   // assert
   assert.deepStrictEqual(notifications, [
@@ -449,12 +453,12 @@ test("collapses the duplicated usage block to one sentence when no source is sup
 test("reports an unknown long flag against the add usage block and adds nothing", async (t) => {
   // arrange
   const { cwd, sourceTree, networkCallCount } = await createHermeticScope(t, "unknown-flag");
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
   const git = createGitPort(sourceTree);
-  const addHandler = makeAddHandler(pi, createAddDeps(git.gitOps));
+  const addHandler = makeAddHandler(createAddDeps(git.gitOps));
 
   // act
-  await addHandler(`${URL_SOURCE} --frobnicate`, ctx);
+  await addHandler(`${URL_SOURCE} --frobnicate`, ctx, runWithNothingLoaded());
 
   // assert
   assert.deepStrictEqual(notifications, [
@@ -469,12 +473,12 @@ test("reports an unknown long flag against the add usage block and adds nothing"
 test("shows an unrecognised scope value verbatim against the add usage block and adds nothing", async (t) => {
   // arrange
   const { cwd, sourceTree, networkCallCount } = await createHermeticScope(t, "invalid-scope");
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
   const git = createGitPort(sourceTree);
-  const addHandler = makeAddHandler(pi, createAddDeps(git.gitOps));
+  const addHandler = makeAddHandler(createAddDeps(git.gitOps));
 
   // act
-  await addHandler(`${URL_SOURCE} --scope bogus`, ctx);
+  await addHandler(`${URL_SOURCE} --scope bogus`, ctx, runWithNothingLoaded());
 
   // assert
   assert.deepStrictEqual(notifications, [
@@ -492,12 +496,12 @@ test("shows an unrecognised scope value verbatim against the add usage block and
 test("rejects surplus input before cloning or writing config", async (t) => {
   // arrange
   const { cwd, sourceTree, networkCallCount } = await createHermeticScope(t, "surplus");
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
   const git = createGitPort(sourceTree);
-  const handler = makeAddHandler(pi, createAddDeps(git.gitOps));
+  const handler = makeAddHandler(createAddDeps(git.gitOps));
 
   // act
-  await handler(`${URL_SOURCE} surplus`, ctx);
+  await handler(`${URL_SOURCE} surplus`, ctx, runWithNothingLoaded());
 
   // assert
   assert.deepStrictEqual(notifications, [
@@ -508,3 +512,61 @@ test("rejects surplus input before cloning or writing config", async (t) => {
   assert.strictEqual(networkCallCount(), 0);
   verifyBoundary();
 });
+
+for (const mode of ["json", "rpc"] as const) {
+  for (const { args, message } of [
+    {
+      args: "--scope bad",
+      message: 'Invalid --scope value: "bad". Must be "user" or "project".',
+    },
+    {
+      args: "--bogus",
+      message: 'Unknown flag: "--bogus".',
+    },
+    {
+      args: "",
+      message: "Missing required argument.",
+    },
+    {
+      args: '""',
+      message: "Missing required argument.",
+    },
+    {
+      args: "alpha@official beta@official",
+      message: "Too many arguments.",
+    },
+  ]) {
+    test(`appends marketplace/add rejection for ${args} in ${mode} (enabled)`, async () => {
+      // arrange
+      const { ctx, run, capture, verifyBoundary } = createMachineNotificationBoundary(mode);
+      const deps = mock<Parameters<typeof makeAddHandler>[0]>({
+        exactParams: true,
+        name: "handler dependencies",
+      });
+      const commandHandler = makeAddHandler(deps);
+
+      // act
+      await commandHandler(args, ctx, run);
+
+      // assert
+      assert.deepStrictEqual(capture.entries, [
+        {
+          customType: "claude-plugin",
+          payload: {
+            schemaVersion: 1,
+            origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+            kind: "usage-error",
+            severity: "error",
+            needsReload: false,
+            message,
+            usage:
+              "Usage: /claude:plugin marketplace add <source> [--scope user|project] [--local]",
+          },
+        },
+      ]);
+      capture.assertValid();
+      verifyBoundary();
+      verify(deps);
+    });
+  }
+}

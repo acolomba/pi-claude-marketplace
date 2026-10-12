@@ -44,15 +44,13 @@ import {
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { MarketplaceNotFoundError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
-import { expectSoftDepProbes } from "../../edge/notification-boundary.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import type {
-  ExtensionAPI,
-  ExtensionContext,
-} from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { ExtensionContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { CompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import type { NotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 
 interface NotificationCall {
@@ -67,7 +65,7 @@ type NotificationUi = Omit<ExtensionContext["ui"], "notify"> & {
 
 interface NotificationBoundary {
   readonly ctx: ExtensionContext;
-  readonly pi: ExtensionAPI;
+  readonly run: NotificationRun;
   readonly calls: NotificationCall[];
   verifyInteractions(): void;
 }
@@ -101,19 +99,23 @@ function recordingCompletionCache(calls: InvalidationCall[]): CompletionCache {
 }
 
 /**
+ * The strict context boundary, sized to the emissions the case promises.
  * `noticeCalls` counts the MCP config notifications sent after the row. Each
- * one reads `ctx.ui` and calls `notify` once and probes no soft dependency.
+ * one reads `ctx.mode` and `ctx.ui` and calls `notify` once.
+ * D-05: every emission renders from the run's snapshot, so no tool inventory
+ * is present to probe.
  */
 function notificationBoundary(expectedCalls: 0 | 1, noticeCalls: 0 | 1 = 0): NotificationBoundary {
   const calls: NotificationCall[] = [];
   const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
-  const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
   const ui = mock<NotificationUi>({ exactParams: true, name: "notification UI" });
   if (expectedCalls === 1) {
+    when(() => ctx.mode)
+      .thenReturn("tui")
+      .times(1 + noticeCalls);
     when(() => ctx.ui)
       .thenReturn(ui)
       .times(1 + noticeCalls);
-    expectSoftDepProbes(pi, 1);
     when(() => ui.notify)
       .thenReturn((message, severity) => {
         calls.push(severity === undefined ? { message } : { message, severity });
@@ -123,11 +125,10 @@ function notificationBoundary(expectedCalls: 0 | 1, noticeCalls: 0 | 1 = 0): Not
 
   return {
     ctx,
-    pi,
+    run: runWithNothingLoaded(),
     calls,
     verifyInteractions(): void {
       verify(ctx);
-      verify(pi);
       verify(ui);
     },
   };
@@ -279,7 +280,7 @@ test("reports a bare-form missing marketplace searched across both scopes withou
   const outcome = await removeMarketplace({
     completionCache: recordingCompletionCache(invalidations),
     ctx: notification.ctx,
-    pi: notification.pi,
+    run: notification.run,
     name: "absent",
     cwd,
   });
@@ -310,7 +311,7 @@ test("reports an explicit-scope missing marketplace without mutating project sta
   const outcome = await removeMarketplace({
     completionCache: recordingCompletionCache(invalidations),
     ctx: notification.ctx,
-    pi: notification.pi,
+    run: notification.run,
     name: "absent",
     scope: "project",
     cwd,
@@ -406,7 +407,7 @@ test("invalidates committed full removal after persistence and before data hygie
   const outcome = await removeMarketplace({
     completionCache,
     ctx: notification.ctx,
-    pi: notification.pi,
+    run: notification.run,
     name: marketplace,
     scope: "project",
     cwd,
@@ -457,7 +458,7 @@ test("invalidates a partial removal while retaining failed plugin data", async (
   const outcome = await removeMarketplace({
     completionCache,
     ctx: notification.ctx,
-    pi: notification.pi,
+    run: notification.run,
     name: marketplace,
     scope: "project",
     cwd,
@@ -534,7 +535,7 @@ for (const failurePoint of ["names", "plugins"] as const) {
     const outcome = await removeMarketplace({
       completionCache,
       ctx: notification.ctx,
-      pi: notification.pi,
+      run: notification.run,
       name: marketplace,
       scope: "project",
       cwd,
@@ -564,7 +565,7 @@ test("returns the complete orchestrated missing-marketplace outcome without noti
   const outcome = await removeMarketplace({
     completionCache: createCompletionCache(),
     ctx: notification.ctx,
-    pi: notification.pi,
+    run: notification.run,
     name: "absent",
     cwd,
     notifications: { mode: "orchestrated" },
@@ -612,7 +613,7 @@ test("prefers the project marketplace in orchestrated bare form", async (testCon
   const outcome = await removeMarketplace({
     completionCache: createCompletionCache(),
     ctx: notification.ctx,
-    pi: notification.pi,
+    run: notification.run,
     name: "shared",
     cwd,
     notifications: { mode: "orchestrated" },
@@ -645,7 +646,7 @@ test("selects the user marketplace in orchestrated bare form when project is abs
   const outcome = await removeMarketplace({
     completionCache: createCompletionCache(),
     ctx: notification.ctx,
-    pi: notification.pi,
+    run: notification.run,
     name: "user-only",
     cwd,
     notifications: { mode: "orchestrated" },
@@ -723,7 +724,7 @@ for (const sourceCase of SOURCE_CASES) {
     const outcome = await removeMarketplace({
       completionCache: createCompletionCache(),
       ctx: notification.ctx,
-      pi: notification.pi,
+      run: notification.run,
       name: marketplace,
       scope: "project",
       cwd,
@@ -770,7 +771,7 @@ test("swallows clone garbage-collection failure and safely reports the retry", a
   const firstOutcome = await removeMarketplace({
     completionCache: createCompletionCache(),
     ctx: firstNotification.ctx,
-    pi: firstNotification.pi,
+    run: firstNotification.run,
     name: "gc-failure",
     scope: "project",
     cwd,
@@ -779,7 +780,7 @@ test("swallows clone garbage-collection failure and safely reports the retry", a
   const retryOutcome = await removeMarketplace({
     completionCache: createCompletionCache(),
     ctx: retryNotification.ctx,
-    pi: retryNotification.pi,
+    run: retryNotification.run,
     name: "gc-failure",
     scope: "user",
     cwd,
@@ -847,7 +848,7 @@ test("retains the source clone when a forward-compatible recorded kind is unavai
   const outcome = await removeMarketplace({
     completionCache: createCompletionCache(),
     ctx: notification.ctx,
-    pi: notification.pi,
+    run: notification.run,
     name: marketplace,
     scope: "project",
     cwd,
@@ -904,7 +905,7 @@ test("sweeps marketplace and plugin declarations from both config layers", async
   const outcome = await removeMarketplace({
     completionCache: createCompletionCache(),
     ctx: notification.ctx,
-    pi: notification.pi,
+    run: notification.run,
     name: "remove-me",
     scope: "project",
     cwd,
@@ -962,7 +963,7 @@ test("leaves a valid unrelated sibling config layer byte-identical", async (test
   await removeMarketplace({
     completionCache: createCompletionCache(),
     ctx: notification.ctx,
-    pi: notification.pi,
+    run: notification.run,
     name: "remove-me",
     scope: "project",
     cwd,
@@ -999,7 +1000,7 @@ test("leaves an invalid sibling config layer byte-identical", async (testContext
   await removeMarketplace({
     completionCache: createCompletionCache(),
     ctx: notification.ctx,
-    pi: notification.pi,
+    run: notification.run,
     name: "remove-me",
     scope: "project",
     cwd,
@@ -1032,7 +1033,7 @@ test("aborts a standalone local remove on invalid target config without leaking 
   const outcome = await removeMarketplace({
     completionCache: createCompletionCache(),
     ctx: notification.ctx,
-    pi: notification.pi,
+    run: notification.run,
     name: "invalid-config",
     scope: "project",
     cwd,
@@ -1071,7 +1072,7 @@ test("returns an orchestrated invalid-config outcome without notifying or saving
   const outcome = await removeMarketplace({
     completionCache: recordingCompletionCache(invalidations),
     ctx: notification.ctx,
-    pi: notification.pi,
+    run: notification.run,
     name: "invalid-config",
     scope: "project",
     cwd,
@@ -1130,7 +1131,7 @@ test("propagates config write failure, preserves state, and converges on retry",
     await removeMarketplace({
       completionCache: recordingCompletionCache(failedInvalidations),
       ctx: firstNotification.ctx,
-      pi: firstNotification.pi,
+      run: firstNotification.run,
       name: "write-failure",
       scope: "project",
       cwd,
@@ -1149,7 +1150,7 @@ test("propagates config write failure, preserves state, and converges on retry",
   const retryOutcome = await removeMarketplace({
     completionCache: createCompletionCache(),
     ctx: retryNotification.ctx,
-    pi: retryNotification.pi,
+    run: retryNotification.run,
     name: "write-failure",
     scope: "project",
     cwd,
@@ -1218,7 +1219,7 @@ test("preserves the state record after state-save failure while retaining commit
     await removeMarketplace({
       completionCache: createCompletionCache(),
       ctx: firstNotification.ctx,
-      pi: firstNotification.pi,
+      run: firstNotification.run,
       name: "state-failure",
       scope: "project",
       cwd,
@@ -1237,7 +1238,7 @@ test("preserves the state record after state-save failure while retaining commit
   const retryOutcome = await removeMarketplace({
     completionCache: createCompletionCache(),
     ctx: retryNotification.ctx,
-    pi: retryNotification.pi,
+    run: retryNotification.run,
     name: "state-failure",
     scope: "project",
     cwd,
@@ -1348,7 +1349,7 @@ test("keeps exact partial state and silent cleanup residue before retry converge
   const firstOutcome = await removeMarketplace({
     completionCache: createCompletionCache(),
     ctx: firstNotification.ctx,
-    pi: firstNotification.pi,
+    run: firstNotification.run,
     name: marketplace,
     scope: "project",
     cwd,
@@ -1370,7 +1371,7 @@ test("keeps exact partial state and silent cleanup residue before retry converge
   const retryOutcome = await removeMarketplace({
     completionCache: createCompletionCache(),
     ctx: retryNotification.ctx,
-    pi: retryNotification.pi,
+    run: retryNotification.run,
     name: marketplace,
     scope: "project",
     cwd,
@@ -1490,7 +1491,7 @@ test("subtracts a dropped workflow envelope from the persisted row and leaves ho
   // act
   await removeMarketplace({
     ctx: notification.ctx,
-    pi: notification.pi,
+    run: notification.run,
     name: marketplace,
     scope: "project",
     cwd,
@@ -1530,7 +1531,7 @@ test("WLIF-03: a cascade removal takes every plugin's workflow envelope off disk
   // act
   await removeMarketplace({
     ctx: notification.ctx,
-    pi: notification.pi,
+    run: notification.run,
     name: marketplace,
     scope: "project",
     cwd,
@@ -1571,7 +1572,7 @@ test("WLIF-03: one plugin's cascade failure strands only its own envelope", asyn
   // act
   await removeMarketplace({
     ctx: notification.ctx,
-    pi: notification.pi,
+    run: notification.run,
     name: marketplace,
     scope: "project",
     cwd,
@@ -1624,7 +1625,7 @@ test("returns every orchestrated partial row and preserves agent-conflict resour
   const outcome = await removeMarketplace({
     completionCache: createCompletionCache(),
     ctx: notification.ctx,
-    pi: notification.pi,
+    run: notification.run,
     name: "orchestrated-partial",
     scope: "project",
     cwd,
@@ -1682,7 +1683,7 @@ test("reports a concurrent in-lock disappearance as an empty successful removal"
   const outcome = await removeMarketplace({
     completionCache: createCompletionCache(),
     ctx: notification.ctx,
-    pi: notification.pi,
+    run: notification.run,
     name: "concurrent",
     scope: "project",
     cwd,
@@ -1748,7 +1749,7 @@ test("AFILE-04: marketplace remove over a commented mcp-adapter.json shows the c
   const outcome = await removeMarketplace({
     completionCache: createCompletionCache(),
     ctx: notification.ctx,
-    pi: notification.pi,
+    run: notification.run,
     name: "commented",
     scope: "project",
     cwd,
@@ -1785,7 +1786,7 @@ test("AFILE-04: a partial marketplace remove still shows the notice", async (tes
   await removeMarketplace({
     completionCache: createCompletionCache(),
     ctx: notification.ctx,
-    pi: notification.pi,
+    run: notification.run,
     name: "commented",
     scope: "project",
     cwd,
@@ -1821,7 +1822,7 @@ test("AFILE-04: an orchestrated marketplace remove returns the notice and sends 
   const outcome = await removeMarketplace({
     completionCache: createCompletionCache(),
     ctx: notification.ctx,
-    pi: notification.pi,
+    run: notification.run,
     name: "commented",
     scope: "project",
     cwd,
@@ -1851,7 +1852,7 @@ test("AFILE-04: an orchestrated partial marketplace remove returns every cascade
   const outcome = await removeMarketplace({
     completionCache: createCompletionCache(),
     ctx: notification.ctx,
-    pi: notification.pi,
+    run: notification.run,
     name: "commented",
     scope: "project",
     cwd,
@@ -1892,9 +1893,13 @@ test("AFILE-04: a standalone marketplace remove whose state save fails still sho
   const saveFailure = new Error("state save failed");
   const calls: NotificationCall[] = [];
   const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
-  const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
   const ui = mock<NotificationUi>({ exactParams: true, name: "notification UI" });
-  when(() => ctx.ui).thenReturn(ui);
+  when(() => ctx.mode)
+    .thenReturn("tui")
+    .once();
+  when(() => ctx.ui)
+    .thenReturn(ui)
+    .once();
   when(() => ui.notify).thenReturn((message, severity) => {
     calls.push(severity === undefined ? { message } : { message, severity });
   });
@@ -1903,7 +1908,7 @@ test("AFILE-04: a standalone marketplace remove whose state save fails still sho
   const failure = await removeMarketplace({
     completionCache: createCompletionCache(),
     ctx,
-    pi,
+    run: runWithNothingLoaded(),
     name: "commented",
     scope: "project",
     cwd,
@@ -1922,7 +1927,6 @@ test("AFILE-04: a standalone marketplace remove whose state save fails still sho
     },
   ]);
   verify(ctx);
-  verify(pi);
   verify(ui);
 });
 
@@ -1938,7 +1942,7 @@ test("AFILE-04: an orchestrated marketplace remove whose state save fails carrie
   const failure = await removeMarketplace({
     completionCache: createCompletionCache(),
     ctx: notification.ctx,
-    pi: notification.pi,
+    run: notification.run,
     name: "commented",
     scope: "project",
     cwd,
@@ -1985,7 +1989,7 @@ test("rethrows a state save failure unchanged when no cascade rewrote an MCP con
   const failure = await removeMarketplace({
     completionCache: createCompletionCache(),
     ctx: notification.ctx,
-    pi: notification.pi,
+    run: notification.run,
     name: "plain",
     scope: "project",
     cwd,

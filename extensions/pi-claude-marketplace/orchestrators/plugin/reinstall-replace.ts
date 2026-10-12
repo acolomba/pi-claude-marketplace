@@ -57,7 +57,7 @@ import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { PluginInstallRecord } from "../../persistence/state-io.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { HookSummaryEntry } from "../../shared/concerns/hooks.ts";
-import type { McpConfigNotice } from "../../shared/notification-dispatch.ts";
+import type { McpConfigNotice } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { RmOptions } from "node:fs";
 

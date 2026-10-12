@@ -53,6 +53,7 @@ import {
 import { compareByNameThenScope } from "../../shared/compare-name-scope.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
+import { requireNotificationMode } from "../../shared/notification-run.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
 import { SCOPES } from "../../shared/types.ts";
 
@@ -171,8 +172,8 @@ async function readAndCachePluginHooksWith(
 /**
  * Factory: build the `before_agent_start` handler closure registered on
  * Pi at `registerHooksBridge` time. The registration wrapper checks its
- * captured generation synchronously before invoking this closure. A stale
- * registration returns undefined without draining the live context buffer.
+ * captured generation and live mode before invoking this closure. A stale
+ * registration or rejected mode leaves the live context buffer intact.
  *
  * Drain semantics:
  *   - empty buffer -> returns undefined (no systemPrompt mutation, no
@@ -760,7 +761,7 @@ async function hydrateProjectScopeForCwdWith(
  * so SessionStart hooks can rely on `CLAUDE_ENV_FILE`'s containing
  * directory existing without the bridge re-checking on every dispatch.
  * Containment-guarded via `assertPathInside` per NFR-10; failures route
- * through `hookDebugLog` and the bridge factory continues. Idempotent
+ * through `hookDebugLog` and sibling scope preparation continues. Idempotent
  * across `/reload`.
  */
 async function ensureSharedDataDir(loc: ScopedLocations): Promise<void> {
@@ -785,9 +786,8 @@ async function ensureSharedDataDir(loc: ScopedLocations): Promise<void> {
  *   2. Reset pending-context and settle transitions for the new generation.
  *   3. SIGKILL prior-cycle in-memory async-rewake children (HOOK-06).
  *   4. Hydrate the parsed-config cache from disk, then rebuild routing tables.
- *   5. Prepare each required SessionStart shared directory.
- *   6. Reap persisted orphans per scope (D-62-05).
- *   7. Register exactly 11 pi.on call sites -- 7 Bucket-A dispatch surfaces
+ *   5. Reap persisted orphans per scope (D-62-05).
+ *   6. Register exactly 11 pi.on call sites -- 7 Bucket-A dispatch surfaces
  *      (DISP-01) plus `before_agent_start` (the drain point for the
  *      SessionStart `additionalContext` capture buffer) plus the two
  *      settle-time surfaces `agent_end` (caches the run's last-assistant
@@ -804,7 +804,7 @@ async function ensureSharedDataDir(loc: ScopedLocations): Promise<void> {
  *
  * `opts.executor` is the hook-execution injection point, forwarded verbatim
  * to every `compositeHandlerFor` / `toolResultCompositeHandler` /
- * `settleHandlerFor` closure registered in step 7. The sole production caller
+ * `settleHandlerFor` closure registered in step 6. The sole production caller
  * -- the extension factory in `index.ts` -- does NOT pass it, so production
  * always runs on the `dispatchHookExec` default; it exists so a test can
  * register the real bridge against a spy and assert on routing without
@@ -828,6 +828,27 @@ async function registerHooksBridgeWith(
     return bindRegistrationCallback(runtime, capturedGeneration, callbackForGeneration);
   }
 
+  function bindWithMode<Event, Result>(
+    callbackForGeneration: RegistrationCallbackFactory<
+      [event: Event, ctx: ExtensionContext],
+      Result
+    >,
+  ): (event: Event, ctx: ExtensionContext) => Result | undefined {
+    return bind((generation) => {
+      const callback = callbackForGeneration(generation);
+      return (event: Event, ctx: ExtensionContext): Result | undefined => {
+        try {
+          requireNotificationMode(ctx.mode);
+        } catch (error: unknown) {
+          hookDebugLog(`hook callback skipped: ${errorMessage(error)}`);
+          return undefined;
+        }
+
+        return callback(event, ctx);
+      };
+    });
+  }
+
   // /reload re-enters this factory and must not leak a stale SessionStart
   // additionalContext entry from the prior session into the new buffer.
   // Clearing here makes the invariant explicit: each bridge load starts
@@ -849,24 +870,6 @@ async function registerHooksBridgeWith(
   const hydrated = await hydrateCacheFromDisk(opts, reader, routingState, generationIsCurrent);
   for (const { loc } of hydrated) {
     rebuildRoutingTablesWith(routingState);
-    // D-60-06: ensure the per-session `_shared` data dir exists so a
-    // SessionStart hook's `CLAUDE_ENV_FILE = <dataRoot>/_shared/...` path
-    // can be written by the hook without the bridge having to do it from
-    // inside dispatchHookExec. Gate on at least one SessionStart entry
-    // actually existing in the rebuilt routing table for this scope: an
-    // unsolicited mkdir on a pristine scope would create
-    // `<scopeRoot>/pi-claude-marketplace/...` and violate WR-05 (the "no
-    // files on a clean reconcile" invariant pinned by tests/index.test.ts,
-    // which asserts that a pristine workspace reconcile leaves
-    // both scope roots untouched and emits nothing). When no plugin
-    // declares SessionStart hooks the env-file path will never be set, so
-    // the dir's absence is harmless. Idempotent across `/reload` via mkdir
-    // { recursive }; failures route through hookDebugLog.
-    if (routingState.getRoutingBucket("SessionStart").length > 0) {
-      // eslint-disable-next-line no-await-in-loop -- at most two scopes, one data-dir mkdir each
-      await ensureSharedDataDir(loc);
-    }
-
     // EXEC-05 / D-62-05: read the persisted PID table for this scope,
     // probe each PID via kill 0, verify /proc/<pid>/environ marker on
     // Linux (soft-skip on macOS / read failure / marker mismatch --
@@ -891,18 +894,9 @@ async function registerHooksBridgeWith(
   // rebuilds the tables, by which point the SessionStart event has
   // already passed.
   //
-  // Re-run project-scope hydrate against ctx.cwd now, rebuild the routing
-  // tables so the SessionStart bucket picks up the project entries, and
-  // ensure the project _shared data dir exists for CLAUDE_ENV_FILE (the
-  // factory-time ensureSharedDataDir loop used cwd=homedir() so the
-  // project loc pointed at <homedir>/.pi, not the real project). Then
-  // delegate to the composite handler, which re-reads the now-populated
-  // bucket via getRoutingBucket. Hydrate/mkdir failures are swallowed via
-  // the OBS-01 debug seam so a hydrate error never blocks SessionStart
-  // dispatch -- matching the resources_discover deferred-hydrate stance.
-  // The pi.on call count (DISP-01: 11) and locked event-name set (10) are
-  // unchanged: this wraps the existing session_start handler, it does not
-  // add a registration.
+  // The original context authorizes fresh hydration and shared directories.
+  // Each eligible scope is prepared before dispatch; mkdir failures remain
+  // independent, while stale contexts and output failures stay inside this callback.
   pi.on(
     "session_start",
     bind((generation) => {
@@ -915,57 +909,76 @@ async function registerHooksBridgeWith(
       );
       return async (event, ctx) => {
         try {
-          await hydrateProjectScopeForCwdWith(reader, ctx.cwd, routingState, generationIsCurrent);
+          requireNotificationMode(ctx.mode);
+          try {
+            await hydrateProjectScopeForCwdWith(reader, ctx.cwd, routingState, generationIsCurrent);
+          } catch (err) {
+            hookDebugLog(`session_start lazy project hydrate skipped: ${errorMessage(err)}`);
+          }
+
           if (!generationIsCurrent()) {
             return;
           }
 
           rebuildRoutingTablesWith(routingState);
-          if (routingState.getRoutingBucket("SessionStart").some((e) => e.scope === "project")) {
-            await ensureSharedDataDir(locationsFor("project", ctx.cwd));
-            if (!generationIsCurrent()) {
-              return;
+          const entries = routingState.getRoutingBucket("SessionStart");
+          for (const scope of SCOPES) {
+            if (entries.some((entry) => entry.scope === scope)) {
+              requireNotificationMode(ctx.mode);
+              // eslint-disable-next-line no-await-in-loop -- at most two independent scope directories
+              await ensureSharedDataDir(locationsFor(scope, ctx.cwd));
+              if (!generationIsCurrent()) {
+                return;
+              }
             }
           }
+
+          requireNotificationMode(ctx.mode);
+          await sessionStartHandler(event, ctx);
+          if (!generationIsCurrent()) {
+            return;
+          }
         } catch (err) {
-          hookDebugLog(`session_start lazy project hydrate skipped: ${errorMessage(err)}`);
-        }
-
-        await sessionStartHandler(event, ctx);
-
-        if (!generationIsCurrent()) {
-          return;
+          hookDebugLog(`session_start skipped: ${errorMessage(err)}`);
         }
       };
     }),
   );
   pi.on(
     "session_shutdown",
-    bind((generation) => compositeHandlerFor(runtime, "SessionEnd", generation, pi, opts.executor)),
+    bindWithMode((generation) =>
+      compositeHandlerFor(runtime, "SessionEnd", generation, pi, opts.executor),
+    ),
   );
   pi.on(
     "session_before_compact",
-    bind((generation) => compositeHandlerFor(runtime, "PreCompact", generation, pi, opts.executor)),
+    bindWithMode((generation) =>
+      compositeHandlerFor(runtime, "PreCompact", generation, pi, opts.executor),
+    ),
   );
   pi.on(
     "session_compact",
-    bind((generation) =>
+    bindWithMode((generation) =>
       compositeHandlerFor(runtime, "PostCompact", generation, pi, opts.executor),
     ),
   );
   pi.on(
     "input",
-    bind((generation) =>
+    bindWithMode((generation) =>
       compositeHandlerFor(runtime, "UserPromptSubmit", generation, pi, opts.executor),
     ),
   );
   pi.on(
     "tool_call",
-    bind((generation) => compositeHandlerFor(runtime, "PreToolUse", generation, pi, opts.executor)),
+    bindWithMode((generation) =>
+      compositeHandlerFor(runtime, "PreToolUse", generation, pi, opts.executor),
+    ),
   );
   pi.on(
     "tool_result",
-    bind((generation) => toolResultCompositeHandler(runtime, generation, pi, opts.executor)),
+    bindWithMode((generation) =>
+      toolResultCompositeHandler(runtime, generation, pi, opts.executor),
+    ),
   );
   // SessionStart additionalContext drain: every agent turn fires
   // before_agent_start; the handler returns early when the pending
@@ -973,14 +986,14 @@ async function registerHooksBridgeWith(
   // turn.
   pi.on(
     "before_agent_start",
-    bind(() => createBeforeAgentStartHandler(runtime)),
+    bindWithMode(() => createBeforeAgentStartHandler(runtime)),
   );
   // Settle-time turn-boundary dispatch: agent_end caches the run's
   // last-assistant message; agent_settled reads it and gates on stopReason
   // to run the Stop / StopFailure buckets (STOP-01).
   pi.on(
     "agent_end",
-    bind((generation) => agentEndCacheHandler(runtime, generation)),
+    bindWithMode((generation) => agentEndCacheHandler(runtime, generation)),
   );
   pi.on(
     "agent_settled",
@@ -993,7 +1006,7 @@ async function registerHooksBridgeWith(
   // NOT pass through `input`, so the flag never self-clears.
   pi.on(
     "input",
-    bind((generation) => inputResetHandlerFor(runtime, generation)),
+    bindWithMode((generation) => inputResetHandlerFor(runtime, generation)),
   );
 }
 

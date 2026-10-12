@@ -3,11 +3,13 @@
 // D-115-03: pending reads the real merged config and the real state off a
 // case-owned temporary tree and delegates the row projection, so every case
 // shapes its inputs on disk rather than injecting a seam. The only doubles are
-// the two Pi surfaces the orchestrator hands to `notify`.
+// the Pi context and the notification run the orchestrator hands to `notify`.
 //
 // IL-2 is proved by sizing the notification boundary: each case promises the
 // exact number of emissions it expects, so a second `ctx.ui.notify` call throws
-// where it is made instead of being counted afterwards.
+// where it is made instead of being counted afterwards. Both pending
+// notifications render from the run's snapshot (D-05), so no case holds a tool
+// inventory to probe.
 //
 // Every seeded state.json is written in the canonical shape (`enabled` present,
 // `resources.hooks` present, both marketplace paths present), so `loadState`
@@ -16,7 +18,8 @@
 // no-mutation assertions from racing a fire-and-forget write.
 
 import assert from "node:assert/strict";
-import { mkdir, readdir, readFile, utimes, writeFile } from "node:fs/promises";
+import fs, { mkdir, readdir, readFile, utimes, writeFile } from "node:fs/promises";
+import { syncBuiltinESMExports } from "node:module";
 import path from "node:path";
 import { test } from "node:test";
 
@@ -24,6 +27,7 @@ import { pendingReconcile } from "../../../extensions/pi-claude-marketplace/orch
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { createNotificationBoundary } from "../../edge/notification-boundary.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 import { retryTree } from "../plugin/scope-tree-inventory.ts";
 
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -136,10 +140,10 @@ function stateBytes(
 test("DIFF-01: reports the zero-action advisory when neither scope has pending work", async (t) => {
   // arrange
   const { cwd } = await createHermeticScopes(t, "empty");
-  const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 1);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
 
   // act
-  await pendingReconcile({ ctx, pi, cwd });
+  await pendingReconcile({ ctx, run: runWithNothingLoaded(), cwd });
 
   // assert
   assert.deepStrictEqual(notifications, [
@@ -159,10 +163,10 @@ test("MSG-GR-3: an omitted scope walks both scopes and orders a shared marketpla
     user.configJsonPath,
     configBytes("mp", "acme/tools", [{ key: "p-user@mp", enabled: true }]),
   );
-  const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 1);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
 
   // act
-  await pendingReconcile({ ctx, pi, cwd });
+  await pendingReconcile({ ctx, run: runWithNothingLoaded(), cwd });
 
   // assert
   assert.deepStrictEqual(notifications, [
@@ -187,10 +191,10 @@ test("an explicit user scope reports the user scope's pending work and never rea
     user.configJsonPath,
     configBytes("mp", "acme/tools", [{ key: "p-user@mp", enabled: true }]),
   );
-  const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 1);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
 
   // act
-  await pendingReconcile({ ctx, pi, cwd, scope: "user" });
+  await pendingReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "user" });
 
   // assert
   assert.deepStrictEqual(notifications, [
@@ -210,10 +214,10 @@ test("an explicit project scope reports the project scope's pending work and nev
     user.configJsonPath,
     configBytes("mp", "acme/tools", [{ key: "p-user@mp", enabled: true }]),
   );
-  const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 1);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
 
   // act
-  await pendingReconcile({ ctx, pi, cwd, scope: "project" });
+  await pendingReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project" });
 
   // assert
   assert.deepStrictEqual(notifications, [
@@ -234,11 +238,11 @@ test("DIFF-01 / NFR-5: a repeated invocation emits the same notification and lea
   const expectedNotification = {
     message: "● mp [project]\n  ○ p1 (will uninstall)\n\nReconcile pending: 1 success",
   };
-  const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(2, 2);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2);
 
   // act
-  await pendingReconcile({ ctx, pi, cwd });
-  await pendingReconcile({ ctx, pi, cwd });
+  await pendingReconcile({ ctx, run: runWithNothingLoaded(), cwd });
+  await pendingReconcile({ ctx, run: runWithNothingLoaded(), cwd });
 
   // assert
   assert.deepStrictEqual(notifications, [expectedNotification, expectedNotification]);
@@ -290,10 +294,10 @@ for (const { reported, files } of invalidConfigRows) {
       await writeUnder(path.join(project.scopeRoot, name), bytes);
     }
 
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 1);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
 
     // act
-    await pendingReconcile({ ctx, pi, cwd, scope: "project" });
+    await pendingReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project" });
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -333,10 +337,10 @@ for (const { condition, bytes, reason } of stateLoadFailureRows) {
     const { cwd, project } = await createHermeticScopes(t, "state-load-failure");
     await writeUnder(project.configJsonPath, configBytes("mp", "acme/tools", []));
     await writeUnder(project.stateJsonPath, bytes);
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 1);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
 
     // act
-    await pendingReconcile({ ctx, pi, cwd, scope: "project" });
+    await pendingReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project" });
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -360,10 +364,10 @@ test("MSG-GR-3: a failed configuration block sorts among the plan blocks by name
     user.configJsonPath,
     configBytes("zzz-mp", "acme/z", [{ key: "pp@zzz-mp", enabled: true }]),
   );
-  const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 1);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
 
   // act
-  await pendingReconcile({ ctx, pi, cwd });
+  await pendingReconcile({ ctx, run: runWithNothingLoaded(), cwd });
 
   // assert
   assert.deepStrictEqual(notifications, [
@@ -388,10 +392,10 @@ test("MIG-01: an absent base configuration plans against the state projection in
       { name: "p1", skills: ["mp-p1-tool"] },
     ]),
   );
-  const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 1);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
 
   // act
-  await pendingReconcile({ ctx, pi, cwd, scope: "project" });
+  await pendingReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project" });
 
   // assert
   assert.deepStrictEqual(notifications, [
@@ -408,11 +412,11 @@ test("MIG-01 / NFR-5: the pre-migration projection is read-only and never writes
   ]);
   await writeUnder(project.stateJsonPath, recordedState);
   const expectedNotification = { message: "Pending: next reload will apply 0 actions." };
-  const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(2, 2);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2);
 
   // act
-  await pendingReconcile({ ctx, pi, cwd, scope: "project" });
-  await pendingReconcile({ ctx, pi, cwd, scope: "project" });
+  await pendingReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project" });
+  await pendingReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project" });
 
   // assert
   assert.deepStrictEqual(notifications, [expectedNotification, expectedNotification]);
@@ -434,10 +438,10 @@ test("MIG-01: a local-only marketplace merges over the state projection and adds
     ]),
   );
   await writeUnder(project.configLocalJsonPath, configBytes("zzz-extra", "acme/extra", []));
-  const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 1);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
 
   // act
-  await pendingReconcile({ ctx, pi, cwd, scope: "project" });
+  await pendingReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project" });
 
   // assert
   assert.deepStrictEqual(notifications, [
@@ -567,10 +571,10 @@ for (const { condition, stage, rendered, expectedMessage } of plannedInstallRows
     // arrange
     const { cwd, project } = await createHermeticScopes(t, "planned-install");
     await stage(cwd, project);
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 1);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
 
     // act
-    await pendingReconcile({ ctx, pi, cwd, scope: "project" });
+    await pendingReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project" });
 
     // assert
     assert.deepStrictEqual(notifications, [{ message: expectedMessage }]);
@@ -622,10 +626,10 @@ test("WR-06: the steady state names a retained workflow staging tree", async (t)
   // the arm an advisory threaded onto the cascade alone would miss entirely.
   const { cwd, user } = await createHermeticScopes(t, "retained-empty");
   await seedRetainedStagingTree(user, "staging-aaa", 2);
-  const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 1);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
 
   // act
-  await pendingReconcile({ ctx, pi, cwd });
+  await pendingReconcile({ ctx, run: runWithNothingLoaded(), cwd });
 
   // assert
   assert.deepStrictEqual(notifications, [
@@ -645,10 +649,10 @@ test("WR-06: the cascade arm carries the identical retained-tree line", async (t
     ]),
   );
   await seedRetainedStagingTree(user, "staging-aaa", 2);
-  const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 1);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
 
   // act
-  await pendingReconcile({ ctx, pi, cwd });
+  await pendingReconcile({ ctx, run: runWithNothingLoaded(), cwd });
 
   // assert
   // Byte-for-byte the same line the steady-state case above asserts: one render
@@ -675,10 +679,16 @@ test("WR-06: renders the advisory once for an invocation that walks both scopes"
     configBytes("mp", "acme/tools", [{ key: "p-user@mp", enabled: true }]),
   );
   await seedRetainedStagingTree(user, "staging-aaa", 2);
-  const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 1);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+  const readdirSpy = t.mock.method(fs, "readdir");
+  syncBuiltinESMExports();
+  t.after(() => {
+    readdirSpy.mock.restore();
+    syncBuiltinESMExports();
+  });
 
   // act
-  await pendingReconcile({ ctx, pi, cwd });
+  await pendingReconcile({ ctx, run: runWithNothingLoaded(), cwd });
 
   // assert
   assert.deepStrictEqual(notifications, [
@@ -686,6 +696,12 @@ test("WR-06: renders the advisory once for an invocation that walks both scopes"
       message: `● mp [project]\n  ● p-proj (will install)\n\n● mp [user]\n  ● p-user (will install)\n\n${RETAINED_LINE}\n\nReconcile pending: 2 successes`,
     },
   ]);
+  assert.deepStrictEqual(
+    readdirSpy.mock.calls
+      .filter((call) => call.arguments[0] === user.workflowsStagingDir)
+      .map((call) => call.arguments),
+    [[user.workflowsStagingDir]],
+  );
   verifyBoundary();
 });
 
@@ -696,10 +712,10 @@ test("WR-06: two retained trees render two lines, sorted by directory name", asy
   const { cwd, user } = await createHermeticScopes(t, "retained-two");
   await seedRetainedStagingTree(user, "staging-zzz", 1);
   await seedRetainedStagingTree(user, "staging-aaa", 2);
-  const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 1);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
 
   // act
-  await pendingReconcile({ ctx, pi, cwd });
+  await pendingReconcile({ ctx, run: runWithNothingLoaded(), cwd });
 
   // assert
   assert.deepStrictEqual(notifications, [
@@ -722,11 +738,11 @@ test("WR-06 / DIFF-01: a retained tree still leaves two consecutive invocations 
   const expected = {
     message: `Pending: next reload will apply 0 actions.\n\n${RETAINED_LINE}`,
   };
-  const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(2, 2);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2);
 
   // act
-  await pendingReconcile({ ctx, pi, cwd });
-  await pendingReconcile({ ctx, pi, cwd });
+  await pendingReconcile({ ctx, run: runWithNothingLoaded(), cwd });
+  await pendingReconcile({ ctx, run: runWithNothingLoaded(), cwd });
 
   // assert
   assert.deepStrictEqual(notifications, [expected, expected]);
@@ -744,10 +760,10 @@ test("NFR-5: naming retained trees never creates the workflows staging directory
   // created it on the way to answering "nothing is retained" would make a
   // documented no-write surface write.
   const { cwd, user } = await createHermeticScopes(t, "retained-absent");
-  const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 1);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
 
   // act
-  await pendingReconcile({ ctx, pi, cwd });
+  await pendingReconcile({ ctx, run: runWithNothingLoaded(), cwd });
 
   // assert
   assert.deepStrictEqual(notifications, [
@@ -765,10 +781,10 @@ test("WR-06: a staging directory that cannot be read leaves the command's own ou
   const { cwd, user } = await createHermeticScopes(t, "retained-unreadable");
   await mkdir(user.workflowsHomeDir, { recursive: true });
   await writeFile(user.workflowsStagingDir, "not a directory", "utf8");
-  const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 1);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
 
   // act
-  await pendingReconcile({ ctx, pi, cwd });
+  await pendingReconcile({ ctx, run: runWithNothingLoaded(), cwd });
 
   // assert
   assert.deepStrictEqual(notifications, [

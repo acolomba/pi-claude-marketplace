@@ -12,6 +12,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/settle.ts";
 import { parseMatcher } from "../../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
+import { createJsonCapture } from "../../edge/json-capture.ts";
 
 import type { HookExecutor } from "../../../extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts";
 import type { HookExecResult } from "../../../extensions/pi-claude-marketplace/bridges/hooks/exec-result.ts";
@@ -26,7 +27,7 @@ import type {
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
 const settledEvent = { type: "agent_settled" } as unknown as AgentSettledEvent;
-const emptyContext = {} as unknown as ExtensionContext;
+const emptyContext = { mode: "print" } as unknown as ExtensionContext;
 
 interface SendCall {
   readonly message: Record<string, unknown>;
@@ -41,6 +42,7 @@ interface NotifyCall {
 function makePi(sendError?: Error): { pi: ExtensionAPI; sent: SendCall[] } {
   const sent: SendCall[] = [];
   const pi = {
+    getAllTools: () => [],
     sendMessage: (message: unknown, options?: unknown): void => {
       if (sendError !== undefined) {
         throw sendError;
@@ -59,6 +61,7 @@ function makePi(sendError?: Error): { pi: ExtensionAPI; sent: SendCall[] } {
 function makeContext(): { ctx: ExtensionContext; notified: NotifyCall[] } {
   const notified: NotifyCall[] = [];
   const ctx = {
+    mode: "tui",
     ui: {
       notify: (text: string, severity?: "info" | "warning" | "error"): void => {
         notified.push({ text, severity });
@@ -139,6 +142,210 @@ async function runStop(
   const generation = runtime.currentGeneration();
   agentEndCacheHandler(runtime, generation)(agentEnd("stop"));
   await settleHandlerFor(runtime, generation, pi, executor)(settledEvent, ctx);
+}
+
+for (const scenario of [
+  { name: "json", mode: "json", failure: "none", emits: true },
+  { name: "rpc", mode: "rpc", failure: "none", emits: true },
+  { name: "append refusal", mode: "json", failure: "append", emits: true },
+  { name: "stale sink", mode: "rpc", failure: "sink", emits: false },
+  { name: "stale emission mode", mode: "json", failure: "mode", emits: false },
+]) {
+  test(`retains the shared Stop cap after ${scenario.name}`, async (t) => {
+    // arrange
+    const runtime = createHooksRuntime();
+    const capture = createJsonCapture();
+    const host = makePi();
+    const inventory = t.mock.fn(() => []);
+    let sinkReads = 0;
+    const pi = {
+      ...host.pi,
+      getAllTools: inventory,
+      get appendEntry(): ExtensionAPI["appendEntry"] {
+        sinkReads += 1;
+        if (scenario.failure === "sink") {
+          throw new Error("stale host");
+        }
+
+        return (customType, payload) => {
+          capture.entrySink.appendEntry(customType, payload);
+          if (scenario.failure === "append") {
+            throw new Error("entry unavailable before bind");
+          }
+        };
+      },
+    };
+    let modeReads = 0;
+    const ctx = {
+      get mode(): string {
+        modeReads += 1;
+        if (scenario.failure === "mode" && modeReads === 9) {
+          throw new Error("stale emission context");
+        }
+
+        return scenario.mode;
+      },
+      get ui() {
+        return capture.ui;
+      },
+    } as unknown as ExtensionContext;
+    const flags: boolean[] = [];
+    const executor: HookExecutor = (_entry, event) => {
+      flags.push((event as { stop_hook_active: boolean }).stop_hook_active);
+      return Promise.resolve(
+        flags.length % 2 === 0
+          ? { kind: "mutate", additionalContext: "more context" }
+          : { kind: "block", reason: "continue" },
+      );
+    };
+
+    runtime.setRoutingBucket("Stop", [stopEntry("alpha")]);
+
+    // act
+    for (let index = 0; index < 9; index += 1) {
+      await runStop(runtime, pi, ctx, executor);
+    }
+
+    await settleHandlerFor(runtime, runtime.currentGeneration(), pi, executor)(settledEvent, ctx);
+
+    // assert
+    assert.deepStrictEqual(
+      host.sent,
+      [
+        "continue",
+        "more context",
+        "continue",
+        "more context",
+        "continue",
+        "more context",
+        "continue",
+      ].map((content) => ({
+        message: {
+          customType: "claude-hook-stop-block",
+          content,
+          display: false,
+          details: { pluginId: "alpha" },
+        },
+        options: { deliverAs: "followUp", triggerTurn: true },
+      })),
+    );
+    assert.strictEqual(runtime.isStopHookActive(), true);
+    assert.deepStrictEqual(runtime.recordStopReentry(), { reenter: false, notifyCap: false });
+    assert.deepStrictEqual(
+      capture.entries,
+      scenario.emits
+        ? [
+            {
+              customType: "claude-plugin",
+              payload: {
+                schemaVersion: 1,
+                origin: { kind: "hook" },
+                kind: "stop-override-cap",
+                severity: "warning",
+                needsReload: false,
+                pluginId: "alpha",
+                cap: 8,
+              },
+            },
+          ]
+        : [],
+    );
+    assert.deepStrictEqual(flags, [false, true, true, true, true, true, true, true, true]);
+    assert.strictEqual(modeReads, 11);
+    assert.strictEqual(sinkReads, scenario.failure === "mode" ? 0 : 1);
+    assert.strictEqual(inventory.mock.callCount(), 27);
+    capture.assertValid();
+  });
+}
+
+for (const scenario of [
+  { name: "unsupported initial mode", stale: false },
+  { name: "stale initial mode", stale: true },
+]) {
+  test(`suppresses fresh Stop work for ${scenario.name}`, async (t) => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.setRoutingBucket("Stop", [stopEntry("alpha")]);
+    const capture = createJsonCapture();
+    const host = makePi();
+    const inventory = t.mock.fn(() => []);
+    const pi = { ...host.pi, getAllTools: inventory, appendEntry: capture.entrySink.appendEntry };
+    const ctx = {
+      get mode(): string {
+        if (scenario.stale) {
+          throw new Error("stale mode");
+        }
+
+        return "unknown";
+      },
+      get ui() {
+        return capture.ui;
+      },
+    } as unknown as ExtensionContext;
+    const executor = t.mock.fn<HookExecutor>(() =>
+      Promise.resolve({ kind: "block", reason: "continue" }),
+    );
+
+    // act
+    await runStop(runtime, pi, ctx, executor);
+    agentEndCacheHandler(runtime, runtime.currentGeneration())(failureEnd("error", "failure"));
+    await settleHandlerFor(runtime, runtime.currentGeneration(), pi, executor)(settledEvent, ctx);
+
+    // assert
+    assert.strictEqual(runtime.isStopHookActive(), false);
+    assert.deepStrictEqual(host.sent, []);
+    assert.deepStrictEqual(capture.entries, []);
+    assert.strictEqual(executor.mock.callCount(), 0);
+    assert.strictEqual(inventory.mock.callCount(), 0);
+    capture.assertValid();
+  });
+}
+
+for (const stopReason of [
+  "stop",
+  "error",
+  "length",
+  "pending",
+  "aborted",
+  "toolUse",
+  "deferred",
+] as const) {
+  for (const { failure, readMode } of [
+    { failure: "unknown mode", readMode: (): string => "unknown" },
+    {
+      failure: "throwing mode getter",
+      readMode: (): string => {
+        throw new Error("stale mode");
+      },
+    },
+  ]) {
+    test(`preserves the ${stopReason} assistant cache on ${failure}`, async () => {
+      // arrange
+      const runtime = createHooksRuntime();
+      const { pi, sent } = makePi();
+      const ending = agentEnd(stopReason);
+      const assistant = ending.messages[1];
+      assert.ok(assistant?.role === "assistant");
+      runtime.recordLastAssistant(assistant);
+      const context = new Proxy(emptyContext, {
+        get(target, property, receiver): unknown {
+          if (property === "mode") {
+            return readMode();
+          }
+
+          return Reflect.get(target, property, receiver);
+        },
+      });
+      const handler = settleHandlerFor(runtime, runtime.currentGeneration(), pi);
+
+      // act
+      await handler(settledEvent, context);
+
+      // assert
+      assert.strictEqual(runtime.takeLastAssistant(), assistant);
+      assert.deepStrictEqual(sent, []);
+    });
+  }
 }
 
 test("uses only the supplied runtime for Stop re-entry", async () => {

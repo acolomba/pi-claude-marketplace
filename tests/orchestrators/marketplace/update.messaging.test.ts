@@ -8,10 +8,11 @@ import {
   type UpdateRowMsg,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/update.messaging.ts";
 import { preparePluginUpdate } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts";
+import { composePluginLines } from "../../../extensions/pi-claude-marketplace/shared/notification-grammar.ts";
 import { seedUnconstrainedTarget } from "../plugin/seed-unconstrained-target.ts";
 
 import type { PluginUpdateOutcome } from "../../../extensions/pi-claude-marketplace/orchestrators/types.ts";
-import type { SoftDepStatus } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { ResolvedRow } from "../../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 
 void ({
   status: "updated",
@@ -42,7 +43,7 @@ void ({
 test("exports the complete marketplace update context in declared order", () => {
   // arrange
   const expectedContext = {
-    keys: ["Messaging", "render"],
+    keys: ["Messaging", "rowPolicies"],
     label: "Marketplace update",
     renderKeys: ["updated", "partially-installed", "skipped", "failed"],
   };
@@ -51,34 +52,33 @@ test("exports the complete marketplace update context in declared order", () => 
   const context = {
     keys: Object.keys(UPDATE_CONTEXT),
     label: UPDATE_CONTEXT.Messaging.label,
-    renderKeys: Object.keys(UPDATE_CONTEXT.render),
+    renderKeys: Object.keys(UPDATE_CONTEXT.rowPolicies),
   };
 
   // assert
   assert.deepStrictEqual(context, expectedContext);
 });
 
-test("renders an updated row with ordered reasons and both missing companions", () => {
+test("renders an updated row with its ordered resolved reasons", () => {
   // arrange
   const message = {
     status: "updated",
     name: "alpha",
     from: "hash-2ea95f85703d",
     to: "hash-1c3d9a0bbef1",
-    dependencies: ["agents", "mcp"],
     scope: "project",
-    reasons: ["orphan rewake", "malformed skill"],
+    reasons: [
+      "orphan rewake",
+      "malformed skill",
+      "requires pi-subagents",
+      "requires pi-mcp-adapter",
+    ],
     severity: "warning",
     needsReload: true,
-  } as const satisfies UpdateRowMsg;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: false,
-    piMcpAdapterLoaded: false,
-    workflowEngineLoaded: true,
-  };
+  } as const satisfies ResolvedRow<UpdateRowMsg>;
 
   // act
-  const row = UPDATE_CONTEXT.render.updated(message, probe, "user");
+  const row = composePluginLines(message, "user")[0]!.slice(2);
 
   // assert
   assert.equal(
@@ -90,34 +90,32 @@ test("renders an updated row with ordered reasons and both missing companions", 
     name: "alpha",
     from: "hash-2ea95f85703d",
     to: "hash-1c3d9a0bbef1",
-    dependencies: ["agents", "mcp"],
     scope: "project",
-    reasons: ["orphan rewake", "malformed skill"],
+    reasons: [
+      "orphan rewake",
+      "malformed skill",
+      "requires pi-subagents",
+      "requires pi-mcp-adapter",
+    ],
     severity: "warning",
     needsReload: true,
   });
 });
 
-test("renders a partially-installed row with a folded scope and MCP marker", () => {
+test("renders a partially-installed row with a folded scope and its resolved marker", () => {
   // arrange
   const message = {
     status: "partially-installed",
     name: "beta",
-    reasons: ["malformed command", "lsp"],
-    dependencies: ["mcp"],
+    reasons: ["malformed command", "lsp", "requires pi-mcp-adapter"],
     version: "2.0.0",
     scope: "user",
     severity: "warning",
     needsReload: true,
-  } as const satisfies UpdateRowMsg;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: true,
-    piMcpAdapterLoaded: false,
-    workflowEngineLoaded: true,
-  };
+  } as const satisfies ResolvedRow<UpdateRowMsg>;
 
   // act
-  const row = UPDATE_CONTEXT.render["partially-installed"](message, probe, "user");
+  const row = composePluginLines(message, "user")[0]!.slice(2);
 
   // assert
   assert.equal(
@@ -127,8 +125,7 @@ test("renders a partially-installed row with a folded scope and MCP marker", () 
   assert.deepStrictEqual(message, {
     status: "partially-installed",
     name: "beta",
-    reasons: ["malformed command", "lsp"],
-    dependencies: ["mcp"],
+    reasons: ["malformed command", "lsp", "requires pi-mcp-adapter"],
     version: "2.0.0",
     scope: "user",
     severity: "warning",
@@ -146,15 +143,10 @@ test("renders a skipped row without failure-only metadata", () => {
     scope: "project",
     severity: "warning",
     needsReload: false,
-  } as const satisfies UpdateRowMsg;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: false,
-    piMcpAdapterLoaded: false,
-    workflowEngineLoaded: true,
-  };
+  } as const satisfies ResolvedRow<UpdateRowMsg>;
 
   // act
-  const row = UPDATE_CONTEXT.render.skipped(message, probe, "user");
+  const row = composePluginLines(message, "user")[0]!.slice(2);
 
   // assert
   assert.equal(row, "⊘ gamma [project] v3.0.0 (skipped) {not installed, concurrently uninstalled}");
@@ -167,32 +159,35 @@ test("renders a skipped row without failure-only metadata", () => {
     severity: "warning",
     needsReload: false,
   });
-  assert.equal(Object.hasOwn(message, "cause"), false);
+  assert.equal(Object.hasOwn(message, "failure"), false);
 });
 
-test("renders a failed row while preserving cause and rollback metadata", () => {
+test("renders a failed row while preserving its failure detail", () => {
   // arrange
-  const cause = new Error("update failed");
-  const rollbackCause = new Error("remove staged agent failed");
+  const failure = {
+    cause: { causeChain: ["update failed"], truncated: false },
+    leaks: [],
+    rollbackPartial: [
+      {
+        phase: "agents",
+        cause: { causeChain: ["remove staged agent failed"], truncated: false },
+      },
+      { phase: "hooks" },
+    ],
+  };
   const message = {
     status: "failed",
     name: "delta",
     reasons: ["rollback partial"],
     version: "4.0.0",
     scope: "project",
-    cause,
-    rollbackPartial: [{ phase: "agents", cause: rollbackCause }, { phase: "hooks" }],
+    failure,
     severity: "error",
     needsReload: false,
-  } as const satisfies UpdateRowMsg;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: true,
-    piMcpAdapterLoaded: true,
-    workflowEngineLoaded: true,
-  };
+  } as const satisfies ResolvedRow<UpdateRowMsg>;
 
   // act
-  const row = UPDATE_CONTEXT.render.failed(message, probe, "user");
+  const row = composePluginLines(message, "user")[0]!.slice(2);
 
   // assert
   assert.equal(row, "⊘ delta [project] v4.0.0 (failed) {rollback partial}");
@@ -202,12 +197,10 @@ test("renders a failed row while preserving cause and rollback metadata", () => 
     reasons: ["rollback partial"],
     version: "4.0.0",
     scope: "project",
-    cause,
-    rollbackPartial: [{ phase: "agents", cause: rollbackCause }, { phase: "hooks" }],
+    failure,
     severity: "error",
     needsReload: false,
   });
-  assert.equal(Object.hasOwn(message.rollbackPartial[1], "cause"), false);
 });
 
 test("projects a clean updated outcome with dependency order and optional reason omission", () => {
@@ -1027,5 +1020,18 @@ test("classifies an unknown failure note as an unreadable manifest", () => {
     reasons: ["unreadable manifest"],
     severity: "error",
     needsReload: false,
+  });
+});
+
+test("UPDATE_CONTEXT declares complete row policies", () => {
+  // act
+  const policies = UPDATE_CONTEXT.rowPolicies;
+
+  // assert
+  assert.deepStrictEqual(policies, {
+    updated: { markers: true, contentReasons: true },
+    "partially-installed": { markers: true, contentReasons: true },
+    skipped: { markers: false, contentReasons: true },
+    failed: { markers: false, contentReasons: true },
   });
 });

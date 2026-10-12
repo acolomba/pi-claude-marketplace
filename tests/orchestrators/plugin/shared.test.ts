@@ -39,19 +39,16 @@ import {
   CrossPluginConflictError,
   MarketplaceNotFoundError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
-import { type PluginSkippedMessage } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
-import { expectSoftDepProbes } from "../../edge/notification-boundary.ts";
+import { createJsonCapture } from "../../edge/json-capture.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type { PluginEntry } from "../../../extensions/pi-claude-marketplace/domain/components/plugin.ts";
 import type { MaterializablePlugin } from "../../../extensions/pi-claude-marketplace/domain/resolver-types.ts";
 import type { ScopeConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import type {
-  ExtensionAPI,
-  ExtensionContext,
-} from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { ExtensionContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { CommandContext } from "../../../extensions/pi-claude-marketplace/shared/notify-context.ts";
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 
@@ -171,16 +168,14 @@ async function saveScopedState(
  */
 function makeRecordingBoundary(notifications: { message: string; severity?: string }[]): {
   readonly ctx: ExtensionContext;
-  readonly pi: ExtensionAPI;
 } {
   const ui = {
     notify(message: string, severity?: string) {
       notifications.push(severity === undefined ? { message } : { message, severity });
     },
   } as unknown as ExtensionContext["ui"];
-  const ctx = { ui } as ExtensionContext;
-  const pi = { getAllTools: () => [] } as unknown as ExtensionAPI;
-  return { ctx, pi };
+  const ctx = { mode: "tui", ui } as ExtensionContext;
+  return { ctx };
 }
 
 async function writeConfig(filePath: string, config: ScopeConfig): Promise<void> {
@@ -2093,12 +2088,11 @@ describe("emitMarketplaceNotAdded", () => {
   test("returns a complete orchestrated failure across both scopes", () => {
     // arrange
     const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
-    const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
 
     // act
     const failure = emitMarketplaceNotAdded({
       ctx,
-      pi,
+      run: runWithNothingLoaded(),
       marketplace: "ghost",
       requestedScope: undefined,
       orchestrated: true,
@@ -2113,18 +2107,16 @@ describe("emitMarketplaceNotAdded", () => {
     assert.equal(failure.cause, 'Marketplace "ghost" not found in project, user scopes.');
     assert.deepStrictEqual(Object.keys(failure), ["status", "reason", "error", "cause"]);
     verify(ctx);
-    verify(pi);
   });
 
   test("returns a complete orchestrated failure for the requested scope", () => {
     // arrange
     const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
-    const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
 
     // act
     const failure = emitMarketplaceNotAdded({
       ctx,
-      pi,
+      run: runWithNothingLoaded(),
       marketplace: "ghost",
       requestedScope: "project",
       orchestrated: true,
@@ -2139,15 +2131,15 @@ describe("emitMarketplaceNotAdded", () => {
     assert.equal(failure.cause, 'Marketplace "ghost" not found in project scope.');
     assert.deepStrictEqual(Object.keys(failure), ["status", "reason", "error", "cause"]);
     verify(ctx);
-    verify(pi);
   });
 
   test("emits the exact scoped standalone row and still answers with the typed failure", () => {
     // arrange
     const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
     const ui = mock<ExtensionContext["ui"]>({ exactParams: true, name: "extension UI" });
-    const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
-    expectSoftDepProbes(pi, 1);
+    when(() => ctx.mode)
+      .thenReturn("tui")
+      .once();
     when(() => ctx.ui)
       .thenReturn(ui)
       .once();
@@ -2163,7 +2155,7 @@ describe("emitMarketplaceNotAdded", () => {
     // act
     const failure = emitMarketplaceNotAdded({
       ctx,
-      pi,
+      run: runWithNothingLoaded(),
       marketplace: "ghost",
       requestedScope: "user",
       orchestrated: false,
@@ -2178,15 +2170,15 @@ describe("emitMarketplaceNotAdded", () => {
     assert.deepStrictEqual(failure.error.scopes, ["user"]);
     verify(ctx);
     verify(ui);
-    verify(pi);
   });
 
   test("emits the exact unscoped standalone row when both scopes miss", () => {
     // arrange
     const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
     const ui = mock<ExtensionContext["ui"]>({ exactParams: true, name: "extension UI" });
-    const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
-    expectSoftDepProbes(pi, 1);
+    when(() => ctx.mode)
+      .thenReturn("tui")
+      .once();
     when(() => ctx.ui)
       .thenReturn(ui)
       .once();
@@ -2202,7 +2194,7 @@ describe("emitMarketplaceNotAdded", () => {
     // act
     const failure = emitMarketplaceNotAdded({
       ctx,
-      pi,
+      run: runWithNothingLoaded(),
       marketplace: "ghost",
       requestedScope: undefined,
       orchestrated: false,
@@ -2215,30 +2207,23 @@ describe("emitMarketplaceNotAdded", () => {
     assert.deepStrictEqual(failure.error.scopes, ["project", "user"]);
     verify(ctx);
     verify(ui);
-    verify(pi);
   });
 });
 
 describe("emitMarketplaceNotAddedSignal", () => {
   test("renders the plugin row when nothing of the container is installed at the named scope", async () => {
     // arrange
-    const renderedRows: PluginSkippedMessage[] = [];
     const context = {
       Messaging: { label: "Plugin reinstall" },
-      render: {
-        skipped: (row) => {
-          renderedRows.push(row);
-          return `⊘ ${row.name} (skipped)`;
-        },
-      },
-    } satisfies CommandContext<"skipped", PluginSkippedMessage>;
+      rowPolicies: { skipped: { markers: false, contentReasons: true } },
+    } satisfies CommandContext<"skipped">;
     const notifications: { message: string; severity?: string }[] = [];
-    const { ctx, pi } = makeRecordingBoundary(notifications);
+    const { ctx } = makeRecordingBoundary(notifications);
 
     // act
     await emitMarketplaceNotAddedSignal({
       ctx,
-      pi,
+      run: runWithNothingLoaded(),
       cwd: "/work/project",
       context,
       cardinality: "plural",
@@ -2246,21 +2231,15 @@ describe("emitMarketplaceNotAddedSignal", () => {
     });
 
     // assert
-    assert.deepStrictEqual(renderedRows, [
-      {
-        status: "skipped",
-        name: "hello",
-        reasons: ["not installed", "marketplace in user scope"],
-        severity: "error",
-        needsReload: false,
-      },
-    ]);
+    assert.deepStrictEqual(context.rowPolicies, {
+      skipped: { markers: false, contentReasons: true },
+    });
     assert.deepStrictEqual(notifications, [
       {
         message:
           "A plugin operation has failed.\n\n" +
           "● mp [project]\n" +
-          "  ⊘ hello (skipped)\n\n" +
+          "  ⊘ hello (skipped) {not installed, marketplace in user scope}\n\n" +
           "Plugin reinstall: 1 failure",
         severity: "error",
       },
@@ -2272,17 +2251,15 @@ describe("emitMarketplaceNotAddedSignal", () => {
       // arrange
       const context = {
         Messaging: { label: "Plugin reinstall" },
-        render: {
-          skipped: (row) => `⊘ ${row.name} (skipped)`,
-        },
-      } satisfies CommandContext<"skipped", PluginSkippedMessage>;
+        rowPolicies: { skipped: { markers: false, contentReasons: false } },
+      } satisfies CommandContext<"skipped">;
       const notifications: { message: string; severity?: string }[] = [];
-      const { ctx, pi } = makeRecordingBoundary(notifications);
+      const { ctx } = makeRecordingBoundary(notifications);
 
       // act
       await emitMarketplaceNotAddedSignal({
         ctx,
-        pi,
+        run: runWithNothingLoaded(),
         cwd,
         context,
         cardinality: "single",
@@ -2331,13 +2308,63 @@ describe("splitStagingWarnings", () => {
 });
 
 describe("surfaceDiscoveryWarnings", () => {
+  for (const mode of ["json", "rpc"]) {
+    test(`preserves redacted discovery lines and the parent sink in ${mode}`, () => {
+      // arrange
+      const capture = createJsonCapture();
+      const ctx = {
+        mode,
+        get ui() {
+          return capture.ui;
+        },
+      };
+      const run = { ...runWithNothingLoaded(), entrySink: capture.entrySink };
+
+      // act
+      surfaceDiscoveryWarnings(ctx, run, {
+        plugin: "alpha",
+        verb: "installed",
+        warnings: [
+          "Could not read /private/plugin/skills/alpha-skill",
+          "fetch with Bearer abc.def failed",
+          "fetch with Bearer abc.def failed",
+        ],
+      });
+
+      // assert
+      assert.deepStrictEqual(capture.entries, [
+        {
+          customType: "claude-plugin",
+          payload: {
+            schemaVersion: 1,
+            origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+            kind: "diagnostic",
+            severity: "warning",
+            needsReload: false,
+            header: 'Plugin "alpha" installed; 3 declared components have notes.',
+            lines: [
+              "Could not read alpha-skill",
+              "fetch with Bearer *** failed",
+              "fetch with Bearer *** failed",
+            ],
+          },
+        },
+      ]);
+      capture.assertValid();
+    });
+  }
+
   // eslint-disable-next-line sonarjs/assertions-in-tests -- Explicit strong-mock verify calls assert the complete notification interaction.
   test("does not notify when no discovery warning exists", () => {
     // arrange
     const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
 
     // act
-    surfaceDiscoveryWarnings(ctx, { plugin: "alpha", verb: "installed", warnings: [] });
+    surfaceDiscoveryWarnings(ctx, runWithNothingLoaded(), {
+      plugin: "alpha",
+      verb: "installed",
+      warnings: [],
+    });
 
     // assert
     verify(ctx);
@@ -2348,6 +2375,9 @@ describe("surfaceDiscoveryWarnings", () => {
     // arrange
     const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
     const ui = mock<ExtensionContext["ui"]>({ exactParams: true, name: "extension UI" });
+    when(() => ctx.mode)
+      .thenReturn("tui")
+      .once();
     when(() => ctx.ui)
       .thenReturn(ui)
       .once();
@@ -2361,7 +2391,7 @@ describe("surfaceDiscoveryWarnings", () => {
       .once();
 
     // act
-    surfaceDiscoveryWarnings(ctx, {
+    surfaceDiscoveryWarnings(ctx, runWithNothingLoaded(), {
       plugin: "alpha",
       verb: "installed",
       warnings: ["Could not read /private/plugin/skills/alpha-skill"],
@@ -2377,6 +2407,9 @@ describe("surfaceDiscoveryWarnings", () => {
     // arrange
     const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
     const ui = mock<ExtensionContext["ui"]>({ exactParams: true, name: "extension UI" });
+    when(() => ctx.mode)
+      .thenReturn("tui")
+      .once();
     when(() => ctx.ui)
       .thenReturn(ui)
       .once();
@@ -2390,7 +2423,7 @@ describe("surfaceDiscoveryWarnings", () => {
       .once();
 
     // act
-    surfaceDiscoveryWarnings(ctx, {
+    surfaceDiscoveryWarnings(ctx, runWithNothingLoaded(), {
       plugin: "alpha",
       verb: "updated",
       warnings: ["first warning", "second warning"],

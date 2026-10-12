@@ -44,7 +44,7 @@
 //        - per-plugin data dirs (always)
 //        - marketplace data dir + clone dir (github/url sources; ONLY when failedPlugins.length === 0; MR-7)
 //        - cleanup failures are SWALLOWED silently per D-18-01.
-//   4. Compose user-visible output via one `notify(opts.ctx, opts.pi, ...)` call.
+//   4. Compose user-visible output via one `notify(opts.ctx, opts.run, ...)` call.
 //
 // D-02: hand-rolled try/catch loop (NOT the phase-ledger runner).
 // D-03 corollary: per-plugin order mirrors PU-1 (skills → commands → agents → MCP).
@@ -87,9 +87,10 @@ import {
 } from "./shared.ts";
 
 import type { ScopedLocations } from "../../persistence/locations.ts";
-import type { NotificationContext, PiInventory } from "../../platform/pi-api.ts";
+import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
-import type { McpConfigNotice } from "../../shared/notification-dispatch.ts";
+import type { NotificationRun } from "../../shared/notification-run.ts";
+import type { McpConfigNotice } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 
 type RecordedSourceKind = "github" | "url" | "path" | "unknown";
@@ -167,10 +168,11 @@ export type RemoveMarketplaceOutcome =
 export interface RemoveMarketplaceOptions {
   readonly ctx: NotificationContext;
   /**
-   * Factory `pi` reference -- carries `getAllTools()` and `getCommands()` for the
-   * soft-dependency probes (RH-5, ADET-02, WDEP-01).
+   * D-05 / D-07: the command's run, or the load pass's run when reconcile
+   * drives the removal. Every emission renders from its soft-dependency
+   * snapshot.
    */
-  readonly pi: PiInventory;
+  readonly run: NotificationRun;
   readonly name: string;
   /** Lifecycle-owned completion cache shared with the command's readers. */
   readonly completionCache: CompletionCache;
@@ -361,8 +363,8 @@ function emitPartialFailure(args: {
         ],
       },
     ];
-    notifyWithContext(opts.ctx, opts.pi, REMOVE_CONTEXT, partialRows, undefined, "single");
-    notifyMcpConfigNotices(opts.ctx, mcpConfigNotices);
+    notifyWithContext(opts.ctx, opts.run, REMOVE_CONTEXT, partialRows, undefined, "single");
+    notifyMcpConfigNotices(opts.ctx, opts.run, mcpConfigNotices);
   }
 
   return outcome;
@@ -652,7 +654,7 @@ function surfaceCfgInvalid(args: {
         plugins: [],
       },
     ];
-    notifyWithContext(opts.ctx, opts.pi, REMOVE_CONTEXT, invalidManifestRows, undefined, "single");
+    notifyWithContext(opts.ctx, opts.run, REMOVE_CONTEXT, invalidManifestRows, undefined, "single");
   }
 
   return outcome;
@@ -839,7 +841,7 @@ async function runRemoveOutcome(
     );
   } catch (err) {
     if (err !== cfgInvalidSentinel) {
-      rethrowWithMcpConfigNotices(err, opts.ctx, orchestrated, mcpConfigNotices);
+      rethrowWithMcpConfigNotices(err, opts, orchestrated, mcpConfigNotices);
     }
 
     return surfaceCfgInvalid({
@@ -861,10 +863,10 @@ async function runRemoveOutcome(
   });
 
   // One MarketplaceNotificationMessage per outcome, emitted via one
-  // notify(opts.ctx, opts.pi, ...) call; `plugins[]` carries one
+  // notify(opts.ctx, opts.run, ...) call; `plugins[]` carries one
   // PluginUninstalledMessage per successfully unstaged plugin (D-22-02).
-  // Per-plugin `PluginFailedMessage.cause` renders at 4-space indent via
-  // renderPluginRow. There is no marketplace-level cause-chain trailer.
+  // Per-plugin `PluginFailedMessage.cause` renders at 4-space indent under its
+  // row. There is no marketplace-level cause-chain trailer.
   // - No retry anchor is emitted per D-17-09.
   // - Severity (error on partial, info on clean) is computed by notify()
   // ; the `/reload to pick up changes` trailer is computed per
@@ -884,7 +886,7 @@ async function runRemoveOutcome(
 
   if (!orchestrated) {
     emitCleanRemoval(opts, resolved.scope, successfullyUnstaged);
-    notifyMcpConfigNotices(opts.ctx, mcpConfigNotices);
+    notifyMcpConfigNotices(opts.ctx, opts.run, mcpConfigNotices);
   }
 
   return {
@@ -903,7 +905,7 @@ async function runRemoveOutcome(
  */
 function rethrowWithMcpConfigNotices(
   err: unknown,
-  ctx: NotificationContext,
+  opts: Pick<RemoveMarketplaceOptions, "ctx" | "run">,
   orchestrated: boolean,
   notices: readonly McpConfigNotice[],
 ): never {
@@ -915,7 +917,7 @@ function rethrowWithMcpConfigNotices(
     throw new MarketplaceRemoveFailureError(notices, { cause: err });
   }
 
-  notifyMcpConfigNotices(ctx, notices);
+  notifyMcpConfigNotices(opts.ctx, opts.run, notices);
   throw err;
 }
 
@@ -951,5 +953,5 @@ function emitCleanRemoval(
       })),
     },
   ];
-  notifyWithContext(opts.ctx, opts.pi, REMOVE_CONTEXT, removedRows, undefined, "single");
+  notifyWithContext(opts.ctx, opts.run, REMOVE_CONTEXT, removedRows, undefined, "single");
 }

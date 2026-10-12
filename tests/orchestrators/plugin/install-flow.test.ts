@@ -66,12 +66,13 @@ import {
 } from "../../../extensions/pi-claude-marketplace/transaction/phase-ledger.ts";
 import { withLockedStateTransaction } from "../../../extensions/pi-claude-marketplace/transaction/with-state-guard.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
+import { createJsonCapture } from "../../edge/json-capture.ts";
 import { createNotificationBoundary } from "../../edge/notification-boundary.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { captureDebugLog } from "../../platform/debug-log-capture.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
-import { adapterCommand, toolInventoryItem } from "../../platform/pi-inventory-seed.ts";
+import { runWithNothingLoaded, runWithSoftDeps } from "../../shared/notification-run-seeds.ts";
 
 import { retryTree } from "./scope-tree-inventory.ts";
 
@@ -87,11 +88,11 @@ import type { InstallFailureCapture } from "../../../extensions/pi-claude-market
 import type { MarketplaceTagProbeOptions } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/marketplace-tag-probe.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type {
-  CommandInventoryItem,
   NotificationContext,
-  PiInventory,
+  SoftDepStatus,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { CompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import type { NotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 import type { TestContext } from "node:test";
 
@@ -273,8 +274,8 @@ function retryStagingMkdirPrefix(stagingDir: string): string {
 //   PI-8: atomic staging + cleanup warnings (skills bridge cleanup-leak fold).
 //   PI-9: 7-phase ordering + rollback on phase-N failure (end-state assertion).
 //   PI-10: ${CLAUDE_PLUGIN_ROOT} substitution observable in staged skill body.
-//   PI-11: subagents warning -- pi.getAllTools returns no "subagent" -> warning.
-//   PI-12: mcp-adapter warning -- no `mcp-adapter` command (ADET-02) -> warning.
+//   PI-11: subagents warning -- the run reports pi-subagents unloaded -> warning.
+//   PI-12: mcp-adapter warning -- the run reports pi-mcp-adapter unloaded -> warning.
 //   PI-13: dependencies declaration -> manual-install note appended to body.
 //   PI-14: PathContainmentError bypass -- verbatim message, NO rollback partial.
 //   PI-15: concurrent install (state pre-seeded) -> ConcurrentInstallError path
@@ -289,27 +290,27 @@ interface NotifyRecord {
   severity?: string;
 }
 
-function makeCtx(piOverrides?: {
-  readonly toolNames?: readonly string[];
-  readonly commands?: readonly CommandInventoryItem[];
-}): {
+function makeCtx(loaded?: Partial<SoftDepStatus>): {
   ctx: NotificationContext;
-  pi: PiInventory;
+  run: NotificationRun;
   notifications: NotifyRecord[];
 } {
   const notifications: NotifyRecord[] = [];
   const ctx = {
+    mode: "tui",
     ui: {
       notify(message: string, severity?: string): void {
         notifications.push(severity === undefined ? { message } : { message, severity });
       },
     },
   };
-  const pi: PiInventory = {
-    getAllTools: () => (piOverrides?.toolNames ?? []).map(toolInventoryItem),
-    getCommands: () => piOverrides?.commands ?? [],
-  };
-  return { ctx, pi, notifications };
+  const run = runWithSoftDeps({
+    piSubagentsLoaded: false,
+    piMcpAdapterLoaded: false,
+    workflowEngineLoaded: false,
+    ...loaded,
+  });
+  return { ctx, run, notifications };
 }
 
 async function withHermeticHome<T>(fn: (owner: InstallTestOwner) => Promise<T>): Promise<T> {
@@ -891,11 +892,11 @@ test("PI-3: plugin name not in marketplace plugins[] -> V2 failed/{not in manife
         pluginName: "real-plugin",
       });
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       const cacheDrops = observeCompletionDrops(t, completionCache);
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -937,11 +938,11 @@ test("ATTR-01 / M1: marketplace itself absent -> standalone {marketplace not add
       // project->user fallback also misses, install re-attributes the failure
       // to the MARKETPLACE subject via the canonical `MarketplaceNotAddedMessage` variant
       // (ATTR-01 / ATTR-08 split), NOT `{not in manifest}` on a plugin row.
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       const cacheDrops = observeCompletionDrops(t, completionCache);
       const outcome = await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "ghost-mp",
@@ -974,10 +975,10 @@ test("Orchestrated ATTR-01 / M1: marketplace absent in orchestrated mode -> fail
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-orch-m1-"));
     try {
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       const outcome = await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "ghost-mp",
@@ -1017,10 +1018,10 @@ test("PI-4: unsupported source (npm) -> V2 unavailable/{unsupported source}", as
         rawSourceOverride: { source: "npm", package: "some-pkg" },
       });
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -1067,10 +1068,10 @@ test("PI-5: state already has plugin record -> V2 failed/{already installed}", a
         preInstall: true,
       });
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -1126,10 +1127,10 @@ test("PI-6: generated skill name collides with another plugin's existing skill -
         },
       });
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -1170,7 +1171,7 @@ test("AGENT-01: fresh install preserves prefixed and unprefixed agent identities
           { sourceName: "reviewer", description: "Reviewer", body: "Short body.\n" },
         ],
       });
-      const { ctx, pi, notifications } = makeCtx({ toolNames: ["subagent"] });
+      const { ctx, run, notifications } = makeCtx({ piSubagentsLoaded: true });
       const expectedAgents = [
         {
           sourceName: "hello-reviewer",
@@ -1189,7 +1190,7 @@ test("AGENT-01: fresh install preserves prefixed and unprefixed agent identities
       // act
       const outcome = await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -1274,12 +1275,12 @@ test("PDEF-01: install preview detects an agent conflict from a later resolved d
         },
       });
 
-      const { ctx, pi, notifications } = makeCtx({ toolNames: ["subagent"] });
+      const { ctx, run, notifications } = makeCtx({ piSubagentsLoaded: true });
 
       // act
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -1336,12 +1337,12 @@ test("PDEF-01: install stages every agent directory and warns on a later duplica
         `agent source "shared" at "${path.join(conventionalAgentsDir, "shared-later.md")}" duplicates generated name ` +
         '"pi-claude-marketplace-hello-shared" already produced by agent source "shared" at ' +
         `"${path.join(conventionalAgentsDir, "..", "declared-agents", "shared-first.md")}"; keeping first discovered source.`;
-      const { ctx, pi, notifications } = makeCtx({ toolNames: ["subagent"] });
+      const { ctx, run, notifications } = makeCtx({ piSubagentsLoaded: true });
 
       // act
       const outcome = await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -1402,10 +1403,10 @@ test("PI-7 (a): entry.version present, plugin.json version absent -> recorded st
         skills: [{ sourceName: "tool" }],
       });
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -1442,10 +1443,10 @@ test("PI-7 (b): entry.version absent, plugin.json version absent -> recorded sta
         skills: [{ sourceName: "tool" }],
       });
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -1485,10 +1486,10 @@ test("SNM-34: plugin.json version present, entry.version absent -> recorded stat
         skills: [{ sourceName: "tool" }],
       });
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -1557,10 +1558,10 @@ for (const site of DFEN_DECLARATION_SITES) {
           ...site.seedKnob,
         });
 
-        const { ctx, pi, notifications } = makeCtx();
+        const { ctx, run, notifications } = makeCtx();
         await installPlugin({
           ctx,
-          pi,
+          run,
           scope: "project",
           cwd,
           marketplace: "mp",
@@ -1662,14 +1663,14 @@ test("OUT-04 / D-102-07 / ENBL-15: the install-disabled row is ONE info emission
         mcpServers: { server1: { command: "node", args: ["server.js"] } },
       });
 
-      // ENBL-15 / D-100-06: BOTH companion extensions report UNLOADED. If the
-      // `disabled` render arm ever threaded the real soft-dep flags instead of
-      // hard-coding them false, this fixture is the one that would emit
+      // ENBL-15 / D-100-06: BOTH companion extensions report UNLOADED. If
+      // install's `disabled` row policy ever turned markers on, this fixture is
+      // the one that would emit
       // `{requires pi-subagents, requires pi-mcp-adapter}` and fail below.
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -1733,10 +1734,10 @@ test("OUT-04 / D-102-10: the enable hint is a frozen, non-interpolating trailer 
         skills: [{ sourceName: "tool" }],
       });
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "acme-registry",
@@ -1777,10 +1778,10 @@ test("OUT-04 / D-102-10: an ordinary successful install carries no enable-hint t
         skills: [{ sourceName: "tool" }],
       });
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -1821,10 +1822,10 @@ test("OUT-04 / WARN-01 / FSTAT-07: the install-disabled row names the degradatio
         experimental: { themes: "./themes", monitors: "./monitors.json" },
       });
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -2086,10 +2087,10 @@ for (const precedence of DFEN_PRECEDENCE_CASES) {
           );
         }
 
-        const { ctx, pi, notifications } = makeCtx();
+        const { ctx, run, notifications } = makeCtx();
         await installPlugin({
           ctx,
-          pi,
+          run,
           scope: "project",
           cwd,
           marketplace: "mp",
@@ -2170,7 +2171,7 @@ for (const precedence of DFEN_PRECEDENCE_CASES) {
           const reload = makeCtx();
           await applyReconcile({
             ctx: reload.ctx,
-            pi: reload.pi,
+            run: runWithNothingLoaded(),
             cwd,
             scope: "project",
             completionCache: createCompletionCache(),
@@ -2259,10 +2260,10 @@ test("DFEN-08: a declared-true entry and a silent entry render identical install
       // seeded -- because a stated value short-circuits the install's own gate
       // and would collapse the three arms onto one outcome.
       const install = async (plugin: string): Promise<NotifyRecord[]> => {
-        const run = makeCtx();
+        const session = makeCtx();
         await installPlugin({
-          ctx: run.ctx,
-          pi: run.pi,
+          ctx: session.ctx,
+          run: session.run,
           scope: "project",
           cwd,
           marketplace: "mp",
@@ -2270,10 +2271,10 @@ test("DFEN-08: a declared-true entry and a silent entry render identical install
           applyDefaultEnabled: true,
         });
         assert.deepEqual(
-          run.notifications.filter((n) => n.severity === "error"),
+          session.notifications.filter((n) => n.severity === "error"),
           [],
         );
-        return run.notifications;
+        return session.notifications;
       };
 
       const alphaNotifications = await install("alpha");
@@ -2404,10 +2405,10 @@ test("D-103-16 / DFEN-06 / CFG-02: a locally-declared install stamps the LOCAL f
         locations.scopeRoot,
       );
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -2486,7 +2487,7 @@ test("D-103-16 / DFEN-06 / CFG-02: the reload after a locally-declared install p
       const install = makeCtx();
       await installPlugin({
         ctx: install.ctx,
-        pi: install.pi,
+        run: install.run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -2503,7 +2504,7 @@ test("D-103-16 / DFEN-06 / CFG-02: the reload after a locally-declared install p
       const reload = makeCtx();
       await applyReconcile({
         ctx: reload.ctx,
-        pi: reload.pi,
+        run: runWithNothingLoaded(),
         cwd,
         scope: "project",
         completionCache: createCompletionCache(),
@@ -2567,10 +2568,10 @@ test("D-102-03: an install that does not opt in ignores defaultEnabled and lands
         commands: [{ sourceName: "deploy" }],
       });
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -2645,10 +2646,10 @@ test("T-102-01: an install-disabled plugin gets no hooks routing entry and no on
         throw new Error("post-save routing removal denied");
       });
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -2693,10 +2694,10 @@ test("T-102-01: the same hooks fixture installed ENABLED does get its routing en
         },
       });
 
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -2788,11 +2789,11 @@ test("D-102-02 / NFR-3: a disable cascade that throws reports failure and leaves
         }),
       );
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       const cacheDrops = observeCompletionDrops(t, completionCache);
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -2898,10 +2899,10 @@ test("PI-9: happy-path install lands skills + commands + agents + mcp + state in
         mcpServers: { server1: { command: "node", args: ["server.js"] } },
       });
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -2937,10 +2938,10 @@ test("PI-9: happy-path install lands skills + commands + agents + mcp + state in
       assert.deepEqual([...record.resources.mcpServers], ["server1"]);
 
       // V2 byte form matches `docs/output-catalog.md` (`success-with-soft-dep`):
-      // the default `makeCtx()` mocks pi without `subagent` or `mcp` tools so
-      // both companion extensions are unloaded; the renderer emits both per-row
-      // soft-dep markers from `dependencies: ["agents", "mcp"]` + the threaded
-      // probe per D-16-14 / D-16-15. The fixture seeds version 1.0.0.
+      // the default `makeCtx()` run reports both companion extensions unloaded;
+      // the renderer emits both per-row soft-dep markers from
+      // `dependencies: ["agents", "mcp"]` + the run's snapshot per D-16-14 /
+      // D-16-15. The fixture seeds version 1.0.0.
       // PluginInstalledMessage triggers the reload-hint structurally per D-16-12.
       // SEV-01: both declared companions are unloaded, so the success row stamps
       // warning -- the cascade gains the `needs attention` summary line.
@@ -2980,9 +2981,9 @@ test("AFILE-01: install writes the plugin's marked entries into project mcp-adap
         '﻿{\n  // user settings\n  "settings": { "toolPrefix": "short" },\n  "mcpServers": {\n    "mine": { "command": "my-server" },\n  },\n}\n',
       );
       const dataDir = path.join(locations.dataRoot, "mp", "hello");
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
-      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+      await installPlugin({ ctx, run, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
 
       assert.equal(
         await readFile(adapterPath, "utf8"),
@@ -3046,12 +3047,12 @@ test("ANAME-01: install writes Claude Code server keys that the global toolPrefi
       await mkdir(path.dirname(adapterPath), { recursive: true });
       await writeFile(adapterPath, '{"settings":{"toolPrefix":"short"}}\n');
       const dataDir = path.join(locations.dataRoot, "mp", "my.plugin");
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -3152,10 +3153,10 @@ test("ANAME-07 / D-08-04: install writes Claude servers through the closed adapt
       });
       const adapterPath = path.join(cwd, ".pi", "mcp-adapter.json");
       const dataDir = path.join(locations.dataRoot, "mp", "hello");
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
-      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+      await installPlugin({ ctx, run, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
 
       // assert
       assert.equal(
@@ -3228,10 +3229,10 @@ test("ANAME-07: a normal install of a plugin with a ws server refuses with {unsu
           local: { command: "node" },
         },
       });
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
-      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+      await installPlugin({ ctx, run, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
 
       // assert
       assert.deepStrictEqual(
@@ -3274,12 +3275,12 @@ test("ANAME-07: --partial installs every server except the blocked one", async (
       });
       const adapterPath = path.join(cwd, ".pi", "mcp-adapter.json");
       const dataDir = path.join(locations.dataRoot, "mp", "hello");
-      const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
+      const { ctx, run, notifications } = makeCtx({ piMcpAdapterLoaded: true });
 
       // act
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -3353,12 +3354,12 @@ test("ANAME-03: a plugin tool-name prefix past 128 characters installs with no l
         mcpServers: { [serverName]: { command: "node" } },
       });
       const adapterPath = path.join(cwd, ".pi", "mcp-adapter.json");
-      const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
+      const { ctx, run, notifications } = makeCtx({ piMcpAdapterLoaded: true });
 
       // act
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -3410,12 +3411,12 @@ test("ANAME-07: a server Claude Code's schema rejects makes the plugin unavailab
           live: { type: "ws", url: "wss://mcp.example.com/ws" },
         },
       });
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -3474,10 +3475,17 @@ for (const { title, descriptions, description } of [
           },
         });
         const adapterPath = path.join(cwd, ".pi", "mcp-adapter.json");
-        const { ctx, pi } = makeCtx();
+        const { ctx, run } = makeCtx();
 
         // act
-        await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+        await installPlugin({
+          ctx,
+          run,
+          scope: "project",
+          cwd,
+          marketplace: "mp",
+          plugin: "hello",
+        });
 
         // assert
         assert.equal(
@@ -3530,9 +3538,9 @@ test("AFILE-02: an MCP install over an unparseable mcp-adapter.json fails and ke
       const storedBytes = '{"a": sk-secret-abc}\n';
       await mkdir(path.dirname(adapterPath), { recursive: true });
       await writeFile(adapterPath, storedBytes);
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
-      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+      await installPlugin({ ctx, run, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
 
       assert.equal(await readFile(adapterPath, "utf8"), storedBytes);
       assert.deepEqual(notifications, [
@@ -3583,12 +3591,12 @@ test("AFILE-04: install over a commented mcp-adapter.json shows the comments-rem
         siblingPlugins: [{ name: "other", mcpServers: { server2: { command: "node" } } }],
       });
       await writeCommentedProjectAdapterFile(cwd);
-      const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
+      const { ctx, run, notifications } = makeCtx({ piMcpAdapterLoaded: true });
 
       // act
-      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+      await installPlugin({ ctx, run, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
       const firstInstall = notifications.splice(0);
-      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "other" });
+      await installPlugin({ ctx, run, scope: "project", cwd, marketplace: "mp", plugin: "other" });
 
       // assert
       assert.deepStrictEqual(firstInstall, [
@@ -3639,10 +3647,10 @@ test("AFILE-04: a dependency cascade over a commented mcp-adapter.json shows the
       // arrange
       await seedMcpDependencyCascade(cwd);
       await writeCommentedProjectAdapterFile(cwd);
-      const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
+      const { ctx, run, notifications } = makeCtx({ piMcpAdapterLoaded: true });
 
       // act
-      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+      await installPlugin({ ctx, run, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
 
       // assert
       assert.deepStrictEqual(notifications, [
@@ -3672,10 +3680,10 @@ test("AFILE-04: a failed dependency cascade still reports the removed comments a
       await writeCommentedProjectAdapterFile(cwd);
       const agentsPath = await seedForeignServer1();
       const adapterPath = path.join(cwd, ".pi", "mcp-adapter.json");
-      const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
+      const { ctx, run, notifications } = makeCtx({ piMcpAdapterLoaded: true });
 
       // act
-      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+      await installPlugin({ ctx, run, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
 
       // assert
       assert.deepStrictEqual(notifications, [
@@ -3738,11 +3746,18 @@ for (const { title, env, expectedNotifications } of [
           pluginName: "hello",
           mcpServers: { server1: { command: "node", args: ["${PI_CM_SET_FOR_STAGING}"] } },
         });
-        const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
+        const { ctx, run, notifications } = makeCtx({ piMcpAdapterLoaded: true });
         const installPlugin = createInstallPlugin(transaction, hooksRouting, completionCache, env);
 
         // act
-        await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+        await installPlugin({
+          ctx,
+          run,
+          scope: "project",
+          cwd,
+          marketplace: "mp",
+          plugin: "hello",
+        });
 
         // assert
         assert.deepStrictEqual(notifications, expectedNotifications);
@@ -3774,11 +3789,11 @@ test("AVAR-04: a failed dependency cascade shows no variable notice for the depe
       });
       const agentsPath = await seedForeignServer1();
       const adapterPath = path.join(cwd, ".pi", "mcp-adapter.json");
-      const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
+      const { ctx, run, notifications } = makeCtx({ piMcpAdapterLoaded: true });
       const installPlugin = createInstallPlugin(transaction, hooksRouting, completionCache, {});
 
       // act
-      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+      await installPlugin({ ctx, run, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
 
       // assert
       assert.deepStrictEqual(notifications, [
@@ -3810,13 +3825,13 @@ test("AVAR-04: an install that lands disabled shows no variable notice for the s
         entryDefaultEnabled: false,
         mcpServers: { server1: { command: "node", args: UNSET_VARIABLE_ARGS } },
       });
-      const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
+      const { ctx, run, notifications } = makeCtx({ piMcpAdapterLoaded: true });
       const installPlugin = createInstallPlugin(transaction, hooksRouting, completionCache, {});
 
       // act
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -3845,16 +3860,16 @@ test("AFILE-04: promoting a disabled dependency that re-materializes MCP servers
     try {
       // arrange
       await seedMcpDependencyCascade(cwd);
-      const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
-      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
-      await disableSeededDependency(cwd, hooksRouting, { ctx, pi });
+      const { ctx, run, notifications } = makeCtx({ piMcpAdapterLoaded: true });
+      await installPlugin({ ctx, run, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+      await disableSeededDependency(cwd, hooksRouting, { ctx, run });
       await writeCommentedProjectAdapterFile(cwd);
       notifications.length = 0;
 
       // act
       const outcome = await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -3896,12 +3911,12 @@ test("AFILE-04: an orchestrated install returns its MCP config notices and sends
       // arrange
       await seedMcpDependencyCascade(cwd);
       await writeCommentedProjectAdapterFile(cwd);
-      const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
+      const { ctx, run, notifications } = makeCtx({ piMcpAdapterLoaded: true });
 
       // act
       const outcome = await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -3934,12 +3949,12 @@ test("AFILE-04: an orchestrated install over a comment-free mcp-adapter.json car
     try {
       // arrange
       await seedMcpDependencyCascade(cwd);
-      const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
+      const { ctx, run, notifications } = makeCtx({ piMcpAdapterLoaded: true });
 
       // act
       const outcome = await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -3971,12 +3986,12 @@ test("AFILE-04: an orchestrated failed cascade returns the removed comments on i
       await seedMcpDependencyCascade(cwd);
       await writeCommentedProjectAdapterFile(cwd);
       await seedForeignServer1();
-      const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
+      const { ctx, run, notifications } = makeCtx({ piMcpAdapterLoaded: true });
 
       // act
       const outcome = await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -4004,12 +4019,12 @@ test("AFILE-04: the reload missing-dependency install returns its MCP config not
       // arrange
       await seedMcpDependencyCascade(cwd);
       await writeCommentedProjectAdapterFile(cwd);
-      const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
+      const { ctx, run, notifications } = makeCtx({ piMcpAdapterLoaded: true });
 
       // act
       const outcome = await installMissingDependency({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -4045,10 +4060,10 @@ test("AFILE-02: installing a plugin with no MCP servers over an unparseable mcp-
       const adapterPath = path.join(cwd, ".pi", "mcp-adapter.json");
       await mkdir(path.dirname(adapterPath), { recursive: true });
       await writeFile(adapterPath, "{");
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
-      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+      await installPlugin({ ctx, run, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
 
       // assert
       assert.equal(await readFile(adapterPath, "utf8"), "{");
@@ -4089,12 +4104,12 @@ test("AFILE-04: an install that lands disabled reports the notices of both its s
         legacyPath,
         '// legacy note\n{"mcpServers":{"server1":{"command":"node","_piClaudeMarketplace":{"plugin":"hello","marketplace":"mp"}}}}\n',
       );
-      const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
+      const { ctx, run, notifications } = makeCtx({ piMcpAdapterLoaded: true });
 
       // act
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -4172,10 +4187,10 @@ test("AFILE-06: install over a project override with an env field shows the over
         mcpServers: { server1: { command: "node", args: ["server.js"] } },
       });
       await writeProjectOverrideFile(cwd, "plugin_hello_server1_");
-      const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
+      const { ctx, run, notifications } = makeCtx({ piMcpAdapterLoaded: true });
 
       // act
-      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+      await installPlugin({ ctx, run, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
 
       // assert
       assert.deepStrictEqual(notifications, [
@@ -4211,12 +4226,12 @@ test("AFILE-06: an install that lands disabled writes the override back and show
         cwd,
         "plugin_hello_server1_",
       );
-      const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
+      const { ctx, run, notifications } = makeCtx({ piMcpAdapterLoaded: true });
 
       // act
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -4251,10 +4266,10 @@ test("AFILE-06: a failed dependency cascade writes its dependency's override bac
         "plugin_some-other-plugin_server2_",
       );
       const agentsPath = await seedForeignServer1();
-      const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
+      const { ctx, run, notifications } = makeCtx({ piMcpAdapterLoaded: true });
 
       // act
-      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+      await installPlugin({ ctx, run, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
 
       // assert
       assert.deepStrictEqual(notifications, [
@@ -4292,10 +4307,10 @@ test("AFILE-04: install over a commented file holding an override shows the comm
         adapterPath,
         '{\n  // mine\n  "mcpServers": { "plugin_hello_server1_": { "disabled": true, "env": { "STUB_TOKEN": "stub-secret" } } }\n}\n',
       );
-      const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
+      const { ctx, run, notifications } = makeCtx({ piMcpAdapterLoaded: true });
 
       // act
-      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+      await installPlugin({ ctx, run, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
 
       // assert
       assert.deepStrictEqual(notifications, [
@@ -4354,10 +4369,10 @@ test("AFILE-04: an install whose state save fails still reports the removed comm
       });
       await writeCommentedProjectAdapterFile(cwd);
       const installPlugin = refusingSaveInstall(owner);
-      const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
+      const { ctx, run, notifications } = makeCtx({ piMcpAdapterLoaded: true });
 
       // act
-      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+      await installPlugin({ ctx, run, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
 
       // assert
       assert.deepStrictEqual(notifications, [
@@ -4396,12 +4411,12 @@ test("AFILE-04: an install that lands disabled and whose state save fails report
         '// legacy note\n{"mcpServers":{"server1":{"command":"node","_piClaudeMarketplace":{"plugin":"hello","marketplace":"mp"}}}}\n',
       );
       const installPlugin = refusingSaveInstall(owner);
-      const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
+      const { ctx, run, notifications } = makeCtx({ piMcpAdapterLoaded: true });
 
       // act
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -4439,16 +4454,16 @@ test("AFILE-04: a promotion whose state save fails still reports the removed com
     try {
       // arrange
       await seedMcpDependencyCascade(cwd);
-      const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
+      const { ctx, run, notifications } = makeCtx({ piMcpAdapterLoaded: true });
       await owner.installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
         plugin: "hello",
       });
-      await disableSeededDependency(cwd, owner.hooksRouting, { ctx, pi });
+      await disableSeededDependency(cwd, owner.hooksRouting, { ctx, run });
       await writeCommentedProjectAdapterFile(cwd);
       notifications.length = 0;
       const installPlugin = refusingSaveInstall(owner);
@@ -4456,7 +4471,7 @@ test("AFILE-04: a promotion whose state save fails still reports the removed com
       // act
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -4493,12 +4508,12 @@ test("AFILE-04: a missing-dependency install whose state save fails returns the 
         owner.hooksRouting,
         owner.completionCache,
       );
-      const { ctx, pi, notifications } = makeCtx({ commands: [adapterCommand()] });
+      const { ctx, run, notifications } = makeCtx({ piMcpAdapterLoaded: true });
 
       // act
       const outcome = await installMissingDependency({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -4538,9 +4553,9 @@ test("AFILE-05: install refuses a server ~/.agents/mcp.json already defines and 
       });
       const agentsPath = await seedForeignServer1();
       const adapterPath = path.join(cwd, ".pi", "mcp-adapter.json");
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
-      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+      await installPlugin({ ctx, run, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
 
       assert.deepEqual(notifications, [
         {
@@ -4581,10 +4596,10 @@ test("PI-10: staged skill body has ${CLAUDE_PLUGIN_ROOT} replaced with absolute 
         ],
       });
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -4633,7 +4648,7 @@ test("PI-10: staged skill body has ${CLAUDE_PLUGIN_ROOT} replaced with absolute 
 // PI-11 / RH-3 -- subagents not loaded warning
 // ───────────────────────────────────────────────────────────────────────────
 
-test("PI-11 / RH-3: staged agents + pi.getAllTools has no 'subagent' -> the success row carries the {requires pi-subagents} marker", async () => {
+test("PI-11 / RH-3: staged agents + a run reporting pi-subagents unloaded -> the success row carries the {requires pi-subagents} marker", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-pi11-"));
     try {
@@ -4645,10 +4660,10 @@ test("PI-11 / RH-3: staged agents + pi.getAllTools has no 'subagent' -> the succ
         agents: [{ sourceName: "bot" }],
       });
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -4678,7 +4693,7 @@ test("PI-11 / RH-3: staged agents + pi.getAllTools has no 'subagent' -> the succ
 // PI-12 / ADET-02 -- mcp-adapter not loaded warning
 // ───────────────────────────────────────────────────────────────────────────
 
-test("PI-12 / ADET-02: staged MCP servers with no mcp-adapter command or adapter source -> the success row carries the {requires pi-mcp-adapter} marker", async () => {
+test("PI-12 / RH-4: staged mcp + a run reporting pi-mcp-adapter unloaded -> the success row carries the {requires pi-mcp-adapter} marker", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-pi12-"));
     try {
@@ -4690,10 +4705,10 @@ test("PI-12 / ADET-02: staged MCP servers with no mcp-adapter command or adapter
         mcpServers: { server1: { command: "node" } },
       });
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -4737,10 +4752,10 @@ test("SKILL-01 / WARN-01: standalone install of a plugin with one unparseable sk
         skills: [{ sourceName: "bad", frontmatterName: "[unterminated", body: "# Bad\nBody.\n" }],
       });
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       const outcome = await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -4782,10 +4797,10 @@ test("CMD-01 / WARN-01: standalone install of a plugin with one unparseable comm
         commands: [{ sourceName: "bad", body: "---\ntitle: A: B: C\n---\nRun it.\n" }],
       });
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       const outcome = await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -4827,10 +4842,10 @@ test("RESV-01 / D-19-01: an entry declaring a dependency renders no PR-5 trailer
         siblingPlugins: [{ name: "some-other-plugin" }],
       });
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -4882,12 +4897,12 @@ test("WR-03: installPlugin's marketplaceTagProbe seam reaches a path-source depe
         siblingPlugins: [{ name: "some-other-plugin" }],
       });
       const seen: MarketplaceTagProbeOptions[] = [];
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
       const outcome = await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -4943,11 +4958,11 @@ for (const allowed of [false, true]) {
         const userStateBefore = await readFile(user.stateJsonPath, "utf8");
         const projectTreeBefore = await retryTree(project.scopeRoot);
         const userTreeBefore = await retryTree(user.scopeRoot);
-        const { ctx, pi, notifications } = makeCtx();
+        const { ctx, run, notifications } = makeCtx();
 
         const outcome = await installPlugin({
           ctx,
-          pi,
+          run,
           scope: "project",
           cwd,
           marketplace: "official",
@@ -5039,11 +5054,11 @@ for (const allowGamma of [false, true]) {
         });
         const stateBefore = await readFile(project.stateJsonPath, "utf8");
         const treeBefore = await retryTree(cwd);
-        const { ctx, pi, notifications } = makeCtx();
+        const { ctx, run, notifications } = makeCtx();
 
         const outcome = await installPlugin({
           ctx,
-          pi,
+          run,
           scope: "project",
           cwd,
           marketplace: "alpha",
@@ -5099,7 +5114,7 @@ test("RESV-01 / RESV-06: a dependency no marketplace declares fails the install 
       });
       const stateBytes = await readFile(locations.stateJsonPath, "utf8");
       const beforeTree = await retryTree(locations.scopeRoot);
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
       const outcome = await installPlugin({
@@ -5107,7 +5122,7 @@ test("RESV-01 / RESV-06: a dependency no marketplace declares fails the install 
         cwd,
         marketplace: "mp",
         notifications: { mode: "orchestrated" },
-        pi,
+        run,
         plugin: "hello",
         scope: "project",
       });
@@ -5147,7 +5162,7 @@ test("TAGS-02: a dependency whose constraint no release tag satisfies installs t
         dependencyVersion: "^2.0.0",
         siblingPlugins: [{ name: "some-other-plugin" }],
       });
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
       const outcome = await installPlugin({
@@ -5155,7 +5170,7 @@ test("TAGS-02: a dependency whose constraint no release tag satisfies installs t
         cwd,
         marketplace: "mp",
         notifications: { mode: "orchestrated" },
-        pi,
+        run,
         plugin: "hello",
         scope: "project",
       });
@@ -5195,7 +5210,7 @@ test("RESV-03 regression: an unreadable version constraint still fails the insta
       });
       const stateBytes = await readFile(locations.stateJsonPath, "utf8");
       const beforeTree = await retryTree(locations.scopeRoot);
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
       const outcome = await installPlugin({
@@ -5203,7 +5218,7 @@ test("RESV-03 regression: an unreadable version constraint still fails the insta
         cwd,
         marketplace: "mp",
         notifications: { mode: "orchestrated" },
-        pi,
+        run,
         plugin: "hello",
         scope: "project",
       });
@@ -5251,14 +5266,14 @@ test("RESV-06 / NFR-3: a failed cascade never reaches tx.save() and replays the 
       }
 
       const beforeArtifacts = await artifacts();
-      const { ctx, notifications, pi } = makeCtx();
+      const { ctx, notifications, run } = makeCtx();
       async function install(): Promise<Awaited<ReturnType<InstallOperation>>> {
         return installPlugin({
           ctx,
           cwd,
           marketplace: "mp",
           notifications: { mode: "orchestrated" },
-          pi,
+          run,
           plugin: "hello",
           scope: "project",
         });
@@ -5310,10 +5325,10 @@ test("PI-14: PathContainmentError from a bridge prepare propagates verbatim with
       // Target of the symlink doesn't have to exist; readlink will report it.
       await symlink("/tmp/decoy", path.join(locations.skillsTargetDir, "hello-tool"));
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -5361,10 +5376,10 @@ test("PI-15 layer (a): record already exists -> caught by early-sanity check (co
         preInstall: true,
       });
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -5410,11 +5425,11 @@ test("AS-6: pluginDataDir mkdir failure post-state-commit -> V2 drops warning pe
       const { chmod } = await import("node:fs/promises");
       await chmod(path.join(locations.dataRoot, "mp"), 0o555);
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       try {
         await installPlugin({
           ctx,
-          pi,
+          run,
           scope: "project",
           cwd,
           marketplace: "mp",
@@ -5502,10 +5517,10 @@ test("AS-7: retired foreign agent target is preserved while a distinct new agent
         }),
       );
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -5558,10 +5573,10 @@ test("CMP-3 / PI-16: project-target install falls back to user-scope marketplace
         scope: "user",
       });
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -5632,7 +5647,7 @@ test("RESV-01 / D-04-04: an orchestrated install records its cascade dependency 
         const pass = makeCtx();
         await applyReconcile({
           ctx: pass.ctx,
-          pi: pass.pi,
+          run: pass.run,
           cwd,
           scope: "project",
           completionCache: createCompletionCache(),
@@ -5721,7 +5736,7 @@ test("D-04-05 / CMP-3: a dependency adopted from a user-scope marketplace surviv
       // act
       const outcome = await installPlugin({
         ctx: install.ctx,
-        pi: install.pi,
+        run: install.run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -5761,7 +5776,7 @@ test("D-04-05 / CMP-3: a dependency adopted from a user-scope marketplace surviv
       const reload = makeCtx();
       await applyReconcile({
         ctx: reload.ctx,
-        pi: reload.pi,
+        run: reload.run,
         cwd,
         scope: "project",
         completionCache: createCompletionCache(),
@@ -5810,7 +5825,7 @@ test("DFEN-04 / D-04-02: an orchestrated cascade whose root lands disabled decla
       });
       const { loadConfig } =
         await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
       const outcome = await installPlugin({
@@ -5819,7 +5834,7 @@ test("DFEN-04 / D-04-02: an orchestrated cascade whose root lands disabled decla
         cwd,
         marketplace: "mp",
         notifications: { mode: "orchestrated" },
-        pi,
+        run,
         plugin: "hello",
         scope: "project",
       });
@@ -5876,12 +5891,12 @@ test("CMP-3 / D-03-08: a project install off a user-scope marketplace resolves a
         declareDependencies: true,
         siblingPlugins: [{ name: "some-other-plugin" }],
       });
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
       const outcome = await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -5918,10 +5933,10 @@ test("CMP-4 / PI-16: user-target install cannot source a project-only marketplac
         pluginName: "hello",
       });
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "user",
         cwd,
         marketplace: "mp",
@@ -5967,10 +5982,10 @@ test("PI-17: same plugin may be installed in both user and project target scopes
         preInstall: true,
       });
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -6036,10 +6051,10 @@ test("PI-9 corollary: empty plugin (no skills/commands/agents/mcp) -> V2 emits r
         // No skills, commands, agents, or mcpServers.
       });
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -6089,10 +6104,10 @@ test("Sanity: staged agent target carries the AG-5 owned-agent marker", async ()
         agents: [{ sourceName: "bot" }],
       });
 
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -6139,11 +6154,11 @@ test("Rollback-skills-undo: skills committed then commands phase fails -> skill 
       await mkdir(path.dirname(locations.commandsStagingDir), { recursive: true });
       await writeFile(locations.commandsStagingDir, "not-a-dir");
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       const cacheDrops = observeCompletionDrops(t, completionCache);
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -6197,10 +6212,10 @@ test("Rollback-commands-undo: commands committed then agents phase fails -> comm
       await mkdir(path.dirname(locations.agentsStagingDir), { recursive: true });
       await writeFile(locations.agentsStagingDir, "not-a-dir");
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -6256,10 +6271,10 @@ test("Rollback-agents-undo: agents committed then mcp phase fails -> agent targe
       await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
       await mkdir(locations.mcpAdapterJsonPath, { recursive: true });
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -6308,10 +6323,10 @@ test("Orchestrated-PI-3: plugin not found -> outcome.status 'failed' with not-fo
         pluginName: "real-plugin",
       });
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       const outcome = await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -6345,10 +6360,10 @@ test("Orchestrated-PI-4: non-installable plugin -> outcome.status 'uninstallable
         rawSourceOverride: "github:anthropics/some-repo",
       });
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       const outcome = await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -6377,10 +6392,10 @@ test("Orchestrated-PI-5: already installed -> outcome.status 'already-installed'
         preInstall: true,
       });
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       const outcome = await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -6410,10 +6425,10 @@ test("Orchestrated-success: success path returns typed outcome, fires no notific
         skills: [{ sourceName: "tool" }],
       });
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       const outcome = await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -6474,12 +6489,12 @@ test("retry proof: install: completion-cache maintenance failure stays installed
       );
 
       const manifestBytes = await readFile(manifestPath, "utf8");
-      const { ctx, notifications, pi } = makeCtx();
+      const { ctx, notifications, run } = makeCtx();
 
       // act
       const first = await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -6491,7 +6506,7 @@ test("retry proof: install: completion-cache maintenance failure stays installed
       cacheFault = false;
       const second = await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -6567,11 +6582,11 @@ test("install keeps a completion-cache maintenance failure silent in standalone 
           return Promise.reject(new Error("cache maintenance denied"));
         },
       );
-      const { ctx, notifications, pi } = makeCtx();
+      const { ctx, notifications, run } = makeCtx();
 
       const outcome = await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -6654,12 +6669,12 @@ test("retry proof: install: plugin-data-dir maintenance failure stays installed 
       });
 
       const manifestBytes = await readFile(manifestPath, "utf8");
-      const { ctx, notifications, pi } = makeCtx();
+      const { ctx, notifications, run } = makeCtx();
 
       // act
       const first = await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -6671,7 +6686,7 @@ test("retry proof: install: plugin-data-dir maintenance failure stays installed 
       await chmod(path.dirname(pluginDataDir), 0o755);
       const second = await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -6761,10 +6776,10 @@ test("Orchestrated-agent-foreign: agentForeignFailures -> postCommitWarnings has
         }),
       );
 
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
       const outcome = await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -6837,10 +6852,10 @@ test("D-03-INV :: install invalidates plugin cache for the target marketplace", 
         assert.ok(record !== undefined, "the durable state save must precede cache invalidation");
       });
 
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -6901,10 +6916,10 @@ test("PHOOK-04: install --partial stages a strict-subset hooks.json -- dropped N
         },
       });
 
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -6955,10 +6970,10 @@ test("PHOOK-04 / D-71-02: install --partial drops only the unsupportable matcher
         },
       });
 
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -7015,7 +7030,7 @@ test("SEV-01 / SEV-02 / FSTAT-07 / D-71-06: partial-hook install blocks without 
       const noForce = makeCtx();
       await installPlugin({
         ctx: noForce.ctx,
-        pi: noForce.pi,
+        run: noForce.run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -7058,7 +7073,7 @@ test("SEV-01 / SEV-02 / FSTAT-07 / D-71-06: partial-hook install blocks without 
       const forced = makeCtx();
       await installPlugin({
         ctx: forced.ctx,
-        pi: forced.pi,
+        run: forced.run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -7102,10 +7117,10 @@ test("WB-01: standalone install writes the plugin entry to claude-plugins.json",
         pluginName: "hello",
       });
 
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -7144,12 +7159,12 @@ test("D-03-05 / D-04-02: a cascade dependency lands in the parent's scope and st
         declareDependencies: true,
         siblingPlugins: [{ name: "some-other-plugin" }],
       });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -7228,12 +7243,12 @@ test("D-04-01: a cascade records its root as explicit and its dependency as a de
         declareDependencies: true,
         siblingPlugins: [{ name: "some-other-plugin" }],
       });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -7264,12 +7279,12 @@ test("D-04-01: a plugin declaring no dependencies records its single member as e
         pluginName: "hello",
         skills: [{ sourceName: "tool" }],
       });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -7305,10 +7320,10 @@ test("D-04-01: a direct install stays a direct install when a later plugin decla
         declareDependencies: true,
         siblingPlugins: [{ name: "some-other-plugin" }],
       });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -7321,7 +7336,7 @@ test("D-04-01: a direct install stays a direct install when a later plugin decla
       const directSnapshot = clonePluginRecord(directRecord);
 
       // act
-      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+      await installPlugin({ ctx, run, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
 
       // assert
       assert.deepStrictEqual(
@@ -7354,7 +7369,7 @@ async function seedDependencyInstalled(
 ): Promise<{
   readonly before: ExtensionState;
   readonly ctx: NotificationContext;
-  readonly pi: PiInventory;
+  readonly run: NotificationRun;
   readonly notifications: NotifyRecord[];
 }> {
   const locations = locationsFor("project", cwd);
@@ -7373,10 +7388,10 @@ async function seedDependencyInstalled(
       },
     ],
   });
-  const { ctx, pi, notifications } = makeCtx();
+  const { ctx, run, notifications } = makeCtx();
   await installPlugin({
     ctx,
-    pi,
+    run,
     scope: "project",
     cwd,
     marketplace: "mp",
@@ -7396,7 +7411,7 @@ async function seedDependencyInstalled(
     "the dependency's record carries the availability the case asked for",
   );
   notifications.length = 0;
-  return { before, ctx, pi, notifications };
+  return { before, ctx, run, notifications };
 }
 
 test("D-04-07: installing a dependency by name flips its provenance and nothing else in the state document", async () => {
@@ -7405,7 +7420,7 @@ test("D-04-07: installing a dependency by name flips its provenance and nothing 
     try {
       // arrange
       const locations = locationsFor("project", cwd);
-      const { before, ctx, pi } = await seedDependencyInstalled(cwd, installPlugin);
+      const { before, ctx, run } = await seedDependencyInstalled(cwd, installPlugin);
       const marketplaceBefore = before.marketplaces["mp"];
       assert.ok(marketplaceBefore !== undefined);
       const dependencyBefore = marketplaceBefore.plugins["some-other-plugin"];
@@ -7414,7 +7429,7 @@ test("D-04-07: installing a dependency by name flips its provenance and nothing 
       // act
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -7450,12 +7465,12 @@ test("D-04-07: the promotion declares the promoted key and reports one installed
     try {
       // arrange
       const locations = locationsFor("project", cwd);
-      const { ctx, pi, notifications } = await seedDependencyInstalled(cwd, installPlugin);
+      const { ctx, run, notifications } = await seedDependencyInstalled(cwd, installPlugin);
 
       // act
       const outcome = await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -7499,13 +7514,13 @@ test("D-04-07: an orchestrated promotion flips the record, writes no declaration
     try {
       // arrange
       const locations = locationsFor("project", cwd);
-      const { ctx, pi, notifications } = await seedDependencyInstalled(cwd, installPlugin);
+      const { ctx, run, notifications } = await seedDependencyInstalled(cwd, installPlugin);
       const configBefore = await readFile(locations.configJsonPath, "utf8");
 
       // act
       const outcome = await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -7554,7 +7569,7 @@ async function assertPromotionRefused(args: {
   readonly installPlugin: InstallOperation;
   readonly seeded: {
     readonly ctx: NotificationContext;
-    readonly pi: PiInventory;
+    readonly run: NotificationRun;
     readonly notifications: NotifyRecord[];
   };
   readonly flags: { readonly pinVersionOverride?: string; readonly partial?: boolean };
@@ -7566,7 +7581,7 @@ async function assertPromotionRefused(args: {
 
   const outcome = await installPlugin({
     ctx: seeded.ctx,
-    pi: seeded.pi,
+    run: seeded.run,
     scope: "project",
     cwd,
     marketplace: "mp",
@@ -7644,16 +7659,20 @@ test("D-04-07: --partial is the consent that promotes a partially installed depe
     try {
       // arrange
       const locations = locationsFor("project", cwd);
-      const { before, ctx, pi, notifications } = await seedDependencyInstalled(cwd, installPlugin, {
-        partialDependency: true,
-      });
+      const { before, ctx, run, notifications } = await seedDependencyInstalled(
+        cwd,
+        installPlugin,
+        {
+          partialDependency: true,
+        },
+      );
       const dependencyBefore = before.marketplaces["mp"]?.plugins["some-other-plugin"];
       assert.ok(dependencyBefore !== undefined);
 
       // act
       const outcome = await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -7698,13 +7717,13 @@ test("D-04-07: --partial is the consent that promotes a partially installed depe
 async function disableSeededDependency(
   cwd: string,
   hooksRouting: InstallHooksRouting,
-  seeded: { readonly ctx: NotificationContext; readonly pi: PiInventory },
+  seeded: { readonly ctx: NotificationContext; readonly run: NotificationRun },
 ): Promise<void> {
   const { createEnableOperation } =
     await import("../../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts");
   const outcome = await createEnableOperation(hooksRouting)({
     ctx: seeded.ctx,
-    pi: seeded.pi,
+    run: seeded.run,
     cwd,
     scope: "project",
     marketplace: "mp",
@@ -7721,17 +7740,17 @@ test("D-04-07: installing a disabled dependency by name promotes it, re-material
     try {
       // arrange
       const locations = locationsFor("project", cwd);
-      const { before, ctx, pi, notifications } = await seedDependencyInstalled(cwd, installPlugin);
+      const { before, ctx, run, notifications } = await seedDependencyInstalled(cwd, installPlugin);
       const dependencyBefore = before.marketplaces["mp"]?.plugins["some-other-plugin"];
       assert.ok(dependencyBefore !== undefined);
-      await disableSeededDependency(cwd, hooksRouting, { ctx, pi });
+      await disableSeededDependency(cwd, hooksRouting, { ctx, run });
       const skillDir = path.join(locations.skillsTargetDir, "some-other-plugin-tool");
       await assert.rejects(stat(skillDir), "the disable took the dependency's skill off disk");
 
       // act
       const outcome = await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -7793,8 +7812,8 @@ test("D-04-07: a --local promotion of a disabled dependency writes the enable pa
       // omission; the promotion enables it on purpose and says so in the file
       // it writes.
       const locations = locationsFor("project", cwd);
-      const { ctx, pi } = await seedDependencyInstalled(cwd, installPlugin);
-      await disableSeededDependency(cwd, hooksRouting, { ctx, pi });
+      const { ctx, run } = await seedDependencyInstalled(cwd, installPlugin);
+      await disableSeededDependency(cwd, hooksRouting, { ctx, run });
       await writeFile(
         locations.configJsonPath,
         '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "mp": {\n      "source": "./mp-src"\n    }\n  },\n  "plugins": {\n    "hello@mp": {},\n    "some-other-plugin@mp": {\n      "enabled": false\n    }\n  }\n}\n',
@@ -7805,7 +7824,7 @@ test("D-04-07: a --local promotion of a disabled dependency writes the enable pa
       // act
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -7854,10 +7873,10 @@ test("CR-01: the install cascade's re-enable arm overwrites a stale config enabl
         declareDependencies: true,
         siblingPlugins: [{ name: "some-other-plugin" }],
       });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -7867,7 +7886,7 @@ test("CR-01: the install cascade's re-enable arm overwrites a stale config enabl
         await import("../../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts");
       await createEnableOperation(createHooksRouting(createHooksRuntime(), { readHooksJson }))({
         ctx,
-        pi,
+        run,
         cwd,
         scope: "project",
         marketplace: "mp",
@@ -7891,7 +7910,7 @@ test("CR-01: the install cascade's re-enable arm overwrites a stale config enabl
       );
 
       // act
-      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+      await installPlugin({ ctx, run, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
 
       // assert
       const state = await loadState(locations.extensionRoot);
@@ -7936,10 +7955,10 @@ test("CR-06: install hello --local overwrites a base-file stale entry for a re-e
         declareDependencies: true,
         siblingPlugins: [{ name: "some-other-plugin" }],
       });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -7949,7 +7968,7 @@ test("CR-06: install hello --local overwrites a base-file stale entry for a re-e
         await import("../../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts");
       await createEnableOperation(createHooksRouting(createHooksRuntime(), { readHooksJson }))({
         ctx,
-        pi,
+        run,
         cwd,
         scope: "project",
         marketplace: "mp",
@@ -7967,7 +7986,7 @@ test("CR-06: install hello --local overwrites a base-file stale entry for a re-e
       // act
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -8024,10 +8043,10 @@ test("CR-01: the install cascade's re-enable arm leaves a member with no config 
         declareDependencies: true,
         siblingPlugins: [{ name: "some-other-plugin" }],
       });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -8042,7 +8061,7 @@ test("CR-01: the install cascade's re-enable arm leaves a member with no config 
         await import("../../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts");
       await createEnableOperation(createHooksRouting(createHooksRuntime(), { readHooksJson }))({
         ctx,
-        pi,
+        run,
         cwd,
         scope: "project",
         marketplace: "mp",
@@ -8058,7 +8077,7 @@ test("CR-01: the install cascade's re-enable arm leaves a member with no config 
       );
 
       // act
-      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+      await installPlugin({ ctx, run, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
 
       // assert: the record is re-enabled, but the config entry -- which
       // never said `enabled: false` -- is untouched.
@@ -8082,14 +8101,14 @@ test("D-04-07: a plugin already recorded as a direct install still fails with th
       // second install by name is D-04-07's empty case and must refuse exactly
       // as it does for any other repeat install.
       const locations = locationsFor("project", cwd);
-      const { ctx, pi, notifications } = await seedDependencyInstalled(cwd, installPlugin);
+      const { ctx, run, notifications } = await seedDependencyInstalled(cwd, installPlugin);
       const stateBefore = await readFile(locations.stateJsonPath, "utf8");
       const configBefore = await readFile(locations.configJsonPath, "utf8");
 
       // act
       const outcome = await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -8150,12 +8169,12 @@ test("RESV-01 / D-01-32: a dependency declared only in the plugin's own manifest
           dependencies: [{ name: "some-other-plugin", version: "*" }],
         }),
       );
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -8191,10 +8210,10 @@ test("WB-01: --local routes the write to claude-plugins.local.json; base file un
         pluginName: "hello",
       });
 
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -8230,10 +8249,10 @@ test("WR-09 / T-56-03-01: orchestrated-mode install SKIPS write-back (neither fi
         pluginName: "hello",
       });
 
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
       const outcome = await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -8279,10 +8298,10 @@ test("WB-01 / UAT-05 / D-103-16: a plugin declared in NEITHER file stamps the ba
         skills: [{ sourceName: "tool" }],
       });
 
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -8334,10 +8353,10 @@ test("WB-01 / UAT-05 / D-103-16: a typed --local still targets the local file ov
         locations.scopeRoot,
       );
 
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -8406,10 +8425,10 @@ for (const arm of [
           locations.scopeRoot,
         );
 
-        const { ctx, pi, notifications } = makeCtx();
+        const { ctx, run, notifications } = makeCtx();
         const outcome = await installPlugin({
           ctx,
-          pi,
+          run,
           scope: "project",
           cwd,
           marketplace: "mp",
@@ -8442,10 +8461,10 @@ test("WB-01: marketplace-not-added FAILED arm does NOT write back; config untouc
     const cwd = await mkdtemp(path.join(tmpdir(), "install-wb01-fail-"));
     try {
       const locations = locationsFor("project", cwd);
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "ghost-mp",
@@ -8484,10 +8503,10 @@ test("CFG-03 / T-56-03-04: invalid config aborts install; basename-only cause; s
       const stateBytesPre = await readFile(statePath, "utf8");
       const stateMtimePre = (await stat(statePath)).mtimeMs;
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -8549,10 +8568,10 @@ test("CFG-03 / D-103-16: an UNREADABLE local config aborts a flagless install ra
       const stateBytesPre = await readFile(statePath, "utf8");
       const stateMtimePre = (await stat(statePath)).mtimeMs;
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -8621,10 +8640,10 @@ test("UAT-05 / CR-02: an UNREADABLE sibling config skips the marketplace adoptio
       });
       await writeFile(locations.configJsonPath, baseBytes, "utf8");
 
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -8691,10 +8710,10 @@ test("UAT-05: --local install with marketplace declared in BASE writes ONLY the 
         locations.scopeRoot,
       );
 
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -8755,10 +8774,10 @@ test("UAT-05 / CR-02: --local install with marketplace declared NOWHERE declares
         skills: [{ sourceName: "helper" }],
       });
 
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -8824,10 +8843,10 @@ test("UAT-05: base-targeted install with marketplace already in base leaves the 
         locations.scopeRoot,
       );
 
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -8883,12 +8902,12 @@ test("RESV-01: the caller's version pin reaches the named plugin and no dependen
         declareDependencies: true,
         siblingPlugins: [{ name: "some-other-plugin" }],
       });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
       const outcome = await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -8945,12 +8964,12 @@ test("RESV-01 / WR-03: a cascade-installed dependency's hooks reach the routing 
         ],
       });
       assert.equal(ownerRuntime.getRoutingBucket("PreToolUse").length, 0);
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
       const outcome = await runtimeInstallPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -8999,10 +9018,10 @@ test("LIFE-01: installPlugin with hooks writes <hooksDir>/<plugin>/hooks.json vi
         hooksJson,
       });
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -9055,10 +9074,10 @@ test("SURF-05: installPlugin of a hooks-declaring plugin with rewakeMessage but 
         },
       });
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -9107,10 +9126,10 @@ test("SURF-05: installPlugin of a hooks-declaring plugin with rewakeMessage AND 
         },
       });
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -9152,10 +9171,10 @@ test("FORCE-01: force on an unsupported plugin installs the supported components
         experimental: { themes: "./themes", monitors: "./monitors.json" },
       });
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -9207,10 +9226,10 @@ test("FORCE-01: force on a fully-supported plugin is inert and installs as (inst
         skills: [{ sourceName: "tool" }],
       });
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -9255,10 +9274,10 @@ test("FSTAT-07 / D-66-04: a partial install of a partially-available plugin emit
         experimental: { themes: "./themes", monitors: "./monitors.json" },
       });
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -9309,10 +9328,10 @@ test("WR-03: the installed outcome of a partial install carries the dropped kind
         skills: [{ sourceName: "tool" }],
       });
 
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
       const degraded = await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -9332,7 +9351,7 @@ test("WR-03: the installed outcome of a partial install carries the dropped kind
 
       const clean = await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd: cleanCwd,
         marketplace: "mp",
@@ -9370,12 +9389,12 @@ test("WR-03: a (partially-installed) success row renders soft-dep markers when a
         experimental: { themes: "./themes", monitors: "./monitors.json" },
       });
 
-      // Default probe: getAllTools() returns [] -> pi-subagents is NOT loaded,
+      // Default run: pi-subagents is NOT loaded,
       // so the staged agent's `{requires pi-subagents}` soft-dep marker fires.
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -9407,7 +9426,7 @@ test("WR-03: a (partially-installed) success row renders soft-dep markers when a
 });
 
 // SEV-01 regression guard: the missing-companion warning is conditioned on the
-// probe -- when the declared companion IS loaded, the success row stays info.
+// run's snapshot -- when the declared companion IS loaded, the success row stays info.
 test("SEV-01: install staging agents with pi-subagents loaded stays info (companion present)", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-sev01-loaded-"));
@@ -9422,12 +9441,12 @@ test("SEV-01: install staging agents with pi-subagents loaded stays info (compan
         agents: [{ sourceName: "bot" }],
       });
 
-      // Probe reports the `pi-subagents` companion loaded -> no missing
+      // The run reports the `pi-subagents` companion loaded -> no missing
       // companion -> the success row keeps its info stamp (no summary line).
-      const { ctx, pi, notifications } = makeCtx({ toolNames: ["subagent"] });
+      const { ctx, run, notifications } = makeCtx({ piSubagentsLoaded: true });
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -9460,12 +9479,12 @@ test("FORCE-03: without force an unsupported plugin still blocks and writes no s
         experimental: { themes: "./themes", monitors: "./monitors.json" },
       });
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       // No `--partial` -> the default `requireInstallable` gate still blocks
       // the `partially-available` arm.
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -9497,10 +9516,10 @@ test("FORCE-04: the partial-degrade path emits no warning-severity notification 
         experimental: { themes: "./themes", monitors: "./monitors.json" },
       });
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -9541,10 +9560,10 @@ test("FORCE-05: force cannot bypass an unavailable (structural) plugin", async (
         rawSourceOverride: { source: "npm", package: "some-pkg" },
       });
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -9573,12 +9592,12 @@ test("FORCE-05: force cannot bypass a missing marketplace", async () => {
       const locations = locationsFor("project", cwd);
       await mkdir(locations.extensionRoot, { recursive: true });
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       // No marketplace seeded -> the marketplace-absent precondition
       // short-circuits BEFORE the gate; `--partial` cannot conjure a source.
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "ghost-mp",
@@ -9844,12 +9863,12 @@ test("RESV-03/RESV-05: a tag-pinned dependency records the tag's own version, an
         ],
       });
       const { gitOps, state: gitState } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
       const outcome = await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -9881,7 +9900,7 @@ test("RESV-03/RESV-05: a tag-pinned dependency records the tag's own version, an
       // an unresolvable recorded form has nothing to fall back on.
       const second = await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -9927,10 +9946,10 @@ test("PURL-01/02/09: url-source install materializes a clone, records sha-<12hex
       });
 
       const { gitOps, state: gitState } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -10002,10 +10021,10 @@ test("PURL-04: a second install of the same url+sha does NOT clone again (dedup)
 
       const { gitOps, state: gitState } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
       const seam = seamWith(gitOps);
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -10016,7 +10035,7 @@ test("PURL-04: a second install of the same url+sha does NOT clone again (dedup)
 
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -10062,10 +10081,10 @@ test("PURL-03: git-subdir install resolves pluginRoot = cloneRoot + subdir", asy
       });
 
       const { gitOps } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -10110,10 +10129,10 @@ test("PURL-03: a git-subdir path escaping the clone root fails the install", asy
       });
 
       const { gitOps } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -10153,10 +10172,10 @@ test("PURL-03: a missing git-subdir path fails the install", async () => {
       });
 
       const { gitOps } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -10208,10 +10227,10 @@ test("D-77-06: a github-object source dedups to the same clone as a url naming t
 
       const { gitOps, state: gitState } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
       const seam = seamWith(gitOps);
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -10220,7 +10239,7 @@ test("D-77-06: a github-object source dedups to the same clone as a url naming t
       });
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -10273,10 +10292,10 @@ test("MIRR-01/MIRR-03: an unpinned url source materializes the mirror and record
         localRefs: { "refs/heads/main": headSha },
         remoteRefs: { "refs/remotes/origin/main": headSha },
       });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -10337,10 +10356,10 @@ test("MIRR-01/MIRR-03: an unpinned git-subdir source materializes the mirror und
         localRefs: { "refs/heads/main": headSha },
         remoteRefs: { "refs/remotes/origin/main": headSha },
       });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -10394,10 +10413,10 @@ test("MIRR-01 regression: a PINNED install still records a per-sha <12hex>-<12he
       });
 
       const { gitOps } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -10448,10 +10467,10 @@ test("PURL-09 / sha over ref: a source with both ref and sha records the sha's v
         fixtureSourceDir: fixtureRepoDir,
         remoteResolveMap: { "v2.0.0": refSha },
       });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -10491,8 +10510,8 @@ test("PURL-09 regression: a path-source install keeps its 3-tier ladder version 
         pluginJsonVersion: null,
       });
 
-      const { ctx, pi } = makeCtx();
-      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "p" });
+      const { ctx, run } = makeCtx();
+      await installPlugin({ ctx, run, scope: "project", cwd, marketplace: "mp", plugin: "p" });
 
       const locations = locationsFor("project", cwd);
       const after = await loadState(locations.extensionRoot);
@@ -10541,8 +10560,8 @@ test("SUB-02: project-scope install substitutes ${CLAUDE_PROJECT_DIR} to the ins
         ],
       });
 
-      const { ctx, pi, notifications } = makeCtx();
-      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+      const { ctx, run, notifications } = makeCtx();
+      await installPlugin({ ctx, run, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
 
       const errs = notifications.filter((n) => n.severity === "error");
       assert.equal(errs.length, 0, `unexpected errors: ${JSON.stringify(errs)}`);
@@ -10620,8 +10639,8 @@ test("SUB-02: user-scope install keeps ${CLAUDE_PROJECT_DIR} literal in skill, c
         agents: [{ sourceName: "bot", body: "Project: ${CLAUDE_PROJECT_DIR}\n" }],
       });
 
-      const { ctx, pi, notifications } = makeCtx();
-      await installPlugin({ ctx, pi, scope: "user", cwd, marketplace: "mp", plugin: "hello" });
+      const { ctx, run, notifications } = makeCtx();
+      await installPlugin({ ctx, run, scope: "user", cwd, marketplace: "mp", plugin: "hello" });
 
       const errs = notifications.filter((n) => n.severity === "error");
       assert.equal(errs.length, 0, `unexpected errors: ${JSON.stringify(errs)}`);
@@ -10685,8 +10704,8 @@ test("PI-15: an mcp phase that cannot run unwinds the hooks bridge and leaves no
 
       await mkdir(locations.mcpAdapterJsonPath, { recursive: true });
 
-      const { ctx, pi, notifications } = makeCtx();
-      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+      const { ctx, run, notifications } = makeCtx();
+      await installPlugin({ ctx, run, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
 
       const allText = notifications.map((n) => n.message).join("\n");
       assert.match(allText, /⊘ hello v0\.0\.1 \(failed\)/, `no failed row in:\n${allText}`);
@@ -10752,8 +10771,9 @@ test("D-141-03: a standalone install surfaces a command discovery warning as a s
       });
       await seedCollidingNestedCommands(path.join(marketplaceRoot, "plugins", "hello"));
 
-      const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(2, 2);
-      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2);
+      const run = runWithNothingLoaded();
+      await installPlugin({ ctx, run, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
 
       assert.deepStrictEqual(notifications, [
         {
@@ -10772,6 +10792,97 @@ test("D-141-03: a standalone install surfaces a command discovery warning as a s
   });
 });
 
+for (const mode of ["json", "rpc"]) {
+  test(`appends install discovery diagnostics after the cascade in ${mode}`, async () => {
+    await withHermeticHome(async ({ installPlugin }) => {
+      // arrange
+      const cwd = await mkdtemp(path.join(tmpdir(), "install-machine-diagnostics-"));
+      try {
+        const marketplaceRoot = path.join(cwd, "mp-src");
+        await seedPathMarketplaceWithPlugin({
+          cwd,
+          marketplaceRoot,
+          marketplaceName: "mp",
+          pluginName: "hello",
+          commands: [{ sourceName: "keep" }],
+        });
+        await seedCollidingNestedCommands(path.join(marketplaceRoot, "plugins", "hello"));
+        const capture = createJsonCapture();
+        const ctx = {
+          mode,
+          get ui() {
+            return capture.ui;
+          },
+        };
+        const run = { ...runWithNothingLoaded(), entrySink: capture.entrySink };
+
+        // act
+        const installed = await installPlugin({
+          ctx,
+          run,
+          scope: "project",
+          cwd,
+          marketplace: "mp",
+          plugin: "hello",
+        });
+
+        // assert
+        assert.strictEqual(installed.status, "installed");
+        const locations = locationsFor("project", cwd);
+        assert.strictEqual(
+          (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins["hello"]?.version,
+          "0.0.1",
+        );
+        assert.deepStrictEqual(capture.entries, [
+          {
+            customType: "claude-plugin",
+            payload: {
+              schemaVersion: 1,
+              origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+              kind: "cascade",
+              severity: "info",
+              needsReload: true,
+              marketplaces: [
+                {
+                  name: "mp",
+                  scope: "project",
+                  plugins: [
+                    {
+                      name: "hello",
+                      id: "hello@mp",
+                      scope: "project",
+                      reasons: [],
+                      status: "installed",
+                      version: "0.0.1",
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+          {
+            customType: "claude-plugin",
+            payload: {
+              schemaVersion: 1,
+              origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+              kind: "diagnostic",
+              severity: "warning",
+              needsReload: false,
+              header: 'Plugin "hello" installed; 1 declared component has a note.',
+              lines: [
+                'command source "tools/lint" in "commands" elides to generated name "hello:tools:lint", already produced by command source "hello-tools/lint"; ignoring duplicate.',
+              ],
+            },
+          },
+        ]);
+        capture.assertValid();
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
+
 test("D-141-03: an orchestrated install carries the same warning on postCommitWarnings", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-discwarn-orch-"));
@@ -10786,10 +10897,11 @@ test("D-141-03: an orchestrated install carries the same warning on postCommitWa
       });
       await seedCollidingNestedCommands(path.join(marketplaceRoot, "plugins", "hello"));
 
-      const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(0, 0);
+      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
+      const run = runWithNothingLoaded();
       const outcome = await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -10829,7 +10941,7 @@ test("plugin install authentication: threads a GitHub provider bundle to the pin
       const authCapture = captureInstallAuth(seamWith(git.gitOps));
       const credentials = createCredentialOpsFake({ boundary: "memory" });
       const deviceFlow = installDeviceFlow();
-      const { ctx, notifications, pi } = makeCtx();
+      const { ctx, notifications, run } = makeCtx();
 
       // act
       const outcome = await installPlugin({
@@ -10841,7 +10953,7 @@ test("plugin install authentication: threads a GitHub provider bundle to the pin
         deviceFlowHttp: deviceFlow.http,
         marketplace: "mp",
         notifications: { mode: "orchestrated" },
-        pi,
+        run,
         plugin: "gh",
         scope: "project",
       });
@@ -10899,7 +11011,7 @@ test("plugin install authentication: threads a host-keyed bundle for a host the 
       const git = createGitOps({ fixtureSourceDir: fixtureRepoDir });
       const authCapture = captureInstallAuth(seamWith(git.gitOps));
       const credentials = createCredentialOpsFake({ boundary: "memory" });
-      const { ctx, notifications, pi } = makeCtx();
+      const { ctx, notifications, run } = makeCtx();
 
       // act
       const outcome = await installPlugin({
@@ -10909,7 +11021,7 @@ test("plugin install authentication: threads a host-keyed bundle for a host the 
         cwd,
         marketplace: "mp",
         notifications: { mode: "orchestrated" },
-        pi,
+        run,
         plugin: "public",
         scope: "project",
       });
@@ -10985,7 +11097,7 @@ test("plugin install authentication: threads the GitLab provider bundle onto the
       const authCapture = captureInstallAuth(seamWith(git.gitOps));
       const credentials = createCredentialOpsFake({ boundary: "memory" });
       const deviceFlow = installDeviceFlow();
-      const { ctx, notifications, pi } = makeCtx();
+      const { ctx, notifications, run } = makeCtx();
 
       // act
       const outcome = await installPlugin({
@@ -10996,7 +11108,7 @@ test("plugin install authentication: threads the GitLab provider bundle onto the
         deviceFlowHttp: deviceFlow.http,
         marketplace: "mp",
         notifications: { mode: "orchestrated" },
-        pi,
+        run,
         plugin: "gitlab",
         scope: "project",
       });
@@ -11069,7 +11181,7 @@ test("plugin install authentication: memoizes one Device Flow result across same
         ],
       });
       const authMemo = new Map<string, AuthAttemptResult>();
-      const { ctx, notifications, pi } = makeCtx();
+      const { ctx, notifications, run } = makeCtx();
 
       // act
       const firstOutcome = await installPlugin({
@@ -11081,7 +11193,7 @@ test("plugin install authentication: memoizes one Device Flow result across same
         deviceFlowHttp: deviceFlow.http,
         marketplace: "mp",
         notifications: { mode: "orchestrated" },
-        pi,
+        run,
         plugin: "first",
         scope: "project",
       });
@@ -11094,7 +11206,7 @@ test("plugin install authentication: memoizes one Device Flow result across same
         deviceFlowHttp: deviceFlow.http,
         marketplace: "mp",
         notifications: { mode: "orchestrated" },
-        pi,
+        run,
         plugin: "second",
         scope: "project",
       });
@@ -11191,7 +11303,7 @@ test("plugin install authentication: classifies a providerless 401 without a cau
       });
       const git = createGitOps({ cloneThrows: cloneError, fixtureSourceDir: fixtureRepoDir });
       const credentials = createCredentialOpsFake({ boundary: "memory" });
-      const { ctx, notifications, pi } = makeCtx();
+      const { ctx, notifications, run } = makeCtx();
 
       // act
       const outcome = await installPlugin({
@@ -11200,7 +11312,7 @@ test("plugin install authentication: classifies a providerless 401 without a cau
         ctx,
         cwd,
         marketplace: "mp",
-        pi,
+        run,
         plugin: "private",
         scope: "project",
       });
@@ -11244,7 +11356,7 @@ test("plugin install authentication: preserves a network failure outside authent
       });
       const git = createGitOps({ cloneThrows: cloneError, fixtureSourceDir: fixtureRepoDir });
       const credentials = createCredentialOpsFake({ boundary: "memory" });
-      const { ctx, notifications, pi } = makeCtx();
+      const { ctx, notifications, run } = makeCtx();
 
       // act
       const outcome = await installPlugin({
@@ -11253,7 +11365,7 @@ test("plugin install authentication: preserves a network failure outside authent
         ctx,
         cwd,
         marketplace: "mp",
-        pi,
+        run,
         plugin: "network",
         scope: "project",
       });
@@ -11303,7 +11415,7 @@ test("plugin install authentication: contains a non-Error clone failure without 
         resolvePluginPin: cloneCache.resolvePluginPin,
       };
       const credentials = createCredentialOpsFake({ boundary: "memory" });
-      const { ctx, notifications, pi } = makeCtx();
+      const { ctx, notifications, run } = makeCtx();
 
       // act
       const outcome = await installPlugin({
@@ -11312,7 +11424,7 @@ test("plugin install authentication: contains a non-Error clone failure without 
         ctx,
         cwd,
         marketplace: "mp",
-        pi,
+        run,
         plugin: "oddball",
         scope: "project",
       });
@@ -11355,7 +11467,7 @@ test("plugin install authentication: classifies a cancelled Device Flow clone wi
       const git = createGitOps({ cloneThrows: cloneError, fixtureSourceDir: fixtureRepoDir });
       const credentials = createCredentialOpsFake({ boundary: "memory" });
       const deviceFlow = installDeviceFlow();
-      const { ctx, notifications, pi } = makeCtx();
+      const { ctx, notifications, run } = makeCtx();
 
       // act
       const outcome = await installPlugin({
@@ -11365,7 +11477,7 @@ test("plugin install authentication: classifies a cancelled Device Flow clone wi
         cwd,
         deviceFlowHttp: deviceFlow.http,
         marketplace: "mp",
-        pi,
+        run,
         plugin: "private",
         scope: "project",
       });
@@ -11440,7 +11552,7 @@ test("install cleans up each bridge staging root inside its own phase and a repe
           })),
           ctx,
         );
-      const { ctx, notifications, pi } = makeCtx({ toolNames: ["subagent"] });
+      const { ctx, notifications, run } = makeCtx({ piSubagentsLoaded: true });
 
       // act
       const first = await installPlugin({
@@ -11448,7 +11560,7 @@ test("install cleans up each bridge staging root inside its own phase and a repe
         cwd,
         marketplace: "mp",
         notifications: { mode: "orchestrated" },
-        pi,
+        run,
         plugin: "complete",
         scope: "project",
       });
@@ -11459,7 +11571,7 @@ test("install cleans up each bridge staging root inside its own phase and a repe
         cwd,
         marketplace: "mp",
         notifications: { mode: "orchestrated" },
-        pi,
+        run,
         plugin: "complete",
         scope: "project",
       });
@@ -11574,7 +11686,7 @@ test("install rejects a hooks file that changes after resolver validation", asyn
           })),
           ctx,
         );
-      const { ctx, notifications, pi } = makeCtx();
+      const { ctx, notifications, run } = makeCtx();
 
       // act
       const outcome = await installPlugin({
@@ -11582,7 +11694,7 @@ test("install rejects a hooks file that changes after resolver validation", asyn
         cwd,
         marketplace: "mp",
         notifications: { mode: "orchestrated" },
-        pi,
+        run,
         plugin: "hooky",
         scope: "project",
       });
@@ -11641,7 +11753,7 @@ test("retry proof: install: post-save hook-cache failure stays installed and ret
       );
       const locations = locationsFor("project", cwd);
       const manifestBytes = await readFile(manifestPath, "utf8");
-      const { ctx, notifications, pi } = makeCtx();
+      const { ctx, notifications, run } = makeCtx();
 
       // act
       const first = await installPlugin({
@@ -11649,7 +11761,7 @@ test("retry proof: install: post-save hook-cache failure stays installed and ret
         cwd,
         marketplace: "mp",
         notifications: { mode: "orchestrated" },
-        pi,
+        run,
         plugin: "hooky",
         scope: "project",
       });
@@ -11662,7 +11774,7 @@ test("retry proof: install: post-save hook-cache failure stays installed and ret
         cwd,
         marketplace: "mp",
         notifications: { mode: "orchestrated" },
-        pi,
+        run,
         plugin: "hooky",
         scope: "project",
       });
@@ -11723,7 +11835,7 @@ test("RESV-01: a post-save routing rebuild failure leaves the install recorded w
         throw new Error("post-save routing rebuild denied");
       });
       const locations = locationsFor("project", cwd);
-      const { ctx, notifications, pi } = makeCtx();
+      const { ctx, notifications, run } = makeCtx();
 
       // act
       const outcome = await installPlugin({
@@ -11731,7 +11843,7 @@ test("RESV-01: a post-save routing rebuild failure leaves the install recorded w
         cwd,
         marketplace: "mp",
         notifications: { mode: "orchestrated" },
-        pi,
+        run,
         plugin: "hooky",
         scope: "project",
       });
@@ -11816,7 +11928,7 @@ test("retry proof: install: disabled cascade failure preserves shrunken record a
 
       const stateBytes = await readFile(locations.stateJsonPath, "utf8");
       const manifestBytes = await readFile(manifestPath, "utf8");
-      const { ctx, notifications, pi } = makeCtx();
+      const { ctx, notifications, run } = makeCtx();
 
       // act
       const first = await installPlugin({
@@ -11825,7 +11937,7 @@ test("retry proof: install: disabled cascade failure preserves shrunken record a
         cwd,
         marketplace: "mp",
         notifications: { mode: "orchestrated" },
-        pi,
+        run,
         plugin: "hooky",
         scope: "project",
       });
@@ -11841,7 +11953,7 @@ test("retry proof: install: disabled cascade failure preserves shrunken record a
         cwd,
         marketplace: "mp",
         notifications: { mode: "orchestrated" },
-        pi,
+        run,
         plugin: "hooky",
         scope: "project",
       });
@@ -11900,7 +12012,7 @@ test("orchestrated install returns the invalid-config outcome without emitting",
       const expectedError = new Error(
         'Config file "claude-plugins.json" failed schema validation.',
       );
-      const { ctx, notifications, pi } = makeCtx();
+      const { ctx, notifications, run } = makeCtx();
 
       // act
       const outcome = await installPlugin({
@@ -11908,7 +12020,7 @@ test("orchestrated install returns the invalid-config outcome without emitting",
         cwd,
         marketplace: "mp",
         notifications: { mode: "orchestrated" },
-        pi,
+        run,
         plugin: "hello",
         scope: "project",
       });
@@ -11965,7 +12077,7 @@ test("orchestrated install reports when the state write does not retain its fres
 
         return originalParse(text);
       });
-      const { ctx, notifications, pi } = makeCtx();
+      const { ctx, notifications, run } = makeCtx();
       const expectedError = new Error(
         'installPlugin: internal error -- the state phase left no record for plugin "vanishing" to disable.',
       );
@@ -11977,7 +12089,7 @@ test("orchestrated install reports when the state write does not retain its fres
         cwd,
         marketplace: "mp",
         notifications: { mode: "orchestrated" },
-        pi,
+        run,
         plugin: "vanishing",
         scope: "project",
       });
@@ -12013,7 +12125,7 @@ test("install forwards explicit map-model and version-pin entrypoint options", a
         marketplaceRoot,
         pluginName: "plain",
       });
-      const { ctx, notifications, pi } = makeCtx();
+      const { ctx, notifications, run } = makeCtx();
 
       // act
       const outcome = await installPlugin({
@@ -12022,7 +12134,7 @@ test("install forwards explicit map-model and version-pin entrypoint options", a
         mapModel: false,
         marketplace: "mp",
         notifications: { mode: "orchestrated" },
-        pi,
+        run,
         pinVersionOverride: "pinned-by-entrypoint",
         plugin: "plain",
         scope: "project",
@@ -12088,7 +12200,7 @@ test("an unpinned ref-only source forwards the moving ref to its cold mirror clo
         localRefs: { "refs/heads/main": headSha },
         remoteRefs: { "refs/remotes/origin/main": headSha },
       });
-      const { ctx, notifications, pi } = makeCtx();
+      const { ctx, notifications, run } = makeCtx();
 
       // act
       const outcome = await installPlugin({
@@ -12097,7 +12209,7 @@ test("an unpinned ref-only source forwards the moving ref to its cold mirror clo
         cwd,
         marketplace: "mp",
         notifications: { mode: "orchestrated" },
-        pi,
+        run,
         plugin: "moving",
         scope: "project",
       });
@@ -12142,14 +12254,14 @@ test("standalone install normalizes a non-Error lock-directory failure", async (
         // eslint-disable-next-line @typescript-eslint/only-throw-error
         throw "lock directory unavailable";
       });
-      const { ctx, notifications, pi } = makeCtx();
+      const { ctx, notifications, run } = makeCtx();
 
       // act
       const outcome = await installPlugin({
         ctx,
         cwd,
         marketplace: "mp",
-        pi,
+        run,
         plugin: "hello",
         scope: "project",
       });
@@ -12207,9 +12319,9 @@ test("retry proof: install: commands prepare failure after a committed skill con
         },
         activeSchedule,
       );
-      const { ctx, notifications, pi } = makeCtx({
-        toolNames: ["subagent"],
-        commands: [adapterCommand()],
+      const { ctx, notifications, run } = makeCtx({
+        piMcpAdapterLoaded: true,
+        piSubagentsLoaded: true,
       });
 
       // act
@@ -12218,7 +12330,7 @@ test("retry proof: install: commands prepare failure after a committed skill con
         cwd,
         marketplace: "mp",
         notifications: { mode: "orchestrated" },
-        pi,
+        run,
         plugin: "retryable",
         scope: "project",
       });
@@ -12231,7 +12343,7 @@ test("retry proof: install: commands prepare failure after a committed skill con
         cwd,
         marketplace: "mp",
         notifications: { mode: "orchestrated" },
-        pi,
+        run,
         plugin: "retryable",
         scope: "project",
       });
@@ -12344,9 +12456,9 @@ test("retry proof: install: skills prepare failure with no committed phases conv
         },
         activeSchedule,
       );
-      const { ctx, notifications, pi } = makeCtx({
-        toolNames: ["subagent"],
-        commands: [adapterCommand()],
+      const { ctx, notifications, run } = makeCtx({
+        piMcpAdapterLoaded: true,
+        piSubagentsLoaded: true,
       });
 
       // act
@@ -12355,7 +12467,7 @@ test("retry proof: install: skills prepare failure with no committed phases conv
         cwd,
         marketplace: "mp",
         notifications: { mode: "orchestrated" },
-        pi,
+        run,
         plugin: "retryable",
         scope: "project",
       });
@@ -12368,7 +12480,7 @@ test("retry proof: install: skills prepare failure with no committed phases conv
         cwd,
         marketplace: "mp",
         notifications: { mode: "orchestrated" },
-        pi,
+        run,
         plugin: "retryable",
         scope: "project",
       });
@@ -12469,9 +12581,9 @@ test("retry proof: install: agents prepare failure after committed commands unwi
         },
         activeSchedule,
       );
-      const { ctx, notifications, pi } = makeCtx({
-        toolNames: ["subagent"],
-        commands: [adapterCommand()],
+      const { ctx, notifications, run } = makeCtx({
+        piMcpAdapterLoaded: true,
+        piSubagentsLoaded: true,
       });
 
       // act
@@ -12480,7 +12592,7 @@ test("retry proof: install: agents prepare failure after committed commands unwi
         cwd,
         marketplace: "mp",
         notifications: { mode: "orchestrated" },
-        pi,
+        run,
         plugin: "retryable",
         scope: "project",
       });
@@ -12493,7 +12605,7 @@ test("retry proof: install: agents prepare failure after committed commands unwi
         cwd,
         marketplace: "mp",
         notifications: { mode: "orchestrated" },
-        pi,
+        run,
         plugin: "retryable",
         scope: "project",
       });
@@ -12625,9 +12737,9 @@ test("retry proof: install: hooks reparse failure after three bridges retries wi
         },
         activeSchedule,
       );
-      const { ctx, notifications, pi } = makeCtx({
-        toolNames: ["subagent"],
-        commands: [adapterCommand()],
+      const { ctx, notifications, run } = makeCtx({
+        piMcpAdapterLoaded: true,
+        piSubagentsLoaded: true,
       });
 
       // act
@@ -12636,7 +12748,7 @@ test("retry proof: install: hooks reparse failure after three bridges retries wi
         cwd,
         marketplace: "mp",
         notifications: { mode: "orchestrated" },
-        pi,
+        run,
         plugin: "retryable",
         scope: "project",
       });
@@ -12650,7 +12762,7 @@ test("retry proof: install: hooks reparse failure after three bridges retries wi
         cwd,
         marketplace: "mp",
         notifications: { mode: "orchestrated" },
-        pi,
+        run,
         plugin: "retryable",
         scope: "project",
       });
@@ -12788,9 +12900,9 @@ test("retry proof: install: MCP prepare failure after hooks compensates every co
         },
         activeSchedule,
       );
-      const { ctx, notifications, pi } = makeCtx({
-        toolNames: ["subagent"],
-        commands: [adapterCommand()],
+      const { ctx, notifications, run } = makeCtx({
+        piMcpAdapterLoaded: true,
+        piSubagentsLoaded: true,
       });
 
       // act
@@ -12799,7 +12911,7 @@ test("retry proof: install: MCP prepare failure after hooks compensates every co
         cwd,
         marketplace: "mp",
         notifications: { mode: "orchestrated" },
-        pi,
+        run,
         plugin: "retryable",
         scope: "project",
       });
@@ -12812,7 +12924,7 @@ test("retry proof: install: MCP prepare failure after hooks compensates every co
         cwd,
         marketplace: "mp",
         notifications: { mode: "orchestrated" },
-        pi,
+        run,
         plugin: "retryable",
         scope: "project",
       });
@@ -12918,9 +13030,9 @@ test("retry proof: install: non-containment undo failure reports ordered rollbac
         },
         activeSchedule,
       );
-      const { ctx, notifications, pi } = makeCtx({
-        toolNames: ["subagent"],
-        commands: [adapterCommand()],
+      const { ctx, notifications, run } = makeCtx({
+        piMcpAdapterLoaded: true,
+        piSubagentsLoaded: true,
       });
 
       // act
@@ -12928,7 +13040,7 @@ test("retry proof: install: non-containment undo failure reports ordered rollbac
         ctx,
         cwd,
         marketplace: "mp",
-        pi,
+        run,
         plugin: "retryable",
         scope: "project",
       });
@@ -12941,7 +13053,7 @@ test("retry proof: install: non-containment undo failure reports ordered rollbac
         ctx,
         cwd,
         marketplace: "mp",
-        pi,
+        run,
         plugin: "retryable",
         scope: "project",
       });
@@ -13059,9 +13171,9 @@ test("retry proof: install: containment failure preserves the refused residue an
         },
         activeSchedule,
       );
-      const { ctx, notifications, pi } = makeCtx({
-        toolNames: ["subagent"],
-        commands: [adapterCommand()],
+      const { ctx, notifications, run } = makeCtx({
+        piMcpAdapterLoaded: true,
+        piSubagentsLoaded: true,
       });
 
       // act
@@ -13069,7 +13181,7 @@ test("retry proof: install: containment failure preserves the refused residue an
         ctx,
         cwd,
         marketplace: "mp",
-        pi,
+        run,
         plugin: "retryable",
         scope: "project",
       });
@@ -13081,7 +13193,7 @@ test("retry proof: install: containment failure preserves the refused residue an
         ctx,
         cwd,
         marketplace: "mp",
-        pi,
+        run,
         plugin: "retryable",
         scope: "project",
       });
@@ -13203,9 +13315,9 @@ test("retry proof: install: state commit race after staged work retries from unc
         activeSchedule,
       );
       const cacheDrops = observeCompletionDrops(t, completionCache);
-      const { ctx, notifications, pi } = makeCtx({
-        toolNames: ["subagent"],
-        commands: [adapterCommand()],
+      const { ctx, notifications, run } = makeCtx({
+        piMcpAdapterLoaded: true,
+        piSubagentsLoaded: true,
       });
 
       // act
@@ -13215,7 +13327,7 @@ test("retry proof: install: state commit race after staged work retries from unc
         cwd,
         marketplace: "mp",
         notifications: { mode: "orchestrated" },
-        pi,
+        run,
         plugin: "retryable",
         scope: "project",
       });
@@ -13231,7 +13343,7 @@ test("retry proof: install: state commit race after staged work retries from unc
         cwd,
         marketplace: "mp",
         notifications: { mode: "orchestrated" },
-        pi,
+        run,
         plugin: "retryable",
         scope: "project",
       });
@@ -13335,10 +13447,10 @@ test("RESV-01 / RESV-06: a successful cascade renders one row per member", async
         declareDependencies: true,
         siblingPlugins: [{ name: "some-other-plugin" }],
       });
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
-      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+      await installPlugin({ ctx, run, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
 
       // assert
       assert.deepStrictEqual(notifications, [
@@ -13373,10 +13485,10 @@ test("RESV-05 / RESV-06: an already-installed dependency renders as left alone",
         declareDependencies: true,
         siblingPlugins: [{ name: "some-other-plugin" }],
       });
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -13385,7 +13497,7 @@ test("RESV-05 / RESV-06: an already-installed dependency renders as left alone",
       notifications.length = 0;
 
       // act
-      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+      await installPlugin({ ctx, run, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
 
       // assert
       assert.deepStrictEqual(notifications, [
@@ -13418,10 +13530,10 @@ test("RESV-06: a dependency its marketplace does not declare is what the block n
         skills: [{ sourceName: "tool" }],
         declareDependencies: true,
       });
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
-      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+      await installPlugin({ ctx, run, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
 
       // assert
       assert.deepStrictEqual(notifications, [
@@ -13461,10 +13573,10 @@ test("TAGS-02 / D-07-03: an unsatisfiable path-source constraint installs the cu
         dependencyVersion: "^2.0.0",
         siblingPlugins: [{ name: "some-other-plugin" }],
       });
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
-      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+      await installPlugin({ ctx, run, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
 
       // assert
       assert.deepStrictEqual(notifications, [
@@ -13505,10 +13617,10 @@ test("RESV-06: a dependency whose own ledger throws is the block's subject", asy
           skillName: "some-other-plugin-tool",
         },
       });
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
-      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+      await installPlugin({ ctx, run, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
 
       // assert: the failing DEPENDENCY is the subject and carries its ledger's
       // own cause; the requesting plugin's row says why it is there.
@@ -13567,12 +13679,12 @@ test("XMKT-01 reload refuses an unlisted original declarer before installing the
       await saveState(locations.extensionRoot, state);
       const before = await readFile(locations.stateJsonPath);
       const beforeTree = await retryTree(locations.scopeRoot);
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
       const outcome = await installMissingDependency({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "beta",
@@ -13604,7 +13716,7 @@ test("XMKT-01 reload refuses an unlisted original declarer before installing the
       );
       const retry = await installMissingDependency({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "beta",
@@ -13684,12 +13796,12 @@ for (const scenario of [
           );
         }
 
-        const { ctx, pi } = makeCtx();
+        const { ctx, run } = makeCtx();
 
         // act
         const outcome = await installMissingDependency({
           ctx,
-          pi,
+          run,
           scope: "project",
           cwd,
           marketplace: "beta",
@@ -13758,12 +13870,12 @@ for (const scenario of [
         state.marketplaces["gamma"] = gamma;
         await saveState(locations.extensionRoot, state);
         const before = await readFile(locations.stateJsonPath);
-        const { ctx, pi } = makeCtx();
+        const { ctx, run } = makeCtx();
 
         // act
         const outcome = await installMissingDependency({
           ctx,
-          pi,
+          run,
           scope: "project",
           cwd,
           marketplace: "beta",
@@ -13851,12 +13963,12 @@ for (const scenario of [
           );
         }
 
-        const { ctx, pi } = makeCtx();
+        const { ctx, run } = makeCtx();
 
         // act
         const outcome = await installMissingDependency({
           ctx,
-          pi,
+          run,
           scope: "project",
           cwd,
           marketplace: "beta",
@@ -13928,12 +14040,12 @@ test("XMKT-01 project declaring policy outranks a permissive user source", async
       assert.ok(alpha !== undefined);
       state.marketplaces["alpha"] = alpha;
       await saveState(project.extensionRoot, state);
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
       const outcome = await installMissingDependency({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "beta",
@@ -13979,12 +14091,12 @@ test("XMKT-01 project missing install reads a user-only target source into proje
         preInstall: true,
         allowedDependencyMarketplaces: ["beta"],
       });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
       const outcome = await installMissingDependency({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "beta",
@@ -14040,12 +14152,12 @@ test("XMKT-01 missing install reports a source removed after authorization", asy
         return runPhases(phases, ctx);
       };
 
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
       const outcome = await installMissingDependency({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "beta",
@@ -14079,13 +14191,13 @@ test("MISS-01 / D-09-05: the entry point installs the missing dependency and its
         declareDependencies: true,
         siblingPlugins: [{ name: "some-other-plugin" }],
       });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
       const cacheDrops = observeCompletionDrops(t, completionCache);
 
       // act
       const outcome = await installMissingDependency({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -14140,12 +14252,12 @@ test("D-09-05: a dependency whose entry declares defaultEnabled false still land
         pluginName: "secrets-vault",
         entryDefaultEnabled: false,
       });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
       const outcome = await installMissingDependency({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -14178,12 +14290,12 @@ test("D-09-05: the declarers' ranges reach the cascade as the root range", async
         marketplaceName: "mp",
         pluginName: "secrets-vault",
       });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
       const outcome = await installMissingDependency({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -14223,14 +14335,14 @@ test("D-09-05: a satisfiable root range reaches the marketplace tag probe throug
         marketplaceName: "mp",
         pluginName: "secrets-vault",
       });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act -- the injected probe exercises the same options.marketplaceTagProbe
       // spread a caller-supplied seam takes; its "no-matching-tag" answer
       // still resolves through TAGS-02's current-copy fallback.
       const outcome = await installMissingDependency({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -14268,12 +14380,12 @@ test("D-09-05: a pinned git-source root records the tag's own version through th
       });
       const { gitOps, state: gitState } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
       const locations = locationsFor("project", cwd);
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
       const outcome = await installMissingDependency({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -14316,12 +14428,12 @@ test("D-09-05: a malformed skill degrades the missing dependency and surfaces a 
         pluginName: "secrets-vault",
         skills: [{ sourceName: "bad", frontmatterName: "[unterminated", body: "# Bad\nBody.\n" }],
       });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
       const outcome = await installMissingDependency({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -14365,12 +14477,12 @@ test("SURF-05: an orphan-rewake hook on the missing dependency carries orphanRew
           ],
         },
       });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
       const outcome = await installMissingDependency({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -14428,12 +14540,12 @@ test("D-09-04: the entry point walks with disabled records as walls", async () =
         updatedAt: "2026-01-01T00:00:00.000Z",
       };
       await saveState(locations.extensionRoot, seeded);
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
       const outcome = await installMissingDependency({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -14483,12 +14595,12 @@ test("D-09-06: an already-recorded key is skipped inside the lock", async () => 
       await saveState(locations.extensionRoot, seeded);
       await unlink(path.join(cwd, "mp-src", ".claude-plugin", "marketplace.json"));
       const before = await stat(locations.stateJsonPath);
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
       const outcome = await installMissingDependency({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -14522,12 +14634,12 @@ test("MISS-02: the root's own ledger failure passes through unwrapped", async ()
         marketplaceName: "mp",
         pluginName: "other-plugin",
       });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
       const outcome = await installMissingDependency({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -14562,12 +14674,12 @@ test("MISS-02 / D-03-07: a closure failure leaves nothing materialized and retur
         declareDependencies: true,
       });
       const before = await loadState(locations.extensionRoot);
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
       const outcome = await installMissingDependency({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -14596,12 +14708,12 @@ test("MISS-02 / D-03-08: an unreachable marketplace fails as not added and is ne
     try {
       // arrange -- "other" is not added in either scope.
       const locations = locationsFor("project", cwd);
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
       const outcome = await installMissingDependency({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "other",
@@ -14711,10 +14823,10 @@ test("WLIF-01: an installed workflow lands as an envelope and the record names i
           },
         ],
       });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
-      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+      await installPlugin({ ctx, run, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
 
       // assert -- the envelope path is composed with `path.join`, NOT with the
       // async artifact-path composer: a forgotten await there yields a leaf
@@ -14746,8 +14858,8 @@ interface WorkflowInstallRun {
 }
 
 /**
- * Install one plugin carrying a single well-formed workflow script in a session
- * whose tool list is exactly `toolNames`, and return the envelope bytes, the
+ * Install one plugin carrying a single well-formed workflow script in a run
+ * whose snapshot reports the host engine as `workflowEngineLoaded`, and return the envelope bytes, the
  * persisted inventory and the rendered row.
  *
  * The script carries a NAMED `meta` export on purpose: a default-export body
@@ -14758,7 +14870,7 @@ interface WorkflowInstallRun {
  * home would let the first run's envelope satisfy the second run's read.
  */
 async function installWorkflowBearingPlugin(
-  toolNames: readonly string[],
+  workflowEngineLoaded: boolean,
 ): Promise<WorkflowInstallRun> {
   return withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-workflows-softdep-"));
@@ -14776,9 +14888,9 @@ async function installWorkflowBearingPlugin(
           },
         ],
       });
-      const { ctx, pi, notifications } = makeCtx({ toolNames });
+      const { ctx, run, notifications } = makeCtx({ workflowEngineLoaded });
 
-      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+      await installPlugin({ ctx, run, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
 
       // The envelope path is composed with `path.join`, NOT with the async
       // artifact-path composer: a forgotten await there yields a leaf named
@@ -14800,14 +14912,12 @@ async function installWorkflowBearingPlugin(
 }
 
 test("WDEP-02: a workflow-bearing install names the host engine only when it is absent", async () => {
-  // arrange -- the two sessions differ ONLY in their tool list. A session
-  // exposing `workflow` alone is the `@nicknisi/pi-workflows` shape, which is
-  // not the host engine; `workflow_control` is the discriminator the host
-  // engine registers.
+  // arrange -- the two runs differ ONLY in whether their snapshot reports the
+  // host engine as loaded.
 
   // act
-  const withoutEngine = await installWorkflowBearingPlugin(["workflow"]);
-  const withEngine = await installWorkflowBearingPlugin(["workflow_control"]);
+  const withoutEngine = await installWorkflowBearingPlugin(false);
+  const withEngine = await installWorkflowBearingPlugin(true);
 
   // assert
   assert.match(withoutEngine.row.message, /\{[^}]*requires pi-dynamic-workflows[^}]*\}/);
@@ -14839,14 +14949,12 @@ const workflowEnvelopeBytes = `{
 `;
 
 test("WDEP-02 / WDEP-03: the envelope bytes do not depend on whether the host engine is loaded", async () => {
-  // arrange -- the two runs install the SAME fixture and differ only in the
-  // session's tool list. `workflow` alone is the `@nicknisi/pi-workflows`
-  // shape, which is not the host engine; `workflow_control` is the tool the
-  // host engine registers.
+  // arrange -- the two runs install the SAME fixture and differ only in
+  // whether their snapshot reports the host engine as loaded.
 
   // act
-  const withoutEngine = await installWorkflowBearingPlugin(["workflow"]);
-  const withEngine = await installWorkflowBearingPlugin(["workflow_control"]);
+  const withoutEngine = await installWorkflowBearingPlugin(false);
+  const withEngine = await installWorkflowBearingPlugin(true);
 
   // assert -- non-vacuity first. Each run wrote a real envelope and recorded a
   // real inventory, so "the two agree" cannot be satisfied by two empty reads.
@@ -14876,10 +14984,10 @@ test("WLIF-01: a plugin declaring no workflows records an empty inventory", asyn
         marketplaceRoot: path.join(cwd, "mp-src"),
         pluginName: "bare",
       });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
-      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "bare" });
+      await installPlugin({ ctx, run, scope: "project", cwd, marketplace: "mp", plugin: "bare" });
 
       // assert
       const state = await loadState(locations.extensionRoot);
@@ -14911,7 +15019,7 @@ test("WLIF-01: a re-stage over a kept record displaces the plugin's own envelope
       const first = makeCtx();
       await installPlugin({
         ctx: first.ctx,
-        pi: first.pi,
+        run: first.run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -14928,6 +15036,7 @@ test("WLIF-01: a re-stage over a kept record displaces the plugin's own envelope
       // act
       const ledgerOutcome = await runInstallLedger(kept, locations, {
         ctx,
+        run: runWithNothingLoaded(),
         cwd,
         marketplace: "mp",
         plugin: "hello",
@@ -14985,7 +15094,7 @@ test("WLIF-05: the projection reports the placed names in discovery order, stabl
       const first = makeCtx();
       await installPlugin({
         ctx: first.ctx,
-        pi: first.pi,
+        run: first.run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -14999,6 +15108,7 @@ test("WLIF-05: the projection reports the placed names in discovery order, stabl
       // rather than refusing on occupancy.
       const ledgerOutcome = await runInstallLedger(kept, locations, {
         ctx,
+        run: runWithNothingLoaded(),
         cwd,
         marketplace: "mp",
         plugin: "hello",
@@ -15048,7 +15158,7 @@ test("WLIF-05: a refused re-stage places nothing and leaves the foreign envelope
       const first = makeCtx();
       await installPlugin({
         ctx: first.ctx,
-        pi: first.pi,
+        run: first.run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -15065,6 +15175,7 @@ test("WLIF-05: a refused re-stage places nothing and leaves the foreign envelope
       await assert.rejects(
         runInstallLedger(kept, locations, {
           ctx,
+          run: runWithNothingLoaded(),
           cwd,
           marketplace: "mp",
           plugin: "hello",
@@ -15112,6 +15223,7 @@ test("WLIF-01: a statePhase failure takes the envelope and the staging tree back
       await assert.rejects(
         runInstallLedger(state, locations, {
           ctx,
+          run: runWithNothingLoaded(),
           cwd,
           marketplace: "mp",
           plugin: "hello",
@@ -15153,12 +15265,12 @@ test("WLIF-01: an undo before the workflows phase ran removes nothing and does n
         workflows: [{ sourceName: "greet" }],
       });
       await writeFile(path.join(pluginRoot, ".mcp.json"), "{ not json");
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
       const outcome = await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -15203,12 +15315,12 @@ test("WLIF-01: a staging cleanup leak from the workflows commit reaches the brid
           return originalRm(...args);
         },
       );
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
       const outcome = await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -15254,12 +15366,12 @@ test("WLIF-01: a workflows prepare failure leaves the undo with nothing to remov
           },
         ],
       });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
       const outcome = await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -15323,6 +15435,7 @@ test("WLIF-03: an undo that cannot remove a placed envelope raises the typed fai
           locations,
           {
             ctx,
+            run: runWithNothingLoaded(),
             cwd,
             marketplace: "mp",
             plugin: "hello",
@@ -15382,6 +15495,7 @@ test("T-112-01: an envelope this install did not place survives the undo byte-un
       await assert.rejects(
         runInstallLedger(state, locations, {
           ctx,
+          run: runWithNothingLoaded(),
           cwd,
           marketplace: "mp",
           plugin: "hello",
@@ -15450,6 +15564,7 @@ test("WLIF-03: an unremovable envelope does not abort the rest of the removal", 
           locations,
           {
             ctx,
+            run: runWithNothingLoaded(),
             cwd,
             marketplace: "mp",
             plugin: "hello",
@@ -15534,12 +15649,12 @@ test("WLIF-03: a failed workflows removal renders a rollback-partial child namin
         },
       );
       syncBuiltinESMExports();
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
       const outcome = await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -15608,12 +15723,12 @@ test("PI-14: a containment refusal from the workflows undo propagates verbatim",
         },
       );
       syncBuiltinESMExports();
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
       const outcome = await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -15670,13 +15785,13 @@ test("WLIF-01: installing removes an abandoned staging tree and spares a live on
       const backdated = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
       await utimes(abandoned, backdated, backdated);
       await mkdir(path.join(locations.workflowsStagingDir, "in-flight"), { recursive: true });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
       const logged = captureDebugLog(t);
 
       // act
       const outcome = await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -15709,13 +15824,13 @@ test("WLIF-01: an install succeeds unchanged when the staging sweep throws", asy
       });
       await mkdir(locations.workflowsHomeDir, { recursive: true });
       await writeFile(locations.workflowsStagingDir, "not a directory");
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       const logged = captureDebugLog(t);
 
       // act
       const outcome = await installPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -15762,7 +15877,7 @@ test("WLIF-01: install debug-logs a leak when the staging sweep cannot remove an
       const backdated = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
       await utimes(abandoned, backdated, backdated);
       await chmod(locations.workflowsStagingDir, 0o500);
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       const logged = captureDebugLog(t);
 
       // act
@@ -15770,7 +15885,7 @@ test("WLIF-01: install debug-logs a leak when the staging sweep cannot remove an
       try {
         outcome = await installPlugin({
           ctx,
-          pi,
+          run,
           scope: "project",
           cwd,
           marketplace: "mp",
@@ -15818,9 +15933,9 @@ async function installGatedWorkflowPlugin(body: string): Promise<{
         pluginName: "hello",
         workflows: [{ sourceName: "greet", body }],
       });
-      const { ctx, pi, notifications } = makeCtx({ toolNames: ["workflow_control"] });
+      const { ctx, run, notifications } = makeCtx({ workflowEngineLoaded: true });
 
-      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+      await installPlugin({ ctx, run, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
 
       const state = await loadState(locations.extensionRoot);
       const recordedWorkflows = state.marketplaces.mp?.plugins.hello?.resources.workflows;
@@ -16032,10 +16147,10 @@ test("SKTK-01: a skill that names a sibling workflow by its upstream spelling is
           },
         ],
       });
-      const { ctx, pi } = makeCtx({ toolNames: ["workflow_control"] });
+      const { ctx, run } = makeCtx({ workflowEngineLoaded: true });
 
       // act
-      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+      await installPlugin({ ctx, run, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
 
       // assert -- the staged skill names the command the session has; the
       // reference to a workflow the plugin does not ship stays verbatim.
@@ -16116,10 +16231,10 @@ test("WGATE-01 / D-115-05: a standalone install renders every workflow discovery
         path.join(pluginRoot, "workflows", "epsilon-bad.js"),
         Buffer.from([0x65, 0x78, 0xff, 0xfe, 0x0a]),
       );
-      const { ctx, pi, notifications } = makeCtx({ toolNames: ["workflow_control"] });
+      const { ctx, run, notifications } = makeCtx({ workflowEngineLoaded: true });
 
       // act
-      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+      await installPlugin({ ctx, run, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
 
       // assert
       assert.equal(notifications.length, 2, JSON.stringify(notifications));

@@ -12,6 +12,7 @@ import type { GitPluginRootResult } from "../../domain/resolver-types.ts";
 import type { GitBackedSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
+import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
 
 /** Clone-cache operations used to materialize an install source. */
@@ -28,6 +29,7 @@ export interface InstallCloneProbeOptions {
   readonly seam?: InstallCloneCacheSeam;
   readonly auth: {
     readonly ctx: NotificationContext;
+    readonly run: NotificationRun;
     readonly credentialOps: CredentialOps;
     readonly deviceFlowHttp?: DeviceFlowHttp;
     readonly authMemo?: Map<string, AuthAttemptResult>;

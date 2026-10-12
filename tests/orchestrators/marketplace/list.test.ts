@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import test from "node:test";
+import { describe, test } from "node:test";
 
 import { mock, verify, when } from "strong-mock";
 
@@ -10,20 +10,20 @@ import {
   parsePluginSource,
   pathSource,
 } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
-import { listMarketplaces } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/list.ts";
+import {
+  listMarketplaces,
+  loadMarketplaceListEntries,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/list.ts";
 import { saveConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import { expectSoftDepProbes } from "../../edge/notification-boundary.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type { ListMarketplacesOptions } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/list.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import type {
-  ExtensionAPI,
-  ExtensionContext,
-} from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { ExtensionContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
 type MarketplaceRecord = ExtensionState["marketplaces"][string];
 type NotificationSeverity = Parameters<ExtensionContext["ui"]["notify"]>[1];
@@ -39,7 +39,6 @@ interface CapturedNotification {
 interface NotificationBoundary {
   readonly ctx: ExtensionContext;
   readonly notifications: CapturedNotification[];
-  readonly pi: ExtensionAPI;
   readonly ui: NotificationUi;
 }
 
@@ -56,18 +55,19 @@ interface WorkspaceSnapshot {
 
 function notificationBoundary(name: string, expectsNotification: boolean): NotificationBoundary {
   const ctx = mock<ExtensionContext>({ exactParams: true, name: `${name} context` });
-  const pi = mock<ExtensionAPI>({ exactParams: true, name: `${name} extension API` });
   const ui = mock<NotificationUi>({ exactParams: true, name: `${name} UI` });
   const notifications: CapturedNotification[] = [];
   if (expectsNotification) {
+    when(() => ctx.mode)
+      .thenReturn("tui")
+      .times(1);
     when(() => ctx.ui).thenReturn(ui);
-    expectSoftDepProbes(pi, 1);
     when(() => ui.notify).thenReturn((message, severity) => {
       notifications.push({ message, ...(severity === undefined ? {} : { severity }) });
     });
   }
 
-  return { ctx, notifications, pi, ui };
+  return { ctx, notifications, ui };
 }
 
 async function seedAutoupdate(
@@ -96,6 +96,24 @@ async function seedMarketplaces(
     schemaVersion: 2,
     marketplaces: Object.fromEntries(records.map((record) => [record.name, record])),
   });
+}
+
+function pathRecord(
+  cwd: string,
+  name: string,
+  scope: MarketplaceRecord["scope"],
+  lastUpdatedAt?: string,
+): MarketplaceRecord {
+  return {
+    addedFromCwd: cwd,
+    manifestPath: path.join(cwd, `${name}.json`),
+    marketplaceRoot: path.join(cwd, name),
+    name,
+    plugins: {},
+    scope,
+    source: pathSource(`./${name}`),
+    ...(lastUpdatedAt === undefined ? {} : { lastUpdatedAt }),
+  };
 }
 
 function compareNames(left: string, right: string): number {
@@ -148,7 +166,7 @@ test("bare list emits only the empty-state sentinel without creating scope data"
     const options = {
       ctx: boundary.ctx,
       cwd,
-      pi: boundary.pi,
+      run: runWithNothingLoaded(),
     } satisfies ListMarketplacesOptions;
     const before = await snapshotWorkspace(home, cwd);
 
@@ -159,7 +177,6 @@ test("bare list emits only the empty-state sentinel without creating scope data"
     assert.deepStrictEqual(boundary.notifications, [{ message: "(no marketplaces)" }]);
     assert.deepStrictEqual(await snapshotWorkspace(home, cwd), before);
     verify(boundary.ctx);
-    verify(boundary.pi);
     verify(boundary.ui);
   });
 });
@@ -183,7 +200,7 @@ test("explicit project list renders the exact one-row path-source notification",
     const options = {
       ctx: boundary.ctx,
       cwd,
-      pi: boundary.pi,
+      run: runWithNothingLoaded(),
       scope: "project",
     } satisfies ListMarketplacesOptions;
     const before = await snapshotWorkspace(home, cwd);
@@ -197,7 +214,6 @@ test("explicit project list renders the exact one-row path-source notification",
     ]);
     assert.deepStrictEqual(await snapshotWorkspace(home, cwd), before);
     verify(boundary.ctx);
-    verify(boundary.pi);
     verify(boundary.ui);
   });
 });
@@ -221,7 +237,7 @@ test("explicit project list renders one GitHub source without a source suffix", 
     const options = {
       ctx: boundary.ctx,
       cwd,
-      pi: boundary.pi,
+      run: runWithNothingLoaded(),
       scope: "project",
     } satisfies ListMarketplacesOptions;
     const before = await snapshotWorkspace(home, cwd);
@@ -235,7 +251,6 @@ test("explicit project list renders one GitHub source without a source suffix", 
     ]);
     assert.deepStrictEqual(await snapshotWorkspace(home, cwd), before);
     verify(boundary.ctx);
-    verify(boundary.pi);
     verify(boundary.ui);
   });
 });
@@ -267,7 +282,7 @@ test("local config overrides base config and renders the exact autoupdate marker
     const options = {
       ctx: boundary.ctx,
       cwd,
-      pi: boundary.pi,
+      run: runWithNothingLoaded(),
       scope: "project",
     } satisfies ListMarketplacesOptions;
     const before = await snapshotWorkspace(home, cwd);
@@ -281,7 +296,6 @@ test("local config overrides base config and renders the exact autoupdate marker
     ]);
     assert.deepStrictEqual(await snapshotWorkspace(home, cwd), before);
     verify(boundary.ctx);
-    verify(boundary.pi);
     verify(boundary.ui);
   });
 });
@@ -306,7 +320,7 @@ test("lastUpdatedAt remains stored but renders no timestamp or status marker", a
     const options = {
       ctx: boundary.ctx,
       cwd,
-      pi: boundary.pi,
+      run: runWithNothingLoaded(),
       scope: "project",
     } satisfies ListMarketplacesOptions;
     const before = await snapshotWorkspace(home, cwd);
@@ -320,7 +334,6 @@ test("lastUpdatedAt remains stored but renders no timestamp or status marker", a
     ]);
     assert.deepStrictEqual(await snapshotWorkspace(home, cwd), before);
     verify(boundary.ctx);
-    verify(boundary.pi);
     verify(boundary.ui);
   });
 });
@@ -344,7 +357,7 @@ test("explicit user list renders only the user scope", async () => {
     const options = {
       ctx: boundary.ctx,
       cwd,
-      pi: boundary.pi,
+      run: runWithNothingLoaded(),
       scope: "user",
     } satisfies ListMarketplacesOptions;
     const before = await snapshotWorkspace(home, cwd);
@@ -358,7 +371,6 @@ test("explicit user list renders only the user scope", async () => {
     ]);
     assert.deepStrictEqual(await snapshotWorkspace(home, cwd), before);
     verify(boundary.ctx);
-    verify(boundary.pi);
     verify(boundary.ui);
   });
 });
@@ -430,7 +442,7 @@ test("bare list emits the exact many-row notification in project-then-user inser
     const options = {
       ctx: boundary.ctx,
       cwd,
-      pi: boundary.pi,
+      run: runWithNothingLoaded(),
     } satisfies ListMarketplacesOptions;
     const before = await snapshotWorkspace(home, cwd);
 
@@ -446,7 +458,6 @@ test("bare list emits the exact many-row notification in project-then-user inser
     ]);
     assert.deepStrictEqual(await snapshotWorkspace(home, cwd), before);
     verify(boundary.ctx);
-    verify(boundary.pi);
     verify(boundary.ui);
   });
 });
@@ -478,7 +489,7 @@ test("invalid local config is ignored while the valid base autoupdate value rend
     const options = {
       ctx: boundary.ctx,
       cwd,
-      pi: boundary.pi,
+      run: runWithNothingLoaded(),
       scope: "project",
     } satisfies ListMarketplacesOptions;
     const before = await snapshotWorkspace(home, cwd);
@@ -494,7 +505,6 @@ test("invalid local config is ignored while the valid base autoupdate value rend
     ]);
     assert.deepStrictEqual(await snapshotWorkspace(home, cwd), before);
     verify(boundary.ctx);
-    verify(boundary.pi);
     verify(boundary.ui);
   });
 });
@@ -509,7 +519,7 @@ test("unsupported state schema rejects exactly without notifying or mutating the
     const options = {
       ctx: boundary.ctx,
       cwd,
-      pi: boundary.pi,
+      run: runWithNothingLoaded(),
       scope: "project",
     } satisfies ListMarketplacesOptions;
     const before = await snapshotWorkspace(home, cwd);
@@ -533,7 +543,142 @@ test("unsupported state schema rejects exactly without notifying or mutating the
     assert.deepStrictEqual(boundary.notifications, []);
     assert.deepStrictEqual(await snapshotWorkspace(home, cwd), before);
     verify(boundary.ctx);
-    verify(boundary.pi);
     verify(boundary.ui);
+  });
+});
+
+describe("loadMarketplaceListEntries", () => {
+  test("returns one block per record in project-then-user insertion order", async () => {
+    await withHermeticHome(async ({ cwd }) => {
+      // arrange
+      await seedMarketplaces(locationsFor("project", cwd), [
+        pathRecord(cwd, "proj-b", "project"),
+        pathRecord(cwd, "proj-a", "project"),
+      ]);
+      await seedMarketplaces(locationsFor("user", cwd), [pathRecord(cwd, "user-a", "user")]);
+
+      // act
+      const blocks = (await loadMarketplaceListEntries({ cwd })).map((entry) => entry.block);
+
+      // assert
+      assert.deepStrictEqual(blocks, [
+        { name: "proj-b", scope: "project", severity: "info", plugins: [] },
+        { name: "proj-a", scope: "project", severity: "info", plugins: [] },
+        { name: "user-a", scope: "user", severity: "info", plugins: [] },
+      ]);
+    });
+  });
+
+  test("pairs each block with the scope and state record it was built from", async () => {
+    await withHermeticHome(async ({ cwd }) => {
+      // arrange
+      await seedMarketplaces(locationsFor("project", cwd), [pathRecord(cwd, "proj-a", "project")]);
+      await seedMarketplaces(locationsFor("user", cwd), [pathRecord(cwd, "user-a", "user")]);
+
+      // act
+      const entries = await loadMarketplaceListEntries({ cwd });
+
+      // assert
+      assert.deepStrictEqual(
+        entries.map(({ scope, record, block }) => ({
+          scope,
+          record: record.name,
+          block: block.name,
+        })),
+        [
+          { scope: "project", record: "proj-a", block: "proj-a" },
+          { scope: "user", record: "user-a", block: "user-a" },
+        ],
+      );
+    });
+  });
+
+  test("returns only the requested scope's blocks", async () => {
+    await withHermeticHome(async ({ cwd }) => {
+      // arrange
+      await seedMarketplaces(locationsFor("project", cwd), [pathRecord(cwd, "proj-a", "project")]);
+      await seedMarketplaces(locationsFor("user", cwd), [pathRecord(cwd, "user-a", "user")]);
+
+      // act
+      const blocks = (await loadMarketplaceListEntries({ cwd, scope: "user" })).map(
+        (entry) => entry.block,
+      );
+
+      // assert
+      assert.deepStrictEqual(blocks, [
+        { name: "user-a", scope: "user", severity: "info", plugins: [] },
+      ]);
+    });
+  });
+
+  test("carries autoupdate details when the merged config turns autoupdate on", async () => {
+    await withHermeticHome(async ({ cwd }) => {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedMarketplaces(locations, [pathRecord(cwd, "auto", "project")]);
+      await seedAutoupdate(locations, locations.configJsonPath, "auto", "./auto", true);
+
+      // act
+      const blocks = (await loadMarketplaceListEntries({ cwd, scope: "project" })).map(
+        (entry) => entry.block,
+      );
+
+      // assert
+      assert.deepStrictEqual(blocks, [
+        {
+          name: "auto",
+          scope: "project",
+          severity: "info",
+          details: { autoupdate: true },
+          plugins: [],
+        },
+      ]);
+    });
+  });
+
+  test("carries the last-update time with autoupdate off", async () => {
+    await withHermeticHome(async ({ cwd }) => {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedMarketplaces(locations, [
+        pathRecord(cwd, "dated", "project", "2026-05-25T00:00:00Z"),
+      ]);
+      await seedAutoupdate(locations, locations.configJsonPath, "dated", "./dated", false);
+
+      // act
+      const blocks = (await loadMarketplaceListEntries({ cwd, scope: "project" })).map(
+        (entry) => entry.block,
+      );
+
+      // assert
+      assert.deepStrictEqual(blocks, [
+        {
+          name: "dated",
+          scope: "project",
+          severity: "info",
+          details: { autoupdate: false, lastUpdatedAt: "2026-05-25T00:00:00Z" },
+          plugins: [],
+        },
+      ]);
+    });
+  });
+
+  test("omits details when autoupdate is off and no last-update time is recorded", async () => {
+    await withHermeticHome(async ({ cwd }) => {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedMarketplaces(locations, [pathRecord(cwd, "plain", "project")]);
+      await seedAutoupdate(locations, locations.configJsonPath, "plain", "./plain", false);
+
+      // act
+      const blocks = (await loadMarketplaceListEntries({ cwd, scope: "project" })).map(
+        (entry) => entry.block,
+      );
+
+      // assert
+      assert.deepStrictEqual(blocks, [
+        { name: "plain", scope: "project", severity: "info", plugins: [] },
+      ]);
+    });
   });
 });

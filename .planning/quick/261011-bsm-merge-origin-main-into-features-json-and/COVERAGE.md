@@ -1,0 +1,1 @@
+No external API integration: this task merges origin/main into features/json and ports main's already-reviewed pi-mcp-adapter work onto the branch's notification output model; it adds no new external API, SDK, or service capability, and the "integration" matches refer to the repository's integration test suite.

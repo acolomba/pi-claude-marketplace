@@ -1,49 +1,44 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { ManualRecoveryError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 import {
-  composeMarketplaceBlock,
-  composePluginLinesWith,
+  composePluginLines,
   composeReconcileAppliedBody,
-  composeReasons,
-  composeVersionArrow,
-  ICON_AVAILABLE,
-  ICON_DISABLED,
-  ICON_INSTALLED,
-  ICON_PARTIALLY_INSTALLED,
-  ICON_UNINSTALLABLE,
-  installedLikeRow,
-  joinTokens,
-  partiallyInstalledRow,
-  pluginRow,
-  renderAvailableRow,
-  renderDisabledRow,
+  formatEnvelopeArguments,
+  formatRawSurface,
   renderMarketplaceInfo,
   renderMarketplaceInfoCascade,
   renderMarketplaceNotAdded,
   renderMpHeader,
-  renderPartiallyAvailableRow,
   renderPluginInfo,
   renderPluginInfoCascade,
-  renderRemoteRow,
-  renderScopeBracket,
-  renderUnavailableRow,
-  renderUninstalledRow,
-  renderVersion,
+  renderPruneCommittedWarning,
+  renderPruneEmpty,
+  renderReconcilePendingEmpty,
 } from "../../extensions/pi-claude-marketplace/shared/notification-grammar.ts";
 import { shouldEmitReloadHint } from "../../extensions/pi-claude-marketplace/shared/notification-summary.ts";
 
+import type { NotifyArguments } from "../../extensions/pi-claude-marketplace/shared/notification-grammar.ts";
 import type {
+  ResolvedMarketplace,
+  ResolvedRawSurface,
+  ResolvedRow,
+} from "../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
+import type {
+  MarketplaceNotAddedMessage,
   MarketplaceNotificationMessage,
   McpServerSummaryEntry,
+  PluginFailedMessage,
   PluginInfoMessage,
+  PluginInstalledMessage,
   PluginNotificationMessage,
+  PluginPartiallyInstalledMessage,
+  PruneEmptyMessage,
   Reason,
 } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
 /**
- * PL-4: `composePluginLinesWith` selects the description-bearing rows by their
+ * PL-4: `composePluginLines` selects the description-bearing rows by their
  * status discriminant. These two spellings of that set -- by the presence of the
  * optional member, and by the status literals -- must stay the same set, so the
  * control below pins them against each other in BOTH directions and fails if a
@@ -69,12 +64,47 @@ type MutuallyAssignable<A, B> = [A] extends [B] ? ([B] extends [A] ? true : fals
 
 void (true satisfies MutuallyAssignable<DescriptionBearingByMember, DescriptionBearingByStatus>);
 
+/**
+ * D-13: `composePluginLines` accepts a resolved row and refuses the producer row
+ * it was resolved from, alone or inside a union, so a caller cannot render a row
+ * whose `{requires ...}` markers `resolveRows` has not composed yet.
+ */
+type Assignable<A, B> = [A] extends [B] ? true : false;
+type PluginRowInput = Parameters<typeof composePluginLines>[0];
+void (true satisfies Assignable<ResolvedRow<PluginPartiallyInstalledMessage>, PluginRowInput>);
+void (false satisfies Assignable<PluginInstalledMessage, PluginRowInput>);
+void ((row: PluginPartiallyInstalledMessage) =>
+  // @ts-expect-error an unresolved producer row still declares its dependencies
+  composePluginLines(row, "user"));
+void ((row: PluginPartiallyInstalledMessage | ResolvedRow<PluginInstalledMessage>) =>
+  // @ts-expect-error a union with an unresolved member still declares its dependencies
+  composePluginLines(row, "user"));
+
+for (const { row, expected } of [
+  {
+    row: { status: "unknown", name: "alpha", reasons: [], missingPolicy: true },
+    expected: '  alpha (failed) {internal: no render arm for "unknown"}',
+  },
+  {
+    row: { status: "unknown", reasons: [], missingPolicy: true },
+    expected: '  ? (failed) {internal: no render arm for "unknown"}',
+  },
+]) {
+  test(`formats the missing-policy diagnostic ${expected}`, () => {
+    // act
+    const lines = composePluginLines(row as never, "user");
+
+    // assert
+    assert.deepStrictEqual(lines, [expected]);
+  });
+}
+
 test("exports notification grammar from its named owner", () => {
   // arrange
   const expectedType = "function";
 
   // act
-  const actualType = typeof joinTokens;
+  const actualType = typeof composePluginLines;
 
   // assert
   assert.equal(actualType, expectedType);
@@ -135,7 +165,7 @@ for (const { status, extra, expected } of [
     const marketplace = { ...MARKETPLACE_BASE, status, ...extra };
 
     // act
-    const rendered = renderMpHeader(marketplace as never, bothLoadedProbe());
+    const rendered = renderMpHeader(marketplace as never);
 
     // assert
     assert.equal(rendered, expected);
@@ -149,7 +179,9 @@ const ROW_CASES = [
       name: "alpha",
       scope: "user",
       version: "1.0.0",
-      dependencies: [],
+      reasons: [],
+      severity: "info",
+      needsReload: true,
     },
     expected: "● alpha v1.0.0 (installed)",
   },
@@ -160,13 +192,22 @@ const ROW_CASES = [
       scope: "project",
       from: "1",
       to: "2",
-      dependencies: [],
       reasons: ["lsp"],
+      severity: "info",
+      needsReload: true,
     },
     expected: "● alpha [project] v1 → v2 (updated) {lsp}",
   },
   {
-    plugin: { status: "reinstalled", name: "alpha", scope: "user", version: "2", dependencies: [] },
+    plugin: {
+      status: "reinstalled",
+      name: "alpha",
+      scope: "user",
+      version: "2",
+      reasons: [],
+      severity: "info",
+      needsReload: true,
+    },
     expected: "● alpha v2 (reinstalled)",
   },
   {
@@ -177,14 +218,18 @@ const ROW_CASES = [
       version: "1",
       needsReload: true,
       severity: "info",
+      reasons: [],
     },
     expected: "○ alpha [project] v1 (uninstalled)",
   },
   {
-    plugin: { status: "available", name: "alpha", version: "1" },
+    plugin: { status: "available", name: "alpha", version: "1", reasons: [] },
     expected: "○ alpha v1 (available)",
   },
-  { plugin: { status: "remote", name: "alpha", version: "1" }, expected: "◌ alpha v1 (remote)" },
+  {
+    plugin: { status: "remote", name: "alpha", version: "1", reasons: [] },
+    expected: "◌ alpha v1 (remote)",
+  },
   {
     plugin: { status: "unavailable", name: "alpha", version: "1", reasons: ["invalid manifest"] },
     expected: "⊘ alpha v1 (unavailable) {invalid manifest}",
@@ -200,7 +245,6 @@ const ROW_CASES = [
       scope: "user",
       version: "2",
       reasons: [],
-      dependencies: [],
     },
     expected: "● alpha v2 (upgradable)",
   },
@@ -211,7 +255,6 @@ const ROW_CASES = [
       scope: "user",
       version: "1",
       reasons: ["lsp"],
-      dependencies: [],
     },
     expected: "◉ alpha v1 (partially-installed) {lsp}",
   },
@@ -222,7 +265,6 @@ const ROW_CASES = [
       scope: "user",
       version: "2",
       reasons: ["lsp"],
-      dependencies: [],
     },
     expected: "● alpha v2 (partially-upgradable) {lsp}",
   },
@@ -243,6 +285,7 @@ const ROW_CASES = [
       scope: "user",
       version: "1",
       reasons: ["not found"],
+      severity: "error",
     },
     expected: "⊘ alpha v1 (failed) {not found}",
   },
@@ -257,23 +300,23 @@ const ROW_CASES = [
     expected: "⊘ alpha v1 (manual recovery) {rollback partial}",
   },
   {
-    plugin: { status: "will install", name: "alpha", scope: "user" },
+    plugin: { status: "will install", name: "alpha", scope: "user", reasons: [] },
     expected: "● alpha (will install)",
   },
   {
-    plugin: { status: "will install", name: "alpha", scope: "user", partial: true },
+    plugin: { status: "will install", name: "alpha", scope: "user", partial: true, reasons: [] },
     expected: "● alpha (will partially install)",
   },
   {
-    plugin: { status: "will uninstall", name: "alpha", scope: "user" },
+    plugin: { status: "will uninstall", name: "alpha", scope: "user", reasons: [] },
     expected: "○ alpha (will uninstall)",
   },
   {
-    plugin: { status: "will enable", name: "alpha", scope: "user" },
+    plugin: { status: "will enable", name: "alpha", scope: "user", reasons: [] },
     expected: "● alpha (will enable)",
   },
   {
-    plugin: { status: "will disable", name: "alpha", scope: "user" },
+    plugin: { status: "will disable", name: "alpha", scope: "user", reasons: [] },
     expected: "◍ alpha (will disable)",
   },
   {
@@ -288,7 +331,7 @@ const ROW_CASES = [
     },
     expected: "◍ alpha v1 (disabled)",
   },
-] as const;
+] as const satisfies readonly { plugin: ResolvedRow; expected: string }[];
 
 for (const { plugin, expected } of ROW_CASES) {
   test(`renders exact ${plugin.status} row through the marketplace block`, () => {
@@ -296,7 +339,7 @@ for (const { plugin, expected } of ROW_CASES) {
     const marketplace = { ...MARKETPLACE_BASE, plugins: [plugin] };
 
     // act
-    const rendered = composeMarketplaceBlock(marketplace as never, bothLoadedProbe());
+    const rendered = composeReconcileAppliedBody([marketplace]);
 
     // assert
     assert.equal(rendered, `● official [user]\n  ${expected}`);
@@ -315,14 +358,23 @@ test("pending uninstall stays bare while prune preview adds its reason without a
     scope: "user",
     plugins: [{ status: "will uninstall", name: "shared-lib", reasons: ["dependency pruned"] }],
   };
+  const resolvedBare: ResolvedMarketplace = {
+    ...bare,
+    plugins: [{ status: "will uninstall", name: "shared-lib", reasons: [] }],
+  };
+  const resolvedPreview: ResolvedMarketplace = {
+    ...prunePreview,
+    plugins: [{ status: "will uninstall", name: "shared-lib", reasons: ["dependency pruned"] }],
+  };
 
-  // act & assert
+  // act
+  const bareBlock = composeReconcileAppliedBody([resolvedBare]);
+  const previewBlock = composeReconcileAppliedBody([resolvedPreview]);
+
+  // assert
+  assert.equal(bareBlock, "● official [user]\n  ○ shared-lib (will uninstall)");
   assert.equal(
-    composeMarketplaceBlock(bare, bothLoadedProbe()),
-    "● official [user]\n  ○ shared-lib (will uninstall)",
-  );
-  assert.equal(
-    composeMarketplaceBlock(prunePreview, bothLoadedProbe()),
+    previewBlock,
     "● official [user]\n  ○ shared-lib (will uninstall) {dependency pruned}",
   );
   assert.equal(shouldEmitReloadHint({ marketplaces: [bare] }), false);
@@ -331,23 +383,24 @@ test("pending uninstall stays bare while prune preview adds its reason without a
 
 test("composes descriptions, hints, causes, leaks, and rollback failures in order", () => {
   // arrange
-  const cause = new ManualRecoveryError("outer", ["/tmp/leak"], { cause: new Error("inner") });
   const plugin = {
     status: "failed",
+    severity: "error",
     name: "alpha",
     reasons: ["rollback partial"],
-    partialHint: true,
-    cause,
-    rollbackPartial: [{ phase: "skills", cause: new Error("rollback") }, { phase: "commands" }],
-  };
+    hint: "stale-gate-update",
+    failure: {
+      cause: { causeChain: ["outer", "inner"], truncated: false },
+      leaks: ["/tmp/leak"],
+      rollbackPartial: [
+        { phase: "skills", cause: { causeChain: ["rollback"], truncated: false } },
+        { phase: "commands" },
+      ],
+    },
+  } satisfies ResolvedRow<PluginFailedMessage>;
 
   // act
-  const lines = composePluginLinesWith(
-    plugin as never,
-    bothLoadedProbe(),
-    "user",
-    () => "⊘ alpha (failed) {rollback partial}",
-  );
+  const lines = composePluginLines(plugin, "user");
 
   // assert
   assert.deepStrictEqual(lines, [
@@ -361,22 +414,23 @@ test("composes descriptions, hints, causes, leaks, and rollback failures in orde
   ]);
 });
 
-test("renders the remedy cause trailer on a disabled row that carries one", () => {
+test("renders the remedy cause line of a realized disabled row", () => {
   // arrange
-  const plugin = {
+  const row = {
     status: "disabled",
     name: "alpha",
     reasons: ["dependency unsatisfied"],
-    cause: new Error('Install "vault@mp" or uninstall "alpha@mp"'),
-  };
+    severity: "warning",
+    needsReload: false,
+    failure: {
+      cause: { causeChain: ['Install "vault@mp" or uninstall "alpha@mp"'], truncated: false },
+      leaks: [],
+      rollbackPartial: [],
+    },
+  } as const satisfies ResolvedRow;
 
   // act
-  const lines = composePluginLinesWith(
-    plugin as never,
-    bothLoadedProbe(),
-    "user",
-    () => "◍ alpha (disabled) {dependency unsatisfied}",
-  );
+  const lines = composePluginLines(row, "user");
 
   // assert
   assert.deepStrictEqual(lines, [
@@ -385,38 +439,26 @@ test("renders the remedy cause trailer on a disabled row that carries one", () =
   ]);
 });
 
-test("renders no trailer on a disabled row that carries no cause", () => {
+test("renders the held-update cause line of a skipped row", () => {
   // arrange
-  const plugin = { status: "disabled", name: "alpha" };
-
-  // act
-  const lines = composePluginLinesWith(
-    plugin as never,
-    bothLoadedProbe(),
-    "user",
-    () => "◍ alpha (disabled)",
-  );
-
-  // assert
-  assert.deepStrictEqual(lines, ["  ◍ alpha (disabled)"]);
-});
-
-test("renders the held-update cause trailer on a skipped row that carries one", () => {
-  // arrange
-  const plugin = {
+  const row = {
     status: "skipped",
     name: "alpha",
     reasons: ["dependents constrain"],
-    cause: new Error('the declared ranges admit no version in common -- required by "beta@mp"'),
-  };
+    severity: "warning",
+    needsReload: false,
+    failure: {
+      cause: {
+        causeChain: ['the declared ranges admit no version in common -- required by "beta@mp"'],
+        truncated: false,
+      },
+      leaks: [],
+      rollbackPartial: [],
+    },
+  } as const satisfies ResolvedRow;
 
   // act
-  const lines = composePluginLinesWith(
-    plugin as never,
-    bothLoadedProbe(),
-    "user",
-    () => "⊘ alpha (skipped) {dependents constrain}",
-  );
+  const lines = composePluginLines(row, "user");
 
   // assert
   assert.deepStrictEqual(lines, [
@@ -425,42 +467,77 @@ test("renders the held-update cause trailer on a skipped row that carries one", 
   ]);
 });
 
-test("composes exactly one line for a skipped row with no cause", () => {
-  // arrange
-  const plugin = { status: "skipped", name: "alpha", reasons: ["up-to-date"] };
-
-  // act
-  const lines = composePluginLinesWith(
-    plugin as never,
-    bothLoadedProbe(),
-    "user",
-    () => "⊘ alpha (skipped) {up-to-date}",
-  );
-
-  // assert
-  assert.deepStrictEqual(lines, ["  ⊘ alpha (skipped) {up-to-date}"]);
-});
-
-for (const { plugin, trailer } of [
+for (const { plugin, expectedLines } of [
   {
-    plugin: { status: "partially-available", name: "alpha", partialHint: true },
-    trailer: "Re-run with --partial to install the supported components.",
+    plugin: {
+      status: "partially-available",
+      name: "alpha",
+      reasons: ["lsp"],
+      description: "summary",
+      hint: "partial-install",
+    },
+    expectedLines: [
+      "  ⊖ alpha (partially-available) {lsp}",
+      "    summary",
+      "    Re-run with --partial to install the supported components.",
+    ],
   },
   {
-    plugin: { status: "partially-upgradable", name: "alpha", partialHint: true },
-    trailer: "Re-run with --partial to update with the supported components.",
+    plugin: {
+      status: "partially-upgradable",
+      name: "alpha",
+      reasons: ["lsp"],
+      description: "summary",
+      hint: "partial-update",
+    },
+    expectedLines: [
+      "  ● alpha (partially-upgradable) {lsp}",
+      "    summary",
+      "    Re-run with --partial to update with the supported components.",
+    ],
   },
   {
-    plugin: { status: "disabled", name: "alpha", enableHint: true },
-    trailer: "Run enable on this plugin to use its components.",
+    plugin: {
+      status: "disabled",
+      severity: "info",
+      needsReload: true,
+      name: "alpha",
+      description: "summary",
+      reasons: [],
+      hint: "enable",
+    },
+    expectedLines: [
+      "  ◍ alpha (disabled)",
+      "    summary",
+      "    Run enable on this plugin to use its components.",
+    ],
   },
-] as const) {
-  test(`renders the exact ${plugin.status} trailer`, () => {
-    // arrange / act
-    const lines = composePluginLinesWith(plugin as never, bothLoadedProbe(), "user", () => "row");
+  {
+    plugin: {
+      status: "failed",
+      severity: "error",
+      name: "alpha",
+      reasons: [],
+      hint: "stale-gate-update",
+      failure: {
+        cause: { causeChain: ["gate"], truncated: false },
+        leaks: [],
+        rollbackPartial: [],
+      },
+    },
+    expectedLines: [
+      "  ⊘ alpha (failed)",
+      "    Run update --partial on this plugin, then enable it again.",
+      "    cause: gate",
+    ],
+  },
+] as const satisfies readonly { plugin: ResolvedRow; expectedLines: readonly string[] }[]) {
+  test(`renders the ${plugin.hint} hint after the description and before any failure line`, () => {
+    // act
+    const lines = composePluginLines(plugin, "user");
 
     // assert
-    assert.deepStrictEqual(lines, ["  row", `    ${trailer}`]);
+    assert.deepStrictEqual(lines, expectedLines);
   });
 }
 
@@ -469,22 +546,18 @@ test("truncates a long inventory description and preserves a short one", () => {
   const longDescription = "x".repeat(67);
 
   // act
-  const longLines = composePluginLinesWith(
-    { status: "available", name: "alpha", description: longDescription } as never,
-    bothLoadedProbe(),
+  const longLines = composePluginLines(
+    { status: "available", name: "alpha", description: longDescription, reasons: [] },
     "user",
-    () => "row",
   );
-  const shortLines = composePluginLinesWith(
-    { status: "available", name: "alpha", description: "short" } as never,
-    bothLoadedProbe(),
+  const shortLines = composePluginLines(
+    { status: "available", name: "alpha", description: "short", reasons: [] },
     "user",
-    () => "row",
   );
 
   // assert
-  assert.deepStrictEqual(longLines, ["  row", `    ${"x".repeat(63)}...`]);
-  assert.deepStrictEqual(shortLines, ["  row", "    short"]);
+  assert.deepStrictEqual(longLines, ["  ○ alpha (available)", `    ${"x".repeat(63)}...`]);
+  assert.deepStrictEqual(shortLines, ["  ○ alpha (available)", "    short"]);
 });
 
 const INFO_DETAILS = { autoupdate: false, lastUpdatedAt: "2025-01-02T03:04:05.000Z" } as const;
@@ -519,7 +592,7 @@ for (const { source, expectedSource } of [
     };
 
     // act
-    const rendered = renderMarketplaceInfo(message as never, bothLoadedProbe());
+    const rendered = renderMarketplaceInfo(message as never);
 
     // assert
     const updated = source.sourceKind === "path" ? "" : "\nlast_updated: 2025-01-02T03:04:05.000Z";
@@ -552,7 +625,7 @@ test("marketplace info escapes hostile allowlist values on one line without muta
   };
 
   // act
-  const rendered = renderMarketplaceInfo(message, bothLoadedProbe());
+  const rendered = renderMarketplaceInfo(message);
 
   // assert
   assert.equal(
@@ -580,11 +653,8 @@ test("marketplace info cascades preserve zero and many shapes and order", () => 
   };
 
   // act
-  const empty = renderMarketplaceInfoCascade({ blocks: [] } as never, bothLoadedProbe());
-  const many = renderMarketplaceInfoCascade(
-    { blocks: [first, second] } as never,
-    bothLoadedProbe(),
-  );
+  const empty = renderMarketplaceInfoCascade({ blocks: [] } as never);
+  const many = renderMarketplaceInfoCascade({ blocks: [first, second] } as never);
 
   // assert
   assert.equal(empty, "");
@@ -614,7 +684,7 @@ for (const [status, glyph] of [
     };
 
     // act
-    const rendered = renderPluginInfo(message as never, bothLoadedProbe());
+    const rendered = renderPluginInfo(message as never);
 
     // assert
     assert.equal(
@@ -640,7 +710,7 @@ test("renders the entry-declared dependencies line after the unresolved marker (
   };
 
   // act
-  const rendered = renderPluginInfo(message, bothLoadedProbe());
+  const rendered = renderPluginInfo(message);
 
   // assert
   assert.equal(
@@ -660,7 +730,7 @@ test("renders no dependencies line for an unresolved row whose list is empty", (
   };
 
   // act
-  const rendered = renderPluginInfo(message, bothLoadedProbe());
+  const rendered = renderPluginInfo(message);
 
   // assert
   assert.equal(
@@ -691,7 +761,7 @@ test("ADET-01: renders the stamped requires line after the components and before
   };
 
   // act
-  const rendered = renderPluginInfo(message, bothLoadedProbe());
+  const rendered = renderPluginInfo(message);
 
   // assert
   assert.equal(
@@ -779,7 +849,7 @@ for (const { requirement, label, mcp, mcpLines } of [
     };
 
     // act
-    const rendered = renderPluginInfo(message, bothLoadedProbe());
+    const rendered = renderPluginInfo(message);
 
     // assert
     assert.equal(
@@ -791,7 +861,7 @@ for (const { requirement, label, mcp, mcpLines } of [
   });
 }
 
-test("ADET-01: formats the requires entries as stamped, whatever the probe it is handed reports", () => {
+test("ADET-01: formats the requires entries as stamped", () => {
   // arrange
   const message: PluginInfoMessage = {
     kind: "plugin-info",
@@ -808,7 +878,7 @@ test("ADET-01: formats the requires entries as stamped, whatever the probe it is
   };
 
   // act
-  const rendered = renderPluginInfo(message, neitherLoadedProbe());
+  const rendered = renderPluginInfo(message);
 
   // assert
   assert.equal(
@@ -843,7 +913,7 @@ for (const { label, stamp } of [
     };
 
     // act
-    const rendered = renderPluginInfo(message, neitherLoadedProbe());
+    const rendered = renderPluginInfo(message);
 
     // assert
     assert.equal(
@@ -880,7 +950,7 @@ test("renders resolved plugin components and wraps descriptions without ellipsis
   };
 
   // act
-  const rendered = renderPluginInfo(message as never, bothLoadedProbe());
+  const rendered = renderPluginInfo(message as never);
 
   // assert
   assert.equal(
@@ -922,7 +992,7 @@ test("WR-09: renders one note line per entry, last, in composer order", () => {
   };
 
   // act
-  const rendered = renderPluginInfo(message as never, bothLoadedProbe());
+  const rendered = renderPluginInfo(message as never);
 
   // assert
   assert.equal(
@@ -946,9 +1016,9 @@ test("plugin info cascades preserve zero and repeated-render many shapes", () =>
   };
 
   // act
-  const empty = renderPluginInfoCascade({ blocks: [] } as never, bothLoadedProbe());
-  const once = renderPluginInfoCascade({ blocks: [block, block] } as never, bothLoadedProbe());
-  const twice = renderPluginInfoCascade({ blocks: [block, block] } as never, bothLoadedProbe());
+  const empty = renderPluginInfoCascade({ blocks: [] } as never);
+  const once = renderPluginInfoCascade({ blocks: [block, block] } as never);
+  const twice = renderPluginInfoCascade({ blocks: [block, block] } as never);
 
   // assert
   assert.equal(empty, "");
@@ -956,35 +1026,98 @@ test("plugin info cascades preserve zero and repeated-render many shapes", () =>
   assert.equal(once.split("\n\n").length, 2);
 });
 
-for (const { message, expected } of [
-  { message: { name: "missing" }, expected: "⊘ missing (failed) {marketplace not added}" },
+for (const { message, reason, expected } of [
   {
-    message: { name: "missing", scope: "user", presentInOtherScope: true },
+    message: { kind: "marketplace-not-added", name: "missing" },
+    reason: "marketplace not added",
+    expected: "⊘ missing (failed) {marketplace not added}",
+  },
+  {
+    message: { kind: "marketplace-not-added", name: "missing", scope: "user" },
+    reason: "marketplace not added to user scope",
     expected: "⊘ missing [user] (failed) {marketplace not added to user scope}",
   },
   {
-    message: { name: "missing", scope: "project", presentInOtherScope: true },
+    message: { kind: "marketplace-not-added", name: "missing", scope: "project" },
+    reason: "marketplace not added to project scope",
     expected: "⊘ missing [project] (failed) {marketplace not added to project scope}",
   },
-] as const) {
+] as const satisfies readonly {
+  message: MarketplaceNotAddedMessage;
+  reason: Reason;
+  expected: string;
+}[]) {
   test(`renders marketplace-not-added as ${expected}`, () => {
-    // arrange / act
-    const rendered = renderMarketplaceNotAdded(message as never, bothLoadedProbe());
+    // act
+    const rendered = renderMarketplaceNotAdded(message, reason);
 
     // assert
     assert.equal(rendered, expected);
   });
 }
 
-test("reconcile applied body preserves empty and caller-ordered blocks", () => {
+test("renders the reconcile-pending-empty body line", () => {
+  // act
+  const rendered = renderReconcilePendingEmpty();
+
+  // assert
+  assert.equal(rendered, "Pending: next reload will apply 0 actions.");
+});
+
+for (const { scope, expected } of [
+  {
+    scope: "user",
+    expected: "Nothing to prune in user scope: no orphaned dependency installs were found.",
+  },
+  {
+    scope: "project",
+    expected: "Nothing to prune in project scope: no orphaned dependency installs were found.",
+  },
+] as const) {
+  test(`renders prune-empty for ${scope} scope`, () => {
+    // arrange
+    const message = { kind: "prune-empty", scope } as const satisfies PruneEmptyMessage;
+
+    // act
+    const rendered = renderPruneEmpty(message);
+
+    // assert
+    assert.equal(rendered, expected);
+  });
+}
+
+test("renders prune-committed-warning as the scope line and the indented cause trailer", () => {
   // arrange
-  const message = {
-    marketplaces: [MARKETPLACE_BASE, { ...MARKETPLACE_BASE, name: "second", scope: "project" }],
-  };
+  const cause = { causeChain: ["save failed", "disk full"], truncated: false };
 
   // act
-  const empty = composeReconcileAppliedBody({ marketplaces: [] } as never, bothLoadedProbe());
-  const many = composeReconcileAppliedBody(message as never, bothLoadedProbe());
+  const rendered = renderPruneCommittedWarning("project", cause);
+
+  // assert
+  assert.equal(rendered, "Prune committed in project scope.\n  cause: save failed -> disk full");
+});
+
+test("renders prune-committed-warning with an empty trailer when there is no cause", () => {
+  // arrange
+  const cause = undefined;
+
+  // act
+  const rendered = renderPruneCommittedWarning("user", cause);
+
+  // assert
+  assert.equal(rendered, "Prune committed in user scope.\n  ");
+});
+
+test("reconcile applied body preserves empty and caller-ordered blocks", () => {
+  // arrange
+  const marketplaces = [
+    MARKETPLACE_BASE,
+    { ...MARKETPLACE_BASE, name: "second", scope: "project" },
+  ] as const satisfies readonly ResolvedMarketplace[];
+
+  // act
+  const empty = composeReconcileAppliedBody([]);
+  const many = composeReconcileAppliedBody(marketplaces);
 
   // assert
   assert.equal(empty, "(no marketplaces)");
@@ -1000,18 +1133,15 @@ test("a whitespace-only description renders no description line", () => {
   };
 
   // act
-  const whitespace = renderPluginInfo(
-    {
-      ...infoBase,
-      plugin: {
-        status: "available",
-        name: "alpha",
-        description: " \t ",
-        componentsResolved: false,
-      },
-    } as never,
-    bothLoadedProbe(),
-  );
+  const whitespace = renderPluginInfo({
+    ...infoBase,
+    plugin: {
+      status: "available",
+      name: "alpha",
+      description: " \t ",
+      componentsResolved: false,
+    },
+  } as never);
 
   // assert
   assert.equal(whitespace.includes("\n     "), false);
@@ -1022,31 +1152,31 @@ test("covers the unavailable install hint and long single-word wrap boundaries",
   const longWord = "x".repeat(70);
 
   // act
-  const hint = composePluginLinesWith(
-    { status: "unavailable", name: "alpha", partialHint: true } as never,
-    bothLoadedProbe(),
-    "user",
-    () => "row",
-  );
-  const info = renderPluginInfo(
+  const hint = composePluginLines(
     {
-      marketplaceName: "official",
-      marketplaceScope: "user",
-      marketplaceDetails: { autoupdate: false },
-      plugin: {
-        status: "available",
-        name: "alpha",
-        description: longWord,
-        componentsResolved: true,
-        components: {},
-      },
-    } as never,
-    bothLoadedProbe(),
+      status: "unavailable",
+      name: "alpha",
+      reasons: ["unsupported source"],
+      hint: "partial-install",
+    } satisfies ResolvedRow,
+    "user",
   );
+  const info = renderPluginInfo({
+    marketplaceName: "official",
+    marketplaceScope: "user",
+    marketplaceDetails: { autoupdate: false },
+    plugin: {
+      status: "available",
+      name: "alpha",
+      description: longWord,
+      componentsResolved: true,
+      components: {},
+    },
+  } as never);
 
   // assert
   assert.deepStrictEqual(hint, [
-    "  row",
+    "  ⊘ alpha (unavailable) {unsupported source}",
     "    Re-run with --partial to install the supported components.",
   ]);
   assert.equal(info.endsWith(`\n    ${longWord}`), true);
@@ -1054,48 +1184,29 @@ test("covers the unavailable install hint and long single-word wrap boundaries",
 
 test("optional dependency and empty cause branches collapse without extra tokens", () => {
   // arrange / act
-  const partial = partiallyInstalledRow(
-    { name: "alpha", reasons: [] },
+  const partial = composePluginLines(
+    {
+      ...{ name: "alpha", reasons: [] },
+      status: "partially-installed",
+      severity: "warning",
+      needsReload: true,
+    },
     "user",
-    neitherLoadedProbe(),
-  );
-  const failed = composePluginLinesWith(
-    { status: "failed", name: "alpha", cause: null } as never,
-    bothLoadedProbe(),
+  )[0]!.slice(2);
+  const failed = composePluginLines(
+    {
+      status: "failed",
+      severity: "error",
+      name: "alpha",
+      reasons: [],
+      failure: { leaks: [], rollbackPartial: [] },
+    } satisfies ResolvedRow<PluginFailedMessage>,
     "user",
-    () => "row",
   );
 
   // assert
   assert.equal(partial, "◉ alpha (partially-installed)");
-  assert.deepStrictEqual(failed, ["  row"]);
-});
-
-type Probe = Parameters<typeof composeReasons>[4];
-
-function bothLoadedProbe(): Probe {
-  return { piSubagentsLoaded: true, piMcpAdapterLoaded: true, workflowEngineLoaded: true };
-}
-
-function neitherLoadedProbe(): Probe {
-  return { piSubagentsLoaded: false, piMcpAdapterLoaded: false, workflowEngineLoaded: false };
-}
-
-test("notification glyph constants preserve exact public values", () => {
-  // arrange
-  const expectedGlyphs = ["●", "○", "⊘", "◍", "◉"];
-
-  // act
-  const glyphs = [
-    ICON_INSTALLED,
-    ICON_AVAILABLE,
-    ICON_UNINSTALLABLE,
-    ICON_DISABLED,
-    ICON_PARTIALLY_INSTALLED,
-  ];
-
-  // assert
-  assert.deepStrictEqual(glyphs, expectedGlyphs);
+  assert.deepStrictEqual(failed, ["  ⊘ alpha (failed)"]);
 });
 
 test("the remote and partially-available glyphs preserve exact values on their rows", () => {
@@ -1108,39 +1219,17 @@ test("the remote and partially-available glyphs preserve exact values on their r
 
   // act
   const glyphs = [
-    renderRemoteRow(
-      { status: "remote", name: "alpha" },
-      bothLoadedProbe(),
-      "user",
-      undefined,
-    ).slice(0, 1),
-    renderPartiallyAvailableRow(
-      { status: "partially-available", name: "alpha", reasons: [] },
-      bothLoadedProbe(),
-      "user",
-    ).slice(0, 1),
+    composePluginLines({ status: "remote", name: "alpha", reasons: [] }, "user")[0]!
+      .slice(2)
+      .slice(0, 1),
+    composePluginLines({ status: "partially-available", name: "alpha", reasons: [] }, "user")[0]!
+      .slice(2)
+      .slice(0, 1),
   ];
 
   // assert
   assert.deepStrictEqual(glyphs, expectedGlyphs);
 });
-
-for (const { name, parts, expected } of [
-  { name: "joins non-empty tokens with one space", parts: ["a", "b"], expected: "a b" },
-  { name: "drops empty token slots", parts: ["a", "", "b", ""], expected: "a b" },
-  { name: "joins an empty token list as an empty string", parts: [], expected: "" },
-] as const) {
-  test(name, () => {
-    // arrange
-    const expectedText = expected;
-
-    // act
-    const text = joinTokens(parts);
-
-    // assert
-    assert.equal(text, expectedText);
-  });
-}
 
 for (const { name, version, expected } of [
   { name: "omits an undefined version", version: undefined, expected: "" },
@@ -1176,10 +1265,18 @@ for (const { name, version, expected } of [
 ] as const) {
   test(name, () => {
     // arrange
-    const expectedVersion = expected;
+    const expectedVersion = `  ○ alpha${expected === "" ? "" : ` ${expected}`} (available)`;
 
     // act
-    const renderedVersion = renderVersion(version);
+    const renderedVersion = composePluginLines(
+      {
+        status: "available",
+        name: "alpha",
+        reasons: [],
+        ...(version === undefined ? {} : { version }),
+      },
+      "user",
+    )[0];
 
     // assert
     assert.equal(renderedVersion, expectedVersion);
@@ -1208,10 +1305,20 @@ for (const { name, pluginScope, marketplaceScope, expected } of [
 ] as const) {
   test(name, () => {
     // arrange
-    const expectedBracket = expected;
+    const expectedBracket = `  ● alpha${expected === "" ? "" : ` ${expected}`} (installed)`;
 
     // act
-    const bracket = renderScopeBracket(pluginScope, marketplaceScope);
+    const bracket = composePluginLines(
+      {
+        status: "installed",
+        name: "alpha",
+        reasons: [],
+        severity: "info",
+        needsReload: false,
+        ...(pluginScope === undefined ? {} : { scope: pluginScope }),
+      },
+      marketplaceScope,
+    )[0];
 
     // assert
     assert.equal(bracket, expectedBracket);
@@ -1220,50 +1327,52 @@ for (const { name, pluginScope, marketplaceScope, expected } of [
 
 test("composeVersionArrow renders complete version bytes on both sides", () => {
   // arrange
-  const expectedArrow = "v#0123456 → v2.0.0";
+  const expectedArrow = "  ● alpha v#0123456 → v2.0.0 (updated)";
 
   // act
-  const arrow = composeVersionArrow("hash-0123456789ab", "2.0.0");
+  const arrow = composePluginLines(
+    {
+      status: "updated",
+      name: "alpha",
+      from: "hash-0123456789ab",
+      to: "2.0.0",
+      reasons: [],
+      severity: "info",
+      needsReload: true,
+    },
+    "user",
+  )[0];
 
   // assert
   assert.equal(arrow, expectedArrow);
 });
 
-for (const { name, reasons, agents, mcp, workflows, probe, expected } of [
+for (const { name, reasons, expected } of [
   {
-    name: "omits an empty reasons block",
+    name: "omits an undefined reasons block",
     reasons: undefined,
-    agents: false,
-    mcp: false,
-    workflows: false,
-    probe: bothLoadedProbe(),
     expected: "",
   },
   {
-    name: "renders caller reasons in their supplied order",
-    reasons: ["not found", "permission denied"] satisfies readonly Reason[],
-    agents: false,
-    mcp: false,
-    workflows: false,
-    probe: bothLoadedProbe(),
-    expected: "{not found, permission denied}",
+    name: "omits an empty reasons block",
+    reasons: [] satisfies readonly Reason[],
+    expected: "",
   },
   {
-    name: "appends missing companion markers after caller reasons",
-    reasons: ["not found"] satisfies readonly Reason[],
-    agents: true,
-    mcp: true,
-    workflows: false,
-    probe: neitherLoadedProbe(),
-    expected: "{not found, requires pi-subagents, requires pi-mcp-adapter}",
+    name: "renders resolved reasons in their supplied order and adds none",
+    reasons: ["not found", "requires pi-subagents"] satisfies readonly Reason[],
+    expected: "{not found, requires pi-subagents}",
   },
 ] as const) {
   test(name, () => {
     // arrange
-    const expectedReasons = expected;
+    const expectedReasons = `  ○ alpha (available)${expected === "" ? "" : ` ${expected}`}`;
 
     // act
-    const renderedReasons = composeReasons(reasons, agents, mcp, workflows, probe);
+    const renderedReasons = composePluginLines(
+      { status: "available", name: "alpha", reasons: reasons ?? [] },
+      "user",
+    )[0];
 
     // assert
     assert.equal(renderedReasons, expectedReasons);
@@ -1275,28 +1384,33 @@ test("pluginRow composes scope, version, label, and reasons exactly", () => {
   const expectedRow = "⊘ alpha [project] v1.0.0 (failed) {not found}";
 
   // act
-  const row = pluginRow(
-    "⊘",
-    { name: "alpha", scope: "project", version: "1.0.0", reasons: ["not found"] },
+  const row = composePluginLines(
+    {
+      ...{ name: "alpha", scope: "project", version: "1.0.0", reasons: ["not found"] },
+      status: "failed",
+      severity: "error",
+    },
     "user",
-    "(failed)",
-    bothLoadedProbe(),
-  );
+  )[0]!.slice(2);
 
   // assert
   assert.equal(row, expectedRow);
 });
 
-test("partiallyInstalledRow composes dropped kinds before companion markers", () => {
+test("partiallyInstalledRow composes its resolved reasons in order", () => {
   // arrange
   const expectedRow = "◉ alpha v1.0.0 (partially-installed) {lsp, requires pi-subagents}";
 
   // act
-  const row = partiallyInstalledRow(
-    { name: "alpha", version: "1.0.0", reasons: ["lsp"], dependencies: ["agents"] },
+  const row = composePluginLines(
+    {
+      ...{ name: "alpha", version: "1.0.0", reasons: ["lsp", "requires pi-subagents"] },
+      status: "partially-installed",
+      severity: "warning",
+      needsReload: true,
+    },
     "user",
-    neitherLoadedProbe(),
-  );
+  )[0]!.slice(2);
 
   // assert
   assert.equal(row, expectedRow);
@@ -1307,15 +1421,16 @@ test("installedLikeRow composes an exact transition row", () => {
   const expectedRow = "● alpha [project] v1.0.0 (installed) {orphan rewake}";
 
   // act
-  const row = installedLikeRow(
-    "●",
-    { name: "alpha", scope: "project", dependencies: [] },
+  const row = composePluginLines(
+    {
+      ...{ name: "alpha", scope: "project", reasons: ["orphan rewake"] },
+      status: "installed",
+      version: "1.0.0",
+      severity: "info",
+      needsReload: true,
+    },
     "user",
-    "v1.0.0",
-    "(installed)",
-    ["orphan rewake"],
-    bothLoadedProbe(),
-  );
+  )[0]!.slice(2);
 
   // assert
   assert.equal(row, expectedRow);
@@ -1323,9 +1438,9 @@ test("installedLikeRow composes an exact transition row", () => {
 
 for (const { name, row, expected } of [
   {
-    name: "renderUninstalledRow renders a realized removal",
+    name: "composePluginLines renders a realized uninstalled row",
     row: () =>
-      renderUninstalledRow(
+      composePluginLines(
         {
           status: "uninstalled",
           name: "alpha",
@@ -1333,16 +1448,16 @@ for (const { name, row, expected } of [
           version: "1.0.0",
           severity: "info",
           needsReload: true,
+          reasons: [],
         },
-        bothLoadedProbe(),
         "user",
-      ),
+      )[0]!.slice(2),
     expected: "○ alpha [project] v1.0.0 (uninstalled)",
   },
   {
-    name: "renderUninstalledRow renders the data disposition of a realized removal",
+    name: "composePluginLines renders the data disposition of an uninstalled row",
     row: () =>
-      renderUninstalledRow(
+      composePluginLines(
         {
           status: "uninstalled",
           name: "alpha",
@@ -1352,57 +1467,56 @@ for (const { name, row, expected } of [
           severity: "info",
           needsReload: true,
         },
-        bothLoadedProbe(),
         "user",
-      ),
+      )[0]!.slice(2),
     expected: "○ alpha [project] v1.0.0 (uninstalled) {data kept}",
   },
   {
-    name: "renderAvailableRow renders an entry-derived reason",
+    name: "composePluginLines renders an available row's entry-derived reason",
     row: () =>
-      renderAvailableRow(
-        { status: "available", name: "alpha", version: "1.0.0" },
-        bothLoadedProbe(),
+      composePluginLines(
+        {
+          ...{ status: "available", name: "alpha", version: "1.0.0", reasons: [] },
+          reasons: ["installs disabled"],
+        },
         "user",
-        ["installs disabled"],
-      ),
+      )[0]!.slice(2),
     expected: "○ alpha v1.0.0 (available) {installs disabled}",
   },
   {
-    name: "renderRemoteRow renders an entry-derived reason",
+    name: "composePluginLines renders a remote row's entry-derived reason",
     row: () =>
-      renderRemoteRow(
-        { status: "remote", name: "alpha", version: "1.0.0" },
-        bothLoadedProbe(),
+      composePluginLines(
+        {
+          ...{ status: "remote", name: "alpha", version: "1.0.0", reasons: [] },
+          reasons: ["installs disabled"],
+        },
         "user",
-        ["installs disabled"],
-      ),
+      )[0]!.slice(2),
     expected: "◌ alpha v1.0.0 (remote) {installs disabled}",
   },
   {
-    name: "renderUnavailableRow renders structural reasons",
+    name: "composePluginLines renders an unavailable row's structural reasons",
     row: () =>
-      renderUnavailableRow(
+      composePluginLines(
         { status: "unavailable", name: "alpha", version: "1.0.0", reasons: ["invalid manifest"] },
-        bothLoadedProbe(),
         "user",
-      ),
+      )[0]!.slice(2),
     expected: "⊘ alpha v1.0.0 (unavailable) {invalid manifest}",
   },
   {
-    name: "renderPartiallyAvailableRow renders dropped kinds",
+    name: "composePluginLines renders a partially-available row's dropped kinds",
     row: () =>
-      renderPartiallyAvailableRow(
+      composePluginLines(
         { status: "partially-available", name: "alpha", version: "1.0.0", reasons: ["lsp"] },
-        bothLoadedProbe(),
         "user",
-      ),
+      )[0]!.slice(2),
     expected: "⊖ alpha v1.0.0 (partially-available) {lsp}",
   },
   {
-    name: "renderDisabledRow renders an orphan-fold scope and reason",
+    name: "composePluginLines renders a disabled row's orphan-fold scope and reason",
     row: () =>
-      renderDisabledRow(
+      composePluginLines(
         {
           status: "disabled",
           name: "alpha",
@@ -1412,9 +1526,8 @@ for (const { name, row, expected } of [
           severity: "info",
           needsReload: false,
         },
-        bothLoadedProbe(),
         "user",
-      ),
+      )[0]!.slice(2),
     expected: "◍ alpha [project] v1.0.0 (disabled) {not in manifest}",
   },
 ] as const) {
@@ -1429,3 +1542,482 @@ for (const { name, row, expected } of [
     assert.equal(renderedRow, expectedRow);
   });
 }
+
+test("formatEnvelopeArguments returns an info body byte for byte as its only argument", () => {
+  // arrange
+  const body = "● official [user]\n  alpha (installed)";
+
+  // act
+  const notifyArguments = formatEnvelopeArguments(
+    { severity: "info", needsReload: false, noOp: false },
+    body,
+  );
+
+  // assert
+  assert.deepStrictEqual(notifyArguments, ["● official [user]\n  alpha (installed)"]);
+});
+
+for (const severity of ["warning", "error"] as const) {
+  test(`formatEnvelopeArguments prepends a ${severity} summary as its own block`, () => {
+    // arrange
+    const envelope = {
+      severity,
+      summary: "A plugin operation has failed.",
+      needsReload: false,
+      noOp: false,
+    };
+
+    // act
+    const notifyArguments = formatEnvelopeArguments(
+      envelope,
+      "● official [user]\n  alpha (failed)",
+    );
+
+    // assert
+    assert.deepStrictEqual(notifyArguments, [
+      "A plugin operation has failed.\n\n● official [user]\n  alpha (failed)",
+      severity,
+    ]);
+  });
+}
+
+for (const { name, envelope, expectedText } of [
+  {
+    name: "singular category words",
+    envelope: {
+      severity: "info",
+      needsReload: false,
+      noOp: false,
+      tally: { label: "Plugin update", failures: 1, warnings: 1, success: { count: 1 } },
+    },
+    expectedText: "body\n\nPlugin update: 1 failure, 1 warning, 1 success",
+  },
+  {
+    name: "plural category words",
+    envelope: {
+      severity: "info",
+      needsReload: false,
+      noOp: false,
+      tally: { label: "Plugin import", failures: 2, warnings: 3, success: { count: 4 } },
+    },
+    expectedText: "body\n\nPlugin import: 2 failures, 3 warnings, 4 successes",
+  },
+  {
+    name: "zero successes",
+    envelope: {
+      severity: "info",
+      needsReload: false,
+      noOp: false,
+      tally: { label: "Plugin list", failures: 0, warnings: 0, success: { count: 0 } },
+    },
+    expectedText: "body\n\nPlugin list: 0 successes",
+  },
+  {
+    name: "a success verb without a plural form",
+    envelope: {
+      severity: "info",
+      needsReload: false,
+      noOp: false,
+      tally: {
+        label: "Plugin update",
+        failures: 0,
+        warnings: 0,
+        success: { count: 2, verb: "updated" },
+      },
+    },
+    expectedText: "body\n\nPlugin update: 2 updated",
+  },
+  {
+    name: "failures only",
+    envelope: {
+      severity: "info",
+      needsReload: false,
+      noOp: false,
+      tally: { label: "Plugin install", failures: 1, warnings: 0 },
+    },
+    expectedText: "body\n\nPlugin install: 1 failure",
+  },
+] satisfies readonly {
+  readonly name: string;
+  readonly envelope: Parameters<typeof formatEnvelopeArguments>[0];
+  readonly expectedText: string;
+}[]) {
+  test(`formatEnvelopeArguments composes a tally sentence with ${name}`, () => {
+    // act
+    const notifyArguments = formatEnvelopeArguments(envelope, "body");
+
+    // assert
+    assert.deepStrictEqual(notifyArguments, [expectedText]);
+  });
+}
+
+for (const { name, envelope, body, expectedArguments } of [
+  {
+    name: "orders the body, the tally, and the reload trailer",
+    envelope: {
+      severity: "info",
+      needsReload: true,
+      noOp: false,
+      tally: { label: "Plugin install", failures: 0, warnings: 0, success: { count: 1 } },
+    },
+    body: "body",
+    expectedArguments: ["body\n\nPlugin install: 1 success\n\n/reload to pick up changes"],
+  },
+  {
+    name: "leaves one blank line between the body and the trailer without a tally",
+    envelope: { severity: "info", needsReload: true, noOp: false },
+    body: "body",
+    expectedArguments: ["body\n\n/reload to pick up changes"],
+  },
+  {
+    name: "puts the no-op headline in the tally slot",
+    envelope: { severity: "info", needsReload: false, noOp: true },
+    body: "body",
+    expectedArguments: ["body\n\nPlugin update: nothing to update"],
+  },
+  {
+    name: "renders the no-op headline alone over an empty body",
+    envelope: { severity: "info", needsReload: false, noOp: true },
+    body: "",
+    expectedArguments: ["Plugin update: nothing to update"],
+  },
+  {
+    name: "prepends the summary over the folded body",
+    envelope: {
+      severity: "error",
+      summary: "A plugin operation has failed.",
+      needsReload: true,
+      noOp: false,
+      tally: { label: "Plugin install", failures: 1, warnings: 0 },
+    },
+    body: "body",
+    expectedArguments: [
+      "A plugin operation has failed.\n\nbody\n\nPlugin install: 1 failure\n\n/reload to pick up changes",
+      "error",
+    ],
+  },
+] satisfies readonly {
+  readonly name: string;
+  readonly envelope: Parameters<typeof formatEnvelopeArguments>[0];
+  readonly body: string;
+  readonly expectedArguments: NotifyArguments;
+}[]) {
+  test(`formatEnvelopeArguments ${name}`, () => {
+    // act
+    const notifyArguments = formatEnvelopeArguments(envelope, body);
+
+    // assert
+    assert.deepStrictEqual(notifyArguments, expectedArguments);
+  });
+}
+
+/**
+ * D-15: every raw kind passes its severity explicitly, so each formats to two
+ * arguments. The mapped type requires one row per resolved kind, so a kind
+ * without a row fails typecheck.
+ */
+const RAW_SURFACE_ROWS: {
+  readonly [K in ResolvedRawSurface["kind"]]: {
+    readonly surface: Extract<ResolvedRawSurface, { kind: K }>;
+    readonly expectedArguments: NotifyArguments;
+  };
+} = {
+  "reconcile-aborted": {
+    surface: { kind: "reconcile-aborted", causeMessage: "boom" },
+    expectedArguments: ["reconcile aborted: boom", "error"],
+  },
+  "plugin-path-skipped": {
+    surface: { kind: "plugin-path-skipped", scope: "user", reason: "state.json is unreadable" },
+    expectedArguments: [
+      "plugin PATH not refreshed for user scope (install state unreadable): state.json is unreadable",
+      "warning",
+    ],
+  },
+  "usage-error": {
+    surface: {
+      kind: "usage-error",
+      message: "Unknown plugin",
+      usage: "Usage: /claude:plugin install <name>",
+    },
+    expectedArguments: ["Unknown plugin\n\nUsage: /claude:plugin install <name>", "error"],
+  },
+  "usage-info": {
+    surface: { kind: "usage-info", usage: "Usage: /claude:plugin help [marketplace]" },
+    expectedArguments: ["Usage: /claude:plugin help [marketplace]", "info"],
+  },
+  diagnostic: {
+    surface: { kind: "diagnostic", header: "Warnings", lines: ["first", "second"] },
+    expectedArguments: ["Warnings\n\nfirst\nsecond", "warning"],
+  },
+  // The example values come from catalog-state `device-flow-prompt` in
+  // docs/output-catalog.md; this row holds that byte lock.
+  "device-flow-prompt": {
+    surface: {
+      kind: "device-flow-prompt",
+      verificationUri: "https://github.com/login/device",
+      userCode: "ABCD-1234",
+    },
+    expectedArguments: ["Open https://github.com/login/device and enter: ABCD-1234", "info"],
+  },
+  "async-rewake-summary": {
+    surface: { kind: "async-rewake-summary", summary: "ready" },
+    expectedArguments: ["ready", "info"],
+  },
+  "stop-override-cap": {
+    surface: { kind: "stop-override-cap", pluginId: "official:guard", cap: 8 },
+    expectedArguments: [
+      "Stop hook override cap reached.\n\n`official:guard`'s Stop hook blocked 8 times in a row; the turn ended despite its active block.",
+      "warning",
+    ],
+  },
+  "mcp-config-notices": {
+    surface: {
+      kind: "mcp-config-notices",
+      section: "left-unchanged",
+      notices: [{ kind: "left-unchanged", scope: "user", file: "mcp.json" }],
+    },
+    expectedArguments: [
+      "MCP config left unchanged.\n\nThe user-scope mcp.json is not a valid MCP config, so it was left unchanged. Fix it before you install or update a plugin that has MCP servers.",
+      "warning",
+    ],
+  },
+  "mcp-migration": {
+    surface: {
+      kind: "mcp-migration",
+      rows: [
+        {
+          kind: "removed",
+          scope: "project",
+          plugin: "hello",
+          marketplace: "mp",
+          server: "gone",
+          cause: "not-declared",
+        },
+      ],
+      notices: [],
+      severity: "info",
+      needsReload: true,
+    },
+    expectedArguments: [
+      "Plugin MCP servers removed from mcp.json.\n\nRemoved from mcp.json:\n  gone (hello) [project] hello no longer declares it.\n/reload to pick up changes",
+      "info",
+    ],
+  },
+};
+
+for (const [kind, { surface, expectedArguments }] of Object.entries(RAW_SURFACE_ROWS)) {
+  test(`formatRawSurface renders ${kind} with its explicit severity`, () => {
+    // act
+    const notifyArguments = formatRawSurface(surface);
+
+    // assert
+    assert.deepStrictEqual(notifyArguments, expectedArguments);
+  });
+}
+
+// RAWS-01 / D-06: nonempty usage joins the message with one blank line.
+// Usage kinds have no no-op. RAWS-02 / D-05: a diagnostic keeps its lines
+// in caller order, duplicates and empty strings included, and only a
+// zero-length line list emits nothing. RAWS-05 / D-07 / D-08: the hook kinds
+// pass the author's summary and the plugin id through untouched, the cap is
+// data, and only a zero-length summary emits nothing. RAWS-03 / D-09: the
+// device-flow values pass through verbatim, empty or carrying a query string.
+for (const { title, surface, expectedArguments } of [
+  {
+    title: "keeps both blocks when the message equals the usage",
+    surface: { kind: "usage-error", message: "Usage: x", usage: "Usage: x" },
+    expectedArguments: ["Usage: x\n\nUsage: x", "error"],
+  },
+  {
+    title: "emits an empty message without a separator when usage is empty",
+    surface: { kind: "usage-error", message: "", usage: "" },
+    expectedArguments: ["", "error"],
+  },
+  {
+    title: "emits only the refusal when usage is empty",
+    surface: {
+      kind: "usage-error",
+      message: "Browse is unavailable in print mode. Use /claude:plugin list instead.",
+      usage: "",
+    },
+    expectedArguments: [
+      "Browse is unavailable in print mode. Use /claude:plugin list instead.",
+      "error",
+    ],
+  },
+  {
+    title: "keeps a trailing newline on the message untrimmed",
+    surface: { kind: "usage-error", message: "Unknown plugin\n", usage: "Usage: x" },
+    expectedArguments: ["Unknown plugin\n\n\nUsage: x", "error"],
+  },
+  {
+    title: "emits an empty help usage at info severity",
+    surface: { kind: "usage-info", usage: "" },
+    expectedArguments: ["", "info"],
+  },
+  {
+    title: "passes a non-ASCII message through unchanged",
+    surface: { kind: "usage-error", message: "Plugin «café» introuvable ⊘", usage: "Usage: x" },
+    expectedArguments: ["Plugin «café» introuvable ⊘\n\nUsage: x", "error"],
+  },
+  {
+    title: "emits nothing for a diagnostic with zero lines",
+    surface: { kind: "diagnostic", header: "Warnings", lines: [] },
+    expectedArguments: undefined,
+  },
+  {
+    title: "renders a single-line diagnostic as the header, one blank line, and the line",
+    surface: { kind: "diagnostic", header: "Warnings", lines: ["only"] },
+    expectedArguments: ["Warnings\n\nonly", "warning"],
+  },
+  {
+    title: "keeps duplicate and empty diagnostic lines in caller order",
+    surface: { kind: "diagnostic", header: "Warnings", lines: ["a", "", "a"] },
+    expectedArguments: ["Warnings\n\na\n\na", "warning"],
+  },
+  {
+    title: "renders empty device-flow values verbatim",
+    surface: { kind: "device-flow-prompt", verificationUri: "", userCode: "" },
+    expectedArguments: ["Open  and enter: ", "info"],
+  },
+  {
+    title: "passes a device-flow URI with a query string through verbatim",
+    surface: {
+      kind: "device-flow-prompt",
+      verificationUri: "https://verify.example/device?user_code=ab%2Fcd&lang=EN",
+      userCode: "ab-CD",
+    },
+    expectedArguments: [
+      "Open https://verify.example/device?user_code=ab%2Fcd&lang=EN and enter: ab-CD",
+      "info",
+    ],
+  },
+  {
+    title: "emits nothing for an empty async-rewake summary",
+    surface: { kind: "async-rewake-summary", summary: "" },
+    expectedArguments: undefined,
+  },
+  {
+    title: "returns a whitespace-padded async-rewake summary verbatim",
+    surface: { kind: "async-rewake-summary", summary: "  ready  " },
+    expectedArguments: ["  ready  ", "info"],
+  },
+  {
+    title: "states the stop-override cap it is given",
+    surface: { kind: "stop-override-cap", pluginId: "official:guard", cap: 3 },
+    expectedArguments: [
+      "Stop hook override cap reached.\n\n`official:guard`'s Stop hook blocked 3 times in a row; the turn ended despite its active block.",
+      "warning",
+    ],
+  },
+  {
+    title:
+      "ends a migration notice that needs no reload without the hint, at its resolved severity",
+    surface: {
+      kind: "mcp-migration",
+      rows: [{ kind: "stopped", scope: "user", detail: "state.json is locked" }],
+      notices: [],
+      severity: "warning",
+      needsReload: false,
+    },
+    expectedArguments: [
+      "Plugin MCP servers in mcp.json need attention.\n\nLeft in mcp.json:\n  The user-scope move stopped: state.json is locked. The next /reload tries again.",
+      "warning",
+    ],
+  },
+  {
+    title: "passes a backtick in the stop-override plugin id through unescaped",
+    surface: { kind: "stop-override-cap", pluginId: "a`b", cap: 8 },
+    expectedArguments: [
+      "Stop hook override cap reached.\n\n`a`b`'s Stop hook blocked 8 times in a row; the turn ended despite its active block.",
+      "warning",
+    ],
+  },
+] satisfies readonly {
+  readonly title: string;
+  readonly surface: ResolvedRawSurface;
+  readonly expectedArguments: NotifyArguments | undefined;
+}[]) {
+  test(`formatRawSurface ${title}`, () => {
+    // act
+    const notifyArguments = formatRawSurface(surface);
+
+    // assert
+    assert.deepStrictEqual(notifyArguments, expectedArguments);
+  });
+}
+
+test("a missing-policy row retains its trailers before the adjacent valid row", () => {
+  // arrange
+  const marketplace = {
+    name: "official",
+    scope: "user",
+    plugins: [
+      {
+        status: "partially-available",
+        name: "orphan",
+        missingPolicy: true,
+        reasons: ["lsp"],
+        description: "Unavailable tools",
+        hint: "partial-install",
+        failure: {
+          cause: { causeChain: ["outer", "inner"], truncated: false },
+          leaks: ["relative-leak"],
+          rollbackPartial: [{ phase: "skills" }],
+        },
+      },
+      { status: "available", name: "neighbor", reasons: [], description: "Available tools" },
+    ],
+  } as const satisfies ResolvedMarketplace;
+
+  // act
+  const text = composeReconcileAppliedBody([marketplace]);
+
+  // assert
+  assert.equal(
+    text,
+    [
+      "● official [user]",
+      '  orphan (failed) {internal: no render arm for "partially-available"}',
+      "    Unavailable tools",
+      "    Re-run with --partial to install the supported components.",
+      "    cause: outer -> inner",
+      "    leaked: relative-leak",
+      "    [skills] (rollback failed)",
+      "  ○ neighbor (available)",
+      "    Available tools",
+    ].join("\n"),
+  );
+});
+
+test("empty plugin collections keep their header and singletons keep complete grammar", () => {
+  // arrange
+  const empty = { name: "official", scope: "project", plugins: [] } as const;
+  const singleton = {
+    name: "official",
+    scope: "project",
+    plugins: [
+      {
+        status: "installed",
+        name: "alpha",
+        scope: "user",
+        version: "1.2.3",
+        severity: "info",
+        needsReload: true,
+        reasons: ["lsp", "requires pi-mcp-adapter"],
+        description: "One plugin",
+      },
+    ],
+  } as const satisfies ResolvedMarketplace;
+
+  // act
+  const emptyText = composeReconcileAppliedBody([empty]);
+  const singletonText = composeReconcileAppliedBody([singleton]);
+
+  // assert
+  assert.equal(emptyText, "● official [project]");
+  assert.equal(
+    singletonText,
+    "● official [project]\n  ● alpha [user] v1.2.3 (installed) {lsp, requires pi-mcp-adapter}\n    One plugin",
+  );
+});

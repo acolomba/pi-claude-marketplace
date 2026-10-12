@@ -1,11 +1,12 @@
 // Drives the real extension on the repository's own Pi CLI over RPC, once per
 // Pi MCP state. Each case first proves its state through `get_commands` and an
 // inventory-probe command, then adds a path-source marketplace, installs a
-// plugin that declares one MCP server, lists it and prints its info.
+// plugin that declares one MCP server, lists it and prints its info, reading
+// each result from the schema-checked `claude-plugin` entries Pi streams.
 // Pi's built-in MCP client does not run Claude plugin MCP servers, so only a
-// loaded pi-mcp-adapter clears `{requires pi-mcp-adapter}` (ADET-01). The
-// adapter counts when it registers its `mcp-adapter` command, and a foreign
-// tool named `mcp` does not count (ADET-02). No real pi-mcp-adapter is
+// loaded pi-mcp-adapter clears the `requires pi-mcp-adapter` reason (ADET-01).
+// The adapter counts when it registers its `mcp-adapter` command, and a
+// foreign tool named `mcp` does not count (ADET-02). No real pi-mcp-adapter is
 // installed: small fixture extensions stand in for each state.
 import assert from "node:assert/strict";
 import { mkdir, readFile, realpath, writeFile } from "node:fs/promises";
@@ -14,6 +15,9 @@ import { test } from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 
+import { Compile } from "typebox/compile";
+
+import { NOTIFICATION_PAYLOAD_SCHEMA } from "../../extensions/pi-claude-marketplace/shared/notification-wire.ts";
 import { createHermeticEnvironment } from "../platform/hermetic-environment.ts";
 import { builtinMcpCommand, builtinMcpTool } from "../platform/pi-inventory-seed.ts";
 
@@ -21,6 +25,7 @@ import { listedCommands, promptDisposition, runRpcSession } from "./_rpc.ts";
 
 import type { ListedCommand, RpcSessionResult } from "./_rpc.ts";
 import type { HermeticEnvironment } from "../platform/hermetic-environment.ts";
+import type { Static } from "typebox";
 
 interface PreparedPiMcpState {
   readonly extraExtensions: readonly string[];
@@ -33,15 +38,31 @@ interface PreparedPiMcpState {
 interface PiMcpState {
   readonly title: string;
   readonly prepare: (env: HermeticEnvironment) => Promise<PreparedPiMcpState>;
-  /** The `mcp-fixture` row on both the install and the list notify. */
-  readonly expectedRow: string;
-  /** The install notify's `notifyType`; Pi omits it for info. */
-  readonly expectedInstallNotifyType: string | undefined;
-  /** The info block's `requires:` line. */
-  readonly expectedRequiresLine: string;
+  /** The `mcp-fixture` row on both the install and the list cascade. */
+  readonly expectedRow: FixtureRow;
+  /** The severity of the install cascade that carries the row. */
+  readonly expectedInstallSeverity: string;
+  /** Whether the info payload's pi-mcp-adapter requirement is missing. */
+  readonly expectedAdapterMissing: boolean;
 }
 
-const MCP_FIXTURE_ROW_PREFIX = "  ● mcp-fixture ";
+type NotificationPayload = Static<typeof NOTIFICATION_PAYLOAD_SCHEMA>;
+
+/** The `mcp-fixture` plugin-row fields the RPC cases compare. */
+interface FixtureRow {
+  readonly status: string;
+  readonly version: string | undefined;
+  readonly reasons: readonly string[];
+}
+
+const PAYLOAD_VALIDATOR = Compile(NOTIFICATION_PAYLOAD_SCHEMA);
+const MCP_FIXTURE = "mcp-fixture";
+const ADAPTER_REQUIRED_ROW: FixtureRow = {
+  status: "installed",
+  version: "1.0.0",
+  reasons: ["requires pi-mcp-adapter"],
+};
+const ADAPTER_CLEARED_ROW: FixtureRow = { status: "installed", version: "1.0.0", reasons: [] };
 const MCP_COMMAND_NAME = /^mcp(-adapter(:\d+)?)?$/;
 const PLUGIN_STEP_IDS = ["add", "install", "list", "info"];
 
@@ -242,33 +263,51 @@ function mcpCommands(run: RpcSessionResult): readonly ListedCommand[] {
     .sort((left, right) => left.name.localeCompare(right.name));
 }
 
-function notifyLines(run: RpcSessionResult, stepId: string): readonly string[] {
-  return run.notifies
-    .filter((notify) => notify.after === stepId)
-    .flatMap((notify) => notify.message.split("\n"));
-}
-
-/** Returns the `mcp-fixture` row from the notifies of one step, or "" when none has it. */
-function rowFor(run: RpcSessionResult, stepId: string): string {
-  return notifyLines(run, stepId).find((line) => line.startsWith(MCP_FIXTURE_ROW_PREFIX)) ?? "";
-}
-
-function requiresLines(run: RpcSessionResult): readonly string[] {
-  return notifyLines(run, "info").filter((line) => line.startsWith("    requires:"));
+/** The schema-checked `claude-plugin` payloads Pi streamed while `stepId` was in flight. */
+function payloadsAfter(run: RpcSessionResult, stepId: string): readonly NotificationPayload[] {
+  return run.entries
+    .filter((entry) => entry.after === stepId && entry.customType === "claude-plugin")
+    .map((entry) => {
+      assert.ok(PAYLOAD_VALIDATOR.Check(entry.data), JSON.stringify(entry.data));
+      return entry.data;
+    });
 }
 
 /**
- * Returns the `notifyType` of the install-step notify that carries the
- * `mcp-fixture` row, or `null` when no such notify exists, so a missing
- * notify never matches the info expectation (`undefined`).
+ * Returns the `mcp-fixture` row of one step's cascade with that cascade's
+ * severity, or `undefined` when no cascade of the step carries the row.
  */
-function installNotifyType(run: RpcSessionResult): string | undefined | null {
-  const notify = run.notifies.find(
-    (candidate) =>
-      candidate.after === "install" &&
-      candidate.message.split("\n").some((line) => line.startsWith(MCP_FIXTURE_ROW_PREFIX)),
-  );
-  return notify === undefined ? null : notify.notifyType;
+function fixtureRow(
+  run: RpcSessionResult,
+  stepId: string,
+): { readonly row: FixtureRow; readonly severity: string } | undefined {
+  for (const payload of payloadsAfter(run, stepId)) {
+    if (payload.kind !== "cascade") {
+      continue;
+    }
+
+    const row = payload.marketplaces
+      .flatMap((marketplace) => marketplace.plugins)
+      .find((plugin) => plugin.name === MCP_FIXTURE);
+    if (row !== undefined) {
+      return {
+        row: { status: row.status, version: row.version, reasons: row.reasons },
+        severity: payload.severity,
+      };
+    }
+  }
+
+  return undefined;
+}
+
+/** The `requires` list of the info step's resolved `plugin-info` payload. */
+function infoRequires(run: RpcSessionResult): unknown {
+  const payload = payloadsAfter(run, "info").find((candidate) => candidate.kind === "plugin-info");
+  if (payload?.kind !== "plugin-info" || !payload.plugin.componentsResolved) {
+    return undefined;
+  }
+
+  return payload.plugin.requires;
 }
 
 /** The `tools` or `commands` list the inventory probe notified. */
@@ -399,16 +438,12 @@ test(
     assert.deepStrictEqual(namedEntries(inventoryEntries(run, "commands"), "mcp"), [
       expectedCommand,
     ]);
-    assert.strictEqual(
-      rowFor(run, "install"),
-      "  ● mcp-fixture v1.0.0 (installed) {requires pi-mcp-adapter}",
-    );
-    assert.strictEqual(installNotifyType(run), "warning");
-    assert.strictEqual(
-      rowFor(run, "list"),
-      "  ● mcp-fixture v1.0.0 (installed) {requires pi-mcp-adapter}",
-    );
-    assert.deepStrictEqual(requiresLines(run), ["    requires: pi-mcp-adapter (missing)"]);
+    assert.deepStrictEqual(fixtureRow(run, "install"), {
+      row: ADAPTER_REQUIRED_ROW,
+      severity: "warning",
+    });
+    assert.deepStrictEqual(fixtureRow(run, "list")?.row, ADAPTER_REQUIRED_ROW);
+    assert.deepStrictEqual(infoRequires(run), [{ companion: "pi-mcp-adapter", missing: true }]);
     // Pi stops the stub MCP server, which runs in a process group of its own;
     // the session's group kill on Pi's exit stops the sentinel.
     const stubPid = await readPid(stubPidFile).catch((error: unknown) => {
@@ -431,9 +466,9 @@ const PI_MCP_STATES: readonly PiMcpState[] = [
       });
       return { extraExtensions: [], mcpCommands: [], mcpToolPaths: [] };
     },
-    expectedRow: "  ● mcp-fixture v1.0.0 (installed) {requires pi-mcp-adapter}",
-    expectedInstallNotifyType: "warning",
-    expectedRequiresLine: "    requires: pi-mcp-adapter (missing)",
+    expectedRow: ADAPTER_REQUIRED_ROW,
+    expectedInstallSeverity: "warning",
+    expectedAdapterMissing: true,
   },
   {
     title:
@@ -449,9 +484,9 @@ const PI_MCP_STATES: readonly PiMcpState[] = [
         mcpToolPaths: [],
       };
     },
-    expectedRow: "  ● mcp-fixture v1.0.0 (installed)",
-    expectedInstallNotifyType: undefined,
-    expectedRequiresLine: "    requires: pi-mcp-adapter",
+    expectedRow: ADAPTER_CLEARED_ROW,
+    expectedInstallSeverity: "info",
+    expectedAdapterMissing: false,
   },
   {
     title:
@@ -469,9 +504,9 @@ const PI_MCP_STATES: readonly PiMcpState[] = [
         mcpToolPaths: [],
       };
     },
-    expectedRow: "  ● mcp-fixture v1.0.0 (installed)",
-    expectedInstallNotifyType: undefined,
-    expectedRequiresLine: "    requires: pi-mcp-adapter",
+    expectedRow: ADAPTER_CLEARED_ROW,
+    expectedInstallSeverity: "info",
+    expectedAdapterMissing: false,
   },
   {
     title:
@@ -484,9 +519,9 @@ const PI_MCP_STATES: readonly PiMcpState[] = [
         mcpToolPaths: [foreign],
       };
     },
-    expectedRow: "  ● mcp-fixture v1.0.0 (installed) {requires pi-mcp-adapter}",
-    expectedInstallNotifyType: "warning",
-    expectedRequiresLine: "    requires: pi-mcp-adapter (missing)",
+    expectedRow: ADAPTER_REQUIRED_ROW,
+    expectedInstallSeverity: "warning",
+    expectedAdapterMissing: true,
   },
 ];
 
@@ -506,10 +541,14 @@ for (const state of PI_MCP_STATES) {
       sourcePaths(namedEntries(inventoryEntries(run, "tools"), "mcp")),
       prepared.mcpToolPaths,
     );
-    assert.strictEqual(rowFor(run, "install"), state.expectedRow);
-    assert.strictEqual(installNotifyType(run), state.expectedInstallNotifyType);
-    assert.strictEqual(rowFor(run, "list"), state.expectedRow);
-    assert.deepStrictEqual(requiresLines(run), [state.expectedRequiresLine]);
+    assert.deepStrictEqual(fixtureRow(run, "install"), {
+      row: state.expectedRow,
+      severity: state.expectedInstallSeverity,
+    });
+    assert.deepStrictEqual(fixtureRow(run, "list")?.row, state.expectedRow);
+    assert.deepStrictEqual(infoRequires(run), [
+      { companion: "pi-mcp-adapter", missing: state.expectedAdapterMissing },
+    ]);
   });
 }
 

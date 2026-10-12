@@ -31,6 +31,7 @@ import {
 } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { withHermeticEnvironment } from "../platform/hermetic-environment.ts";
+import { runWithNothingLoaded } from "../shared/notification-run-seeds.ts";
 
 import type { ExtensionState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type {
@@ -167,6 +168,7 @@ test("RECON / cross-scope: applyReconcile's per-scope rebuild loop preserves hoo
     // Boot the bridge: hydrate the cache from disk for both scopes so the
     // rebuild walks both scopes' cached entries.
     const placeholderCtx = {
+      mode: "tui",
       cwd: projectCwd,
       ui: { notify: () => {} },
       sessionManager: {
@@ -193,7 +195,7 @@ test("RECON / cross-scope: applyReconcile's per-scope rebuild loop preserves hoo
     // scope's entries from the global routing table.
     await applyReconcile({
       ctx: placeholderCtx,
-      pi: makeMockPi(),
+      run: runWithNothingLoaded(),
       cwd: projectCwd,
       completionCache,
       hooksRouting,

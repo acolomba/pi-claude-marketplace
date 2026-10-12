@@ -26,9 +26,9 @@
  * only `import type` from platform/git.ts and its auth-callback sibling is
  * permitted -- so consumers (install-outcome.ts) that import it stay clean
  * under BLOCK F in `eslint.config.js`. It imports the provider registry
- * (domain), the Device Flow engine (domain), the raw notify seam (shared), the
- * auth-callback seam types (platform/git-auth-callbacks.ts), and the credential
- * surface (platform/git-credential.ts).
+ * (domain), the Device Flow engine (domain), the device-flow prompt helper
+ * (shared), the auth-callback seam types (platform/git-auth-callbacks.ts), and
+ * the credential surface (platform/git-credential.ts).
  *
  * AUTH-09: no credential field is ever interpolated into an Error/notify here;
  * enforced by tests/architecture/no-credential-leak.test.ts (PROV-05).
@@ -37,12 +37,14 @@
 import { findProviderForHost } from "../domain/auth-registry.ts";
 import { initiateDeviceFlow } from "../domain/github-auth.ts";
 import { NODE_CREDENTIAL_SPAWN, createCredentialOps } from "../platform/git-credential.ts";
-import { makeRawNotifyFn } from "../shared/notification-dispatch.ts";
+import { DeviceFlowUnavailableError } from "../shared/errors.ts";
+import { notifyDeviceFlowPrompt } from "../shared/notification-dispatch.ts";
 
 import type { DeviceFlowHttp } from "../domain/github-auth.ts";
 import type { AuthAttemptResult, OnAuthRequiredFn } from "../platform/git-auth-callbacks.ts";
 import type { CredentialOps } from "../platform/git-credential.ts";
 import type { NotificationContext } from "../platform/pi-api.ts";
+import type { NotificationRun } from "../shared/notification-run.ts";
 import type { GitAuthBundle } from "./marketplace/shared.ts";
 
 // Re-export the auth/credential types the network-gated plugin orchestrators
@@ -169,17 +171,17 @@ export function buildAuthForHost(args: {
   host: string;
   credentialOps: CredentialOps;
   ctx: NotificationContext;
+  run: NotificationRun;
   deviceFlowHttp?: DeviceFlowHttp;
   authMemo?: Map<string, AuthAttemptResult>;
 }): GitAuthBundle {
-  const { host, credentialOps, ctx, deviceFlowHttp, authMemo } = args;
+  const { host, credentialOps, ctx, run, deviceFlowHttp, authMemo } = args;
 
   const provider = findProviderForHost(host);
   if (provider === undefined) {
     return buildStoredCredentialAuth(host, credentialOps);
   }
 
-  const notifyFn = makeRawNotifyFn(ctx);
   const onAuthRequired: OnAuthRequiredFn = async (): Promise<AuthAttemptResult> => {
     // D-79-02: once-per-host memo short-circuits a repeated flow.
     const memoized = authMemo?.get(host);
@@ -187,11 +189,17 @@ export function buildAuthForHost(args: {
       return memoized;
     }
 
+    if (ctx.mode === "print") {
+      throw new DeviceFlowUnavailableError();
+    }
+
     const result = await initiateDeviceFlow({
       provider,
       host,
       credentialOps,
-      notifyFn,
+      onDeviceCode: (prompt) => {
+        notifyDeviceFlowPrompt(ctx, run, prompt);
+      },
       ...(deviceFlowHttp !== undefined && { http: deviceFlowHttp }),
     });
     authMemo?.set(host, result);
@@ -222,6 +230,7 @@ export function buildCloneAuth(
   kind: "url" | "git-subdir" | "github",
   auth: {
     readonly ctx: NotificationContext;
+    readonly run: NotificationRun;
     readonly credentialOps: CredentialOps;
     readonly deviceFlowHttp?: DeviceFlowHttp;
     readonly authMemo?: Map<string, AuthAttemptResult>;
@@ -231,6 +240,7 @@ export function buildCloneAuth(
     host: hostFromCloneUrl(cloneUrl, kind),
     credentialOps: auth.credentialOps,
     ctx: auth.ctx,
+    run: auth.run,
     ...(auth.deviceFlowHttp !== undefined && { deviceFlowHttp: auth.deviceFlowHttp }),
     ...(auth.authMemo !== undefined && { authMemo: auth.authMemo }),
   });

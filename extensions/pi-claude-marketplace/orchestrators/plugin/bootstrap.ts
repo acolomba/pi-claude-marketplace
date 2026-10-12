@@ -42,8 +42,9 @@ import { MarketplaceDuplicateNameError } from "../../shared/errors.ts";
 import { addMarketplace } from "../marketplace/add.ts";
 import { setMarketplaceAutoupdate } from "../marketplace/autoupdate.ts";
 
-import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
+import type { ExtensionContext } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
+import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { GitOps } from "../marketplace/shared.ts";
 
 /**
@@ -67,10 +68,10 @@ export const BOOTSTRAP_MARKETPLACE_NAME = "claude-plugins-official";
 export interface BootstrapOptions {
   readonly ctx: ExtensionContext;
   /**
-   * Required by `addMarketplace` / `setMarketplaceAutoupdate` orchestrators.
-   * Bootstrap itself does not read `pi` directly.
+   * D-05 / D-07: the command's run, shared with the nested `addMarketplace`
+   * and `setMarketplaceAutoupdate`.
    */
-  readonly pi: ExtensionAPI;
+  readonly run: NotificationRun;
   readonly cwd: string;
   readonly completionCache: CompletionCache;
   /** D-12 injection seam. Always provided by the edge handler via EdgeDeps. */
@@ -105,7 +106,7 @@ export async function bootstrapClaudePlugin(opts: BootstrapOptions): Promise<voi
   try {
     await addMarketplace({
       ctx: opts.ctx,
-      pi: opts.pi,
+      run: opts.run,
       scope: "user",
       cwd: opts.cwd,
       rawSource: BOOTSTRAP_SOURCE,
@@ -129,7 +130,7 @@ export async function bootstrapClaudePlugin(opts: BootstrapOptions): Promise<voi
 
   await setMarketplaceAutoupdate({
     ctx: opts.ctx,
-    pi: opts.pi,
+    run: opts.run,
     name: BOOTSTRAP_MARKETPLACE_NAME,
     enable: true,
     scope: "user",

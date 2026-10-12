@@ -19,14 +19,10 @@
 // state-changing work ran.
 //
 // The negative half of D-116-06 is proven in full. A rejecting case sizes the
-// boundary at one emission, zero probes, and no stated working directory, then
-// calls `verifyBoundary()`. The zero-probe half is a post-hoc report rather than
-// a fail-fast -- `hasLoadedPiSubagents` and `hasLoadedPiMcpAdapter` each swallow
-// a throw from `pi.getAllTools()` or `pi.getCommands()` and degrade to
-// "unloaded" -- so the call is mandatory and the emission count is never
-// relied on alone. Both counts are measured against the module rather than
-// inherited: a delegating case spends one soft-dependency probe and one
-// `ctx.cwd` read, a rejecting case spends neither.
+// boundary at one emission and no stated working directory, then calls
+// `verifyBoundary()`. The handler holds no tool inventory, and D-05 has the
+// workflow render from the router's run. A delegating case spends one `ctx.cwd`
+// read, a rejecting case spends none.
 //
 // Both scopes are seeded in every case, rejecting ones included, so a workflow
 // that did run would have a record to remove. The two scope roots are
@@ -68,6 +64,8 @@ import { asAbsolutePluginRoot } from "../../../../extensions/pi-claude-marketpla
 import { makeUninstallHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/uninstall.ts";
 import { createCompletionCache } from "../../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
+import { runWithNothingLoaded } from "../../../shared/notification-run-seeds.ts";
+import { createMachineNotificationBoundary } from "../../notification-boundary.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
 import {
   buildInstalledPluginRecord,
@@ -170,11 +168,8 @@ const USER_OVERRIDE_REJECTED = {
 };
 
 /** Construct one isolated registered-handler routing owner per test case. */
-function makeHandlerUnderTest(
-  pi: Parameters<typeof makeUninstallHandler>[0],
-): ReturnType<typeof makeUninstallHandler> {
+function makeHandlerUnderTest(): ReturnType<typeof makeUninstallHandler> {
   return makeUninstallHandler(
-    pi,
     createHooksRouting(createHooksRuntime(), { readHooksJson }),
     createCompletionCache(),
   );
@@ -413,7 +408,7 @@ test("DATA-02: removes the project-scope record and its data when the reference 
   // arrange
   const workspace = await createHermeticWorkspace(t, "bare-reference");
   await seedBothScopes(workspace);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 1, {
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
     value: workspace.cwd,
     reads: 1,
   });
@@ -422,10 +417,10 @@ test("DATA-02: removes the project-scope record and its data when the reference 
   const hooksRouting = await populateRuntimeRoute(workspace, ownerRuntime, "demo", "owner-target");
   await populateRuntimeRoute(workspace, ownerRuntime, "other", "owner-unrelated");
   await populateRuntimeRoute(workspace, peerRuntime, "demo", "peer-target");
-  const uninstallHandler = makeUninstallHandler(pi, hooksRouting, createCompletionCache());
+  const uninstallHandler = makeUninstallHandler(hooksRouting, createCompletionCache());
 
   // act
-  await uninstallHandler("demo@alpha", ctx);
+  await uninstallHandler("demo@alpha", ctx, runWithNothingLoaded());
 
   // assert
   assert.deepStrictEqual(notifications, [PROJECT_UNINSTALLED]);
@@ -450,14 +445,14 @@ for (const { args, placement } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, "keep-data-position");
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 1, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
       value: workspace.cwd,
       reads: 1,
     });
-    const uninstallHandler = makeHandlerUnderTest(pi);
+    const uninstallHandler = makeHandlerUnderTest();
 
     // act
-    await uninstallHandler(args, ctx);
+    await uninstallHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [PROJECT_UNINSTALLED_DATA_KEPT]);
@@ -479,14 +474,14 @@ for (const { args, placement } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, "prune-position");
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 1, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
       value: workspace.cwd,
       reads: 1,
     });
-    const uninstallHandler = makeHandlerUnderTest(pi);
+    const uninstallHandler = makeHandlerUnderTest();
 
     // act
-    await uninstallHandler(args, ctx);
+    await uninstallHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [PROJECT_UNINSTALLED]);
@@ -505,14 +500,14 @@ for (const { args, placement } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, "prune-keep-data");
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 1, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
       value: workspace.cwd,
       reads: 1,
     });
-    const uninstallHandler = makeHandlerUnderTest(pi);
+    const uninstallHandler = makeHandlerUnderTest();
 
     // act
-    await uninstallHandler(args, ctx);
+    await uninstallHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [PROJECT_UNINSTALLED_DATA_KEPT]);
@@ -548,14 +543,14 @@ test("FLAG-01 / D-05-10: a typed --prune reaches the sweep and removes the orpha
   // arrange
   const workspace = await createHermeticWorkspace(t, "prune-forwarded");
   await seedOrphanedDependency(workspace);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 1, {
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
     value: workspace.cwd,
     reads: 1,
   });
-  const uninstallHandler = makeHandlerUnderTest(pi);
+  const uninstallHandler = makeHandlerUnderTest();
 
   // act
-  await uninstallHandler("demo@alpha --prune", ctx);
+  await uninstallHandler("demo@alpha --prune", ctx, runWithNothingLoaded());
 
   // assert
   assert.deepStrictEqual(notifications, [PROJECT_UNINSTALLED_DEPENDENCY_PRUNED]);
@@ -568,14 +563,14 @@ test("FLAG-01 / D-05-10: the same command without --prune keeps the orphaned dep
   // arrange
   const workspace = await createHermeticWorkspace(t, "prune-omitted");
   await seedOrphanedDependency(workspace);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 1, {
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
     value: workspace.cwd,
     reads: 1,
   });
-  const uninstallHandler = makeHandlerUnderTest(pi);
+  const uninstallHandler = makeHandlerUnderTest();
 
   // act
-  await uninstallHandler("demo@alpha", ctx);
+  await uninstallHandler("demo@alpha", ctx, runWithNothingLoaded());
 
   // assert
   assert.deepStrictEqual(notifications, [PROJECT_UNINSTALLED]);
@@ -600,14 +595,18 @@ for (const { expectedEffects, expectedNotification, scopeValue } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, `keep-data-scope-${scopeValue}`);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 1, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
       value: workspace.cwd,
       reads: 1,
     });
-    const uninstallHandler = makeHandlerUnderTest(pi);
+    const uninstallHandler = makeHandlerUnderTest();
 
     // act
-    await uninstallHandler(`demo@alpha --keep-data --scope ${scopeValue}`, ctx);
+    await uninstallHandler(
+      `demo@alpha --keep-data --scope ${scopeValue}`,
+      ctx,
+      runWithNothingLoaded(),
+    );
 
     // assert
     assert.deepStrictEqual(notifications, [expectedNotification]);
@@ -621,14 +620,14 @@ test("preservation leaves the scope-target flag selecting the override layer", a
   const workspace = await createHermeticWorkspace(t, "keep-data-write-target");
   await seedBothScopes(workspace);
   await seedInvalidOverrideLayer(workspace.projectRoot);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 1, {
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
     value: workspace.cwd,
     reads: 1,
   });
-  const uninstallHandler = makeHandlerUnderTest(pi);
+  const uninstallHandler = makeHandlerUnderTest();
 
   // act
-  await uninstallHandler("demo@alpha --keep-data --local", ctx);
+  await uninstallHandler("demo@alpha --keep-data --local", ctx, runWithNothingLoaded());
 
   // assert
   assert.deepStrictEqual(notifications, [PROJECT_OVERRIDE_REJECTED]);
@@ -640,11 +639,11 @@ test("D-02-05: a preservation-shaped scope value is rejected, not read as the fl
   // arrange
   const workspace = await createHermeticWorkspace(t, "keep-data-as-scope-value");
   await seedBothScopes(workspace);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-  const uninstallHandler = makeHandlerUnderTest(pi);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+  const uninstallHandler = makeHandlerUnderTest();
 
   // act
-  await uninstallHandler("demo@alpha --scope --keep-data", ctx);
+  await uninstallHandler("demo@alpha --scope --keep-data", ctx, runWithNothingLoaded());
 
   // assert
   assert.deepStrictEqual(notifications, [
@@ -661,11 +660,11 @@ test("reports a missing plugin reference and removes nothing (D-116-06)", async 
   // arrange
   const workspace = await createHermeticWorkspace(t, "no-positional");
   await seedBothScopes(workspace);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-  const uninstallHandler = makeHandlerUnderTest(pi);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+  const uninstallHandler = makeHandlerUnderTest();
 
   // act
-  await uninstallHandler("", ctx);
+  await uninstallHandler("", ctx, runWithNothingLoaded());
 
   // assert
   assert.deepStrictEqual(notifications, [
@@ -679,11 +678,11 @@ test("rejects a surplus positional token and leaves both records intact", async 
   // arrange
   const workspace = await createHermeticWorkspace(t, "surplus-positional");
   await seedBothScopes(workspace);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-  const uninstallHandler = makeHandlerUnderTest(pi);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+  const uninstallHandler = makeHandlerUnderTest();
 
   // act
-  await uninstallHandler("demo@alpha surplus", ctx);
+  await uninstallHandler("demo@alpha surplus", ctx, runWithNothingLoaded());
 
   // assert
   assert.deepStrictEqual(notifications, [
@@ -702,11 +701,11 @@ for (const { malformedRef, shape } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, "malformed-reference");
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-    const uninstallHandler = makeHandlerUnderTest(pi);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const uninstallHandler = makeHandlerUnderTest();
 
     // act
-    await uninstallHandler(malformedRef, ctx);
+    await uninstallHandler(malformedRef, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -736,14 +735,14 @@ for (const { expectedEffects, expectedNotification, scopeValue } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, `scope-${scopeValue}`);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 1, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
       value: workspace.cwd,
       reads: 1,
     });
-    const uninstallHandler = makeHandlerUnderTest(pi);
+    const uninstallHandler = makeHandlerUnderTest();
 
     // act
-    await uninstallHandler(`demo@alpha --scope ${scopeValue}`, ctx);
+    await uninstallHandler(`demo@alpha --scope ${scopeValue}`, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [expectedNotification]);
@@ -762,14 +761,14 @@ for (const { args, placement } of [
     const workspace = await createHermeticWorkspace(t, "scope-target-position");
     await seedBothScopes(workspace);
     await seedInvalidOverrideLayer(workspace.projectRoot);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 1, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
       value: workspace.cwd,
       reads: 1,
     });
-    const uninstallHandler = makeHandlerUnderTest(pi);
+    const uninstallHandler = makeHandlerUnderTest();
 
     // act
-    await uninstallHandler(args, ctx);
+    await uninstallHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [PROJECT_OVERRIDE_REJECTED]);
@@ -783,14 +782,14 @@ test("reads the base layer and removes the record when the scope-target flag is 
   const workspace = await createHermeticWorkspace(t, "scope-target-omitted");
   await seedBothScopes(workspace);
   await seedInvalidOverrideLayer(workspace.projectRoot);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 1, {
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
     value: workspace.cwd,
     reads: 1,
   });
-  const uninstallHandler = makeHandlerUnderTest(pi);
+  const uninstallHandler = makeHandlerUnderTest();
 
   // act
-  await uninstallHandler("demo@alpha --scope project", ctx);
+  await uninstallHandler("demo@alpha --scope project", ctx, runWithNothingLoaded());
 
   // assert
   assert.deepStrictEqual(notifications, [PROJECT_UNINSTALLED]);
@@ -803,14 +802,14 @@ test("honors the scope flag and the scope-target flag together", async (t) => {
   const workspace = await createHermeticWorkspace(t, "both-selectors");
   await seedBothScopes(workspace);
   await seedInvalidOverrideLayer(workspace.userRoot);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 1, {
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
     value: workspace.cwd,
     reads: 1,
   });
-  const uninstallHandler = makeHandlerUnderTest(pi);
+  const uninstallHandler = makeHandlerUnderTest();
 
   // act
-  await uninstallHandler("demo@alpha --scope user --local", ctx);
+  await uninstallHandler("demo@alpha --scope user --local", ctx, runWithNothingLoaded());
 
   // assert
   assert.deepStrictEqual(notifications, [USER_OVERRIDE_REJECTED]);
@@ -831,11 +830,11 @@ for (const rejectedToken of ["--delete-data", "-y", "--yes", "--keep-data=false"
       // arrange
       const workspace = await createHermeticWorkspace(t, "rejected-flag");
       await seedBothScopes(workspace);
-      const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-      const uninstallHandler = makeHandlerUnderTest(pi);
+      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+      const uninstallHandler = makeHandlerUnderTest();
 
       // act
-      await uninstallHandler(args, ctx);
+      await uninstallHandler(args, ctx, runWithNothingLoaded());
 
       // assert
       assert.deepStrictEqual(notifications, [
@@ -855,11 +854,11 @@ for (const { rejectedToken, shape } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, "invalid-scope-value");
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-    const uninstallHandler = makeHandlerUnderTest(pi);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const uninstallHandler = makeHandlerUnderTest();
 
     // act
-    await uninstallHandler(`demo@alpha --scope ${rejectedToken}`, ctx);
+    await uninstallHandler(`demo@alpha --scope ${rejectedToken}`, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -871,4 +870,58 @@ for (const { rejectedToken, shape } of [
     assert.deepStrictEqual(await readObservedEffects(workspace), BOTH_RECORDS_INTACT);
     verifyBoundary();
   });
+}
+
+for (const mode of ["json", "rpc"] as const) {
+  for (const { args, message } of [
+    {
+      args: "--scope bad",
+      message: 'Invalid --scope value: "bad". Must be "user" or "project".',
+    },
+    {
+      args: "--bogus",
+      message: 'Unknown flag: "--bogus".',
+    },
+    {
+      args: "alpha@official beta@official",
+      message: "Too many arguments.",
+    },
+    {
+      args: "invalid",
+      message: 'Invalid <plugin>@<marketplace> ref: "invalid".',
+    },
+    {
+      args: "",
+      message: "Missing required argument.",
+    },
+  ]) {
+    test(`appends plugin/uninstall rejection for ${args} in ${mode} (enabled)`, async () => {
+      // arrange
+      const { ctx, run, capture, verifyBoundary } = createMachineNotificationBoundary(mode);
+
+      const commandHandler = makeHandlerUnderTest();
+
+      // act
+      await commandHandler(args, ctx, run);
+
+      // assert
+      assert.deepStrictEqual(capture.entries, [
+        {
+          customType: "claude-plugin",
+          payload: {
+            schemaVersion: 1,
+            origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+            kind: "usage-error",
+            severity: "error",
+            needsReload: false,
+            message,
+            usage:
+              "Usage: /claude:plugin uninstall <plugin>@<marketplace> [--scope user|project] [--keep-data] [--local] [--prune]",
+          },
+        },
+      ]);
+      capture.assertValid();
+      verifyBoundary();
+    });
+  }
 }

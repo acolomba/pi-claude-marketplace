@@ -32,22 +32,16 @@ import {
   type ScopeReadResult,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts";
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { UninstallPluginOperation } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import type {
-  ExtensionAPI,
-  ExtensionContext,
-} from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { ExtensionContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
 const extensionContext = mock<ExtensionContext>({
   exactParams: true,
   name: "extension context type evidence",
-});
-const extensionApi = mock<ExtensionAPI>({
-  exactParams: true,
-  name: "extension API type evidence",
 });
 const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
 const completionCache = createCompletionCache();
@@ -152,14 +146,14 @@ void ({
 
 void ({
   ctx: extensionContext,
-  pi: extensionApi,
+  run: runWithNothingLoaded(),
   cwd: "/work/project",
   completionCache,
   hooksRouting,
 } satisfies ApplyReconcileOptions);
 void ({
   ctx: extensionContext,
-  pi: extensionApi,
+  run: runWithNothingLoaded(),
   cwd: "/work/project",
   completionCache,
   scope: "project",
@@ -168,7 +162,7 @@ void ({
 } satisfies ApplyReconcileOptions);
 void ({
   ctx: extensionContext,
-  pi: extensionApi,
+  run: runWithNothingLoaded(),
   cwd: "/work/project",
   completionCache,
   hooksRouting,
@@ -176,7 +170,7 @@ void ({
 } satisfies ApplyReconcileOptions);
 void ({
   ctx: extensionContext,
-  pi: extensionApi,
+  run: runWithNothingLoaded(),
   cwd: "/work/project",
   completionCache,
   hooksRouting,
@@ -184,7 +178,7 @@ void ({
 } satisfies ApplyReconcileOptions);
 void ({
   ctx: extensionContext,
-  pi: extensionApi,
+  run: runWithNothingLoaded(),
   cwd: "/work/project",
   completionCache,
   hooksRouting,
@@ -200,7 +194,7 @@ void ({
 // D-09-13: the host's resources_discover reason.
 void ({
   ctx: extensionContext,
-  pi: extensionApi,
+  run: runWithNothingLoaded(),
   cwd: "/work/project",
   completionCache,
   hooksRouting,
@@ -208,7 +202,7 @@ void ({
 } satisfies ApplyReconcileOptions);
 void ({
   ctx: extensionContext,
-  pi: extensionApi,
+  run: runWithNothingLoaded(),
   cwd: "/work/project",
   completionCache,
   hooksRouting,
@@ -216,7 +210,7 @@ void ({
 } satisfies ApplyReconcileOptions);
 void ({
   ctx: extensionContext,
-  pi: extensionApi,
+  run: runWithNothingLoaded(),
   cwd: "/work/project",
   completionCache,
   hooksRouting,
@@ -407,7 +401,7 @@ void ({
   // @ts-expect-error reconcile plans always expose their mismatch bucket
 } satisfies ReconcilePlan);
 void ({
-  pi: extensionApi,
+  run: runWithNothingLoaded(),
   cwd: "/work/project",
   completionCache,
   hooksRouting,
@@ -415,7 +409,14 @@ void ({
 } satisfies ApplyReconcileOptions);
 void ({
   ctx: extensionContext,
-  pi: extensionApi,
+  cwd: "/work/project",
+  completionCache,
+  hooksRouting,
+  // @ts-expect-error apply options always carry the load pass's notification run
+} satisfies ApplyReconcileOptions);
+void ({
+  ctx: extensionContext,
+  run: runWithNothingLoaded(),
   cwd: "/work/project",
   completionCache,
   hooksRouting,
@@ -424,7 +425,7 @@ void ({
 } satisfies ApplyReconcileOptions);
 void ({
   ctx: extensionContext,
-  pi: extensionApi,
+  run: runWithNothingLoaded(),
   cwd: "/work/project",
   completionCache,
   hooksRouting,
@@ -433,7 +434,7 @@ void ({
 } satisfies ApplyReconcileOptions);
 void ({
   ctx: extensionContext,
-  pi: extensionApi,
+  run: runWithNothingLoaded(),
   cwd: "/work/project",
   completionCache,
   hooksRouting,

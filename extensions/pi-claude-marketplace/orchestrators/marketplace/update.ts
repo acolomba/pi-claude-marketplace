@@ -2,7 +2,7 @@
 //
 // MU-1, MU-4, MU-5, MU-6, MU-7, MU-8, MU-9 + RH-1/RH-2/RH-5 + SC-6 + NFR-5.
 //
-// Each orchestration emits exactly one `notify(ctx, pi,...)` call with a
+// Each orchestration emits exactly one `notify(ctx, run,...)` call with a
 // discriminated `NotificationMessage` payload. Severity, reload-hint,
 // soft-dep marker, and per-row glyph dispatch are owned by the renderer in
 // `shared/notification-grammar.ts`.
@@ -34,8 +34,8 @@
 //
 // Per-row soft-dep markers are driven by the per-plugin
 // `dependencies: Dependency[]` field on `PluginUpdatedMessage` /
-// `PluginInstalledMessage` / `PluginReinstalledMessage`, threaded through the
-// notify-time `softDepStatus(pi)` probe.
+// `PluginInstalledMessage` / `PluginReinstalledMessage`. D-05: the markers come
+// from the command run's soft-dependency snapshot, composed in the resolve step.
 //
 // MU-2 and MU-3 do not apply under the "follow upstream blindly" contract --
 // the local marketplace clone is read-only, so the pull --ff-only
@@ -81,7 +81,7 @@
 //  partition[outcome.partition].push(outcome)
 //  // MU-7: per-plugin outcomes feed outcomeToCascadePluginMessage construction
 //
-//  3. Compose user-visible output via a single notify(ctx, pi,...)
+//  3. Compose user-visible output via a single notify(ctx, run,...)
 //  call per orchestration (see header comment above for
 //  the catalog UAT fixtures bound to each shape). Empty targets,
 //  mp-level failure, autoupdate-OFF success, and autoupdate-ON
@@ -146,8 +146,9 @@ import type { ParsedSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { CredentialOps } from "../../platform/git-credential.ts";
-import type { NotificationContext, PiInventory } from "../../platform/pi-api.ts";
+import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
+import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { PluginUpdateFn, PluginUpdateOutcome } from "../types.ts";
 
@@ -165,13 +166,11 @@ export interface UpdateMarketplaceOptions {
    */
   readonly pluginUpdate?: PluginUpdateFn;
   /**
-   * Soft-dep probe target. `pi.getAllTools()` and `pi.getCommands()` are the
-   * source of truth for whether `pi-subagents` / `pi-mcp-adapter` are loaded.
-   * Required (not optional) so every `notify(ctx, pi, ...)` call has a
-   * non-null reference; the renderer threads `softDepStatus(pi)` internally at
-   * notify-time.
+   * D-05: the command's run. Every emission renders from its soft-dependency
+   * snapshot, and the `{requires ...}` markers are composed from it in the
+   * resolve step.
    */
-  readonly pi: PiInventory;
+  readonly run: NotificationRun;
   /**
    * AUTH-02 injection seam. Defaults to DEFAULT_CREDENTIAL_OPS which
    * wraps `git credential fill/approve/reject` via subprocess. Tests
@@ -203,8 +202,8 @@ export interface UpdateAllMarketplacesOptions {
   readonly cwd: string;
   readonly gitOps?: GitOps;
   readonly pluginUpdate?: PluginUpdateFn;
-  /** See `UpdateMarketplaceOptions.pi`. */
-  readonly pi: PiInventory;
+  /** See `UpdateMarketplaceOptions.run`. */
+  readonly run: NotificationRun;
   /**
    * AUTH-02 injection seam. Defaults to DEFAULT_CREDENTIAL_OPS which
    * wraps `git credential fill/approve/reject` via subprocess. Tests
@@ -238,7 +237,7 @@ export async function updateMarketplace(opts: UpdateMarketplaceOptions): Promise
   await refreshOneMarketplace({
     completionCache: opts.completionCache,
     ctx: opts.ctx,
-    pi: opts.pi,
+    run: opts.run,
     cardinality: "single",
     name: opts.name,
     scope: resolved.scope,
@@ -280,7 +279,7 @@ export async function updateAllMarketplaces(opts: UpdateAllMarketplacesOptions):
     // OUT-07 / D-12: empty inventory -> Plural (zero rows). Renders the
     // `(no marketplaces)` sentinel via the central seam the spine reuses.
     const emptyRows: Plural<MarketplaceRows<UpdateRowMsg>> = [];
-    notifyWithContext(opts.ctx, opts.pi, UPDATE_CONTEXT, emptyRows, undefined, "plural");
+    notifyWithContext(opts.ctx, opts.run, UPDATE_CONTEXT, emptyRows, undefined, "plural");
     return;
   }
 
@@ -290,7 +289,7 @@ export async function updateAllMarketplaces(opts: UpdateAllMarketplacesOptions):
     await refreshOneMarketplace({
       completionCache: opts.completionCache,
       ctx: opts.ctx,
-      pi: opts.pi,
+      run: opts.run,
       cardinality: "plural",
       name: t.name,
       scope: t.scope,
@@ -312,7 +311,7 @@ interface RefreshOneArgs {
   readonly locations: ScopedLocations;
   readonly gitOps: GitOps;
   readonly pluginUpdate?: PluginUpdateFn;
-  readonly pi: PiInventory;
+  readonly run: NotificationRun;
   readonly credentialOps: CredentialOps;
   readonly deviceFlowHttp?: DeviceFlowHttp;
   readonly stateTransaction?: LockedStateTransactionDeps;
@@ -393,8 +392,8 @@ async function refreshRecord(
       // platform/git.ts::buildAuthCallbacks first consults
       // credentialOps.fill(host); on a hit (the post-add common case) the
       // stored token is returned and Device Flow does NOT trigger -- this is
-      // the AUTH-02 silent-reuse contract. AUTH-09: the closure interpolates
-      // ONLY user_code + verification_uri inside the flow's notifyFn.
+      // the AUTH-02 silent-reuse contract. AUTH-09: only the user code and
+      // the verification URI cross the flow's onDeviceCode callback.
       const { ctx, credentialOps, deviceFlowHttp } = args;
       const host = hostFromCloneUrl(
         `https://github.com/${source.owner}/${source.repo}.git`,
@@ -404,6 +403,7 @@ async function refreshRecord(
         host,
         credentialOps,
         ctx,
+        run: args.run,
         ...(deviceFlowHttp !== undefined && { deviceFlowHttp }),
       });
 
@@ -425,6 +425,7 @@ async function refreshRecord(
         source,
         gitOps,
         ctx,
+        run: args.run,
         credentialOps,
         ...(deviceFlowHttp !== undefined && { deviceFlowHttp }),
         onFetchSucceeded: () => {
@@ -672,7 +673,7 @@ function transportReason(err: Error): ContentReason | undefined {
 }
 
 async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
-  const { ctx, cardinality, name, scope, locations, pluginUpdate, pi } = args;
+  const { ctx, cardinality, name, scope, locations, pluginUpdate, run } = args;
 
   let snapshot: RefreshSnapshot | undefined;
   try {
@@ -703,7 +704,7 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
       // D-03: a failed marketplace update -> error.
       { name, scope, status: "failed", severity: "error", plugins: [failedRow] },
     ];
-    notifyWithContext(ctx, pi, UPDATE_CONTEXT, failedRows, undefined, cardinality);
+    notifyWithContext(ctx, run, UPDATE_CONTEXT, failedRows, undefined, cardinality);
     return;
   }
 
@@ -769,7 +770,7 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
       const skippedRows: Single<MarketplaceRows<UpdateRowMsg>> = [
         { name, scope, status: "skipped", reasons: ["up-to-date"], plugins: [] },
       ];
-      notifyWithContext(ctx, pi, UPDATE_CONTEXT, skippedRows, undefined, cardinality);
+      notifyWithContext(ctx, run, UPDATE_CONTEXT, skippedRows, undefined, cardinality);
       return;
     }
 
@@ -777,7 +778,7 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
     const updatedRows: Single<MarketplaceRows<UpdateRowMsg>> = [
       { name, scope, status: "updated", plugins: [] },
     ];
-    notifyWithContext(ctx, pi, UPDATE_CONTEXT, updatedRows, undefined, cardinality);
+    notifyWithContext(ctx, run, UPDATE_CONTEXT, updatedRows, undefined, cardinality);
     return;
   }
 
@@ -805,7 +806,7 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
     const noopRows: Single<MarketplaceRows<UpdateRowMsg>> = [
       { name, scope, status: "skipped", reasons: ["up-to-date"], plugins: [] },
     ];
-    notifyWithContext(ctx, pi, UPDATE_CONTEXT, noopRows, undefined, cardinality);
+    notifyWithContext(ctx, run, UPDATE_CONTEXT, noopRows, undefined, cardinality);
     return;
   }
 
@@ -815,7 +816,7 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
   // -> warning; otherwise info), reload-hint (fires only when a plugin row
   // carries a status in {installed, updated, reinstalled, uninstalled} -- the
   // marketplace status never triggers it), and the per-row soft-dep marker
-  // (single probe per notify call, threaded into every renderPluginRow).
+  // (single probe per notify call, applied to every row by its row policy).
   // Caller-supplied plugin order is honored verbatim.
   // OUT-07 / D-12: one marketplace block carrying the per-plugin cascade child
   // rows -> Single. The `(updated)` header renders via the central seam; the
@@ -831,13 +832,14 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
       plugins: outcomes.map((o) => outcomeToCascadePluginMessage(o, scope)),
     },
   ];
-  notifyWithContext(ctx, pi, UPDATE_CONTEXT, cascadeRows, undefined, cardinality);
+  notifyWithContext(ctx, run, UPDATE_CONTEXT, cascadeRows, undefined, cardinality);
   // AFILE-04: the notices of the cascade's updates, shown after the rows they
   // explain. A failed update can carry them too: its MCP commit succeeded
   // before a later bridge or the finalize failed. The no-op paths above have
   // only `unchanged` outcomes, which carry none.
   notifyMcpConfigNotices(
     ctx,
+    run,
     outcomes.flatMap((o) =>
       o.partition === "updated" || o.partition === "failed" ? (o.mcpConfigNotices ?? []) : [],
     ),

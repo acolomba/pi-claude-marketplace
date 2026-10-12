@@ -6,23 +6,21 @@ import type { SoftDepStatus } from "../../platform/pi-api.ts";
  * shared/concerns/soft-dep.ts -- the soft-dep marker injection concern (D-01).
  * Owns the `Dependency` literal-union, the three soft-dep marker constants, and
  * the pure `softDepMarkers` helper that maps a per-row declares-flags triple + a
- * threaded `SoftDepStatus` probe to the soft-dep markers to append. It also owns
- * the companion package names and `companionRequirements`, the same mapping
- * shaped for the info `requires:` line (ADET-01). The central
- * `composeReasons` (in `notification-grammar.ts`, as shared presentation
- * vocabulary) delegates its soft-dep branch here.
+ * `SoftDepStatus` snapshot to the soft-dep markers to append. It also owns the
+ * companion package names and `companionRequirements`, the same mapping shaped
+ * for the info `requires:` line (ADET-01).
  *
- * The `softDepStatus(pi)` probe stays threaded by the renderer (environment is
- * the renderer's job); this module is pure given the probe result. `Reason` is
- * imported type-only from `notification-types.ts`, the single source of the
- * reason vocabulary. The type-only import is the cycle safeguard: the
- * renderer->concern call direction plus type-only back-references prevent any
- * runtime cycle.
+ * Resolve calls `softDepMarkers` with the command run's snapshot (D-05, D-12),
+ * and plugin info calls `companionRequirements` with it; this module never
+ * probes and is pure given the snapshot. `Reason` is imported type-only from
+ * `notification-types.ts`, and the type-only import is the cycle safeguard:
+ * the resolve->concern call direction plus type-only back-references prevent
+ * any runtime cycle.
  */
 
 /**
- * Closed set of dependency probe targets (SNM-06). 3 members, each driving the
- * renderer's per-dependency soft-dep probe path (`requires pi-subagents` /
+ * Closed set of dependency probe targets (SNM-06). 3 members, each selecting
+ * the snapshot flag behind one soft-dep marker (`requires pi-subagents` /
  * `requires pi-mcp-adapter` / `requires pi-dynamic-workflows` reason emission).
  *
  * Spelled out as a literal union rather than a runtime `DEPENDENCIES` tuple:

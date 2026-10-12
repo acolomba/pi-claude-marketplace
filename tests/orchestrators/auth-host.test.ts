@@ -13,15 +13,28 @@ import {
 } from "../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
 import { buildAuthCallbacks } from "../../extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts";
 import { createCredentialOps } from "../../extensions/pi-claude-marketplace/platform/git-credential.ts";
+import { DeviceFlowUnavailableError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
+import { openNotificationRun } from "../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import { createDeviceFlowFake } from "../domain/device-flow-fake.ts";
+import { createJsonCapture } from "../edge/json-capture.ts";
 import { createCredentialOpsFake } from "../platform/credential-ops-fake.ts";
 import { captureDebugLog } from "../platform/debug-log-capture.ts";
 import { createGitOpsFake } from "../platform/git-ops-fake.ts";
+import { runWithNothingLoaded } from "../shared/notification-run-seeds.ts";
 
+import type {
+  DeviceCodeResponse,
+  DeviceFlowHttp,
+  PollResult,
+} from "../../extensions/pi-claude-marketplace/domain/github-auth.ts";
 import type { GitAuthBundle } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { AuthAttemptResult } from "../../extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts";
 import type { CredentialSpawn } from "../../extensions/pi-claude-marketplace/platform/git-credential.ts";
-import type { ExtensionContext } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type {
+  ExtensionContext,
+  NotificationContext,
+  PiInventory,
+} from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
 /** Narrows a bundle the case expects to run a Device Flow, and fails the case otherwise. */
 function expectDeviceFlow(auth: GitAuthBundle): Extract<GitAuthBundle, { kind: "device-flow" }> {
@@ -112,6 +125,408 @@ describe("NO_STORED_CREDENTIAL_CAUSE", () => {
 });
 
 describe("buildAuthForHost", () => {
+  for (const initialMode of ["print", "json", "rpc", "tui"]) {
+    test(`refuses new device flow in live print mode after construction in ${initialMode}`, async () => {
+      // arrange
+      const ui = mock<NotificationContext["ui"]>({ exactParams: true, name: "UI" });
+      const deviceFlowHttp = mock<DeviceFlowHttp>({ exactParams: true, name: "device HTTP" });
+      const credentials = createCredentialOpsFake({ boundary: "memory" });
+      const ctx = { mode: initialMode, ui };
+      const authMemo = new Map<string, AuthAttemptResult>();
+      const auth = expectDeviceFlow(
+        buildAuthForHost({
+          host: "github.com",
+          ctx,
+          run: runWithNothingLoaded(),
+          credentialOps: credentials.credentialOps,
+          deviceFlowHttp,
+          authMemo,
+        }),
+      );
+      assert.deepStrictEqual(credentials.calls, { fill: [], approve: [], reject: [] });
+      ctx.mode = "print";
+
+      // act & assert
+      await assert.rejects(auth.onAuthRequired(), (error: unknown) => {
+        assert.ok(error instanceof DeviceFlowUnavailableError);
+        assert.strictEqual(
+          error.message,
+          "Device-flow authentication is unavailable in print mode. Retry with --mode json or interactive Pi.",
+        );
+        return true;
+      });
+      assert.deepStrictEqual(authMemo, new Map());
+      assert.deepStrictEqual(credentials.calls, { fill: [], approve: [], reject: [] });
+      verify(deviceFlowHttp);
+      verify(ui);
+    });
+  }
+
+  for (const host of ["github.com", "gitlab.com", "git.example.invalid"]) {
+    test(`reuses a stored credential in print for ${host}`, async () => {
+      // arrange
+      const ui = mock<NotificationContext["ui"]>({ exactParams: true, name: "UI" });
+      const deviceFlowHttp = mock<DeviceFlowHttp>({ exactParams: true, name: "device HTTP" });
+      const credentials = createCredentialOpsFake({
+        boundary: "memory",
+        credentials: [[host, { username: "stored", password: "secret" }]],
+      });
+      const auth = buildAuthForHost({
+        host,
+        ctx: { mode: "print", ui },
+        run: runWithNothingLoaded(),
+        credentialOps: credentials.credentialOps,
+        deviceFlowHttp,
+      });
+
+      // act
+      const credential = await buildAuthCallbacks(auth).onAuth(`https://${host}/owner/repo`);
+
+      // assert
+      assert.deepStrictEqual(credential, { username: "stored", password: "secret" });
+      assert.deepStrictEqual(credentials.calls, { fill: [{ host }], approve: [], reject: [] });
+      verify(deviceFlowHttp);
+      verify(ui);
+    });
+  }
+
+  for (const authentication of [
+    { ok: true, cred: { username: "memo", password: "secret" } },
+    { ok: false, reason: "User cancelled authorization." },
+  ] satisfies AuthAttemptResult[]) {
+    test(`reuses a memoized ${authentication.ok ? "success" : "failure"} in print`, async () => {
+      // arrange
+      const ui = mock<NotificationContext["ui"]>({ exactParams: true, name: "UI" });
+      const deviceFlowHttp = mock<DeviceFlowHttp>({ exactParams: true, name: "device HTTP" });
+      const credentials = createCredentialOpsFake({ boundary: "memory" });
+      const authMemo = new Map<string, AuthAttemptResult>([["github.com", authentication]]);
+      const auth = expectDeviceFlow(
+        buildAuthForHost({
+          host: "github.com",
+          ctx: { mode: "print", ui },
+          run: runWithNothingLoaded(),
+          credentialOps: credentials.credentialOps,
+          deviceFlowHttp,
+          authMemo,
+        }),
+      );
+
+      // act
+      const reused = await auth.onAuthRequired();
+
+      // assert
+      assert.strictEqual(reused, authentication);
+      assert.deepStrictEqual(authMemo, new Map([["github.com", authentication]]));
+      assert.deepStrictEqual(credentials.calls, { fill: [], approve: [], reject: [] });
+      verify(deviceFlowHttp);
+      verify(ui);
+    });
+  }
+
+  for (const mode of ["json", "rpc"]) {
+    test(`joins the delayed prompt and token poll before auth settlement in ${mode}`, async (t) => {
+      // arrange
+      t.mock.timers.enable({ apis: ["setTimeout"] });
+      const capture = createJsonCapture();
+      const events: unknown[] = [];
+      let liveMode = "invalid-mode";
+      const reads: string[] = [];
+      const ctx = {
+        get mode() {
+          reads.push(liveMode);
+          return liveMode;
+        },
+        get ui() {
+          return capture.ui;
+        },
+      };
+      let releaseCode!: (code: DeviceCodeResponse) => void;
+      const code = new Promise<DeviceCodeResponse>((resolve) => {
+        releaseCode = resolve;
+      });
+      let releaseToken!: (token: PollResult) => void;
+      const token = new Promise<PollResult>((resolve) => {
+        releaseToken = resolve;
+      });
+      let prompted!: () => void;
+      const promptReady = new Promise<void>((resolve) => {
+        prompted = resolve;
+      });
+      let polling!: () => void;
+      const pollReady = new Promise<void>((resolve) => {
+        polling = resolve;
+      });
+      const origin = {
+        kind: "command",
+        commandId: "marketplace add",
+        invocationId: "auth-run",
+      } as const;
+      const run = openNotificationRun(
+        {
+          getAllTools: () => [],
+          getCommands: () => [],
+          appendEntry(customType, payload) {
+            capture.entrySink.appendEntry(customType, payload);
+            events.push({ customType, payload });
+            prompted();
+          },
+        },
+        origin,
+      );
+      const credentials = createCredentialOpsFake({ boundary: "memory" });
+      const authMemo = new Map<string, AuthAttemptResult>();
+      const auth = expectDeviceFlow(
+        buildAuthForHost({
+          host: "github.com",
+          ctx,
+          run,
+          authMemo,
+          credentialOps: credentials.credentialOps,
+          deviceFlowHttp: {
+            requestCode: () => code,
+            pollToken: () => {
+              polling();
+              return token;
+            },
+          },
+        }),
+      );
+      const prompt = {
+        customType: "claude-plugin",
+        payload: {
+          schemaVersion: 1,
+          origin,
+          kind: "device-flow-prompt",
+          severity: "info",
+          needsReload: false,
+          verificationUri: "https://github.com/login/device",
+          userCode: "WAIT-1234",
+        },
+      };
+
+      // act
+      const authentication = auth.onAuthRequired().then((authenticated) => {
+        events.push("settled");
+        return authenticated;
+      });
+      const beforeCode = [...events];
+      liveMode = mode;
+      releaseCode({
+        device_code: "device-secret",
+        user_code: "WAIT-1234",
+        verification_uri: "https://github.com/login/device",
+        expires_in: 900,
+        interval: 1,
+      });
+      await promptReady;
+      t.mock.timers.tick(1000);
+      await pollReady;
+      const beforeToken = [...events];
+      const memoBeforeToken = new Map(authMemo);
+      releaseToken({
+        kind: "success",
+        accessToken: "auth-secret",
+        tokenType: "bearer",
+        scope: "repo",
+      });
+      const authenticated = await authentication;
+      const repeated = await auth.onAuthRequired();
+
+      // assert
+      assert.deepStrictEqual(beforeCode, []);
+      assert.deepStrictEqual(beforeToken, [prompt]);
+      assert.deepStrictEqual(memoBeforeToken, new Map());
+      assert.deepStrictEqual(events, [prompt, "settled"]);
+      assert.deepStrictEqual(capture.entries, [prompt]);
+      assert.deepStrictEqual(authenticated, {
+        ok: true,
+        cred: { username: "x-access-token", password: "auth-secret" },
+      });
+      assert.strictEqual(repeated, authenticated);
+      assert.deepStrictEqual(authMemo, new Map([["github.com", authenticated]]));
+      assert.deepStrictEqual(reads, ["invalid-mode", mode]);
+      assert.deepStrictEqual(credentials.storedCredential("github.com"), {
+        username: "x-access-token",
+        password: "auth-secret",
+      });
+      capture.assertValid();
+    });
+  }
+
+  test("selects the live mode for a delayed prompt and memoizes only the authentication", async () => {
+    // arrange
+    const capture = createJsonCapture();
+    let mode = "json";
+    const reads: string[] = [];
+    const ctx = {
+      get mode() {
+        reads.push(mode);
+        return mode;
+      },
+      get ui() {
+        return capture.ui;
+      },
+    };
+    const inventory = mock<PiInventory>({ exactParams: true, name: "inventory" });
+    when(() => inventory.getAllTools())
+      .thenReturn([])
+      .times(3);
+    when(() => inventory.getCommands())
+      .thenReturn([])
+      .once();
+    const pi = {
+      getAllTools: () => inventory.getAllTools(),
+      getCommands: () => inventory.getCommands(),
+      appendEntry: capture.entrySink.appendEntry,
+    };
+    const run = openNotificationRun(pi, {
+      kind: "command",
+      commandId: "plugin",
+      invocationId: "test-run",
+    });
+    const snapshot = run.softDeps;
+    const credentials = createCredentialOpsFake({ boundary: "memory" });
+    const deviceCode = {
+      device_code: "delayed-device-secret",
+      user_code: "LATE-1234",
+      verification_uri: "https://github.com/login/device",
+      expires_in: 900,
+      interval: 0,
+      access_token: "unexpected-provider-secret",
+      password: "unexpected-password",
+    };
+    const deviceFlow = createDeviceFlowFake({
+      boundary: "memory",
+      network: "disabled",
+      deviceCode,
+      pollResponses: [
+        { kind: "success", accessToken: "delayed-token", tokenType: "bearer", scope: "repo" },
+      ],
+    });
+    const authMemo = new Map<string, AuthAttemptResult>();
+    const auth = expectDeviceFlow(
+      buildAuthForHost({
+        host: "github.com",
+        credentialOps: credentials.credentialOps,
+        ctx,
+        run,
+        deviceFlowHttp: deviceFlow.http,
+        authMemo,
+      }),
+    );
+    const readsBeforePrompt = [...reads];
+
+    // act
+    mode = "rpc";
+    const authentication = await auth.onAuthRequired();
+    const repeatedAuthentication = await auth.onAuthRequired();
+
+    // assert
+    assert.deepStrictEqual(capture.entries, [
+      {
+        customType: "claude-plugin",
+        payload: {
+          schemaVersion: 1,
+          origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+          kind: "device-flow-prompt",
+          severity: "info",
+          needsReload: false,
+          verificationUri: "https://github.com/login/device",
+          userCode: "LATE-1234",
+        },
+      },
+    ]);
+    assert.deepStrictEqual(authentication, {
+      ok: true,
+      cred: { username: "x-access-token", password: "delayed-token" },
+    });
+    assert.strictEqual(repeatedAuthentication, authentication);
+    assert.deepStrictEqual(authMemo, new Map([["github.com", authentication]]));
+    assert.deepStrictEqual(readsBeforePrompt, []);
+    assert.deepStrictEqual(reads, ["rpc", "rpc"]);
+    assert.strictEqual(run.entrySink, pi);
+    assert.strictEqual(run.softDeps, snapshot);
+    assert.deepStrictEqual(snapshot, {
+      piSubagentsLoaded: false,
+      piMcpAdapterLoaded: false,
+      workflowEngineLoaded: false,
+    });
+    assert.deepStrictEqual(deviceFlow.calls, {
+      requestCode: [{ clientId: "Ov23liNcyK08uGdU0mMl", scope: "repo" }],
+      pollToken: [
+        { clientId: "Ov23liNcyK08uGdU0mMl", deviceCode: "delayed-device-secret", intervalSec: 0 },
+      ],
+    });
+    assert.deepStrictEqual(credentials.storedCredential("github.com"), {
+      username: "x-access-token",
+      password: "delayed-token",
+    });
+    capture.assertValid();
+    verify(inventory);
+  });
+
+  for (const mode of ["json", "rpc"]) {
+    test(`appends the host-bound device prompt in ${mode}`, async () => {
+      // arrange
+      const capture = createJsonCapture();
+      const ctx = {
+        mode,
+        get ui() {
+          return capture.ui;
+        },
+      };
+      const run = { ...runWithNothingLoaded(), entrySink: capture.entrySink };
+      const credentials = createCredentialOpsFake({ boundary: "memory" });
+      const deviceFlow = createDeviceFlowFake({
+        boundary: "memory",
+        network: "disabled",
+        deviceCode: {
+          device_code: "device-secret",
+          user_code: "HOST-1234",
+          verification_uri: "https://github.com/login/device",
+          expires_in: 900,
+          interval: 0,
+        },
+        pollResponses: [
+          { kind: "success", accessToken: "auth-secret", tokenType: "bearer", scope: "repo" },
+        ],
+      });
+      const auth = expectDeviceFlow(
+        buildAuthForHost({
+          host: "github.com",
+          credentialOps: credentials.credentialOps,
+          ctx,
+          run,
+          deviceFlowHttp: deviceFlow.http,
+        }),
+      );
+
+      // act
+      const authentication = await auth.onAuthRequired();
+
+      // assert
+      assert.deepStrictEqual(capture.entries, [
+        {
+          customType: "claude-plugin",
+          payload: {
+            schemaVersion: 1,
+            origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+            kind: "device-flow-prompt",
+            severity: "info",
+            needsReload: false,
+            verificationUri: "https://github.com/login/device",
+            userCode: "HOST-1234",
+          },
+        },
+      ]);
+      assert.deepStrictEqual(authentication, {
+        ok: true,
+        cred: { username: "x-access-token", password: "auth-secret" },
+      });
+      capture.assertValid();
+    });
+  }
+
   test("forwards an unregistered host's stored credential through the real auth callbacks", async () => {
     // arrange
     const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
@@ -123,6 +538,7 @@ describe("buildAuthForHost", () => {
       host: "git.example.invalid",
       credentialOps: credentials.credentialOps,
       ctx,
+      run: runWithNothingLoaded(),
     });
     const callbacks = buildAuthCallbacks(auth);
 
@@ -148,6 +564,7 @@ describe("buildAuthForHost", () => {
       host: "git.example.invalid",
       credentialOps: credentials.credentialOps,
       ctx,
+      run: runWithNothingLoaded(),
     });
     const callbacks = buildAuthCallbacks(auth);
 
@@ -178,6 +595,7 @@ describe("buildAuthForHost", () => {
       host: "git.example.invalid",
       credentialOps: credentials.credentialOps,
       ctx,
+      run: runWithNothingLoaded(),
     });
     const callbacks = buildAuthCallbacks(auth);
 
@@ -209,6 +627,7 @@ describe("buildAuthForHost", () => {
       host: "github.com",
       credentialOps: credentials.credentialOps,
       ctx,
+      run: runWithNothingLoaded(),
     });
     const callbacks = buildAuthCallbacks(auth);
 
@@ -239,6 +658,7 @@ describe("buildAuthForHost", () => {
       host: "git.example.invalid",
       credentialOps: credentials.credentialOps,
       ctx,
+      run: runWithNothingLoaded(),
     });
 
     // assert
@@ -263,6 +683,7 @@ describe("buildAuthForHost", () => {
         host: "github.com",
         credentialOps: credentials.credentialOps,
         ctx,
+        run: runWithNothingLoaded(),
       }),
     );
 
@@ -297,6 +718,7 @@ describe("buildAuthForHost", () => {
         host: "gitlab.com",
         credentialOps: credentials.credentialOps,
         ctx,
+        run: runWithNothingLoaded(),
       }),
     );
 
@@ -323,6 +745,9 @@ describe("buildAuthForHost", () => {
     // arrange
     const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
     const ui = mock<ExtensionContext["ui"]>({ exactParams: true, name: "extension UI" });
+    when(() => ctx.mode)
+      .thenReturn("tui")
+      .times(4);
     when(() => ctx.ui)
       .thenReturn(ui)
       .twice();
@@ -362,6 +787,7 @@ describe("buildAuthForHost", () => {
         host: "github.com",
         credentialOps: credentials.credentialOps,
         ctx,
+        run: runWithNothingLoaded(),
         deviceFlowHttp: deviceFlow.http,
       }),
     );
@@ -428,6 +854,9 @@ describe("buildAuthForHost", () => {
   test("returns an exact Device Flow initialization failure without notifying or persisting", async () => {
     // arrange
     const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
+    when(() => ctx.mode)
+      .thenReturn("tui")
+      .once();
     const credentials = createCredentialOpsFake({ boundary: "memory" });
     const deviceFlow = createDeviceFlowFake({
       boundary: "memory",
@@ -447,6 +876,7 @@ describe("buildAuthForHost", () => {
         host: "github.com",
         credentialOps: credentials.credentialOps,
         ctx,
+        run: runWithNothingLoaded(),
         deviceFlowHttp: deviceFlow.http,
         authMemo,
       }),
@@ -479,6 +909,9 @@ describe("buildAuthForHost", () => {
     // arrange
     const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
     const ui = mock<ExtensionContext["ui"]>({ exactParams: true, name: "extension UI" });
+    when(() => ctx.mode)
+      .thenReturn("tui")
+      .twice();
     when(() => ctx.ui)
       .thenReturn(ui)
       .once();
@@ -513,6 +946,7 @@ describe("buildAuthForHost", () => {
         host: "github.com",
         credentialOps: credentials.credentialOps,
         ctx,
+        run: runWithNothingLoaded(),
         deviceFlowHttp: deviceFlow.http,
         authMemo,
       }),
@@ -567,6 +1001,9 @@ describe("buildAuthForHost", () => {
     // arrange
     const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
     const ui = mock<ExtensionContext["ui"]>({ exactParams: true, name: "extension UI" });
+    when(() => ctx.mode)
+      .thenReturn("tui")
+      .times(4);
     when(() => ctx.ui)
       .thenReturn(ui)
       .twice();
@@ -602,6 +1039,7 @@ describe("buildAuthForHost", () => {
         host: "github.com",
         credentialOps: credentials.credentialOps,
         ctx,
+        run: runWithNothingLoaded(),
         deviceFlowHttp: deviceFlow.http,
         authMemo,
       }),
@@ -611,6 +1049,7 @@ describe("buildAuthForHost", () => {
         host: "gitlab.com",
         credentialOps: credentials.credentialOps,
         ctx,
+        run: runWithNothingLoaded(),
         deviceFlowHttp: deviceFlow.http,
         authMemo,
       }),
@@ -705,6 +1144,9 @@ describe("buildAuthForHost", () => {
     // arrange
     const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
     const ui = mock<ExtensionContext["ui"]>({ exactParams: true, name: "extension UI" });
+    when(() => ctx.mode)
+      .thenReturn("tui")
+      .twice();
     when(() => ctx.ui)
       .thenReturn(ui)
       .once();
@@ -757,6 +1199,7 @@ describe("buildAuthForHost", () => {
         host: "github.com",
         credentialOps: credentials.credentialOps,
         ctx,
+        run: runWithNothingLoaded(),
         authMemo,
       }),
     );
@@ -844,6 +1287,9 @@ describe("buildCloneAuth", () => {
     // arrange
     const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
     const ui = mock<ExtensionContext["ui"]>({ exactParams: true, name: "extension UI" });
+    when(() => ctx.mode)
+      .thenReturn("tui")
+      .twice();
     when(() => ctx.ui)
       .thenReturn(ui)
       .once();
@@ -876,6 +1322,7 @@ describe("buildCloneAuth", () => {
     const auth = expectDeviceFlow(
       buildCloneAuth("not a valid URL", "github", {
         ctx,
+        run: runWithNothingLoaded(),
         credentialOps: credentials.credentialOps,
         deviceFlowHttp: deviceFlow.http,
         authMemo,
@@ -932,7 +1379,11 @@ describe("buildCloneAuth", () => {
       boundary: "memory",
       credentials: [["gitlab.com", { username: "oauth2", password: "stored-secret" }]],
     });
-    const authOptions = { credentialOps: credentials.credentialOps, ctx };
+    const authOptions = {
+      credentialOps: credentials.credentialOps,
+      ctx,
+      run: runWithNothingLoaded(),
+    };
     const auth = buildCloneAuth("https://gitlab.com/team/plugin.git", "url", authOptions);
     const callbacks = buildAuthCallbacks(auth);
 
@@ -949,7 +1400,7 @@ describe("buildCloneAuth", () => {
       approve: [],
       reject: [],
     });
-    assert.deepStrictEqual(Object.keys(authOptions), ["credentialOps", "ctx"]);
+    assert.deepStrictEqual(Object.keys(authOptions), ["credentialOps", "ctx", "run"]);
     verify(ctx);
   });
 
@@ -957,6 +1408,9 @@ describe("buildCloneAuth", () => {
     // arrange
     const cloneUrl = "https://gitlab.com/team/plugin.git";
     const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
+    when(() => ctx.mode)
+      .thenReturn("tui")
+      .once();
     const credentials = createCredentialOpsFake({ boundary: "memory" });
     const initializationError = new Error("provider unavailable");
     const deviceFlow = createDeviceFlowFake({
@@ -974,6 +1428,7 @@ describe("buildCloneAuth", () => {
     const auth = expectDeviceFlow(
       buildCloneAuth(cloneUrl, "url", {
         ctx,
+        run: runWithNothingLoaded(),
         credentialOps: credentials.credentialOps,
         deviceFlowHttp: deviceFlow.http,
       }),
@@ -1015,7 +1470,7 @@ describe("buildCloneAuth", () => {
     const auth = buildCloneAuth(
       "https://gitlab.com:8443/team/repository.git#plugin",
       "git-subdir",
-      { ctx, credentialOps: credentials.credentialOps },
+      { ctx, run: runWithNothingLoaded(), credentialOps: credentials.credentialOps },
     );
 
     // assert

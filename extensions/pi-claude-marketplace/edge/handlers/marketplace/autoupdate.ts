@@ -9,13 +9,16 @@
 // parameterized by `enable: boolean`. The edge layer maps the two slash
 // subcommands onto this single factory via `makeAutoupdateHandler(true)` and
 // `makeAutoupdateHandler(false)`.
+//
+// D-05: the orchestrator renders from the router's notification run, which
+// the handler forwards.
 
 import { setMarketplaceAutoupdate } from "../../../orchestrators/marketplace/autoupdate.ts";
 import { notifyUsageError } from "../../../shared/notification-dispatch.ts";
 import { parseCommandArgs } from "../../args-schema.ts";
 import { extractLocalFlag } from "../shared.ts";
 
-import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
+import type { SubcommandHandler } from "../../router.ts";
 
 function usageFor(enable: boolean): string {
   return enable
@@ -23,13 +26,11 @@ function usageFor(enable: boolean): string {
     : "Usage: /claude:plugin marketplace noautoupdate [<name>] [--scope user|project] [--local]";
 }
 
-export function makeAutoupdateHandler(
-  pi: ExtensionAPI,
-  enable: boolean,
-): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
+export function makeAutoupdateHandler(enable: boolean): SubcommandHandler {
   const usage = usageFor(enable);
-  return async (args, ctx): Promise<void> => {
-    const localFlag = extractLocalFlag(args, ctx, usage);
+  // fallow-ignore-next-line code-duplication -- reviewed: autoupdate and enable/disable share the same --local argument prologue on purpose, so each handler reads top to bottom
+  return async (args, ctx, run): Promise<void> => {
+    const localFlag = extractLocalFlag(args, { ctx, run, usage });
     if (localFlag === undefined) {
       return;
     }
@@ -41,7 +42,7 @@ export function makeAutoupdateHandler(
         usage,
       },
       (message) => {
-        notifyUsageError(ctx, { message, usage });
+        notifyUsageError(ctx, run, { message, usage });
       },
     );
     if (parsed === undefined) {
@@ -50,7 +51,7 @@ export function makeAutoupdateHandler(
 
     await setMarketplaceAutoupdate({
       ctx,
-      pi,
+      run,
       cwd: ctx.cwd,
       enable,
       ...(parsed.name !== undefined && { name: parsed.name }),

@@ -44,6 +44,7 @@ import { DEFAULT_STATE } from "../../extensions/pi-claude-marketplace/persistenc
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { createGitOpsFake } from "../platform/git-ops-fake.ts";
 import { createHermeticEnvironment } from "../platform/hermetic-environment.ts";
+import { runWithNothingLoaded } from "../shared/notification-run-seeds.ts";
 
 import type { ScopeConfig } from "../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 
@@ -164,15 +165,14 @@ test("WB-01 SC#4 (add path): after addMarketplace, reconcile is a no-op AND stat
     const locations = locationsFor("project", cwd);
     await mkdir(locations.extensionRoot, { recursive: true });
 
-    const ctx = { ui: { notify: (): void => undefined } } as never;
-    const pi = { getAllTools: (): unknown[] => [] } as never;
+    const ctx = { mode: "tui", ui: { notify: (): void => undefined } };
     const { gitOps } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
 
     await addMarketplace({
       ctx,
-      pi,
+      run: runWithNothingLoaded(),
       scope: "project",
       cwd,
       completionCache: createCompletionCache(),
@@ -213,8 +213,7 @@ test("WB-01 SC#4 (add + autoupdate enable): post-flip reconcile is a no-op AND u
     const locations = locationsFor("project", cwd);
     await mkdir(locations.extensionRoot, { recursive: true });
 
-    const ctx = { ui: { notify: (): void => undefined } } as never;
-    const pi = { getAllTools: (): unknown[] => [] } as never;
+    const ctx = { mode: "tui", ui: { notify: (): void => undefined } };
     const { gitOps } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
@@ -242,7 +241,7 @@ test("WB-01 SC#4 (add + autoupdate enable): post-flip reconcile is a no-op AND u
 
     await addMarketplace({
       ctx,
-      pi,
+      run: runWithNothingLoaded(),
       scope: "project",
       cwd,
       completionCache: createCompletionCache(),
@@ -253,7 +252,7 @@ test("WB-01 SC#4 (add + autoupdate enable): post-flip reconcile is a no-op AND u
     // 2. Flip autoupdate ON via the orchestrator.
     await setMarketplaceAutoupdate({
       ctx,
-      pi,
+      run: runWithNothingLoaded(),
       name: "valid-marketplace",
       enable: true,
       scope: "project",
@@ -306,15 +305,14 @@ test("WB-01 SC#4 (add + autoupdate disable): post-flip reconcile is a no-op", as
     const locations = locationsFor("project", cwd);
     await mkdir(locations.extensionRoot, { recursive: true });
 
-    const ctx = { ui: { notify: (): void => undefined } } as never;
-    const pi = { getAllTools: (): unknown[] => [] } as never;
+    const ctx = { mode: "tui", ui: { notify: (): void => undefined } };
     const { gitOps } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
 
     await addMarketplace({
       ctx,
-      pi,
+      run: runWithNothingLoaded(),
       scope: "project",
       cwd,
       completionCache: createCompletionCache(),
@@ -323,7 +321,7 @@ test("WB-01 SC#4 (add + autoupdate disable): post-flip reconcile is a no-op", as
     });
     await setMarketplaceAutoupdate({
       ctx,
-      pi,
+      run: runWithNothingLoaded(),
       name: "valid-marketplace",
       enable: true,
       scope: "project",
@@ -332,7 +330,7 @@ test("WB-01 SC#4 (add + autoupdate disable): post-flip reconcile is a no-op", as
     // Now flip back OFF.
     await setMarketplaceAutoupdate({
       ctx,
-      pi,
+      run: runWithNothingLoaded(),
       name: "valid-marketplace",
       enable: false,
       scope: "project",
@@ -368,8 +366,7 @@ test("WB-01 SC#4 (add + remove cascade): post-remove reconcile is a no-op and co
     const locations = locationsFor("project", cwd);
     await mkdir(locations.extensionRoot, { recursive: true });
 
-    const ctx = { ui: { notify: (): void => undefined } } as never;
-    const pi = { getAllTools: (): unknown[] => [] } as never;
+    const ctx = { mode: "tui", ui: { notify: (): void => undefined } };
     const { gitOps } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
@@ -379,7 +376,7 @@ test("WB-01 SC#4 (add + remove cascade): post-remove reconcile is a no-op and co
     // config + state in their original empty shape.
     await addMarketplace({
       ctx,
-      pi,
+      run: runWithNothingLoaded(),
       scope: "project",
       cwd,
       completionCache: createCompletionCache(),
@@ -389,7 +386,7 @@ test("WB-01 SC#4 (add + remove cascade): post-remove reconcile is a no-op and co
     await removeMarketplace({
       completionCache,
       ctx,
-      pi,
+      run: runWithNothingLoaded(),
       name: "valid-marketplace",
       scope: "project",
       cwd,
@@ -433,8 +430,7 @@ test("WB-01 SC#4 (bare-form autoupdate flip, 2 marketplaces): BOTH config entrie
     const locations = locationsFor("project", cwd);
     await mkdir(locations.extensionRoot, { recursive: true });
 
-    const ctx = { ui: { notify: (): void => undefined } } as never;
-    const pi = { getAllTools: (): unknown[] => [] } as never;
+    const ctx = { mode: "tui", ui: { notify: (): void => undefined } };
 
     function mpRecord(name: string): Record<string, unknown> {
       return {
@@ -456,7 +452,7 @@ test("WB-01 SC#4 (bare-form autoupdate flip, 2 marketplaces): BOTH config entrie
     // Bare form: NO name -- every marketplace in the scope flips.
     await setMarketplaceAutoupdate({
       ctx,
-      pi,
+      run: runWithNothingLoaded(),
       enable: true,
       scope: "project",
       cwd,
@@ -536,8 +532,7 @@ test("WB-01 SC#4 (cross-scope CMP-3 install): project-scope install via user-sco
       },
     } as never);
 
-    const ctx = { ui: { notify: (): void => undefined } } as never;
-    const pi = { getAllTools: (): unknown[] => [] } as never;
+    const ctx = { mode: "tui", ui: { notify: (): void => undefined } };
     const installPlugin = createInstallOperation(
       createHooksRouting(createHooksRuntime(), { readHooksJson }),
       createCompletionCache(),
@@ -548,7 +543,7 @@ test("WB-01 SC#4 (cross-scope CMP-3 install): project-scope install via user-sco
     // (CMP-3) and clones it into project state.
     await installPlugin({
       ctx,
-      pi,
+      run: runWithNothingLoaded(),
       scope: "project",
       cwd,
       marketplace: "mp",
@@ -588,8 +583,7 @@ test("WR-09 orchestrated-mode SKIP: addMarketplace with notifications.mode 'orch
     const locations = locationsFor("project", cwd);
     await mkdir(locations.extensionRoot, { recursive: true });
 
-    const ctx = { ui: { notify: (): void => undefined } } as never;
-    const pi = { getAllTools: (): unknown[] => [] } as never;
+    const ctx = { mode: "tui", ui: { notify: (): void => undefined } };
     const { gitOps } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
@@ -602,7 +596,7 @@ test("WR-09 orchestrated-mode SKIP: addMarketplace with notifications.mode 'orch
 
     await addMarketplace({
       ctx,
-      pi,
+      run: runWithNothingLoaded(),
       scope: "project",
       cwd,
       completionCache: createCompletionCache(),

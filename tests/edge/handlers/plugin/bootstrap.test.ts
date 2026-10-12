@@ -4,10 +4,9 @@
 // forwarding it, and one of the two that emit through the probing notification
 // path rather than the usage-error path. Both facts are visible in how each case
 // sizes the shared boundary: the three rejection sentences reach
-// `notifyUsageError`, which probes nothing, so those cases state one emission and
-// ZERO probes; the delegating and failure cases reach `notify()`, which runs one
-// soft-dependency probe per emission, so they state one probe per emission.
-// Every count here was measured against the
+// `notifyUsageError`, so those cases state one emission; the delegating and
+// failure cases reach `notify()`, and D-05 renders every one of those emissions
+// from the run the handler receives. Every count here was measured against the
 // real module through a counting context before a line was written: the workflow
 // emits twice (add, then autoupdate) and the failure conversion emits once, and
 // the handler reads `ctx.cwd` exactly once on the path that reaches the workflow
@@ -87,12 +86,16 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { test, type TestContext } from "node:test";
 
+import { mock, verify } from "strong-mock";
+
 import { makeBootstrapHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/bootstrap.ts";
 import { BOOTSTRAP_MARKETPLACE_NAME } from "../../../../extensions/pi-claude-marketplace/orchestrators/plugin/bootstrap.ts";
 import { locationsFor } from "../../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { createCompletionCache } from "../../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { createGitOpsFake } from "../../../platform/git-ops-fake.ts";
 import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
+import { runWithNothingLoaded } from "../../../shared/notification-run-seeds.ts";
+import { createMachineNotificationBoundary } from "../../notification-boundary.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
 
 import type { EdgeDeps } from "../../../../extensions/pi-claude-marketplace/edge/types.ts";
@@ -253,12 +256,12 @@ function describeClones(clones: readonly GitCloneCall[], stagingRoot: string): G
 test("clones through the injected git port into the user scope at the accepted arity", async (t) => {
   // arrange
   const { cwd, sourceTree, networkCallCount } = await createHermeticScope(t, "accepted");
-  const { ctx, pi, verifyBoundary } = createNotificationBoundary(2, 2, { value: cwd, reads: 1 });
+  const { ctx, verifyBoundary } = createNotificationBoundary(2, { value: cwd, reads: 1 });
   const git = createGitPort(sourceTree);
-  const bootstrapHandler = makeBootstrapHandler(pi, createBootstrapDeps(git.gitOps));
+  const bootstrapHandler = makeBootstrapHandler(createBootstrapDeps(git.gitOps));
 
   // act
-  await bootstrapHandler("", ctx);
+  await bootstrapHandler("", ctx, runWithNothingLoaded());
 
   // assert
   assert.deepStrictEqual(describeClones(git.clones, userStagingRoot(cwd)), [BOOTSTRAP_CLONE]);
@@ -273,12 +276,12 @@ for (const { args, label, tokens } of [
   test(`rejects ${tokens} with the no-arguments sentence and never reaches the workflow`, async (t) => {
     // arrange
     const { sourceTree, networkCallCount } = await createHermeticScope(t, `positional-${label}`);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
     const git = createGitPort(sourceTree);
-    const bootstrapHandler = makeBootstrapHandler(pi, createBootstrapDeps(git.gitOps));
+    const bootstrapHandler = makeBootstrapHandler(createBootstrapDeps(git.gitOps));
 
     // act
-    await bootstrapHandler(args, ctx);
+    await bootstrapHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [{ message: NO_ARGUMENTS_MESSAGE, severity: "error" }]);
@@ -292,12 +295,12 @@ for (const scope of ["user", "project"] satisfies readonly Scope[]) {
   test(`rejects --scope ${scope} as never accepted, because bootstrap always targets the user scope`, async (t) => {
     // arrange
     const { sourceTree, networkCallCount } = await createHermeticScope(t, `scope-${scope}`);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
     const git = createGitPort(sourceTree);
-    const bootstrapHandler = makeBootstrapHandler(pi, createBootstrapDeps(git.gitOps));
+    const bootstrapHandler = makeBootstrapHandler(createBootstrapDeps(git.gitOps));
 
     // act
-    await bootstrapHandler(`--scope ${scope}`, ctx);
+    await bootstrapHandler(`--scope ${scope}`, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -320,12 +323,12 @@ for (const { args, label, subject } of [
   test(`takes the scope-target flag as a positional and rejects it ${subject}`, async (t) => {
     // arrange
     const { sourceTree, networkCallCount } = await createHermeticScope(t, `scope-target-${label}`);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
     const git = createGitPort(sourceTree);
-    const bootstrapHandler = makeBootstrapHandler(pi, createBootstrapDeps(git.gitOps));
+    const bootstrapHandler = makeBootstrapHandler(createBootstrapDeps(git.gitOps));
 
     // act
-    await bootstrapHandler(args, ctx);
+    await bootstrapHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [{ message: NO_ARGUMENTS_MESSAGE, severity: "error" }]);
@@ -346,12 +349,12 @@ for (const { args, label, subject } of [
   test(`reports an unrecognised scope value with the bootstrap usage block when ${subject}`, async (t) => {
     // arrange
     const { sourceTree, networkCallCount } = await createHermeticScope(t, `invalid-scope-${label}`);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
     const git = createGitPort(sourceTree);
-    const bootstrapHandler = makeBootstrapHandler(pi, createBootstrapDeps(git.gitOps));
+    const bootstrapHandler = makeBootstrapHandler(createBootstrapDeps(git.gitOps));
 
     // act
-    await bootstrapHandler(args, ctx);
+    await bootstrapHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [{ message: INVALID_SCOPE_MESSAGE, severity: "error" }]);
@@ -364,15 +367,15 @@ for (const { args, label, subject } of [
 test("converts a thrown bootstrap failure into one failed marketplace row carrying no error text", async (t) => {
   // arrange
   const { cwd, sourceTree, networkCallCount } = await createHermeticScope(t, "failure");
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 1, {
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
     value: cwd,
     reads: 1,
   });
   const git = createGitPort(sourceTree, new Error(REFUSED_CLONE_MESSAGE));
-  const bootstrapHandler = makeBootstrapHandler(pi, createBootstrapDeps(git.gitOps));
+  const bootstrapHandler = makeBootstrapHandler(createBootstrapDeps(git.gitOps));
 
   // act
-  await bootstrapHandler("", ctx);
+  await bootstrapHandler("", ctx, runWithNothingLoaded());
 
   // assert
   assert.deepStrictEqual(notifications, [{ message: FAILED_ROW_MESSAGE, severity: "error" }]);
@@ -380,3 +383,52 @@ test("converts a thrown bootstrap failure into one failed marketplace row carryi
   assert.strictEqual(networkCallCount(), 0);
   verifyBoundary();
 });
+
+for (const mode of ["json", "rpc"] as const) {
+  for (const { args, message } of [
+    {
+      args: "--scope bad",
+      message: 'Invalid --scope value: "bad". Must be "user" or "project".',
+    },
+    {
+      args: "extra",
+      message: "bootstrap takes no arguments.",
+    },
+    {
+      args: "--scope user",
+      message: "bootstrap does not accept --scope; it always targets user scope.",
+    },
+  ]) {
+    test(`appends plugin/bootstrap rejection for ${args} in ${mode} (enabled)`, async () => {
+      // arrange
+      const { ctx, run, capture, verifyBoundary } = createMachineNotificationBoundary(mode);
+      const deps = mock<Parameters<typeof makeBootstrapHandler>[0]>({
+        exactParams: true,
+        name: "handler dependencies",
+      });
+      const commandHandler = makeBootstrapHandler(deps);
+
+      // act
+      await commandHandler(args, ctx, run);
+
+      // assert
+      assert.deepStrictEqual(capture.entries, [
+        {
+          customType: "claude-plugin",
+          payload: {
+            schemaVersion: 1,
+            origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+            kind: "usage-error",
+            severity: "error",
+            needsReload: false,
+            message,
+            usage: "Usage: /claude:plugin bootstrap",
+          },
+        },
+      ]);
+      capture.assertValid();
+      verifyBoundary();
+      verify(deps);
+    });
+  }
+}

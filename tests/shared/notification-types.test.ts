@@ -5,19 +5,64 @@ import {
   isScopeBearingListRow,
   pluginScopeOrFallback,
   pluginVersion,
+  type AsyncRewakeSummarySurface,
   type ContentReason,
+  type CascadeNotificationMessage,
+  type DeviceFlowPrompt,
+  type DeviceFlowPromptSurface,
+  type DiagnosticSurface,
+  type HookSurface,
+  type LoadSurface,
   type MarketplaceNotificationMessage,
   type MarketplaceStatus,
   type NotificationMessage,
+  type PluginAvailableMessage,
   type PluginInstalledMessage,
   type PluginNotificationMessage,
+  type PluginPathSkippedSurface,
   type PluginSkippedMessage,
   type PluginUpdateSkippedMessage,
   type PluginStatus,
   type Reason,
+  type ReconcileAbortedSurface,
+  type ReconcilePendingEmptyMessage,
+  type RetainedWorkflowStaging,
   type Severity,
   type StatusToken,
+  type StopOverrideCapSurface,
+  type UsageErrorSurface,
+  type UsageInfoSurface,
+  type WithPlugins,
 } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
+
+import type { Scope } from "../../extensions/pi-claude-marketplace/shared/types.ts";
+
+void ({ name: "staging" } satisfies RetainedWorkflowStaging);
+void ({ name: "staging", envelopeCount: 0 } satisfies RetainedWorkflowStaging);
+void ({
+  marketplaces: [],
+  retainedWorkflows: [{ name: "staging" }],
+} satisfies CascadeNotificationMessage);
+void ({
+  kind: "reconcile-pending-empty",
+  retainedWorkflows: [{ name: "staging", envelopeCount: 1 }],
+} satisfies ReconcilePendingEmptyMessage);
+// @ts-expect-error retained workflow observations carry facts, not formatted lines.
+void ({ marketplaces: [], retainedWorkflows: ["staging"] } satisfies CascadeNotificationMessage);
+void ({
+  kind: "reconcile-pending-empty",
+  // @ts-expect-error pending empty observations carry facts, not formatted lines.
+  retainedWorkflows: ["staging"],
+} satisfies ReconcilePendingEmptyMessage);
+// @ts-expect-error an unobserved count is absent, never null.
+void ({ name: "staging", envelopeCount: null } satisfies RetainedWorkflowStaging);
+// @ts-expect-error cascade observations cannot be null.
+void ({ marketplaces: [], retainedWorkflows: null } satisfies CascadeNotificationMessage);
+void ({
+  kind: "reconcile-pending-empty",
+  // @ts-expect-error pending empty observations cannot be null.
+  retainedWorkflows: null,
+} satisfies ReconcilePendingEmptyMessage);
 
 /**
  * The four closed vocabularies are declared privately by their owner and reach
@@ -254,6 +299,69 @@ void ({
 } satisfies NotificationMessage);
 // @ts-expect-error a committed prune warning must carry its failure cause
 void ({ kind: "prune-committed-warning", scope: "project" } satisfies NotificationMessage);
+void ({ kind: "reconcile-aborted", cause: new Error("boom") } satisfies ReconcileAbortedSurface);
+void ({ kind: "reconcile-aborted", cause: "boom" } satisfies ReconcileAbortedSurface);
+void ({ kind: "reconcile-aborted", cause: undefined } satisfies ReconcileAbortedSurface);
+void ({
+  kind: "plugin-path-skipped",
+  scope: "project",
+  reason: "schema unsupported",
+} satisfies PluginPathSkippedSurface);
+// @ts-expect-error D-01: a load surface is not a NotificationMessage
+void ({ kind: "reconcile-aborted", cause: "boom" } satisfies NotificationMessage);
+void ({
+  kind: "plugin-path-skipped",
+  // @ts-expect-error a skipped scope is only user or project
+  scope: "local",
+  reason: "schema unsupported",
+} satisfies PluginPathSkippedSurface);
+void ({
+  kind: "usage-error",
+  message: "Unknown plugin",
+  usage: "Usage: x",
+} satisfies UsageErrorSurface);
+void ({ kind: "usage-info", usage: "Usage: x" } satisfies UsageInfoSurface);
+// @ts-expect-error a usage error carries its usage block
+void ({ kind: "usage-error", message: "Unknown plugin" } satisfies UsageErrorSurface);
+// @ts-expect-error D-01: a usage surface is not a NotificationMessage
+void ({ kind: "usage-info", usage: "Usage: x" } satisfies NotificationMessage);
+void ({ kind: "diagnostic", header: "Warnings", lines: ["first"] } satisfies DiagnosticSurface);
+void ({ kind: "diagnostic", header: "Warnings", lines: [] } satisfies DiagnosticSurface);
+void ({
+  kind: "diagnostic",
+  header: "Warnings",
+  // @ts-expect-error RAWS-02 / D-05: diagnostic lines are data, not a pre-joined block
+  lines: "first\nsecond",
+} satisfies DiagnosticSurface);
+void ({ kind: "async-rewake-summary", summary: "ready" } satisfies AsyncRewakeSummarySurface);
+void ({
+  kind: "stop-override-cap",
+  pluginId: "official:guard",
+  cap: 8,
+} satisfies StopOverrideCapSurface);
+void ({ kind: "stop-override-cap", pluginId: "official:guard", cap: 8 } satisfies HookSurface);
+// @ts-expect-error D-14: a hook surface is not a load surface
+void ({ kind: "async-rewake-summary", summary: "ready" } satisfies LoadSurface);
+void ({
+  kind: "stop-override-cap",
+  pluginId: "official:guard",
+  // @ts-expect-error D-07: the cap is a number, not text
+  cap: "8",
+} satisfies StopOverrideCapSurface);
+void ({
+  kind: "device-flow-prompt",
+  verificationUri: "https://verify.example/device",
+  userCode: "CODE-1",
+} satisfies DeviceFlowPromptSurface);
+void ({
+  kind: "device-flow-prompt",
+  verificationUri: "https://verify.example/device",
+  userCode: "CODE-1",
+  // @ts-expect-error D-10 / AUTH-09: the prompt carries no token
+  accessToken: "token-1",
+} satisfies DeviceFlowPromptSurface);
+// @ts-expect-error RAWS-03: the prompt is values, not a composed sentence
+void ("Open https://verify.example/device and enter: CODE-1" satisfies DeviceFlowPrompt);
 void installedMessage;
 void skippedMessage;
 void contentReason;
@@ -296,6 +404,18 @@ void ({
 // @ts-expect-error structural marketplace absence is not a content reason
 const structuralReason: ContentReason = "marketplace not added";
 void structuralReason;
+
+interface SimpleMarketplace {
+  readonly name: string;
+  readonly scope: Scope;
+  readonly plugins: readonly PluginNotificationMessage[];
+}
+
+void ({
+  name: "official",
+  scope: "user",
+  plugins: [{ status: "available", name: "alpha" }],
+} satisfies WithPlugins<SimpleMarketplace, PluginAvailableMessage>);
 
 // Each public union holds EXACTLY the members its list above names. Adding a
 // member to the owner's vocabulary without adding it here, or removing one,

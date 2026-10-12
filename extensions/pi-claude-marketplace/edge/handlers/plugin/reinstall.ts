@@ -20,20 +20,19 @@ import { splitPluginMarketplaceRef } from "./shared.ts";
 
 import type { ReinstallPluginsFn } from "../../../orchestrators/plugin/reinstall-flow.ts";
 import type { ReinstallPluginsTarget } from "../../../orchestrators/plugin/reinstall-targets.ts";
-import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
+import type { ExtensionCommandContext } from "../../../platform/pi-api.ts";
+import type { NotificationRun } from "../../../shared/notification-run.ts";
+import type { SubcommandHandler } from "../../router.ts";
 
 const USAGE =
   "Usage: /claude:plugin reinstall [<plugin>@<marketplace> | @<marketplace>] [--scope user|project] [--local]";
 
-export function makeReinstallHandler(
-  pi: ExtensionAPI,
-  reinstallPlugins: ReinstallPluginsFn,
-): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
-  return async (args, ctx): Promise<void> => {
+export function makeReinstallHandler(reinstallPlugins: ReinstallPluginsFn): SubcommandHandler {
+  return async (args, ctx, run): Promise<void> => {
     // Shared scanner; see edge/handlers/shared.ts. No command-local long flags
     // are passed through (RINST-01 / D-67-03: reinstall takes no overwrite
     // flag), so any unrecognized `--` token is rejected here as an UNKNOWN flag.
-    const localFlag = extractLocalFlag(args, ctx, USAGE, []);
+    const localFlag = extractLocalFlag(args, { ctx, run, usage: USAGE }, []);
     if (localFlag === undefined) {
       return;
     }
@@ -42,24 +41,24 @@ export function makeReinstallHandler(
     try {
       parsed = parseArgs(localFlag.residualArgs);
     } catch (err) {
-      notifyUsageError(ctx, { message: errorMessage(err), usage: USAGE });
+      notifyUsageError(ctx, run, { message: errorMessage(err), usage: USAGE });
       return;
     }
 
     const refs = parsed.positional;
     if (refs.length > 1) {
-      notifyUsageError(ctx, { message: "Too many arguments.", usage: USAGE });
+      notifyUsageError(ctx, run, { message: "Too many arguments.", usage: USAGE });
       return;
     }
 
-    const target = parseTarget(refs[0], ctx);
+    const target = parseTarget(refs[0], ctx, run);
     if (target === undefined) {
       return;
     }
 
     await reinstallPlugins({
       ctx,
-      pi,
+      run,
       cwd: ctx.cwd,
       target,
       ...(parsed.scope !== undefined && { scope: parsed.scope }),
@@ -71,6 +70,7 @@ export function makeReinstallHandler(
 function parseTarget(
   ref: string | undefined,
   ctx: ExtensionCommandContext,
+  run: NotificationRun,
 ): ReinstallPluginsTarget | undefined {
   if (ref === undefined) {
     return { kind: "all" };
@@ -82,7 +82,7 @@ function parseTarget(
 
   const pluginRef = splitPluginMarketplaceRef(ref);
   if (pluginRef === undefined) {
-    notifyUsageError(ctx, {
+    notifyUsageError(ctx, run, {
       message: `Invalid <plugin>@<marketplace> ref: "${ref}".`,
       usage: USAGE,
     });

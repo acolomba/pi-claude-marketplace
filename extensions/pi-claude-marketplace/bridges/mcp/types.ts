@@ -8,7 +8,7 @@
 import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { McpWrittenFile } from "../../shared/errors-bridges.ts";
-import type { McpConfigNotice } from "../../shared/notification-dispatch.ts";
+import type { McpConfigNotice } from "../../shared/notification-types.ts";
 
 /**
  * Top-level shape of an MCP config document: `<scopeRoot>/mcp-adapter.json`,

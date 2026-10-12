@@ -29,6 +29,7 @@ import {
 } from "../../extensions/pi-claude-marketplace/platform/git.ts";
 import {
   CrossOriginChallengeError,
+  DeviceFlowUnavailableError,
   TooManyRedirectsError,
 } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 
@@ -846,6 +847,58 @@ describe("local Git operations", () => {
 });
 
 describe("clone", () => {
+  test("clones a public repository without consulting its auth bundle", async (t) => {
+    // arrange
+    const repository = await createGitTestRepository(t, { boundary: "local" });
+    const dir = await createGitTestDirectory(t, { boundary: "local" });
+    await installRepositoryTransport(t, repository);
+    const credentials = createCredentialOpsFake({ boundary: "memory" });
+
+    // act
+    await clone({
+      dir,
+      url: REMOTE_URL,
+      auth: {
+        kind: "device-flow",
+        host: HOST,
+        credentialOps: credentials.credentialOps,
+        onAuthRequired: () => Promise.reject(new DeviceFlowUnavailableError()),
+      },
+    });
+
+    // assert
+    assert.strictEqual(await resolveRef({ dir, ref: "HEAD" }), repository.initialOid);
+    assert.deepStrictEqual(credentials.calls, { fill: [], approve: [], reject: [] });
+  });
+
+  test("preserves a typed auth refusal from the real clone operation", async (t) => {
+    // arrange
+    const requests = installFailedDiscoveryTransport(t, { challengeOnce: true });
+    const repository = await createGitTestRepository(t, { boundary: "local" });
+    const credentials = createCredentialOpsFake({ boundary: "memory" });
+    const refusal = new DeviceFlowUnavailableError();
+
+    // act & assert
+    await assert.rejects(
+      clone({
+        dir: repository.dir,
+        url: REMOTE_URL,
+        auth: {
+          kind: "device-flow",
+          host: HOST,
+          credentialOps: credentials.credentialOps,
+          onAuthRequired: () => Promise.reject(refusal),
+        },
+      }),
+      (error: unknown) => {
+        assert.strictEqual(error, refusal);
+        return true;
+      },
+    );
+    assert.deepStrictEqual(requests, [expectedDiscoveryRequest()]);
+    assert.deepStrictEqual(credentials.calls, { fill: [{ host: HOST }], approve: [], reject: [] });
+  });
+
   test("forwards an explicit ref and single-branch option without auth", async (t) => {
     // arrange
     const requests = installFailedDiscoveryTransport(t);
@@ -920,6 +973,34 @@ describe("clone", () => {
 });
 
 describe("fetch", () => {
+  test("preserves a typed auth refusal from the real fetch operation", async (t) => {
+    // arrange
+    const requests = installFailedDiscoveryTransport(t, { challengeOnce: true });
+    const repository = await createGitTestRepository(t, { boundary: "local" });
+    await git.addRemote({ fs, dir: repository.dir, remote: "origin", url: REMOTE_URL });
+    const credentials = createCredentialOpsFake({ boundary: "memory" });
+    const refusal = new DeviceFlowUnavailableError();
+
+    // act & assert
+    await assert.rejects(
+      fetch({
+        dir: repository.dir,
+        auth: {
+          kind: "device-flow",
+          host: HOST,
+          credentialOps: credentials.credentialOps,
+          onAuthRequired: () => Promise.reject(refusal),
+        },
+      }),
+      (error: unknown) => {
+        assert.strictEqual(error, refusal);
+        return true;
+      },
+    );
+    assert.deepStrictEqual(requests, [expectedDiscoveryRequest()]);
+    assert.deepStrictEqual(credentials.calls, { fill: [{ host: HOST }], approve: [], reject: [] });
+  });
+
   test("uses the default remote without auth", async (t) => {
     // arrange
     const requests = installFailedDiscoveryTransport(t);

@@ -1,27 +1,3 @@
-// orchestrators/marketplace/update.messaging.ts
-//
-// The `marketplace update` command's co-located notification vocabulary.
-//
-// D-01 / MOD-01: `marketplace update` records a marketplace header of
-// `(updated)` (manifest changed and/or cascade ran) or `(skipped) {up-to-date}`
-// (no-op), rendered via the central `renderMpHeader` seam the spine reuses. On
-// the autoupdate-ON cascade path the marketplace block carries per-plugin child
-// rows whose statuses are `updated` / `skipped` / `failed` (produced by
-// `outcomeToCascadePluginMessage`); those rows dispatch through this command's
-// render map below. The render-map arms are lifted verbatim from the central
-// `renderPluginRow` `updated` / `skipped` / `failed` arms, so dispatch is
-// byte-identical.
-
-import {
-  ICON_UNINSTALLABLE,
-  composeReasons,
-  composeVersionArrow,
-  partiallyInstalledRow,
-  joinTokens,
-  pluginRow,
-  renderScopeBracket,
-  ICON_INSTALLED,
-} from "../../shared/notification-grammar.ts";
 import {
   type ContentReason,
   type PluginFailedMessage,
@@ -40,14 +16,6 @@ import type {
   PluginUpdateSkippedOutcome,
 } from "../types.ts";
 
-/**
- * The plugin-child-row statuses `marketplace update`'s autoupdate-ON cascade
- * emits: `updated`, `partially-installed`, `skipped`, `failed`. This is the Status
- * set the render map below is total over (D-10: a missing arm is a TS2741
- * compile error). SEV-03 / D-69-01: `partially-installed` joins the set because the
- * autoupdate cascade now TAKES the partial path, so a degrading candidate renders
- * `(partially-installed) {dropped kinds}` instead of `(skipped) {no longer installable}`.
- */
 type UpdateRowStatus = "updated" | "partially-installed" | "skipped" | "failed";
 export type UpdateRowMsg =
   | PluginUpdatedMessage
@@ -55,46 +23,16 @@ export type UpdateRowMsg =
   | PluginUpdateSkippedMessage
   | PluginFailedMessage;
 
-/**
- * D-04 / D-05 / D-10 / MOD-01 / MOD-03: the `marketplace update` command
- * context. The render map is total over the command's plugin-child-row statuses;
- * each arm reproduces the EXACT bytes of the central `renderPluginRow` arm it
- * lifts, so cascade dispatch through `notifyWithContext` is byte-identical.
- */
+/** The command label and complete per-status reason policy. */
 export const UPDATE_CONTEXT = {
   Messaging: { label: "Marketplace update" },
-  render: {
-    // WR-12: thread the optional `reasons` brace, as the central
-    // `renderPluginRow` arm and the manual update cascade's map both do. This
-    // map is the THIRD render surface reached by an `(updated)` row and the one
-    // the autoupdate cascade actually dispatches through, so leaving it unthreaded
-    // raises the severity while still dropping the brace.
-    updated: (p, probe, mpScope) =>
-      joinTokens([
-        ICON_INSTALLED,
-        p.name,
-        renderScopeBracket(p.scope, mpScope),
-        composeVersionArrow(p.from, p.to),
-        "(updated)",
-        composeReasons(
-          p.reasons,
-          p.dependencies.includes("agents"),
-          p.dependencies.includes("mcp"),
-          p.dependencies.includes("workflows"),
-          probe,
-        ),
-      ]),
-    // SEV-03 / D-69-01: an autoupdate cascade candidate that re-resolved
-    // `partially-available` degraded via the partial path. Reuse `partiallyInstalledRow` --
-    // the SOLE composition site (D-notification-refactor-01-11 "call, never duplicate") -- so the
-    // `◉ <name> v<version> (partially-installed) {dropped kinds[, requires pi-...]}`
-    // bytes stay identical to the install / update success surfaces.
-    "partially-installed": (p, probe, mpScope) => partiallyInstalledRow(p, mpScope, probe),
-    // fallow-ignore-next-line code-duplication -- reviewed: per-command typed render-map arms are one-line calls to shared row composers; extracting them needs a cross-command generic.
-    skipped: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(skipped)", probe),
-    failed: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)", probe),
+  rowPolicies: {
+    updated: { markers: true, contentReasons: true },
+    "partially-installed": { markers: true, contentReasons: true },
+    skipped: { markers: false, contentReasons: true },
+    failed: { markers: false, contentReasons: true },
   },
-} as const satisfies CommandContext<UpdateRowStatus, UpdateRowMsg>;
+} as const satisfies CommandContext<UpdateRowStatus>;
 
 // ───────────────────────────────────────────────────────────────────────────
 // Outcome -> cascade row projection, moved from update.ts where it was reached
@@ -104,9 +42,9 @@ export const UPDATE_CONTEXT = {
 
 /**
  * Map a `PluginUpdateOutcome` to a discriminated `UpdateRowMsg`.
- * The renderer (`renderPluginRow` in shared/notification-grammar.ts) owns the icon
- * dispatch, the version-arrow composition, the reasons-brace composition, and
- * the per-row soft-dep marker injection. The mapper's job is structural --
+ * The renderer owns the icon dispatch, the version-arrow composition, and the
+ * reasons-brace composition; `resolveRows` composes the per-row soft-dep
+ * markers (D-12). The mapper's job is structural --
  * pick the variant that matches the partition and forward the
  * partition-specific fields.
  *
@@ -114,8 +52,8 @@ export const UPDATE_CONTEXT = {
  *  - `updated`   -> `PluginUpdatedMessage{ from, to, dependencies }`. Renderer
  *                   composes `<name> v<from> → v<to> (updated)`; MSG-SD-3
  *                   allows the soft-dep marker, and `dependencies` carries the
- *                   declared kinds the notify-time probe combines with
- *                   `softDepStatus(pi)`.
+ *                   declared kinds `resolveRows` combines with the
+ *                   command run's soft-dep snapshot.
  *  - `unchanged` -> `PluginSkippedMessage{ reasons: ["up-to-date"] }`. The
  *                   `skipped` status routes through the warning severity
  *                   ladder -> ⊘ glyph.

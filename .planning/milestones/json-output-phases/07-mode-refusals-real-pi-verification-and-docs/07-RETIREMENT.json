@@ -1,0 +1,23 @@
+{
+  "command": "npm run check",
+  "timeoutSeconds": 2400,
+  "exitStatus": 0,
+  "head": "0dffe6c1deeb9609360f8c4614fa7b9a2f43e5c1",
+  "node": "v26.11.1",
+  "completedAt": "2026-10-10T04:29:22.828Z",
+  "strictInputEvidence": "07-CORPUS-FINAL.json",
+  "note": "Refreshed after WR-01. Historical tools were restored byte-for-byte from a9673e10 solely for capture/check, then removed after the fresh strict pass. No baseline tuple changed.",
+  "removedSinceStrictFingerprint": [
+    "scripts/notify-corpus.mjs",
+    "scripts/notify-corpus.hook.mjs",
+    "scripts/notify-corpus.negative.mjs"
+  ],
+  "executableDiffFromStrictHead": "",
+  "retirementAudit": {
+    "command": "node .planning/phases/07-mode-refusals-real-pi-verification-and-docs/07-corpus-audit.mjs --retired",
+    "exitStatus": 0,
+    "report": "PASS: exactly three tools retired; 848 remaining tracked files read; behavior inputs unchanged\n"
+  },
+  "reportSha256": "6e046f14234fb780f2f787ba5cd84b94616e4801f4af500486db2153d042820b",
+  "report": "\n> pi-claude-marketplace@0.19.2 check\n> npm run --silent check:static && npm run --silent test:unpaired && npm run --silent test:integration && npm run --silent test:coverage:direct:all\n\npassed typecheck (9.8 s)\npassed lint (3.8 s)\npassed lint:workflows (0.3 s)\npassed fallow (4.5 s)\npassed format:check (6.0 s)\npassed test:corresponding (3.2 s)\nMerged LCOV: coverage/direct.lcov (266 records)\n"
+}

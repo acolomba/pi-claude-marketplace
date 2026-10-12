@@ -44,18 +44,16 @@ import { REPO_ROOT, assertNoForbiddenSurface } from "./source-scan.ts";
  *   until its rationale is written or retired. That covers the deletion
  *   direction the derived list can no longer cover on its own.
  *
- * Exempt file (do NOT add):
- *   - orchestrators/plugin/install.ts
- *     It calls `softDepStatus(pi)` legitimately, to derive the install ROW's
- *     severity, on a path structurally disjoint from the ledger's workflows
- *     phase: the row is composed after the ledger has already committed, and
- *     `prepareStageWorkflows` takes a `StageWorkflowsInput` that carries no
- *     `pi` at all. Listing it here would make this gate red on day one, and a
- *     gate that is red on day one invites a suppression rather than a fix.
- *     The ledger half of the claim is proved behaviorally instead, by the
- *     byte-equality pair in `tests/orchestrators/plugin/install-flow.test.ts`: two
- *     installs differing only in the session's tool list write byte-identical
- *     envelopes and identical inventories.
+ * Outside this gate:
+ *   The install flow reads a soft-dependency snapshot, but only the command
+ *   run's (D-05), and only to derive the install ROW's severity after the
+ *   ledger has committed. That path is structurally disjoint from the ledger's
+ *   workflows phase: `prepareStageWorkflows` takes a `StageWorkflowsInput`
+ *   that carries no snapshot and no Pi handle. The ledger half of the claim is
+ *   proved behaviorally, by the byte-equality pair in
+ *   `tests/orchestrators/plugin/install-flow.test.ts`: two installs differing
+ *   only in the run's snapshot write byte-identical envelopes and identical
+ *   inventories.
  *
  * stripComments rationale (mandatory):
  *   The guarded files should say in their own header comments that they must

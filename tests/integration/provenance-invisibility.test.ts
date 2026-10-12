@@ -13,20 +13,10 @@
 // pi-subagents' anchored `^([\w-]+):` key regex over indented content).
 //
 // pi-subagents is an optional peer. The test imports its compiled
-// `src/agents/frontmatter.js` in place through the shared loader in
-// pi-subagents-peer.ts. It skips when the peer is not installed, so
-// `npm run check` stays green there. It also skips when the installed version
-// is below the declared peer floor, because a pass there proves nothing about
-// a supported version. An at-or-above-floor package whose module is missing
-// or fails to import fails the test, and so does a `PI_SUBAGENTS_ROOT` that
-// names no pi-subagents package. A run reports the proven version as a
-// diagnostic.
-//
-// CI gap: no .github/workflows/*.yml step installs pi-subagents, so in CI the
-// peer lookup finds nothing and this test always skips -- the sole
-// safety-claim check in this file never runs in CI. TODO: track adding a
-// global `npm install -g pi-subagents` step to the integration-tests job (or
-// an equivalent peer fixture) so this check actually executes in CI.
+// `src/agents/frontmatter.js` in place from the declared floor in the optional
+// peer cache, through pi-subagents-peer.ts. A missing or wrong-version package
+// fails the test, and so does a module that is missing or fails to import. A
+// run reports the proven version as a diagnostic.
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -34,12 +24,7 @@ import { test } from "node:test";
 import { emitGeneratedAgentFile } from "../../extensions/pi-claude-marketplace/bridges/agents/frontmatter.ts";
 import { GENERATED_AGENT_MARKER } from "../../extensions/pi-claude-marketplace/bridges/agents/marker.ts";
 
-import {
-  findPiSubagentsPackage,
-  isBelowPeerFloor,
-  loadPiSubagentsModule,
-  readPeerFloor,
-} from "./pi-subagents-peer.ts";
+import { findPiSubagentsPackage, loadPiSubagentsModule } from "./pi-subagents-peer.ts";
 
 interface PiSubagentsFrontmatterModule {
   readonly parseFrontmatter: (content: string) => {
@@ -49,20 +34,8 @@ interface PiSubagentsFrontmatterModule {
 }
 
 test("T-d8i-01: provenance stays invisible to pi-subagents' own frontmatter parser", async (t) => {
-  const peer = await findPiSubagentsPackage();
-  if (!peer) {
-    t.skip("pi-subagents is not installed in this environment");
-    return;
-  }
-
-  if (await isBelowPeerFloor(peer.version)) {
-    t.skip(
-      `pi-subagents ${peer.version} at ${peer.root} is below the peer floor ${await readPeerFloor()}`,
-    );
-    return;
-  }
-
   // arrange
+  const peer = await findPiSubagentsPackage();
   t.diagnostic(`pi-subagents ${peer.version} at ${peer.root}`);
   const fm = await loadPiSubagentsModule<PiSubagentsFrontmatterModule>(peer, "frontmatter");
 

@@ -29,28 +29,16 @@ import test, { type TestContext } from "node:test";
 
 import { notify } from "../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
 import { type NotificationMessage } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
-import { adapterCommand } from "../platform/pi-inventory-seed.ts";
+import { runWithAllLoaded } from "../shared/notification-run-seeds.ts";
 
-import type {
-  CommandInventoryItem,
-  NotificationContext,
-} from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { NotificationContext } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { NotificationRun } from "../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 
 // ---------------------------------------------------------------------------
-// Mock helpers -- mirror the catalog-uat harness (emitOnce + piWith*Loaded).
+// Mock helpers -- mirror the catalog-uat harness (emitOnce).
 // ---------------------------------------------------------------------------
 
 type NotifyArguments = [message: string, severity?: string];
-
-interface MockTool {
-  name?: string;
-  sourceInfo?: { source?: string };
-}
-
-interface MockPi {
-  getAllTools: () => MockTool[];
-  getCommands: () => CommandInventoryItem[];
-}
 
 /**
  * Drives `notify()` over the fixture and returns the arguments of its one
@@ -58,11 +46,15 @@ interface MockPi {
  */
 function emitOnce(
   t: TestContext,
-  fixture: { readonly label: string; readonly pi: MockPi; readonly message: NotificationMessage },
+  fixture: {
+    readonly label: string;
+    readonly run: NotificationRun;
+    readonly message: NotificationMessage;
+  },
 ): NotifyArguments {
   const uiNotify = t.mock.fn<(...args: NotifyArguments) => void>();
-  const ctx: NotificationContext = { ui: { notify: uiNotify } };
-  notify(ctx, fixture.pi, fixture.message);
+  const ctx: NotificationContext = { mode: "tui", ui: { notify: uiNotify } };
+  notify(ctx, fixture.run, fixture.message);
   assert.equal(
     uiNotify.mock.calls.length,
     1,
@@ -71,17 +63,6 @@ function emitOnce(
   const [call] = uiNotify.mock.calls;
   assert.ok(call);
   return call.arguments;
-}
-
-/**
- * Probe reports all three companions loaded -- pi-subagents, pi-mcp-adapter and
- * the host workflow engine -- so no soft-dep marker fires on any row.
- */
-function piWithAllLoaded(): MockPi {
-  return {
-    getAllTools: () => [{ name: "subagent" }, { name: "workflow_control" }],
-    getCommands: () => [adapterCommand()],
-  };
 }
 
 // ---------------------------------------------------------------------------
@@ -102,7 +83,7 @@ const ROW_ICONS = ["●", "○", "⊘"];
 
 interface GrammarFixture {
   readonly label: string;
-  readonly pi: MockPi;
+  readonly run: NotificationRun;
   readonly message: NotificationMessage;
 }
 
@@ -116,7 +97,7 @@ const CROSS_SCOPE_FIXTURES: readonly GrammarFixture[] = [
     // summary must still be the first line and still be distinct from the
     // detail block.
     label: "standalone marketplace-not-added carrying the cross-scope reason token",
-    pi: piWithAllLoaded(),
+    run: runWithAllLoaded(),
     message: {
       kind: "marketplace-not-added",
       name: "mp",
@@ -128,7 +109,7 @@ const CROSS_SCOPE_FIXTURES: readonly GrammarFixture[] = [
     // The project-target direction: the baked-in scope word must track the
     // bracket, never contradict it.
     label: "standalone marketplace-not-added carrying the project-direction token",
-    pi: piWithAllLoaded(),
+    run: runWithAllLoaded(),
     message: {
       kind: "marketplace-not-added",
       name: "mp",
@@ -145,7 +126,7 @@ const CROSS_SCOPE_FIXTURES: readonly GrammarFixture[] = [
 const CROSS_SCOPE_ROW_FIXTURES: readonly GrammarFixture[] = [
   {
     label: "absent-target plugin row carrying the user-scope cross-scope token",
-    pi: piWithAllLoaded(),
+    run: runWithAllLoaded(),
     message: {
       marketplaces: [
         {
@@ -167,7 +148,7 @@ const CROSS_SCOPE_ROW_FIXTURES: readonly GrammarFixture[] = [
   {
     // The other direction: a user-scope target whose container sits in project.
     label: "absent-target plugin row carrying the project-scope cross-scope token",
-    pi: piWithAllLoaded(),
+    run: runWithAllLoaded(),
     message: {
       marketplaces: [
         {
@@ -191,7 +172,7 @@ const CROSS_SCOPE_ROW_FIXTURES: readonly GrammarFixture[] = [
 const FIXTURES: readonly GrammarFixture[] = [
   {
     label: "standalone marketplace-not-added (marketplace subject)",
-    pi: piWithAllLoaded(),
+    run: runWithAllLoaded(),
     message: {
       kind: "marketplace-not-added",
       name: "ghost-mp",
@@ -202,7 +183,7 @@ const FIXTURES: readonly GrammarFixture[] = [
   ...CROSS_SCOPE_ROW_FIXTURES,
   {
     label: "standalone failed plugin-info (plugin subject, multi-line body)",
-    pi: piWithAllLoaded(),
+    run: runWithAllLoaded(),
     message: {
       kind: "plugin-info",
       marketplaceName: "bad-mp",
@@ -219,7 +200,7 @@ const FIXTURES: readonly GrammarFixture[] = [
   },
   {
     label: "cascade with a failed plugin row (error severity)",
-    pi: piWithAllLoaded(),
+    run: runWithAllLoaded(),
     message: {
       marketplaces: [
         {
@@ -243,7 +224,7 @@ const FIXTURES: readonly GrammarFixture[] = [
   },
   {
     label: "cascade with an actionable skipped plugin row (warning severity)",
-    pi: piWithAllLoaded(),
+    run: runWithAllLoaded(),
     message: {
       marketplaces: [
         {
@@ -281,7 +262,7 @@ const FIXTURES: readonly GrammarFixture[] = [
 const WILL_VARIANT_FIXTURES: readonly GrammarFixture[] = [
   {
     label: "DIFF-02 / will install plugin row under list-arm marketplace",
-    pi: piWithAllLoaded(),
+    run: runWithAllLoaded(),
     message: {
       marketplaces: [
         { name: "mp", scope: "user", plugins: [{ status: "will install", name: "p" }] },
@@ -290,7 +271,7 @@ const WILL_VARIANT_FIXTURES: readonly GrammarFixture[] = [
   },
   {
     label: "FSTAT-06 / will partially install plugin row (partial modifier set)",
-    pi: piWithAllLoaded(),
+    run: runWithAllLoaded(),
     message: {
       marketplaces: [
         {
@@ -303,7 +284,7 @@ const WILL_VARIANT_FIXTURES: readonly GrammarFixture[] = [
   },
   {
     label: "DIFF-02 / will uninstall plugin row",
-    pi: piWithAllLoaded(),
+    run: runWithAllLoaded(),
     message: {
       marketplaces: [
         { name: "mp", scope: "user", plugins: [{ status: "will uninstall", name: "p" }] },
@@ -312,7 +293,7 @@ const WILL_VARIANT_FIXTURES: readonly GrammarFixture[] = [
   },
   {
     label: "DIFF-02 / will enable plugin row",
-    pi: piWithAllLoaded(),
+    run: runWithAllLoaded(),
     message: {
       marketplaces: [
         { name: "mp", scope: "user", plugins: [{ status: "will enable", name: "p" }] },
@@ -321,7 +302,7 @@ const WILL_VARIANT_FIXTURES: readonly GrammarFixture[] = [
   },
   {
     label: "DIFF-02 / will disable plugin row",
-    pi: piWithAllLoaded(),
+    run: runWithAllLoaded(),
     message: {
       marketplaces: [
         { name: "mp", scope: "user", plugins: [{ status: "will disable", name: "p" }] },
@@ -374,7 +355,7 @@ const DISABLED_VARIANT_FIXTURES: readonly DisabledRowFixture[] = [
   {
     label: "D-54-01 / disabled plugin row with version under list-arm marketplace",
     notifyArgs: 1,
-    pi: piWithAllLoaded(),
+    run: runWithAllLoaded(),
     message: {
       marketplaces: [
         {
@@ -396,7 +377,7 @@ const DISABLED_VARIANT_FIXTURES: readonly DisabledRowFixture[] = [
   {
     label: "D-54-01 / disabled plugin row without version",
     notifyArgs: 1,
-    pi: piWithAllLoaded(),
+    run: runWithAllLoaded(),
     message: {
       marketplaces: [
         {
@@ -412,7 +393,7 @@ const DISABLED_VARIANT_FIXTURES: readonly DisabledRowFixture[] = [
   {
     label: "D-54-01 / disabled plugin row with orphan-fold scope bracket",
     notifyArgs: 1,
-    pi: piWithAllLoaded(),
+    run: runWithAllLoaded(),
     message: {
       marketplaces: [
         {
@@ -438,7 +419,7 @@ const DISABLED_VARIANT_FIXTURES: readonly DisabledRowFixture[] = [
     // renders at warning severity.
     label: "LOAD-01 / disabled plugin row held down by an unsatisfied dependency",
     notifyArgs: 2,
-    pi: piWithAllLoaded(),
+    run: runWithAllLoaded(),
     message: {
       marketplaces: [
         {
@@ -548,7 +529,7 @@ for (const fixture of DISABLED_VARIANT_FIXTURES) {
 const RECONCILE_APPLIED_FIXTURES: readonly GrammarFixture[] = [
   {
     label: "RECON-04 / success cascade with realized installed plugin row (transition token)",
-    pi: piWithAllLoaded(),
+    run: runWithAllLoaded(),
     message: {
       kind: "reconcile-applied-cascade",
       marketplaces: [
@@ -571,7 +552,7 @@ const RECONCILE_APPLIED_FIXTURES: readonly GrammarFixture[] = [
   },
   {
     label: "RECON-04 / soft-fail cascade mixing failed mp row + installed plugin row",
-    pi: piWithAllLoaded(),
+    run: runWithAllLoaded(),
     message: {
       kind: "reconcile-applied-cascade",
       marketplaces: [
@@ -605,7 +586,7 @@ const RECONCILE_APPLIED_FIXTURES: readonly GrammarFixture[] = [
     // LOAD-01: the first reconcile row to carry a cause trailer, which is what
     // makes the cause-line escape in the subject-first test load-bearing.
     label: "LOAD-01 / cascade with a load-time dependency disable row (warning severity)",
-    pi: piWithAllLoaded(),
+    run: runWithAllLoaded(),
     message: {
       kind: "reconcile-applied-cascade",
       marketplaces: [

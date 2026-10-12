@@ -398,9 +398,9 @@ export interface PluginUninstalledMessage extends TransitionMessageBase {
    * renders the legacy brace-less row byte-for-byte: `composeReasons` returns
    * `""` for an undefined list and `joinTokens` collapses the empty slot.
    *
-   * MSG-SD-3 is untouched -- the render arm still passes all three
-   * soft-dependency arguments hard-coded `false`, so an `(uninstalled)` row
-   * cannot emit `{requires pi-subagents}` / `{requires pi-mcp-adapter}` /
+   * MSG-SD-3: every marker policy maps `uninstalled` to off (D-12), so an
+   * `(uninstalled)` row cannot emit `{requires pi-subagents}` /
+   * `{requires pi-mcp-adapter}` /
    * `{requires pi-dynamic-workflows}` whatever the removed record declared.
    */
   readonly reasons?: readonly ContentReason[];
@@ -775,6 +775,36 @@ export type MarketplaceNotificationMessage =
   | MpSkipped
   | MpList;
 
+/**
+ * WR-01 / D-10: the marketplace-row shape `notifyWithContext` accepts, with its
+ * `plugins` slot narrowed to the command's OWN `Msg`. This DISTRIBUTES over the
+ * real `MarketplaceNotificationMessage` union (one mapped member per arm),
+ * preserving each arm's per-status constraints (e.g. `MpFailed`'s REQUIRED
+ * `severity: "error" | "warning"`, `MpSkipped`'s reachable `reasons?`, `MpList`'s
+ * reachable `details?`), and replaces ONLY the `plugins` child slot with the
+ * command's `Msg`. Because it is built FROM the union, assigning a value of this
+ * type back to `readonly MarketplaceNotificationMessage[]` is a genuine
+ * assignability relationship -- the `notifyWithContext` widening seam is a single
+ * safe upcast, not an `as unknown as` reinterpretation, so a status drift between
+ * a producer and the context's row policies surfaces as a compile error at the
+ * producer.
+ *
+ * Combined with the `Msg extends { status: Status }` bound on
+ * `notifyWithContext`, a call site that pushes a plugin row whose `status` the
+ * context's row policies do not declare is a compile error at the call site --
+ * the design's stated exhaustiveness guarantee in BOTH directions (row policies
+ * total over `Status`, AND rows carry only `Status`).
+ */
+export type WithPlugins<MP, Msg> = MP extends unknown
+  ? Omit<MP, "plugins"> & { readonly plugins: readonly Msg[] }
+  : never;
+
+/** A retained workflow staging basename and its observed envelope count. */
+export interface RetainedWorkflowStaging {
+  readonly name: string;
+  readonly envelopeCount?: number;
+}
+
 /** Standard marketplace/plugin notification cascade. */
 export interface CascadeNotificationMessage {
   readonly kind?: "cascade";
@@ -792,6 +822,7 @@ export interface CascadeNotificationMessage {
    * either one byte-identical.
    */
   readonly advisories?: readonly string[];
+  readonly retainedWorkflows?: readonly RetainedWorkflowStaging[];
 }
 
 /** Marketplace information message. */
@@ -977,6 +1008,7 @@ export interface ReconcilePendingEmptyMessage {
    * the reader it exists for.
    */
   readonly advisories?: readonly string[];
+  readonly retainedWorkflows?: readonly RetainedWorkflowStaging[];
 }
 
 /** Scoped informational result for a standalone orphan sweep. */
@@ -1020,3 +1052,413 @@ export type NotificationMessage =
   | PruneEmptyMessage
   | PruneCommittedWarningMessage
   | ReconcileAppliedCascadeMessage;
+
+/**
+ * AFILE-04 / AFILE-02: one fact about an MCP config file that a command
+ * rewrote or left alone. The MCP bridge reports it and the orchestrator
+ * routes it to `notifyMcpConfigNotices` after its own row.
+ */
+export interface McpConfigFileNotice {
+  readonly kind: "comments-dropped" | "left-unchanged";
+  readonly scope: Scope;
+  readonly file: "mcp-adapter.json" | "mcp.json";
+}
+
+/**
+ * AFILE-06: a stage replaced a user's marker-less override with the plugin's
+ * entry and keeps the override in that entry's marker. `fields` lists the
+ * override's fields that stop applying while the plugin provides `server`, in
+ * the override's key order. It names fields, never their values.
+ */
+export interface McpOverrideKeptNotice {
+  readonly kind: "override-kept";
+  readonly scope: Scope;
+  readonly file: "mcp-adapter.json";
+  readonly plugin: string;
+  readonly server: string;
+  readonly fields: readonly string[];
+}
+
+/**
+ * AFILE-01 / AFILE-06: an unstage wrote a kept override back as a marker-less
+ * entry. It renders nothing. It cancels an earlier override-kept notice for
+ * the same scope, file and server, so a command that keeps and then writes
+ * back an override shows no warning for it.
+ */
+export interface McpOverrideRestoredNotice {
+  readonly kind: "override-restored";
+  readonly scope: Scope;
+  readonly file: "mcp-adapter.json" | "mcp.json";
+  readonly server: string;
+}
+
+/**
+ * AVAR-04: a staged plugin server references environment variables that are
+ * unset and have no `:-` default. `names` lists them once each, in first-seen
+ * order. It names variables, never their values.
+ */
+export interface McpVariablesMissingNotice {
+  readonly kind: "variables-missing";
+  readonly scope: Scope;
+  readonly file: "mcp-adapter.json";
+  readonly plugin: string;
+  readonly server: string;
+  readonly names: readonly string[];
+}
+
+/**
+ * AVAR-04 / AVAR-05: a staged plugin server's `url` or `headers` references
+ * deny-listed credential variables that were set at install, and the entry
+ * carries empty values in their place. `names` lists them once each, in
+ * first-seen order. It names variables, never their values.
+ */
+export interface McpCredentialsBlankedNotice {
+  readonly kind: "credentials-blanked";
+  readonly scope: Scope;
+  readonly file: "mcp-adapter.json";
+  readonly plugin: string;
+  readonly server: string;
+  readonly names: readonly string[];
+}
+
+/**
+ * ANAME-07 / AMIG-01: a staged plugin server declares tool permission rules
+ * that pi-mcp-adapter does not enforce. `fields` lists the field names in
+ * table order. It names fields, never tool names or policy values.
+ */
+export interface McpToolRulesUnenforcedNotice {
+  readonly kind: "tool-rules-unenforced";
+  readonly scope: Scope;
+  readonly file: "mcp-adapter.json";
+  readonly plugin: string;
+  readonly server: string;
+  readonly fields: readonly string[];
+}
+
+/**
+ * AMIG-01: a stage removed a marker-less entry pi-mcp-adapter had written
+ * under `server`, the old name of a plugin server whose `mcp.json` entry the
+ * command removed: an override stub or the panel's direct-tools copy.
+ */
+export interface McpLeftoverRemovedNotice {
+  readonly kind: "leftover-removed";
+  readonly scope: Scope;
+  readonly file: "mcp-adapter.json";
+  readonly plugin: string;
+  readonly server: string;
+}
+
+/**
+ * AFILE-04 / AFILE-06 / AVAR-04 / ANAME-07 / AMIG-01: one MCP config fact a
+ * command routes to `notifyMcpConfigNotices`.
+ */
+export type McpConfigNotice =
+  | McpConfigFileNotice
+  | McpOverrideKeptNotice
+  | McpOverrideRestoredNotice
+  | McpVariablesMissingNotice
+  | McpCredentialsBlankedNotice
+  | McpToolRulesUnenforcedNotice
+  | McpLeftoverRemovedNotice;
+
+/** AMIG-01 / AMIG-03: a server the reload moved from `mcp.json` to `mcp-adapter.json`. */
+export interface McpMigrationMovedRow {
+  readonly kind: "moved";
+  readonly scope: Scope;
+  readonly plugin: string;
+  readonly marketplace: string;
+  /** The server's key in `mcp.json`, its declared name. */
+  readonly from: string;
+  /** The server's key in `mcp-adapter.json` (ANAME-01). */
+  readonly to: string;
+}
+
+/** AMIG-01 / AMIG-03: a scope or plugin whose move stopped, with a path-free detail. */
+export interface McpMigrationStoppedRow {
+  readonly kind: "stopped";
+  readonly scope: Scope;
+  readonly detail: string;
+}
+
+/**
+ * AMIG-04: a plugin's marked `mcp.json` entries that no install record in
+ * this scope owns. `servers` holds the old names in file order.
+ */
+export interface McpMigrationUnownedRow {
+  readonly kind: "unowned";
+  readonly scope: Scope;
+  readonly plugin: string;
+  readonly marketplace: string;
+  readonly servers: readonly string[];
+}
+
+/**
+ * AMIG-01: an installed git-source plugin whose clone is not in the cache, so
+ * its entries stay under their old names until a reinstall fetches it.
+ */
+export interface McpMigrationSourceUnreadableRow {
+  readonly kind: "source-unreadable";
+  readonly scope: Scope;
+  readonly plugin: string;
+  readonly marketplace: string;
+  readonly servers: readonly string[];
+}
+
+/**
+ * AMIG-01: an installed plugin that its marketplace manifest no longer lists,
+ * or lists in a form that is not valid. A reinstall reads the same manifest,
+ * so the remedy is a marketplace update or an uninstall.
+ */
+export interface McpMigrationNotListedRow {
+  readonly kind: "not-listed";
+  readonly scope: Scope;
+  readonly plugin: string;
+  readonly marketplace: string;
+  readonly servers: readonly string[];
+}
+
+/**
+ * AMIG-01: an installed plugin whose source the cached marketplace copy
+ * cannot give: a missing or unparseable manifest, a source the copy lacks, or
+ * a declared git-subdir path that leaves the plugin's repository. A reinstall
+ * reads the same copy. An uninstall clears every cause, so it comes first; a
+ * marketplace update refreshes an out-of-date copy but cannot restore a
+ * missing checkout.
+ */
+export interface McpMigrationMarketplaceUnreadableRow {
+  readonly kind: "marketplace-unreadable";
+  readonly scope: Scope;
+  readonly plugin: string;
+  readonly marketplace: string;
+  readonly servers: readonly string[];
+}
+
+/**
+ * D-08-05 / AMIG-01: an installed git-source plugin whose cached source, the
+ * warm mirror of an unpinned source or the clone of the recorded commit, has
+ * no plugin at the path the marketplace declares. An update installs the
+ * source the marketplace now declares, so the remedy is an update.
+ */
+export interface McpMigrationSourceOutdatedRow {
+  readonly kind: "source-outdated";
+  readonly scope: Scope;
+  readonly plugin: string;
+  readonly marketplace: string;
+  readonly servers: readonly string[];
+}
+
+/**
+ * AMIG-01: an installed plugin whose new key another config source already
+ * defines in full, so none of its servers moved. `key` is that source's key
+ * and `source` names it as the row reads it: a scope file with its article
+ * (`the user-scope mcp-adapter.json`) or a home-relative path
+ * (`~/.config/mcp/mcp.json`), never an absolute path.
+ */
+export interface McpMigrationCollisionRow {
+  readonly kind: "collision";
+  readonly scope: Scope;
+  readonly plugin: string;
+  readonly marketplace: string;
+  readonly servers: readonly string[];
+  readonly key: string;
+  readonly source: string;
+}
+
+/** AMIG-01: a scope config file that does not parse, so nothing in the scope moved. */
+export interface McpMigrationFileUnreadableRow {
+  readonly kind: "file-unreadable";
+  readonly scope: Scope;
+  readonly file: "mcp.json" | "mcp-adapter.json";
+}
+
+/**
+ * AMIG-01: why the reload removed a server's `mcp.json` entry without moving
+ * it: the plugin no longer declares it, the plugin is disabled, the server
+ * needs a feature pi-mcp-adapter cannot run, or the plugin's MCP config is
+ * not valid.
+ */
+export type McpMigrationRemovalCause =
+  "not-declared" | "disabled" | "unsupported-feature" | "malformed";
+
+/**
+ * AMIG-01 / AMIG-03: a server whose `mcp.json` entry the reload removed and
+ * did not write to `mcp-adapter.json`. `server` is its old name; `feature`
+ * names the blocking feature, set only for an `unsupported-feature` cause.
+ */
+export interface McpMigrationRemovedRow {
+  readonly kind: "removed";
+  readonly scope: Scope;
+  readonly plugin: string;
+  readonly marketplace: string;
+  readonly server: string;
+  readonly cause: McpMigrationRemovalCause;
+  readonly feature?: string;
+}
+
+/**
+ * AMIG-02: a plugin whose servers the reload wrote to `mcp-adapter.json` but
+ * could not remove from `mcp.json`, so both files hold them until the next
+ * reload. `detail` carries no absolute path.
+ */
+export interface McpMigrationUnfinishedRow {
+  readonly kind: "unfinished";
+  readonly scope: Scope;
+  readonly plugin: string;
+  readonly marketplace: string;
+  readonly servers: readonly string[];
+  /** The file whose write failed after the new entries were written. */
+  readonly file: "mcp.json" | "project-scope mcp-adapter.json";
+  readonly detail: string;
+}
+
+/** AMIG-03: one row of the reload migration notice. */
+export type McpMigrationRow =
+  | McpMigrationMovedRow
+  | McpMigrationRemovedRow
+  | McpMigrationStoppedRow
+  | McpMigrationUnownedRow
+  | McpMigrationNotListedRow
+  | McpMigrationSourceUnreadableRow
+  | McpMigrationSourceOutdatedRow
+  | McpMigrationMarketplaceUnreadableRow
+  | McpMigrationCollisionRow
+  | McpMigrationFileUnreadableRow
+  | McpMigrationUnfinishedRow;
+
+/** AMIG-03: a row whose servers stay in `mcp.json`. */
+export type McpMigrationLeftRow = Exclude<
+  McpMigrationRow,
+  McpMigrationMovedRow | McpMigrationRemovedRow
+>;
+
+/** AMIG-03: everything one reload's migration reports, across both scopes. */
+export interface McpMigrationReport {
+  readonly rows: readonly McpMigrationRow[];
+  /** The MCP config facts of the files the migration wrote. */
+  readonly notices: readonly McpConfigNotice[];
+}
+
+/**
+ * AFILE-04: a notice that renders a line. An `override-restored` notice only
+ * cancels an earlier `override-kept` notice, so it never reaches a strategy.
+ */
+export type RenderedMcpConfigNotice = Exclude<McpConfigNotice, McpOverrideRestoredNotice>;
+
+/** AFILE-04: the notice sections; each rendered notice kind is its own section. */
+export type McpConfigNoticeSection = RenderedMcpConfigNotice["kind"];
+
+/**
+ * AFILE-04 / WIRE-01: one non-empty section of MCP config notices, every one
+ * of the kind `section` names. The kind belongs to no fixed-origin group
+ * (D-14), because commands and the load pass both write MCP config files.
+ */
+export interface McpConfigNoticesSurface {
+  readonly kind: "mcp-config-notices";
+  readonly section: McpConfigNoticeSection;
+  readonly notices: readonly RenderedMcpConfigNotice[];
+}
+
+/**
+ * AMIG-03 / D-14: the reload migration notice, a load-origin surface. `rows`
+ * is non-empty: a report without rows goes out as config notice sections.
+ */
+export interface McpMigrationSurface {
+  readonly kind: "mcp-migration";
+  readonly rows: readonly McpMigrationRow[];
+  readonly notices: readonly McpConfigNotice[];
+}
+
+/** RAWS-04 / D-13: the load-time reconcile aborted; `cause` is the live thrown value. */
+export interface ReconcileAbortedSurface {
+  readonly kind: "reconcile-aborted";
+  readonly cause: unknown;
+}
+
+/** RAWS-04 / D-13: the load pass could not refresh one scope's plugin PATH. */
+export interface PluginPathSkippedSurface {
+  readonly kind: "plugin-path-skipped";
+  readonly scope: Scope;
+  readonly reason: string;
+}
+
+/** D-14: the load-origin group of raw output surfaces. */
+export type LoadSurface = ReconcileAbortedSurface | PluginPathSkippedSurface | McpMigrationSurface;
+
+/** RAWS-01 / D-06: an argv-validation error with the verb's usage block. */
+export interface UsageErrorSurface extends UsageErrorMessage {
+  readonly kind: "usage-error";
+}
+
+/** RAWS-01 / D-06: usage documentation shown on an explicit help request. */
+export interface UsageInfoSurface {
+  readonly kind: "usage-info";
+  readonly usage: string;
+}
+
+/**
+ * RAWS-02 / D-05: an out-of-band warning block. The producer composes the
+ * header and redacts the lines; the text strategy joins them. The kind belongs
+ * to no fixed-origin group (D-14), because its origin depends on the caller:
+ * import is a command, and reconcile post-install is load.
+ */
+export interface DiagnosticSurface {
+  readonly kind: "diagnostic";
+  readonly header: string;
+  readonly lines: readonly string[];
+}
+
+/** RAWS-05 / D-08: a plugin author's async-rewake summary, kept verbatim. */
+export interface AsyncRewakeSummarySurface {
+  readonly kind: "async-rewake-summary";
+  readonly summary: string;
+}
+
+/**
+ * RAWS-05 / D-07: the one-shot Stop-hook override-cap warning. `cap` is the
+ * re-entry cap the settle bridge compares against, so the warning states the
+ * number that tripped it.
+ */
+export interface StopOverrideCapSurface {
+  readonly kind: "stop-override-cap";
+  readonly pluginId: string;
+  readonly cap: number;
+}
+
+/**
+ * D-14: the hook-origin group of raw output surfaces. Hook callbacks get no run
+ * object.
+ */
+export type HookSurface = AsyncRewakeSummarySurface | StopOverrideCapSurface;
+
+/**
+ * D-10 / AUTH-03: the device-flow values a user needs to authorize this
+ * machine. AUTH-09: these two values are the only data that cross the
+ * device-code callback; no token exists yet when they do.
+ */
+export interface DeviceFlowPrompt {
+  readonly verificationUri: string;
+  readonly userCode: string;
+}
+
+/**
+ * RAWS-03 / D-12: the device-flow prompt. It belongs to no fixed-origin group
+ * (D-14), because the prompt fires during commands and during load-pass git
+ * installs.
+ */
+export interface DeviceFlowPromptSurface extends DeviceFlowPrompt {
+  readonly kind: "device-flow-prompt";
+}
+
+/**
+ * D-01 / D-04: every raw output surface. It is deliberately not a
+ * `NotificationMessage` member, so `notify()`'s run never reaches a raw call
+ * site.
+ */
+export type RawSurface =
+  | UsageErrorSurface
+  | UsageInfoSurface
+  | DiagnosticSurface
+  | DeviceFlowPromptSurface
+  | McpConfigNoticesSurface
+  | HookSurface
+  | LoadSurface;

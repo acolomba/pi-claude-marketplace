@@ -11,19 +11,22 @@ import {
   PROMOTED_ROW_REASONS,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts";
 import { PluginShapeError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import { composePluginLines } from "../../../extensions/pi-claude-marketplace/shared/notification-grammar.ts";
+import { resolveRows } from "../../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 import { PathContainmentError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
+import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type {
   EntityErrorRow,
   InstallMsg,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts";
-import type { SoftDepStatus } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { ResolvedRow } from "../../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 import type { ContentReason } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
 describe("INSTALL_CONTEXT", () => {
-  test("exposes the install label and all six render arms", () => {
+  test("exposes the install label and all six row policy statuses", () => {
     // arrange
-    const expectedRenderArms = [
+    const expectedPolicyStatuses = [
       "disabled",
       "failed",
       "installed",
@@ -35,36 +38,30 @@ describe("INSTALL_CONTEXT", () => {
     // act
     const contextShape = {
       label: INSTALL_CONTEXT.Messaging.label,
-      renderArms: Object.keys(INSTALL_CONTEXT.render).sort(),
+      policyStatuses: Object.keys(INSTALL_CONTEXT.rowPolicies).sort(),
     };
 
     // assert
     assert.deepStrictEqual(contextShape, {
       label: "Plugin install",
-      renderArms: expectedRenderArms,
+      policyStatuses: expectedPolicyStatuses,
     });
   });
 
-  test("renders an installed row with reasons and both missing companions", () => {
+  test("renders an installed row with its resolved reasons and markers", () => {
     // arrange
     const message = {
       status: "installed",
       name: "helper",
-      dependencies: ["agents", "mcp"],
       version: "1.2.3",
       scope: "user",
-      reasons: ["orphan rewake"],
+      reasons: ["orphan rewake", "requires pi-subagents", "requires pi-mcp-adapter"],
       severity: "warning",
       needsReload: true,
-    } satisfies InstallMsg;
-    const probe = {
-      piSubagentsLoaded: false,
-      piMcpAdapterLoaded: false,
-      workflowEngineLoaded: true,
-    } satisfies SoftDepStatus;
+    } satisfies ResolvedRow<InstallMsg>;
 
     // act
-    const row = INSTALL_CONTEXT.render.installed(message, probe, "user");
+    const row = composePluginLines(message, "user")[0]!.slice(2);
 
     // assert
     assert.strictEqual(
@@ -73,26 +70,20 @@ describe("INSTALL_CONTEXT", () => {
     );
   });
 
-  test("renders a partially-installed row with cross-scope and dependency markers", () => {
+  test("renders a partially-installed row with a cross-scope bracket and resolved markers", () => {
     // arrange
     const message = {
       status: "partially-installed",
       name: "helper",
-      reasons: ["lsp"],
-      dependencies: ["agents"],
+      reasons: ["lsp", "requires pi-subagents"],
       version: "2.0.0",
       scope: "project",
       severity: "warning",
       needsReload: true,
-    } satisfies InstallMsg;
-    const probe = {
-      piSubagentsLoaded: false,
-      piMcpAdapterLoaded: true,
-      workflowEngineLoaded: true,
-    } satisfies SoftDepStatus;
+    } satisfies ResolvedRow<InstallMsg>;
 
     // act
-    const row = INSTALL_CONTEXT.render["partially-installed"](message, probe, "user");
+    const row = composePluginLines(message, "user")[0]!.slice(2);
 
     // assert
     assert.strictEqual(
@@ -108,15 +99,10 @@ describe("INSTALL_CONTEXT", () => {
       name: "helper",
       reasons: ["unsupported source"],
       severity: "error",
-    } satisfies InstallMsg;
-    const probe = {
-      piSubagentsLoaded: false,
-      piMcpAdapterLoaded: false,
-      workflowEngineLoaded: true,
-    } satisfies SoftDepStatus;
+    } satisfies ResolvedRow<InstallMsg>;
 
     // act
-    const row = INSTALL_CONTEXT.render.unavailable(message, probe, "project");
+    const row = composePluginLines(message, "project")[0]!.slice(2);
 
     // assert
     assert.strictEqual(row, "⊘ helper (unavailable) {unsupported source}");
@@ -130,16 +116,11 @@ describe("INSTALL_CONTEXT", () => {
       reasons: ["unsupported hooks", "lsp"],
       version: "3.1.0",
       severity: "error",
-      partialHint: true,
-    } satisfies InstallMsg;
-    const probe = {
-      piSubagentsLoaded: false,
-      piMcpAdapterLoaded: false,
-      workflowEngineLoaded: true,
-    } satisfies SoftDepStatus;
+      hint: "partial-install",
+    } satisfies ResolvedRow<InstallMsg>;
 
     // act
-    const row = INSTALL_CONTEXT.render["partially-available"](message, probe, "project");
+    const row = composePluginLines(message, "project")[0]!.slice(2);
 
     // assert
     assert.strictEqual(row, "⊖ helper v3.1.0 (partially-available) {unsupported hooks, lsp}");
@@ -155,21 +136,16 @@ describe("INSTALL_CONTEXT", () => {
       scope: "project",
       severity: "error",
       needsReload: false,
-    } satisfies InstallMsg;
-    const probe = {
-      piSubagentsLoaded: false,
-      piMcpAdapterLoaded: false,
-      workflowEngineLoaded: true,
-    } satisfies SoftDepStatus;
+    } satisfies ResolvedRow<InstallMsg>;
 
     // act
-    const row = INSTALL_CONTEXT.render.failed(message, probe, "user");
+    const row = composePluginLines(message, "user")[0]!.slice(2);
 
     // assert
     assert.strictEqual(row, "⊘ helper [project] v1.0.0 (failed) {permission denied}");
   });
 
-  test("renders a disabled row without soft-dependency markers", () => {
+  test("renders a disabled row with its resolved reasons", () => {
     // arrange
     const message = {
       status: "disabled",
@@ -177,18 +153,13 @@ describe("INSTALL_CONTEXT", () => {
       version: "4.0.0",
       scope: "user",
       reasons: ["installs disabled", "malformed skill"],
-      enableHint: true,
+      hint: "enable",
       severity: "warning",
       needsReload: false,
-    } satisfies InstallMsg;
-    const probe = {
-      piSubagentsLoaded: false,
-      piMcpAdapterLoaded: false,
-      workflowEngineLoaded: true,
-    } satisfies SoftDepStatus;
+    } satisfies ResolvedRow<InstallMsg>;
 
     // act
-    const row = INSTALL_CONTEXT.render.disabled(message, probe, "user");
+    const row = composePluginLines(message, "user")[0]!.slice(2);
 
     // assert
     assert.strictEqual(row, "◍ helper v4.0.0 (disabled) {installs disabled, malformed skill}");
@@ -649,14 +620,14 @@ describe("composePromotedRow", () => {
       scope: "user",
       needsReload: false,
     });
-    const probe = {
-      piSubagentsLoaded: false,
-      piMcpAdapterLoaded: false,
-      workflowEngineLoaded: false,
-    } satisfies SoftDepStatus;
 
     // act
-    const rendered = INSTALL_CONTEXT.render.installed(row, probe, "user");
+    const [resolved] = resolveRows(
+      [{ name: "official", scope: "user", plugins: [row] }],
+      runWithNothingLoaded().softDeps,
+      INSTALL_CONTEXT.rowPolicies,
+    );
+    const rendered = composePluginLines(resolved!.plugins[0]!, "user")[0]!.slice(2);
 
     // assert: no soft-dep marker joins the brace whatever the host lacks --
     // the row declares no companion because nothing was materialized.
@@ -1048,5 +1019,20 @@ describe("classifyInstallFailure", () => {
       error: new Error("formatted opaque failure"),
       cause: "formatted opaque failure",
     });
+  });
+});
+
+test("INSTALL_CONTEXT declares complete row policies", () => {
+  // act
+  const policies = INSTALL_CONTEXT.rowPolicies;
+
+  // assert
+  assert.deepStrictEqual(policies, {
+    installed: { markers: true, contentReasons: true },
+    "partially-installed": { markers: true, contentReasons: true },
+    failed: { markers: false, contentReasons: true },
+    unavailable: { markers: false, contentReasons: true },
+    "partially-available": { markers: false, contentReasons: true },
+    disabled: { markers: false, contentReasons: true },
   });
 });

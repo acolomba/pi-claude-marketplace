@@ -1,12 +1,4 @@
 import {
-  pluginRow,
-  renderAvailableRow,
-  renderPartiallyAvailableRow,
-  renderRemoteRow,
-  renderUnavailableRow,
-  ICON_UNINSTALLABLE,
-} from "../../shared/notification-grammar.ts";
-import {
   type PluginAvailableMessage,
   type PluginFailedMessage,
   type PluginPartiallyAvailableMessage,
@@ -15,17 +7,7 @@ import {
   type PluginUnavailableMessage,
 } from "../../shared/notification-types.ts";
 
-import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
-
-/**
- * fetch.messaging.ts -- the command-local notification vocabulary for
- * `/claude:plugin fetch` (FTCH-02). Co-locates fetch's private status set, its
- * cascade row message shapes, and a render map total over fetch's OWN statuses
- * (D-10) whose arms DELEGATE to the shared per-row renderers. The shared
- * presentation vocabulary stays central in `shared/notification-grammar.ts`
- * (D-notification-refactor-01-11) and is CALLED here, never duplicated. No closed set (ICON /
- * STATUS_TOKENS / PLUGIN_STATUSES / REASONS) grows -- every member fetch needs already exists.
- */
+import type { CommandContext } from "../../shared/notify-context.ts";
 
 /**
  * fetch's private status set. D-81-02: a fetch success renders the plugin's
@@ -47,48 +29,15 @@ export type FetchMsg =
   | PluginSkippedMessage
   | PluginFailedMessage;
 
-/**
- * Render map total over fetch's OWN statuses (D-10): a missing arm is a TS2741
- * compile error at the `satisfies` site. Every arm calls the shared per-row
- * renderer for its status, so the bytes agree with the central
- * `renderPluginRow` switch -- and with the `list` render map, which emits the
- * same not-installed rows -- because both surfaces call the SAME helper, not
- * because two copies were kept in step. The `[<scope>]` bracket carve-out
- * (MSG-PL-6 / SNM-11) and the `remote` arm's missing reasons brace (D-80-03)
- * are properties of those helpers. The `skipped` no-op row routes through
- * `pluginRow` with the `(skipped)` token at info severity (D-81-02: an existing
- * closed-set reason such as `up-to-date` is carried in `reasons`).
- */
-const FETCH_RENDER: { [K in FetchStatus]: RenderFn<Extract<FetchMsg, { status: K }>> } = {
-  // OUT-02: this surface's producer never stamps `reasons` on a candidate row,
-  // so the drop is stated here rather than inherited from the composer.
-  available: (p, probe, mpScope) => renderAvailableRow(p, probe, mpScope, undefined),
-  // USTAT-01 / D-64-01: not-installed, partially-available row -- the dedicated
-  // ICON_PARTIALLY_AVAILABLE (`⊖`) glyph + `(partially-available)` token. The
-  // helper differs from the `unavailable` one in glyph and token only (same
-  // MSG-PL-6 / SNM-11 no-scope carve-out and reasons composition).
-  "partially-available": (p, probe, mpScope) => renderPartiallyAvailableRow(p, probe, mpScope),
-  unavailable: (p, probe, mpScope) => renderUnavailableRow(p, probe, mpScope),
-  // RSTA-01 / D-80-03: not-installed git-source row whose clone/mirror is not
-  // materialized locally. The helper differs from the `available` one in glyph
-  // (`○` -> `◌`) and token (`(available)` -> `(remote)`). SNM-11 carve-out:
-  // `remote` has NO `scope?` field, so the scope bracket is omitted.
-  // OUT-05 / RSTA-01: D-80-03's bare-row rule holds on THIS surface -- its
-  // producer never stamps `reasons` on a remote row, so the row stays bare.
-  remote: (p, probe, mpScope) => renderRemoteRow(p, probe, mpScope, undefined),
-  // D-81-02: no-op fetch (pinned-warm clone / nothing-to-fetch path source).
-  // Routes through `pluginRow` with the `(skipped)` token, mirroring the update
-  // verb's no-op parity; the existing `up-to-date` REASONS member is carried in
-  // `reasons` at info severity (closed set does not grow -- FTCH-03).
-  skipped: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(skipped)", probe),
-  failed: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)", probe),
-};
-
-/**
- * D-04 / D-05: fetch's `CommandContext`. The `as const satisfies` pin enforces
- * that fetch supplies both `Messaging.label` and a total render map.
- */
+/** The command label and complete per-status reason policy. */
 export const FETCH_CONTEXT = {
   Messaging: { label: "Plugin fetch" },
-  render: FETCH_RENDER,
-} as const satisfies CommandContext<FetchStatus, FetchMsg>;
+  rowPolicies: {
+    available: { markers: false, contentReasons: false },
+    "partially-available": { markers: false, contentReasons: true },
+    unavailable: { markers: false, contentReasons: true },
+    remote: { markers: false, contentReasons: false },
+    skipped: { markers: false, contentReasons: true },
+    failed: { markers: false, contentReasons: true },
+  },
+} as const satisfies CommandContext<FetchStatus>;

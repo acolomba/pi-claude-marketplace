@@ -24,12 +24,14 @@ import { crossScopeFlag } from "./shared.ts";
 
 import type { ParsedSource } from "../../domain/source.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
-import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
+import type { ExtensionContext } from "../../platform/pi-api.ts";
+import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { Scope } from "../../shared/types.ts";
 
 export interface GetMarketplaceInfoOptions {
   readonly ctx: ExtensionContext;
-  readonly pi: ExtensionAPI;
+  /** D-05: the command's notification run; every block renders from its snapshot. */
+  readonly run: NotificationRun;
   readonly name: string;
   /** When omitted, fan-out across BOTH scopes (project-first per INFO-03). */
   readonly scope?: Scope;
@@ -169,7 +171,7 @@ export async function getMarketplaceInfo(opts: GetMarketplaceInfoOptions): Promi
   });
 
   if (found.length === 0) {
-    notify(opts.ctx, opts.pi, await buildNotAddedMessage(opts.cwd, opts.name, opts.scope));
+    notify(opts.ctx, opts.run, await buildNotAddedMessage(opts.cwd, opts.name, opts.scope));
     return;
   }
 
@@ -193,9 +195,9 @@ export async function getMarketplaceInfo(opts: GetMarketplaceInfoOptions): Promi
   // type requires.
   const [first, ...remaining] = blocks;
   if (first !== undefined && remaining.length === 0) {
-    notify(opts.ctx, opts.pi, first);
+    notify(opts.ctx, opts.run, first);
   } else if (first !== undefined) {
-    notify(opts.ctx, opts.pi, { kind: "marketplace-info-cascade", blocks: [first, ...remaining] });
+    notify(opts.ctx, opts.run, { kind: "marketplace-info-cascade", blocks: [first, ...remaining] });
   }
 
   // Surface each failed scope as its own notify call. This intentionally
@@ -203,6 +205,6 @@ export async function getMarketplaceInfo(opts: GetMarketplaceInfoOptions): Promi
   // corrupt manifest in one scope cannot silently hide behind a healthy
   // other-scope render. Callers wanting strict IL-2 must pass `--scope`.
   for (const failure of failures) {
-    notify(opts.ctx, opts.pi, failure);
+    notify(opts.ctx, opts.run, failure);
   }
 }

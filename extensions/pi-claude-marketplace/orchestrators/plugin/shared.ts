@@ -34,7 +34,6 @@ import {
 } from "../../shared/errors.ts";
 import { notify, notifyDiagnostic } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
-import { type PluginSkippedMessage } from "../../shared/notification-types.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
 import { ownValue, setOwn } from "../../shared/own-key.ts";
 import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
@@ -49,8 +48,9 @@ import type {
 } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
-import type { NotificationContext, PiInventory } from "../../platform/pi-api.ts";
+import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
+import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { CommandContext } from "../../shared/notify-context.ts";
 import type { DegradeKind } from "../../shared/notify-reasons.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -1424,7 +1424,7 @@ export function applyPartialCascadeFold(
  */
 export function emitMarketplaceNotAdded(args: {
   readonly ctx: NotificationContext;
-  readonly pi: PiInventory;
+  readonly run: NotificationRun;
   readonly marketplace: string;
   readonly requestedScope: Scope | undefined;
   readonly orchestrated: boolean;
@@ -1434,7 +1434,7 @@ export function emitMarketplaceNotAdded(args: {
   readonly error: Error;
   readonly cause: string;
 } {
-  const { ctx, pi, marketplace, requestedScope, orchestrated } = args;
+  const { ctx, run, marketplace, requestedScope, orchestrated } = args;
   const scopeList: readonly Scope[] =
     requestedScope === undefined ? ["project", "user"] : [requestedScope];
   const err = new MarketplaceNotFoundError(marketplace, scopeList);
@@ -1446,7 +1446,7 @@ export function emitMarketplaceNotAdded(args: {
   } as const;
 
   if (!orchestrated) {
-    notify(ctx, pi, {
+    notify(ctx, run, {
       kind: "marketplace-not-added",
       name: marketplace,
       ...(requestedScope !== undefined && { scope: requestedScope }),
@@ -1473,14 +1473,9 @@ export function emitMarketplaceNotAdded(args: {
  *     present) renders the `[scope]` bracket; the bare both-scopes-miss form
  *     carries no bracket and, per `crossScopeFlag`, is owed no sibling probe.
  *
- * The only per-verb variable is the `CommandContext`, so it is the only
- * parameter: `notifyWithContext` reads `Messaging.label` and dispatches the row
- * body through `render.skipped`, both of which stay the caller's own. Narrowing
- * the parameter to `CommandContext<"skipped", PluginSkippedMessage>` -- rather
- * than making this function generic over the caller's full `Status`/`Msg` pair
- * -- is what lets the row literal below stay a checked `PluginSkippedMessage`
- * instead of an unchecked widening; a verb whose render map omits a `skipped`
- * arm is a compile error at ITS call site.
+ * The caller supplies its command label and skipped-row policy. Requiring
+ * `CommandContext<"skipped">` keeps missing policies a compile error while the
+ * row literal remains checked against the shared producer contract.
  *
  * SEV-04 / D-01: the row is stamped `error`. Its reasons always lead with
  * `not installed` -- an absent target, i.e. the requested operation was NOT
@@ -1492,18 +1487,18 @@ export function emitMarketplaceNotAdded(args: {
  */
 export async function emitMarketplaceNotAddedSignal(args: {
   readonly ctx: NotificationContext;
-  readonly pi: PiInventory;
+  readonly run: NotificationRun;
   readonly cwd: string;
-  readonly context: CommandContext<"skipped", PluginSkippedMessage>;
+  readonly context: CommandContext<"skipped">;
   readonly cardinality: "single" | "plural";
   readonly err: MarketplaceNotAddedSignal;
 }): Promise<void> {
-  const { ctx, pi, cwd, context, cardinality, err } = args;
+  const { ctx, run, cwd, context, cardinality, err } = args;
 
   if (err.notInstalledAt !== undefined && err.plugin !== undefined) {
     notifyWithContext(
       ctx,
-      pi,
+      run,
       context,
       [
         {
@@ -1526,7 +1521,7 @@ export async function emitMarketplaceNotAddedSignal(args: {
     return;
   }
 
-  notify(ctx, pi, {
+  notify(ctx, run, {
     kind: "marketplace-not-added",
     name: err.marketplace,
     ...(err.requestedScope !== undefined && { scope: err.requestedScope }),
@@ -1601,6 +1596,7 @@ export function splitStagingWarnings(warnings: {
  */
 export function surfaceDiscoveryWarnings(
   ctx: NotificationContext,
+  run: NotificationRun,
   args: {
     readonly plugin: string;
     readonly verb: "installed" | "updated" | "reinstalled";
@@ -1616,7 +1612,7 @@ export function surfaceDiscoveryWarnings(
     lines.length === 1
       ? `Plugin "${args.plugin}" ${args.verb}; 1 declared component has a note.`
       : `Plugin "${args.plugin}" ${args.verb}; ${lines.length.toString()} declared components have notes.`;
-  notifyDiagnostic(ctx, header, lines);
+  notifyDiagnostic(ctx, run, header, lines);
 }
 
 /**

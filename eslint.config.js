@@ -105,6 +105,19 @@ const NETWORK_FREE_SYNTAX_SELECTORS = [
   },
 ];
 
+const APPEND_ENTRY_SYNTAX_SELECTORS = [
+  {
+    selector:
+      "CallExpression[callee.type='MemberExpression'][callee.computed=false][callee.property.name='appendEntry']",
+    message: "JOUT-01: only shared/notification-dispatch.ts may call appendEntry.",
+  },
+  {
+    selector:
+      "CallExpression[callee.type='MemberExpression'][callee.computed=true][callee.property.value='appendEntry']",
+    message: "JOUT-01: only shared/notification-dispatch.ts may call appendEntry.",
+  },
+];
+
 export default tseslint.config(
   {
     ignores: [
@@ -330,13 +343,20 @@ export default tseslint.config(
     },
   },
   {
+    // Optional calls share the same CallExpression/MemberExpression shape.
+    files: ["extensions/pi-claude-marketplace/**/*.ts"],
+    ignores: ["extensions/pi-claude-marketplace/shared/notification-dispatch.ts"],
+    rules: {
+      "no-restricted-syntax": ["error", ...APPEND_ENTRY_SYNTAX_SELECTORS],
+    },
+  },
+  {
     // BLOCK F (NFR-5 / PI-2 / PL-3 / PRL-07): default-deny. Every orchestrators/
     // and domain/ module outside NETWORK_SEAMS names no git surface: no
     // platform/git import of any kind (type-only and dynamic included) and no
     // gitOps / DEFAULT_GIT_OPS / refreshGitHubClone identifier, key, or string.
-    // edge/ and index.ts are outside the rule. No other block sets either rule
-    // for extension files. A block that did would replace these options for
-    // every file that both blocks match.
+    // edge/ and index.ts are outside the network rule. Compose the append
+    // restriction again: this block replaces the earlier syntax rule options.
     files: [
       "extensions/pi-claude-marketplace/orchestrators/**/*.ts",
       "extensions/pi-claude-marketplace/domain/**/*.ts",
@@ -355,7 +375,11 @@ export default tseslint.config(
           ],
         },
       ],
-      "no-restricted-syntax": ["error", ...NETWORK_FREE_SYNTAX_SELECTORS],
+      "no-restricted-syntax": [
+        "error",
+        ...APPEND_ENTRY_SYNTAX_SELECTORS,
+        ...NETWORK_FREE_SYNTAX_SELECTORS,
+      ],
     },
   },
   {

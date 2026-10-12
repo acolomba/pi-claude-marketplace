@@ -1,6 +1,13 @@
 /**
- * tests/architecture/workflows-marker-coverage.test.ts -- WDEP-04 / SNM-06
- * cross-site coverage gate for the `requires pi-dynamic-workflows` marker.
+ * tests/architecture/workflows-marker-coverage.test.ts -- two claims about where
+ * soft-dep markers come from.
+ *
+ * First, the WDEP-04 / SNM-06 cross-site coverage gate for the
+ * `requires pi-dynamic-workflows` marker: every `Dependency[]` derivation site
+ * renders it. Second, D-12 / SC-5: the extension calls `softDepMarkers` from
+ * exactly one module, the resolve step. A second call site would let a surface
+ * compose markers that the per-verb marker policy does not govern. The last
+ * case owns that claim.
  *
  * Each derivation site's owner suite proves its own row bytes directly. This
  * suite keeps the distinct architectural invariant: EVERY `Dependency[]`
@@ -31,10 +38,10 @@
  * reached through their exported outcome-to-row composers or through a full
  * orchestrator entry point, never through an export added to serve a test.
  *
- * The engine-absent runs use the DECOY tool name `workflow` rather than an
- * empty tool list. `@nicknisi/pi-workflows` registers a tool by that name, so
- * driving the absent case through it re-proves the WDEP-01 discriminator at
- * every one of these seven surfaces for free.
+ * Every surface renders from a notification run and reads the run's
+ * soft-dependency snapshot (D-05), so the cases seed the snapshot directly. The
+ * WDEP-01 discriminator that keeps the decoy `workflow` tool name from reading
+ * as the host engine belongs to the `softDepStatus` owner suite.
  */
 
 import assert from "node:assert/strict";
@@ -62,16 +69,14 @@ import { createCompletionCache } from "../../extensions/pi-claude-marketplace/sh
 import { notify } from "../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
 import { createGitOpsFake } from "../platform/git-ops-fake.ts";
 import { withHermeticEnvironment } from "../platform/hermetic-environment.ts";
-import { toolInfo } from "../platform/pi-inventory-seed.ts";
+import { runWithSoftDeps } from "../shared/notification-run-seeds.ts";
 
+import { EXTENSION_ROOT_REL, SOFT_DEP_MARKER_DERIVATION_TARGETS } from "./gate-targets.ts";
 import { filesMatching } from "./source-scan.ts";
 
 import type { ExtensionState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import type {
-  ExtensionAPI,
-  ExtensionContext,
-} from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
-import type { SoftDepStatus } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { ExtensionContext } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { NotificationRun } from "../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import type { NotificationMessage } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
 const installPlugin = createInstallOperation(
@@ -82,40 +87,36 @@ const installPlugin = createInstallOperation(
 /** The closed-set marker every case looks for. */
 const HOST_ENGINE_MARKER = "requires pi-dynamic-workflows";
 
-/** The tool name only the host workflow engine registers (WDEP-01). */
-const ENGINE_TOOL = "workflow_control";
-
-/** `@nicknisi/pi-workflows` registers this name; it must NOT read as loaded. */
-const DECOY_TOOL = "workflow";
-
-function toolNamesFor(engineLoaded: boolean): readonly string[] {
-  return engineLoaded ? [ENGINE_TOOL] : [DECOY_TOOL];
-}
-
 interface NotifyRecord {
   readonly message: string;
   readonly severity?: string;
 }
 
-function makeCtx(engineLoaded: boolean): {
+function makeCtx(): {
   ctx: ExtensionContext;
-  pi: ExtensionAPI;
   notifications: NotifyRecord[];
 } {
   const notifications: NotifyRecord[] = [];
-  // The surfaces under test read only `ui.notify` and `getAllTools`; the casts
-  // stand in for the much larger Pi context and API types.
+  // The surfaces under test read only `mode` and `ui.notify`; the cast stands in
+  // for the much larger Pi context type.
   const ctx = {
+    mode: "tui",
     ui: {
       notify(message: string, severity?: string): void {
         notifications.push(severity === undefined ? { message } : { message, severity });
       },
     },
   } as ExtensionContext;
-  const pi = {
-    getAllTools: () => toolNamesFor(engineLoaded).map(toolInfo),
-  } as ExtensionAPI;
-  return { ctx, pi, notifications };
+  return { ctx, notifications };
+}
+
+/** The run whose snapshot reports the host engine as `engineLoaded` and no other companion. */
+function runFor(engineLoaded: boolean): NotificationRun {
+  return runWithSoftDeps({
+    piSubagentsLoaded: false,
+    piMcpAdapterLoaded: false,
+    workflowEngineLoaded: engineLoaded,
+  });
 }
 
 /**
@@ -124,8 +125,8 @@ function makeCtx(engineLoaded: boolean): {
  * the marker" claim the three Tier C cases make.
  */
 function renderThroughNotify(engineLoaded: boolean, message: NotificationMessage): string {
-  const { ctx, pi, notifications } = makeCtx(engineLoaded);
-  notify(ctx, pi, message);
+  const { ctx, notifications } = makeCtx();
+  notify(ctx, runFor(engineLoaded), message);
   const emitted = notifications[0];
   assert.ok(emitted !== undefined, "notify() emitted nothing");
   return emitted.message;
@@ -188,28 +189,15 @@ async function recordMarketplace(cwd: string, marketplaceRoot: string): Promise<
   await saveState(locations.extensionRoot, state);
 }
 
-/**
- * The probe a row composer reads when it is driven directly rather than through
- * an orchestrator: `toolNamesFor` decides the same loaded/not-loaded split the
- * `makeCtx` fakes give the full-orchestrator cases.
- */
-function softDepStatusFor(engineLoaded: boolean): SoftDepStatus {
-  return {
-    piSubagentsLoaded: false,
-    piMcpAdapterLoaded: false,
-    workflowEngineLoaded: engineLoaded,
-  };
-}
-
 /** Drive a real project-scope install of the seeded workflow-bearing plugin. */
 async function runInstall(
   cwd: string,
   engineLoaded: boolean,
 ): Promise<{ notifications: readonly NotifyRecord[] }> {
-  const { ctx, pi, notifications } = makeCtx(engineLoaded);
+  const { ctx, notifications } = makeCtx();
   await installPlugin({
     ctx,
-    pi,
+    run: runFor(engineLoaded),
     scope: "project",
     cwd,
     marketplace: "mp",
@@ -261,8 +249,8 @@ const SITE_CASES = [
         await runInstall(cwd, engineLoaded);
 
         // act
-        const { ctx, pi, notifications } = makeCtx(engineLoaded);
-        await listPlugins({ ctx, pi, cwd, scope: "project" });
+        const { ctx, notifications } = makeCtx();
+        await listPlugins({ ctx, run: runFor(engineLoaded), cwd, scope: "project" });
 
         // assert
         const emitted = notifications[0];
@@ -331,7 +319,7 @@ const SITE_CASES = [
                   },
                 ],
                 alreadyInstalled: [],
-                probe: softDepStatusFor(engineLoaded),
+                probe: runFor(engineLoaded).softDeps,
               }),
             },
           ],
@@ -421,14 +409,14 @@ const SITE_CASES = [
             extraKnownMarketplaces: { mp: { directory: marketplaceRoot } },
           }),
         );
-        const { ctx, pi, notifications } = makeCtx(engineLoaded);
+        const { ctx, notifications } = makeCtx();
 
         // act
         await importClaudeSettings({
           ctx,
+          run: runFor(engineLoaded),
           cwd,
           gitOps: createGitOpsFake({ allowedRemoteUrls: [], boundary: "memory" }).gitOps,
-          pi,
           selectedScopes: ["project"],
           hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
           completionCache: createCompletionCache(),
@@ -531,5 +519,27 @@ test("WDEP-04: the case list covers every Dependency[] derivation site", async (
     discovered,
     [...SITE_CASES].map(({ site }) => site).sort(),
     "WDEP-04: the Dependency[] derivation sites on disk no longer match SITE_CASES. A site present here and absent there renders no host-engine marker and nothing else would notice; add a case that drives its PUBLIC surface. A site absent here and present there has lost its derivation; retire the case with it.",
+  );
+});
+
+/**
+ * A call to the marker helper. The lookbehind skips its declaration in
+ * `shared/concerns/soft-dep.ts`, which names the helper but derives nothing.
+ */
+const MARKER_DERIVATION_CALL = /(?<!function\s)\bsoftDepMarkers\(/;
+
+const SINGLE_DERIVATION_SITE_MESSAGE =
+  "D-12 / SC-5: softDepMarkers is called outside the resolve module, or no longer called there. A second derivation site would let a surface compose markers the policy table does not govern; route the row through resolveRows instead.";
+
+test("D-12 / SC-5: softDepMarkers is called only from the resolve module", async () => {
+  // act
+  const discovered = await filesMatching(EXTENSION_ROOT_REL, MARKER_DERIVATION_CALL);
+
+  // assert -- set equality in both directions, so a new caller and a lost
+  // resolve call are both red.
+  assert.deepEqual(
+    discovered,
+    [...SOFT_DEP_MARKER_DERIVATION_TARGETS],
+    SINGLE_DERIVATION_SITE_MESSAGE,
   );
 });

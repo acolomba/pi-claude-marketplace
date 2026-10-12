@@ -14,8 +14,11 @@ import {
   type EnableMsg,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.messaging.ts";
 import { PluginShapeError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import { composePluginLines } from "../../../extensions/pi-claude-marketplace/shared/notification-grammar.ts";
+import { resolveRows } from "../../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
+import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
-import type { SoftDepStatus } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { ResolvedRow } from "../../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 
 test("exports the complete enable and disable command contexts", () => {
   // arrange
@@ -24,12 +27,12 @@ test("exports the complete enable and disable command contexts", () => {
 
   // act
   const contextKeys = Object.keys(DISABLE_CONTEXT);
-  const disableRenderKeys = Object.keys(DISABLE_CONTEXT.render).sort();
-  const enableRenderKeys = Object.keys(ENABLE_CONTEXT.render).sort();
+  const disableRenderKeys = Object.keys(DISABLE_CONTEXT.rowPolicies).sort();
+  const enableRenderKeys = Object.keys(ENABLE_CONTEXT.rowPolicies).sort();
 
   // assert
-  assert.deepStrictEqual(contextKeys, ["Messaging", "render"]);
-  assert.deepStrictEqual(Object.keys(ENABLE_CONTEXT), ["Messaging", "render"]);
+  assert.deepStrictEqual(contextKeys, ["Messaging", "rowPolicies"]);
+  assert.deepStrictEqual(Object.keys(ENABLE_CONTEXT), ["Messaging", "rowPolicies"]);
   assert.deepStrictEqual(DISABLE_CONTEXT.Messaging, { label: "Plugin disable" });
   assert.deepStrictEqual(ENABLE_CONTEXT.Messaging, { label: "Plugin enable" });
   assert.deepStrictEqual(disableRenderKeys, expectedDisableRenderKeys);
@@ -45,15 +48,11 @@ test("the disable context renders a complete bare disabled transition", () => {
     name: "alpha",
     version: "1.2.3",
     scope: "project",
-  } as const satisfies DisableMsg;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: false,
-    piMcpAdapterLoaded: false,
-    workflowEngineLoaded: true,
-  };
+    reasons: [],
+  } as const satisfies ResolvedRow<DisableMsg>;
 
   // act
-  const renderedRow = DISABLE_CONTEXT.render.disabled(row, probe, "user");
+  const renderedRow = composePluginLines(row, "user")[0]!.slice(2);
 
   // assert
   assert.equal(renderedRow, "◍ alpha [project] v1.2.3 (disabled)");
@@ -64,15 +63,19 @@ test("the disable context renders a complete bare disabled transition", () => {
     name: "alpha",
     version: "1.2.3",
     scope: "project",
+    reasons: [],
   });
   assert.equal(Object.hasOwn(row, "description"), false);
-  assert.equal(Object.hasOwn(row, "enableHint"), false);
-  assert.equal(Object.hasOwn(row, "reasons"), false);
+  assert.equal(Object.hasOwn(row, "hint"), false);
 });
 
-test("the disable context renders a complete failed row without leaking its cause", () => {
+test("the disable context renders a complete failed row without leaking its failure detail", () => {
   // arrange
-  const cause = new Error("unstage failed");
+  const failure = {
+    cause: { causeChain: ["unstage failed"], truncated: false },
+    leaks: [],
+    rollbackPartial: [],
+  };
   const row = {
     status: "failed",
     severity: "error",
@@ -81,16 +84,11 @@ test("the disable context renders a complete failed row without leaking its caus
     version: "2.0.0",
     scope: "user",
     reasons: ["permission denied", "rollback partial"],
-    cause,
-  } as const satisfies DisableMsg;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: true,
-    piMcpAdapterLoaded: true,
-    workflowEngineLoaded: true,
-  };
+    failure,
+  } as const satisfies ResolvedRow<DisableMsg>;
 
   // act
-  const renderedRow = DISABLE_CONTEXT.render.failed(row, probe, "user");
+  const renderedRow = composePluginLines(row, "user")[0]!.slice(2);
 
   // assert
   assert.equal(renderedRow, "⊘ beta v2.0.0 (failed) {permission denied, rollback partial}");
@@ -102,9 +100,9 @@ test("the disable context renders a complete failed row without leaking its caus
     version: "2.0.0",
     scope: "user",
     reasons: ["permission denied", "rollback partial"],
-    cause,
+    failure,
   });
-  assert.equal(Object.hasOwn(row, "partialHint"), false);
+  assert.equal(Object.hasOwn(row, "hint"), false);
 });
 
 test("the disable context renders a complete idempotent skipped row", () => {
@@ -117,15 +115,10 @@ test("the disable context renders a complete idempotent skipped row", () => {
     version: "3.0.0",
     scope: "user",
     reasons: ["already disabled"],
-  } as const satisfies DisableMsg;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: false,
-    piMcpAdapterLoaded: true,
-    workflowEngineLoaded: true,
-  };
+  } as const satisfies ResolvedRow<DisableMsg>;
 
   // act
-  const renderedRow = DISABLE_CONTEXT.render.skipped(row, probe, "project");
+  const renderedRow = composePluginLines(row, "project")[0]!.slice(2);
 
   // assert
   assert.equal(renderedRow, "⊘ gamma [user] v3.0.0 (skipped) {already disabled}");
@@ -138,18 +131,16 @@ test("the disable context renders a complete idempotent skipped row", () => {
     scope: "user",
     reasons: ["already disabled"],
   });
-  assert.equal(Object.hasOwn(row, "cause"), false);
+  assert.equal(Object.hasOwn(row, "failure"), false);
 });
 
 test("the enable context renders a complete failed stale-gate row body", () => {
   // arrange
-  const cause = new PluginShapeError({
-    kind: "not-installable",
-    plugin: "delta",
-    reasons: ["contains lspServers"],
-    partialable: true,
-    unsupportedKinds: ["lspServers"],
-  });
+  const failure = {
+    cause: { causeChain: ["plugin delta is not installable"], truncated: false },
+    leaks: [],
+    rollbackPartial: [],
+  };
   const row = {
     status: "failed",
     severity: "error",
@@ -158,17 +149,12 @@ test("the enable context renders a complete failed stale-gate row body", () => {
     version: "4.0.0",
     scope: "user",
     reasons: ["lsp"],
-    partialHint: true,
-    cause,
-  } as const satisfies EnableMsg;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: true,
-    piMcpAdapterLoaded: false,
-    workflowEngineLoaded: true,
-  };
+    hint: "stale-gate-update",
+    failure,
+  } as const satisfies ResolvedRow<EnableMsg>;
 
   // act
-  const renderedRow = ENABLE_CONTEXT.render.failed(row, probe, "user");
+  const renderedRow = composePluginLines(row, "user")[0]!.slice(2);
 
   // assert
   assert.equal(renderedRow, "⊘ delta v4.0.0 (failed) {lsp}");
@@ -180,8 +166,8 @@ test("the enable context renders a complete failed stale-gate row body", () => {
     version: "4.0.0",
     scope: "user",
     reasons: ["lsp"],
-    partialHint: true,
-    cause,
+    hint: "stale-gate-update",
+    failure,
   });
 });
 
@@ -192,17 +178,12 @@ test("the enable context renders a complete bare installed transition", () => {
     severity: "info",
     needsReload: true,
     name: "epsilon",
-    dependencies: [],
     version: "5.0.0",
-  } as const satisfies EnableMsg;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: false,
-    piMcpAdapterLoaded: false,
-    workflowEngineLoaded: true,
-  };
+    reasons: [],
+  } as const satisfies ResolvedRow<EnableMsg>;
 
   // act
-  const renderedRow = ENABLE_CONTEXT.render.installed(row, probe, "project");
+  const renderedRow = composePluginLines(row, "project")[0]!.slice(2);
 
   // assert
   assert.equal(renderedRow, "● epsilon v5.0.0 (installed)");
@@ -211,34 +192,27 @@ test("the enable context renders a complete bare installed transition", () => {
     severity: "info",
     needsReload: true,
     name: "epsilon",
-    dependencies: [],
     version: "5.0.0",
+    reasons: [],
   });
   assert.equal(Object.hasOwn(row, "description"), false);
-  assert.equal(Object.hasOwn(row, "reasons"), false);
   assert.equal(Object.hasOwn(row, "scope"), false);
 });
 
-test("the enable context renders installed reasons before both missing companion markers", () => {
+test("the enable context renders installed content reasons before the resolved markers", () => {
   // arrange
   const row = {
     status: "installed",
     severity: "warning",
     needsReload: true,
     name: "eta",
-    dependencies: ["agents", "mcp"],
     version: "6.0.0",
     scope: "project",
-    reasons: ["malformed skill"],
-  } as const satisfies EnableMsg;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: false,
-    piMcpAdapterLoaded: false,
-    workflowEngineLoaded: true,
-  };
+    reasons: ["malformed skill", "requires pi-subagents", "requires pi-mcp-adapter"],
+  } as const satisfies ResolvedRow<EnableMsg>;
 
   // act
-  const renderedRow = ENABLE_CONTEXT.render.installed(row, probe, "user");
+  const renderedRow = composePluginLines(row, "user")[0]!.slice(2);
 
   // assert
   assert.equal(
@@ -250,33 +224,26 @@ test("the enable context renders installed reasons before both missing companion
     severity: "warning",
     needsReload: true,
     name: "eta",
-    dependencies: ["agents", "mcp"],
     version: "6.0.0",
     scope: "project",
-    reasons: ["malformed skill"],
+    reasons: ["malformed skill", "requires pi-subagents", "requires pi-mcp-adapter"],
   });
 });
 
-test("the enable context renders a partially-installed row with one missing companion marker", () => {
+test("the enable context renders a partially-installed row with its resolved marker", () => {
   // arrange
   const row = {
     status: "partially-installed",
     severity: "info",
     needsReload: true,
     name: "theta",
-    dependencies: ["mcp"],
     version: "7.0.0",
     scope: "user",
-    reasons: ["lsp"],
-  } as const satisfies EnableMsg;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: true,
-    piMcpAdapterLoaded: false,
-    workflowEngineLoaded: true,
-  };
+    reasons: ["lsp", "requires pi-mcp-adapter"],
+  } as const satisfies ResolvedRow<EnableMsg>;
 
   // act
-  const renderedRow = ENABLE_CONTEXT.render["partially-installed"](row, probe, "user");
+  const renderedRow = composePluginLines(row, "user")[0]!.slice(2);
 
   // assert
   assert.equal(renderedRow, "◉ theta v7.0.0 (partially-installed) {lsp, requires pi-mcp-adapter}");
@@ -285,10 +252,9 @@ test("the enable context renders a partially-installed row with one missing comp
     severity: "info",
     needsReload: true,
     name: "theta",
-    dependencies: ["mcp"],
     version: "7.0.0",
     scope: "user",
-    reasons: ["lsp"],
+    reasons: ["lsp", "requires pi-mcp-adapter"],
   });
   assert.equal(Object.hasOwn(row, "description"), false);
 });
@@ -302,15 +268,10 @@ test("the enable context renders a complete idempotent skipped row with optional
     name: "zeta",
     scope: "project",
     reasons: ["already enabled"],
-  } as const satisfies EnableMsg;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: true,
-    piMcpAdapterLoaded: true,
-    workflowEngineLoaded: true,
-  };
+  } as const satisfies ResolvedRow<EnableMsg>;
 
   // act
-  const renderedRow = ENABLE_CONTEXT.render.skipped(row, probe, "user");
+  const renderedRow = composePluginLines(row, "user")[0]!.slice(2);
 
   // assert
   assert.equal(renderedRow, "⊘ zeta [project] (skipped) {already enabled}");
@@ -322,7 +283,7 @@ test("the enable context renders a complete idempotent skipped row with optional
     scope: "project",
     reasons: ["already enabled"],
   });
-  assert.equal(Object.hasOwn(row, "cause"), false);
+  assert.equal(Object.hasOwn(row, "failure"), false);
   assert.equal(Object.hasOwn(row, "version"), false);
 });
 
@@ -595,6 +556,31 @@ test("staleGateDropped preserves first-seen unsupported-kind order and deduplica
   ]);
 });
 
+test("ENABLE_CONTEXT declares complete row policies", () => {
+  // act
+  const policies = ENABLE_CONTEXT.rowPolicies;
+
+  // assert
+  assert.deepStrictEqual(policies, {
+    installed: { markers: true, contentReasons: true },
+    "partially-installed": { markers: true, contentReasons: true },
+    skipped: { markers: false, contentReasons: true },
+    failed: { markers: false, contentReasons: true },
+  });
+});
+
+test("DISABLE_CONTEXT declares complete row policies", () => {
+  // act
+  const policies = DISABLE_CONTEXT.rowPolicies;
+
+  // assert
+  assert.deepStrictEqual(policies, {
+    disabled: { markers: false, contentReasons: true },
+    skipped: { markers: false, contentReasons: true },
+    failed: { markers: false, contentReasons: true },
+  });
+});
+
 describe("composeEnableCascadeRows", () => {
   test("a root with no cascade members composes to exactly the root row", () => {
     // arrange
@@ -678,14 +664,14 @@ test("the disable context renders the dependents-remain refusal reason", () => {
     reasons: ["dependents remain"],
     cause,
   } as const satisfies DisableMsg;
-  const probe: SoftDepStatus = {
-    workflowEngineLoaded: false,
-    piSubagentsLoaded: false,
-    piMcpAdapterLoaded: false,
-  };
 
   // act
-  const renderedRow = DISABLE_CONTEXT.render.failed(row, probe, "user");
+  const [resolved] = resolveRows(
+    [{ name: "official", scope: "user", plugins: [row] }],
+    runWithNothingLoaded().softDeps,
+    DISABLE_CONTEXT.rowPolicies,
+  );
+  const renderedRow = composePluginLines(resolved!.plugins[0]!, "user")[0]!.slice(2);
 
   // assert
   assert.equal(renderedRow, "⊘ shared-lib (failed) {dependents remain}");

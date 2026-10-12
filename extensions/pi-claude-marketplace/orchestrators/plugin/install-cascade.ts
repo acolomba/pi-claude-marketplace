@@ -133,7 +133,7 @@ import type { GitBackedSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState, PluginInstallRecord } from "../../persistence/state-io.ts";
 import type { RemoteTag } from "../../platform/git.ts";
-import type { McpConfigNotice } from "../../shared/notification-dispatch.ts";
+import type { McpConfigNotice } from "../../shared/notification-types.ts";
 import type { Phase, RollbackPartial, RunPhasesResult } from "../../transaction/phase-ledger.ts";
 
 /** Materialization operations the cascade drives, injectable for fault tests. */
@@ -720,6 +720,7 @@ async function probeMemberPin(
     tagMemo: options.tagMemo,
     auth: {
       ctx: ledger.ctx,
+      run: ledger.run,
       credentialOps: ledger.credentialOps ?? DEFAULT_CREDENTIAL_OPS,
       ...(ledger.deviceFlowHttp !== undefined && { deviceFlowHttp: ledger.deviceFlowHttp }),
       ...(ledger.authMemo !== undefined && { authMemo: ledger.authMemo }),

@@ -1061,37 +1061,30 @@ today; it is a discoverability ceiling, not a data loss.
 
 Code seams: `.github/workflows/lint.yml` (`fallow-audit`).
 
-## MRO-01: mode-aware structured output via `ctx.mode` and `pi.appendEntry`
+## MRO-01: mode-aware structured output via `ctx.mode` and `pi.appendEntry` — CLOSED
 
-Surfaced during the 2026-08-10 competitive analysis of `@nklisch/pi-plugins`
-(`docs/competitive-analysis/pi-plugins.md`, recommendation #11). Verified
-2026-08-13 directly against our own pinned `@earendil-works/pi-coding-agent`:
-every `ExtensionContext` carries a real `mode: "tui" | "rpc" | "json" |
-"print"` field, set by how the user invoked Pi (`pi` interactive, `pi -p`,
-`pi --mode json`, or the RPC stdin/stdout protocol). We never read it. Our
-sole output primitive, `ctx.ui.notify(message: string, type?)`, takes a plain
-formatted string and a severity -- no structured-payload slot.
+Closed 2026-10-10. Surfaced during the 2026-08-10 competitive analysis of
+`@nklisch/pi-plugins` (`docs/competitive-analysis/pi-plugins.md`,
+recommendation #11).
 
-A user driving `/claude:plugin` through `pi --mode json` or RPC gets the same
-human-formatted string wrapped in a JSON envelope today, not real
-machine-readable data. `@nklisch/pi-plugins` solved this on the low-level
-`pi.appendEntry<T>(customType, data)` primitive -- confirmed present in our
-own pinned Pi version too, under "Append a custom entry to the session for
-state persistence (not sent to LLM)". Their `pi-control-channel.ts` keys
-output by mode: rpc/json modes emit `appendEntry` frames, print mode writes
-stdout lines, tui is a no-op. A versioned grammar, closed exit-code
-vocabulary, and pagination sit on top of that channel, none of which are
-scoped here.
+The extension reads `ctx.mode` and selects exactly one transport. In
+`tui`/`print`, it uses `ctx.ui.notify`. Pi keeps print notifications silent,
+so scripts use `--mode json`. In `json`/`rpc`, the JSON strategy uses
+`pi.appendEntry` to emit versioned custom `claude-plugin` entries. Pi owns
+the event framing. The extension never writes directly to stdout/stderr.
 
-Direction for later: design a structured shape for the existing
-`NotificationMessage` / `PluginInfoRow` discriminated types in
-`shared/notify.ts` (most of the shape work already exists), and emit it via
-`pi.appendEntry` when `ctx.mode` is `"json"` or `"rpc"`, alongside (not
-instead of) the existing human `notify()` line.
+The earlier claim that JSON and RPC receive the same human notification
+string was incorrect. These modes receive structured payloads. The earlier
+proposal to emit structured output alongside `notify`, or to use print
+stdout, was also incorrect. Transport selection is exclusive. RPC
+front-ends render the entries, including device-flow instructions.
 
-Code seams: `shared/notify.ts` (message shapes), `platform/pi-api.ts`
-(re-exports `ExtensionContext`), `edge/router.ts` (the `/claude:plugin`
-command entry point every handler's `ctx` flows through).
+The [JSON output guide](../docs/json-output.md) documents every payload kind,
+field, compatibility rule, command verdict, and delivery limitation.
+[Real-runtime tests](../tests/e2e/pi-json-output.test.ts) passed on Pi
+0.87.1 and exact 0.86.1, including startup stream absence, RPC `get_entries`,
+and slash-only persistence timing. The executed commands and results are in
+[the runtime summary](phases/07-mode-refusals-real-pi-verification-and-docs/07-03-SUMMARY.md#verification-evidence).
 
 <!--
 Pruned 2026-09-09: shipped under workflows-detection and workflows-replay, one
@@ -3792,6 +3785,74 @@ Carried from `any-git-host` (`03-REVIEW-DISPOSITION.md`; milestone audit, 2026-0
   root. The `listRemotes` arm no longer uses `chmod`.
 - Code hygiene: WR-01/WR-06/WR-07 (stale JSDoc and flow header), WR-08
   (five positional parameters), WR-09, IN-02, IN-03, IN-06, IN-07, IN-08.
+
+## WOUT-01: workflow output quality is unobserved because engine subagents declined every tool call
+
+Carried from the json-output close (WINDOWS #84).
+
+The bridge-to-engine path is proven end to end; workflow output quality is not.
+Measured 2026-09-22 with engine 3.13.0 and pi 0.85.1 in the `tmp/pi-uat`
+sandbox: `code-modernization:modernize-harden-scan` reached status `completed`
+in 16.5 s with all five Find-phase agents done. The staged envelope loaded from
+the user saved store, the script parsed unmodified, its log, dedup, and
+refutation stages ran, and its return value came back as JSON with zero
+findings.
+
+Every subagent declined to call any tool. Each one emitted "structured_output
+recovered from prose extraction" and then claimed that no filesystem was
+available. That claim is false: `agent.ts:818` defaults to
+`createCodingTools(cwd)` when the invocation passes no tools.
+
+A one-agent negative control that asked for one file name failed the same way,
+with `SCHEMA_NONCOMPLIANCE` at 217 output tokens. So the cause is not
+code-modernization, the six envelopes, or this bridge.
+
+The sandbox had only `openai-codex` authed. gpt-5.5 and gpt-5.6-terra failed
+the same way, and gpt-5.3-codex-spark hung past 200 s without a run record, so
+the provider path could not be separated from the engine subagent layer. The
+Verify phase and the adversarial second pass are unobserved.
+
+**To settle it:** put an Anthropic key in `tmp/pi-uat/agent` and re-run
+`code-modernization:modernize-harden-scan` once in that sandbox. Subagents that
+call tools and return findings settle the question; the same refusal under a
+second provider points at the engine subagent layer.
+
+## DEPADV-01: Pi's shrinkwrap pins a vulnerable nested brace-expansion
+
+Carried from the json-output close (DEP-07-03-01 in the 07/ deferred items).
+
+GHSA-q2hr-2g5m-vwhr, GHSA-qhr7-859c-m2p7, and GHSA-6j4f-fj2g-mc7p cover
+`brace-expansion` 4.0.0 - 5.0.11 and are fixed in >=5.0.12. Lock commit
+`a12dfa16` pinned the root `node_modules/brace-expansion` at 5.0.12.
+
+`npm audit --package-lock-only` still reports
+`node_modules/@earendil-works/pi-coding-agent/node_modules/brace-expansion` at
+5.0.9. Pi 0.87.1 publishes an `npm-shrinkwrap.json` that pins
+`brace-expansion` 5.0.9 and `minimatch` 10.2.6, and npm honors a dependency's
+shrinkwrap: `overrides`, `npm dedupe`, and a fresh lock all left it at 5.0.9
+(measured 2026-10-10). Deleting the nested lock entries clears the audit on
+paper only, because `npm ci` re-extracts the shrinkwrapped tree.
+
+The copy is a dev-only dependency that no attacker-controlled glob reaches. The
+peer-floor fixture lock under `tests/e2e/pi-peer-floor/` keeps Pi 0.86.1's
+shrinkwrapped 5.0.9 by design, as `07-PEER-FLOOR-AUDIT.md` decided; the
+json-output close kept that fixture byte-identical.
+
+Measured 2026-10-10 with
+`npm view @earendil-works/pi-coding-agent@<V> _hasShrinkwrap`: 0.87.1 true,
+0.99.2 true, 1.0.0 true, 1.0.1 false, 1.1.0 false. 1.0.1 is the first release
+that ships no shrinkwrap. `origin/main` at `94160614` (#250, the Pi 1.0 floor)
+locks `@earendil-works/pi-coding-agent` at 1.0.0, which still ships the
+shrinkwrap (nested `brace-expansion` 5.0.9), and its root
+`node_modules/brace-expansion` at 5.0.9.
+
+**To settle it:** the clearing action is the Pi devDependency bump to 1.x (its
+own work, not the json-output close). It clears this copy only once the lock
+resolves Pi at 1.0.1 or later, the first release with no shrinkwrap; for
+example, when this branch merges main's Pi 1.0 floor and refreshes the lock
+past 1.0.0. Keep the root `node_modules/brace-expansion` at >=5.0.12 in that
+merged lock. Then `npm audit --package-lock-only` reports no `brace-expansion`
+path. This residual has no WINDOWS.md entry.
 
 ## ~~MCPOVR-01: MCP server overrides do not survive plugin disable then enable~~ -- CLOSED
 

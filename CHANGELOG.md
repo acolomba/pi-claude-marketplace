@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+- Scripts can now read `/claude:plugin` output. In Pi's `json` and `rpc` modes, every message arrives as a `claude-plugin` session entry that matches `schema/claude-plugin.schema.json`. See [JSON output](docs/json-output.md). (#251)
+
+  - The `tui` and `print` modes keep their text output byte for byte.
+  - Each entry names its origin, its command and invocation ID, its severity, and whether `/reload` is needed. A command that throws still ends with an `internal-error` entry.
+  - `browse` outside `tui`, and a new device-flow login in `print` mode, now refuse with a message that names the mode and the alternative.
+  - The two LLM tools return the same structured rows as their `details`.
+  - Credentials no longer appear in any output, including JSON entries and the text the LLM tools return to the model.
+  - Internal: integration tests now install the optional peers at their declared floors, so they run the same locally and in CI, with no skips.
+
 ## [0.20.1] - 2026-10-11
 
 - `/claude:plugin update` now authenticates when it refreshes a marketplace from a private GitHub repository, as `/claude:plugin marketplace update` does. Before, the refresh failed with `{authentication required}` ([#249](https://github.com/acolomba/pi-claude-marketplace/issues/249)).

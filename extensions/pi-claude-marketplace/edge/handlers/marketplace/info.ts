@@ -11,12 +11,10 @@ import { getMarketplaceInfo } from "../../../orchestrators/marketplace/info.ts";
 
 import { makeSingleNameMarketplaceHandler } from "./shared.ts";
 
-import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
+import type { SubcommandHandler } from "../../router.ts";
 
 const USAGE = "Usage: /claude:plugin marketplace info <name> [--scope user|project]";
 
-export function makeMarketplaceInfoHandler(
-  pi: ExtensionAPI,
-): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
-  return makeSingleNameMarketplaceHandler(pi, USAGE, getMarketplaceInfo);
+export function makeMarketplaceInfoHandler(): SubcommandHandler {
+  return makeSingleNameMarketplaceHandler(USAGE, getMarketplaceInfo);
 }

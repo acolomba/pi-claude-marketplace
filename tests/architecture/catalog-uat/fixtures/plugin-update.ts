@@ -1,9 +1,62 @@
 import { UPDATE_CONTEXT } from "../../../../extensions/pi-claude-marketplace/orchestrators/plugin/update.messaging.ts";
+import { presentUpdateNoOp } from "../../../../extensions/pi-claude-marketplace/shared/notification-present.ts";
 import { notifyUpdateNoOpWithContext } from "../../../../extensions/pi-claude-marketplace/shared/notify-context.ts";
 import { piWithAllLoaded, piWithBothLoaded } from "../mock-pi.ts";
 
-import type { NotificationMessage } from "../../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
+import type { NotificationPresentation } from "../../../../extensions/pi-claude-marketplace/shared/notification-present.ts";
+import type { NotificationRun } from "../../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
+import type {
+  NotificationMessage,
+  PluginNotificationMessage,
+} from "../../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
+import type { MarketplaceRows } from "../../../../extensions/pi-claude-marketplace/shared/notify-context.ts";
 import type { FixtureMap } from "../fixture-types.ts";
+import type { MockCtx } from "../mock-pi.ts";
+
+/**
+ * The one `partially-upgradable` row a bulk update declines; the fixture's
+ * message, its no-op emission, and its presentation all read it.
+ */
+const SKIP_PARTIALLY_UPGRADABLE_ROWS = [
+  {
+    name: "mp",
+    scope: "project",
+    plugins: [
+      {
+        status: "partially-upgradable",
+        severity: "info",
+        needsReload: false,
+        partialHint: true,
+        name: "hello",
+        version: "1.0.0",
+        reasons: ["lsp"],
+      },
+    ],
+  },
+] as const;
+
+/**
+ * The update no-op seam pair for one set of surviving rows, stated once.
+ * `emit` calls `notifyUpdateNoOpWithContext`, the seam bulk update calls;
+ * `present` presents the message that seam builds from the same rows, label,
+ * cardinality, and row policies, so the JSON strategy converts the value the
+ * text bytes came from.
+ */
+function updateNoOpSeam<
+  Msg extends PluginNotificationMessage & { status: keyof typeof UPDATE_CONTEXT.rowPolicies },
+>(rows: readonly MarketplaceRows<Msg>[]) {
+  return {
+    emit: (ctx: MockCtx, run: NotificationRun): void => {
+      notifyUpdateNoOpWithContext(ctx, run, UPDATE_CONTEXT, rows, "plural");
+    },
+    present: (run: NotificationRun): NotificationPresentation =>
+      presentUpdateNoOp(
+        run,
+        { marketplaces: rows, label: UPDATE_CONTEXT.Messaging.label, cardinality: "plural" },
+        UPDATE_CONTEXT.rowPolicies,
+      ),
+  };
+}
 
 /** Catalog fixtures for the plugin update command surface. */
 export const PLUGIN_UPDATE_FIXTURES: FixtureMap = {
@@ -74,7 +127,7 @@ export const PLUGIN_UPDATE_FIXTURES: FixtureMap = {
     },
 
     // UGRM-02: the override carries a 0 success count (zero `updated` rows), so
-    // `composeTally` drops the success category and the failure math is
+    // the resolved tally drops the success category and the failure math is
     // unchanged -- the summary stays byte-identical at `Plugin update: 1
     // failure`. Proves the override does not perturb a failure-only cascade.
     "failed-with-rollback-partial": {
@@ -125,9 +178,7 @@ export const PLUGIN_UPDATE_FIXTURES: FixtureMap = {
         cardinality: "plural",
         marketplaces: [],
       },
-      emit: (ctx, pi) => {
-        notifyUpdateNoOpWithContext(ctx, pi, UPDATE_CONTEXT, [], "plural");
-      },
+      ...updateNoOpSeam([]),
     },
 
     // UGRM-01: the up-to-date `beta` row is suppressed. UGRM-02: two realized
@@ -457,8 +508,8 @@ export const PLUGIN_UPDATE_FIXTURES: FixtureMap = {
     // `(partially-upgradable) {lsp}` body row + `--partial` trailer still render, but
     // the headline is the never-silent `Plugin update: nothing to update`
     // constant -- emitted by the ORCHESTRATOR (`notifyUpdateNoOpWithContext`),
-    // NOT by composeTally (which would collapse a `tally {count: 0}` override to
-    // `""`, dropping the line = the byte-drift defect). So this fixture drives
+    // NOT by the tally (a `tally {count: 0}` override resolves no success
+    // category, dropping the line = the byte-drift defect). So this fixture drives
     // the orchestrator no-op seam via `emit`, keeping the Phase-73 row as the
     // body. Info severity, no reload-hint.
     "skip-partially-upgradable-bulk": {
@@ -466,49 +517,9 @@ export const PLUGIN_UPDATE_FIXTURES: FixtureMap = {
       message: {
         label: "Plugin update",
         cardinality: "plural",
-        marketplaces: [
-          {
-            name: "mp",
-            scope: "project",
-            plugins: [
-              {
-                status: "partially-upgradable",
-                severity: "info",
-                needsReload: false,
-                partialHint: true,
-                name: "hello",
-                version: "1.0.0",
-                reasons: ["lsp"],
-              },
-            ],
-          },
-        ],
+        marketplaces: SKIP_PARTIALLY_UPGRADABLE_ROWS,
       },
-      emit: (ctx, pi) => {
-        notifyUpdateNoOpWithContext(
-          ctx,
-          pi,
-          UPDATE_CONTEXT,
-          [
-            {
-              name: "mp",
-              scope: "project",
-              plugins: [
-                {
-                  status: "partially-upgradable",
-                  severity: "info",
-                  needsReload: false,
-                  partialHint: true,
-                  name: "hello",
-                  version: "1.0.0",
-                  reasons: ["lsp"],
-                },
-              ],
-            },
-          ],
-          "plural",
-        );
-      },
+      ...updateNoOpSeam(SKIP_PARTIALLY_UPGRADABLE_ROWS),
     },
 
     // WR-04 / D-98-04: a targeted `update` against a DISABLED record that is

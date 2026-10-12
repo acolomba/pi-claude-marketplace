@@ -7,10 +7,13 @@ import {
   composeUninstalledRow,
   UNINSTALL_CONTEXT,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.messaging.ts";
+import { composePluginLines } from "../../../extensions/pi-claude-marketplace/shared/notification-grammar.ts";
+import { resolveRows } from "../../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 import { type PluginFailedMessage } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 import { type PluginUninstalledMessage } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
+import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
-import type { SoftDepStatus } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { ResolvedRow } from "../../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 
 test("exports the complete uninstall command context", () => {
   // arrange
@@ -18,10 +21,10 @@ test("exports the complete uninstall command context", () => {
 
   // act
   const contextKeys = Object.keys(UNINSTALL_CONTEXT);
-  const renderKeys = Object.keys(UNINSTALL_CONTEXT.render);
+  const renderKeys = Object.keys(UNINSTALL_CONTEXT.rowPolicies);
 
   // assert
-  assert.deepEqual(contextKeys, ["Messaging", "render"]);
+  assert.deepEqual(contextKeys, ["Messaging", "rowPolicies"]);
   assert.deepEqual(UNINSTALL_CONTEXT.Messaging, { label: "Plugin uninstall" });
   assert.deepEqual(renderKeys, expectedRenderKeys);
 });
@@ -35,15 +38,11 @@ test("renders a complete cross-scope uninstalled transition row", () => {
     name: "alpha",
     version: "1.2.3",
     scope: "project",
-  } as const satisfies PluginUninstalledMessage;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: false,
-    piMcpAdapterLoaded: false,
-    workflowEngineLoaded: true,
-  };
+    reasons: [],
+  } as const satisfies ResolvedRow<PluginUninstalledMessage>;
 
   // act
-  const actual = UNINSTALL_CONTEXT.render.uninstalled(row, probe, "user");
+  const actual = composePluginLines(row, "user")[0]!.slice(2);
 
   // assert
   assert.equal(actual, "○ alpha [project] v1.2.3 (uninstalled)");
@@ -54,14 +53,18 @@ test("renders a complete cross-scope uninstalled transition row", () => {
     name: "alpha",
     version: "1.2.3",
     scope: "project",
+    reasons: [],
   });
-  assert.equal(Object.hasOwn(row, "reasons"), false);
-  assert.equal(Object.hasOwn(row, "cause"), false);
+  assert.equal(Object.hasOwn(row, "failure"), false);
 });
 
-test("renders a failed uninstall row without leaking its cause into the row body", () => {
+test("renders a failed uninstall row without leaking its failure detail into the row body", () => {
   // arrange
-  const cause = new Error("unstage failed");
+  const failure = {
+    cause: { causeChain: ["unstage failed"], truncated: false },
+    leaks: [],
+    rollbackPartial: [],
+  };
   const row = {
     status: "failed",
     severity: "error",
@@ -70,16 +73,11 @@ test("renders a failed uninstall row without leaking its cause into the row body
     version: "2.0.0",
     scope: "user",
     reasons: ["permission denied", "rollback partial"],
-    cause,
-  } as const satisfies PluginFailedMessage;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: true,
-    piMcpAdapterLoaded: true,
-    workflowEngineLoaded: true,
-  };
+    failure,
+  } as const satisfies ResolvedRow<PluginFailedMessage>;
 
   // act
-  const actual = UNINSTALL_CONTEXT.render.failed(row, probe, "user");
+  const actual = composePluginLines(row, "user")[0]!.slice(2);
 
   // assert
   assert.equal(actual, "⊘ beta v2.0.0 (failed) {permission denied, rollback partial}");
@@ -91,7 +89,18 @@ test("renders a failed uninstall row without leaking its cause into the row body
     version: "2.0.0",
     scope: "user",
     reasons: ["permission denied", "rollback partial"],
-    cause,
+    failure,
+  });
+});
+
+test("UNINSTALL_CONTEXT declares complete row policies", () => {
+  // act
+  const policies = UNINSTALL_CONTEXT.rowPolicies;
+
+  // assert
+  assert.deepStrictEqual(policies, {
+    uninstalled: { markers: false, contentReasons: true },
+    failed: { markers: false, contentReasons: true },
   });
 });
 
@@ -141,14 +150,14 @@ test("D-05-11: a pruned row renders through the uninstalled arm with its brace a
     severity: "info",
     needsReload: true,
   };
-  const probe: SoftDepStatus = {
-    workflowEngineLoaded: false,
-    piSubagentsLoaded: false,
-    piMcpAdapterLoaded: false,
-  };
 
   // act
-  const rendered = UNINSTALL_CONTEXT.render.uninstalled(prunedRow, probe, "user");
+  const [resolved] = resolveRows(
+    [{ name: "official", scope: "user", plugins: [prunedRow] }],
+    runWithNothingLoaded().softDeps,
+    UNINSTALL_CONTEXT.rowPolicies,
+  );
+  const rendered = composePluginLines(resolved!.plugins[0]!, "user")[0]!.slice(2);
 
   // assert
   assert.equal(rendered, "○ shared-lib v2.0.0 (uninstalled) {dependency pruned, data kept}");
@@ -324,14 +333,14 @@ test("LOAD-03: a dependents row renders its brace and its 4-space cause trailer 
     keepData: true,
     dependents: ["alpha@official"],
   });
-  const probe: SoftDepStatus = {
-    workflowEngineLoaded: false,
-    piSubagentsLoaded: false,
-    piMcpAdapterLoaded: false,
-  };
 
   // act
-  const rendered = UNINSTALL_CONTEXT.render.uninstalled(row, probe, "user");
+  const [resolved] = resolveRows(
+    [{ name: "official", scope: "user", plugins: [row] }],
+    runWithNothingLoaded().softDeps,
+    UNINSTALL_CONTEXT.rowPolicies,
+  );
+  const rendered = composePluginLines(resolved!.plugins[0]!, "user")[0]!.slice(2);
 
   // assert
   assert.equal(rendered, "○ helper v1.0.0 (uninstalled) {dependents unsatisfied, data kept}");

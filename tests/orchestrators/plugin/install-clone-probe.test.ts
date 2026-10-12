@@ -10,6 +10,9 @@ import {
   type InstallCloneCacheSeam,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-clone-probe.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
+import { createJsonCapture } from "../../edge/json-capture.ts";
+import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type { GitBackedSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import type {
@@ -22,6 +25,87 @@ import type { NotificationContext } from "../../../extensions/pi-claude-marketpl
 
 const SHA = "1111111111111111111111111111111111111111";
 
+for (const mode of ["json", "rpc"]) {
+  for (const pin of [undefined, SHA]) {
+    test(`delivers clone authentication through the parent run in ${mode} with pin ${String(pin)}`, async (t) => {
+      // arrange
+      const { locations, root } = await freshLocations(t);
+      const capture = createJsonCapture();
+      const ctx = {
+        mode,
+        get ui() {
+          return capture.ui;
+        },
+      };
+      const run = { ...runWithNothingLoaded(), entrySink: capture.entrySink };
+      const deviceFlow = createDeviceFlowFake({
+        boundary: "memory",
+        network: "disabled",
+        deviceCode: {
+          device_code: "clone-secret",
+          user_code: "CLONE-1234",
+          verification_uri: "https://github.com/login/device",
+          expires_in: 900,
+          interval: 0,
+        },
+        pollResponses: [
+          { kind: "success", accessToken: "token-secret", tokenType: "bearer", scope: "repo" },
+        ],
+      });
+      const seam: InstallCloneCacheSeam = {
+        resolvePluginPin: () =>
+          Promise.resolve({ cloneUrl: "https://github.com/owner/repo", pin: SHA }),
+        async materializePluginClone(options) {
+          assert.strictEqual(options.auth?.kind, "device-flow");
+          assert.ok(options.auth?.kind === "device-flow");
+          await options.auth.onAuthRequired();
+          return root;
+        },
+        async materializeOrRefreshPluginMirror(options) {
+          assert.ok(options.auth?.kind === "device-flow");
+          await options.auth.onAuthRequired();
+          return { pluginRoot: root, resolvedSha: SHA };
+        },
+      };
+
+      // act
+      const outcome = await probeInstallClone({
+        source: {
+          kind: "github",
+          raw: "owner/repo",
+          owner: "owner",
+          repo: "repo",
+          ...(pin !== undefined && { sha: pin }),
+        },
+        locations,
+        seam,
+        auth: { ...auth(), ctx, run, deviceFlowHttp: deviceFlow.http },
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        result: { kind: "materialized", pluginRoot: root, resolvedSha: SHA },
+        resolvedSha: SHA,
+      });
+      assert.deepStrictEqual(capture.entries, [
+        {
+          customType: "claude-plugin",
+          payload: {
+            schemaVersion: 1,
+            origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+            kind: "device-flow-prompt",
+            severity: "info",
+            needsReload: false,
+            verificationUri: "https://github.com/login/device",
+            userCode: "CLONE-1234",
+          },
+        },
+      ]);
+      capture.assertValid();
+    });
+  }
+}
+
 async function freshLocations(
   testContext: TestContext,
 ): Promise<{ readonly locations: ScopedLocations; readonly root: string }> {
@@ -31,13 +115,13 @@ async function freshLocations(
 }
 
 function auth(): Parameters<typeof probeInstallClone>[0]["auth"] {
-  const ctx: NotificationContext = { ui: { notify: () => undefined } };
+  const ctx: NotificationContext = { mode: "tui", ui: { notify: () => undefined } };
   const credentialOps: CredentialOps = {
     approve: () => Promise.resolve(),
     fill: () => Promise.resolve(null),
     reject: () => Promise.resolve(),
   };
-  return { ctx, credentialOps };
+  return { ctx, run: runWithNothingLoaded(), credentialOps };
 }
 
 test("uses the production seam for a warm pinned clone", async (testContext) => {

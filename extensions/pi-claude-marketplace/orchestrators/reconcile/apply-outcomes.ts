@@ -43,7 +43,7 @@ import {
 
 import type { UnsatisfiedKind } from "./dependency-verdict.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
-import type { McpConfigNotice } from "../../shared/notification-dispatch.ts";
+import type { McpConfigNotice } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { EnableDegradationSignals } from "../plugin/enable-disable.ts";
 import type { UninstallRefusedError } from "../plugin/uninstall.ts";

@@ -43,9 +43,11 @@ import { loadState } from "../../../extensions/pi-claude-marketplace/persistence
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { MarketplaceNotFoundError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { notify } from "../../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
+import { openNotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import { withLockedStateTransaction } from "../../../extensions/pi-claude-marketplace/transaction/with-state-guard.ts";
+import { createJsonCapture } from "../../edge/json-capture.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
-import { adapterCommand, toolInventoryItem } from "../../platform/pi-inventory-seed.ts";
+import { runWithNothingLoaded, runWithSoftDeps } from "../../shared/notification-run-seeds.ts";
 
 import type { HooksRouting } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import type { HooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
@@ -54,11 +56,8 @@ import type {
   EnableDisablePluginOptions,
   EnableDisablePluginOutcome,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts";
-import type {
-  CommandInventoryItem,
-  NotificationContext,
-  PiInventory,
-} from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { NotificationContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { NotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 
 /**
  * The reconcile composition: the factory bound to the real selected-state
@@ -104,6 +103,7 @@ interface NotifyRecord {
 function makeCtx(cwd: string): { ctx: NotificationContext; notifications: NotifyRecord[] } {
   const notifications: NotifyRecord[] = [];
   const ctx = {
+    mode: "tui",
     cwd,
     ui: {
       notify(message: string, severity?: string): void {
@@ -114,11 +114,12 @@ function makeCtx(cwd: string): { ctx: NotificationContext; notifications: Notify
   return { ctx, notifications };
 }
 
-function makePi(
-  toolNames: readonly string[] = [],
-  commands: readonly CommandInventoryItem[] = [],
-): PiInventory {
-  return { getAllTools: () => toolNames.map(toolInventoryItem), getCommands: () => commands };
+function runWithMcpAdapterLoaded(): NotificationRun {
+  return runWithSoftDeps({
+    piSubagentsLoaded: false,
+    piMcpAdapterLoaded: true,
+    workflowEngineLoaded: false,
+  });
 }
 
 function createUpdatePlugins() {
@@ -185,16 +186,6 @@ async function populateRuntimeRoute(
 test("enable-disable exposes its required transaction factory", () => {
   assert.strictEqual(typeof createSetPluginEnabled, "function");
 });
-
-/**
- * WR-06 / SEV-01: a Pi whose tool list carries the `subagent` tool, which is
- * the single sanctioned `pi-subagents`-loaded probe (`softDepStatus`). The
- * default `makePi()` above reports BOTH companions unloaded, which is what
- * makes a row with a staged agent take the soft-dep marker.
- */
-function makePiWithSubagents(): PiInventory {
-  return makePi(["subagent"]);
-}
 
 async function withHermeticHome<T>(
   fn: (env: { cwd: string; home: string }) => Promise<T>,
@@ -630,7 +621,7 @@ test("ENBL-01: disable writes enabled:false to claude-plugins.json (base)", asyn
     // act
     await setPluginEnabled({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "mp",
       plugin: "foo",
@@ -660,7 +651,7 @@ test("ENBL-01: enable --local writes enabled:true to claude-plugins.local.json (
     // act
     await setPluginEnabled({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "mp",
       plugin: "foo",
@@ -708,7 +699,7 @@ test("D-103-13 / CFG-02 / ENBL-01: flagless enable of a locally-declared plugin 
     // act
     await setPluginEnabled({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "mp",
       plugin: "foo",
@@ -776,7 +767,7 @@ test("WB-01 / D-103-13: flagless enable of a BASE-declared plugin still writes t
     // act
     await setPluginEnabled({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "mp",
       plugin: "foo",
@@ -817,7 +808,7 @@ test("UAT-05 / D-103-13: a typed --local still targets the local file even when 
     // act
     await setPluginEnabled({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "mp",
       plugin: "foo",
@@ -879,7 +870,7 @@ test("CFG-03 / D-103-13: an UNREADABLE local config aborts a flagless enable rat
     // act
     await setPluginEnabled({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "mp",
       plugin: "foo",
@@ -927,7 +918,7 @@ test("ENBL-02 / ENBL-18: disable preserves the version pin and the record's reso
     // act
     await setPluginEnabled({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "mp",
       plugin: "foo",
@@ -1031,7 +1022,7 @@ test("ENBL-13 / ENBL-18: disable of a hooks-only plugin removes hooks.json but r
     // act
     await setPluginEnabled({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "mp",
       plugin: "foo",
@@ -1103,7 +1094,7 @@ test("CR-01: fresh enable succeeds end-to-end against a real on-disk marketplace
     // act
     await setPluginEnabled({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "claude-plugins-official",
       plugin: "foo-plugin",
@@ -1197,7 +1188,7 @@ test("publishes a freshly enabled hook only to the supplied runtime after durabl
       enable: true,
       marketplace: "mp",
       notifications: { mode: "orchestrated" },
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       plugin: "foo",
       scope: "user",
     });
@@ -1259,7 +1250,7 @@ for (const { failure, label } of [
         enable: true,
         marketplace: "mp",
         notifications: { mode: "orchestrated" },
-        pi: makePi(),
+        run: runWithNothingLoaded(),
         plugin: "foo",
         scope: "user",
       });
@@ -1293,7 +1284,7 @@ test("WLIF-03: disable removes the workflow envelope while the record keeps nami
       withWorkflow: true,
     });
     const args = {
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "claude-plugins-official",
       plugin: "foo-plugin",
@@ -1408,7 +1399,7 @@ async function seedWorkflowRoundTrip(
   cwd: string,
   scripts: readonly { sourceName: string; metaName?: string }[],
 ): Promise<{
-  args: { pi: PiInventory; cwd: string; marketplace: string; plugin: string; scope: "user" };
+  args: { run: NotificationRun; cwd: string; marketplace: string; plugin: string; scope: "user" };
   statePath: string;
   mpRoot: string;
   savedDir: string;
@@ -1424,7 +1415,7 @@ async function seedWorkflowRoundTrip(
 
   return {
     args: {
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "claude-plugins-official",
       plugin: "foo-plugin",
@@ -1879,7 +1870,7 @@ test("ENBL-19: an enable/disable/enable round trip succeeds -- the retained inve
       version: "1.2.3",
     });
     const args = {
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "claude-plugins-official",
       plugin: "foo-plugin",
@@ -1947,7 +1938,7 @@ test("ENBL-07: enable on a disabled PARTIAL re-materializes through the partial 
     // act
     await setPluginEnabled({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "mp",
       plugin: "foo-plugin",
@@ -2029,7 +2020,7 @@ test("WARN-01 / D-86-03: enable of a plugin whose skill frontmatter is unparseab
     // act
     await setPluginEnabled({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "mp",
       plugin: "foo-plugin",
@@ -2077,7 +2068,7 @@ test("WR-06 / SEV-01: enable of a plugin that stages an agent renders {requires 
     // act
     await setPluginEnabled({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "claude-plugins-official",
       plugin: "foo-plugin",
@@ -2119,7 +2110,11 @@ test("WR-06 / SEV-01: the same re-enable with pi-subagents loaded renders no mar
     // act
     await setPluginEnabled({
       ctx,
-      pi: makePiWithSubagents(),
+      run: runWithSoftDeps({
+        piSubagentsLoaded: true,
+        piMcpAdapterLoaded: false,
+        workflowEngineLoaded: false,
+      }),
       cwd,
       marketplace: "claude-plugins-official",
       plugin: "foo-plugin",
@@ -2163,7 +2158,7 @@ test("WR-06 / WARN-01: a re-enable that staged an agent AND degraded a skill com
     // act
     await setPluginEnabled({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "claude-plugins-official",
       plugin: "foo-plugin",
@@ -2204,7 +2199,7 @@ test("WR-06 / NREG-01: a re-enable that staged neither agents nor MCP servers re
     // act
     await setPluginEnabled({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "claude-plugins-official",
       plugin: "foo-plugin",
@@ -2242,7 +2237,7 @@ test("ENBL-07 / D-97-01: enable on a manifest-absent disabled PARTIAL fails clea
     // act
     await setPluginEnabled({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "mp",
       plugin: "foo-plugin",
@@ -2335,7 +2330,7 @@ test("WR-02: an enable whose persisted installable gate is stale names the dropp
     // act
     await setPluginEnabled({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "mp",
       plugin: "foo-plugin",
@@ -2378,7 +2373,7 @@ test("WR-02: an enable that fails for an unrelated reason keeps its bare failed 
     // act
     await setPluginEnabled({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "mp",
       plugin: "foo",
@@ -2405,7 +2400,7 @@ test("WR-02: a failed plugin row from another surface renders byte-identically -
   // `partialHint`. Widening the trailer gate to admit the `failed` status must
   // leave it byte-for-byte where it was.
   // act
-  notify(ctx, makePi(), {
+  notify(ctx, runWithNothingLoaded(), {
     marketplaces: [
       {
         name: "claude-plugins-official",
@@ -2454,7 +2449,7 @@ test("ENBL-03: missing cached clone aborts with (failed) {source missing}", asyn
     // act
     await setPluginEnabled({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "mp",
       plugin: "foo",
@@ -2494,7 +2489,7 @@ test("Idempotency: enable on already-enabled plugin renders (skipped) {already e
     // act
     await setPluginEnabled({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "mp",
       plugin: "foo",
@@ -2522,7 +2517,7 @@ test("Idempotency: disable on already-disabled plugin renders (skipped) {already
     // act
     await setPluginEnabled({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "mp",
       plugin: "foo",
@@ -2552,7 +2547,7 @@ test("ENBL-04 byte-lock: disable-already-disabled renders `⊘ foo (skipped) {al
     // act
     await setPluginEnabled({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "mp",
       plugin: "foo",
@@ -2589,7 +2584,7 @@ test("ENBL-07 / ENBL-04 byte-lock: disable on an already-disabled PARTIAL render
     // act
     await setPluginEnabled({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "mp",
       plugin: "foo",
@@ -2640,7 +2635,7 @@ test("WR-03: enable on state-enabled plugin with config enabled:false lands the 
     // act
     await setPluginEnabled({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "mp",
       plugin: "foo",
@@ -2692,7 +2687,7 @@ test("WR-03 / D-103-13: the config-truth promotion writes into the LOCAL declari
     // act
     await setPluginEnabled({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "mp",
       plugin: "foo",
@@ -2738,7 +2733,7 @@ test("CFG-03 / WR-01: invalid config aborts and state.json is byte- and mtime-un
     // act
     await setPluginEnabled({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "mp",
       plugin: "foo",
@@ -2788,7 +2783,7 @@ test("WR-03: enable on a present marketplace whose plugin row is absent renders 
     // act
     await setPluginEnabled({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "mp",
       plugin: "foo",
@@ -2820,7 +2815,7 @@ test("Marketplace not added: explicit --scope emits standalone marketplace-not-a
     // act
     await setPluginEnabled({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "ghost-mp",
       plugin: "foo",
@@ -2851,7 +2846,7 @@ test("D-08-07: enable of a plugin named constructor reports it as not installed 
     // act
     await setPluginEnabled({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "mp",
       plugin: "constructor",
@@ -2885,7 +2880,7 @@ test("D-08-07: disable in a marketplace named toString reports the marketplace a
     // act
     await setPluginEnabled({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "toString",
       plugin: "x",
@@ -2914,7 +2909,7 @@ test("D-08-07: a plugin named constructor enables, disables and enables through 
       version: "1.2.3",
     });
     const args = {
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "mp",
       plugin: "constructor",
@@ -2967,7 +2962,7 @@ test("RECON-03 enable-disable orchestrated mode -- disable returns { status: 'di
     // act
     const outcome = await setPluginEnabled({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "mp",
       plugin: "foo",
@@ -3000,7 +2995,7 @@ test("RECON-03 enable-disable orchestrated mode -- idempotent disable-already-di
     // act
     const outcome = await setPluginEnabled({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "mp",
       plugin: "foo",
@@ -3033,7 +3028,7 @@ test("ENBL-07 / RECON-03: orchestrated disable on an already-disabled PARTIAL re
     // act
     const outcome = await setPluginEnabled({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "mp",
       plugin: "foo",
@@ -3068,7 +3063,7 @@ test("RECON-03 enable-disable orchestrated mode -- idempotent enable-already-ena
     // act
     const outcome = await createEnableOperation(hooksRouting)({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "mp",
       plugin: "foo",
@@ -3091,7 +3086,7 @@ test("RECON-03 enable-disable orchestrated mode -- missing marketplace returns {
     // act
     const outcome = await setPluginEnabled({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "ghost-mp",
       plugin: "foo",
@@ -3118,7 +3113,7 @@ test("RECON-03 enable-disable standalone-default mode -- omitted notifications o
     // act
     const outcome = await setPluginEnabled({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "ghost-mp-byte",
       plugin: "foo",
@@ -3173,7 +3168,7 @@ test("UAT-05: --local enable flip with marketplace declared in BASE writes ONLY 
     // act
     await setPluginEnabled({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "mp",
       plugin: "foo",
@@ -3235,7 +3230,7 @@ test("C1: corrupt state.json in the requested scope renders a (failed) row (no t
     // act
     const outcome = await setPluginEnabled({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "mp",
       plugin: "foo",
@@ -3275,7 +3270,7 @@ test("C1: orchestrated mode -- corrupt state.json returns { status: 'failed' } t
     // act
     const outcome = await setPluginEnabled({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "mp",
       plugin: "foo",
@@ -3365,7 +3360,7 @@ test("I3: disable cascade partial failure mutates state.resources to drop the ca
     // act
     await setPluginEnabled({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "mp",
       plugin: "foo",
@@ -3426,7 +3421,7 @@ test("I4: enable branch threads InstallFailureCapture into runInstallLedger (reg
     // act
     await setPluginEnabled({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "mp",
       plugin: "foo",
@@ -3472,7 +3467,7 @@ test("Y3: orchestrated overload returns EnableDisablePluginOutcome (no | undefin
     // act
     const outcome: EnableDisablePluginOutcome = await setPluginEnabled({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "mp",
       plugin: "foo",
@@ -3495,7 +3490,7 @@ test("Y3: standalone overload still returns | undefined -- typecheck pin", async
     // act
     const outcome: EnableDisablePluginOutcome | undefined = await setPluginEnabled({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "ghost-mp",
       plugin: "foo",
@@ -3541,7 +3536,7 @@ test("T1 / PR #51: orchestrated mode enable-success returns { status: 'enabled',
     // act
     const outcome = await setPluginEnabled({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "claude-plugins-official",
       plugin: "foo-plugin",
@@ -3593,7 +3588,11 @@ test("orchestrated enable returns every live degradation and companion signal wi
       enable: true,
       marketplace: "mp",
       notifications: { mode: "orchestrated" },
-      pi: makePi(["subagent"], [adapterCommand()]),
+      run: runWithSoftDeps({
+        piSubagentsLoaded: true,
+        piMcpAdapterLoaded: true,
+        workflowEngineLoaded: false,
+      }),
       plugin: "foo",
       scope: "user",
     });
@@ -3639,7 +3638,7 @@ test("standalone enable renders the exact orphan-rewake byte form", async () => 
       cwd,
       enable: true,
       marketplace: "mp",
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       plugin: "foo",
       scope: "user",
     });
@@ -3679,7 +3678,7 @@ test("orchestrated invalid local config returns an exact typed failure and leave
       local: true,
       marketplace: "mp",
       notifications: { mode: "orchestrated" },
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       plugin: "foo",
       scope: "user",
     });
@@ -3719,7 +3718,7 @@ test("orchestrated missing installed row returns an exact skipped outcome", asyn
       enable: true,
       marketplace: "mp",
       notifications: { mode: "orchestrated" },
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       plugin: "foo",
       scope: "user",
     });
@@ -3750,7 +3749,7 @@ test("orchestrated enable failure returns the exact source classification and pe
       enable: true,
       marketplace: "mp",
       notifications: { mode: "orchestrated" },
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       plugin: "foo",
       scope: "user",
     });
@@ -3767,7 +3766,7 @@ test("orchestrated enable failure returns the exact source classification and pe
       enable: true,
       marketplace: "mp",
       notifications: { mode: "orchestrated" },
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       plugin: "foo",
       scope: "user",
     });
@@ -3808,7 +3807,7 @@ test("SCOPE-01 orchestrated mode -- a container one scope over returns the not-i
       cwd,
       enable: false,
       marketplace: "mp",
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       plugin: "foo",
       scope: "user",
       notifications: { mode: "orchestrated" },
@@ -3838,7 +3837,7 @@ test("SCOPE-01: an explicit user request names the project scope the marketplace
       cwd,
       enable: false,
       marketplace: "mp",
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       plugin: "foo",
       scope: "user",
     });
@@ -3885,7 +3884,7 @@ test("a held project lock returns lock-held in orchestrated mode and succeeds af
       enable: false,
       marketplace: "mp",
       notifications: { mode: "orchestrated" },
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       plugin: "foo",
       scope: "project",
     });
@@ -3897,7 +3896,7 @@ test("a held project lock returns lock-held in orchestrated mode and succeeds af
       enable: false,
       marketplace: "mp",
       notifications: { mode: "orchestrated" },
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       plugin: "foo",
       scope: "project",
     });
@@ -3955,7 +3954,7 @@ test("a config-write failure leaves the state bytes unchanged and a standalone r
       cwd,
       enable: false,
       marketplace: "mp",
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       plugin: "foo",
       scope: "user",
     });
@@ -3968,7 +3967,7 @@ test("a config-write failure leaves the state bytes unchanged and a standalone r
       enable: false,
       marketplace: "mp",
       notifications: { mode: "orchestrated" },
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       plugin: "foo",
       scope: "user",
     });
@@ -3979,7 +3978,7 @@ test("a config-write failure leaves the state bytes unchanged and a standalone r
       enable: false,
       marketplace: "mp",
       notifications: { mode: "orchestrated" },
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       plugin: "foo",
       scope: "user",
     });
@@ -3990,7 +3989,7 @@ test("a config-write failure leaves the state bytes unchanged and a standalone r
       cwd,
       enable: false,
       marketplace: "mp",
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       plugin: "foo",
       scope: "user",
     });
@@ -4052,7 +4051,7 @@ test("a source-normalization failure without a path uses the disable context and
       cwd,
       enable: false,
       marketplace: "mp",
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       plugin: "foo",
     });
 
@@ -4107,7 +4106,7 @@ test("a non-Error state normalization failure is contained as a typed unreadable
       enable: true,
       marketplace: "mp",
       notifications: { mode: "orchestrated" },
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       plugin: "foo",
       scope: "user",
     });
@@ -4160,7 +4159,7 @@ test("orchestrated enable normalizes a non-Error manifest read rejection and ret
       enable: true,
       marketplace: "mp",
       notifications: { mode: "orchestrated" },
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       plugin: "foo",
       scope: "user",
     });
@@ -4174,7 +4173,7 @@ test("orchestrated enable normalizes a non-Error manifest read rejection and ret
       enable: true,
       marketplace: "mp",
       notifications: { mode: "orchestrated" },
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       plugin: "foo",
       scope: "user",
     });
@@ -4255,7 +4254,7 @@ test("orchestrated partial disable folds a removed hook after MCP cleanup fails"
       enable: false,
       marketplace: "mp",
       notifications: { mode: "orchestrated" },
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       plugin: "foo",
       scope: "user",
     });
@@ -4266,7 +4265,7 @@ test("orchestrated partial disable folds a removed hook after MCP cleanup fails"
       enable: false,
       marketplace: "mp",
       notifications: { mode: "orchestrated" },
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       plugin: "foo",
       scope: "user",
     });
@@ -4354,7 +4353,7 @@ test("a partial disable preserves its committed fold when route publication fail
       enable: false,
       marketplace: "mp",
       notifications: { mode: "orchestrated" },
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       plugin: "foo",
       scope: "user",
     });
@@ -4404,7 +4403,7 @@ test("a clean disable remains successful when the hooks cache rebuild throws", a
       enable: false,
       marketplace: "mp",
       notifications: { mode: "orchestrated" },
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       plugin: "foo",
       scope: "user",
     });
@@ -4479,7 +4478,7 @@ test("standalone enable exposes ordered rollback partials and retries without du
       cwd,
       enable: true,
       marketplace: "mp",
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       plugin: "foo",
       scope: "user",
     });
@@ -4491,7 +4490,7 @@ test("standalone enable exposes ordered rollback partials and retries without du
       enable: true,
       marketplace: "mp",
       notifications: { mode: "orchestrated" },
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       plugin: "foo",
       scope: "user",
     });
@@ -4501,7 +4500,11 @@ test("standalone enable exposes ordered rollback partials and retries without du
       cwd,
       enable: true,
       marketplace: "mp",
-      pi: makePi([], [adapterCommand()]),
+      run: runWithSoftDeps({
+        piSubagentsLoaded: false,
+        piMcpAdapterLoaded: true,
+        workflowEngineLoaded: false,
+      }),
       plugin: "foo",
       scope: "user",
     });
@@ -4571,7 +4574,6 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable of a BASE-declared plugi
       version: "1.0.0",
     });
     const locations = locationsFor("user", cwd);
-    const pi = makePi();
     const observe = async (): Promise<{
       enabled: boolean | undefined;
       merged: { source: "base" | "local"; declaredEnabled: boolean } | undefined;
@@ -4602,7 +4604,7 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable of a BASE-declared plugi
       cwd,
       enable: true,
       marketplace: "mp",
-      pi,
+      run: runWithNothingLoaded(),
       plugin: "foo",
       scope: "user",
     });
@@ -4610,8 +4612,8 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable of a BASE-declared plugi
     const declaringConfig = await readConfig(configPath);
     await applyReconcile({
       ctx: firstReload.ctx,
+      run: runWithNothingLoaded(),
       cwd,
-      pi,
       scope: "user",
       completionCache: createCompletionCache(),
       hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
@@ -4633,7 +4635,7 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable of a BASE-declared plugi
     await createUpdatePlugins()({
       ctx: updateContext.ctx,
       cwd,
-      pi,
+      run: runWithNothingLoaded(),
       scope: "user",
       target: { kind: "plugin", marketplace: "mp", plugin: "foo" },
     });
@@ -4642,15 +4644,15 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable of a BASE-declared plugi
       ctx: reinstallContext.ctx,
       cwd,
       marketplace: "mp",
-      pi,
+      run: runWithNothingLoaded(),
       plugin: "foo",
       scope: "user",
     });
     const afterReinstall = await observe();
     await applyReconcile({
       ctx: secondReload.ctx,
+      run: runWithNothingLoaded(),
       cwd,
-      pi,
       scope: "user",
       completionCache: createCompletionCache(),
       hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
@@ -4707,7 +4709,6 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable of a LOCALLY-declared pl
       },
     );
     const locations = locationsFor("user", cwd);
-    const pi = makePi();
     const observe = async (): Promise<{
       enabled: boolean | undefined;
       merged: { source: "base" | "local"; declaredEnabled: boolean } | undefined;
@@ -4738,7 +4739,7 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable of a LOCALLY-declared pl
       cwd,
       enable: true,
       marketplace: "mp",
-      pi,
+      run: runWithNothingLoaded(),
       plugin: "foo",
       scope: "user",
     });
@@ -4747,8 +4748,8 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable of a LOCALLY-declared pl
     const baseExistsAfterEnable = await fileExists(configPath);
     await applyReconcile({
       ctx: firstReload.ctx,
+      run: runWithNothingLoaded(),
       cwd,
-      pi,
       scope: "user",
       completionCache: createCompletionCache(),
       hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
@@ -4771,7 +4772,7 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable of a LOCALLY-declared pl
     await createUpdatePlugins()({
       ctx: updateContext.ctx,
       cwd,
-      pi,
+      run: runWithNothingLoaded(),
       scope: "user",
       target: { kind: "plugin", marketplace: "mp", plugin: "foo" },
     });
@@ -4781,15 +4782,15 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable of a LOCALLY-declared pl
       ctx: reinstallContext.ctx,
       cwd,
       marketplace: "mp",
-      pi,
+      run: runWithNothingLoaded(),
       plugin: "foo",
       scope: "user",
     });
     const afterReinstall = await observe();
     await applyReconcile({
       ctx: secondReload.ctx,
+      run: runWithNothingLoaded(),
       cwd,
-      pi,
       scope: "user",
       completionCache: createCompletionCache(),
       hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
@@ -5015,7 +5016,7 @@ test("EDEP-01 / EDEP-03: enabling a plugin turns on its one disabled dependency 
     // act
     await setPluginEnabled({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "official",
       plugin: "helper",
@@ -5049,6 +5050,128 @@ test("EDEP-01 / EDEP-03: enabling a plugin turns on its one disabled dependency 
   });
 });
 
+for (const mode of ["json", "rpc"]) {
+  test(`joins delegated installation under the enable invocation in ${mode}`, async () => {
+    await withHermeticHome(async ({ cwd, home }) => {
+      // arrange
+      const { statePath } = await seedEnableCascadeFixture(home, {
+        declareDependency: true,
+        dependencyEnabled: false,
+      });
+      const capture = createJsonCapture();
+      const events: unknown[] = [];
+      const origin = {
+        kind: "command",
+        commandId: "plugin enable",
+        invocationId: "enable-run",
+      } as const;
+      const ctx = {
+        mode,
+        get ui() {
+          return capture.ui;
+        },
+      };
+      const run = openNotificationRun(
+        {
+          getAllTools: () => [],
+          getCommands: () => [],
+          appendEntry(customType, payload) {
+            capture.entrySink.appendEntry(customType, payload);
+            events.push({ customType, payload });
+          },
+        },
+        origin,
+      );
+      let started!: () => void;
+      const installStarted = new Promise<void>((resolve) => {
+        started = resolve;
+      });
+      let release!: () => void;
+      const pending = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const transaction: EnableDisableTransaction = {
+        ...REAL_ENABLE_DISABLE_TRANSACTION,
+        async runInstallLedger(state, locations, options, failureCapture) {
+          events.push(options.plugin);
+          started();
+          await pending;
+          return REAL_ENABLE_DISABLE_TRANSACTION.runInstallLedger(
+            state,
+            locations,
+            options,
+            failureCapture,
+          );
+        },
+      };
+      const enable = createSetPluginEnabled(
+        transaction,
+        createHooksRouting(createHooksRuntime(), { readHooksJson }),
+      );
+      const entry = {
+        customType: "claude-plugin",
+        payload: {
+          schemaVersion: 1,
+          origin,
+          kind: "cascade",
+          severity: "info",
+          needsReload: true,
+          marketplaces: [
+            {
+              name: "official",
+              scope: "user",
+              plugins: [
+                {
+                  name: "formatter@tools",
+                  id: "formatter@tools@official",
+                  scope: "user",
+                  status: "installed",
+                  version: "2.1.0",
+                  reasons: ["dependency enabled"],
+                },
+                {
+                  name: "helper",
+                  id: "helper@official",
+                  scope: "user",
+                  status: "installed",
+                  version: "1.0.0",
+                  reasons: [],
+                },
+              ],
+            },
+          ],
+        },
+      };
+
+      // act
+      const enabling = enable({
+        ctx,
+        run,
+        cwd,
+        marketplace: "official",
+        plugin: "helper",
+        enable: true,
+        scope: "user",
+      }).then(() => {
+        events.push("settled");
+      });
+      await installStarted;
+      const beforeRelease = [...events];
+      release();
+      await enabling;
+
+      // assert
+      assert.deepStrictEqual(beforeRelease, ["formatter"]);
+      assert.deepStrictEqual(events, ["formatter", "helper", entry, "settled"]);
+      assert.deepStrictEqual(capture.entries, [entry]);
+      const state = JSON.parse(await readFile(statePath, "utf8")) as EdepStateShape;
+      assert.strictEqual(state.marketplaces.official!.plugins.helper!.enabled, true);
+      assert.strictEqual(state.marketplaces.tools!.plugins.formatter!.enabled, true);
+      capture.assertValid();
+    });
+  });
+}
+
 test("EDEP-03: an already-enabled dependency renders (skipped) {already enabled} and its record is untouched", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
@@ -5064,7 +5187,7 @@ test("EDEP-03: an already-enabled dependency renders (skipped) {already enabled}
     // act
     await setPluginEnabled({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "official",
       plugin: "helper",
@@ -5107,7 +5230,7 @@ test("EDEP-01 empty edge: a root declaring no dependencies enables byte-identica
     // act
     await setPluginEnabled({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "official",
       plugin: "helper",
@@ -5237,7 +5360,7 @@ test("EDEP-01: depth-2 transitivity enables the whole chain in dependency-first 
     // act
     await setPluginEnabledForOwner({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "official",
       plugin: "a",
@@ -5273,7 +5396,7 @@ test("EDEP-01: a diamond shares its member once", async () => {
     // act
     await setPluginEnabled({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "official",
       plugin: "a",
@@ -5306,7 +5429,7 @@ test("EDEP-01: a not-installed declared dependency reports {not installed} and d
     // act
     await setPluginEnabled({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "official",
       plugin: "a",
@@ -5346,7 +5469,7 @@ test("EDEP-01: a cycle refuses the enable and writes nothing", async () => {
     // act
     await setPluginEnabled({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "official",
       plugin: "a",
@@ -5393,7 +5516,7 @@ test("WR-03: an unrelated plugin's unreadable manifest entry never blocks this e
     // act
     await setPluginEnabled({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "official",
       plugin: "x",
@@ -5433,7 +5556,7 @@ test("CR-02: a sha-pinned declaration refuses the enable with {invalid manifest}
     // act
     await setPluginEnabled({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "official",
       plugin: "a",
@@ -5481,7 +5604,7 @@ test("EDEP-01: an unreadable declarer refuses the enable with no absolute path l
     // act
     await setPluginEnabled({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "official",
       plugin: "a",
@@ -5518,7 +5641,7 @@ test("EDEP-01: row order follows the canonical comparator even when the root is 
     // act
     await setPluginEnabled({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "official",
       plugin: "zeta",
@@ -5563,7 +5686,7 @@ test("CR-01: a re-enabled member's config entry saying enabled: false is overwri
     // act
     await setPluginEnabled({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "official",
       plugin: "a",
@@ -5603,7 +5726,7 @@ test("CR-06: enable a --local overwrites a base-file stale entry for a re-enable
     // act
     await setPluginEnabled({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "official",
       plugin: "a",
@@ -5639,7 +5762,7 @@ test("CR-01: a member with NO config entry stays untouched", async () => {
     // act
     await setPluginEnabled({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "official",
       plugin: "a",
@@ -5678,7 +5801,7 @@ test("EDEP-01: an idempotent root still enables a disabled dependency and report
     // act
     await setPluginEnabled({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "official",
       plugin: "a",
@@ -5725,7 +5848,7 @@ test("CR-01: a re-enabled member's config entry is overwritten even when the roo
     // act
     await setPluginEnabled({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "official",
       plugin: "a",
@@ -5786,7 +5909,7 @@ test("EDEP-01: a member ledger failure unwinds every member even when the root i
     // act
     await setPluginEnabledForOwner({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "official",
       plugin: "a",
@@ -5867,7 +5990,7 @@ test("EDEP-01: a rollback partial on the idempotent-root path threads into the f
     // act
     await setPluginEnabledForOwner({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "official",
       plugin: "a",
@@ -5907,7 +6030,7 @@ test("EDEP-01 / LOAD-02: enabling a consequence-disabled member clears its depen
     // act
     await setPluginEnabled({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "official",
       plugin: "a",
@@ -5959,7 +6082,7 @@ test("CR-05: a member ledger failure unwinds every member this command already t
     // act
     await setPluginEnabledForOwner({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "official",
       plugin: "a",
@@ -6015,7 +6138,7 @@ test("EDEP-01: orchestrated mode skips the cascade entirely -- a cyclic declarat
     // with its own dependency handling; EDEP-01's cascade never runs for it.
     const outcome = await setPluginEnabledForOwner({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "official",
       plugin: "a",
@@ -6070,7 +6193,7 @@ test("CR-05: a member's undo tolerates the record vanishing from the snapshot be
     // act
     await setPluginEnabledForOwner({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "official",
       plugin: "a",
@@ -6128,7 +6251,7 @@ test("WR-02: a re-enabled member's hooks are hydrated into the routing cache wit
     // act
     await setPluginEnabledForOwner({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "official",
       plugin: "a",
@@ -6176,7 +6299,7 @@ test("WR-02: a re-enabled member's hooks cache-read failure is non-fatal and doe
     // act
     await setPluginEnabledForOwner({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "official",
       plugin: "a",
@@ -6225,7 +6348,7 @@ test("WR-02: a re-enabled member's routing-table rebuild failure is non-fatal an
     // act
     await setPluginEnabledForOwner({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "official",
       plugin: "a",
@@ -6271,7 +6394,7 @@ test("CR-03: a root ledger failure AFTER a member materialized unwinds the membe
     // act
     await setPluginEnabledForOwner({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "official",
       plugin: "a",
@@ -6331,7 +6454,7 @@ test("WR-08: a config-write throw after the merged ledger commits unwinds the me
     // act
     await setPluginEnabledForOwner({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "official",
       plugin: "a",
@@ -6411,7 +6534,7 @@ test("CR-05: a member's undo folds a partial unstage failure and rethrows it as 
     // act
     await setPluginEnabledForOwner({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "official",
       plugin: "a",
@@ -6495,7 +6618,7 @@ test("CR-05: a member's undo whose unstage failure carries no cause still rethro
     // act
     await setPluginEnabledForOwner({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "official",
       plugin: "a",
@@ -6560,7 +6683,7 @@ test("EDEP-02: a disable is refused while an installed and enabled plugin still 
     // act
     await setPluginEnabledForOwner({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "official",
       plugin: "shared-lib",
@@ -6598,7 +6721,7 @@ test("EDEP-02: a DISABLED declarer does not block the disable", async () => {
     // act
     await setPluginEnabled({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "official",
       plugin: "shared-lib",
@@ -6638,7 +6761,7 @@ test("EDEP-02: a declarer in the OTHER scope does not block the disable", async 
     // act
     await setPluginEnabled({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "official",
       plugin: "shared-lib",
@@ -6663,7 +6786,7 @@ test("EDEP-02: nothing declares the target, disable proceeds byte-identically to
     // act
     await setPluginEnabled({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "official",
       plugin: "shared-lib",
@@ -6698,7 +6821,7 @@ test("EDEP-02: two enabled dependents are named on the cause line, sorted", asyn
     // act
     await setPluginEnabled({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "official",
       plugin: "shared-lib",
@@ -6735,7 +6858,7 @@ test("EDEP-02: an orchestrated disable skips the dependents guard entirely", asy
     // act
     const outcome = await setPluginEnabled({
       ctx: makeCtx(cwd).ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "official",
       plugin: "shared-lib",
@@ -6794,7 +6917,7 @@ test("EDEP-02: an unreadable declarer refuses the disable with no absolute path 
     // act
     await setPluginEnabledForOwner({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "official",
       plugin: "shared-lib",
@@ -6871,7 +6994,7 @@ async function seedEnabledMcpPluginUnderComment(cwd: string, home: string): Prom
   const { ctx } = makeCtx(cwd);
   await setPluginEnabled({
     ctx,
-    pi: makePi([], [adapterCommand()]),
+    run: runWithMcpAdapterLoaded(),
     cwd,
     marketplace: "mp",
     plugin: "foo",
@@ -6912,7 +7035,7 @@ test("AFILE-04: disable over a commented mcp-adapter.json shows the comments-rem
     // act
     await setPluginEnabled({
       ctx,
-      pi: makePi([], [adapterCommand()]),
+      run: runWithMcpAdapterLoaded(),
       cwd,
       marketplace: "mp",
       plugin: "foo",
@@ -6942,7 +7065,7 @@ test("AFILE-04: a disable whose cascade fails after the MCP slot still shows the
     // act
     await setPluginEnabledForOwner({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "mp",
       plugin: "foo",
@@ -6980,7 +7103,7 @@ test("AFILE-04: a disable whose config write fails after the cascade still shows
     // act
     await setPluginEnabledForOwner({
       ctx,
-      pi: makePi([], [adapterCommand()]),
+      run: runWithMcpAdapterLoaded(),
       cwd,
       marketplace: "mp",
       plugin: "foo",
@@ -7009,7 +7132,7 @@ test("AFILE-04: an orchestrated disable returns the notice on its outcome and se
     // act
     const outcome = await setPluginEnabled({
       ctx,
-      pi: makePi([], [adapterCommand()]),
+      run: runWithMcpAdapterLoaded(),
       cwd,
       marketplace: "mp",
       plugin: "foo",
@@ -7043,7 +7166,7 @@ test("AFILE-04: an orchestrated disable whose cascade fails after the MCP slot r
     // act
     const outcome = await setPluginEnabledForOwner({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "mp",
       plugin: "foo",
@@ -7079,7 +7202,7 @@ test("AFILE-04: enable over a commented mcp-adapter.json shows the comments-remo
     // act
     await setPluginEnabled({
       ctx,
-      pi: makePi([], [adapterCommand()]),
+      run: runWithMcpAdapterLoaded(),
       cwd,
       marketplace: "mp",
       plugin: "foo",
@@ -7121,7 +7244,7 @@ test("AFILE-06: disable writes a kept override back and enable keeps it again wi
       const { ctx, notifications } = makeCtx(cwd);
       await setPluginEnabled({
         ctx,
-        pi: makePi([], [adapterCommand()]),
+        run: runWithMcpAdapterLoaded(),
         cwd,
         marketplace: "mp",
         plugin: "foo",
@@ -7176,7 +7299,7 @@ test("AFILE-04: an enable cascade reports the notice once for the root and its r
     // act
     await setPluginEnabled({
       ctx,
-      pi: makePi([], [adapterCommand()]),
+      run: runWithMcpAdapterLoaded(),
       cwd,
       marketplace: "official",
       plugin: "a",
@@ -7245,7 +7368,7 @@ test("AFILE-04: an enable cascade that unwinds after a member rewrote the file s
     // act
     await setPluginEnabledForOwner({
       ctx,
-      pi: makePi([], [adapterCommand()]),
+      run: runWithMcpAdapterLoaded(),
       cwd,
       marketplace: "official",
       plugin: "a",
@@ -7288,7 +7411,7 @@ test("AFILE-04: an enable cascade undo that unstages from a commented mcp-adapte
     // act
     await setPluginEnabledForOwner({
       ctx,
-      pi: makePi([], [adapterCommand()]),
+      run: runWithMcpAdapterLoaded(),
       cwd,
       marketplace: "official",
       plugin: "a",
@@ -7336,7 +7459,7 @@ test("AVAR-04: an enable cascade undo shows no variable notice for the member se
     // act
     await setPluginEnabledForOwner({
       ctx,
-      pi: makePi([], [adapterCommand()]),
+      run: runWithMcpAdapterLoaded(),
       cwd,
       marketplace: "official",
       plugin: "a",
@@ -7391,7 +7514,7 @@ for (const { title, env, expectedNotifications } of [
       // act
       await setPluginEnabledForOwner({
         ctx,
-        pi: makePi([], [adapterCommand()]),
+        run: runWithMcpAdapterLoaded(),
         cwd,
         marketplace: "mp",
         plugin: "foo",
@@ -7443,7 +7566,7 @@ test("AVAR-04 / AVAR-05: with pi-mcp-adapter loaded, enable reports an info succ
     // act
     await setPluginEnabled({
       ctx,
-      pi: makePi([], [adapterCommand()]),
+      run: runWithMcpAdapterLoaded(),
       cwd,
       marketplace: "mp",
       plugin: "foo",
@@ -7483,7 +7606,7 @@ test("AFILE-02: enabling a plugin with no MCP servers over an unparseable mcp-ad
     // act
     await setPluginEnabled({
       ctx,
-      pi: makePi(),
+      run: runWithNothingLoaded(),
       cwd,
       marketplace: "mp",
       plugin: "foo",
@@ -7519,7 +7642,7 @@ test("AFILE-04: an orchestrated enable returns the notice on its outcome and sen
     // act
     const outcome = await setPluginEnabled({
       ctx,
-      pi: makePi([], [adapterCommand()]),
+      run: runWithMcpAdapterLoaded(),
       cwd,
       marketplace: "mp",
       plugin: "foo",

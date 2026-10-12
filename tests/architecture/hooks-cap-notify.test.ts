@@ -2,13 +2,13 @@
 //
 // Byte-equality pin for the Stop-hook override-cap warning seam
 // (STOP-07 / D-88-01). Mirrors the notifyAsyncRewakeSummary byte precedent in
-// hooks-async-rewake.test.ts: the seam is a bridge diagnostic emitted directly
-// via ctx.ui.notify (NOT a structured NotificationMessage), so the catalog-uat
+// hooks-async-rewake.test.ts: the seam is a bridge diagnostic emitted as a raw
+// hook surface (NOT a structured NotificationMessage), so the catalog-uat
 // forward walk and the notify-grammar invariant -- both of which drive only
 // NotificationMessage fixtures through notify() -- never exercise it. This
 // dedicated test reads the `stop-override-cap` block from docs/output-catalog.md
 // at test time (the same way catalog-uat reads its blocks) and asserts that
-// notifyStopHookOverrideCap's ctx.ui.notify output matches it byte-for-byte at
+// notifyStopHookOverrideCap's tui ctx.ui.notify output matches it byte-for-byte at
 // warning severity with a single call (D-88-01 documentation parity + D-88-07
 // honest reconciliation: the seam satisfies the invariant's STRUCTURAL rule --
 // non-empty summary first line + `\n\n` block -- without being silently
@@ -17,7 +17,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { STOP_OVERRIDE_CAP } from "../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import { notifyStopHookOverrideCap } from "../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
+import { runWithNothingLoaded } from "../shared/notification-run-seeds.ts";
 
 import { readCatalogBlock } from "./catalog-block.ts";
 
@@ -44,8 +46,8 @@ function makeCtx(t: TestContext): RecordingCtx {
   const notify = t.mock.fn((message: string, severity?: string): void => {
     notifications.push({ message, severity });
   });
-  // The seam reads only `ui.notify`; the rest of the host context is irrelevant to it.
-  const ctx = { ui: { notify } } as unknown as ExtensionContext;
+  // The seam reads only `mode` and `ui.notify`; the rest of the host context is irrelevant to it.
+  const ctx = { mode: "tui", ui: { notify } } as unknown as ExtensionContext;
 
   return { ctx, notifications };
 }
@@ -62,7 +64,7 @@ test("STOP-07 / D-88-01: notifyStopHookOverrideCap emits one warning-severity ct
   const { ctx, notifications } = makeCtx(t);
 
   // act
-  notifyStopHookOverrideCap(ctx, CATALOG_PLUGIN_ID);
+  notifyStopHookOverrideCap(ctx, runWithNothingLoaded(), CATALOG_PLUGIN_ID, STOP_OVERRIDE_CAP);
 
   // assert
   assert.equal(notifications.length, 1, "the cap-trip seam must call ctx.ui.notify exactly once");
@@ -78,7 +80,7 @@ test("STOP-07 / D-88-01: cap-trip first line is a non-empty summary followed by 
   const { ctx, notifications } = makeCtx(t);
 
   // act
-  notifyStopHookOverrideCap(ctx, CATALOG_PLUGIN_ID);
+  notifyStopHookOverrideCap(ctx, runWithNothingLoaded(), CATALOG_PLUGIN_ID, STOP_OVERRIDE_CAP);
 
   // assert
   const emitted = onlyNotification(notifications).message;
@@ -101,7 +103,7 @@ test("STOP-07 / D-88-01: cap-trip output is byte-equal to the docs/output-catalo
   const { ctx, notifications } = makeCtx(t);
 
   // act
-  notifyStopHookOverrideCap(ctx, CATALOG_PLUGIN_ID);
+  notifyStopHookOverrideCap(ctx, runWithNothingLoaded(), CATALOG_PLUGIN_ID, STOP_OVERRIDE_CAP);
 
   // assert
   assert.equal(

@@ -25,10 +25,10 @@ import { locationsFor } from "../../../extensions/pi-claude-marketplace/persiste
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { buildAuthCallbacks } from "../../../extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
-import { expectSoftDepProbes } from "../../edge/notification-boundary.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type { MarketplaceManifest } from "../../../extensions/pi-claude-marketplace/domain/manifest.ts";
 import type { GitBackedSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
@@ -44,10 +44,8 @@ import type * as FetchOrchestrator from "../../../extensions/pi-claude-marketpla
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { GitCredentials } from "../../../extensions/pi-claude-marketplace/platform/git.ts";
-import type {
-  ExtensionAPI,
-  ExtensionContext,
-} from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { ExtensionContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { NotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 
 type ManifestEntry = MarketplaceManifest["plugins"][number];
@@ -82,7 +80,7 @@ interface CapturedNotification {
 interface NotificationBoundary {
   readonly ctx: ExtensionContext;
   readonly notifications: CapturedNotification[];
-  readonly pi: ExtensionAPI;
+  readonly run: NotificationRun;
   readonly ui: NotificationUi;
 }
 
@@ -114,26 +112,30 @@ interface CacheBoundary {
   readonly seam: FetchCloneCacheSeam;
 }
 
-function notificationBoundary(name: string, expectedCalls = 1): NotificationBoundary {
+function notificationBoundary(
+  name: string,
+  expectedCalls = 1,
+  expectedModeReads = expectedCalls,
+): NotificationBoundary {
   const ctx = mock<ExtensionContext>({ exactParams: true, name: `${name} context` });
-  const pi = mock<ExtensionAPI>({ exactParams: true, name: `${name} extension API` });
   const ui = mock<NotificationUi>({ exactParams: true, name: `${name} UI` });
   const notifications: CapturedNotification[] = [];
+  when(() => ctx.mode)
+    .thenReturn("tui")
+    .times(expectedModeReads);
   when(() => ctx.ui)
     .thenReturn(ui)
     .times(expectedCalls);
-  expectSoftDepProbes(pi, 1);
   when(() => ui.notify)
     .thenReturn((message, severity) => {
       notifications.push({ message, ...(severity === undefined ? {} : { severity }) });
     })
     .times(expectedCalls);
-  return { ctx, notifications, pi, ui };
+  return { ctx, notifications, run: runWithNothingLoaded(), ui };
 }
 
 function verifyNotifications(boundary: NotificationBoundary): void {
   verify(boundary.ctx);
-  verify(boundary.pi);
   verify(boundary.ui);
 }
 
@@ -399,7 +401,7 @@ test("keeps a path source offline through the production defaults", async () => 
     await fetchPlugins({
       ctx: boundary.ctx,
       cwd,
-      pi: boundary.pi,
+      run: boundary.run,
       scope: "project",
       target: { kind: "plugin", marketplace: "marketplace", plugin: "path-plugin" },
     });
@@ -457,7 +459,7 @@ test("keeps a pinned warm URL clone offline and byte-identical", async () => {
       ctx: boundary.ctx,
       cwd,
       deviceFlowHttp: deviceFlow.http,
-      pi: boundary.pi,
+      run: boundary.run,
       scope: "project",
       target: { kind: "plugin", marketplace: "marketplace", plugin: "warm" },
     });
@@ -514,7 +516,7 @@ test("materializes a cold pinned URL clone at its recorded SHA", async () => {
       credentialOps: credentials.credentialOps,
       ctx: boundary.ctx,
       cwd,
-      pi: boundary.pi,
+      run: boundary.run,
       scope: "project",
       target: { kind: "plugin", marketplace: "marketplace", plugin: "cold" },
     });
@@ -590,7 +592,7 @@ test("refreshes an unpinned warm mirror with its ref and leaves state immutable"
       credentialOps: credentials.credentialOps,
       ctx: boundary.ctx,
       cwd,
-      pi: boundary.pi,
+      run: boundary.run,
       scope: "project",
       target: { kind: "plugin", marketplace: "marketplace", plugin: "moving" },
     });
@@ -652,7 +654,7 @@ test("materializes a cold unpinned URL mirror at the typed wire url", async () =
       credentialOps: credentials.credentialOps,
       ctx: boundary.ctx,
       cwd,
-      pi: boundary.pi,
+      run: boundary.run,
       scope: "project",
       target: { kind: "plugin", marketplace: "marketplace", plugin: "cold-mirror" },
     });
@@ -738,7 +740,7 @@ test("materializes a cold unpinned GitHub mirror through Device Flow once per ho
         { accessToken: "token", kind: "success", scope: "repo", tokenType: "bearer" },
       ],
     });
-    const boundary = notificationBoundary("Device Flow", 2);
+    const boundary = notificationBoundary("Device Flow", 2, 3);
     const originalMirror = cache.seam.materializeOrRefreshPluginMirror;
     const seam: FetchCloneCacheSeam = {
       ...cache.seam,
@@ -759,7 +761,7 @@ test("materializes a cold unpinned GitHub mirror through Device Flow once per ho
       ctx: boundary.ctx,
       cwd,
       deviceFlowHttp: deviceFlow.http,
-      pi: boundary.pi,
+      run: boundary.run,
       scope: "project",
       target: { kind: "plugin", marketplace: "marketplace", plugin: "private" },
     });
@@ -845,7 +847,7 @@ test("reuses a stored GitHub credential without Device Flow", async () => {
       ctx: boundary.ctx,
       cwd,
       deviceFlowHttp: deviceFlow.http,
-      pi: boundary.pi,
+      run: boundary.run,
       scope: "project",
       target: { kind: "plugin", marketplace: "marketplace", plugin: "stored" },
     });
@@ -894,7 +896,7 @@ test("memoizes one accepted Device Flow result across a same-host sweep", async 
         { accessToken: "token", kind: "success", scope: "repo", tokenType: "bearer" },
       ],
     });
-    const boundary = notificationBoundary("memoized Device Flow", 2);
+    const boundary = notificationBoundary("memoized Device Flow", 2, 3);
     const authResults: unknown[] = [];
     const seam: FetchCloneCacheSeam = {
       materializeOrRefreshPluginMirror() {
@@ -924,7 +926,7 @@ test("memoizes one accepted Device Flow result across a same-host sweep", async 
       ctx: boundary.ctx,
       cwd,
       deviceFlowHttp: deviceFlow.http,
-      pi: boundary.pi,
+      run: boundary.run,
       scope: "project",
       target: { kind: "marketplace", marketplace: "marketplace" },
     });
@@ -1011,7 +1013,7 @@ test("preserves marketplace and manifest ordering across both scopes", async () 
       credentialOps: credentials.credentialOps,
       ctx: boundary.ctx,
       cwd,
-      pi: boundary.pi,
+      run: boundary.run,
       target: { kind: "all" },
     });
 
@@ -1073,7 +1075,7 @@ test("filters unrelated marketplaces and nonmatching manifest entries", async ()
       credentialOps: credentials.credentialOps,
       ctx: boundary.ctx,
       cwd,
-      pi: boundary.pi,
+      run: boundary.run,
       scope: "project",
       target: { kind: "plugin", marketplace: "selected", plugin: "chosen" },
     });
@@ -1117,7 +1119,7 @@ test("isolates a malformed manifest and continues the healthy marketplace", asyn
       credentialOps: credentials.credentialOps,
       ctx: boundary.ctx,
       cwd,
-      pi: boundary.pi,
+      run: boundary.run,
       scope: "project",
       target: { kind: "all" },
     });
@@ -1190,7 +1192,7 @@ test("continues a manifest-ordered sweep after a network failure", async () => {
       credentialOps: credentials.credentialOps,
       ctx: boundary.ctx,
       cwd,
-      pi: boundary.pi,
+      run: boundary.run,
       scope: "project",
       target: { kind: "marketplace", marketplace: "marketplace" },
     });
@@ -1267,7 +1269,7 @@ test("derives partially available and unavailable git rows exactly", async () =>
       credentialOps: credentials.credentialOps,
       ctx: boundary.ctx,
       cwd,
-      pi: boundary.pi,
+      run: boundary.run,
       scope: "project",
       target: { kind: "marketplace", marketplace: "marketplace" },
     });
@@ -1325,7 +1327,7 @@ test("flags binaries on a fetched git row of an official marketplace", async () 
       credentialOps: credentials.credentialOps,
       ctx: boundary.ctx,
       cwd,
-      pi: boundary.pi,
+      run: boundary.run,
       scope: "project",
       target: { kind: "marketplace", marketplace: "claude-plugins-official" },
     });
@@ -1384,7 +1386,7 @@ test("reports a successful seam with a still-cold cache as remote", async () => 
       credentialOps: credentials.credentialOps,
       ctx: boundary.ctx,
       cwd,
-      pi: boundary.pi,
+      run: boundary.run,
       scope: "project",
       target: { kind: "plugin", marketplace: "marketplace", plugin: "remote" },
     });
@@ -1443,7 +1445,7 @@ test("reports available when the cache becomes visible between fresh probes", as
       credentialOps: credentials.credentialOps,
       ctx: boundary.ctx,
       cwd,
-      pi: boundary.pi,
+      run: boundary.run,
       scope: "project",
       target: { kind: "plugin", marketplace: "marketplace", plugin: "concurrent" },
     });
@@ -1536,7 +1538,7 @@ test("renders fresh status after materialization through the required capability
       credentialOps: credentials.credentialOps,
       ctx: boundary.ctx,
       cwd,
-      pi: boundary.pi,
+      run: boundary.run,
       scope: "project",
       target: { kind: "plugin", marketplace: "marketplace", plugin: "fresh" },
     });
@@ -1620,7 +1622,7 @@ test("narrows permission and non-Error failures without aborting the sweep", asy
       credentialOps: credentials.credentialOps,
       ctx: boundary.ctx,
       cwd,
-      pi: boundary.pi,
+      run: boundary.run,
       scope: "project",
       target: { kind: "marketplace", marketplace: "marketplace" },
     });
@@ -1680,7 +1682,7 @@ test("cleans failed clone staging and converges on retry", async () => {
       credentialOps: credentials.credentialOps,
       ctx: failedBoundary.ctx,
       cwd,
-      pi: failedBoundary.pi,
+      run: failedBoundary.run,
       scope: "project",
       target: { kind: "plugin", marketplace: "marketplace", plugin: "retry" },
     });
@@ -1691,7 +1693,7 @@ test("cleans failed clone staging and converges on retry", async () => {
       credentialOps: credentials.credentialOps,
       ctx: retryBoundary.ctx,
       cwd,
-      pi: retryBoundary.pi,
+      run: retryBoundary.run,
       scope: "project",
       target: { kind: "plugin", marketplace: "marketplace", plugin: "retry" },
     });
@@ -1751,7 +1753,7 @@ test("accepts a concurrent cache winner and removes losing staging", async () =>
       credentialOps: credentials.credentialOps,
       ctx: boundary.ctx,
       cwd,
-      pi: boundary.pi,
+      run: boundary.run,
       scope: "project",
       target: { kind: "plugin", marketplace: "marketplace", plugin: "race" },
     });
@@ -1803,7 +1805,7 @@ test("surfaces a cleanup leak and retries safely after permissions are repaired"
       credentialOps: credentials.credentialOps,
       ctx: failedBoundary.ctx,
       cwd,
-      pi: failedBoundary.pi,
+      run: failedBoundary.run,
       scope: "project",
       target: { kind: "plugin", marketplace: "marketplace", plugin: "leak" },
     });
@@ -1814,7 +1816,7 @@ test("surfaces a cleanup leak and retries safely after permissions are repaired"
       credentialOps: credentials.credentialOps,
       ctx: retryBoundary.ctx,
       cwd,
-      pi: retryBoundary.pi,
+      run: retryBoundary.run,
       scope: "project",
       target: { kind: "plugin", marketplace: "marketplace", plugin: "leak" },
     });
@@ -1860,7 +1862,7 @@ test("classifies a denied Device Flow as authentication required", async () => {
       network: "disabled",
       pollResponses: [{ kind: "access_denied" }],
     });
-    const boundary = notificationBoundary("denied Device Flow", 2);
+    const boundary = notificationBoundary("denied Device Flow", 2, 3);
     const seam: FetchCloneCacheSeam = {
       materializeOrRefreshPluginMirror() {
         return Promise.reject(new Error("unexpected mirror call"));
@@ -1884,7 +1886,7 @@ test("classifies a denied Device Flow as authentication required", async () => {
       ctx: boundary.ctx,
       cwd,
       deviceFlowHttp: deviceFlow.http,
-      pi: boundary.pi,
+      run: boundary.run,
       scope: "project",
       target: { kind: "plugin", marketplace: "marketplace", plugin: "denied" },
     });
@@ -1949,7 +1951,7 @@ test("fails cleanly when Device Flow credential approval rejects", async () => {
         { accessToken: "token", kind: "success", scope: "repo", tokenType: "bearer" },
       ],
     });
-    const boundary = notificationBoundary("approve failure", 2);
+    const boundary = notificationBoundary("approve failure", 2, 3);
     const seam: FetchCloneCacheSeam = {
       materializeOrRefreshPluginMirror() {
         return Promise.reject(new Error("unexpected mirror call"));
@@ -1973,7 +1975,7 @@ test("fails cleanly when Device Flow credential approval rejects", async () => {
       ctx: boundary.ctx,
       cwd,
       deviceFlowHttp: deviceFlow.http,
-      pi: boundary.pi,
+      run: boundary.run,
       scope: "project",
       target: { kind: "plugin", marketplace: "marketplace", plugin: "approve-failure" },
     });
@@ -2052,7 +2054,7 @@ test("rejects a stale credential and contains a reject failure", async () => {
       credentialOps: credentials.credentialOps,
       ctx: boundary.ctx,
       cwd,
-      pi: boundary.pi,
+      run: boundary.run,
       scope: "project",
       target: { kind: "plugin", marketplace: "marketplace", plugin: "stale" },
     });
@@ -2120,7 +2122,7 @@ test("retains a warm mirror after refresh failure and converges on retry", async
       credentialOps: credentials.credentialOps,
       ctx: failedBoundary.ctx,
       cwd,
-      pi: failedBoundary.pi,
+      run: failedBoundary.run,
       scope: "project",
       target: { kind: "plugin", marketplace: "marketplace", plugin: "warm-retry" },
     });
@@ -2130,7 +2132,7 @@ test("retains a warm mirror after refresh failure and converges on retry", async
       credentialOps: credentials.credentialOps,
       ctx: retryBoundary.ctx,
       cwd,
-      pi: retryBoundary.pi,
+      run: retryBoundary.run,
       scope: "project",
       target: { kind: "plugin", marketplace: "marketplace", plugin: "warm-retry" },
     });
@@ -2190,7 +2192,7 @@ test("cleans a non-race promotion failure and converges on retry", async () => {
       credentialOps: credentials.credentialOps,
       ctx: failedBoundary.ctx,
       cwd,
-      pi: failedBoundary.pi,
+      run: failedBoundary.run,
       scope: "project",
       target: { kind: "plugin", marketplace: "marketplace", plugin: "promotion" },
     });
@@ -2201,7 +2203,7 @@ test("cleans a non-race promotion failure and converges on retry", async () => {
       credentialOps: credentials.credentialOps,
       ctx: retryBoundary.ctx,
       cwd,
-      pi: retryBoundary.pi,
+      run: retryBoundary.run,
       scope: "project",
       target: { kind: "plugin", marketplace: "marketplace", plugin: "promotion" },
     });
@@ -2262,7 +2264,7 @@ test("narrows an unreadable warm mirror probe to source missing", async () => {
       credentialOps: credentials.credentialOps,
       ctx: boundary.ctx,
       cwd,
-      pi: boundary.pi,
+      run: boundary.run,
       scope: "project",
       target: { kind: "plugin", marketplace: "marketplace", plugin: "corrupt" },
     });

@@ -256,3 +256,16 @@ export const SCOPE_ORDER_CANONICAL_TARGETS = [
   "extensions/pi-claude-marketplace/shared/types.ts",
   "extensions/pi-claude-marketplace/shared/compare-name-scope.ts",
 ] as const;
+
+/** D-12 / SC-5: the one module that derives soft-dep markers. */
+export const SOFT_DEP_MARKER_DERIVATION_TARGETS = [
+  "extensions/pi-claude-marketplace/shared/notification-resolve.ts",
+] as const;
+
+/**
+ * D-16 / SC-5 / IL-2: the one module whose notify arguments must all come from
+ * the text strategy's output.
+ */
+export const PRESENTATION_SINK_TARGETS = [
+  "extensions/pi-claude-marketplace/shared/notification-dispatch.ts",
+] as const;

@@ -33,11 +33,10 @@ import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence
 import { loadState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { createHermeticEnvironment } from "../platform/hermetic-environment.ts";
+import { runWithNothingLoaded } from "../shared/notification-run-seeds.ts";
 
-import type {
-  ExtensionAPI,
-  ExtensionContext,
-} from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { ExtensionContext } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { NotificationRun } from "../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 
 const AUTHOR = { name: "test", email: "test@example.com" } as const;
 
@@ -48,14 +47,14 @@ interface NotifyRecord {
 
 interface TestCtx {
   readonly ctx: ExtensionContext;
-  readonly pi: ExtensionAPI;
+  readonly run: NotificationRun;
   readonly notifications: NotifyRecord[];
 }
 
 function makeCtx(cwd: string): TestCtx {
   const notifications: NotifyRecord[] = [];
-  const pi = { getAllTools: (): ReturnType<ExtensionAPI["getAllTools"]> => [] } as ExtensionAPI;
   const ctx = {
+    mode: "tui",
     cwd,
     ui: {
       notify(message: string, severity?: string): void {
@@ -63,7 +62,7 @@ function makeCtx(cwd: string): TestCtx {
       },
     },
   } as ExtensionContext;
-  return { ctx, pi, notifications };
+  return { ctx, run: runWithNothingLoaded(), notifications };
 }
 
 /** `.git/HEAD` and `.git/index` bytes, plus the two files a stray checkout would touch. */
@@ -180,7 +179,7 @@ test("TAGS-01/TAGS-03: a constrained path-source dependency installs from the ma
   // clone's own local tags with no seam of any kind injected.
   await addMarketplace({
     ctx: addCtx.ctx,
-    pi: addCtx.pi,
+    run: addCtx.run,
     scope: "project",
     cwd: environment.cwd,
     completionCache,
@@ -188,7 +187,7 @@ test("TAGS-01/TAGS-03: a constrained path-source dependency installs from the ma
   });
   await installPlugin({
     ctx: installCtx.ctx,
-    pi: installCtx.pi,
+    run: installCtx.run,
     scope: "project",
     cwd: environment.cwd,
     marketplace: "acme",
@@ -272,7 +271,7 @@ test("CR-01: an untracked file in the marketplace root does not leak into the ma
   // act
   await addMarketplace({
     ctx: addCtx.ctx,
-    pi: addCtx.pi,
+    run: addCtx.run,
     scope: "project",
     cwd: environment.cwd,
     completionCache,
@@ -280,7 +279,7 @@ test("CR-01: an untracked file in the marketplace root does not leak into the ma
   });
   await installPlugin({
     ctx: installCtx.ctx,
-    pi: installCtx.pi,
+    run: installCtx.run,
     scope: "project",
     cwd: environment.cwd,
     marketplace: "acme",
@@ -407,7 +406,7 @@ test("TAGS-01: two cascade members resolving against the SAME marketplace clone 
   // act
   await addMarketplace({
     ctx: addCtx.ctx,
-    pi: addCtx.pi,
+    run: addCtx.run,
     scope: "project",
     cwd: environment.cwd,
     completionCache,
@@ -415,7 +414,7 @@ test("TAGS-01: two cascade members resolving against the SAME marketplace clone 
   });
   await installPlugin({
     ctx: installCtx.ctx,
-    pi: installCtx.pi,
+    run: installCtx.run,
     scope: "project",
     cwd: environment.cwd,
     marketplace: "acme",
@@ -535,7 +534,7 @@ test("TAGS-02: a constraint no marketplace tag satisfies still installs both plu
   // `no-matching-tag`, and TAGS-02's fallback carries the install through.
   await addMarketplace({
     ctx: addCtx.ctx,
-    pi: addCtx.pi,
+    run: addCtx.run,
     scope: "project",
     cwd: environment.cwd,
     completionCache,
@@ -543,7 +542,7 @@ test("TAGS-02: a constraint no marketplace tag satisfies still installs both plu
   });
   await installPlugin({
     ctx: installCtx.ctx,
-    pi: installCtx.pi,
+    run: installCtx.run,
     scope: "project",
     cwd: environment.cwd,
     marketplace: "acme",

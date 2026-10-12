@@ -1,0 +1,150 @@
+{
+  "source": "/tmp/json-phase5-edge-probe.json",
+  "spec_absent": true,
+  "edge_absent": true,
+  "items": [
+    {
+      "requirement_id": "MODE-01",
+      "category": "empty",
+      "status": "resolved",
+      "verification": "explicit",
+      "resolution": "An empty mode string raises UnsupportedModeError before any command routing, inventory probe, or mutation.",
+      "reason": "Executable predicate authored in 05-01.1; execution evidence remains pending.",
+      "probe": "What is the result for empty, single-element, or null input?",
+      "task": "05-01.1"
+    },
+    {
+      "requirement_id": "MODE-01",
+      "category": "encoding",
+      "status": "resolved",
+      "verification": "explicit",
+      "resolution": "Only exact tui, print, json, and rpc strings pass; case, padding, and Unicode-lookalike strings are rejected without normalization.",
+      "reason": "Executable predicate authored in 05-01.1; execution evidence remains pending.",
+      "probe": "Whose definition of length/equality applies — bytes, code points, grapheme clusters, or normalized form?",
+      "task": "05-01.1"
+    },
+    {
+      "requirement_id": "MODE-02",
+      "category": "unclassified",
+      "status": "unresolved",
+      "verification": null,
+      "resolution": null,
+      "reason": null,
+      "flagged_assumption": "A-05-01: classification did not establish the full set of before-mutation roots; independent root/caller review remains required.",
+      "probe": "unclassified — review manually",
+      "flagged": true
+    },
+    {
+      "requirement_id": "JOUT-01",
+      "category": "adjacency",
+      "status": "resolved",
+      "verification": "explicit",
+      "resolution": "Two equal usage emissions append two distinct entries in their original call order.",
+      "reason": "Executable predicate authored in 05-02.2; execution evidence remains pending.",
+      "probe": "When two things are exactly equal or just touch, do they merge, collide, or separate?",
+      "task": "05-02.2"
+    },
+    {
+      "requirement_id": "JOUT-01",
+      "category": "empty",
+      "status": "resolved",
+      "verification": "explicit",
+      "resolution": "Diagnostic lines [] and rewake text \"\" emit nothing; [\"\"] and whitespace-only rewake text each emit one entry, while structured empty arrays remain valid payload data.",
+      "reason": "Executable predicate authored in 05-03.2; 05-06.1; 05-07.1; execution evidence remains pending.",
+      "probe": "What is the result for empty, single-element, or null input?",
+      "task": "05-03.2; 05-06.1; 05-07.1"
+    },
+    {
+      "requirement_id": "JOUT-01",
+      "category": "ordering",
+      "status": "resolved",
+      "verification": "explicit",
+      "resolution": "The dispatcher preserves emission order and diagnostic line order, including equal adjacent values.",
+      "reason": "Executable predicate authored in 05-02.2; 05-03.2; execution evidence remains pending.",
+      "probe": "When elements compare equal, is output order specified and stable?",
+      "task": "05-02.2; 05-03.2"
+    },
+    {
+      "requirement_id": "JOUT-05",
+      "category": "unclassified",
+      "status": "unresolved",
+      "verification": null,
+      "resolution": null,
+      "reason": null,
+      "flagged_assumption": "A-05-02: classification did not establish complete lifecycle stale-object containment; independent callback review remains required.",
+      "probe": "unclassified — review manually",
+      "flagged": true
+    },
+    {
+      "requirement_id": "TENB-01",
+      "category": "adjacency",
+      "status": "resolved",
+      "verification": "explicit",
+      "resolution": "Capture retains two equal payloads as two ordered entries and validates both.",
+      "reason": "Executable predicate authored in 05-01.1; execution evidence remains pending.",
+      "probe": "When two things are exactly equal or just touch, do they merge, collide, or separate?",
+      "task": "05-01.1"
+    },
+    {
+      "requirement_id": "TENB-01",
+      "category": "empty",
+      "status": "resolved",
+      "verification": "explicit",
+      "resolution": "An empty capture passes assertValid; a recorded empty object fails schema validation and remains a final assertion failure.",
+      "reason": "Executable predicate authored in 05-01.1; execution evidence remains pending.",
+      "probe": "What is the result for empty, single-element, or null input?",
+      "task": "05-01.1"
+    },
+    {
+      "requirement_id": "TENB-01",
+      "category": "ordering",
+      "status": "resolved",
+      "verification": "explicit",
+      "resolution": "An invalid middle entry remains a final assertValid failure even when valid entries surround it and the immediate throw was caught.",
+      "reason": "Executable predicate authored in 05-01.1; 05-03.2; execution evidence remains pending.",
+      "probe": "When elements compare equal, is output order specified and stable?",
+      "task": "05-01.1; 05-03.2"
+    },
+    {
+      "requirement_id": "TENB-02",
+      "category": "adjacency",
+      "status": "resolved",
+      "verification": "explicit",
+      "resolution": "Two context fakes each supply independent explicit mode values; changing one does not change the other.",
+      "reason": "Executable predicate authored in 05-01.1; execution evidence remains pending.",
+      "probe": "When two things are exactly equal or just touch, do they merge, collide, or separate?",
+      "task": "05-01.1"
+    },
+    {
+      "requirement_id": "TENB-02",
+      "category": "empty",
+      "status": "resolved",
+      "verification": "explicit",
+      "resolution": "Omitting mode fails the consumer-owned TypeScript context contract; test fakes cannot hide the missing member with assertion casts.",
+      "reason": "Executable predicate authored in 05-01.1; execution evidence remains pending.",
+      "probe": "What is the result for empty, single-element, or null input?",
+      "task": "05-01.1"
+    },
+    {
+      "requirement_id": "TENB-02",
+      "category": "ordering",
+      "status": "resolved",
+      "verification": "explicit",
+      "resolution": "A getter-backed context on one run exposes its changed mode to the next emission without a second soft-dependency snapshot.",
+      "reason": "Executable predicate authored in 05-01.1; 05-02.2; execution evidence remains pending.",
+      "probe": "When elements compare equal, is output order specified and stable?",
+      "task": "05-01.1; 05-02.2"
+    }
+  ],
+  "coverage": {
+    "applicable": 13,
+    "resolved": 11,
+    "unresolved": 2,
+    "unclassified": 2,
+    "byVerification": {
+      "explicit": 11,
+      "backstop": 0
+    }
+  },
+  "note": "Resolved means an explicit planned predicate exists, not that its implementation has passed."
+}

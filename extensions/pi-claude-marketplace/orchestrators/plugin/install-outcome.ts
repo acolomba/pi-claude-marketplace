@@ -32,7 +32,7 @@
 //   POST-state-commit (D-08 / AS-6):  mkdir(pluginDataDir), dropped per D-19-01
 //   Success notify via notify() with PluginInstalledMessage carrying
 //   dependencies: readonly Dependency[] derived from staged content; the
-//  renderer probes companion-loaded state once per notify call
+//  renderer reads the run's one soft-dependency snapshot (D-05)
 //   and emits per-row soft-dep markers + the reload-hint trailer
 //  structurally.
 //   Failure routes through one notify() call with PluginFailedMessage
@@ -40,7 +40,7 @@
 //  composes the depth-5 cause-chain and per-phase rollback child
 //   rows automatically.
 //
-// Standalone-mode emission is a single notify(ctx, pi, { marketplaces:
+// Standalone-mode emission is a single notify(ctx, run, { marketplaces:
 // [{ ..., plugins: [<row>] }] }) call per orchestration arm. The 5
 // post-state-commit soft-warning sites (mkdir / cache-refresh /
 // agentForeignFailures / bridgeWarnings / PI-13 deps note) are NOT surfaced:
@@ -150,7 +150,8 @@ import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState, PluginInstallRecord } from "../../persistence/state-io.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { HookSummaryEntry } from "../../shared/concerns/hooks.ts";
-import type { McpConfigNotice } from "../../shared/notification-dispatch.ts";
+import type { NotificationRun } from "../../shared/notification-run.ts";
+import type { McpConfigNotice } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { InstallPluginOutcome } from "../types.ts";
 
@@ -162,6 +163,7 @@ export type InstallPluginNotifications =
 export interface InstallLedgerOptions {
   /** Context used only by the clone probe's authentication notification seam. */
   readonly ctx: NotificationContext;
+  readonly run: NotificationRun;
   readonly scope: Scope;
   readonly cwd: string;
   readonly marketplace: string;
@@ -532,6 +534,7 @@ async function preflightInstallResolve(
         ...(opts.cloneCacheSeam !== undefined && { seam: opts.cloneCacheSeam }),
         auth: {
           ctx: opts.ctx,
+          run: opts.run,
           credentialOps: opts.credentialOps ?? DEFAULT_CREDENTIAL_OPS,
           ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
           ...(opts.authMemo !== undefined && { authMemo: opts.authMemo }),

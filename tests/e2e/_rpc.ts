@@ -1,9 +1,11 @@
 // The reusable real-Pi RPC driver. It spawns the repository's own Pi CLI in
 // `--mode rpc` inside a disposable sandbox, always loads the real extension
 // with `--extension`, writes one JSONL step at a time, and collects the
-// responses, notifies, dialogs and extension errors Pi prints on stdout.
-// `ctx.ui.notify` prints nothing in Pi's print and json modes, so RPC is the
-// mode that shows the rows a user sees (ADET-01).
+// responses, notifies, custom entries, dialogs and extension errors Pi prints
+// on stdout. In RPC mode the extension appends each `/claude:plugin` result as
+// a `claude-plugin` custom entry instead of calling `ctx.ui.notify`, and Pi
+// streams every entry appended after startup as an `entry_appended` record
+// (JOUT-01). Notifies still carry what other extensions print.
 //
 // The child environment is an allowlist built from scratch. A prompt that is
 // not an extension command falls through to Pi's model path, and inherited
@@ -58,6 +60,13 @@ export interface RpcNotify {
   readonly notifyType: string | undefined;
 }
 
+/** One custom entry Pi streamed; `after` is the id of the step in flight when it arrived. */
+export interface RpcEntry {
+  readonly after: string;
+  readonly customType: string;
+  readonly data: unknown;
+}
+
 /** One parsed stdout record, read only through narrowing. */
 export type RpcResponseRecord = Readonly<Record<string, unknown>>;
 
@@ -68,6 +77,7 @@ export interface RpcSessionResult {
   readonly stderr: string;
   readonly responses: ReadonlyMap<string, RpcResponseRecord>;
   readonly notifies: readonly RpcNotify[];
+  readonly entries: readonly RpcEntry[];
   readonly dialogs: readonly string[];
   readonly extensionErrors: readonly string[];
 }
@@ -81,6 +91,7 @@ interface SessionState {
   timedOut: boolean;
   readonly responses: Map<string, RpcResponseRecord>;
   readonly notifies: RpcNotify[];
+  readonly entries: RpcEntry[];
   readonly dialogs: string[];
   readonly extensionErrors: string[];
 }
@@ -219,6 +230,19 @@ function handleUiRequest(state: SessionState, record: RpcResponseRecord): void {
   }
 }
 
+function handleEntry(state: SessionState, record: RpcResponseRecord): void {
+  const entry = record.entry;
+  if (!isRecord(entry) || entry.type !== "custom") {
+    return;
+  }
+
+  state.entries.push({
+    after: state.lastSentId,
+    customType: stringField(entry, "customType") ?? "",
+    data: entry.data,
+  });
+}
+
 function handleLine(state: SessionState, line: string): void {
   const record = parseLine(line);
   if (record === undefined) {
@@ -231,6 +255,9 @@ function handleLine(state: SessionState, line: string): void {
       break;
     case "extension_ui_request":
       handleUiRequest(state, record);
+      break;
+    case "entry_appended":
+      handleEntry(state, record);
       break;
     case "extension_error":
       state.extensionErrors.push(stringField(record, "error") ?? line);
@@ -247,6 +274,7 @@ function resultOf(state: SessionState, exitCode: number | null): RpcSessionResul
     stderr: state.stderr,
     responses: state.responses,
     notifies: state.notifies,
+    entries: state.entries,
     dialogs: state.dialogs,
     extensionErrors: state.extensionErrors,
   };
@@ -336,6 +364,7 @@ function startSession(options: RpcSessionOptions, sandbox: RpcSandbox): SessionS
     timedOut: false,
     responses: new Map(),
     notifies: [],
+    entries: [],
     dialogs: [],
     extensionErrors: [],
   };

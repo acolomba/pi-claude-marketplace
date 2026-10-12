@@ -24,7 +24,7 @@ npm run test:modules     # the paired module suites only (no architecture)
 npm run test:coverage:direct -- <paths>   # one or more pairs, each run alone
 npm run test:coverage:direct:commit       # --staged: pairs of the staged files; every pair when shared test support, package.json, package-lock.json, tsconfig.json, scripts/test-coverage-direct.mjs, or scripts/test-reporter.mjs is staged
 npm run check:commit     # pre-commit gate: check:static && test:unpaired && test:coverage:direct:commit
-npm run test:integration # tests/integration/**/*.test.ts
+npm run test:integration # scripts/install-test-peers.mjs, then tests/integration/**/*.test.ts
 npm run test:e2e         # tests/e2e/**/*.test.ts (PI_CM_E2E_REF=pinned)
 npm run test:coverage    # rm -rf coverage, then direct coverage for every pair, then integration and e2e under --experimental-test-coverage, emits coverage/{direct,integration,e2e}.lcov
 npm run check            # check:static (typecheck, lint, lint:workflows, fallow, format:check, test:corresponding, in parallel) && test:unpaired && test:integration && test:coverage:direct:all (no e2e)

@@ -75,11 +75,12 @@ import {
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
+import { createJsonCapture } from "../../edge/json-capture.ts";
 import { createNotificationBoundary } from "../../edge/notification-boundary.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
-import { adapterCommand, toolInventoryItem } from "../../platform/pi-inventory-seed.ts";
+import { runWithNothingLoaded, runWithSoftDeps } from "../../shared/notification-run-seeds.ts";
 
 import { retryTree } from "./scope-tree-inventory.ts";
 import {
@@ -111,11 +112,11 @@ import type {
 import type { AgentsIndex } from "../../../extensions/pi-claude-marketplace/persistence/agents-index-schema.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type {
-  CommandInventoryItem,
   NotificationContext,
-  PiInventory,
+  SoftDepStatus,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { CompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import type { NotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import type { LockedStateTransactionDeps } from "../../../extensions/pi-claude-marketplace/transaction/with-state-guard.ts";
 
 // The single-plugin production convenience wrapper is module-private: its only
@@ -174,27 +175,27 @@ test("owns the injected single-plugin and the bulk production reinstall factorie
   assert.strictEqual(typeof bulk, "function");
 });
 
-function makeCtx(piOverrides?: {
-  readonly toolNames?: readonly string[];
-  readonly commands?: readonly CommandInventoryItem[];
-}): {
+function makeCtx(softDeps?: Partial<SoftDepStatus>): {
   ctx: NotificationContext;
-  pi: PiInventory;
+  run: NotificationRun;
   notifications: NotifyRecord[];
 } {
   const notifications: NotifyRecord[] = [];
   const ctx = {
+    mode: "tui",
     ui: {
       notify(message: string, severity?: string): void {
         notifications.push(severity === undefined ? { message } : { message, severity });
       },
     },
   };
-  const pi: PiInventory = {
-    getAllTools: () => (piOverrides?.toolNames ?? []).map(toolInventoryItem),
-    getCommands: () => piOverrides?.commands ?? [],
-  };
-  return { ctx, pi, notifications };
+  const run = runWithSoftDeps({
+    piSubagentsLoaded: false,
+    piMcpAdapterLoaded: false,
+    workflowEngineLoaded: false,
+    ...softDeps,
+  });
+  return { ctx, run, notifications };
 }
 
 async function withHermeticHome<T>(fn: () => Promise<T>): Promise<T> {
@@ -323,14 +324,18 @@ async function seedMarketplace(opts: {
   });
 
   if (opts.install === true) {
-    const { ctx, pi } = makeCtx({ toolNames: ["subagent"], commands: [adapterCommand()] });
+    const { ctx } = makeCtx();
     const installPlugin = createInstallOperation(
       createHooksRouting(createHooksRuntime(), { readHooksJson }),
       createCompletionCache(),
     );
     await installPlugin({
       ctx,
-      pi,
+      run: runWithSoftDeps({
+        piSubagentsLoaded: true,
+        piMcpAdapterLoaded: true,
+        workflowEngineLoaded: false,
+      }),
       scope,
       cwd: opts.cwd,
       marketplace: marketplaceName,
@@ -509,8 +514,8 @@ async function writeManifest(
   return manifestPath;
 }
 
-async function reinstallDefault(cwd: string, ctx: NotificationContext, pi: PiInventory) {
-  return reinstallPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+async function reinstallDefault(cwd: string, ctx: NotificationContext, run: NotificationRun) {
+  return reinstallPlugin({ ctx, run, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
 }
 
 async function readSkill(cwd: string): Promise<string> {
@@ -535,10 +540,10 @@ test("PRL-06: absent installed record returns skipped and does not mutate state 
       const locations = locationsFor("project", cwd);
       await seedMarketplace({ cwd, marketplaceRoot: path.join(cwd, "mp-src"), install: false });
       const before = await readFile(locations.stateJsonPath, "utf8");
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
-      const outcome = await reinstallDefault(cwd, ctx, pi);
+      const outcome = await reinstallDefault(cwd, ctx, run);
 
       // assert
       assert.equal(outcome.partition, "skipped");
@@ -649,10 +654,10 @@ for (const coexist of [false, true]) {
             ]
           : []),
       ];
-      const { ctx, pi, notifications } = makeCtx({ toolNames: ["subagent"] });
+      const { ctx, run, notifications } = makeCtx({ piSubagentsLoaded: true });
       const options = {
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -773,12 +778,12 @@ test("AGENT-01: reinstall preserves legacy bytes and state when the new target h
     await writeFile(newTarget, "Other owner's bytes.\n");
     const indexBefore = await readFile(locations.agentsIndexPath, "utf8");
     const stateBefore = await readFile(locations.stateJsonPath, "utf8");
-    const { ctx, pi, notifications } = makeCtx({ toolNames: ["subagent"] });
+    const { ctx, run, notifications } = makeCtx({ piSubagentsLoaded: true });
 
     // act
     const outcome = await reinstallPlugin({
       ctx,
-      pi,
+      run,
       scope: "project",
       cwd,
       marketplace: "mp",
@@ -834,12 +839,12 @@ test("AGENT-01: reinstall preserves legacy bytes and state when another plugin o
     );
     const indexBefore = await readFile(locations.agentsIndexPath, "utf8");
     const stateBefore = await readFile(locations.stateJsonPath, "utf8");
-    const { ctx, pi, notifications } = makeCtx({ toolNames: ["subagent"] });
+    const { ctx, run, notifications } = makeCtx({ piSubagentsLoaded: true });
 
     // act
     const outcome = await reinstallPlugin({
       ctx,
-      pi,
+      run,
       scope: "project",
       cwd,
       marketplace: "mp",
@@ -878,12 +883,12 @@ test("AGENT-01: reinstall preserves legacy bytes and state when the post-migrati
     const { locations, oldTarget, newTarget, oldBytes } = await seedLegacyReinstall(cwd, false);
     const indexBefore = await readFile(locations.agentsIndexPath, "utf8");
     const stateBefore = await readFile(locations.stateJsonPath, "utf8");
-    const { ctx, pi, notifications } = makeCtx({ toolNames: ["subagent"] });
+    const { ctx, run, notifications } = makeCtx({ piSubagentsLoaded: true });
 
     // act
     const outcome = await reinstallPlugin({
       ctx,
-      pi,
+      run,
       scope: "project",
       cwd,
       marketplace: "mp",
@@ -954,12 +959,12 @@ test("PDEF-01: reinstall preview detects an agent conflict from a later resolved
         },
       };
       await saveState(locations.extensionRoot, state);
-      const { ctx, pi, notifications } = makeCtx({ toolNames: ["subagent"] });
+      const { ctx, run, notifications } = makeCtx({ piSubagentsLoaded: true });
 
       // act
       const outcome = await reinstallPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -1011,12 +1016,12 @@ test("PDEF-01: reinstall stages every agent directory and warns on a later dupli
         `agent source "shared" at "${path.join(conventionalAgentsDir, "shared-later.md")}" duplicates generated name ` +
         '"pi-claude-marketplace-hello-shared" already produced by agent source "shared" at ' +
         `"${path.join(conventionalAgentsDir, "..", "declared-agents", "shared-first.md")}"; keeping first discovered source.`;
-      const { ctx, pi } = makeCtx({ toolNames: ["subagent"] });
+      const { ctx, run } = makeCtx({ piSubagentsLoaded: true });
 
       // act
       const outcome = await reinstallPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -1087,12 +1092,12 @@ test("PDEF-01: reinstall rolls back replacements sourced from every agent direct
       const firstTarget = path.join(locations.agentsDir, "pi-claude-marketplace-hello-first.md");
       const laterTarget = path.join(locations.agentsDir, "pi-claude-marketplace-hello-later.md");
       let observedAtSave: readonly string[] = [];
-      const { ctx, pi } = makeCtx({ toolNames: ["subagent"] });
+      const { ctx, run } = makeCtx({ piSubagentsLoaded: true });
 
       // act
       const outcome = await reinstallPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -1141,10 +1146,10 @@ test("PRL-10: missing cached manifest entry fails and preserves old state, resou
         path.join(cwd, "mp-src", ".claude-plugin", "marketplace.json"),
         JSON.stringify({ name: "mp", plugins: [] }),
       );
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
-      const outcome = await reinstallDefault(cwd, ctx, pi);
+      const outcome = await reinstallDefault(cwd, ctx, run);
 
       // assert
       assert.equal(outcome.partition, "failed");
@@ -1177,13 +1182,13 @@ test("PRL-10 / RINST-01: bare reinstall unconditionally overwrites foreign agent
         command: "new command",
         agent: "new agent",
       });
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
       // RINST-01 / D-67-03: a bare reinstall (no `--partial`) overwrites the
       // agent that holds foreign bytes and refreshes every bridge -- overwrite
       // is unconditional.
-      const outcome = await reinstallDefault(cwd, ctx, pi);
+      const outcome = await reinstallDefault(cwd, ctx, run);
 
       // assert
       assert.equal(outcome.partition, "reinstalled");
@@ -1220,12 +1225,12 @@ test("PRL-10: saveState failure rolls back physical replacements and preserves d
         agent: "new agent",
         mcp: true,
       });
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
       const outcome = await reinstallPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -1263,12 +1268,12 @@ test("PRL-10 / RINST-01: unconditional overwrite of foreign previous agent conte
       const foreignBytes = "manual foreign bytes";
       await writeFile(agentPath, foreignBytes, "utf8");
       await writePluginTree(seeded.pluginRoot, "hello", { agent: "new agent" });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
       const outcome = await reinstallPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -1310,13 +1315,13 @@ test("PRL-12: cache and data cleanup failures are SILENTLY swallowed after succe
         install: true,
       });
       await writePluginTree(seeded.pluginRoot, "hello", { skill: "new skill" });
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
       const outcome = await reinstallPluginWithCache(
         {
           ctx,
-          pi,
+          run,
           scope: "project",
           cwd,
           marketplace: "mp",
@@ -1360,9 +1365,9 @@ test("PRL-12/RH-5: V2 per-variant reload-hint -- emitted on reinstalled even wit
         resources: {},
         install: true,
       });
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       // act & assert
-      const noResource = await reinstallDefault(cwd, ctx, pi);
+      const noResource = await reinstallDefault(cwd, ctx, run);
       assert.equal(noResource.partition, "reinstalled");
       // The reload-hint trailer is emitted structurally
       // from the `reinstalled` variant per D-16-12, regardless of
@@ -1382,7 +1387,7 @@ test("PRL-12/RH-5: V2 per-variant reload-hint -- emitted on reinstalled even wit
       });
       const withDeps = await reinstallPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd: cwd2,
         marketplace: "mp",
@@ -1415,12 +1420,12 @@ test("PRL-13 quiet render suppresses per-plugin notifications", async () => {
         resources: { skill: "old skill" },
         install: true,
       });
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
       const outcome = await reinstallPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -1448,13 +1453,13 @@ test("PRL-13 quiet render returns warning notes after successful cleanup warning
         resources: { skill: "old skill" },
         install: true,
       });
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
       const outcome = await reinstallPluginWithCache(
         {
           ctx,
-          pi,
+          run,
           scope: "project",
           cwd,
           marketplace: "mp",
@@ -1509,10 +1514,10 @@ test("PRL-04 bulk bare reinstall enumerates user and project scopes", async () =
         resources: { skill: "project old" },
         install: true,
       });
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
-      const outcomes = await reinstallPlugins({ ctx, pi, cwd, target: { kind: "all" } });
+      const outcomes = await reinstallPlugins({ ctx, run, cwd, target: { kind: "all" } });
 
       // assert
       // CR-01 / D-04: ordered via compareByNameThenScope (name
@@ -1555,12 +1560,12 @@ test("PRL-03 bulk marketplace reinstall resolves implicit scope like update", as
         resources: { skill: "old" },
         install: true,
       });
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
       const outcomes = await reinstallPlugins({
         ctx,
-        pi,
+        run,
         cwd,
         target: { kind: "marketplace", marketplace: "mymp" },
       });
@@ -1604,12 +1609,12 @@ test("PRL-05 bulk reinstall explicit scope filters targets", async () => {
         resources: { skill: "project" },
         install: true,
       });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
       const outcomes = await reinstallPlugins({
         ctx,
-        pi,
+        run,
         cwd,
         scope: "project",
         target: { kind: "all" },
@@ -1640,7 +1645,7 @@ test("ATTR-03/SCOPE-01: explicit-scope-plugin reinstall of an other-scope-only t
         resources: { skill: "user" },
         install: true,
       });
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
       // --scope project where the marketplace lives ONLY in user scope.
@@ -1652,7 +1657,7 @@ test("ATTR-03/SCOPE-01: explicit-scope-plugin reinstall of an other-scope-only t
       // was NOT carried out, so the row is `error`.
       const outcomes = await reinstallPlugins({
         ctx,
-        pi,
+        run,
         cwd,
         scope: "project",
         target: { kind: "plugin", plugin: "plug", marketplace: "mp" },
@@ -1687,7 +1692,7 @@ test("ATTR-03/SCOPE-01: explicit-scope-marketplace reinstall of an other-scope-o
         resources: { skill: "user" },
         install: true,
       });
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
       // Marketplace target with explicit --scope project where mp lives only
@@ -1697,7 +1702,7 @@ test("ATTR-03/SCOPE-01: explicit-scope-marketplace reinstall of an other-scope-o
       // carries the REQUESTED scope. No raw throw escapes.
       const outcomes = await reinstallPlugins({
         ctx,
-        pi,
+        run,
         cwd,
         scope: "project",
         target: { kind: "marketplace", marketplace: "mp" },
@@ -1733,7 +1738,7 @@ test("ATTR-03: bare reinstall of a marketplace absent in BOTH scopes emits stand
         resources: { skill: "user" },
         install: true,
       });
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
       // Bare form (no --scope): ghost-mp is absent in both scopes.
@@ -1741,7 +1746,7 @@ test("ATTR-03: bare reinstall of a marketplace absent in BOTH scopes emits stand
       // `{marketplace not added}` with NO bracket (absent-from-both form).
       const outcomes = await reinstallPlugins({
         ctx,
-        pi,
+        run,
         cwd,
         target: { kind: "marketplace", marketplace: "ghost-mp" },
       });
@@ -1788,10 +1793,10 @@ test("PRL-13 batch reinstall continues after failed plugin", async () => {
           plugins: [{ name: "good", version: "1.0.0", source: "./plugins/good" }],
         }),
       );
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
-      const outcomes = await reinstallPlugins({ ctx, pi, cwd, target: { kind: "all" } });
+      const outcomes = await reinstallPlugins({ ctx, run, cwd, target: { kind: "all" } });
 
       // assert
       assert.deepEqual(
@@ -1863,10 +1868,10 @@ test("PRL-13 deterministic partition output sorts by scope marketplace plugin", 
         resources: { skill: "u z" },
         install: true,
       });
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
-      const outcomes = await reinstallPlugins({ ctx, pi, cwd, target: { kind: "all" } });
+      const outcomes = await reinstallPlugins({ ctx, run, cwd, target: { kind: "all" } });
 
       // assert
       // CR-01 / D-04: ordered project-before-user via
@@ -1942,10 +1947,10 @@ test("same-name cross-scope reinstall renders the project-scope row before the u
         resources: { skill: "project-scope skill" },
         install: true,
       });
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
-      const outcomes = await reinstallPlugins({ ctx, pi, cwd, target: { kind: "all" } });
+      const outcomes = await reinstallPlugins({ ctx, run, cwd, target: { kind: "all" } });
 
       // assert
       // Outcome order asserts the project-before-user tie-break at the
@@ -2007,10 +2012,10 @@ test("PRL-14 batch reload hint uses only changed successful outcomes", async () 
         resources: { skill: "skill" },
         install: true,
       });
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
-      await reinstallPlugins({ ctx, pi, cwd, target: { kind: "all" } });
+      await reinstallPlugins({ ctx, run, cwd, target: { kind: "all" } });
 
       // assert
       const body = notifications.at(-1)?.message ?? "";
@@ -2050,10 +2055,10 @@ test("PRL-15 batch soft dependency warnings aggregate successful restaged resour
           plugins: [{ name: "good", version: "1.0.0", source: "./plugins/good" }],
         }),
       );
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
-      await reinstallPlugins({ ctx, pi, cwd, target: { kind: "all" } });
+      await reinstallPlugins({ ctx, run, cwd, target: { kind: "all" } });
 
       // assert
       const body = notifications.at(-1)?.message ?? "";
@@ -2087,10 +2092,10 @@ test("GAP-01: an empty bulk reinstall emits only its sentinel", async () => {
       // No plugins installed; state is empty.
       const locations = locationsFor("project", cwd);
       await mkdir(locations.extensionRoot, { recursive: true });
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
-      const outcomes = await reinstallPlugins({ ctx, pi, cwd, target: { kind: "all" } });
+      const outcomes = await reinstallPlugins({ ctx, run, cwd, target: { kind: "all" } });
 
       // assert
       assert.deepEqual([...outcomes], []);
@@ -2118,10 +2123,10 @@ test("GAP-02: reinstallPlugins with plugin removed from manifest emits failed ca
         path.join(cwd, "mp-src", ".claude-plugin", "marketplace.json"),
         JSON.stringify({ name: "mp", plugins: [] }),
       );
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
-      const outcomes = await reinstallPlugins({ ctx, pi, cwd, target: { kind: "all" } });
+      const outcomes = await reinstallPlugins({ ctx, run, cwd, target: { kind: "all" } });
 
       // assert
       assert.equal(outcomes.length, 1);
@@ -2149,12 +2154,12 @@ test("GAP-03: reinstallPlugin render=none failure returns failed without notifyi
         path.join(cwd, "mp-src", ".claude-plugin", "marketplace.json"),
         JSON.stringify({ name: "mp", plugins: [] }),
       );
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
       const outcome = await reinstallPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -2186,12 +2191,12 @@ test("GAP-04: errorWithManualRecovery empty-leaks path: saveState fails on empty
         resources: {},
         install: true,
       });
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
       const outcome = await reinstallPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -2257,10 +2262,10 @@ test("GAP-06: prepareAllHandles catch: MCP collision aborts partial handles and 
       await writeFile(mcpPath, JSON.stringify(mcpDoc));
 
       // act
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
       const outcome = await reinstallPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -2285,13 +2290,13 @@ test("GAP-07: reinstallPlugin skipped does not trigger runPostSuccessMaintenance
       // arrange
       await seedMarketplace({ cwd, marketplaceRoot: path.join(cwd, "mp-src"), install: false });
       let maintenanceCalled = false;
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
       const outcome = await reinstallPluginWithCache(
         {
           ctx,
-          pi,
+          run,
           scope: "project",
           cwd,
           marketplace: "mp",
@@ -2318,12 +2323,12 @@ test("GAP-08: reinstallPlugin render=none with skipped outcome emits no notifica
     try {
       // arrange
       await seedMarketplace({ cwd, marketplaceRoot: path.join(cwd, "mp-src"), install: false });
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
       const outcome = await reinstallPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -2352,12 +2357,12 @@ test("GAP-09: reinstallPlugin render=none success with bridgeWarnings returns an
         resources: { skill: "old" },
         install: true,
       });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
       const outcome = await reinstallPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -2396,12 +2401,12 @@ test("GAP-10: reinstallPlugin render=none success with no warnings returns bare 
         resources: { skill: "old" },
         install: true,
       });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
       const outcome = await reinstallPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -2436,12 +2441,12 @@ test("GAP-11 / RINST-01: reinstallPlugin unconditionally overwrites agent foreig
       const agentPath = path.join(locations.agentsDir, "pi-claude-marketplace-hello-bot.md");
       await writeFile(agentPath, "foreign bytes", "utf8");
       await writePluginTree(seeded.pluginRoot, "hello", { agent: "new agent" });
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
       const outcome = await reinstallPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -2471,10 +2476,10 @@ test("GAP-12: reinstallPlugins exactly-one-reinstalled emits singular summary", 
         resources: { skill: "old" },
         install: true,
       });
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
-      const outcomes = await reinstallPlugins({ ctx, pi, cwd, target: { kind: "all" } });
+      const outcomes = await reinstallPlugins({ ctx, run, cwd, target: { kind: "all" } });
 
       // assert
       assert.equal(outcomes.length, 1);
@@ -2502,12 +2507,12 @@ test("GAP-13: reinstallPlugin user-scope happy path reinstalls and records corre
         resources: { skill: "user old" },
         install: true,
       });
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
       const outcome = await reinstallPlugin({
         ctx,
-        pi,
+        run,
         scope: "user",
         cwd,
         marketplace: "ump",
@@ -2557,7 +2562,7 @@ test("GAP-14: reinstallPlugins batch with only skipped outcomes emits skipped ca
           },
         },
       });
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
       // Explicit scope=project so enumerateMarketplaceReinstallTargets finds
@@ -2565,7 +2570,7 @@ test("GAP-14: reinstallPlugins batch with only skipped outcomes emits skipped ca
       // reinstallPlugin then sees plugin not in mp.plugins and returns skipped.
       const outcomes = await reinstallPlugins({
         ctx,
-        pi,
+        run,
         cwd,
         scope: "project",
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -2598,13 +2603,13 @@ test("GAP-15: reinstallPlugin with bridge warning emits notifyWarning before suc
         resources: { skill: "old" },
         install: true,
       });
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
       const outcome = await reinstallPluginWithCache(
         {
           ctx,
-          pi,
+          run,
           scope: "project",
           cwd,
           marketplace: "mp",
@@ -2639,12 +2644,12 @@ test("GAP-16: reinstallPlugin saveState failure with non-empty replacements wrap
         skill: "new skill",
         command: "new command",
       });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
       const outcome = await reinstallPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -2683,12 +2688,12 @@ test("GAP-17: reinstallPlugin outcome notes include reinstall-specific failure m
         resources: { skill: "old" },
         install: true,
       });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
       const outcome = await reinstallPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -2716,12 +2721,12 @@ test("ATTR-03: a plugin reinstall whose marketplace is absent everywhere names t
     // arrange
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-plugin-ghost-"));
     try {
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
       const outcomes = await reinstallPlugins({
         ctx,
-        pi,
+        run,
         cwd,
         target: { kind: "plugin", marketplace: "ghost-mp", plugin: "hello" },
       });
@@ -2755,12 +2760,12 @@ test("SCOPE-01: an explicit-scope plugin reinstall of an other-scope-only contai
         resources: { skill: "s" },
         install: true,
       });
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
       const outcomes = await reinstallPlugins({
         ctx,
-        pi,
+        run,
         cwd,
         scope: "project",
         target: { kind: "plugin", marketplace: "mp", plugin: "hello" },
@@ -2802,12 +2807,12 @@ test("GAP-18: reinstallPlugins enumeration miss for an other-scope-only marketpl
         resources: { skill: "s" },
         install: true,
       });
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
       const outcomes = await reinstallPlugins({
         ctx,
-        pi,
+        run,
         cwd,
         scope: "project",
         target: { kind: "marketplace", marketplace: "onlyuser" },
@@ -2844,12 +2849,12 @@ test("GAP-19: reinstallPlugin updateStateRecord concurrent-removal detection", a
       });
 
       let firstAccess = true;
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
       const outcome = await reinstallPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -2924,10 +2929,10 @@ test("WB-01 / A7: reinstall with EQUAL existing entry leaves config byte- and mt
       await new Promise((r) => setTimeout(r, 50));
 
       // act
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
       const outcome = await reinstallPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -2981,10 +2986,10 @@ test("WB-01 / A7: reinstall with DIFFERENT existing entry writes back the patche
       );
 
       // act
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
       const outcome = await reinstallPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -3026,10 +3031,10 @@ test("WB-01: --local reinstall targets the local file; base file untouched", asy
       const baseBytesBefore = await readFile(locations.configJsonPath);
 
       // act
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
       const outcome = await reinstallPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -3109,14 +3114,14 @@ test("WR-03: reinstallPlugin round-trips the plugin's routing-table entries with
       );
 
       // act
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       const outcome = await createReinstallPlugin(
         REAL_REINSTALL_TRANSACTION,
         hooksRouting,
         createCompletionCache(),
       )({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -3191,10 +3196,10 @@ test("LIFE-01 (reinstall): a plugin with hooks rewrites <hooksDir>/<plugin>/hook
         JSON.stringify({ corrupted: true }),
       );
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       const outcome = await reinstallPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -3241,10 +3246,10 @@ test("LIFE-01 (reinstall): a plugin without hooks removes any stale <hooksDir>/<
       );
 
       // act
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       const outcome = await reinstallPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -3304,10 +3309,10 @@ test("BFILL-01 / RINST-01: reinstalling a partially-installed plugin succeeds in
       await seedThenDegradeToUnsupported(cwd);
 
       // act
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       const outcome = await reinstallPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -3333,10 +3338,10 @@ test("BFILL-01 / D-68-02 partial: reinstall records the REAL non-empty unsupport
       await seedThenDegradeToUnsupported(cwd);
 
       // act
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
       const outcome = await reinstallPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -3377,10 +3382,10 @@ test("BFILL-01 / D-68-02 full: reinstall of an installable plugin records instal
       });
 
       // act
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
       const outcome = await reinstallPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -3576,14 +3581,14 @@ async function seedInstalledGitSourcePlugin(opts: {
   });
 
   const { gitOps } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
-  const { ctx, pi } = makeCtx();
+  const { ctx } = makeCtx();
   const installPlugin = createInstallOperation(
     createHooksRouting(createHooksRuntime(), { readHooksJson }),
     createCompletionCache(),
   );
   await installPlugin({
     ctx,
-    pi,
+    run: runWithNothingLoaded(),
     scope: "project",
     cwd: opts.cwd,
     marketplace: opts.marketplaceName,
@@ -3608,13 +3613,13 @@ test("a clone-cache seam non-Error rejection becomes a complete failed outcome",
         pluginCloneKey("https://github.com/org/repo", GIT_SOURCE_SHA),
       );
       await rm(cloneRoot, { recursive: true, force: true });
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       const rejectNonError = Promise.reject.bind(Promise);
 
       // act
       const outcome = await reinstallPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -3668,12 +3673,12 @@ test("plugin reinstall authentication: a cold GitHub cache threads one provider 
         network: "disabled",
         deviceCode: DEVICE_CODE,
       });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
       const outcome = await reinstallPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -3722,12 +3727,12 @@ test("plugin reinstall authentication: a host the registry does not claim thread
       const { credentialOps, calls: credentialCalls } = createCredentialOpsFake({
         boundary: "memory",
       });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
       const outcome = await reinstallPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -3843,12 +3848,12 @@ test("plugin reinstall authentication: a bulk cold-cache sweep shares one host m
           { kind: "success", accessToken: "tok-abc", tokenType: "bearer", scope: "repo" },
         ],
       });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
       const outcomes = await reinstallPlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "marketplace", marketplace: "mp" },
@@ -3900,10 +3905,10 @@ test("a url-source reinstall completes on a warm cache with clone and resolveRem
         cloneThrows: new Error("network unreachable: clone"),
         resolveRemoteRefThrows: new Error("network unreachable: resolveRemoteRef"),
       });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
       const outcome = await reinstallPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -3944,10 +3949,10 @@ test("a git-source reinstall carries the recorded resolvedSha, version, and inst
         cloneThrows: new Error("network unreachable: clone"),
         resolveRemoteRefThrows: new Error("network unreachable: resolveRemoteRef"),
       });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
       await reinstallPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -3999,10 +4004,10 @@ test("a cold-cache git-source reinstall re-materializes from the recorded sha wi
         fixtureSourceDir: fixtureRepoDir,
         resolveRemoteRefThrows: new Error("network unreachable: resolveRemoteRef"),
       });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
       const outcome = await reinstallPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -4054,10 +4059,10 @@ test("a git-subdir reinstall honors clone-root subdir containment (pluginRoot un
         cloneThrows: new Error("network unreachable: clone"),
         resolveRemoteRefThrows: new Error("network unreachable: resolveRemoteRef"),
       });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
       const outcome = await reinstallPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -4199,10 +4204,10 @@ test("MIRR-06 / PRL-07: an unpinned reinstall repairs fs-only from the warm mirr
         cloneThrows: new Error("network unreachable: clone"),
         resolveRemoteRefThrows: new Error("network unreachable: resolveRemoteRef"),
       });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
       const outcome = await reinstallPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -4259,10 +4264,10 @@ test("MIRR-06 / D-79.1-04: an unpinned reinstall with only a per-sha clone (no m
         cloneThrows: new Error("network unreachable: clone"),
         resolveRemoteRefThrows: new Error("network unreachable: resolveRemoteRef"),
       });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
       const outcome = await reinstallPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -4315,10 +4320,10 @@ test("MIRR-06 / PRL-07: an unpinned reinstall with neither mirror nor per-sha cl
         cloneThrows: new Error("network unreachable: clone"),
         resolveRemoteRefThrows: new Error("network unreachable: resolveRemoteRef"),
       });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
       const outcome = await reinstallPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -4376,8 +4381,8 @@ test("SUB-02: project-scope reinstall substitutes ${CLAUDE_PROJECT_DIR} to the i
       });
 
       // act
-      const { ctx, pi, notifications } = makeCtx();
-      const outcome = await reinstallDefault(cwd, ctx, pi);
+      const { ctx, run, notifications } = makeCtx();
+      const outcome = await reinstallDefault(cwd, ctx, run);
 
       // assert
       assert.equal(outcome.partition, "reinstalled");
@@ -4452,10 +4457,10 @@ test("SUB-02: user-scope reinstall keeps ${CLAUDE_PROJECT_DIR} literal in skill,
       });
 
       // act
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       const outcome = await reinstallPlugin({
         ctx,
-        pi,
+        run,
         scope: "user",
         cwd,
         marketplace: "mp",
@@ -4523,10 +4528,10 @@ test("WR-04: a reinstall whose source frontmatter no longer parses reports the d
       );
 
       // act
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
       const outcome = await reinstallPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -4558,12 +4563,12 @@ test("WR-04: a reinstall whose command frontmatter no longer parses reports the 
         path.join(seeded.pluginRoot, "commands", "deploy.md"),
         "---\ntitle: A: B: C\n---\nRun it.\n",
       );
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
       const outcome = await reinstallPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -4607,10 +4612,10 @@ test("WR-09: the standalone reinstall row names the degraded kind and takes the 
       );
 
       // act
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await reinstallPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -4653,10 +4658,10 @@ test("WR-09: a clean reinstall row carries no brace and no raise", async () => {
       });
 
       // act
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await reinstallPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -4692,10 +4697,10 @@ test("WR-04: a clean reinstall omits the degraded-kinds field entirely", async (
       });
 
       // act
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
       const outcome = await reinstallPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -4735,10 +4740,10 @@ test("S5: a reinstall whose config write-back cannot parse reports the skip besi
       await writeFile(locations.configJsonPath, "{ not json ", "utf8");
 
       // act
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       const outcome = await reinstallPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -4792,10 +4797,10 @@ test("PRL-10: a source that stopped being installable fails with the typed reaso
       );
 
       // act
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       const outcome = await reinstallPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -4933,8 +4938,8 @@ test("DFEN-07 / D-103-12 / ENBL-18: reinstall over a disabled record writes noth
       const configBefore = await readFile(locations.configJsonPath, "utf8");
 
       // act
-      const { ctx, pi } = makeCtx();
-      const outcome = await reinstallDefault(cwd, ctx, pi);
+      const { ctx, run } = makeCtx();
+      const outcome = await reinstallDefault(cwd, ctx, run);
 
       // assert
       assert.equal(outcome.partition, "skipped");
@@ -4969,10 +4974,10 @@ test("DFEN-07 / D-103-12: the standalone reinstall renders one benign skipped ro
     try {
       // arrange
       await seedDisabledInstall(cwd);
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
-      await reinstallDefault(cwd, ctx, pi);
+      await reinstallDefault(cwd, ctx, run);
 
       // assert
       // IL-2: one emission for the whole reinstall. The mock records a severity
@@ -5008,12 +5013,12 @@ test("DFEN-07 / D-103-12: the bulk cascade carries the skipped and the reinstall
         install: true,
       });
       await seedDisabledInstall(cwd, { marketplaceRoot, pluginName: "sleeper" });
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
       const outcomes = await reinstallPlugins({
         ctx,
-        pi,
+        run,
         cwd,
         target: { kind: "marketplace", marketplace: "mp" },
       });
@@ -5113,10 +5118,10 @@ test("DFEN-08: a declared-true entry and a silent entry render identical reinsta
       assert.equal(before["gamma"]?.enabled, true, "precondition: a silent entry installs enabled");
 
       // act
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       const outcomes = await reinstallPlugins({
         ctx,
-        pi,
+        run,
         cwd,
         target: { kind: "marketplace", marketplace: "mp" },
       });
@@ -5238,8 +5243,8 @@ test("DFEN-07 / D-103-10: a declaration flipped between install and reinstall do
       );
 
       // act
-      const { ctx, pi } = makeCtx();
-      const outcome = await reinstallDefault(cwd, ctx, pi);
+      const { ctx, run } = makeCtx();
+      const outcome = await reinstallDefault(cwd, ctx, run);
 
       // assert
       assert.equal(outcome.partition, "skipped");
@@ -5287,6 +5292,106 @@ async function seedCollidingSkills(
   }
 }
 
+for (const mode of ["json", "rpc"]) {
+  test(`appends reinstall discovery diagnostics after the cascade in ${mode}`, async () => {
+    await withHermeticHome(async () => {
+      // arrange
+      const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-machine-diagnostics-"));
+      try {
+        const { pluginRoot } = await seedMarketplace({
+          cwd,
+          marketplaceRoot: path.join(cwd, "mp-src"),
+          resources: { skill: "old skill" },
+        });
+        const capture = createJsonCapture();
+        const ctx = {
+          mode,
+          get ui() {
+            return capture.ui;
+          },
+        };
+        const run = { ...runWithNothingLoaded(), entrySink: capture.entrySink };
+        const installPlugin = createInstallOperation(
+          createHooksRouting(createHooksRuntime(), { readHooksJson }),
+          createCompletionCache(),
+        );
+        await installPlugin({
+          ctx,
+          run,
+          scope: "project",
+          cwd,
+          marketplace: "mp",
+          plugin: "hello",
+          notifications: { mode: "orchestrated" },
+        });
+        await seedCollidingSkills(pluginRoot, "hello", ["foo"]);
+
+        // act
+        const outcomes = await reinstallPlugins({
+          ctx,
+          run,
+          cwd,
+          target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+        });
+
+        // assert
+        assert.strictEqual(outcomes[0]?.partition, "reinstalled");
+        assert.strictEqual(
+          (await loadState(locationsFor("project", cwd).extensionRoot)).marketplaces["mp"]?.plugins[
+            "hello"
+          ]?.version,
+          "1.0.0",
+        );
+        assert.deepStrictEqual(capture.entries, [
+          {
+            customType: "claude-plugin",
+            payload: {
+              schemaVersion: 1,
+              origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+              kind: "cascade",
+              severity: "info",
+              needsReload: true,
+              marketplaces: [
+                {
+                  name: "mp",
+                  scope: "project",
+                  plugins: [
+                    {
+                      name: "hello",
+                      id: "hello@mp",
+                      scope: "project",
+                      reasons: [],
+                      status: "reinstalled",
+                      version: "1.0.0",
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+          {
+            customType: "claude-plugin",
+            payload: {
+              schemaVersion: 1,
+              origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+              kind: "diagnostic",
+              severity: "warning",
+              needsReload: false,
+              header: 'Plugin "hello" reinstalled; 1 declared component has a note.',
+              lines: [
+                'skill source "hello-foo" in "skills" elides to generated name "hello-foo", already produced by skill source "foo"; ignoring duplicate.',
+              ],
+            },
+          },
+        ]);
+        capture.assertValid();
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
+
 test("D-141-03: a standalone reinstall surfaces a skills discovery warning after the row", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-discwarn-"));
@@ -5302,10 +5407,11 @@ test("D-141-03: a standalone reinstall surfaces a skills discovery warning after
       await seedCollidingSkills(pluginRoot, "hello", ["foo"]);
 
       // act
-      const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(2, 1);
+      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2);
+      const run = runWithNothingLoaded();
       const outcomes = await reinstallPlugins({
         ctx,
-        pi,
+        run,
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
       });
@@ -5360,8 +5466,9 @@ test("D-141-03: a bulk reinstall surfaces one diagnostic per plugin, singular an
       await seedCollidingSkills(world.pluginRoot, "world", ["foo", "bar"]);
 
       // act
-      const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(3, 1);
-      await reinstallPlugins({ ctx, pi, cwd, target: { kind: "all" } });
+      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(3);
+      const run = runWithNothingLoaded();
+      await reinstallPlugins({ ctx, run, cwd, target: { kind: "all" } });
 
       // assert
       assert.deepStrictEqual(notifications, [
@@ -5401,10 +5508,11 @@ test("D-141-03: an orchestrated reinstall carries the discovery half on notes an
       await seedCollidingSkills(pluginRoot, "hello", ["foo"]);
 
       // act
-      const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(0, 0);
+      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
+      const run = runWithNothingLoaded();
       const outcome = await reinstallPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -5447,10 +5555,10 @@ test("NREG-01: a clean reinstall outcome carries neither notes nor discoveryWarn
       });
 
       // act
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
       const outcome = await reinstallPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -5485,10 +5593,10 @@ test("NREG-01: a hygiene-only reinstall carries notes but still omits discoveryW
       });
 
       // act
-      const { ctx, pi } = makeCtx({ toolNames: ["subagent"] });
+      const { ctx, run } = makeCtx({ piSubagentsLoaded: true });
       const outcome = await reinstallPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -5525,10 +5633,10 @@ test("D-141-03: an agents hygiene warning rides notes in orchestrated mode and n
       await seedCollidingSkills(pluginRoot, "hello", ["foo"]);
 
       // act & assert
-      const orchestrated = makeCtx({ toolNames: ["subagent"] });
+      const orchestrated = makeCtx({ piSubagentsLoaded: true });
       const orchestratedOutcome = await reinstallPlugin({
         ctx: orchestrated.ctx,
-        pi: orchestrated.pi,
+        run: orchestrated.run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -5544,10 +5652,10 @@ test("D-141-03: an agents hygiene warning rides notes in orchestrated mode and n
         `expected the agents warning on notes; got: ${JSON.stringify(notes)}`,
       );
 
-      const standalone = makeCtx({ toolNames: ["subagent"] });
+      const standalone = makeCtx({ piSubagentsLoaded: true });
       await reinstallPlugins({
         ctx: standalone.ctx,
-        pi: standalone.pi,
+        run: standalone.run,
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
       });
@@ -5658,10 +5766,10 @@ async function standaloneReinstallNotifications(
     await mutate(pluginRoot);
   }
 
-  const { ctx, pi, notifications } = makeCtx();
+  const { ctx, run, notifications } = makeCtx();
   const outcomes = await reinstallPlugins({
     ctx,
-    pi,
+    run,
     cwd,
     target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
   });
@@ -5786,12 +5894,12 @@ test("a malformed state file renders one bulk enumeration failure without mutati
       await mkdir(locations.extensionRoot, { recursive: true });
       const malformedState = "{ not json";
       await writeFile(locations.stateJsonPath, malformedState, "utf8");
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
       const outcomes = await reinstallPlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "all" },
@@ -5817,12 +5925,12 @@ test("a bare marketplace reinstall preserves a non-absence scope-resolution fail
       await mkdir(userLocations.extensionRoot, { recursive: true });
       const malformedState = "{ malformed user state";
       await writeFile(userLocations.stateJsonPath, malformedState, "utf8");
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
       const outcomes = await reinstallPlugins({
         ctx,
-        pi,
+        run,
         cwd,
         target: { kind: "marketplace", marketplace: "mp" },
       });
@@ -5885,12 +5993,12 @@ test(
           payloads: [presentState, removedState],
         });
         await stateServer.ready;
-        const { ctx, pi, notifications } = makeCtx();
+        const { ctx, run, notifications } = makeCtx();
 
         // act
         const outcomes = await reinstallPlugins({
           ctx,
-          pi,
+          run,
           cwd,
           target: { kind: "marketplace", marketplace: "mp" },
         });
@@ -5948,12 +6056,12 @@ for (const { title, failure, reasons } of [
       const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-state-read-"));
       try {
         // arrange
-        const { ctx, pi, notifications } = makeCtx();
+        const { ctx, run, notifications } = makeCtx();
 
         // act
         const outcome = await reinstallPlugin({
           ctx,
-          pi,
+          run,
           scope: "project",
           cwd,
           marketplace: "mp",
@@ -5995,12 +6103,12 @@ test("a replacement failure aborts every prepared bridge and preserves foreign c
       await mkdir(foreignTarget, { recursive: true });
       await writeFile(path.join(foreignTarget, "foreign.txt"), "foreign\n");
       const stateBefore = await readFile(locations.stateJsonPath, "utf8");
-      const { ctx, pi } = makeCtx({ toolNames: ["subagent"], commands: [adapterCommand()] });
+      const { ctx, run } = makeCtx({ piMcpAdapterLoaded: true, piSubagentsLoaded: true });
 
       // act
       const outcome = await reinstallPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -6038,12 +6146,12 @@ test("a post-save hook-cache read failure leaves the committed reinstall success
       const sourceHooksPath = path.join(seeded.pluginRoot, "hooks", "hooks.json");
       const locations = locationsFor("project", cwd);
       const stateBefore = await loadState(locations.extensionRoot);
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
       const outcome = await reinstallPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -6103,7 +6211,7 @@ test("a hooks source changed after resolve fails before state persistence", asyn
           return prepared;
         },
       };
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
       const outcome = await createReinstallPlugin(
@@ -6112,7 +6220,7 @@ test("a hooks source changed after resolve fails before state persistence", asyn
         createCompletionCache(),
       )({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -6157,7 +6265,7 @@ test("an abort cleanup failure reports manual recovery through the exported work
           return prepared;
         },
       };
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
       const outcome = await createReinstallPlugin(
@@ -6166,7 +6274,7 @@ test("an abort cleanup failure reports manual recovery through the exported work
         createCompletionCache(),
       )({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -6201,12 +6309,12 @@ test("a local single reinstall names the invalid local config after a successful
       });
       const locations = locationsFor("project", cwd);
       await writeFile(locations.configLocalJsonPath, "{ invalid", "utf8");
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
       const outcome = await reinstallPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -6237,12 +6345,12 @@ test("a bulk local reinstall writes only the local configuration", async () => {
       });
       const locations = locationsFor("project", cwd);
       const baseConfigBefore = await readFile(locations.configJsonPath, "utf8");
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
       const outcomes = await reinstallPlugins({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         target: { kind: "plugin", marketplace: "mp", plugin: "hello" },
@@ -6280,12 +6388,12 @@ test("an unpinned git-subdir reinstall repairs from the warm mirror without exte
         cloneThrows: new Error("unexpected clone"),
         resolveRemoteRefThrows: new Error("unexpected remote resolution"),
       });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
       const outcome = await reinstallPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -6326,12 +6434,12 @@ test("an unpinned git-subdir reinstall reports a missing mirror subdirectory wit
       const { gitOps, state: gitState } = createGitOps({
         cloneThrows: new Error("unexpected clone"),
       });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
       const outcome = await reinstallPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -6373,12 +6481,12 @@ test("a pinned git-subdir reinstall reports a missing cached subdirectory", asyn
       const { gitOps, state: gitState } = createGitOps({
         cloneThrows: new Error("unexpected clone"),
       });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
       const outcome = await reinstallPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -6664,9 +6772,9 @@ test("retry proof: reinstall: skills prepare failure with no prepared handles co
       const activeSchedule = { current: firstSchedule };
       const { removeDataDir, stateTransaction } = observeRetryCollaborators(activeSchedule);
       const reinstall = createRetryReinstall(activeSchedule);
-      const { ctx, notifications, pi } = makeCtx({
-        toolNames: ["subagent"],
-        commands: [adapterCommand()],
+      const { ctx, notifications, run } = makeCtx({
+        piMcpAdapterLoaded: true,
+        piSubagentsLoaded: true,
       });
 
       // act
@@ -6674,7 +6782,7 @@ test("retry proof: reinstall: skills prepare failure with no prepared handles co
         ctx,
         cwd,
         marketplace: "mp",
-        pi,
+        run,
         plugin: "hello",
         removeDataDir,
         render: "none",
@@ -6691,7 +6799,7 @@ test("retry proof: reinstall: skills prepare failure with no prepared handles co
         ctx,
         cwd,
         marketplace: "mp",
-        pi,
+        run,
         plugin: "hello",
         removeDataDir,
         render: "none",
@@ -6815,9 +6923,9 @@ test("retry proof: reinstall: commands prepare failure aborts the one prepared h
       const activeSchedule = { current: firstSchedule };
       const { removeDataDir, stateTransaction } = observeRetryCollaborators(activeSchedule);
       const reinstall = createRetryReinstall(activeSchedule);
-      const { ctx, notifications, pi } = makeCtx({
-        toolNames: ["subagent"],
-        commands: [adapterCommand()],
+      const { ctx, notifications, run } = makeCtx({
+        piMcpAdapterLoaded: true,
+        piSubagentsLoaded: true,
       });
 
       // act
@@ -6825,7 +6933,7 @@ test("retry proof: reinstall: commands prepare failure aborts the one prepared h
         ctx,
         cwd,
         marketplace: "mp",
-        pi,
+        run,
         plugin: "hello",
         removeDataDir,
         render: "none",
@@ -6841,7 +6949,7 @@ test("retry proof: reinstall: commands prepare failure aborts the one prepared h
         ctx,
         cwd,
         marketplace: "mp",
-        pi,
+        run,
         plugin: "hello",
         removeDataDir,
         render: "none",
@@ -6956,9 +7064,9 @@ test("retry proof: reinstall: a rollback cleanup leak reports manual recovery an
         },
       };
       const reinstall = createRetryReinstall(activeSchedule);
-      const { ctx, notifications, pi } = makeCtx({
-        toolNames: ["subagent"],
-        commands: [adapterCommand()],
+      const { ctx, notifications, run } = makeCtx({
+        piMcpAdapterLoaded: true,
+        piSubagentsLoaded: true,
       });
 
       // act
@@ -6966,7 +7074,7 @@ test("retry proof: reinstall: a rollback cleanup leak reports manual recovery an
         ctx,
         cwd,
         marketplace: "mp",
-        pi,
+        run,
         plugin: "hello",
         removeDataDir,
         scope: "project",
@@ -6982,7 +7090,7 @@ test("retry proof: reinstall: a rollback cleanup leak reports manual recovery an
         ctx,
         cwd,
         marketplace: "mp",
-        pi,
+        run,
         plugin: "hello",
         removeDataDir,
         scope: "project",
@@ -7107,9 +7215,9 @@ test("retry proof: reinstall: an abort cleanup leak reports manual recovery and 
           }
         }),
       );
-      const { ctx, notifications, pi } = makeCtx({
-        toolNames: ["subagent"],
-        commands: [adapterCommand()],
+      const { ctx, notifications, run } = makeCtx({
+        piMcpAdapterLoaded: true,
+        piSubagentsLoaded: true,
       });
 
       // act
@@ -7117,7 +7225,7 @@ test("retry proof: reinstall: an abort cleanup leak reports manual recovery and 
         ctx,
         cwd,
         marketplace: "mp",
-        pi,
+        run,
         plugin: "hello",
         removeDataDir,
         scope: "project",
@@ -7134,7 +7242,7 @@ test("retry proof: reinstall: an abort cleanup leak reports manual recovery and 
         ctx,
         cwd,
         marketplace: "mp",
-        pi,
+        run,
         plugin: "hello",
         removeDataDir,
         scope: "project",
@@ -7289,9 +7397,9 @@ test("retry proof: reinstall: MCP prepare failure aborts three prepared handles 
       const activeSchedule = { current: firstSchedule };
       const { removeDataDir, stateTransaction } = observeRetryCollaborators(activeSchedule);
       const reinstall = createRetryReinstall(activeSchedule);
-      const { ctx, notifications, pi } = makeCtx({
-        toolNames: ["subagent"],
-        commands: [adapterCommand()],
+      const { ctx, notifications, run } = makeCtx({
+        piMcpAdapterLoaded: true,
+        piSubagentsLoaded: true,
       });
 
       // act
@@ -7299,7 +7407,7 @@ test("retry proof: reinstall: MCP prepare failure aborts three prepared handles 
         ctx,
         cwd,
         marketplace: "mp",
-        pi,
+        run,
         plugin: "hello",
         removeDataDir,
         render: "none",
@@ -7315,7 +7423,7 @@ test("retry proof: reinstall: MCP prepare failure aborts three prepared handles 
         ctx,
         cwd,
         marketplace: "mp",
-        pi,
+        run,
         plugin: "hello",
         removeDataDir,
         render: "none",
@@ -7419,9 +7527,9 @@ test("retry proof: reinstall: skills replacement refusal leaves an empty replace
       const activeSchedule = { current: firstSchedule };
       const { removeDataDir, stateTransaction } = observeRetryCollaborators(activeSchedule);
       const reinstall = createRetryReinstall(activeSchedule);
-      const { ctx, notifications, pi } = makeCtx({
-        toolNames: ["subagent"],
-        commands: [adapterCommand()],
+      const { ctx, notifications, run } = makeCtx({
+        piMcpAdapterLoaded: true,
+        piSubagentsLoaded: true,
       });
 
       // act
@@ -7429,7 +7537,7 @@ test("retry proof: reinstall: skills replacement refusal leaves an empty replace
         ctx,
         cwd,
         marketplace: "mp",
-        pi,
+        run,
         plugin: "hello",
         removeDataDir,
         render: "none",
@@ -7446,7 +7554,7 @@ test("retry proof: reinstall: skills replacement refusal leaves an empty replace
         ctx,
         cwd,
         marketplace: "mp",
-        pi,
+        run,
         plugin: "hello",
         removeDataDir,
         render: "none",
@@ -7563,9 +7671,9 @@ test("retry proof: reinstall: commands replacement refusal unwinds the committed
         activeSchedule,
         observeReinstallOperations(activeSchedule),
       );
-      const { ctx, notifications, pi } = makeCtx({
-        toolNames: ["subagent"],
-        commands: [adapterCommand()],
+      const { ctx, notifications, run } = makeCtx({
+        piMcpAdapterLoaded: true,
+        piSubagentsLoaded: true,
       });
 
       // act
@@ -7573,7 +7681,7 @@ test("retry proof: reinstall: commands replacement refusal unwinds the committed
         ctx,
         cwd,
         marketplace: "mp",
-        pi,
+        run,
         plugin: "hello",
         removeDataDir,
         render: "none",
@@ -7591,7 +7699,7 @@ test("retry proof: reinstall: commands replacement refusal unwinds the committed
         ctx,
         cwd,
         marketplace: "mp",
-        pi,
+        run,
         plugin: "hello",
         removeDataDir,
         render: "none",
@@ -7734,9 +7842,9 @@ test("retry proof: reinstall: a persistence failure after hooks removal leaves t
         persistence: persistenceFault,
       });
       const reinstall = createRetryReinstall(activeSchedule);
-      const { ctx, notifications, pi } = makeCtx({
-        toolNames: ["subagent"],
-        commands: [adapterCommand()],
+      const { ctx, notifications, run } = makeCtx({
+        piMcpAdapterLoaded: true,
+        piSubagentsLoaded: true,
       });
 
       // act
@@ -7744,7 +7852,7 @@ test("retry proof: reinstall: a persistence failure after hooks removal leaves t
         ctx,
         cwd,
         marketplace: "mp",
-        pi,
+        run,
         plugin: "hello",
         removeDataDir,
         render: "none",
@@ -7763,7 +7871,7 @@ test("retry proof: reinstall: a persistence failure after hooks removal leaves t
         ctx,
         cwd,
         marketplace: "mp",
-        pi,
+        run,
         plugin: "hello",
         removeDataDir,
         render: "none",
@@ -7866,9 +7974,9 @@ test("retry proof: reinstall: a persistence failure after four committed replace
         activeSchedule,
         observeReinstallOperations(activeSchedule),
       );
-      const { ctx, notifications, pi } = makeCtx({
-        toolNames: ["subagent"],
-        commands: [adapterCommand()],
+      const { ctx, notifications, run } = makeCtx({
+        piMcpAdapterLoaded: true,
+        piSubagentsLoaded: true,
       });
 
       // act
@@ -7876,7 +7984,7 @@ test("retry proof: reinstall: a persistence failure after four committed replace
         ctx,
         cwd,
         marketplace: "mp",
-        pi,
+        run,
         plugin: "hello",
         removeDataDir,
         render: "none",
@@ -7895,7 +8003,7 @@ test("retry proof: reinstall: a persistence failure after four committed replace
         ctx,
         cwd,
         marketplace: "mp",
-        pi,
+        run,
         plugin: "hello",
         removeDataDir,
         render: "none",
@@ -8060,9 +8168,9 @@ test("retry proof: reinstall: a concurrently removed record unwinds before any s
         },
       );
       const reinstall = createRetryReinstall(activeSchedule);
-      const { ctx, notifications, pi } = makeCtx({
-        toolNames: ["subagent"],
-        commands: [adapterCommand()],
+      const { ctx, notifications, run } = makeCtx({
+        piMcpAdapterLoaded: true,
+        piSubagentsLoaded: true,
       });
 
       // act
@@ -8070,7 +8178,7 @@ test("retry proof: reinstall: a concurrently removed record unwinds before any s
         ctx,
         cwd,
         marketplace: "mp",
-        pi,
+        run,
         plugin: "hello",
         removeDataDir,
         render: "none",
@@ -8086,7 +8194,7 @@ test("retry proof: reinstall: a concurrently removed record unwinds before any s
         ctx,
         cwd,
         marketplace: "mp",
-        pi,
+        run,
         plugin: "hello",
         removeDataDir,
         render: "none",
@@ -8174,9 +8282,9 @@ test("retry proof: reinstall: an invalid config write-back is reported beside th
       const activeSchedule = { current: firstSchedule };
       const { removeDataDir, stateTransaction } = observeRetryCollaborators(activeSchedule);
       const reinstall = createRetryReinstall(activeSchedule);
-      const { ctx, notifications, pi } = makeCtx({
-        toolNames: ["subagent"],
-        commands: [adapterCommand()],
+      const { ctx, notifications, run } = makeCtx({
+        piMcpAdapterLoaded: true,
+        piSubagentsLoaded: true,
       });
 
       // act
@@ -8184,7 +8292,7 @@ test("retry proof: reinstall: an invalid config write-back is reported beside th
         ctx,
         cwd,
         marketplace: "mp",
-        pi,
+        run,
         plugin: "hello",
         removeDataDir,
         scope: "project",
@@ -8202,7 +8310,7 @@ test("retry proof: reinstall: an invalid config write-back is reported beside th
         ctx,
         cwd,
         marketplace: "mp",
-        pi,
+        run,
         plugin: "hello",
         removeDataDir,
         scope: "project",
@@ -8315,9 +8423,9 @@ test("retry proof: reinstall: a post-save hook-cache read failure stays silent a
         createCompletionCache(),
       );
 
-      const { ctx, notifications, pi } = makeCtx({
-        toolNames: ["subagent"],
-        commands: [adapterCommand()],
+      const { ctx, notifications, run } = makeCtx({
+        piMcpAdapterLoaded: true,
+        piSubagentsLoaded: true,
       });
 
       // act
@@ -8325,7 +8433,7 @@ test("retry proof: reinstall: a post-save hook-cache read failure stays silent a
         ctx,
         cwd,
         marketplace: "mp",
-        pi,
+        run,
         plugin: "hello",
         render: "none",
         scope: "project",
@@ -8340,7 +8448,7 @@ test("retry proof: reinstall: a post-save hook-cache read failure stays silent a
         ctx,
         cwd,
         marketplace: "mp",
-        pi,
+        run,
         plugin: "hello",
         render: "none",
         scope: "project",
@@ -8417,14 +8525,14 @@ test("WR-03: a post-save routing-table rebuild failure leaves the committed rein
         hooksRouting,
         createCompletionCache(),
       );
-      const { ctx, notifications, pi } = makeCtx();
+      const { ctx, notifications, run } = makeCtx();
 
       // act
       const outcome = await reinstall({
         ctx,
         cwd,
         marketplace: "mp",
-        pi,
+        run,
         plugin: "hello",
         render: "none",
         scope: "project",
@@ -8476,9 +8584,9 @@ test("retry proof: reinstall: a completion-cache maintenance failure notes the d
         createHooksRouting(createHooksRuntime(), { readHooksJson }),
         completionCache,
       );
-      const { ctx, notifications, pi } = makeCtx({
-        toolNames: ["subagent"],
-        commands: [adapterCommand()],
+      const { ctx, notifications, run } = makeCtx({
+        piMcpAdapterLoaded: true,
+        piSubagentsLoaded: true,
       });
 
       // act
@@ -8486,7 +8594,7 @@ test("retry proof: reinstall: a completion-cache maintenance failure notes the d
         ctx,
         cwd,
         marketplace: "mp",
-        pi,
+        run,
         plugin: "hello",
         removeDataDir,
         render: "none",
@@ -8503,7 +8611,7 @@ test("retry proof: reinstall: a completion-cache maintenance failure notes the d
         ctx,
         cwd,
         marketplace: "mp",
-        pi,
+        run,
         plugin: "hello",
         removeDataDir,
         render: "none",
@@ -8572,9 +8680,9 @@ test("retry proof: reinstall: a plugin-data-dir maintenance failure keeps the di
         data: dataFault,
       });
       const reinstall = createRetryReinstall(activeSchedule);
-      const { ctx, notifications, pi } = makeCtx({
-        toolNames: ["subagent"],
-        commands: [adapterCommand()],
+      const { ctx, notifications, run } = makeCtx({
+        piMcpAdapterLoaded: true,
+        piSubagentsLoaded: true,
       });
 
       // act
@@ -8582,7 +8690,7 @@ test("retry proof: reinstall: a plugin-data-dir maintenance failure keeps the di
         ctx,
         cwd,
         marketplace: "mp",
-        pi,
+        run,
         plugin: "hello",
         removeDataDir,
         render: "none",
@@ -8599,7 +8707,7 @@ test("retry proof: reinstall: a plugin-data-dir maintenance failure keeps the di
         ctx,
         cwd,
         marketplace: "mp",
-        pi,
+        run,
         plugin: "hello",
         removeDataDir,
         render: "none",
@@ -8691,9 +8799,9 @@ test("retry proof: reinstall: a bulk cascade keeps the earlier committed target 
       const betaRecordBefore = (await loadState(locations.extensionRoot)).marketplaces["mp"]
         ?.plugins["beta"];
       const maintenance: string[] = [];
-      const { ctx, notifications, pi } = makeCtx({
-        toolNames: ["subagent"],
-        commands: [adapterCommand()],
+      const { ctx, notifications, run } = makeCtx({
+        piMcpAdapterLoaded: true,
+        piSubagentsLoaded: true,
       });
       const removeDataDir: RemoveDataDirFn = async (target, options) => {
         maintenance.push(`remove:data:${path.basename(target)}`);
@@ -8704,7 +8812,7 @@ test("retry proof: reinstall: a bulk cascade keeps the earlier committed target 
       const first = await reinstallPlugins({
         ctx,
         cwd,
-        pi,
+        run,
         removeDataDir,
         scope: "project",
         target: { kind: "marketplace", marketplace: "mp" },
@@ -8718,7 +8826,7 @@ test("retry proof: reinstall: a bulk cascade keeps the earlier committed target 
       const second = await reinstallPlugins({
         ctx,
         cwd,
-        pi,
+        run,
         removeDataDir,
         scope: "project",
         target: { kind: "marketplace", marketplace: "mp" },
@@ -8861,10 +8969,10 @@ test("WLIF-01: a replace-step failure leaves no workflows staging tree behind", 
         },
       );
       syncBuiltinESMExports();
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
-      const outcome = await reinstallDefault(cwd, ctx, pi);
+      const outcome = await reinstallDefault(cwd, ctx, run);
 
       // assert
       assert.equal(outcome.partition, "failed");
@@ -8925,10 +9033,10 @@ test("CR-01: a partially failed workflows commit unplaces what it stranded", asy
         },
       );
       syncBuiltinESMExports();
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
-      const outcome = await reinstallDefault(cwd, ctx, pi);
+      const outcome = await reinstallDefault(cwd, ctx, run);
 
       // assert
       assert.equal(outcome.partition, "failed");
@@ -8985,10 +9093,10 @@ test("CR-02: a failed restore keeps the staging root holding the only copy", asy
         },
       );
       syncBuiltinESMExports();
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
-      const outcome = await reinstallDefault(cwd, ctx, pi);
+      const outcome = await reinstallDefault(cwd, ctx, run);
 
       // assert
       assert.equal(outcome.partition, "failed");
@@ -9028,10 +9136,10 @@ test("WLIF-01: a reinstall of a plugin with no workflows touches neither workflo
         install: true,
       });
       await writePluginTree(seeded.pluginRoot, "hello", { skill: "new skill" });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
-      const outcome = await reinstallDefault(cwd, ctx, pi);
+      const outcome = await reinstallDefault(cwd, ctx, run);
 
       // assert -- the prepare short-circuits on the noop branch, so no staging
       // root is created and the engine's storage root is not brought into
@@ -9102,10 +9210,10 @@ test("WLIF-04: a reinstall REPLACES a workflow envelope at its recorded target",
           },
         ],
       });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
-      const outcome = await reinstallDefault(cwd, ctx, pi);
+      const outcome = await reinstallDefault(cwd, ctx, run);
 
       // assert
       assert.equal(outcome.partition, "reinstalled");
@@ -9156,14 +9264,14 @@ test("WLIF-01: a failure after the commit removes exactly the envelopes it place
         skill: "new skill",
         workflows: [{ sourceName: "greet" }],
       });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act -- the transaction save is the last of the three post-commit steps
       // and the simplest to sabotage; the workflows step sits outside the
       // replacement ledger, so only the outer catch can reach the envelope.
       const outcome = await reinstallPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -9209,14 +9317,14 @@ test("T-112-14: a containment refusal during recovery becomes a leak, not the su
         skill: "new skill",
         workflows: [{ sourceName: "greet" }],
       });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act -- the sabotage replaces the just-placed envelope with a symlink
       // BEFORE it throws, so the recovery's own path chokepoint refuses the
       // leaf it composed (SymlinkRefusedError extends PathContainmentError).
       const outcome = await reinstallPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -9283,13 +9391,13 @@ test("WLIF-01: a workflows staging-cleanup leak reaches the reinstall bridge war
         return originalRm(...args);
       });
       syncBuiltinESMExports();
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act -- `render: "none"` is the cascade surface, the only one that
       // carries the hygiene (bridge) warnings out as notes per D-19-01.
       const outcome = await reinstallPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -9348,12 +9456,12 @@ test("WLIF-03: an unremovable placed envelope becomes a manual-recovery leak", a
         },
       );
       syncBuiltinESMExports();
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
       const outcome = await reinstallPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -9402,10 +9510,10 @@ test("WLIF-01: the record names both envelopes a two-workflow reinstall wrote", 
         skill: "new skill",
         workflows: [{ sourceName: "alpha" }, { sourceName: "beta" }],
       });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
-      const outcome = await reinstallDefault(cwd, ctx, pi);
+      const outcome = await reinstallDefault(cwd, ctx, run);
 
       // assert
       assert.equal(outcome.partition, "reinstalled");
@@ -9453,10 +9561,10 @@ test("WLIF-04: a workflow the new version drops leaves neither an envelope nor a
         skill: "new skill",
         workflows: [{ sourceName: "farewell" }],
       });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
-      const outcome = await reinstallDefault(cwd, ctx, pi);
+      const outcome = await reinstallDefault(cwd, ctx, run);
 
       // assert
       assert.equal(outcome.partition, "reinstalled");
@@ -9494,10 +9602,10 @@ test("WLIF-06: a reinstall whose source dropped a workflow carries the stale-com
         skill: "new skill",
         workflows: [{ sourceName: "farewell" }],
       });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
-      const outcome = await reinstallDefault(cwd, ctx, pi);
+      const outcome = await reinstallDefault(cwd, ctx, run);
 
       // assert -- the axis rides the outcome so the shared row composer can
       // name the remedy; `reinstall.messaging.test.ts` pins what it renders.
@@ -9525,10 +9633,10 @@ test("WLIF-06: a reinstall that re-placed every recorded workflow omits the axis
         skill: "new skill",
         workflows: [{ sourceName: "greet" }],
       });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
-      const outcome = await reinstallDefault(cwd, ctx, pi);
+      const outcome = await reinstallDefault(cwd, ctx, run);
 
       // assert -- ABSENT, not `false`: the outcome shape of a clean reinstall
       // is unchanged, which is what keeps its row byte-identical.
@@ -9553,10 +9661,10 @@ test("WLIF-01: a reinstall with no workflows records an empty array, not an abse
         install: true,
       });
       await writePluginTree(seeded.pluginRoot, "hello", { skill: "new skill" });
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
-      const outcome = await reinstallDefault(cwd, ctx, pi);
+      const outcome = await reinstallDefault(cwd, ctx, run);
 
       // assert -- an own, empty array. A `deepStrictEqual` against `[]` alone
       // would not distinguish an absent key from an empty one, so the presence
@@ -9603,13 +9711,13 @@ test("PRL-03: a bulk cascade forwards the state-transaction seam to every per-pl
           await saveState(extensionRoot, state);
         },
       };
-      const { ctx, pi } = makeCtx({ toolNames: ["subagent"], commands: [adapterCommand()] });
+      const { ctx, run } = makeCtx({ piMcpAdapterLoaded: true, piSubagentsLoaded: true });
 
       // act
       const outcomes = await reinstallPlugins({
         ctx,
         cwd,
-        pi,
+        run,
         scope: "project",
         stateTransaction,
         target: { kind: "marketplace", marketplace: "mp" },
@@ -9658,9 +9766,9 @@ test("PRL-08 / PRL-11: preserves state, tree, cleanup, and exact notification th
       const beforeRecord = (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins
         .hello;
       assert.ok(beforeRecord !== undefined);
-      const { ctx, pi, notifications } = makeCtx({
-        toolNames: ["subagent"],
-        commands: [adapterCommand()],
+      const { ctx, run, notifications } = makeCtx({
+        piMcpAdapterLoaded: true,
+        piSubagentsLoaded: true,
       });
       const reinstallPlugin = createReinstallPlugin(
         REAL_REINSTALL_TRANSACTION,
@@ -9671,7 +9779,7 @@ test("PRL-08 / PRL-11: preserves state, tree, cleanup, and exact notification th
       // act
       const outcome = await reinstallPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -9746,10 +9854,10 @@ test("AFILE-06: a disabled plugin MCP server stays disabled through reinstall", 
         path.join(pluginRoot, ".mcp.json"),
         JSON.stringify({ mcpServers: { server1: { command: "deno", args: ["v2.js"] } } }),
       );
-      const { ctx, pi } = makeCtx();
+      const { ctx, run } = makeCtx();
 
       // act
-      const outcome = await reinstallDefault(cwd, ctx, pi);
+      const outcome = await reinstallDefault(cwd, ctx, run);
 
       // assert
       assert.strictEqual(outcome.partition, "reinstalled");
@@ -9805,12 +9913,12 @@ test("AFILE-04: reinstall over a commented mcp-adapter.json shows the comments-r
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-afile04-"));
     try {
       await seedCommentedMcpReinstall(cwd);
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
       await reinstallPlugins({
         ctx,
-        pi,
+        run,
         cwd,
         scope: "project",
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -9836,12 +9944,12 @@ test("AFILE-04: a rolled-back reinstall restores the comments and shows no notic
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-afile04-rollback-"));
     try {
       const { locations, commentedText } = await seedCommentedMcpReinstall(cwd);
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
       await reinstallPlugins({
         ctx,
-        pi,
+        run,
         cwd,
         scope: "project",
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -9869,12 +9977,12 @@ test("AFILE-04: an orchestrated reinstall returns the notice on its outcome and 
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-afile04-orchestrated-"));
     try {
       await seedCommentedMcpReinstall(cwd);
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
       const outcome = await reinstallPlugin({
         ctx,
-        pi,
+        run,
         scope: "project",
         cwd,
         marketplace: "mp",
@@ -9912,10 +10020,10 @@ test("AFILE-04: a self-rendered reinstall shows the notice after its row", async
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-afile04-self-"));
     try {
       await seedCommentedMcpReinstall(cwd);
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
-      await reinstallDefault(cwd, ctx, pi);
+      await reinstallDefault(cwd, ctx, run);
 
       // assert
       assert.deepStrictEqual(notifications, [
@@ -9960,10 +10068,10 @@ for (const { label, env, notices } of [
           createCompletionCache(),
           env,
         );
-        const { ctx, pi, notifications } = makeCtx();
+        const { ctx, run, notifications } = makeCtx();
 
         // act
-        await reinstall({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+        await reinstall({ ctx, run, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
 
         // assert
         assert.deepStrictEqual(notifications, [
@@ -9994,12 +10102,12 @@ test("AFILE-02: reinstalling a plugin with no MCP servers over an unparseable mc
       });
       await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
       await writeFile(locations.mcpAdapterJsonPath, "{ not json");
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
 
       // act
       await reinstallPlugins({
         ctx,
-        pi,
+        run,
         cwd,
         scope: "project",
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },

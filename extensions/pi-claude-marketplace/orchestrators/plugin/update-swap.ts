@@ -40,13 +40,13 @@
 // PUP-9 routing:
 //  updateSinglePlugin -- cascade path -- catches into partition='failed'
 //  updatePlugins -- direct path -- surfaces phase-2-or-earlier throws via
-//  a single notify(ctx, pi, NotificationMessage) per
+//  a single notify(ctx, run, NotificationMessage) per
 //  orchestration arm (cause threaded structurally on a
 //  PluginFailedMessage; renderer composes the 4-space
 //  cause-chain trailer).
 //
 // Success and failure notifications are a single
-//  notify(opts.ctx, opts.pi, { marketplaces: [{..., plugins: [...] }] })
+//  notify(opts.ctx, opts.run, { marketplaces: [{..., plugins: [...] }] })
 // call per orchestration arm. notify() owns severity, the reload-hint
 // trailer, and the cause-chain. The post-success completion-cache-refresh
 // warning inside dropPluginCompletionCache is NOT surfaced: the underlying
@@ -133,10 +133,11 @@ import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
 import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
 import type { InstalledReferenceNames } from "../../domain/skill-tokens.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
-import type { NotificationContext, PiInventory } from "../../platform/pi-api.ts";
+import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { HookSummaryEntry } from "../../shared/concerns/hooks.ts";
-import type { McpConfigNotice } from "../../shared/notification-dispatch.ts";
+import type { NotificationRun } from "../../shared/notification-run.ts";
+import type { McpConfigNotice } from "../../shared/notification-types.ts";
 import type { DegradeKind } from "../../shared/notify-reasons.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
@@ -192,7 +193,7 @@ export interface ThreePhaseArgsBase {
 export interface DirectThreePhaseArgs extends ThreePhaseArgsBase {
   readonly cascade: false;
   readonly ctx: NotificationContext;
-  readonly pi: PiInventory;
+  readonly run: NotificationRun;
   readonly cardinality: "single" | "plural";
   readonly notifyPhaseFailure: (error: Error, failures: readonly UpdatePhase3Failure[]) => void;
 }
@@ -201,7 +202,7 @@ export interface DirectThreePhaseArgs extends ThreePhaseArgsBase {
 export interface CascadeThreePhaseArgs extends ThreePhaseArgsBase {
   readonly cascade: true;
   readonly ctx?: never;
-  readonly pi?: never;
+  readonly run?: never;
 }
 
 /** Complete mode-specific replacement contract. */
@@ -1293,7 +1294,7 @@ function notifyInvalidConfigWriteBack(args: DirectThreePhaseArgs): void {
   );
   notifyWithContext(
     args.ctx,
-    args.pi,
+    args.run,
     UPDATE_CONTEXT,
     [
       {
@@ -1456,11 +1457,11 @@ export async function swapPluginUpdate(
   }
 
   // Success: WR-04 fields populated for cascade-side RH-5 composition.
-  // CMC-13: declaresAgents / declaresMcp predicate inputs
-  // mirror reinstall's effective-state contract (declares iff actually
-  // staged this update). The renderer probes companion-loaded state via
-  // SoftDepProbe and emits `{requires pi-subagents}` / `{requires pi-mcp-adapter}`
-  // iff (declares AND unloaded).
+  // CMC-13: declaresAgents / declaresMcp / declaresWorkflows reflect what
+  // was actually staged, matching reinstall's effective-state contract.
+  // resolveRows composes `{requires pi-subagents}`, `{requires pi-mcp-adapter}`,
+  // and `{requires pi-dynamic-workflows}` from the command run's snapshot under
+  // the context's marker policy (D-05, D-12), iff (declares AND unloaded).
   const stagedAgentNames = handles.agents.result.recorded.map((r) => r.generatedName);
   const stagedMcpServerNames = handles.mcp.result.recorded.map((r) => r.generatedName);
   // WARN-01 / WR-12 / D-99-03: the same per-kind degrade collection install and

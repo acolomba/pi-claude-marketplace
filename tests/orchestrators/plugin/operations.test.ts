@@ -32,10 +32,9 @@ import {
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
-import { expectSoftDepProbes } from "../../edge/notification-boundary.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { noStatusSnapshot } from "../../platform/mcp-status-seed.ts";
-import { emptyPiInventory } from "../../platform/pi-inventory-seed.ts";
+import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type { EnableDisableHooksRouting } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts";
 import type { InstallHooksRouting } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-disable-cascade.ts";
@@ -43,12 +42,11 @@ import type { ReinstallHooksRouting } from "../../../extensions/pi-claude-market
 import type { UninstallHooksRouting } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type {
-  ExtensionAPI,
   ExtensionContext,
   NotificationContext,
-  PiInventory,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { CompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import type { NotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 import type { TestContext } from "node:test";
 
@@ -64,26 +62,28 @@ type NotificationUi = Omit<ExtensionContext["ui"], "notify"> & {
 
 interface FetchBoundary {
   readonly ctx: ExtensionContext;
-  readonly pi: ExtensionAPI;
+  readonly run: NotificationRun;
   readonly notifications: NotifyRecord[];
   readonly verifyBoundary: () => void;
 }
 
 /**
  * The fetch command's notification boundary. fetch is handed the whole
- * `ExtensionContext` / `ExtensionAPI` rather than the two narrow read contracts
- * `makeCtx` builds, so the members it may reach are stated as expectations and
- * verified after the call: one cascade emission and one soft-dependency probe.
+ * `ExtensionContext` rather than the narrow read contract `makeCtx` builds, so
+ * the members it may reach are stated as expectations and verified after the
+ * call: one cascade emission. The emission renders from the command run's
+ * snapshot (D-05), so the boundary holds no tool inventory to probe.
  */
 function makeFetchBoundary(): FetchBoundary {
   const ctx = mock<ExtensionContext>({ exactParams: true, name: "fetch context" });
-  const pi = mock<ExtensionAPI>({ exactParams: true, name: "fetch extension API" });
   const ui = mock<NotificationUi>({ exactParams: true, name: "fetch UI" });
   const notifications: NotifyRecord[] = [];
+  when(() => ctx.mode)
+    .thenReturn("tui")
+    .once();
   when(() => ctx.ui)
     .thenReturn(ui)
     .once();
-  expectSoftDepProbes(pi, 1);
   when(() => ui.notify)
     .thenReturn((message, severity) => {
       notifications.push(severity === undefined ? { message } : { message, severity });
@@ -91,11 +91,10 @@ function makeFetchBoundary(): FetchBoundary {
     .once();
   return {
     ctx,
-    pi,
+    run: runWithNothingLoaded(),
     notifications,
     verifyBoundary: () => {
       verify(ctx);
-      verify(pi);
       verify(ui);
     },
   };
@@ -103,18 +102,19 @@ function makeFetchBoundary(): FetchBoundary {
 
 function makeCtx(): {
   ctx: NotificationContext;
-  pi: PiInventory;
+  run: NotificationRun;
   notifications: NotifyRecord[];
 } {
   const notifications: NotifyRecord[] = [];
   const ctx = {
+    mode: "tui",
     ui: {
       notify(message: string, severity?: string): void {
         notifications.push(severity === undefined ? { message } : { message, severity });
       },
     },
   };
-  return { ctx, pi: emptyPiInventory(), notifications };
+  return { ctx, run: runWithNothingLoaded(), notifications };
 }
 
 /**
@@ -373,12 +373,12 @@ test("WR-03: installPlugin of a hooks-declaring plugin rebuilds the routing tabl
   });
   // Pre-condition: the routing table's PreToolUse bucket is empty.
   assert.deepStrictEqual(ownerRuntime.getRoutingBucket("PreToolUse"), []);
-  const { ctx, pi, notifications } = makeCtx();
+  const { ctx, run, notifications } = makeCtx();
 
   // act
   const outcome = await installPlugin({
     ctx,
-    pi,
+    run,
     scope: "project",
     cwd,
     marketplace: "mp",
@@ -545,13 +545,13 @@ test("the composed prune operation removes an orphan in the default user scope",
   const fetchSpy = t.mock.method(globalThis, "fetch", () => {
     throw new Error("prune must stay offline");
   });
-  const { ctx, pi, notifications } = makeCtx();
+  const { ctx, run, notifications } = makeCtx();
 
   // act
   const prunePlugin = createPruneOperation(hooksRouting, completionCache);
   const stateAfterConstruction = await readFile(locations.stateJsonPath, "utf8");
   const locksAfterConstruction = lockSpy.mock.callCount();
-  await prunePlugin({ ctx, pi, cwd });
+  await prunePlugin({ ctx, run, cwd });
 
   // assert
   assert.strictEqual(stateAfterConstruction, stateBefore);
@@ -599,11 +599,11 @@ test("the composed prune operation removes only the selected project orphan", as
   const fetchSpy = t.mock.method(globalThis, "fetch", () => {
     throw new Error("prune must stay offline");
   });
-  const { ctx, pi, notifications } = makeCtx();
+  const { ctx, run, notifications } = makeCtx();
 
   // act
   const prunePlugin = createPruneOperation(hooksRouting, completionCache);
-  await prunePlugin({ ctx, pi, cwd, scope: "project" });
+  await prunePlugin({ ctx, run, cwd, scope: "project" });
 
   // assert
   assert.deepStrictEqual(await loadState(project.extensionRoot), {
@@ -680,13 +680,13 @@ async function installHooksDeclaringPlugin(
     },
     ...(commandName !== undefined && { commandName }),
   });
-  const { ctx, pi } = makeCtx();
+  const { ctx, run } = makeCtx();
   await createInstallOperation(
     hooksRouting,
     createCompletionCache(),
   )({
     ctx,
-    pi,
+    run,
     scope: "project",
     cwd,
     marketplace: "mp",
@@ -715,12 +715,12 @@ test("setPluginEnabled(false) unstages the artifacts, flips durable state and dr
   // Pre-conditions: the install left one live route and a staged hooks.json.
   assert.equal(runtime.getRoutingBucket("PreToolUse").length, 1);
   assert.equal(await pathExists(path.join(locations.hooksDir, "p1", "hooks.json")), true);
-  const { ctx, pi } = makeCtx();
+  const { ctx, run } = makeCtx();
 
   // act
   const outcome = await setPluginEnabled({
     ctx,
-    pi,
+    run,
     scope: "project",
     cwd,
     marketplace: "mp",
@@ -778,12 +778,12 @@ test("uninstallPlugin removes the record, the staged artifacts and the routes", 
   // Pre-conditions: the install left one live route and a staged hooks.json.
   assert.equal(runtime.getRoutingBucket("PreToolUse").length, 1);
   assert.equal(await pathExists(path.join(locations.hooksDir, "p1", "hooks.json")), true);
-  const { ctx, pi } = makeCtx();
+  const { ctx, run } = makeCtx();
 
   // act
   const outcome = await uninstallPlugin({
     ctx,
-    pi,
+    run,
     scope: "project",
     cwd,
     marketplace: "mp",
@@ -828,12 +828,12 @@ test("reinstallPlugin replaces the staged artifacts in place and re-routes the p
       PreToolUse: [{ matcher: "", hooks: [{ type: "command", command: "echo goodbye" }] }],
     }),
   );
-  const { ctx, pi } = makeCtx();
+  const { ctx, run } = makeCtx();
 
   // act
   const outcome = await reinstallPlugin({
     ctx,
-    pi,
+    run,
     scope: "project",
     cwd,
     marketplace: "mp",
@@ -914,7 +914,7 @@ test("fetchPlugins answers a warm pinned source from the bound status capability
   // act
   await fetchPlugins({
     ctx: boundary.ctx,
-    pi: boundary.pi,
+    run: boundary.run,
     scope: "project",
     cwd,
     target: { kind: "plugin", marketplace: "mp", plugin: "p1" },
@@ -943,12 +943,12 @@ test("fetchPlugins answers a warm pinned source from the bound status capability
 test("getPluginInfo reports the installed plugin through the bound reader capability", async (t) => {
   // arrange
   const { cwd } = await installHooksDeclaringPlugin(t, "info-operation-", "c1");
-  const { ctx, pi, notifications } = makeCtx();
+  const { ctx, run, notifications } = makeCtx();
 
   // act
   await getPluginInfo({
     ctx,
-    pi,
+    run,
     mcpStatus: noStatusSnapshot(),
     marketplace: "mp",
     plugin: "p1",

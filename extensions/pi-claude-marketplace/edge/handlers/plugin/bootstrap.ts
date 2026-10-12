@@ -15,6 +15,9 @@
 // `bootstrapClaudePlugin` in a catch that routes a thrown failure through
 // the `notify` path as a failed marketplace row -- a raw stack trace
 // must never reach the user channel.
+//
+// D-05: the router's run renders the add, the autoupdate flip, and the
+// handler's own failed row from one soft-dependency snapshot.
 
 import {
   bootstrapClaudePlugin,
@@ -24,32 +27,32 @@ import { errorMessage } from "../../../shared/errors.ts";
 import { notify, notifyUsageError } from "../../../shared/notification-dispatch.ts";
 import { parseArgs } from "../../args.ts";
 
-import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
+import type { SubcommandHandler } from "../../router.ts";
 import type { EdgeDeps } from "../../types.ts";
 
 const USAGE = "Usage: /claude:plugin bootstrap";
 
 export function makeBootstrapHandler(
-  pi: ExtensionAPI,
   deps: Pick<EdgeDeps, "completionCache" | "gitOps">,
-): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
-  return async (args, ctx): Promise<void> => {
+): SubcommandHandler {
+  // fallow-ignore-next-line code-duplication -- reviewed: bootstrap and import share the same parse-then-reject-positionals prologue on purpose, so each handler reads top to bottom
+  return async (args, ctx, run): Promise<void> => {
     let parsed;
     try {
       parsed = parseArgs(args);
     } catch (err) {
-      notifyUsageError(ctx, { message: errorMessage(err), usage: USAGE });
+      notifyUsageError(ctx, run, { message: errorMessage(err), usage: USAGE });
       return;
     }
 
     if (parsed.positional.length > 0) {
-      notifyUsageError(ctx, { message: "bootstrap takes no arguments.", usage: USAGE });
+      notifyUsageError(ctx, run, { message: "bootstrap takes no arguments.", usage: USAGE });
       return;
     }
 
     // Reject --scope flag explicitly: bootstrap is user-scope only.
     if (parsed.scope !== undefined) {
-      notifyUsageError(ctx, {
+      notifyUsageError(ctx, run, {
         message: "bootstrap does not accept --scope; it always targets user scope.",
         usage: USAGE,
       });
@@ -59,7 +62,7 @@ export function makeBootstrapHandler(
     try {
       await bootstrapClaudePlugin({
         ctx,
-        pi,
+        run,
         cwd: ctx.cwd,
         completionCache: deps.completionCache,
         gitOps: deps.gitOps,
@@ -74,7 +77,7 @@ export function makeBootstrapHandler(
       // (IL-2). The row stamps caller `severity: "error"` (SEV-02). The
       // marketplace-level row carries no cause chain -- SNM-10 confines
       // `cause` to plugin-level variants.
-      notify(ctx, pi, {
+      notify(ctx, run, {
         marketplaces: [
           {
             name: BOOTSTRAP_MARKETPLACE_NAME,

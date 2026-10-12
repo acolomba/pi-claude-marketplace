@@ -2,6 +2,39 @@
 
 *A living document updated after each milestone. Lessons feed forward into future planning.*
 
+## Milestone: json-output -- Mode-Keyed Presentation Strategies
+
+**Completed:** 2026-10-11 on `features/json` (not yet merged, no npm release)
+**Phases:** 9 (1-9) | **Plans:** 50 | **Tasks:** 72 | **Requirements:** 36/36 | **Audit:** `tech_debt`, no blockers (15/15 seams, 8/8 flows); override close (phases 1-7 digests stale by 08 D-12)
+
+### What Was Built
+- One presentation model, computed upstream of rendering, feeds two strategies chosen by `ctx.mode`: text for `tui`/`print` (bytes unchanged) and a versioned JSON wire schema for `json`/`rpc`, delivered as `claude-plugin` session entries.
+- Every command, load-time, and hook output carries its origin, a canonical command identity, an invocation ID, and an explicit outcome, even when the command throws.
+- Credentials are redacted at every serialization site, including the text the two LLM tools return to the model (Phase 9).
+
+### What Worked
+- **A byte corpus captured before the first renderer change.** Every later phase re-diffed 2,600-3,149 recorded `notify` calls, so a refactor of every output path kept the text byte form unchanged, and each approved exception was ledgered.
+- **Tech-debt phases inserted at the end instead of carried forward.** Phases 8 and 9 closed the ledger (0 open) and the last undecided audit item before the close, so the re-audit had no action list.
+
+### What Was Inefficient
+- **Verification digests went stale as later phases built on earlier ones.** Phases 1-7 all read `stale` at close, for drift in shared notification modules, which forced an override close (08 D-12).
+- **Locked decisions written from memory of tooling that had changed.** Phase 9 research found three: `isError` is ignored by Pi 0.87.1, `status: closed` is not a closed status for `audit-open`, and the corpus tool had been deleted. Each needed an orchestrator resolution before planning.
+
+### Patterns Established
+- **Mode-selected transport through one chokepoint.** `ctx.ui.notify` for text, `pi.appendEntry` for JSON, chosen once per run.
+- **Redact at the return boundary of every surface that leaves the process**, through the one `redactCredentials` leaf, rather than in producers.
+
+### Key Lessons
+1. **Probe the live tool or runtime before locking a decision that names it.** All three Phase 9 conflicts came from decisions about tool behavior that a one-minute probe would have caught.
+2. **A transport's error flag is part of its contract.** Pi's `execute` contract says "throw on failure", and a returned `isError` is silently dropped. That is left as an open user choice (D-03).
+
+### Cost Observations
+- Model mix: opus planning, execution and review; sonnet verifiers, plan checker and integration checker
+- Timeline: 2026-09-28 -> 2026-10-11, ~400 commits on the branch
+- Notable: Phase 9 (1 plan, 3 tasks) ran research -> plan -> execute -> secure -> validate -> review -> verify in one autonomous pass; the executor's one `npm run check` (~91 s) covered the regression gate.
+
+---
+
 ## Milestone: mcp-4 -- MCP 4
 
 **Completed:** 2026-10-10; merged 2026-10-10 (PR #250, squash `94160614`); released as npm 0.20.0
@@ -36,6 +69,8 @@
 - Model mix: not measured for this milestone
 - Timeline: 2026-10-01 -> 2026-10-10, ~385 first-parent commits on the branch
 - Notable: Phase 8 alone was 21 of the 73 plans.
+
+---
 
 ## Milestone: any-git-host -- Any Git Host
 
@@ -948,6 +983,7 @@ Result: 8/8 INFO requirements satisfied, 1459/1459 tests GREEN, full catalog UAT
 | v1.19 | 10 | One mirrored owner test per production module, coverage measured in isolation; land-the-control-first sequencing; plants over green runs as the standard of proof |
 | v1.20 | 12 | Dependency provenance in records, upstream parity research, and a final clean-tree gate |
 | mcp-4 | 8 | Conformance against the real adapter's code; sequential executors in one worktree; a debt phase after a `tech_debt` audit; scoped re-verification at close |
+| json-output | 9 | Byte corpus captured before the first renderer change; one presentation model behind mode-selected text and JSON strategies; end-of-milestone tech-debt phases instead of carried items |
 
 ### Cumulative Quality
 
@@ -963,6 +999,7 @@ Result: 8/8 INFO requirements satisfied, 1459/1459 tests GREEN, full catalog UAT
 | v1.19 | 5144 + 31 int | 204/204 mirrored pairs at zero correspondence violations; per-pair direct coverage measured in isolation; gate scripts finally wired into `npm run check`; green on two Node majors |
 | v1.20 | 7760 + 63 int | Full `npm run check` green in a clean checkout; 100% aggregate production coverage; one deferred live credential UAT subcase |
 | mcp-4 | not recorded | Full `npm run check` green with both peer roots (pi-mcp-adapter 5.2.0, pi-subagents 0.74.0); fallow audit `pass` with 0 introduced groups; all review ledgers `open: 0` |
+| json-output | 10,228 (corpus run) | 3,149-record text corpus and output catalog byte-identical apart from ledgered exceptions; wire schema validated against all 260 catalog examples; real headless Pi at 0.87.1 and the 0.86.1 floor |
 
 ### Top Lessons (Verified Across Milestones)
 

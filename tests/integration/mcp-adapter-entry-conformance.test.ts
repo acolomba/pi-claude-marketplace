@@ -9,12 +9,11 @@
 // headers; an entry whose header names an unset variable keeps OAuth off,
 // because the resolver refuses that header (D-08-04).
 //
-// pi-mcp-adapter is an optional peer. The test finds it through
-// `PI_MCP_ADAPTER_ROOT` only (pi-mcp-adapter-peer.ts) and imports its
+// pi-mcp-adapter is an optional peer. The test imports its compiled
 // `dist/config.js`, `dist/mcp-auth-flow.js` and `dist/mcp-auth-fetch.js` in
-// place. Each case skips only when that variable is unset. The CI
-// `integration` job installs the pinned peer and always sets it, so CI runs
-// every case.
+// place from the declared floor that `scripts/install-test-peers.mjs`
+// installs, through pi-mcp-adapter-peer.ts. A missing or wrong-version adapter
+// fails every case.
 
 import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -44,20 +43,14 @@ import type {
   PiMcpAdapterConfig,
 } from "./pi-mcp-adapter-peer.ts";
 
-const NOT_INSTALLED = "PI_MCP_ADAPTER_ROOT is not set";
-
 interface AdapterModules {
   readonly config: PiMcpAdapterConfig;
   readonly authFlow: PiMcpAdapterAuthFlow;
   readonly authFetch: PiMcpAdapterAuthFetch;
 }
 
-async function loadAdapterModules(): Promise<AdapterModules | undefined> {
+async function loadAdapterModules(): Promise<AdapterModules> {
   const peer = await findPiMcpAdapterPackage();
-  if (peer === undefined) {
-    return undefined;
-  }
-
   return {
     config: await loadPiMcpAdapterModule<PiMcpAdapterConfig>(peer, "config"),
     authFlow: await loadPiMcpAdapterModule<PiMcpAdapterAuthFlow>(peer, "mcp-auth-flow"),
@@ -90,13 +83,8 @@ function stampedSseEntry(headers: Readonly<Record<string, string>>): unknown {
   }).stamped.srv;
 }
 
-test("D-08-02: pi-mcp-adapter loads a user file holding a stored server choice as the user's own servers only", async (t) => {
+test("D-08-02: pi-mcp-adapter loads a user file holding a stored server choice as the user's own servers only", async () => {
   const adapter = await loadAdapterModules();
-  if (adapter === undefined) {
-    t.skip(NOT_INSTALLED);
-    return;
-  }
-
   await withHermeticEnvironment("mcp-adapter-entry-conformance-", async ({ cwd }) => {
     // arrange
     await seedMcpPlugin(cwd, ["user"]);
@@ -145,13 +133,8 @@ test("D-08-02: pi-mcp-adapter loads a user file holding a stored server choice a
   });
 });
 
-test("D-08-04: pi-mcp-adapter keeps OAuth for the entry written beside a clean non-Authorization header and resolves that header", async (t) => {
+test("D-08-04: pi-mcp-adapter keeps OAuth for the entry written beside a clean non-Authorization header and resolves that header", async () => {
   const adapter = await loadAdapterModules();
-  if (adapter === undefined) {
-    t.skip(NOT_INSTALLED);
-    return;
-  }
-
   // arrange
   const entry = stampedSseEntry({ "X-Team": "core" });
   assert.ok(isRecord(entry));
@@ -171,13 +154,8 @@ test("D-08-04: pi-mcp-adapter keeps OAuth for the entry written beside a clean n
   assert.deepStrictEqual([...resolvedHeaders], [["x-team", "core"]]);
 });
 
-test("D-08-04: pi-mcp-adapter keeps OAuth off for the entry written beside a header naming an unset variable, whose header OAuth mode refuses", async (t) => {
+test("D-08-04: pi-mcp-adapter keeps OAuth off for the entry written beside a header naming an unset variable, whose header OAuth mode refuses", async () => {
   const adapter = await loadAdapterModules();
-  if (adapter === undefined) {
-    t.skip(NOT_INSTALLED);
-    return;
-  }
-
   // arrange
   const entry = stampedSseEntry({ "X-Org": "${PI_CM_UNSET_IN_CONFORMANCE}" });
   assert.ok(isRecord(entry));

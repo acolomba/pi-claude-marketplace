@@ -12,7 +12,7 @@ import {
   DependencyCascadeError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { notifyWithContext } from "../../../extensions/pi-claude-marketplace/shared/notify-context.ts";
-import { adapterCommand } from "../../platform/pi-inventory-seed.ts";
+import { runWithSoftDeps } from "../../shared/notification-run-seeds.ts";
 
 import type {
   CascadeFailureSubject,
@@ -23,8 +23,6 @@ import type { InstallMsg } from "../../../extensions/pi-claude-marketplace/orche
 import type {
   NotificationContext,
   SoftDepStatus,
-  PiInventory,
-  ToolInventoryItem,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
 /**
@@ -40,10 +38,6 @@ import type {
  * catalog contract independently drives through the dispatcher.
  */
 
-// Every case reports pi-mcp-adapter loaded through its `mcp-adapter` command
-// (ADET-02), so these tool lists only decide whether pi-subagents is loaded.
-const BOTH_LOADED: readonly ToolInventoryItem[] = [{ name: "subagent" }];
-const MCP_ONLY: readonly ToolInventoryItem[] = [];
 const PROBE_BOTH_LOADED: SoftDepStatus = {
   workflowEngineLoaded: false,
   piSubagentsLoaded: true,
@@ -67,20 +61,20 @@ interface Emission {
  * second argument so a case states its severity in the same shape whatever it
  * expects.
  */
-function emit(rows: readonly CascadeMsg[], tools: readonly ToolInventoryItem[]): Emission {
+function emit(rows: readonly CascadeMsg[], softDeps: SoftDepStatus): Emission {
   const captured: Emission[] = [];
   const ctx: NotificationContext = {
+    mode: "tui",
     ui: {
       notify: (message: string, severity?: "info" | "warning" | "error"): void => {
         captured.push({ message, severity: severity ?? "info" });
       },
     },
   };
-  const pi: PiInventory = { getAllTools: () => tools, getCommands: () => [adapterCommand()] };
 
   notifyWithContext(
     ctx,
-    pi,
+    runWithSoftDeps(softDeps),
     CASCADE_CONTEXT,
     [{ name: "official", scope: "user", plugins: rows }],
     undefined,
@@ -126,9 +120,9 @@ function failureRows(subject: CascadeFailureSubject): readonly CascadeMsg[] {
 }
 
 describe("CASCADE_CONTEXT", () => {
-  test("adds exactly the RESV-05 skip arm to install's own render map", () => {
+  test("adds exactly the RESV-05 skipped policy to install's own row policies", () => {
     // arrange
-    const expectedArms = [
+    const expectedPolicyStatuses = [
       "disabled",
       "failed",
       "installed",
@@ -141,11 +135,14 @@ describe("CASCADE_CONTEXT", () => {
     // act
     const shape = {
       label: CASCADE_CONTEXT.Messaging.label,
-      renderArms: Object.keys(CASCADE_CONTEXT.render).sort(),
+      policyStatuses: Object.keys(CASCADE_CONTEXT.rowPolicies).sort(),
     };
 
     // assert
-    assert.deepStrictEqual(shape, { label: "Plugin install", renderArms: expectedArms });
+    assert.deepStrictEqual(shape, {
+      label: "Plugin install",
+      policyStatuses: expectedPolicyStatuses,
+    });
   });
 });
 
@@ -162,7 +159,7 @@ describe("composeCascadeMemberRows", () => {
     });
 
     // act
-    const emitted = emit(rows, BOTH_LOADED);
+    const emitted = emit(rows, PROBE_BOTH_LOADED);
 
     // assert
     assert.deepStrictEqual(emitted, {
@@ -188,7 +185,7 @@ describe("composeCascadeMemberRows", () => {
     });
 
     // act
-    const emitted = emit(rows, BOTH_LOADED);
+    const emitted = emit(rows, PROBE_BOTH_LOADED);
 
     // assert: the catalog's `dependency-cascade-success` bytes.
     assert.deepStrictEqual(emitted, {
@@ -220,7 +217,7 @@ describe("composeCascadeMemberRows", () => {
     });
 
     // act
-    const emitted = emit(rows, BOTH_LOADED);
+    const emitted = emit(rows, PROBE_BOTH_LOADED);
 
     // assert
     assert.deepStrictEqual(emitted, {
@@ -249,7 +246,7 @@ describe("composeCascadeMemberRows", () => {
     });
 
     // act
-    const emitted = emit(rows, BOTH_LOADED);
+    const emitted = emit(rows, PROBE_BOTH_LOADED);
 
     // assert
     assert.deepStrictEqual(emitted, {
@@ -315,7 +312,7 @@ describe("composeCascadeMemberRows", () => {
     });
 
     // act
-    const emitted = emit(rows, MCP_ONLY);
+    const emitted = emit(rows, PROBE_NO_AGENTS);
 
     // assert
     assert.deepStrictEqual(emitted, {
@@ -344,7 +341,7 @@ describe("composeCascadeMemberRows", () => {
     });
 
     // act
-    const emitted = emit(rows, BOTH_LOADED);
+    const emitted = emit(rows, PROBE_BOTH_LOADED);
 
     // assert
     assert.deepStrictEqual(emitted, {
@@ -373,7 +370,7 @@ describe("composeCascadeMemberRows", () => {
     });
 
     // act
-    const emitted = emit(rows, BOTH_LOADED);
+    const emitted = emit(rows, PROBE_BOTH_LOADED);
 
     // assert
     assert.deepStrictEqual(emitted, {
@@ -467,7 +464,7 @@ describe("composeCascadeFailureMessage", () => {
     };
 
     // act
-    const emitted = emit(failureRows(subject), BOTH_LOADED);
+    const emitted = emit(failureRows(subject), PROBE_BOTH_LOADED);
 
     // assert: the catalog's `dependency-cycle` bytes.
     assert.deepStrictEqual(emitted, {
@@ -491,7 +488,7 @@ describe("composeCascadeFailureMessage", () => {
     };
 
     // act
-    const emitted = emit(failureRows(subject), BOTH_LOADED);
+    const emitted = emit(failureRows(subject), PROBE_BOTH_LOADED);
 
     // assert: the subject falls back to the root, so the block names the plugin
     // the user typed rather than rendering a nameless row.
@@ -521,7 +518,7 @@ describe("composeCascadeFailureMessage", () => {
     };
 
     // act
-    const emitted = emit(failureRows(subject), BOTH_LOADED);
+    const emitted = emit(failureRows(subject), PROBE_BOTH_LOADED);
 
     // assert: the catalog's `dependency-marketplace-not-added` bytes.
     assert.deepStrictEqual(emitted, {
@@ -550,7 +547,7 @@ describe("composeCascadeFailureMessage", () => {
       },
     };
 
-    const emitted = emit(failureRows(subject), BOTH_LOADED);
+    const emitted = emit(failureRows(subject), PROBE_BOTH_LOADED);
 
     assert.deepStrictEqual(emitted, {
       severity: "error",
@@ -579,7 +576,7 @@ describe("composeCascadeFailureMessage", () => {
     };
 
     const rows = failureRows(subject);
-    const emitted = emit(rows, BOTH_LOADED);
+    const emitted = emit(rows, PROBE_BOTH_LOADED);
 
     assert.strictEqual(rows.length, 1);
     assert.deepStrictEqual(emitted, {
@@ -606,7 +603,7 @@ describe("composeCascadeFailureMessage", () => {
     };
 
     // act
-    const emitted = emit(failureRows(subject), BOTH_LOADED);
+    const emitted = emit(failureRows(subject), PROBE_BOTH_LOADED);
 
     // assert: the catalog's `dependency-not-in-manifest` bytes.
     assert.deepStrictEqual(emitted, {
@@ -635,7 +632,7 @@ describe("composeCascadeFailureMessage", () => {
     };
 
     // act
-    const emitted = emit(failureRows(subject), BOTH_LOADED);
+    const emitted = emit(failureRows(subject), PROBE_BOTH_LOADED);
 
     // assert: the catalog's `dependency-unusable-declaration` bytes. One
     // subject cannot be the reason for itself, so there is no second row.
@@ -665,7 +662,7 @@ describe("composeCascadeFailureMessage", () => {
     };
 
     // act
-    const emitted = emit(failureRows(subject), BOTH_LOADED);
+    const emitted = emit(failureRows(subject), PROBE_BOTH_LOADED);
 
     // assert: the catalog's `dependency-version-conflict` bytes.
     assert.deepStrictEqual(emitted, {
@@ -695,7 +692,7 @@ describe("composeCascadeFailureMessage", () => {
     };
 
     // act
-    const emitted = emit(failureRows(subject), BOTH_LOADED);
+    const emitted = emit(failureRows(subject), PROBE_BOTH_LOADED);
 
     // assert: the catalog's `dependency-installed-version-conflict` bytes.
     assert.deepStrictEqual(emitted, {
@@ -719,7 +716,7 @@ describe("composeCascadeFailureMessage", () => {
     };
 
     // act
-    const emitted = emit(failureRows(subject), BOTH_LOADED);
+    const emitted = emit(failureRows(subject), PROBE_BOTH_LOADED);
 
     // assert: the catalog's `dependency-no-matching-version` bytes.
     assert.deepStrictEqual(emitted, {
@@ -748,7 +745,7 @@ describe("composeCascadeFailureMessage", () => {
     };
 
     // act
-    const emitted = emit(failureRows(subject), BOTH_LOADED);
+    const emitted = emit(failureRows(subject), PROBE_BOTH_LOADED);
 
     // assert: the catalog's `dependency-tag-listing-failed` bytes.
     assert.deepStrictEqual(emitted, {
@@ -777,7 +774,7 @@ describe("composeCascadeFailureMessage", () => {
     };
 
     // act
-    const emitted = emit(failureRows(subject), BOTH_LOADED);
+    const emitted = emit(failureRows(subject), PROBE_BOTH_LOADED);
 
     // assert
     assert.deepStrictEqual(emitted, {
@@ -806,7 +803,7 @@ describe("composeCascadeFailureMessage", () => {
     };
 
     // act
-    const emitted = emit(failureRows(subject), BOTH_LOADED);
+    const emitted = emit(failureRows(subject), PROBE_BOTH_LOADED);
 
     // assert: the catalog's `dependency-invalid-version-constraint` bytes.
     assert.deepStrictEqual(emitted, {
@@ -835,7 +832,7 @@ describe("composeCascadeFailureMessage", () => {
     };
 
     // act
-    const emitted = emit(failureRows(subject), BOTH_LOADED);
+    const emitted = emit(failureRows(subject), PROBE_BOTH_LOADED);
 
     // assert: the catalog's `dependency-constraint-too-complex` bytes.
     assert.deepStrictEqual(emitted, {
@@ -861,7 +858,7 @@ describe("composeCascadeFailureMessage", () => {
     };
 
     // act
-    const emitted = emit(failureRows(subject), BOTH_LOADED);
+    const emitted = emit(failureRows(subject), PROBE_BOTH_LOADED);
 
     // assert: the catalog's `dependency-install-failed` bytes.
     assert.deepStrictEqual(emitted, {
@@ -894,7 +891,7 @@ describe("composeCascadeFailureMessage", () => {
     };
 
     // act
-    const emitted = emit(failureRows(subject), BOTH_LOADED);
+    const emitted = emit(failureRows(subject), PROBE_BOTH_LOADED);
 
     // assert
     assert.deepStrictEqual(emitted, {

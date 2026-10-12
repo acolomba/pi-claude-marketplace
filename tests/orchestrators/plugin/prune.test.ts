@@ -23,18 +23,31 @@ import { createCompletionCache } from "../../../extensions/pi-claude-marketplace
 import { withLockedStateTransaction } from "../../../extensions/pi-claude-marketplace/transaction/with-state-guard.ts";
 import { makeCtx } from "../../e2e/_helpers.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
-import { emptyPiInventory } from "../../platform/pi-inventory-seed.ts";
+import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
+import type { PruneRestoreOps } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/prune-rollback.ts";
 import type { UninstallTransaction } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
+
+// Mirrors mkdtemp with a fixed suffix, so a retained backup has a known name.
+// The name matches the catalog fixture's.
+const restoreOps = {
+  createBackupRoot: async (prefix: string): Promise<string> => {
+    const backupRoot = `${prefix}ABC123`;
+    await mkdir(backupRoot);
+    return backupRoot;
+  },
+  removeBackup: rm,
+} satisfies PruneRestoreOps;
 
 function prune(transaction: UninstallTransaction = REAL_UNINSTALL_TRANSACTION) {
   return createPrunePlugin(
     transaction,
     createHooksRouting(createHooksRuntime(), { readHooksJson }),
     createCompletionCache(),
+    restoreOps,
   );
 }
 
@@ -191,7 +204,7 @@ test("removes an orphan from the default user scope and reports it", async () =>
     const locations = locationsFor("user", cwd);
 
     // act
-    await prune()({ ctx, pi: emptyPiInventory(), cwd });
+    await prune()({ ctx, run: runWithNothingLoaded(), cwd });
 
     // assert
     assert.deepStrictEqual((await loadState(locations.extensionRoot)).marketplaces.mp?.plugins, {});
@@ -244,7 +257,7 @@ test("prunes legacy state with one durable save", async () => {
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
-    await prune(transaction)({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
+    await prune(transaction)({ ctx, run: runWithNothingLoaded(), cwd, scope: "project" });
 
     // assert
     assert.deepStrictEqual((await loadState(locations.extensionRoot)).marketplaces.mp?.plugins, {});
@@ -271,7 +284,7 @@ test("previews an orphan without writing state or taking a lock", async () => {
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
-    await prune()({ ctx, pi: emptyPiInventory(), cwd, dryRun: true });
+    await prune()({ ctx, run: runWithNothingLoaded(), cwd, dryRun: true });
 
     // assert
     assert.deepStrictEqual(await readFile(locations.stateJsonPath), before);
@@ -291,7 +304,7 @@ test("preview refuses an unreadable declarer without a write", async () => {
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
-    await prune()({ ctx, pi: emptyPiInventory(), cwd, dryRun: true });
+    await prune()({ ctx, run: runWithNothingLoaded(), cwd, dryRun: true });
 
     // assert
     assert.deepStrictEqual(await readFile(locations.stateJsonPath), before);
@@ -308,8 +321,8 @@ test("preview without orphans leaves the selected scope absent", async () => {
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
-    await prune()({ ctx, pi: emptyPiInventory(), cwd, scope: "project", dryRun: true });
-    await prune()({ ctx, pi: emptyPiInventory(), cwd, scope: "project", dryRun: true });
+    await prune()({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", dryRun: true });
+    await prune()({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", dryRun: true });
 
     // assert
     await assert.rejects(stat(locations.extensionRoot), { code: "ENOENT" });
@@ -329,7 +342,7 @@ test("reports an empty project sweep without saving state", async () => {
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
-    await prune()({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
+    await prune()({ ctx, run: runWithNothingLoaded(), cwd, scope: "project" });
 
     // assert
     assert.deepStrictEqual(await readFile(locations.stateJsonPath), before);
@@ -357,7 +370,7 @@ test("actual prune with a missing state skips snapshot and save", async () => {
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
-    await prune(transaction)({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
+    await prune(transaction)({ ctx, run: runWithNothingLoaded(), cwd, scope: "project" });
 
     // assert
     assert.equal(saves, 0);
@@ -382,7 +395,7 @@ test("refuses an unreadable declarer before saving or removing it", async () => 
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
-    await prune()({ ctx, pi: emptyPiInventory(), cwd });
+    await prune()({ ctx, run: runWithNothingLoaded(), cwd });
 
     // assert
     assert.deepStrictEqual(await readFile(locations.stateJsonPath), before);
@@ -422,7 +435,7 @@ test("removes the whole project-scope fixpoint in literal order and leaves held 
 
     await prune()({
       ctx: preview.ctx,
-      pi: emptyPiInventory(),
+      run: runWithNothingLoaded(),
       cwd,
       scope: "project",
       dryRun: true,
@@ -438,7 +451,7 @@ test("removes the whole project-scope fixpoint in literal order and leaves held 
       },
     ]);
 
-    await prune()({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
+    await prune()({ ctx, run: runWithNothingLoaded(), cwd, scope: "project" });
 
     assert.deepStrictEqual(installedKeys(await loadState(project.extensionRoot)), [
       "disabled@alpha",
@@ -478,7 +491,7 @@ test("removes the whole project-scope fixpoint in literal order and leaves held 
       },
     ]);
     const after = await readFile(project.stateJsonPath);
-    await prune()({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
+    await prune()({ ctx, run: runWithNothingLoaded(), cwd, scope: "project" });
     assert.deepStrictEqual(await readFile(project.stateJsonPath), after);
     assert.deepStrictEqual(notifications[1], {
       message: "Nothing to prune in project scope: no orphaned dependency installs were found.",
@@ -501,7 +514,7 @@ test("reports only explicit and held user installs as an empty sweep without sav
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
-    await prune()({ ctx, pi: emptyPiInventory(), cwd });
+    await prune()({ ctx, run: runWithNothingLoaded(), cwd });
 
     // assert
     assert.deepStrictEqual(await readFile(locations.stateJsonPath), before);
@@ -551,7 +564,7 @@ test("a failed member keeps its dependent chain while an independent orphan comm
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
-    await prune(transaction)({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
+    await prune(transaction)({ ctx, run: runWithNothingLoaded(), cwd, scope: "project" });
 
     // assert
     assert.deepStrictEqual(installedKeys(await loadState(locations.extensionRoot)), [
@@ -594,7 +607,7 @@ for (const dryRun of [true, false] as const) {
       const { ctx, notifications } = makeCtx(cwd);
 
       // act
-      await prune()({ ctx, pi: emptyPiInventory(), cwd, scope: "project", dryRun });
+      await prune()({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", dryRun });
 
       // assert
       assert.deepStrictEqual(await readFile(locations.stateJsonPath, "utf8"), "{");
@@ -622,7 +635,7 @@ test("actual prune reports a held lock without changing state", async () => {
 
     try {
       // act
-      await prune()({ ctx, pi: emptyPiInventory(), cwd });
+      await prune()({ ctx, run: runWithNothingLoaded(), cwd });
 
       // assert
       assert.deepStrictEqual(await readFile(locations.stateJsonPath), stateBefore);
@@ -648,7 +661,7 @@ test("actual prune reports a non-Error transaction rejection", async () => {
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
-    await prune(transaction)({ ctx, pi: emptyPiInventory(), cwd });
+    await prune(transaction)({ ctx, run: runWithNothingLoaded(), cwd });
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -681,19 +694,15 @@ test("a failed state save retains a missing skill directory and restores state",
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
-    await prune(transaction)({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
+    await prune(transaction)({ ctx, run: runWithNothingLoaded(), cwd, scope: "project" });
 
     // assert
     assert.deepStrictEqual(await readFile(locations.stateJsonPath), stateBefore);
     await assert.rejects(stat(path.dirname(fixture.skills["orphan@mp"] ?? "")), {
       code: "ENOENT",
     });
-    const [backupName] = (await readdir(locations.extensionRoot)).filter((name) =>
-      name.startsWith("prune-backup-"),
-    );
-    assert.ok(backupName);
     assert.deepStrictEqual(
-      await readFile(path.join(locations.extensionRoot, backupName, "0", "SKILL.md")),
+      await readFile(path.join(locations.extensionRoot, "prune-backup-ABC123", "0", "SKILL.md")),
       skillBefore,
     );
     assert.deepStrictEqual(notifications, [
@@ -701,7 +710,7 @@ test("a failed state save retains a missing skill directory and restores state",
         message:
           "A plugin operation has failed.\n\n" +
           "● (prune) [project]\n  ⊘ (prune) (failed) {rollback partial}\n" +
-          `    cause: Prune rollback was incomplete. Inspect ${backupName}/manifest.json under this scope's pi-claude-marketplace directory before retrying. -> state save failed\n` +
+          "    cause: Prune rollback was incomplete. Inspect prune-backup-ABC123/manifest.json under this scope's pi-claude-marketplace directory before retrying. -> state save failed\n" +
           "    [skills] (rollback failed)\n" +
           "      cause: Prune rollback requires manual directory restore at mp-orphan-skill.",
         severity: "error",
@@ -730,7 +739,7 @@ test("a failed save without directory artifacts completes rollback", async () =>
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
-    await prune(transaction)({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
+    await prune(transaction)({ ctx, run: runWithNothingLoaded(), cwd, scope: "project" });
 
     // assert
     assert.deepStrictEqual(await readFile(locations.stateJsonPath), originalState);
@@ -771,19 +780,15 @@ test("a save that writes then rejects restores state and retains the skill backu
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
-    await prune(transaction)({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
+    await prune(transaction)({ ctx, run: runWithNothingLoaded(), cwd, scope: "project" });
 
     // assert
     assert.deepStrictEqual(await readFile(locations.stateJsonPath), stateBefore);
     await assert.rejects(stat(path.dirname(fixture.skills["orphan@mp"] ?? "")), {
       code: "ENOENT",
     });
-    const [backupName] = (await readdir(locations.extensionRoot)).filter((name) =>
-      name.startsWith("prune-backup-"),
-    );
-    assert.ok(backupName);
     assert.deepStrictEqual(
-      await readFile(path.join(locations.extensionRoot, backupName, "0", "SKILL.md")),
+      await readFile(path.join(locations.extensionRoot, "prune-backup-ABC123", "0", "SKILL.md")),
       skillBefore,
     );
     assert.deepStrictEqual(notifications, [
@@ -791,7 +796,7 @@ test("a save that writes then rejects restores state and retains the skill backu
         message:
           "A plugin operation has failed.\n\n" +
           "● (prune) [project]\n  ⊘ (prune) (failed) {rollback partial}\n" +
-          `    cause: Prune rollback was incomplete. Inspect ${backupName}/manifest.json under this scope's pi-claude-marketplace directory before retrying. -> state save rejected after write\n` +
+          "    cause: Prune rollback was incomplete. Inspect prune-backup-ABC123/manifest.json under this scope's pi-claude-marketplace directory before retrying. -> state save rejected after write\n" +
           "    [skills] (rollback failed)\n" +
           "      cause: Prune rollback requires manual directory restore at mp-orphan-skill.",
         severity: "error",
@@ -824,7 +829,7 @@ test("a failed save removes newly created state and retains the skill backup", a
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
-    await prune(transaction)({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
+    await prune(transaction)({ ctx, run: runWithNothingLoaded(), cwd, scope: "project" });
 
     // assert
     await assert.rejects(stat(locations.stateJsonPath), { code: "ENOENT" });
@@ -832,12 +837,8 @@ test("a failed save removes newly created state and retains the skill backup", a
     await assert.rejects(stat(path.dirname(fixture.skills["orphan@mp"] ?? "")), {
       code: "ENOENT",
     });
-    const [backupName] = (await readdir(locations.extensionRoot)).filter((name) =>
-      name.startsWith("prune-backup-"),
-    );
-    assert.ok(backupName);
     assert.deepStrictEqual(
-      await readFile(path.join(locations.extensionRoot, backupName, "0", "SKILL.md")),
+      await readFile(path.join(locations.extensionRoot, "prune-backup-ABC123", "0", "SKILL.md")),
       skillBefore,
     );
     assert.deepStrictEqual(notifications, [
@@ -845,7 +846,7 @@ test("a failed save removes newly created state and retains the skill backup", a
         message:
           "A plugin operation has failed.\n\n" +
           "● (prune) [project]\n  ⊘ (prune) (failed) {rollback partial}\n" +
-          `    cause: Prune rollback was incomplete. Inspect ${backupName}/manifest.json under this scope's pi-claude-marketplace directory before retrying. -> state save rejected after create\n` +
+          "    cause: Prune rollback was incomplete. Inspect prune-backup-ABC123/manifest.json under this scope's pi-claude-marketplace directory before retrying. -> state save rejected after create\n" +
           "    [skills] (rollback failed)\n" +
           "      cause: Prune rollback requires manual directory restore at mp-orphan-skill.",
         severity: "error",
@@ -878,17 +879,16 @@ test("an occupied restore target reports rollback partial and retains the backup
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
-    await prune(transaction)({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
+    await prune(transaction)({ ctx, run: runWithNothingLoaded(), cwd, scope: "project" });
 
     // assert
     assert.deepStrictEqual(await readFile(locations.stateJsonPath), stateBefore);
     assert.equal(await readFile(skill, "utf8"), "replacement\n");
-    const [backupName] = (await readdir(locations.extensionRoot)).filter((name) =>
-      name.startsWith("prune-backup-"),
-    );
-    assert.match(backupName ?? "", /^prune-backup-[\w-]+$/);
     const manifest = JSON.parse(
-      await readFile(path.join(locations.extensionRoot, backupName ?? "", "manifest.json"), "utf8"),
+      await readFile(
+        path.join(locations.extensionRoot, "prune-backup-ABC123", "manifest.json"),
+        "utf8",
+      ),
     ) as { entries: Array<{ phase: string; root: string; target: string; backup: string | null }> };
     assert.deepStrictEqual(
       manifest.entries.filter((entry) => entry.phase === "skills"),
@@ -906,7 +906,7 @@ test("an occupied restore target reports rollback partial and retains the backup
         message:
           "A plugin operation has failed.\n\n" +
           "● (prune) [project]\n  ⊘ (prune) (failed) {rollback partial}\n" +
-          `    cause: Prune rollback was incomplete. Inspect ${backupName}/manifest.json under this scope's pi-claude-marketplace directory before retrying. -> state save failed\n` +
+          "    cause: Prune rollback was incomplete. Inspect prune-backup-ABC123/manifest.json under this scope's pi-claude-marketplace directory before retrying. -> state save failed\n" +
           "    [skills] (rollback failed)\n" +
           "      cause: Prune rollback found an occupied artifact at mp-orphan-skill.",
         severity: "error",
@@ -935,16 +935,12 @@ test("a missing skill directory reports manual recovery and restores state", asy
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
-    await prune(transaction)({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
+    await prune(transaction)({ ctx, run: runWithNothingLoaded(), cwd, scope: "project" });
 
     // assert
     await assert.rejects(stat(path.dirname(skill)), { code: "ENOENT" });
     assert.deepStrictEqual(await readFile(locations.stateJsonPath), originalState);
-    const [backupName] = (await readdir(locations.extensionRoot)).filter((name) =>
-      name.startsWith("prune-backup-"),
-    );
-    assert.ok(backupName);
-    const backupRoot = path.join(locations.extensionRoot, backupName);
+    const backupRoot = path.join(locations.extensionRoot, "prune-backup-ABC123");
     const manifest = JSON.parse(await readFile(path.join(backupRoot, "manifest.json"), "utf8")) as {
       entries: Array<{ phase: string; root: string; target: string; backup: string | null }>;
     };
@@ -965,7 +961,7 @@ test("a missing skill directory reports manual recovery and restores state", asy
         message:
           "A plugin operation has failed.\n\n" +
           "● (prune) [project]\n  ⊘ (prune) (failed) {rollback partial}\n" +
-          `    cause: Prune rollback was incomplete. Inspect ${backupName}/manifest.json under this scope's pi-claude-marketplace directory before retrying. -> state save failed\n` +
+          "    cause: Prune rollback was incomplete. Inspect prune-backup-ABC123/manifest.json under this scope's pi-claude-marketplace directory before retrying. -> state save failed\n" +
           "    [skills] (rollback failed)\n" +
           "      cause: Prune rollback requires manual directory restore at mp-orphan-skill.",
         severity: "error",
@@ -999,7 +995,7 @@ test("a concurrent MCP edit survives failed save with its original in recovery b
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
-    await prune(transaction)({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
+    await prune(transaction)({ ctx, run: runWithNothingLoaded(), cwd, scope: "project" });
 
     // assert
     assert.deepStrictEqual(await readFile(locations.mcpAdapterJsonPath), currentMcp);
@@ -1008,23 +1004,22 @@ test("a concurrent MCP edit survives failed save with its original in recovery b
       code: "ENOENT",
     });
     await assert.rejects(stat(locations.stateLockFile), { code: "ENOENT" });
-    const [backupName] = (await readdir(locations.extensionRoot)).filter((name) =>
-      name.startsWith("prune-backup-"),
-    );
-    assert.match(backupName ?? "", /^prune-backup-[\w-]+$/);
     const manifest = JSON.parse(
-      await readFile(path.join(locations.extensionRoot, backupName ?? "", "manifest.json"), "utf8"),
+      await readFile(
+        path.join(locations.extensionRoot, "prune-backup-ABC123", "manifest.json"),
+        "utf8",
+      ),
     ) as { entries: Array<{ phase: string; root: string; target: string; backup: string | null }> };
     assert.deepStrictEqual(
       manifest.entries.filter((entry) => entry.phase === "mcp adapter"),
       [{ phase: "mcp adapter", root: ".", target: "mcp-adapter.json", backup: "4" }],
     );
     assert.deepStrictEqual(
-      await readFile(path.join(locations.extensionRoot, backupName ?? "", "4")),
+      await readFile(path.join(locations.extensionRoot, "prune-backup-ABC123", "4")),
       originalMcp,
     );
     assert.deepStrictEqual(
-      await readFile(path.join(locations.extensionRoot, backupName ?? "", "0", "SKILL.md")),
+      await readFile(path.join(locations.extensionRoot, "prune-backup-ABC123", "0", "SKILL.md")),
       skillBefore,
     );
     assert.deepStrictEqual(notifications, [
@@ -1032,7 +1027,7 @@ test("a concurrent MCP edit survives failed save with its original in recovery b
         message:
           "A plugin operation has failed.\n\n" +
           "● (prune) [project]\n  ⊘ (prune) (failed) {rollback partial}\n" +
-          `    cause: Prune rollback was incomplete. Inspect ${backupName}/manifest.json under this scope's pi-claude-marketplace directory before retrying. -> state save failed\n` +
+          "    cause: Prune rollback was incomplete. Inspect prune-backup-ABC123/manifest.json under this scope's pi-claude-marketplace directory before retrying. -> state save failed\n" +
           "    [skills] (rollback failed)\n" +
           "      cause: Prune rollback requires manual directory restore at mp-orphan-skill.\n" +
           "    [mcp adapter] (rollback failed)\n" +
@@ -1066,23 +1061,22 @@ test("an MCP edit after a cascade with no MCP resources survives failed persiste
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
-    await prune(transaction)({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
+    await prune(transaction)({ ctx, run: runWithNothingLoaded(), cwd, scope: "project" });
 
     // assert
     assert.deepStrictEqual(await readFile(locations.mcpAdapterJsonPath), independent);
     assert.match(notifications[0]?.message ?? "", /\{rollback partial\}/);
     assert.match(notifications[0]?.message ?? "", /\[mcp adapter\] \(rollback failed\)/);
-    const [backupName] = (await readdir(locations.extensionRoot)).filter((name) =>
-      name.startsWith("prune-backup-"),
-    );
-    assert.ok(backupName);
     const manifest = JSON.parse(
-      await readFile(path.join(locations.extensionRoot, backupName, "manifest.json"), "utf8"),
+      await readFile(
+        path.join(locations.extensionRoot, "prune-backup-ABC123", "manifest.json"),
+        "utf8",
+      ),
     ) as { entries: Array<{ phase: string; backup: string | null }> };
     const entry = manifest.entries.find(({ phase }) => phase === "mcp adapter");
     assert.ok(entry?.backup);
     assert.deepStrictEqual(
-      await readFile(path.join(locations.extensionRoot, backupName, entry.backup)),
+      await readFile(path.join(locations.extensionRoot, "prune-backup-ABC123", entry.backup)),
       original,
     );
   });
@@ -1118,14 +1112,14 @@ test("rollback details survive a simultaneous lock-release failure", async (t) =
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
-    await prune(transaction)({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
+    await prune(transaction)({ ctx, run: runWithNothingLoaded(), cwd, scope: "project" });
 
     // assert
     const message = notifications[0]?.message ?? "";
     assert.equal(notifications[0]?.severity, "error");
     assert.match(message, /\{rollback partial\}/);
     assert.match(message, /\[mcp adapter\] \(rollback failed\)/);
-    assert.match(message, /prune-backup-[\w-]+\/manifest\.json/);
+    assert.match(message, /Inspect prune-backup-ABC123\/manifest\.json/);
     assert.match(message, /state save failed/);
     assert.match(message, /lock release also failed: lock release failed/);
     assert.doesNotMatch(message, /\/tmp\//);
@@ -1162,11 +1156,12 @@ test("a lock-release rejection reports committed removal and completes cleanup",
         },
       },
       createCompletionCache(),
+      restoreOps,
     );
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
-    await pruneWithRoutes({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
+    await pruneWithRoutes({ ctx, run: runWithNothingLoaded(), cwd, scope: "project" });
 
     // assert
     assert.deepStrictEqual(installedKeys(await loadState(locations.extensionRoot)), []);
@@ -1210,7 +1205,7 @@ test("an undefined release rejection still reports the committed scope", async (
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
-    await prune(transaction)({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
+    await prune(transaction)({ ctx, run: runWithNothingLoaded(), cwd, scope: "project" });
 
     // assert
     assert.deepStrictEqual(installedKeys(await loadState(locations.extensionRoot)), []);
@@ -1259,7 +1254,7 @@ test("post-commit cleanup failure reports committed members and continues cleanu
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
-    await prune(transaction)({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
+    await prune(transaction)({ ctx, run: runWithNothingLoaded(), cwd, scope: "project" });
 
     // assert
     assert.deepStrictEqual(cleaned, ["a", "b"]);
@@ -1307,7 +1302,7 @@ test("cleanup failure on the second member warns only that member and keeps its 
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
-    await prune(transaction)({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
+    await prune(transaction)({ ctx, run: runWithNothingLoaded(), cwd, scope: "project" });
 
     // assert
     assert.deepStrictEqual(cleaned, ["a", "b"]);
@@ -1357,7 +1352,7 @@ test("lock-release and second-member cleanup failures keep separate causes", asy
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
-    await prune(transaction)({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
+    await prune(transaction)({ ctx, run: runWithNothingLoaded(), cwd, scope: "project" });
 
     // assert
     assert.deepStrictEqual(installedKeys(await loadState(locations.extensionRoot)), []);
@@ -1420,7 +1415,7 @@ test("a post-save failure preserves the original cause when every member failed"
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
-    await prune(transaction)({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
+    await prune(transaction)({ ctx, run: runWithNothingLoaded(), cwd, scope: "project" });
 
     // assert
     assert.deepStrictEqual(installedKeys(await loadState(locations.extensionRoot)), ["orphan@mp"]);
@@ -1464,7 +1459,7 @@ test("AFILE-04: prune over a commented mcp-adapter.json shows the comments-remov
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
-    await prune()({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
+    await prune()({ ctx, run: runWithNothingLoaded(), cwd, scope: "project" });
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -1495,7 +1490,7 @@ test("AFILE-04: a dry-run prune sends no notice", async () => {
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
-    await prune()({ ctx, pi: emptyPiInventory(), cwd, scope: "project", dryRun: true });
+    await prune()({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", dryRun: true });
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -1524,7 +1519,7 @@ test("AFILE-04: a rolled-back prune restores the commented original, keeps it in
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
-    await prune(transaction)({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
+    await prune(transaction)({ ctx, run: runWithNothingLoaded(), cwd, scope: "project" });
 
     // assert
     const [backupName] = (await readdir(locations.extensionRoot)).filter((name) =>
@@ -1611,7 +1606,12 @@ test("NFR-3: a rolled-back prune restores its own mcp-adapter.json rewrite byte-
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
-    await prune(REFUSED_SAVE_TRANSACTION)({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
+    await prune(REFUSED_SAVE_TRANSACTION)({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      scope: "project",
+    });
 
     // assert
     assert.deepStrictEqual(
@@ -1673,7 +1673,12 @@ test("NFR-3: a rolled-back prune restores the plugin entry that keeps a user ove
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
-    await prune(REFUSED_SAVE_TRANSACTION)({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
+    await prune(REFUSED_SAVE_TRANSACTION)({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      scope: "project",
+    });
 
     // assert
     assert.deepStrictEqual(
@@ -1715,7 +1720,7 @@ test("AFILE-01: a committed prune writes the pruned plugin's kept override back"
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
-    await prune()({ ctx, pi: emptyPiInventory(), cwd, scope: "project" });
+    await prune()({ ctx, run: runWithNothingLoaded(), cwd, scope: "project" });
 
     // assert
     assert.deepStrictEqual(

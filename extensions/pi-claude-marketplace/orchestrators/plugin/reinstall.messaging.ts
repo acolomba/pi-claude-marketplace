@@ -1,12 +1,5 @@
 import { compareByNameThenScope } from "../../shared/compare-name-scope.ts";
 import {
-  ICON_INSTALLED,
-  ICON_UNINSTALLABLE,
-  installedLikeRow,
-  pluginRow,
-  renderVersion,
-} from "../../shared/notification-grammar.ts";
-import {
   type ContentReason,
   type PluginFailedMessage,
   type PluginManualRecoveryMessage,
@@ -16,36 +9,16 @@ import {
 import { notifyWithContext } from "../../shared/notify-context.ts";
 import { malformedReasonsForKinds, skipSeverity } from "../../shared/notify-reasons.ts";
 
-import type { NotificationContext, PiInventory } from "../../platform/pi-api.ts";
+import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
-import type {
-  CommandContext,
-  MarketplaceRows,
-  Plural,
-  RenderFn,
-} from "../../shared/notify-context.ts";
+import type { NotificationRun } from "../../shared/notification-run.ts";
+import type { CommandContext, MarketplaceRows, Plural } from "../../shared/notify-context.ts";
 import type { Scope } from "../../shared/types.ts";
 import type {
   ReinstallFailedOutcome,
   ReinstallPluginOutcome,
   ReinstallReinstalledOutcome,
 } from "../types.ts";
-
-/**
- * reinstall.messaging.ts -- the command-local notification vocabulary for
- * `/claude:plugin reinstall` (MOD-01). Co-locates reinstall's private status
- * set, its cascade row message shapes, and a render map total over reinstall's
- * OWN statuses (D-10) lifting the matching `renderPluginRow` arm bodies
- * VERBATIM. The shared presentation vocabulary stays central in
- * `shared/notification-grammar.ts` (D-notification-refactor-01-11) and is CALLED here, never
- * duplicated.
- *
- * NFR-9: the `manual recovery` / `failed` cause-chain and rollback-partial
- * trailing lines are NOT composed here. The render map renders only the single
- * row body; the central `emitContextCascade` seam appends the indented
- * cause-chain / rollback-partial lines through `redactAbsolutePaths`
- * (D-notification-refactor-01-11), so the path-redaction security seam is never bypassed.
- */
 
 /**
  * reinstall's private status set: a success `reinstalled` row, a `skipped` row
@@ -55,8 +28,8 @@ type ReinstallStatus = "reinstalled" | "skipped" | "failed" | "manual recovery";
 
 /**
  * reinstall's row message union. `dependencies` stays REQUIRED on the
- * `reinstalled` arm so the soft-dep marker injection fires for exactly that arm
- * (D-06 / TYPE-04).
+ * `reinstalled` arm so `resolveRows` can compose its soft-dep markers
+ * (D-06 / TYPE-04 / D-12).
  */
 type ReinstallMsg =
   | PluginReinstalledMessage
@@ -64,44 +37,16 @@ type ReinstallMsg =
   | PluginFailedMessage
   | PluginManualRecoveryMessage;
 
-/**
- * Render map total over reinstall's OWN statuses (D-10): a missing arm is a
- * TS2741 compile error at the `satisfies` site. Arm bodies are byte-identical
- * to the central `renderPluginRow` switch. The `manual recovery` status
- * discriminator is the literal `"manual recovery"` WITH a space.
- */
-const REINSTALL_RENDER: {
-  [K in ReinstallStatus]: RenderFn<Extract<ReinstallMsg, { status: K }>>;
-} = {
-  // WR-09: threads the optional `reasons` brace, matching the central arm. A
-  // reinstall that degraded a component names the kind here; a clean one passes
-  // an undefined list and renders the same brace-less row as before.
-  reinstalled: (p, probe, mpScope) =>
-    installedLikeRow(
-      ICON_INSTALLED,
-      p,
-      mpScope,
-      renderVersion(p.version),
-      "(reinstalled)",
-      p.reasons,
-      probe,
-    ),
-  // fallow-ignore-next-line code-duplication -- reviewed: per-command typed render-map arms are one-line calls to shared row composers; extracting them needs a cross-command generic.
-  skipped: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(skipped)", probe),
-  failed: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)", probe),
-  "manual recovery": (p, probe, mpScope) =>
-    pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(manual recovery)", probe),
-};
-
-/**
- * D-04 / D-05: reinstall's `CommandContext`. The `as const satisfies` pin
- * enforces that reinstall supplies both `Messaging.label` and a total render
- * map.
- */
+/** The command label and complete per-status reason policy. */
 export const REINSTALL_CONTEXT = {
   Messaging: { label: "Plugin reinstall" },
-  render: REINSTALL_RENDER,
-} as const satisfies CommandContext<ReinstallStatus, ReinstallMsg>;
+  rowPolicies: {
+    reinstalled: { markers: true, contentReasons: true },
+    skipped: { markers: false, contentReasons: true },
+    failed: { markers: false, contentReasons: true },
+    "manual recovery": { markers: false, contentReasons: true },
+  },
+} as const satisfies CommandContext<ReinstallStatus>;
 
 // ───────────────────────────────────────────────────────────────────────────
 // Outcome -> row projection.
@@ -114,7 +59,7 @@ export const REINSTALL_CONTEXT = {
 // ───────────────────────────────────────────────────────────────────────────
 /**
  * Render the bulk-reinstall outcome cascade as a single
- * `notify(ctx, pi, NotificationMessage)` call per orchestration.
+ * `notify(ctx, run, NotificationMessage)` call per orchestration.
  *
  * Shape per marketplace (catalog `/claude:plugin reinstall` cascade):
  *
@@ -139,7 +84,7 @@ export const REINSTALL_CONTEXT = {
  */
 // NotificationMessage cascade recipe:
 // - One MarketplaceNotificationMessage per affected marketplace, emitted via
-//   a single notify(ctx, pi, ...) call per orchestration.
+//   a single notify(ctx, run, ...) call per orchestration.
 // - plugins: readonly PluginNotificationMessage[] in display order
 //   (orchestrator-controlled iteration; notify does not sort).
 // - Discriminators by status: "reinstalled" / "skipped" / "failed" /
@@ -150,7 +95,7 @@ export const REINSTALL_CONTEXT = {
 // - Reference: catalog UAT plugin-reinstall fixtures.
 export function renderReinstallPartitionAndNotify(
   ctx: NotificationContext,
-  pi: PiInventory,
+  run: NotificationRun,
   outcomes: readonly ReinstallPluginOutcome[],
   cardinality: "single" | "plural",
 ): void {
@@ -190,7 +135,7 @@ export function renderReinstallPartitionAndNotify(
   // WR-01: the per-block plugin rows are built through the `outcomeToPluginMessage`
   // helper, now typed to `ReinstallMsg`, so the `MarketplaceRows<ReinstallMsg>`
   // annotation holds without a cast -- a status drift between the producer and
-  // the render map is a compile error here.
+  // the policy map is a compile error here.
   const marketplaces: Plural<MarketplaceRows<ReinstallMsg>> = sortedBlocks.map((block) => {
     const plugins: ReinstallMsg[] = block.outcomes.map((o) => outcomeToPluginMessage(o));
     return { name: block.name, scope: block.scope, plugins };
@@ -201,7 +146,7 @@ export function renderReinstallPartitionAndNotify(
   // reinstall omits it (the row embeds the outcome). The structural
   // single-vs-plural signal is the invocation FORM, threaded from
   // `reinstallPlugins`.
-  notifyWithContext(ctx, pi, REINSTALL_CONTEXT, marketplaces, undefined, cardinality);
+  notifyWithContext(ctx, run, REINSTALL_CONTEXT, marketplaces, undefined, cardinality);
 }
 
 /**
@@ -222,9 +167,9 @@ function isManualRecoveryOutcome(
  * the two surfaces cannot report the same ledger run differently (WR-09).
  *
  * CMC-13: `declaresAgents` / `declaresMcp` are required booleans, mapped to the
- * `dependencies: Dependency[]` tuple per SNM-06. The renderer's per-row soft-dep
- * probe fires `{requires pi-subagents}` / `{requires pi-mcp-adapter}` when the companion
- * extension is unloaded.
+ * `dependencies: Dependency[]` tuple per SNM-06. The row's `dependencies` feed
+ * `resolveRows`, which composes `{requires pi-subagents}` / `{requires pi-mcp-adapter}`
+ * when the companion extension is unloaded (D-12).
  *
  * WARN-01 / WR-09 / D-86-03: a component this ledger degraded names its kind and
  * takes the info -> warning raise, exactly as on the install, enable and backfill
@@ -355,11 +300,10 @@ function outcomeToPluginMessage(outcome: ReinstallPluginOutcome): ReinstallMsg {
 /**
  * Map a `ReinstallReinstalledOutcome`'s `declaresAgents` / `declaresMcp` /
  * `declaresWorkflows` predicate flags to the `Dependency[]` tuple consumed by
- * `PluginReinstalledMessage.dependencies` per SNM-06. The
- * renderer's per-row soft-dep probe iterates this array to emit
- * `{requires pi-subagents}` / `{requires pi-mcp-adapter}` /
- * `{requires pi-dynamic-workflows}` markers when the companion extension is
- * unloaded (MSG-SD-1..2).
+ * `PluginReinstalledMessage.dependencies` per SNM-06. `resolveRows`
+ * iterates this array to compose the `{requires pi-subagents}` /
+ * `{requires pi-mcp-adapter}` / `{requires pi-dynamic-workflows}` markers when the
+ * companion extension is unloaded (MSG-SD-1..2, D-12).
  *
  * WDEP-02: `workflows` pushes LAST, so a reinstall that declares agents and mcp
  * renders the same two-marker brace whether or not it also declares workflows.

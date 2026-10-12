@@ -1,76 +1,56 @@
 import assert from "node:assert/strict";
-import { test, type TestContext } from "node:test";
+import { test, type TestContext, type Mock } from "node:test";
 
 import {
   emitContextCascade,
   emitReconcileAppliedContextCascade,
   emitUpdateNoOpCascade,
 } from "../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
+import { CENTRAL_ROW_POLICY } from "../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 import {
+  buildSummaryLine,
+  composeLeftoverRemovalAdvisories,
   composeRetainedWorkflowsAdvisories,
-  composeTally,
-  composeWithSummary,
-  foldTallyAndHint,
-  isInfoKind,
+  computeSeverity,
+  countRowsBySeverity,
   shouldEmitReloadHint,
 } from "../../extensions/pi-claude-marketplace/shared/notification-summary.ts";
-import { adapterCommand } from "../platform/pi-inventory-seed.ts";
 
-import type {
-  CommandInventoryItem,
-  SoftDepStatus,
-} from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import { runWithSoftDeps } from "./notification-run-seeds.ts";
+
+import type { NotificationRun } from "../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import type {
   CascadeNotificationMessage,
   NotificationMessage,
 } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
 interface NotificationContext {
-  readonly ui: { readonly notify: ReturnType<TestContext["mock"]["fn"]> };
-}
-
-interface NotificationApi {
-  readonly getAllTools: () => readonly { readonly name: string }[];
-  readonly getCommands: () => readonly CommandInventoryItem[];
+  mode: string;
+  readonly ui: {
+    readonly notify: Mock<(message: string, severity?: "info" | "warning" | "error") => void>;
+  };
 }
 
 function createContext(t: TestContext): NotificationContext {
-  return { ui: { notify: t.mock.fn() } };
+  return {
+    mode: "tui",
+    ui: { notify: t.mock.fn((_message: string, _severity?: "info" | "warning" | "error") => {}) },
+  };
 }
 
-function notificationApi(): NotificationApi {
-  return { getAllTools: () => [{ name: "subagent" }], getCommands: () => [adapterCommand()] };
-}
-
-function messageWithKindSequence(
-  fields: Record<string, unknown>,
-  kinds: readonly string[],
-): Record<string, unknown> {
-  let index = 0;
-
-  // The changing discriminator models a hostile getter so the exhaustive
-  // switch tails remain runtime-tested instead of being compile-time-only.
-  return Object.defineProperty({ ...fields }, "kind", {
-    enumerable: true,
-    get() {
-      const kind = kinds[Math.min(index, kinds.length - 1)]!;
-      index++;
-      return kind;
-    },
+/** pi-subagents and pi-mcp-adapter are loaded; the workflow engine is not. */
+function notificationRun(): NotificationRun {
+  return runWithSoftDeps({
+    piSubagentsLoaded: true,
+    piMcpAdapterLoaded: true,
+    workflowEngineLoaded: false,
   });
-}
-
-function renderRow(
-  row: Parameters<typeof emitContextCascade>[2]["marketplaces"][number]["plugins"][number],
-  _probe: SoftDepStatus,
-): string {
-  return `${row.name} (${row.status})`;
 }
 
 function emitContext(t: TestContext, message: CascadeNotificationMessage): readonly unknown[] {
   const ctx = createContext(t);
 
-  emitContextCascade(ctx as never, notificationApi(), message, renderRow);
+  emitContextCascade(ctx, notificationRun(), message, CENTRAL_ROW_POLICY);
 
   assert.equal(ctx.ui.notify.mock.callCount(), 1);
   return ctx.ui.notify.mock.calls[0]!.arguments;
@@ -203,124 +183,10 @@ test("nonempty all-failure summary, tally, and reload hint retain their exact or
 
   // assert
   assert.deepStrictEqual(notification, [
-    "A plugin operation has failed.\n\n● official [user]\n  alpha (failed)\n\nPlugin install: 1 failure\n\n/reload to pick up changes",
+    "A plugin operation has failed.\n\n● official [user]\n  ⊘ alpha (failed) {not found}\n\nPlugin install: 1 failure\n\n/reload to pick up changes",
     "error",
   ]);
 });
-
-test("plural tally keeps failure, warning, and success categories in order", () => {
-  // arrange
-  const message = {
-    cardinality: "plural",
-    label: "Plugin update",
-    marketplaces: [
-      {
-        name: "official",
-        scope: "user",
-        status: "failed",
-        severity: "error",
-        plugins: [
-          {
-            name: "warning-row",
-            status: "skipped",
-            reasons: ["not installed"],
-            severity: "warning",
-            needsReload: false,
-          },
-          { name: "success-row", status: "available", severity: "info" },
-        ],
-      },
-    ],
-  } satisfies Parameters<typeof composeTally>[0];
-
-  // act
-  const tally = composeTally(message);
-
-  // assert
-  assert.equal(tally, "Plugin update: 1 failure, 1 warning, 1 success");
-});
-
-for (const { name, message, expected } of [
-  {
-    name: "single structural invocation suppresses its tally",
-    message: { cardinality: "single", label: "Plugin list", marketplaces: [] },
-    expected: "",
-  },
-  {
-    name: "missing operation label suppresses a plural tally",
-    message: { cardinality: "plural", marketplaces: [] },
-    expected: "",
-  },
-  {
-    name: "empty plural invocation suppresses the default success tally",
-    message: { cardinality: "plural", label: "Plugin list", marketplaces: [] },
-    expected: "",
-  },
-  {
-    name: "populated plural invocation can emit zero successes",
-    message: {
-      cardinality: "plural",
-      label: "Plugin list",
-      marketplaces: [{ name: "official", scope: "user", plugins: [] }],
-    },
-    expected: "Plugin list: 0 successes",
-  },
-  {
-    name: "positive update override emits its supplied verb",
-    message: {
-      cardinality: "plural",
-      label: "Plugin update",
-      marketplaces: [],
-      tally: { verb: "updated", count: 2 },
-    },
-    expected: "Plugin update: 2 updated",
-  },
-  {
-    name: "zero update override contributes no tally",
-    message: {
-      cardinality: "plural",
-      label: "Plugin update",
-      marketplaces: [],
-      tally: { verb: "updated", count: 0 },
-    },
-    expected: "",
-  },
-] as const) {
-  test(name, () => {
-    // act & assert
-    assert.equal(composeTally(message), expected);
-  });
-}
-
-for (const { name, body, tally, hint, expected } of [
-  {
-    name: "keeps all fold segments in order",
-    body: "body",
-    tally: "tally",
-    hint: "hint",
-    expected: "body\n\ntally\n\nhint",
-  },
-  {
-    name: "omits an empty body",
-    body: "",
-    tally: "tally",
-    hint: "hint",
-    expected: "tally\n\nhint",
-  },
-  { name: "omits an empty tally", body: "body", tally: "", hint: "hint", expected: "body\n\nhint" },
-  {
-    name: "omits an empty reload hint",
-    body: "body",
-    tally: "tally",
-    hint: "",
-    expected: "body\n\ntally",
-  },
-] as const) {
-  test(name, () => {
-    // act & assert
-    assert.equal(foldTallyAndHint(body, tally, hint), expected);
-  });
-}
 
 for (const { name, message, expected } of [
   {
@@ -418,17 +284,33 @@ for (const message of [
 ] satisfies readonly NotificationMessage[]) {
   test(`${message.kind} is standalone and suppresses reload`, () => {
     // act & assert
-    assert.equal(isInfoKind(message), true);
     assert.equal(shouldEmitReloadHint(message), false);
   });
 }
 
-test("cascade messages are not standalone", () => {
+test("a cascade is not standalone, so its row stamps drive the reload", () => {
   // arrange
-  const message = { kind: "cascade", marketplaces: [] } satisfies NotificationMessage;
+  const message = {
+    kind: "cascade",
+    marketplaces: [
+      {
+        name: "official",
+        scope: "user",
+        plugins: [
+          {
+            status: "installed",
+            name: "alpha",
+            dependencies: [],
+            severity: "info",
+            needsReload: true,
+          },
+        ],
+      },
+    ],
+  } satisfies NotificationMessage;
 
   // act & assert
-  assert.equal(isInfoKind(message), false);
+  assert.equal(shouldEmitReloadHint(message), true);
 });
 
 test("a committed prune warning remains standalone and requests reload", () => {
@@ -440,32 +322,23 @@ test("a committed prune warning remains standalone and requests reload", () => {
   } satisfies NotificationMessage;
 
   // act & assert
-  assert.equal(isInfoKind(message), true);
   assert.equal(shouldEmitReloadHint(message), true);
-  assert.deepStrictEqual(composeWithSummary(message, "body"), [
-    "Prune committed; finalization needs attention.\n\nbody",
-    "warning",
-  ]);
+  assert.equal(computeSeverity(message), "warning");
+  assert.equal(
+    buildSummaryLine(message, "warning"),
+    "Prune committed; finalization needs attention.",
+  );
 });
 
-/*
- * Summary composition for the payload the dispatcher delivers.
- *
- * `composeWithSummary` returns exactly the argument tuple the dispatcher spreads
- * into the host notify call, so each case below keeps its original expected
- * array verbatim. That the tuple is really delivered -- one call, those exact
- * arguments -- is asserted against the public entry points in
- * `notification-dispatch.test.ts`.
- */
-
-for (const { name, message, expected } of [
+for (const { name, message, severity, summary } of [
   {
-    name: "marketplace absence emits an error summary",
+    name: "marketplace absence resolves an error with a marketplace summary",
     message: { kind: "marketplace-not-added", name: "missing" },
-    expected: ["A marketplace operation has failed.\n\nbody", "error"],
+    severity: "error",
+    summary: "A marketplace operation has failed.",
   },
   {
-    name: "failed plugin info emits an error summary",
+    name: "failed plugin info resolves an error with a plugin summary",
     message: {
       kind: "plugin-info",
       marketplaceName: "official",
@@ -478,10 +351,113 @@ for (const { name, message, expected } of [
         componentsResolved: false,
       },
     },
-    expected: ["A plugin operation has failed.\n\nbody", "error"],
+    severity: "error",
+    summary: "A plugin operation has failed.",
   },
   {
-    name: "available plugin info emits unchanged info bytes",
+    name: "mixed warning rows resolve a plural subjectless warning summary",
+    message: {
+      marketplaces: [
+        {
+          name: "official",
+          scope: "user",
+          status: "skipped",
+          severity: "warning",
+          reasons: ["not found"],
+          plugins: [
+            {
+              name: "alpha",
+              status: "skipped",
+              reasons: ["not installed"],
+              severity: "warning",
+              needsReload: false,
+            },
+          ],
+        },
+      ],
+    },
+    severity: "warning",
+    summary: "Some operations need attention.",
+  },
+  {
+    name: "a marketplace-only failure resolves a marketplace summary",
+    message: {
+      marketplaces: [
+        {
+          name: "official",
+          scope: "user",
+          status: "failed",
+          severity: "error",
+          plugins: [],
+        },
+      ],
+    },
+    severity: "error",
+    summary: "A marketplace operation has failed.",
+  },
+  {
+    name: "reconcile summary counts mixed failed subjects",
+    message: {
+      kind: "reconcile-applied-cascade",
+      marketplaces: [
+        {
+          name: "official",
+          scope: "user",
+          status: "failed",
+          severity: "error",
+          plugins: [
+            {
+              name: "alpha",
+              status: "failed",
+              reasons: ["not found"],
+              severity: "error",
+              needsReload: true,
+            },
+          ],
+        },
+      ],
+    },
+    severity: "error",
+    summary: "Some operations have failed.",
+  },
+  {
+    name: "reconcile summary counts marketplace-only warnings",
+    message: {
+      kind: "reconcile-applied-cascade",
+      marketplaces: [
+        {
+          name: "official",
+          scope: "user",
+          status: "skipped",
+          severity: "warning",
+          plugins: [],
+        },
+      ],
+    },
+    severity: "warning",
+    summary: "A marketplace operation needs attention.",
+  },
+] satisfies readonly {
+  readonly name: string;
+  readonly message: NotificationMessage;
+  readonly severity: "warning" | "error";
+  readonly summary: string;
+}[]) {
+  test(name, () => {
+    // act
+    const resolved = {
+      severity: computeSeverity(message),
+      summary: buildSummaryLine(message, severity),
+    };
+
+    // assert
+    assert.deepStrictEqual(resolved, { severity, summary });
+  });
+}
+
+for (const { name, message } of [
+  {
+    name: "available plugin info resolves to info severity",
     message: {
       kind: "plugin-info",
       marketplaceName: "official",
@@ -489,191 +465,98 @@ for (const { name, message, expected } of [
       marketplaceDetails: { autoupdate: true },
       plugin: { name: "alpha", status: "available", componentsResolved: false },
     },
-    expected: ["body"],
   },
-] satisfies readonly {
-  readonly name: string;
-  readonly message: NotificationMessage;
-  readonly expected: readonly unknown[];
-}[]) {
+  {
+    name: "read-only marketplace info resolves to info severity",
+    message: {
+      kind: "marketplace-info",
+      name: "official",
+      scope: "user",
+      details: { autoupdate: true },
+      source: { sourceKind: "path", absPath: "/marketplaces/official" },
+    },
+  },
+  {
+    name: "an unstamped cascade plugin defaults to info severity",
+    message: {
+      cardinality: "plural",
+      label: "Plugin list",
+      marketplaces: [
+        {
+          name: "official",
+          scope: "user",
+          plugins: [{ name: "alpha", status: "available" }],
+        },
+      ],
+    },
+  },
+] satisfies readonly { readonly name: string; readonly message: NotificationMessage }[]) {
   test(name, () => {
-    // act
-    const composed = composeWithSummary(message, "body");
-
-    // assert
-    assert.deepStrictEqual(composed, expected);
+    // act & assert
+    assert.equal(computeSeverity(message), undefined);
   });
 }
 
-test("mixed warning rows emit a plural summary", () => {
-  // arrange
-  const message = {
-    marketplaces: [
-      {
-        name: "official",
-        scope: "user",
-        status: "skipped",
-        severity: "warning",
-        reasons: ["not found"],
-        plugins: [
-          {
-            name: "alpha",
-            status: "skipped",
-            reasons: ["not installed"],
-            severity: "warning",
-            needsReload: false,
-          },
-        ],
-      },
-    ],
-  } satisfies NotificationMessage;
-
-  // act
-  const composed = composeWithSummary(message, "body");
-
-  // assert
-  assert.deepStrictEqual(composed, ["Some operations need attention.\n\nbody", "warning"]);
-});
-
-test("a marketplace-only failure emits a marketplace summary", () => {
-  // arrange
-  const message = {
-    marketplaces: [
-      {
-        name: "official",
-        scope: "user",
-        status: "failed",
-        severity: "error",
-        plugins: [],
-      },
-    ],
-  } satisfies NotificationMessage;
-
-  // act
-  const composed = composeWithSummary(message, "body");
-
-  // assert
-  assert.deepStrictEqual(composed, ["A marketplace operation has failed.\n\nbody", "error"]);
-});
-
-test("read-only marketplace info emits unchanged info bytes", () => {
-  // arrange
-  const message = {
-    kind: "marketplace-info",
-    name: "official",
-    scope: "user",
-    details: { autoupdate: true },
-    source: { sourceKind: "path", absPath: "/marketplaces/official" },
-  } satisfies NotificationMessage;
-
-  // act
-  const composed = composeWithSummary(message, "body");
-
-  // assert
-  assert.deepStrictEqual(composed, ["body"]);
-});
-
-test("an unstamped cascade plugin defaults to info severity and success tally", () => {
-  // arrange
-  const message = {
-    cardinality: "plural",
-    label: "Plugin list",
-    marketplaces: [
-      {
-        name: "official",
-        scope: "user",
-        plugins: [{ name: "alpha", status: "available" }],
-      },
-    ],
-  } satisfies NotificationMessage;
-
-  // act
-  const composed = composeWithSummary(message, composeTally(message));
-
-  // assert
-  assert.deepStrictEqual(composed, ["Plugin list: 1 success"]);
-});
-
-test("reconcile summary counts mixed failed subjects", () => {
-  // arrange
-  const message = {
-    kind: "reconcile-applied-cascade",
-    marketplaces: [
-      {
-        name: "official",
-        scope: "user",
-        status: "failed",
-        severity: "error",
-        plugins: [
-          {
-            name: "alpha",
-            status: "failed",
-            reasons: ["not found"],
-            severity: "error",
-            needsReload: true,
-          },
-        ],
-      },
-    ],
-  } satisfies NotificationMessage;
-
-  // act
-  const composed = composeWithSummary(message, "body");
-
-  // assert
-  assert.deepStrictEqual(composed, ["Some operations have failed.\n\nbody", "error"]);
-});
-
-test("reconcile summary counts marketplace-only warnings", () => {
-  // arrange
-  const message = {
-    kind: "reconcile-applied-cascade",
-    marketplaces: [
-      {
-        name: "official",
-        scope: "user",
-        status: "skipped",
-        severity: "warning",
-        plugins: [],
-      },
-    ],
-  } satisfies NotificationMessage;
-
-  // act
-  const composed = composeWithSummary(message, "body");
-
-  // assert
-  assert.deepStrictEqual(composed, ["A marketplace operation needs attention.\n\nbody", "warning"]);
-});
-
-test("summary preserves its read-only empty fallback after narrowing", () => {
-  // arrange
-  const message = messageWithKindSequence({}, [
-    ...Array<string>(6).fill("marketplace-not-added"),
-    "marketplace-info",
-  ]);
-
-  // act
-  const composed = composeWithSummary(message as never, "body");
-
-  // assert
-  assert.deepStrictEqual(composed, ["\n\nbody", "error"]);
-});
-
-test("summary preserves its available-plugin empty fallback after narrowing", () => {
-  // arrange
-  const message = messageWithKindSequence(
-    {
+for (const { name, message } of [
+  {
+    name: "summary composes no line for a read-only kind",
+    message: {
+      kind: "marketplace-info",
+      name: "official",
+      scope: "user",
+      details: { autoupdate: true },
+      source: { sourceKind: "path", absPath: "/marketplaces/official" },
+    },
+  },
+  {
+    name: "summary composes no line for an available plugin info",
+    message: {
+      kind: "plugin-info",
+      marketplaceName: "official",
+      marketplaceScope: "user",
+      marketplaceDetails: { autoupdate: true },
       plugin: { name: "alpha", status: "available", componentsResolved: false },
     },
-    [...Array<string>(6).fill("marketplace-not-added"), "marketplace-info", "plugin-info"],
-  );
+  },
+] satisfies readonly { readonly name: string; readonly message: NotificationMessage }[]) {
+  test(name, () => {
+    // act & assert
+    assert.equal(buildSummaryLine(message, "error"), "");
+  });
+}
+
+test("countRowsBySeverity counts unstamped rows as info", () => {
+  // arrange
+  const marketplaces = [
+    {
+      name: "official",
+      scope: "user",
+      plugins: [
+        { name: "alpha", status: "available" },
+        { name: "beta", status: "available", severity: "info" },
+        {
+          name: "gamma",
+          status: "failed",
+          reasons: ["not found"],
+          severity: "error",
+          needsReload: false,
+        },
+      ],
+    },
+    {
+      name: "extra",
+      scope: "project",
+      status: "failed",
+      severity: "error",
+      plugins: [],
+    },
+  ] satisfies CascadeNotificationMessage["marketplaces"];
 
   // act
-  const composed = composeWithSummary(message as never, "body");
+  const counts = countRowsBySeverity(marketplaces, "info");
 
   // assert
-  assert.deepStrictEqual(composed, ["\n\nbody", "error"]);
+  assert.deepStrictEqual(counts, { plugins: 2, marketplaces: 1 });
 });
 
 test("update no-op fold preserves empty and non-empty bodies", (t) => {
@@ -700,15 +583,15 @@ test("update no-op fold preserves empty and non-empty bodies", (t) => {
   } satisfies CascadeNotificationMessage;
 
   // act
-  emitUpdateNoOpCascade(emptyContext as never, notificationApi(), emptyMessage, renderRow);
-  emitUpdateNoOpCascade(bodyContext as never, notificationApi(), bodyMessage, renderRow);
+  emitUpdateNoOpCascade(emptyContext, notificationRun(), emptyMessage, CENTRAL_ROW_POLICY);
+  emitUpdateNoOpCascade(bodyContext, notificationRun(), bodyMessage, CENTRAL_ROW_POLICY);
 
   // assert
   assert.deepStrictEqual(emptyContext.ui.notify.mock.calls[0]!.arguments, [
     "Plugin update: nothing to update",
   ]);
   assert.deepStrictEqual(bodyContext.ui.notify.mock.calls[0]!.arguments, [
-    "● official [user]\n  alpha (partially-upgradable)\n\nPlugin update: nothing to update",
+    "● official [user]\n  ● alpha (partially-upgradable) {lsp}\n\nPlugin update: nothing to update",
   ]);
 });
 
@@ -737,13 +620,24 @@ test("reconcile applied fold suppresses reload while preserving severity and tal
   } satisfies Parameters<typeof emitReconcileAppliedContextCascade>[2];
 
   // act
-  emitReconcileAppliedContextCascade(ctx as never, notificationApi(), message, renderRow);
+  emitReconcileAppliedContextCascade(ctx, notificationRun(), message, CENTRAL_ROW_POLICY);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    "A plugin operation has failed.\n\n● official [user]\n  alpha (failed)\n\nReconcile: 1 failure",
+    "A plugin operation has failed.\n\n● official [user]\n  ⊘ alpha (failed) {not found}\n\nReconcile: 1 failure",
     "error",
   ]);
+});
+
+test("leftover removal advisory redacts paths and preserves indentation", () => {
+  // arrange
+  const leak = "could not remove /private/clones/official: permission denied";
+
+  // act
+  const lines = composeLeftoverRemovalAdvisories(leak);
+
+  // assert
+  assert.deepStrictEqual(lines, ["    could not remove official: permission denied"]);
 });
 
 test("WR-05: composeRetainedWorkflowsAdvisories states the count when known and omits it when not", () => {
@@ -759,5 +653,50 @@ test("WR-05: composeRetainedWorkflowsAdvisories states the count when known and 
     "    retained workflow staging: alpha (1 envelope) under the workflows staging directory",
     "    retained workflow staging: beta (3 envelopes) under the workflows staging directory",
     "    retained workflow staging: gamma under the workflows staging directory",
+  ]);
+});
+
+test("empty retained workflow observations produce no advisory lines", () => {
+  // arrange
+  const retained: [] = [];
+
+  // act
+  const lines = composeRetainedWorkflowsAdvisories(retained);
+
+  // assert
+  assert.deepStrictEqual(lines, []);
+});
+
+test("a retained workflow with zero envelopes keeps its observed count", () => {
+  // arrange
+  const retained = [{ name: "empty-tree", envelopeCount: 0 }];
+
+  // act
+  const lines = composeRetainedWorkflowsAdvisories(retained);
+
+  // assert
+  assert.deepStrictEqual(lines, [
+    "    retained workflow staging: empty-tree (0 envelopes) under the workflows staging directory",
+  ]);
+});
+
+test("retained workflow names preserve Unicode, spaces, and supplied order", () => {
+  // arrange
+  const retained = [
+    { name: "z é", envelopeCount: 3 },
+    { name: "é", envelopeCount: 1 },
+    { name: "  spaced tree  " },
+    { name: "é", envelopeCount: 0 },
+  ];
+
+  // act
+  const lines = composeRetainedWorkflowsAdvisories(retained);
+
+  // assert
+  assert.deepStrictEqual(lines, [
+    "    retained workflow staging: z é (3 envelopes) under the workflows staging directory",
+    "    retained workflow staging: é (1 envelope) under the workflows staging directory",
+    "    retained workflow staging:   spaced tree   under the workflows staging directory",
+    "    retained workflow staging: é (0 envelopes) under the workflows staging directory",
   ]);
 });

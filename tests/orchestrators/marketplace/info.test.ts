@@ -14,12 +14,13 @@ import { getMarketplaceInfo } from "../../../extensions/pi-claude-marketplace/or
 import { saveConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import { expectSoftDepProbes } from "../../edge/notification-boundary.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { NotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
+import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 interface NotificationExpectation {
   readonly message: string;
@@ -46,17 +47,18 @@ function marketplaceRecord(
 
 function notificationBoundary(expectation?: NotificationExpectation): {
   readonly ctx: ExtensionContext;
-  readonly pi: ExtensionAPI;
+  readonly run: NotificationRun;
   verifyAll(): void;
 } {
   const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
-  const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
   const ui = mock<ExtensionContext["ui"]>({ exactParams: true, name: "extension UI" });
   if (expectation !== undefined) {
+    when(() => ctx.mode)
+      .thenReturn("tui")
+      .once();
     when(() => ctx.ui)
       .thenReturn(ui)
       .once();
-    expectSoftDepProbes(pi, 1);
     if (expectation.severity === undefined) {
       when(() => {
         ui.notify(expectation.message);
@@ -70,10 +72,9 @@ function notificationBoundary(expectation?: NotificationExpectation): {
 
   return {
     ctx,
-    pi,
+    run: runWithNothingLoaded(),
     verifyAll(): void {
       verify(ctx);
-      verify(pi);
       verify(ui);
     },
   };
@@ -81,16 +82,17 @@ function notificationBoundary(expectation?: NotificationExpectation): {
 
 function multiNotificationBoundary(expectations: readonly NotificationExpectation[]): {
   readonly ctx: ExtensionContext;
-  readonly pi: ExtensionAPI;
+  readonly run: NotificationRun;
   verifyAll(): void;
 } {
   const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
-  const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
   const ui = mock<ExtensionContext["ui"]>({ exactParams: true, name: "extension UI" });
+  when(() => ctx.mode)
+    .thenReturn("tui")
+    .times(expectations.length);
   when(() => ctx.ui)
     .thenReturn(ui)
     .times(expectations.length);
-  expectSoftDepProbes(pi, expectations.length);
   for (const expectation of expectations) {
     if (expectation.severity === undefined) {
       when(() => {
@@ -105,10 +107,9 @@ function multiNotificationBoundary(expectations: readonly NotificationExpectatio
 
   return {
     ctx,
-    pi,
+    run: runWithNothingLoaded(),
     verifyAll(): void {
       verify(ctx);
-      verify(pi);
       verify(ui);
     },
   };
@@ -227,7 +228,7 @@ test("marketplace info displays a nonempty allowlist after the description", asy
     });
 
     // act
-    await getMarketplaceInfo({ ctx: boundary.ctx, pi: boundary.pi, name: "policy", cwd });
+    await getMarketplaceInfo({ ctx: boundary.ctx, run: boundary.run, name: "policy", cwd });
 
     // assert
     assert.deepStrictEqual(await snapshotEnvironment(home, cwd), before);
@@ -258,7 +259,7 @@ test("marketplace info omits an empty allowlist", async () => {
     });
 
     // act
-    await getMarketplaceInfo({ ctx: boundary.ctx, pi: boundary.pi, name: "empty", cwd });
+    await getMarketplaceInfo({ ctx: boundary.ctx, run: boundary.run, name: "empty", cwd });
 
     // assert
     assert.deepStrictEqual(await snapshotEnvironment(home, cwd), before);
@@ -304,7 +305,7 @@ test("marketplace info shows each scope's own allowlist", async () => {
     });
 
     // act
-    await getMarketplaceInfo({ ctx: boundary.ctx, pi: boundary.pi, name: "same", cwd });
+    await getMarketplaceInfo({ ctx: boundary.ctx, run: boundary.run, name: "same", cwd });
 
     // assert
     assert.deepStrictEqual(await snapshotEnvironment(home, cwd), before);
@@ -346,7 +347,7 @@ test("malformed present allowlist follows the invalid manifest info failure", as
     });
 
     // act
-    await getMarketplaceInfo({ ctx: boundary.ctx, pi: boundary.pi, name: "bad-policy", cwd });
+    await getMarketplaceInfo({ ctx: boundary.ctx, run: boundary.run, name: "bad-policy", cwd });
 
     // assert
     assert.deepStrictEqual(await snapshotEnvironment(home, cwd), before);
@@ -395,7 +396,7 @@ test("INFO-01: an explicit user github source renders all optional fields", asyn
     // act
     await getMarketplaceInfo({
       ctx: boundary.ctx,
-      pi: boundary.pi,
+      run: boundary.run,
       name: "claude-plugins-official",
       scope: "user",
       cwd,
@@ -432,7 +433,7 @@ test("INFO-01: an explicit user github source omits absent optional fields", asy
     // act
     await getMarketplaceInfo({
       ctx: boundary.ctx,
-      pi: boundary.pi,
+      run: boundary.run,
       name: "community-mp",
       scope: "user",
       cwd,
@@ -476,7 +477,7 @@ test("MURL-05: an explicit user URL source renders all optional fields", async (
     // act
     await getMarketplaceInfo({
       ctx: boundary.ctx,
-      pi: boundary.pi,
+      run: boundary.run,
       name: "acme-mp",
       scope: "user",
       cwd,
@@ -513,7 +514,7 @@ test("MURL-05: an explicit user URL source omits absent optional fields", async 
     // act
     await getMarketplaceInfo({
       ctx: boundary.ctx,
-      pi: boundary.pi,
+      run: boundary.run,
       name: "acme-mp",
       scope: "user",
       cwd,
@@ -550,7 +551,7 @@ test("INFO-01: an explicit project path source renders its minimal block", async
     // act
     await getMarketplaceInfo({
       ctx: boundary.ctx,
-      pi: boundary.pi,
+      run: boundary.run,
       name: "local-mp",
       scope: "project",
       cwd,
@@ -597,7 +598,7 @@ test("INFO-01: a user path source renders description independently of source ki
     // act
     await getMarketplaceInfo({
       ctx: boundary.ctx,
-      pi: boundary.pi,
+      run: boundary.run,
       name: "dev-mp",
       scope: "user",
       cwd,
@@ -634,7 +635,7 @@ test("NFR-12: an unknown stored source falls back to the recorded marketplace ro
     // act
     await getMarketplaceInfo({
       ctx: boundary.ctx,
-      pi: boundary.pi,
+      run: boundary.run,
       name: "future-mp",
       scope: "user",
       cwd,
@@ -692,7 +693,7 @@ test("INFO-03: implicit scope renders project then user in one notification", as
     // act
     await getMarketplaceInfo({
       ctx: boundary.ctx,
-      pi: boundary.pi,
+      run: boundary.run,
       name: "my-mp",
       cwd,
     });
@@ -730,7 +731,7 @@ test("INFO-04: explicit user scope ignores a project-only marketplace", async ()
     // act
     await getMarketplaceInfo({
       ctx: boundary.ctx,
-      pi: boundary.pi,
+      run: boundary.run,
       name: "my-mp",
       scope: "user",
       cwd,
@@ -769,7 +770,7 @@ test("INFO-04: explicit project scope ignores a user-only marketplace", async ()
     // act
     await getMarketplaceInfo({
       ctx: boundary.ctx,
-      pi: boundary.pi,
+      run: boundary.run,
       name: "my-mp",
       scope: "project",
       cwd,
@@ -793,7 +794,7 @@ test("D-03: implicit scope renders an absent marketplace without a scope bracket
     // act
     await getMarketplaceInfo({
       ctx: boundary.ctx,
-      pi: boundary.pi,
+      run: boundary.run,
       name: "ghost-mp",
       cwd,
     });
@@ -835,7 +836,7 @@ test("manifest absence renders the complete source-missing failure envelope", as
     // act
     await getMarketplaceInfo({
       ctx: boundary.ctx,
-      pi: boundary.pi,
+      run: boundary.run,
       name: "missing-mp",
       scope: "user",
       cwd,
@@ -880,7 +881,7 @@ test("malformed manifest JSON renders the complete unparseable failure envelope"
     // act
     await getMarketplaceInfo({
       ctx: boundary.ctx,
-      pi: boundary.pi,
+      run: boundary.run,
       name: "bad-mp",
       scope: "user",
       cwd,
@@ -929,7 +930,7 @@ test("schema-invalid manifest JSON renders the catalog invalid-manifest envelope
     // act
     await getMarketplaceInfo({
       ctx: boundary.ctx,
-      pi: boundary.pi,
+      run: boundary.run,
       name: "bad-mp",
       scope: "user",
       cwd,
@@ -972,6 +973,8 @@ test("implicit scope emits a healthy project block before a failed user block", 
       }),
     );
     const before = await snapshotEnvironment(home, cwd);
+    // D-05: one run serves both emissions, so neither probes the tool inventory;
+    // the boundary states the bytes of each block.
     const boundary = multiNotificationBoundary([
       {
         message: "● mixed-mp [project] <no autoupdate>\npath: /repo/path/mixed-mp",
@@ -991,7 +994,7 @@ test("implicit scope emits a healthy project block before a failed user block", 
     // act
     await getMarketplaceInfo({
       ctx: boundary.ctx,
-      pi: boundary.pi,
+      run: boundary.run,
       name: "mixed-mp",
       cwd,
     });
@@ -1031,7 +1034,7 @@ test("a malformed stored marketplace record rejects without notifying or mutatin
     // act
     const infoPromise = getMarketplaceInfo({
       ctx: boundary.ctx,
-      pi: boundary.pi,
+      run: boundary.run,
       name: "broken-mp",
       scope: "project",
       cwd,

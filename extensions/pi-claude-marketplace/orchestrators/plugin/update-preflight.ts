@@ -43,7 +43,8 @@ import type { GitBackedSource, PathSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { RemoteTag } from "../../platform/git.ts";
-import type { NotificationContext, PiInventory } from "../../platform/pi-api.ts";
+import type { NotificationContext } from "../../platform/pi-api.ts";
+import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { ContentReason } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
@@ -76,7 +77,7 @@ export interface UpdateCloneCacheSeam {
 /** Direct update request validated and classified by the update flow. */
 export interface UpdatePluginsOptions {
   readonly ctx: NotificationContext;
-  readonly pi: PiInventory;
+  readonly run: NotificationRun;
   readonly scope?: Scope;
   readonly cwd: string;
   readonly target: UpdatePluginsTarget;
@@ -122,7 +123,7 @@ export interface PreparePluginUpdateOptions {
   /** State I/O for the disabled-pin refresh; production callers omit it. */
   readonly stateTransaction?: LockedStateTransactionDeps;
   readonly partial?: boolean;
-  readonly ctx?: NotificationContext;
+  readonly notification?: { readonly ctx: NotificationContext; readonly run: NotificationRun };
   readonly cloneCacheSeam?: UpdateCloneCacheSeam;
   /**
    * D-10-02 / D-10-19: the constraint gate is composed through this field,
@@ -205,7 +206,7 @@ function makeUpdateCloneProbe(
   seam: UpdateCloneCacheSeam,
   locations: ScopedLocations,
   auth: {
-    readonly ctx?: NotificationContext;
+    readonly notification?: { readonly ctx: NotificationContext; readonly run: NotificationRun };
     readonly credentialOps: CredentialOps;
     readonly deviceFlowHttp?: DeviceFlowHttp;
     readonly authMemo?: Map<string, AuthAttemptResult>;
@@ -214,9 +215,9 @@ function makeUpdateCloneProbe(
   let captured: string | undefined;
 
   function cloneAuth(cloneUrl: string, kind: GitBackedSource["kind"]): GitAuthBundle {
-    return auth.ctx === undefined
+    return auth.notification === undefined
       ? buildStoredCredentialAuth(hostFromCloneUrl(cloneUrl, kind), auth.credentialOps)
-      : buildCloneAuth(cloneUrl, kind, { ...auth, ctx: auth.ctx });
+      : buildCloneAuth(cloneUrl, kind, { ...auth, ...auth.notification });
   }
 
   async function probeUnpinned(gitSource: GitBackedSource): Promise<GitPluginRootResult> {
@@ -771,13 +772,13 @@ function postFetchGuard(
  * on this file.
  */
 function buildUpdateAuth(options: PreparePluginUpdateOptions): {
-  readonly ctx?: NotificationContext;
+  readonly notification?: { readonly ctx: NotificationContext; readonly run: NotificationRun };
   readonly credentialOps: CredentialOps;
   readonly deviceFlowHttp?: DeviceFlowHttp;
   readonly authMemo?: Map<string, AuthAttemptResult>;
 } {
   return {
-    ...(options.ctx !== undefined && { ctx: options.ctx }),
+    ...(options.notification !== undefined && { notification: options.notification }),
     credentialOps: options.credentialOps ?? DEFAULT_CREDENTIAL_OPS,
     ...(options.deviceFlowHttp !== undefined && { deviceFlowHttp: options.deviceFlowHttp }),
     ...(options.authMemo !== undefined && { authMemo: options.authMemo }),

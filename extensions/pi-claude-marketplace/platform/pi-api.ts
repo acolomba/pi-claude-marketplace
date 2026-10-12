@@ -7,11 +7,11 @@
 // The soft-dependency probes (`hasLoadedPiSubagents` /
 // `hasLoadedPiMcpAdapter` / `hasLoadedWorkflowEngine` / `softDepStatus`) live
 // here because they inspect `pi.getAllTools()` and `pi.getCommands()`, which
-// belong to the external Pi API surface. `softDepStatus(pi)` returns a
-// `SoftDepStatus` snapshot that `shared/notification-dispatch.ts` reads once per
-// render to decide whether to append the `requires pi-subagents` /
-// `requires pi-mcp-adapter` / `requires pi-dynamic-workflows` markers to a
-// plugin row whose `dependencies` declare the kind.
+// belong to the external Pi API surface. `softDepStatus` is the probe that
+// `openNotificationRun` takes once per run (D-05). The run's `SoftDepStatus`
+// snapshot decides whether a plugin row whose `dependencies` declare a kind
+// carries the `requires pi-subagents` / `requires pi-mcp-adapter` /
+// `requires pi-dynamic-workflows` marker.
 
 export { getAgentDir } from "@earendil-works/pi-coding-agent";
 
@@ -63,7 +63,10 @@ export type {
 } from "@earendil-works/pi-coding-agent";
 export type { AutocompleteProvider } from "@earendil-works/pi-tui";
 
-import type { AgentEndEvent } from "@earendil-works/pi-coding-agent";
+import type { AgentEndEvent, ExtensionContext } from "@earendil-works/pi-coding-agent";
+
+/** Pi's mode union, derived from its context because the root omits the alias. */
+export type ExtensionMode = ExtensionContext["mode"];
 
 /**
  * Structural `text` content block -- mirrors `pi-ai`'s `TextContent`
@@ -137,6 +140,7 @@ export interface NotificationUi {
 
 /** Consumer-owned view of a Pi context used only to emit notifications. */
 export interface NotificationContext {
+  readonly mode: string;
   readonly ui: NotificationUi;
 }
 

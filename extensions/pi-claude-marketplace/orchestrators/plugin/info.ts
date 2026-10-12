@@ -67,7 +67,6 @@ import {
   type ExtensionState,
   type PluginInstallRecord,
 } from "../../persistence/state-io.ts";
-import { softDepStatus } from "../../platform/pi-api.ts";
 import { companionRequirements } from "../../shared/concerns/soft-dep.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage, isErrnoException } from "../../shared/errors.ts";
@@ -117,8 +116,9 @@ import type {
   ResolvedPluginPartiallyAvailable,
 } from "../../domain/resolver-types.ts";
 import type { McpStatusReader } from "../../platform/mcp-status.ts";
-import type { NotificationContext, PiInventory, SoftDepStatus } from "../../platform/pi-api.ts";
+import type { NotificationContext, SoftDepStatus } from "../../platform/pi-api.ts";
 import type { HookSummaryEntry } from "../../shared/concerns/hooks.ts";
+import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
 import type { Dirent } from "node:fs";
@@ -131,11 +131,12 @@ const BUCKET_A_EVENTS_SET: ReadonlySet<string> = new Set<string>(BUCKET_A_EVENTS
 export interface GetPluginInfoOptions {
   readonly ctx: NotificationContext;
   /**
-   * ADET-01: info reads one `softDepStatus` snapshot to stamp the `requires:`
-   * entries on every resolved row. `notify(ctx, pi, message)` still takes its
-   * own snapshot, which emits no soft-dep marker on the info surfaces.
+   * D-05: the command run. Info surfaces carry no soft-dependency markers;
+   * the run keeps every emission of the command, including the multi-block
+   * fan-out and the failure loop, on one snapshot. ADET-01: that snapshot
+   * also stamps the `requires:` entries on every resolved row.
    */
-  readonly pi: PiInventory;
+  readonly run: NotificationRun;
   /**
    * ASTAT-01 / ASTAT-02: the extension load's status tracker. Info reads
    * pi-mcp-adapter's last snapshot from it and stamps each written server's
@@ -214,6 +215,7 @@ function buildInfoFetchContext(opts: GetPluginInfoOptions): InfoFetchContext | u
 
   return {
     ctx: opts.ctx,
+    run: opts.run,
     seam: opts.cloneCacheSeam ?? {
       resolvePluginPin,
       materializePluginClone,
@@ -2046,6 +2048,7 @@ function buildNonPathInstalledRow(
  */
 interface InfoFetchContext {
   readonly ctx: NotificationContext;
+  readonly run: NotificationRun;
   readonly seam: InfoCloneCacheSeam;
   readonly credentialOps: CredentialOps;
   readonly deviceFlowHttp?: DeviceFlowHttp;
@@ -2963,18 +2966,18 @@ function emitFetchSkip(
   }
 
   const rows: Plural<MarketplaceRows<PluginInfoCascadeMsg>> = [first, ...remaining];
-  notifyWithContext(opts.ctx, opts.pi, PLUGIN_INFO_CONTEXT, rows, undefined, "single");
+  notifyWithContext(opts.ctx, opts.run, PLUGIN_INFO_CONTEXT, rows, undefined, "single");
 }
 
 /**
  * ADET-01: stamps the companions that the components the install writes need
- * onto the block's plugin row, each tagged missing per the invocation's one
- * probe snapshot. A server that a partial install leaves out needs no adapter.
+ * onto the block's plugin row, each tagged missing per the command run's one
+ * soft-dependency snapshot (D-05). A server that a partial install leaves out needs no adapter.
  * An unresolved row and a row that needs no companion keep their shape. A
  * disabled row keeps its component inventory (ENBL-18), so it carries the line
  * too: the line states what the plugin needs, not what is running.
  */
-function withCompanionRequirements(built: InfoBlock, probe: SoftDepStatus): InfoBlock {
+function withCompanionRequirements(built: InfoBlock, softDeps: SoftDepStatus): InfoBlock {
   const plugin = built.block.plugin;
   if (!plugin.componentsResolved) {
     return built;
@@ -2984,7 +2987,7 @@ function withCompanionRequirements(built: InfoBlock, probe: SoftDepStatus): Info
     (plugin.components.agents?.length ?? 0) > 0,
     (plugin.components.mcp ?? []).some((server) => server.unsupportedFeature === undefined),
     (plugin.components.workflows?.length ?? 0) > 0,
-    probe,
+    softDeps,
   );
   return {
     ...built,
@@ -3087,12 +3090,10 @@ async function getPluginInfoWithReader(
         scope: opts.scope,
       })),
     };
-    notify(opts.ctx, opts.pi, message);
+    notify(opts.ctx, opts.run, message);
     return;
   }
 
-  // ADET-01: one probe snapshot stamps the `requires:` entries on every block.
-  const probe = softDepStatus(opts.pi);
   const projectRecord = await readProjectInstallRecord(opts, found);
 
   // D-100-08 / ENBL-17: every found scope goes to `buildBlock`, including a
@@ -3121,12 +3122,12 @@ async function getPluginInfoWithReader(
       ...(fetchCtx !== undefined && { fetchCtx }),
     });
     const built = withServerStatus(
-      withCompanionRequirements(soleBlock, probe),
+      withCompanionRequirements(soleBlock, opts.run.softDeps),
       ownValue(sole.record.plugins, opts.plugin),
       opts.mcpStatus,
       projectRecord,
     );
-    notify(opts.ctx, opts.pi, built.block);
+    notify(opts.ctx, opts.run, built.block);
     emitFetchSkip(opts, scopes, [built]);
     return;
   }
@@ -3161,7 +3162,7 @@ async function getPluginInfoWithReader(
         ...(fetchCtx !== undefined && { fetchCtx }),
       });
       return withServerStatus(
-        withCompanionRequirements(scopeBlock, probe),
+        withCompanionRequirements(scopeBlock, opts.run.softDeps),
         ownValue(f.record.plugins, opts.plugin),
         opts.mcpStatus,
         projectRecord,
@@ -3177,9 +3178,9 @@ async function getPluginInfoWithReader(
   // proves the non-empty tuple shape the cascade type requires.
   const [firstInfo, ...remainingInfo] = infoBlocks;
   if (firstInfo !== undefined && remainingInfo.length === 0) {
-    notify(opts.ctx, opts.pi, firstInfo);
+    notify(opts.ctx, opts.run, firstInfo);
   } else if (firstInfo !== undefined) {
-    notify(opts.ctx, opts.pi, {
+    notify(opts.ctx, opts.run, {
       kind: "plugin-info-cascade",
       blocks: [firstInfo, ...remainingInfo],
     });
@@ -3194,7 +3195,7 @@ async function getPluginInfoWithReader(
 
   // Surface each failed scope as its own `error`-severity notify (GRAM-04).
   for (const failure of failedBlocks) {
-    notify(opts.ctx, opts.pi, failure);
+    notify(opts.ctx, opts.run, failure);
   }
 }
 

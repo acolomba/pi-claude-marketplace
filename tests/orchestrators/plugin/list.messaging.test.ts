@@ -5,8 +5,45 @@ import {
   LIST_CONTEXT,
   type ListMsg,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/list.messaging.ts";
+import { composePluginLines } from "../../../extensions/pi-claude-marketplace/shared/notification-grammar.ts";
+import { resolveRows } from "../../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
+import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
-import type { SoftDepStatus } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { ResolvedRow } from "../../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
+
+test("list preserves partial content while suppressing dependency markers", () => {
+  // arrange
+  const rows = [
+    {
+      name: "official",
+      scope: "user",
+      plugins: [
+        {
+          status: "partially-installed",
+          name: "alpha",
+          version: "1.0.0",
+          reasons: ["lsp"],
+          dependencies: ["agents", "mcp", "workflows"],
+        },
+      ],
+    },
+  ] as const;
+
+  // act
+  const resolved = resolveRows(rows, runWithNothingLoaded().softDeps, LIST_CONTEXT.rowPolicies);
+  const lines = composePluginLines(resolved[0]!.plugins[0]!, "user");
+
+  // assert
+  assert.deepStrictEqual(resolved[0]!.plugins, [
+    {
+      status: "partially-installed",
+      name: "alpha",
+      version: "1.0.0",
+      reasons: ["lsp"],
+    },
+  ]);
+  assert.deepStrictEqual(lines, ["  ◉ alpha v1.0.0 (partially-installed) {lsp}"]);
+});
 
 void ({
   status: "available",
@@ -27,12 +64,12 @@ void ({ status: "partially-upgradable", name: "alpha" } satisfies ListMsg);
 
 test("exports the complete plugin-list command context", () => {
   // arrange
-  const expectedContextKeys = ["Messaging", "render"];
+  const expectedContextKeys = ["Messaging", "rowPolicies"];
   const expectedRenderKeys = [
     "installed",
     "available",
-    "unavailable",
     "partially-available",
+    "unavailable",
     "upgradable",
     "partially-installed",
     "partially-upgradable",
@@ -43,7 +80,7 @@ test("exports the complete plugin-list command context", () => {
 
   // act
   const contextKeys = Object.keys(LIST_CONTEXT);
-  const renderKeys = Object.keys(LIST_CONTEXT.render);
+  const renderKeys = Object.keys(LIST_CONTEXT.rowPolicies);
 
   // assert
   assert.deepStrictEqual(contextKeys, expectedContextKeys);
@@ -59,15 +96,10 @@ test("renders an available row without scope, reload state, or description bytes
     version: "1.0.0",
     description: "Available description stays outside the command-owned row.",
     reasons: ["installs disabled"],
-  } as const satisfies ListMsg;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: false,
-    piMcpAdapterLoaded: false,
-    workflowEngineLoaded: true,
-  };
+  } as const satisfies ResolvedRow<ListMsg>;
 
   // act
-  const renderedRow = LIST_CONTEXT.render.available(row, probe, "project");
+  const renderedRow = composePluginLines(row, "project")[0]!.slice(2);
 
   // assert
   assert.deepStrictEqual(row, {
@@ -81,7 +113,7 @@ test("renders an available row without scope, reload state, or description bytes
   assert.strictEqual(Object.hasOwn(row, "needsReload"), false);
 });
 
-test("renders a disabled row without soft-dependency markers", () => {
+test("renders a disabled row with its resolved reasons", () => {
   // arrange
   const row = {
     status: "disabled",
@@ -92,15 +124,10 @@ test("renders a disabled row without soft-dependency markers", () => {
     reasons: ["not in manifest"],
     severity: "info",
     needsReload: false,
-  } as const satisfies ListMsg;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: false,
-    piMcpAdapterLoaded: false,
-    workflowEngineLoaded: true,
-  };
+  } as const satisfies ResolvedRow<ListMsg>;
 
   // act
-  const renderedRow = LIST_CONTEXT.render.disabled(row, probe, "user");
+  const renderedRow = composePluginLines(row, "user")[0]!.slice(2);
 
   // assert
   assert.deepStrictEqual(row, {
@@ -116,26 +143,25 @@ test("renders a disabled row without soft-dependency markers", () => {
   assert.strictEqual(renderedRow, "◍ beta [project] v2.0.0 (disabled) {not in manifest}");
 });
 
-test("renders a failed row without consuming its cause or lifecycle fields", () => {
+test("renders a failed row without consuming its failure detail or lifecycle fields", () => {
   // arrange
-  const cause = new Error("EACCES: private path");
+  const failure = {
+    cause: { causeChain: ["EACCES: private path"], truncated: false },
+    leaks: [],
+    rollbackPartial: [],
+  };
   const row = {
     status: "failed",
     name: "delta",
     version: "4.0.0",
     scope: "project",
     reasons: ["permission denied", "source missing"],
-    cause,
+    failure,
     severity: "error",
-  } as const satisfies ListMsg;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: true,
-    piMcpAdapterLoaded: true,
-    workflowEngineLoaded: true,
-  };
+  } as const satisfies ResolvedRow<ListMsg>;
 
   // act
-  const renderedRow = LIST_CONTEXT.render.failed(row, probe, "user");
+  const renderedRow = composePluginLines(row, "user")[0]!.slice(2);
 
   // assert
   assert.deepStrictEqual(row, {
@@ -144,7 +170,7 @@ test("renders a failed row without consuming its cause or lifecycle fields", () 
     version: "4.0.0",
     scope: "project",
     reasons: ["permission denied", "source missing"],
-    cause,
+    failure,
     severity: "error",
   });
   assert.strictEqual(
@@ -154,36 +180,29 @@ test("renders a failed row without consuming its cause or lifecycle fields", () 
   assert.strictEqual(Object.hasOwn(row, "needsReload"), false);
 });
 
-test("renders an installed row with durable and missing-companion reasons", () => {
+test("renders an installed row with its durable reasons and resolved markers", () => {
   // arrange
   const row = {
     status: "installed",
     name: "epsilon",
-    dependencies: ["agents", "mcp"],
     version: "sha-123456789abc",
     scope: "project",
-    reasons: ["not in manifest"],
+    reasons: ["not in manifest", "requires pi-subagents", "requires pi-mcp-adapter"],
     description: "Installed description stays outside the command-owned row.",
     severity: "info",
     needsReload: false,
-  } as const satisfies ListMsg;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: false,
-    piMcpAdapterLoaded: false,
-    workflowEngineLoaded: true,
-  };
+  } as const satisfies ResolvedRow<ListMsg>;
 
   // act
-  const renderedRow = LIST_CONTEXT.render.installed(row, probe, "user");
+  const renderedRow = composePluginLines(row, "user")[0]!.slice(2);
 
   // assert
   assert.deepStrictEqual(row, {
     status: "installed",
     name: "epsilon",
-    dependencies: ["agents", "mcp"],
     version: "sha-123456789abc",
     scope: "project",
-    reasons: ["not in manifest"],
+    reasons: ["not in manifest", "requires pi-subagents", "requires pi-mcp-adapter"],
     description: "Installed description stays outside the command-owned row.",
     severity: "info",
     needsReload: false,
@@ -202,15 +221,10 @@ test("renders a partially-available row without a scope or reload stamp", () => 
     version: "5.0.0",
     description: "Partial candidate description stays outside the row.",
     reasons: ["unsupported hooks", "lsp"],
-  } as const satisfies ListMsg;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: true,
-    piMcpAdapterLoaded: true,
-    workflowEngineLoaded: true,
-  };
+  } as const satisfies ResolvedRow<ListMsg>;
 
   // act
-  const renderedRow = LIST_CONTEXT.render["partially-available"](row, probe, "project");
+  const renderedRow = composePluginLines(row, "project")[0]!.slice(2);
 
   // assert
   assert.deepStrictEqual(row, {
@@ -224,31 +238,24 @@ test("renders a partially-available row without a scope or reload stamp", () => 
   assert.strictEqual(Object.hasOwn(row, "needsReload"), false);
 });
 
-test("renders a partially-installed row without inventory soft-dependency markers", () => {
+test("renders a partially-installed row with its resolved reasons", () => {
   // arrange
   const row = {
     status: "partially-installed",
     name: "iota",
-    dependencies: ["agents", "mcp"],
     version: "6.0.0",
     scope: "project",
     description: "Partial installation description stays outside the row.",
     reasons: ["unsupported hooks"],
-  } as const satisfies ListMsg;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: false,
-    piMcpAdapterLoaded: false,
-    workflowEngineLoaded: true,
-  };
+  } as const satisfies ResolvedRow<ListMsg>;
 
   // act
-  const renderedRow = LIST_CONTEXT.render["partially-installed"](row, probe, "user");
+  const renderedRow = composePluginLines(row, "user")[0]!.slice(2);
 
   // assert
   assert.deepStrictEqual(row, {
     status: "partially-installed",
     name: "iota",
-    dependencies: ["agents", "mcp"],
     version: "6.0.0",
     scope: "project",
     description: "Partial installation description stays outside the row.",
@@ -270,15 +277,10 @@ test("renders a partially-upgradable row in its marketplace scope", () => {
     scope: "user",
     description: "Partial upgrade description stays outside the row.",
     reasons: ["unsupported component"],
-  } as const satisfies ListMsg;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: false,
-    piMcpAdapterLoaded: true,
-    workflowEngineLoaded: true,
-  };
+  } as const satisfies ResolvedRow<ListMsg>;
 
   // act
-  const renderedRow = LIST_CONTEXT.render["partially-upgradable"](row, probe, "user");
+  const renderedRow = composePluginLines(row, "user")[0]!.slice(2);
 
   // assert
   assert.deepStrictEqual(row, {
@@ -293,7 +295,7 @@ test("renders a partially-upgradable row in its marketplace scope", () => {
   assert.strictEqual(Object.hasOwn(row, "needsReload"), false);
 });
 
-test("renders a remote row without scope, reload state, or probe-derived reasons", () => {
+test("renders a remote row without scope or reload state", () => {
   // arrange
   const row = {
     status: "remote",
@@ -301,15 +303,10 @@ test("renders a remote row without scope, reload state, or probe-derived reasons
     version: "8.0.0",
     description: "Remote description stays outside the command-owned row.",
     reasons: ["installs disabled"],
-  } as const satisfies ListMsg;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: false,
-    piMcpAdapterLoaded: false,
-    workflowEngineLoaded: true,
-  };
+  } as const satisfies ResolvedRow<ListMsg>;
 
   // act
-  const renderedRow = LIST_CONTEXT.render.remote(row, probe, "project");
+  const renderedRow = composePluginLines(row, "project")[0]!.slice(2);
 
   // assert
   assert.deepStrictEqual(row, {
@@ -331,15 +328,10 @@ test("renders an unavailable row without a scope or reload stamp", () => {
     version: "9.0.0",
     description: "Unavailable description stays outside the row.",
     reasons: ["unsupported source", "permission denied"],
-  } as const satisfies ListMsg;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: false,
-    piMcpAdapterLoaded: false,
-    workflowEngineLoaded: true,
-  };
+  } as const satisfies ResolvedRow<ListMsg>;
 
   // act
-  const renderedRow = LIST_CONTEXT.render.unavailable(row, probe, "user");
+  const renderedRow = composePluginLines(row, "user")[0]!.slice(2);
 
   // assert
   assert.deepStrictEqual(row, {
@@ -365,15 +357,10 @@ test("renders an upgradable row with cross-scope attribution", () => {
     scope: "project",
     description: "Upgrade description stays outside the row.",
     reasons: ["source mismatch"],
-  } as const satisfies ListMsg;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: true,
-    piMcpAdapterLoaded: true,
-    workflowEngineLoaded: true,
-  };
+  } as const satisfies ResolvedRow<ListMsg>;
 
   // act
-  const renderedRow = LIST_CONTEXT.render.upgradable(row, probe, "user");
+  const renderedRow = composePluginLines(row, "user")[0]!.slice(2);
 
   // assert
   assert.deepStrictEqual(row, {
@@ -386,4 +373,23 @@ test("renders an upgradable row with cross-scope attribution", () => {
   });
   assert.strictEqual(renderedRow, "● nu [project] v10.0.0 (upgradable) {source mismatch}");
   assert.strictEqual(Object.hasOwn(row, "needsReload"), false);
+});
+
+test("LIST_CONTEXT declares complete row policies", () => {
+  // act
+  const policies = LIST_CONTEXT.rowPolicies;
+
+  // assert
+  assert.deepStrictEqual(policies, {
+    installed: { markers: true, contentReasons: true },
+    available: { markers: false, contentReasons: true },
+    "partially-available": { markers: false, contentReasons: true },
+    unavailable: { markers: false, contentReasons: true },
+    upgradable: { markers: false, contentReasons: true },
+    "partially-installed": { markers: false, contentReasons: true },
+    "partially-upgradable": { markers: false, contentReasons: true },
+    disabled: { markers: false, contentReasons: true },
+    failed: { markers: false, contentReasons: true },
+    remote: { markers: false, contentReasons: true },
+  });
 });

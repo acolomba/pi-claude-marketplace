@@ -1,0 +1,106 @@
+[
+  {
+    "line": null,
+    "file": "tests/architecture/no-credential-leak.test.ts",
+    "before": null,
+    "after": {
+      "message": "A plugin operation has failed.\n\n● mp [user]\n  ⊘ alpha (failed)\n    cause: clone https://***@github.com/o/r.git failed",
+      "severity": "error",
+      "argc": 2
+    },
+    "multiplicity": 2,
+    "test": "AUTH-09 / PMOD-04: neither strategy shows a credential planted in a failed row's cause; AUTH-09 / PMOD-04: neither strategy shows a credential planted in a failed row's cause whose password carries an @",
+    "preserves": "D-13: the AUTH-09 / PMOD-04 text leg reads the text the production notify path delivers, so this entry pins the redacted bytes the text strategy shows for a credential planted in a failed row's cause and a failed row's cause whose password carries an @. It proves the dispatch formatter adds no credential. Production output and docs/output-catalog.md are unchanged."
+  },
+  {
+    "line": null,
+    "file": "tests/architecture/no-credential-leak.test.ts",
+    "before": null,
+    "after": {
+      "message": "A plugin operation has failed.\n\n● mp [user]\n  ⊘ alpha (failed) {rollback partial}\n    cause: install failed\n    [skills] (rollback failed)\n      cause: restore with *** failed",
+      "severity": "error",
+      "argc": 2
+    },
+    "multiplicity": 1,
+    "test": "AUTH-09 / PMOD-04: neither strategy shows a credential planted in a rollback entry's cause",
+    "preserves": "D-13: the AUTH-09 / PMOD-04 text leg reads the text the production notify path delivers, so this entry pins the redacted bytes the text strategy shows for a credential planted in a rollback entry's cause. It proves the dispatch formatter adds no credential. Production output and docs/output-catalog.md are unchanged."
+  },
+  {
+    "line": null,
+    "file": "tests/architecture/no-credential-leak.test.ts",
+    "before": null,
+    "after": {
+      "message": "A plugin operation has failed.\n\n● mp [user]\n  ⊘ alpha (manual recovery) {rollback partial}\n    cause: stuck\n    leaked: <TMPPATH>",
+      "severity": "error",
+      "argc": 2
+    },
+    "multiplicity": 1,
+    "test": "AUTH-09 / PMOD-04: neither strategy shows a credential planted in a manual-recovery leak",
+    "preserves": "D-13: the AUTH-09 / PMOD-04 text leg reads the text the production notify path delivers, so this entry pins the redacted bytes the text strategy shows for a credential planted in a manual-recovery leak. It proves the dispatch formatter adds no credential. Production output and docs/output-catalog.md are unchanged."
+  },
+  {
+    "line": null,
+    "file": "tests/architecture/no-credential-leak.test.ts",
+    "before": null,
+    "after": {
+      "message": "A plugin operation needs attention.\n\n● mp [user]\n  ◍ alpha (disabled)\n    cause: dependency fetch sent x-access-token:***\n\n/reload to pick up changes",
+      "severity": "warning",
+      "argc": 2
+    },
+    "multiplicity": 1,
+    "test": "AUTH-09 / PMOD-04: neither strategy shows a credential planted in a disabled row's remedy cause",
+    "preserves": "D-13: the AUTH-09 / PMOD-04 text leg reads the text the production notify path delivers, so this entry pins the redacted bytes the text strategy shows for a credential planted in a disabled row's remedy cause. It proves the dispatch formatter adds no credential. Production output and docs/output-catalog.md are unchanged."
+  },
+  {
+    "line": null,
+    "file": "tests/architecture/no-credential-leak.test.ts",
+    "before": null,
+    "after": {
+      "message": "● mp [user] <no autoupdate>\nurl: https://***@github.com/o/r.git",
+      "severity": null,
+      "argc": 1
+    },
+    "multiplicity": 1,
+    "test": "AUTH-09 / PMOD-04: neither strategy shows a credential planted in a url-source marketplace-info",
+    "preserves": "D-13: the AUTH-09 / PMOD-04 text leg reads the text the production notify path delivers, so this entry pins the redacted bytes the text strategy shows for a credential planted in a url-source marketplace-info. It proves the dispatch formatter adds no credential. Production output and docs/output-catalog.md are unchanged."
+  },
+  {
+    "line": null,
+    "file": "tests/architecture/no-credential-leak.test.ts",
+    "before": null,
+    "after": {
+      "message": "Prune committed; finalization needs attention.\n\nPrune committed in user scope.\n  cause: state save with *** failed\n\n/reload to pick up changes",
+      "severity": "warning",
+      "argc": 2
+    },
+    "multiplicity": 1,
+    "test": "AUTH-09 / PMOD-04: neither strategy shows a credential planted in the prune-committed-warning cause",
+    "preserves": "D-13: the AUTH-09 / PMOD-04 text leg reads the text the production notify path delivers, so this entry pins the redacted bytes the text strategy shows for a credential planted in the prune-committed-warning cause. It proves the dispatch formatter adds no credential. Production output and docs/output-catalog.md are unchanged."
+  },
+  {
+    "line": null,
+    "file": "tests/architecture/no-credential-leak.test.ts",
+    "before": null,
+    "after": {
+      "message": "(no marketplaces)\n\nretained staging: Bearer ***",
+      "severity": null,
+      "argc": 1
+    },
+    "multiplicity": 1,
+    "test": "AUTH-09 / PMOD-04: neither strategy shows a credential planted in a cascade advisory",
+    "preserves": "D-13: the AUTH-09 / PMOD-04 text leg reads the text the production notify path delivers, so this entry pins the redacted bytes the text strategy shows for a credential planted in a cascade advisory. It proves the dispatch formatter adds no credential. Production output and docs/output-catalog.md are unchanged."
+  },
+  {
+    "line": null,
+    "file": "tests/architecture/no-credential-leak.test.ts",
+    "before": null,
+    "after": {
+      "message": "● mp [user] <no autoupdate>\n  ○ alpha (available)\n    components: not resolved\n    note: workflow wf: x-access-token:*** rejected",
+      "severity": null,
+      "argc": 1
+    },
+    "multiplicity": 1,
+    "test": "AUTH-09 / PMOD-04: neither strategy shows a credential planted in a plugin-info note",
+    "preserves": "D-13: the AUTH-09 / PMOD-04 text leg reads the text the production notify path delivers, so this entry pins the redacted bytes the text strategy shows for a credential planted in a plugin-info note. It proves the dispatch formatter adds no credential. Production output and docs/output-catalog.md are unchanged."
+  }
+]

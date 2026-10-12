@@ -4,6 +4,7 @@ import {
   link,
   lstat,
   mkdir,
+  mkdtemp,
   readFile,
   readdir,
   readlink,
@@ -24,8 +25,20 @@ import { saveState } from "../../../extensions/pi-claude-marketplace/persistence
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
 import type { IndexedRecord } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-index.ts";
+import type { PruneRestoreOps } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/prune-rollback.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+
+// Mirrors mkdtemp with a fixed suffix, so a retained backup has a known name.
+// The name matches the catalog fixture's.
+const restoreOps = {
+  createBackupRoot: async (prefix: string): Promise<string> => {
+    const backupRoot = `${prefix}ABC123`;
+    await mkdir(backupRoot);
+    return backupRoot;
+  },
+  removeBackup: rm,
+} satisfies PruneRestoreOps;
 
 function member(locations: ScopedLocations): IndexedRecord {
   const record: ExtensionState["marketplaces"][string]["plugins"][string] = {
@@ -107,9 +120,7 @@ test("missing directories retain recovery backups while files and state restore"
     const paths = [fixture.command, fixture.agent];
     const metadata = [locations.agentsIndexPath, locations.mcpJsonPath, locations.stateJsonPath];
     const before = await Promise.all([...paths, ...metadata].map((target) => readFile(target)));
-    const rollback = await preparePruneRollback(locations, [fixture.member], {
-      removeBackup: rm,
-    });
+    const rollback = await preparePruneRollback(locations, [fixture.member], restoreOps);
 
     // act
     for (const target of [fixture.skill, ...paths, fixture.hook]) {
@@ -158,9 +169,7 @@ test("discard removes the snapshot after a successful state save", async () => {
     // arrange
     const locations = locationsFor("project", cwd);
     const fixture = await seed(locations);
-    const rollback = await preparePruneRollback(locations, [fixture.member], {
-      removeBackup: rm,
-    });
+    const rollback = await preparePruneRollback(locations, [fixture.member], restoreOps);
 
     // act
     await rollback.discard();
@@ -179,9 +188,7 @@ test("occupied artifact remains untouched and keeps its recovery backup", async 
     // arrange
     const locations = locationsFor("project", cwd);
     const fixture = await seed(locations);
-    const rollback = await preparePruneRollback(locations, [fixture.member], {
-      removeBackup: rm,
-    });
+    const rollback = await preparePruneRollback(locations, [fixture.member], restoreOps);
     await writeFile(fixture.command, "replacement\n");
 
     // act
@@ -215,7 +222,7 @@ test("artifact publication refuses a replacement created at the write boundary",
     const replacement = Buffer.from("independent replacement\n");
     let published = false;
     const rollback = await preparePruneRollback(locations, [fixture.member], {
-      removeBackup: rm,
+      ...restoreOps,
       link: async (from, to) => {
         if (to === fixture.command) {
           await writeFile(to, replacement, { flag: "wx" });
@@ -250,7 +257,7 @@ test("publication failure keeps the backup and reports an artifact restore failu
     const locations = locationsFor("project", cwd);
     const fixture = await seed(locations);
     const rollback = await preparePruneRollback(locations, [fixture.member], {
-      removeBackup: rm,
+      ...restoreOps,
       link: async (from, to) => {
         if (to === fixture.command) {
           // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- rollback normalizes foreign filesystem rejections.
@@ -287,9 +294,7 @@ test("nested directory backup stays complete across repeated partial rollbacks",
     const skillDir = path.dirname(fixture.skill);
     await rename(fixture.skill, path.join(skillDir, "a.md"));
     await writeFile(path.join(skillDir, "z.md"), "last child\n");
-    const rollback = await preparePruneRollback(locations, [fixture.member], {
-      removeBackup: rm,
-    });
+    const rollback = await preparePruneRollback(locations, [fixture.member], restoreOps);
     await rm(skillDir, { recursive: true });
 
     // act & assert
@@ -321,7 +326,7 @@ test("an in-place edit to a restored file cannot change its retained backup", as
     const original = await readFile(fixture.command);
     const independent = Buffer.from("independent command\n");
     const rollback = await preparePruneRollback(locations, [fixture.member], {
-      removeBackup: rm,
+      ...restoreOps,
       link: async (from, to) => {
         await link(from, to);
         if (to === fixture.command) {
@@ -354,9 +359,7 @@ test("restored file mode survives the process umask", async () => {
     const locations = locationsFor("project", cwd);
     const fixture = await seed(locations);
     await chmod(fixture.command, 0o764);
-    const rollback = await preparePruneRollback(locations, [fixture.member], {
-      removeBackup: rm,
-    });
+    const rollback = await preparePruneRollback(locations, [fixture.member], restoreOps);
     await rm(fixture.command);
     const priorUmask = process.umask(0o077);
 
@@ -387,9 +390,7 @@ test("retained backup maps two skills to their exact recovery targets", async ()
         resources: { ...fixture.member.record.resources, skills: ["orphan-skill", "second-skill"] },
       },
     };
-    const rollback = await preparePruneRollback(locations, [secondMember], {
-      removeBackup: rm,
-    });
+    const rollback = await preparePruneRollback(locations, [secondMember], restoreOps);
     await rm(path.dirname(fixture.skill), { recursive: true });
     await rm(path.dirname(secondSkill), { recursive: true });
 
@@ -410,13 +411,11 @@ test("retained backup maps two skills to their exact recovery targets", async ()
         ],
       ],
     );
-    const [backupName] = (await readdir(locations.extensionRoot)).filter((name) =>
-      name.startsWith("prune-backup-"),
-    );
-    assert.equal(rollback.backupName, backupName);
-    const manifest = JSON.parse(
-      await readFile(path.join(locations.extensionRoot, backupName ?? "", "manifest.json"), "utf8"),
-    ) as { entries: Array<{ phase: string; root: string; target: string; backup: string | null }> };
+    assert.equal(rollback.backupName, "prune-backup-ABC123");
+    const backupRoot = path.join(locations.extensionRoot, "prune-backup-ABC123");
+    const manifest = JSON.parse(await readFile(path.join(backupRoot, "manifest.json"), "utf8")) as {
+      entries: Array<{ phase: string; root: string; target: string; backup: string | null }>;
+    };
     assert.deepStrictEqual(
       manifest.entries.filter((entry) => entry.phase === "skills"),
       [
@@ -437,12 +436,33 @@ test("retained backup maps two skills to their exact recovery targets", async ()
     await assert.rejects(lstat(path.dirname(fixture.skill)), { code: "ENOENT" });
     await assert.rejects(lstat(path.dirname(secondSkill)), { code: "ENOENT" });
     assert.equal(
-      await readFile(path.join(locations.extensionRoot, backupName ?? "", "0", "SKILL.md"), "utf8"),
+      await readFile(path.join(backupRoot, "0", "SKILL.md"), "utf8"),
       "SKILL.md original\n",
     );
     assert.equal(
-      await readFile(path.join(locations.extensionRoot, backupName ?? "", "1", "SKILL.md"), "utf8"),
+      await readFile(path.join(backupRoot, "1", "SKILL.md"), "utf8"),
       "second original\n",
+    );
+  });
+});
+
+test("names the backup root with Node's mkdtemp under the extension root", async () => {
+  await withHermeticEnvironment("prune-rollback-mkdtemp-", async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    const fixture = await seed(locations);
+
+    // act
+    const rollback = await preparePruneRollback(locations, [fixture.member], {
+      createBackupRoot: mkdtemp,
+      removeBackup: rm,
+    });
+
+    // assert
+    assert.match(rollback.backupName, /^prune-backup-[A-Za-z0-9]{6}$/);
+    assert.deepStrictEqual(
+      (await readdir(locations.extensionRoot)).filter((name) => name.startsWith("prune-backup-")),
+      [rollback.backupName],
     );
   });
 });
@@ -472,7 +492,7 @@ test("snapshot preparation refuses an agent path outside the scope", async () =>
     const stateBefore = await readFile(locations.stateJsonPath);
 
     // act & assert
-    await assert.rejects(preparePruneRollback(locations, [fixture.member], { removeBackup: rm }));
+    await assert.rejects(preparePruneRollback(locations, [fixture.member], restoreOps));
     assert.deepStrictEqual(await readFile(locations.stateJsonPath), stateBefore);
     assert.equal(await readFile(fixture.skill, "utf8"), "SKILL.md original\n");
     assert.deepStrictEqual(
@@ -501,9 +521,7 @@ test("invalid bridge names are excluded from the snapshot", async () => {
     };
 
     // act
-    const rollback = await preparePruneRollback(locations, [unsafeMember], {
-      removeBackup: rm,
-    });
+    const rollback = await preparePruneRollback(locations, [unsafeMember], restoreOps);
     const failures = await rollback.rollback();
 
     // assert
@@ -526,9 +544,7 @@ test("rollback preserves absent artifacts and independent metadata created after
     await rm(locations.agentsIndexPath);
     await rm(locations.mcpJsonPath);
     await rm(locations.stateJsonPath);
-    const rollback = await preparePruneRollback(locations, [fixture.member], {
-      removeBackup: rm,
-    });
+    const rollback = await preparePruneRollback(locations, [fixture.member], restoreOps);
     await writeFile(locations.mcpJsonPath, "new mcp\n");
     await writeFile(locations.stateJsonPath, "new state\n");
 
@@ -650,9 +666,7 @@ for (const { name, phase, replace, assertReplacement } of replacementCases) {
         const locations = locationsFor("project", cwd);
         const fixture = await seed(locations);
         const originalSkillMode = (await stat(path.dirname(fixture.skill))).mode & 0o777;
-        const rollback = await preparePruneRollback(locations, [fixture.member], {
-          removeBackup: rm,
-        });
+        const rollback = await preparePruneRollback(locations, [fixture.member], restoreOps);
         await replace(fixture);
 
         // act
@@ -703,9 +717,7 @@ test("nested symlink content is compared without following its target", async ()
     const outside = path.join(cwd, "outside.md");
     await writeFile(outside, "outside bytes\n");
     await symlink(outside, path.join(path.dirname(fixture.skill), "linked.md"));
-    const rollback = await preparePruneRollback(locations, [fixture.member], {
-      removeBackup: rm,
-    });
+    const rollback = await preparePruneRollback(locations, [fixture.member], restoreOps);
 
     // act
     const failures = await rollback.rollback();
@@ -725,9 +737,7 @@ test("missing directory retains a nested symlink in its backup", async () => {
     const outside = path.join(cwd, "outside.md");
     await writeFile(outside, "outside bytes\n");
     await symlink(outside, linked);
-    const rollback = await preparePruneRollback(locations, [fixture.member], {
-      removeBackup: rm,
-    });
+    const rollback = await preparePruneRollback(locations, [fixture.member], restoreOps);
     await rm(path.dirname(fixture.skill), { recursive: true });
 
     // act
@@ -754,9 +764,7 @@ test("rollback rejects a symlink substituted into an artifact backup", async () 
     const fixture = await seed(locations);
     const outside = path.join(cwd, "outside.md");
     await writeFile(outside, "outside bytes\n");
-    const rollback = await preparePruneRollback(locations, [fixture.member], {
-      removeBackup: rm,
-    });
+    const rollback = await preparePruneRollback(locations, [fixture.member], restoreOps);
     const backup = path.join(locations.extensionRoot, rollback.backupName, "1");
     await rm(backup);
     await symlink(outside, backup);
@@ -782,7 +790,7 @@ test("unsupported backup artifact kind retains the recovery snapshot", async () 
     const locations = locationsFor("project", cwd);
     const fixture = await seed(locations);
     const rollback = await preparePruneRollback(locations, [fixture.member], {
-      removeBackup: rm,
+      ...restoreOps,
       inspectBackup: async (target) => {
         const entry = await lstat(target);
         if (path.basename(target) === "1") {
@@ -820,9 +828,7 @@ test("a replaced nested symlink is detected without reading either target", asyn
     const fixture = await seed(locations);
     const linked = path.join(path.dirname(fixture.skill), "linked.md");
     await symlink(path.join(cwd, "first-outside.md"), linked);
-    const rollback = await preparePruneRollback(locations, [fixture.member], {
-      removeBackup: rm,
-    });
+    const rollback = await preparePruneRollback(locations, [fixture.member], restoreOps);
     await rm(linked);
     await symlink(path.join(cwd, "second-outside.md"), linked);
 
@@ -848,9 +854,7 @@ test("metadata restore failure keeps backups and still restores state last", asy
     const locations = locationsFor("project", cwd);
     const fixture = await seed(locations);
     const originalState = await readFile(locations.stateJsonPath);
-    const rollback = await preparePruneRollback(locations, [fixture.member], {
-      removeBackup: rm,
-    });
+    const rollback = await preparePruneRollback(locations, [fixture.member], restoreOps);
     const outside = path.join(cwd, "outside.json");
     await writeFile(outside, "outside bytes\n");
     await rm(locations.mcpJsonPath);
@@ -882,9 +886,7 @@ test("shared MCP edit after unstage stays current and retains its original backu
     const fixture = await seed(locations);
     const originalMcp = await readFile(locations.mcpJsonPath);
     const originalState = await readFile(locations.stateJsonPath);
-    const rollback = await preparePruneRollback(locations, [fixture.member], {
-      removeBackup: rm,
-    });
+    const rollback = await preparePruneRollback(locations, [fixture.member], restoreOps);
     await writeFile(locations.mcpJsonPath, '{ "mcpServers": {} }\n');
     await writeFile(locations.mcpJsonPath, '{ "mcpServers": { "independent": 1 } }\n');
     await writeFile(locations.stateJsonPath, "failed save\n");
@@ -915,9 +917,7 @@ test("MCP edit before unstage observation stays current and retains its backup",
     const locations = locationsFor("project", cwd);
     const fixture = await seed(locations);
     const original = await readFile(locations.mcpJsonPath);
-    const rollback = await preparePruneRollback(locations, [fixture.member], {
-      removeBackup: rm,
-    });
+    const rollback = await preparePruneRollback(locations, [fixture.member], restoreOps);
     const independent = Buffer.from('{ "mcpServers": { "orphan": 1, "independent": 2 } }\n');
     await writeFile(locations.mcpJsonPath, independent);
 
@@ -946,7 +946,7 @@ test("MCP edit during rollback observation remains current with recovery backup"
     const independent = Buffer.from('{ "mcpServers": { "independent": 2 } }\n');
     let injected = false;
     const ops = {
-      removeBackup: rm,
+      ...restoreOps,
       afterMetadataRead: async (target: string): Promise<void> => {
         if (target === locations.mcpJsonPath && !injected) {
           injected = true;
@@ -981,9 +981,7 @@ test("agents index edit after unstage stays current and retains its original bac
     const fixture = await seed(locations);
     const originalIndex = await readFile(locations.agentsIndexPath);
     const originalState = await readFile(locations.stateJsonPath);
-    const rollback = await preparePruneRollback(locations, [fixture.member], {
-      removeBackup: rm,
-    });
+    const rollback = await preparePruneRollback(locations, [fixture.member], restoreOps);
     await writeFile(locations.agentsIndexPath, "unstaged index\n");
     await writeFile(locations.agentsIndexPath, "independent index\n");
     await writeFile(locations.stateJsonPath, "failed save\n");
@@ -1011,9 +1009,7 @@ test("metadata directory collision leaves the directory and its backup intact", 
     const locations = locationsFor("project", cwd);
     const fixture = await seed(locations);
     const originalMcp = await readFile(locations.mcpJsonPath);
-    const rollback = await preparePruneRollback(locations, [fixture.member], {
-      removeBackup: rm,
-    });
+    const rollback = await preparePruneRollback(locations, [fixture.member], restoreOps);
     await rm(locations.mcpJsonPath);
     await mkdir(locations.mcpJsonPath);
 
@@ -1039,9 +1035,7 @@ test("missing shared metadata keeps its original recovery backup", async () => {
     const locations = locationsFor("project", cwd);
     const fixture = await seed(locations);
     const original = await readFile(locations.mcpJsonPath);
-    const rollback = await preparePruneRollback(locations, [fixture.member], {
-      removeBackup: rm,
-    });
+    const rollback = await preparePruneRollback(locations, [fixture.member], restoreOps);
     await rm(locations.mcpJsonPath);
 
     // act
@@ -1066,9 +1060,7 @@ test("a damaged metadata backup is reported without replacing the live document"
     const locations = locationsFor("project", cwd);
     const fixture = await seed(locations);
     const original = await readFile(locations.mcpJsonPath);
-    const rollback = await preparePruneRollback(locations, [fixture.member], {
-      removeBackup: rm,
-    });
+    const rollback = await preparePruneRollback(locations, [fixture.member], restoreOps);
     const backup = path.join(locations.extensionRoot, rollback.backupName, "5");
     await rm(backup);
     await mkdir(backup);
@@ -1091,9 +1083,7 @@ test("AFILE-01: a missing adapter file stays absent after rollback", async () =>
     // arrange
     const locations = locationsFor("project", cwd);
     const fixture = await seed(locations);
-    const rollback = await preparePruneRollback(locations, [fixture.member], {
-      removeBackup: rm,
-    });
+    const rollback = await preparePruneRollback(locations, [fixture.member], restoreOps);
 
     // act
     const failures = await rollback.rollback();
@@ -1111,9 +1101,7 @@ test("AFILE-01: an adapter edit during rollback stays current with its original 
     const fixture = await seed(locations);
     const original = Buffer.from('{ "mcpServers": { "orphan": 1 } }\n');
     await writeFile(locations.mcpAdapterJsonPath, original);
-    const rollback = await preparePruneRollback(locations, [fixture.member], {
-      removeBackup: rm,
-    });
+    const rollback = await preparePruneRollback(locations, [fixture.member], restoreOps);
     const independent = Buffer.from('{ "mcpServers": { "orphan": { "disabled": true } } }\n');
     await writeFile(locations.mcpAdapterJsonPath, independent);
 
@@ -1140,9 +1128,7 @@ test("AFILE-01: a byte-identical adapter file restores cleanly", async () => {
     const fixture = await seed(locations);
     const original = Buffer.from('{ "mcpServers": { "orphan": 1 } }\n');
     await writeFile(locations.mcpAdapterJsonPath, original);
-    const rollback = await preparePruneRollback(locations, [fixture.member], {
-      removeBackup: rm,
-    });
+    const rollback = await preparePruneRollback(locations, [fixture.member], restoreOps);
 
     // act
     const failures = await rollback.rollback();
@@ -1165,9 +1151,7 @@ test("NFR-3: MCP config files holding the recorded unstage bytes restore from th
     const originalAdapter = Buffer.from('// user note\n{ "mcpServers": { "orphan": 1 } }\n');
     await writeFile(locations.mcpAdapterJsonPath, originalAdapter);
     const originalLegacy = await readFile(locations.mcpJsonPath);
-    const rollback = await preparePruneRollback(locations, [fixture.member], {
-      removeBackup: rm,
-    });
+    const rollback = await preparePruneRollback(locations, [fixture.member], restoreOps);
     const ownBytes = Buffer.from('{\n  "mcpServers": {}\n}\n');
     await writeFile(locations.mcpAdapterJsonPath, ownBytes);
     await writeFile(locations.mcpJsonPath, ownBytes);
@@ -1202,9 +1186,7 @@ test("NFR-3: an adapter edit after the recorded unstage write stays current with
     const fixture = await seed(locations);
     const original = Buffer.from('{ "mcpServers": { "orphan": 1 } }\n');
     await writeFile(locations.mcpAdapterJsonPath, original);
-    const rollback = await preparePruneRollback(locations, [fixture.member], {
-      removeBackup: rm,
-    });
+    const rollback = await preparePruneRollback(locations, [fixture.member], restoreOps);
     rollback.recordMcpWrites([
       { path: locations.mcpAdapterJsonPath, bytes: Buffer.from('{\n  "mcpServers": {}\n}\n') },
     ]);
@@ -1239,9 +1221,7 @@ test("NFR-3: the last recorded write to a path is the one the rollback compares"
     const fixture = await seed(locations);
     const original = Buffer.from('{ "mcpServers": { "orphan": 1, "other": 2 } }\n');
     await writeFile(locations.mcpAdapterJsonPath, original);
-    const rollback = await preparePruneRollback(locations, [fixture.member], {
-      removeBackup: rm,
-    });
+    const rollback = await preparePruneRollback(locations, [fixture.member], restoreOps);
     const lastBytes = Buffer.from('{\n  "mcpServers": {}\n}\n');
     rollback.recordMcpWrites([
       {
@@ -1271,7 +1251,7 @@ test("NFR-3: an adapter edit after the rollback reads the recorded unstage write
     const independent = Buffer.from('{\n  "mcpServers": { "independent": 2 }\n}\n');
     let injected = false;
     const rollback = await preparePruneRollback(locations, [fixture.member], {
-      removeBackup: rm,
+      ...restoreOps,
       afterMetadataRead: async (target: string): Promise<void> => {
         if (target === locations.mcpAdapterJsonPath && !injected) {
           injected = true;
@@ -1321,7 +1301,7 @@ test("NFR-3: a failed restore write leaves the adapter file in place and keeps i
     const configDirectory = path.dirname(locations.mcpAdapterJsonPath);
     let entriesAtWrite: readonly string[] = [];
     const rollback = await preparePruneRollback(locations, [fixture.member], {
-      removeBackup: rm,
+      ...restoreOps,
       writeMetadata: async (target) => {
         entriesAtWrite = await readdir(configDirectory);
         throw new Error(`write refused at ${target}`);
@@ -1364,7 +1344,7 @@ test("NFR-3: an adapter removed after the rollback reads the recorded unstage wr
     const original = Buffer.from('{ "mcpServers": { "orphan": 1 } }\n');
     await writeFile(locations.mcpAdapterJsonPath, original);
     const rollback = await preparePruneRollback(locations, [fixture.member], {
-      removeBackup: rm,
+      ...restoreOps,
       afterMetadataRead: async (target: string): Promise<void> => {
         if (target === locations.mcpAdapterJsonPath) {
           await rm(target);
@@ -1406,7 +1386,7 @@ test("NFR-3: an adapter replaced by a directory during the last byte check is re
     const original = Buffer.from('{ "mcpServers": { "orphan": 1 } }\n');
     await writeFile(locations.mcpAdapterJsonPath, original);
     const rollback = await preparePruneRollback(locations, [fixture.member], {
-      removeBackup: rm,
+      ...restoreOps,
       readMetadata: async (target) => {
         await rm(target);
         await mkdir(target);
@@ -1450,7 +1430,7 @@ test("NFR-3: a read error other than a vanished or replaced adapter propagates f
     await writeFile(locations.mcpAdapterJsonPath, original);
     const denied = Object.assign(new Error("adapter read denied"), { code: "EACCES" });
     const rollback = await preparePruneRollback(locations, [fixture.member], {
-      removeBackup: rm,
+      ...restoreOps,
       readMetadata: () => Promise.reject(denied),
     });
     const ownBytes = Buffer.from('{\n  "mcpServers": {}\n}\n');
@@ -1482,7 +1462,7 @@ test("NFR-3: a symlink swapped in after the rollback reads the recorded unstage 
     const ownBytes = Buffer.from('{\n  "mcpServers": {}\n}\n');
     const outside = path.join(cwd, "outside.json");
     const rollback = await preparePruneRollback(locations, [fixture.member], {
-      removeBackup: rm,
+      ...restoreOps,
       afterMetadataRead: async (target: string): Promise<void> => {
         if (target === locations.mcpAdapterJsonPath) {
           await writeFile(outside, ownBytes);
@@ -1522,9 +1502,7 @@ test("state restore refusal keeps the backup and reports state failure", async (
     // arrange
     const locations = locationsFor("project", cwd);
     const fixture = await seed(locations);
-    const rollback = await preparePruneRollback(locations, [fixture.member], {
-      removeBackup: rm,
-    });
+    const rollback = await preparePruneRollback(locations, [fixture.member], restoreOps);
     const outside = path.join(cwd, "outside-state.json");
     await writeFile(outside, "outside bytes\n");
     await rm(locations.stateJsonPath);
@@ -1553,6 +1531,7 @@ test("failed rollback cleanup reports partial failure and retains the backup", a
     const locations = locationsFor("project", cwd);
     const fixture = await seed(locations);
     const rollback = await preparePruneRollback(locations, [fixture.member], {
+      ...restoreOps,
       removeBackup: () => Promise.reject(new Error("backup cleanup refused")),
     });
 
@@ -1578,6 +1557,7 @@ test("failed committed cleanup stays silent and retains the backup", async () =>
     const locations = locationsFor("project", cwd);
     const fixture = await seed(locations);
     const rollback = await preparePruneRollback(locations, [fixture.member], {
+      ...restoreOps,
       removeBackup: () => Promise.reject(new Error("backup cleanup refused")),
     });
 

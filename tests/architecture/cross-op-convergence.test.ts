@@ -61,12 +61,10 @@ import { createCompletionCache } from "../../extensions/pi-claude-marketplace/sh
 import { createGitOpsFake } from "../platform/git-ops-fake.ts";
 import { withHermeticEnvironment } from "../platform/hermetic-environment.ts";
 import { noStatusSnapshot } from "../platform/mcp-status-seed.ts";
-import { emptyPiInventory } from "../platform/pi-inventory-seed.ts";
+import { runWithNothingLoaded } from "../shared/notification-run-seeds.ts";
 
-import type {
-  NotificationContext,
-  PiInventory,
-} from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { NotificationContext } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { NotificationRun } from "../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 
 // ---------------------------------------------------------------------------
 // Hermetic harness -- mirrors the per-op orchestrator test idiom
@@ -99,20 +97,18 @@ function createReinstallPlugins() {
 
 function makeCtx(): {
   ctx: NotificationContext;
-  pi: PiInventory;
   notifications: NotifyRecord[];
 } {
   const notifications: NotifyRecord[] = [];
-  const pi = emptyPiInventory();
   const ctx = {
+    mode: "tui",
     ui: {
       notify: (m: string, s?: string): void => {
         notifications.push(s === undefined ? { message: m } : { message: m, severity: s });
       },
     },
-    pi,
   };
-  return { ctx, pi, notifications };
+  return { ctx, notifications };
 }
 
 async function withHermeticHome<T>(fn: (env: { cwd: string }) => Promise<T>): Promise<T> {
@@ -135,21 +131,22 @@ interface Emission {
  * Invoke a real orchestrator against a missing marketplace and return its sole
  * notify emission. Each invoker is the EXACT call shape copied from that op's
  * own orchestrator test file. `mode` selects the explicit-scope vs bare-form
- * invocation (install has no bare form).
+ * invocation (install has no bare form). Every op renders from the command's
+ * run.
  */
 type Invoker = (env: {
   ctx: NotificationContext;
-  pi: PiInventory;
+  run: NotificationRun;
   cwd: string;
   mode: "explicit" | "bare";
 }) => Promise<void>;
 
 const INVOKERS: Record<string, Invoker> = {
   // marketplace info (the canonical model). info.test.ts (f)/(g).
-  info: async ({ ctx, pi, cwd, mode }) => {
+  info: async ({ ctx, run, cwd, mode }) => {
     await getPluginInfo({
       ctx,
-      pi,
+      run,
       mcpStatus: noStatusSnapshot(),
       marketplace: NAME,
       plugin: "ghost",
@@ -158,20 +155,20 @@ const INVOKERS: Record<string, Invoker> = {
     });
   },
   // install ALWAYS carries a resolved scope -> explicit only. install-flow.test.ts M1.
-  install: async ({ ctx, pi, cwd }) => {
+  install: async ({ ctx, run, cwd }) => {
     await createInstallOperation(
       createHooksRouting(createHooksRuntime(), { readHooksJson }),
       createCompletionCache(),
-    )({ ctx, pi, scope: "project", cwd, marketplace: NAME, plugin: "anything" });
+    )({ ctx, run, scope: "project", cwd, marketplace: NAME, plugin: "anything" });
   },
   // uninstall. uninstall.test.ts ATTR-04 / D-03.
-  uninstall: async ({ ctx, pi, cwd, mode }) => {
+  uninstall: async ({ ctx, run, cwd, mode }) => {
     await createUninstallOperation(
       createHooksRouting(createHooksRuntime(), { readHooksJson }),
       createCompletionCache(),
     )({
       ctx,
-      pi,
+      run,
       cwd,
       marketplace: NAME,
       plugin: "ghost",
@@ -179,41 +176,41 @@ const INVOKERS: Record<string, Invoker> = {
     });
   },
   // reinstall (marketplace target). reinstall-flow.test.ts ATTR-03.
-  reinstall: async ({ ctx, pi, cwd, mode }) => {
+  reinstall: async ({ ctx, run, cwd, mode }) => {
     await createReinstallPlugins()({
       ctx,
-      pi,
+      run,
       cwd,
       target: { kind: "marketplace", marketplace: NAME },
       ...(mode === "explicit" && { scope: "project" as const }),
     });
   },
   // plugin update (marketplace target). update-flow.test.ts ATTR-02.
-  "update (plugin)": async ({ ctx, pi, cwd, mode }) => {
+  "update (plugin)": async ({ ctx, run, cwd, mode }) => {
     await createUpdatePlugins()({
       ctx,
-      pi,
+      run,
       cwd,
       target: { kind: "marketplace", marketplace: NAME },
       ...(mode === "explicit" && { scope: "project" as const }),
     });
   },
   // marketplace remove. remove.test.ts ATTR-06 S3/S4.
-  "marketplace remove": async ({ ctx, pi, cwd, mode }) => {
+  "marketplace remove": async ({ ctx, run, cwd, mode }) => {
     await removeMarketplace({
       completionCache: createCompletionCache(),
       ctx,
-      pi,
+      run,
       name: NAME,
       cwd,
       ...(mode === "explicit" && { scope: "project" as const }),
     });
   },
   // autoupdate flip. autoupdate.test.ts ATTR-05.
-  autoupdate: async ({ ctx, pi, cwd, mode }) => {
+  autoupdate: async ({ ctx, run, cwd, mode }) => {
     await setMarketplaceAutoupdate({
       ctx,
-      pi,
+      run,
       name: NAME,
       enable: true,
       cwd,
@@ -224,12 +221,12 @@ const INVOKERS: Record<string, Invoker> = {
   // injected so a (regression) stray network call would be recorded; the
   // pre-guard miss short-circuits before it is reached (NFR-5). update-flow.test.ts
   // SC#1.
-  "marketplace update": async ({ ctx, pi, cwd, mode }) => {
+  "marketplace update": async ({ ctx, run, cwd, mode }) => {
     const { gitOps } = createGitOps();
     await updateMarketplace({
       completionCache: createCompletionCache(),
       ctx,
-      pi,
+      run,
       name: NAME,
       cwd,
       gitOps,
@@ -240,10 +237,10 @@ const INVOKERS: Record<string, Invoker> = {
 
 async function captureOp(op: string, mode: "explicit" | "bare"): Promise<Emission> {
   return withHermeticHome(async ({ cwd }) => {
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, notifications } = makeCtx();
     const invoke = INVOKERS[op];
     assert.ok(invoke !== undefined, `no invoker registered for op "${op}"`);
-    await invoke({ ctx, pi, cwd, mode });
+    await invoke({ ctx, run: runWithNothingLoaded(), cwd, mode });
     const first = notifications[0];
     return {
       body: first?.message ?? "",

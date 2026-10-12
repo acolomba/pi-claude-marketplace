@@ -62,6 +62,13 @@
 //   TMPDIR=/var/tmp/mcp-adapter-canary \
 //     node tests/live-uat/mcp-adapter-canary.mjs [--invert]
 //
+// This extension answers each `/claude:plugin` command in RPC mode with a
+// `claude-plugin` custom entry, not a notify (JOUT-01). Pi streams an entry
+// appended after startup as an `entry_appended` record; the load-time
+// migration entry is appended before that stream starts, so the canary reads
+// it with `get_entries`. The published 0.19.2 that `--capture-legacy` drives
+// still answers with notifies.
+//
 // `--invert` is the negative control: it flips the expected route A result
 // text and nothing else, so that run must exit 2 at A3.
 //
@@ -124,9 +131,15 @@ const CLOSE_WAIT_MS = 15_000;
 const DIALOG_METHODS = new Set(["select", "confirm", "input", "editor"]);
 
 const LEGACY_FILES = ["mcp.json", "pi-claude-marketplace/state.json", "claude-plugins.json"];
-const MOVED_SUMMARY = "Plugin MCP servers moved from mcp.json to mcp-adapter.json.";
-const MIGRATED_ROW = "echo -> plugin_echo_echo_ (echo) [user]";
 const ECHO_KEY = "plugin_echo_echo_";
+const MIGRATED_ROW = {
+  kind: "moved",
+  scope: "user",
+  plugin: "echo",
+  marketplace: MARKETPLACE,
+  from: "echo",
+  to: ECHO_KEY,
+};
 const PING_KEY = "plugin_ping_ping_";
 const ECHO_TOOL = "mcp__plugin_echo_echo__echo_canary";
 const ROUTE_A_PROMPT = "route-a: find the echo canary tool and call it with the text hi";
@@ -548,6 +561,7 @@ function finishStep(state, extra) {
     message: step.message,
     response: step.response,
     notifies: state.notifies.slice(step.notifyStart),
+    entries: state.entries.slice(step.entryStart),
     tools: state.tools.slice(step.toolStart),
     elapsedMs: Date.now() - step.startedAt,
   });
@@ -597,8 +611,16 @@ function onUiRequest(state, record) {
   }
 }
 
+function onEntry(state, record) {
+  const entry = record.entry;
+  if (entry?.type === "custom") {
+    state.entries.push({ customType: entry.customType, data: entry.data });
+  }
+}
+
 const RECORD_HANDLERS = {
   response: onResponse,
+  entry_appended: onEntry,
   agent_settled: onSettled,
   extension_ui_request: onUiRequest,
   extension_error: (state, record) => state.extensionErrors.push(record),
@@ -628,10 +650,16 @@ function onExit(state, code) {
   }
 }
 
-/** Sends one prompt and resolves on its response, or after `agent_settled` with `settle`. */
-function sendStep(state, message, settle) {
+/** Sends one RPC command and resolves on its response, or after `agent_settled` with `settle`. */
+function sendCommand(state, command, message, settle) {
   if (state.exited) {
-    return Promise.resolve({ failure: "Pi had already exited", message, notifies: [], tools: [] });
+    return Promise.resolve({
+      failure: "Pi had already exited",
+      message,
+      notifies: [],
+      entries: [],
+      tools: [],
+    });
   }
 
   return new Promise((resolve) => {
@@ -651,10 +679,16 @@ function sendStep(state, message, settle) {
       timer,
       startedAt: Date.now(),
       notifyStart: state.notifies.length,
+      entryStart: state.entries.length,
       toolStart: state.tools.length,
     };
-    state.child.stdin.write(`${JSON.stringify({ id, type: "prompt", message })}\n`);
+    state.child.stdin.write(`${JSON.stringify({ id, ...command })}\n`);
   });
+}
+
+/** Sends one prompt and resolves on its response, or after `agent_settled` with `settle`. */
+function sendStep(state, message, settle) {
+  return sendCommand(state, { type: "prompt", message }, message, settle);
 }
 
 function waitForExit(state, ms) {
@@ -702,6 +736,7 @@ function openSession(pi, sandbox, extensions, flags = []) {
     nextId: 0,
     step: undefined,
     notifies: [],
+    entries: [],
     tools: [],
     dialogs: [],
     extensionErrors: [],
@@ -745,6 +780,17 @@ function stderrTail(session) {
 
 function notifyText(notifies) {
   return notifies.map((notify) => notify.message).join("\n---\n");
+}
+
+/** The `claude-plugin` payloads among `entries`, in order. */
+function pluginPayloads(entries) {
+  return entries.filter((entry) => entry.customType === "claude-plugin").map((entry) => entry.data);
+}
+
+function payloadText(entries) {
+  return pluginPayloads(entries)
+    .map((payload) => JSON.stringify(payload))
+    .join("\n---\n");
 }
 
 /** Sends one step; a refused, timed-out or interrupted step routes human_needed. */
@@ -799,35 +845,59 @@ function statusOf(pairs, name) {
   return Array.isArray(pairs) ? pairs.find((pair) => pair[0] === name)?.[1] : undefined;
 }
 
-/** Returns the text inside `mcp: plugin:<plugin>:<plugin> (...)` of the info output. */
+/** The plugin rows of the `plugin-info` or `plugin-info-cascade` payloads, in order. */
+function infoPlugins(payloads) {
+  return payloads.flatMap((payload) => {
+    if (payload?.kind === "plugin-info") {
+      return [payload.plugin];
+    }
+
+    return payload?.kind === "plugin-info-cascade"
+      ? payload.blocks.map((block) => block.plugin)
+      : [];
+  });
+}
+
+/** Returns the `status` of the `plugin:<plugin>:<plugin>` MCP server in the info output. */
 async function infoToken(session, plugin) {
   const outcome = await run(session, `/claude:plugin info ${plugin}@${MARKETPLACE}`);
-  const pattern = new RegExp(`mcp: plugin:${plugin}:${plugin} \\(([^)]*)\\)`);
-  for (const notify of outcome.notifies) {
-    const match = pattern.exec(notify.message);
-    if (match !== null) {
-      return match[1];
-    }
+  const server = `plugin:${plugin}:${plugin}`;
+  const status = infoPlugins(pluginPayloads(outcome.entries))
+    .flatMap((row) => row.components?.mcp ?? [])
+    .find((entry) => entry.name === server)?.status;
+  if (status !== undefined) {
+    return status;
   }
 
   return humanNeeded(
-    `info for ${plugin} printed no "mcp: plugin:${plugin}:${plugin} (" row.`,
-    notifyText(outcome.notifies),
+    `info for ${plugin} shows no ${server} MCP server with a status.`,
+    payloadText(outcome.entries),
   );
 }
 
-/** Finds a notify the session received, polling every half second up to `bound` times. */
-async function waitForNotify(session, predicate, bound) {
+/**
+ * Finds a `claude-plugin` payload in the whole session, read with
+ * `get_entries` every half second up to `bound` times.
+ */
+async function waitForPayload(session, predicate, bound) {
+  let entries = [];
   for (let attempt = 0; attempt <= bound; attempt += 1) {
-    const found = session.state.notifies.find((notify) => predicate(notify.message));
+    const outcome = await sendCommand(session.state, { type: "get_entries" }, "get_entries", false);
+    if (outcome.failure !== undefined) {
+      humanNeeded(`get_entries: ${outcome.failure}.`, stderrTail(session));
+    }
+
+    const listed = outcome.response?.data?.entries;
+    entries = (Array.isArray(listed) ? listed : []).filter((entry) => entry?.type === "custom");
+    const found = pluginPayloads(entries).find(predicate);
     if (found !== undefined || attempt === bound) {
-      return found;
+      return { found, entries };
     }
 
     await run(session, "/canary-wait 500");
   }
 
-  return undefined;
+  return { found: undefined, entries };
 }
 
 /** Closes a session; a dialog or an extension error after the fact still fails the run. */
@@ -967,19 +1037,28 @@ function reportIgnoredSettings(session) {
   }
 }
 
-/** M1 (AMIG-03): the migration notice names the moved entry. */
+function isMigratedRow(row) {
+  return Object.entries(MIGRATED_ROW).every(([key, value]) => row?.[key] === value);
+}
+
+/** M1 (AMIG-03): the migration entry names the moved entry. */
 async function assertMigrationNotice(session) {
-  const notice = await waitForNotify(session, (message) => message.includes(MOVED_SUMMARY), 30);
+  const migrated = JSON.stringify(MIGRATED_ROW);
+  const { found, entries } = await waitForPayload(
+    session,
+    (payload) => payload?.kind === "mcp-migration",
+    30,
+  );
   reportIgnoredSettings(session);
-  if (notice === undefined) {
-    regression("M1", "No migration notice arrived.", notifyText(session.state.notifies));
+  if (found === undefined) {
+    regression("M1", "No mcp-migration entry arrived.", payloadText(entries));
   }
 
-  if (!notice.message.includes(MIGRATED_ROW)) {
-    regression("M1", `The migration notice does not list "${MIGRATED_ROW}".`, notice.message);
+  if (!Array.isArray(found.rows) || !found.rows.some(isMigratedRow)) {
+    regression("M1", `The mcp-migration entry does not list ${migrated}.`, JSON.stringify(found));
   }
 
-  pass("M1", `AMIG-03: the migration notice lists "${MIGRATED_ROW}"`);
+  pass("M1", `AMIG-03: the mcp-migration entry lists ${migrated}`);
 }
 
 /** M2 (AMIG-03, ASTAT-02): before any reload the adapter still serves the old name. */
@@ -1110,11 +1189,15 @@ async function assertReloadCount(session) {
 /** I1 (AFILE-01): a plugin installed fresh in the session is written for the adapter. */
 async function assertFreshInstall(session, sandbox) {
   const outcome = await run(session, `/claude:plugin install ping@${MARKETPLACE} --scope user`);
-  if (!outcome.notifies.some((notify) => notify.message.includes("● ping v1.0.0 (installed)"))) {
+  const installed = pluginPayloads(outcome.entries)
+    .filter((payload) => payload?.kind === "cascade")
+    .flatMap((payload) => payload.marketplaces.flatMap((marketplace) => marketplace.plugins))
+    .some((row) => row.name === "ping" && row.version === "1.0.0" && row.status === "installed");
+  if (!installed) {
     regression(
       "I1",
-      "The install shows no `● ping v1.0.0 (installed)` row.",
-      notifyText(outcome.notifies),
+      "The install cascade has no installed ping v1.0.0 row.",
+      payloadText(outcome.entries),
     );
   }
 

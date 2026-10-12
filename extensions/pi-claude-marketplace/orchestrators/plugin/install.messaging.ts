@@ -1,17 +1,6 @@
 import { causeChainTrailer, errorMessage, PluginShapeError } from "../../shared/errors.ts";
 import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
 import {
-  ICON_INSTALLED,
-  ICON_UNINSTALLABLE,
-  installedLikeRow,
-  partiallyInstalledRow,
-  pluginRow,
-  renderPartiallyAvailableRow,
-  renderUnavailableRow,
-  renderVersion,
-  ICON_DISABLED,
-} from "../../shared/notification-grammar.ts";
-import {
   type ContentReason,
   type PluginDisabledMessage,
   type PluginFailedMessage,
@@ -24,24 +13,10 @@ import {
 import { PathContainmentError } from "../../shared/path-safety.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 
-import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
+import type { CommandContext } from "../../shared/notify-context.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { RollbackPartial } from "../../transaction/phase-ledger.ts";
 import type { InstallPluginOutcome } from "../types.ts";
-
-/**
- * install.messaging.ts -- the command-local notification vocabulary for
- * `/claude:plugin install` (MOD-01). It co-locates install's private status
- * set, the message shapes those statuses carry, install's command-private
- * reasons, and a render map total over install's OWN statuses (D-10) whose
- * arm bodies are lifted VERBATIM from the central `renderPluginRow` switch so
- * the dispatched output is byte-identical.
- *
- * The shared presentation vocabulary (`ICON_*`, `joinTokens`,
- * `renderScopeBracket`, `renderVersion`, `composeReasons`, `pluginRow`) stays
- * central in `shared/notification-grammar.ts` (D-notification-refactor-01-11); this module CALLS
- * it, never duplicates it.
- */
 
 /**
  * install's private status set. A single-target install emits exactly one of
@@ -89,8 +64,8 @@ export interface EntityErrorRow {
 /**
  * install's row message union -- the subset of the central plugin message
  * shapes whose status install actually emits. `dependencies` stays REQUIRED on
- * the `installed` arm so the soft-dep marker injection in `composeReasons`
- * fires for exactly that arm (D-06 / TYPE-04 gating).
+ * the `installed` arm so `resolveRows` can compose its soft-dep markers
+ * (D-06 / TYPE-04 / D-12).
  */
 export type InstallMsg =
   | PluginInstalledMessage
@@ -100,52 +75,18 @@ export type InstallMsg =
   | PluginPartiallyAvailableMessage
   | PluginDisabledMessage;
 
-/**
- * Render map total over install's OWN statuses (D-10): omitting an arm is a
- * TS2741 compile error at the `satisfies` site below. Each arm reproduces the
- * verbatim bytes of the matching `renderPluginRow` switch arm.
- */
-const INSTALL_RENDER: { [K in InstallStatus]: RenderFn<Extract<InstallMsg, { status: K }>> } = {
-  installed: (p, probe, mpScope) =>
-    installedLikeRow(
-      ICON_INSTALLED,
-      p,
-      mpScope,
-      renderVersion(p.version),
-      "(installed)",
-      p.reasons,
-      probe,
-    ),
-  // FSTAT-07 / D-66-04: a partial install that re-resolves `partially-available` reports
-  // (partially-installed) with the dropped-component detail. WR-03: the shared
-  // `partiallyInstalledRow` threads `dependencies` so the soft-dep markers fire on a
-  // degraded install exactly as on a clean `(installed)` row.
-  "partially-installed": (p, probe, mpScope) => partiallyInstalledRow(p, mpScope, probe),
-  unavailable: (p, probe, mpScope) => renderUnavailableRow(p, probe, mpScope),
-  // XSURF-01: the partially-available install-failure arm. Byte-identical to the
-  // `unavailable` arm but with the `⊖` glyph + `(partially-available)` token; the
-  // `--partial` hint trailer is composed centrally by the renderer, not here.
-  "partially-available": (p, probe, mpScope) => renderPartiallyAvailableRow(p, probe, mpScope),
-  failed: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)", probe),
-  // DFEN-04 / OUT-04: the install-disabled arm. Lifted verbatim from the
-  // `disable` verb's own arm so an install that landed disabled and an install
-  // followed by a disable render byte-identically. ENBL-15 / D-100-06: both
-  // soft-dep flags stay hard-coded false, so the row cannot emit a
-  // `{requires pi-subagents}` / `{requires pi-mcp-adapter}` marker whatever inventory
-  // the record retained (ENBL-18). The enable-hint trailer is composed
-  // centrally by the renderer, not here.
-  disabled: (p, probe, mpScope) => pluginRow(ICON_DISABLED, p, mpScope, "(disabled)", probe),
-};
-
-/**
- * D-04 / D-05: install's `CommandContext`. `Messaging.label` is the human
- * operation name; `render` is the total render map. The `as const satisfies`
- * pin enforces that install cannot be wired without supplying both.
- */
+/** The command label and complete per-status reason policy. */
 export const INSTALL_CONTEXT = {
   Messaging: { label: "Plugin install" },
-  render: INSTALL_RENDER,
-} as const satisfies CommandContext<InstallStatus, InstallMsg>;
+  rowPolicies: {
+    installed: { markers: true, contentReasons: true },
+    "partially-installed": { markers: true, contentReasons: true },
+    failed: { markers: false, contentReasons: true },
+    unavailable: { markers: false, contentReasons: true },
+    "partially-available": { markers: false, contentReasons: true },
+    disabled: { markers: false, contentReasons: true },
+  },
+} as const satisfies CommandContext<InstallStatus>;
 
 /**
  * SEV-02 / D-69-03 / D-70-02 / XSURF-01: build the install-failure row,

@@ -49,18 +49,72 @@ import {
   mergeMarketplaceIntoState,
   seedAutoupdateConfig,
 } from "../../edge/handlers/marketplace-seed.ts";
-import { expectSoftDepProbes } from "../../edge/notification-boundary.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
-import { toolInfo } from "../../platform/pi-inventory-seed.ts";
+import { runWithNothingLoaded, runWithSoftDeps } from "../../shared/notification-run-seeds.ts";
 
 import type { ListPluginsOptions } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/list-flow.ts";
 import type {
-  ExtensionAPI,
   ExtensionContext,
+  SoftDepStatus,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { NotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 
-type ListPluginsWithoutConnections = Omit<ListPluginsOptions, "ctx" | "pi">;
+type ListPluginsWithoutConnections = Omit<ListPluginsOptions, "ctx" | "run">;
+
+test("does not turn a list append fault into a business-failure cascade", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "list-append-fault-");
+  const ctx = mock<ExtensionContext>({ exactParams: true, name: "list context" });
+  when(() => ctx.mode)
+    .thenReturn("json")
+    .once();
+  const attempts: Array<{ customType: string; payload: unknown }> = [];
+  const run = {
+    ...runWithNothingLoaded(),
+    entrySink: {
+      appendEntry(customType: string, payload: unknown): void {
+        attempts.push({ customType, payload });
+        if (attempts.length === 1) {
+          throw new Error("Append failed.");
+        }
+      },
+    },
+  };
+  const origin = { kind: "command", commandId: "plugin", invocationId: "test-run" };
+
+  // act
+  await listPlugins({ ctx, run, cwd, scope: "project" });
+
+  // assert
+  assert.deepStrictEqual(attempts, [
+    {
+      customType: "claude-plugin",
+      payload: {
+        schemaVersion: 1,
+        origin,
+        kind: "cascade",
+        severity: "info",
+        needsReload: false,
+        marketplaces: [],
+      },
+    },
+    {
+      customType: "claude-plugin",
+      payload: {
+        schemaVersion: 1,
+        origin,
+        kind: "internal-error",
+        severity: "error",
+        needsReload: false,
+        summary: "Command failed unexpectedly.",
+        cause: { causeChain: ["Append failed."], truncated: false },
+      },
+    },
+  ]);
+  verify(ctx);
+});
+
 void ({ cwd: "/workspace", scope: "user" } satisfies ListPluginsWithoutConnections);
 // @ts-expect-error list is filesystem/state-only and exposes no Git transport option
 void ({ cwd: "/workspace", gitOps: {} } satisfies ListPluginsWithoutConnections);
@@ -75,22 +129,35 @@ type NotificationUi = Omit<ExtensionContext["ui"], "notify"> & {
   readonly notify: (message: string, severity?: NotificationSeverity) => void;
 };
 
+/**
+ * Builds the list command's connections: a strict context whose UI takes one
+ * notification, and a run seeded with `softDeps` over an all-unloaded
+ * snapshot. The orchestrator reads the run's snapshot and never probes a tool
+ * inventory, so no `pi` double exists here.
+ */
 function makeCtx(
-  options: { readonly toolNames?: readonly string[]; readonly recordTally?: boolean } = {},
+  options: { readonly softDeps?: Partial<SoftDepStatus>; readonly recordTally?: boolean } = {},
 ): {
   ctx: ExtensionContext;
-  pi: ExtensionAPI;
+  run: NotificationRun;
   notifications: NotifyRecord[];
   ui: NotificationUi;
 } {
   const notifications: NotifyRecord[] = [];
   const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
-  const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
   const ui = mock<NotificationUi>({ exactParams: true, name: "notification UI" });
+  const run = runWithSoftDeps({
+    piSubagentsLoaded: false,
+    piMcpAdapterLoaded: false,
+    workflowEngineLoaded: false,
+    ...options.softDeps,
+  });
+  when(() => ctx.mode)
+    .thenReturn("tui")
+    .once();
   when(() => ctx.ui)
     .thenReturn(ui)
     .once();
-  expectSoftDepProbes(pi, 1, (options.toolNames ?? []).map(toolInfo));
   when(() => ui.notify)
     .thenReturn((message, severity) => {
       // Most of this owner suite predates operation tallies and owns the list
@@ -109,7 +176,7 @@ function makeCtx(
     })
     .once();
 
-  return { ctx, pi, notifications, ui };
+  return { ctx, run, notifications, ui };
 }
 
 async function withHermeticHome<T>(
@@ -340,14 +407,13 @@ test("CMC-10: exact zero-row notification ignores an ambient Pi agent directory"
   // docs/output-catalog.md:139-145 -- `<!-- catalog-state: empty -->`.
   await withHermeticHome(async ({ cwd }) => {
     // arrange
-    const { ctx, pi, notifications, ui } = makeCtx({ recordTally: true });
+    const { ctx, run, notifications, ui } = makeCtx({ recordTally: true });
     // act
-    await listPlugins({ ctx, pi, cwd });
+    await listPlugins({ ctx, run, cwd });
     // assert
     assert.deepStrictEqual(notifications, [{ message: "(no marketplaces)" }]);
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 
@@ -381,9 +447,9 @@ test("PL-1: no flags emit the exact many-row notification for every bucket", asy
       installablePluginDirs: ["alpha", "beta"],
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx({ recordTally: true });
+    const { ctx, run, notifications, ui } = makeCtx({ recordTally: true });
     // act
-    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    await listPlugins({ ctx, run, cwd, scope: "user" });
     // assert
     // Per D-16-17 orphan-fold rule the renderer suppresses `[<scope>]`
     // on a plugin row when `p.scope === mp.scope`. Here mp.scope and the
@@ -408,7 +474,6 @@ test("PL-1: no flags emit the exact many-row notification for every bucket", asy
     ]);
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -433,9 +498,9 @@ test("PL-1: --installed alone shows only installed plugins", async () => {
       installablePluginDirs: ["alpha", "beta"],
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd, scope: "user", installed: true });
+    await listPlugins({ ctx, run, cwd, scope: "user", installed: true });
     // assert
     const out = notifications[0]!.message;
     // plugin.scope === mp.scope (both "user") -> bracket suppressed
@@ -448,7 +513,6 @@ test("PL-1: --installed alone shows only installed plugins", async () => {
     assert.equal(out.includes("⊘"), false);
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -473,9 +537,9 @@ test("PL-1: --available alone shows only available (not-yet-installed installabl
       installablePluginDirs: ["alpha", "beta"],
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd, scope: "user", available: true });
+    await listPlugins({ ctx, run, cwd, scope: "user", available: true });
     // assert
     const out = notifications[0]!.message;
     assert.equal(out.includes("● alpha"), false);
@@ -483,7 +547,6 @@ test("PL-1: --available alone shows only available (not-yet-installed installabl
     assert.equal(out.includes("⊘"), false);
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -509,9 +572,9 @@ test("PL-1: --unavailable alone shows only unavailable (⊘) plugins", async () 
       installablePluginDirs: ["alpha", "beta"],
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd, scope: "user", unavailable: true });
+    await listPlugins({ ctx, run, cwd, scope: "user", unavailable: true });
     // assert
     const out = notifications[0]!.message;
     assert.equal(out.includes("● alpha"), false);
@@ -519,7 +582,6 @@ test("PL-1: --unavailable alone shows only unavailable (⊘) plugins", async () 
     assert.match(out, /⊘ gamma v3\.0\.0 \(unavailable\)/);
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -580,9 +642,9 @@ test("RSTA-01 / D-80-03: a not-installed git source with no clone renders bare `
       },
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    await listPlugins({ ctx, run, cwd, scope: "user" });
     // assert
     const out = notifications[0]!.message;
     // Byte-equal: the bare `(remote)` row -- no scope bracket (SNM-11), and no
@@ -592,7 +654,6 @@ test("RSTA-01 / D-80-03: a not-installed git source with no clone renders bare `
     assert.equal(out, ["● mp1 [user]", "  ◌ gitplug v1.0.0 (remote)"].join("\n"), out);
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -621,9 +682,9 @@ test("OUT-02 / OUT-05 / RSTA-01: a COLD git-source entry declaring `defaultEnabl
       // No mirror staged for either source: both rows are COLD.
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    await listPlugins({ ctx, run, cwd, scope: "user" });
     // assert
     const out = notifications[0]!.message;
     // The load-bearing fact is that NO tree exists for either row -- no clone,
@@ -644,7 +705,6 @@ test("OUT-02 / OUT-05 / RSTA-01: a COLD git-source entry declaring `defaultEnabl
     );
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -672,9 +732,9 @@ test("OUT-05 / NFR-5 / RSTA-01: the cold `(remote)` claim is rendered with NO cl
       // No mirror staged: the row is COLD.
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    await listPlugins({ ctx, run, cwd, scope: "user" });
     // assert
     const out = notifications[0]!.message;
     assert.equal(
@@ -712,7 +772,6 @@ test("OUT-05 / NFR-5 / RSTA-01: the cold `(remote)` claim is rendered with NO cl
     assert.equal(probeCode, "ENOENT", "plugin-clones/ must not exist after the render");
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -737,9 +796,9 @@ test("OUT-02 / OUT-05 / DOC-02: an entry declaring `defaultEnabled: false` puts 
       installablePluginDirs: ["alpha", "beta", "gamma"],
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    await listPlugins({ ctx, run, cwd, scope: "user" });
     // assert
     const out = notifications[0]!.message;
     // Byte-equal over the whole body, so the three rows prove two facts on one
@@ -761,7 +820,6 @@ test("OUT-02 / OUT-05 / DOC-02: an entry declaring `defaultEnabled: false` puts 
     );
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -800,9 +858,9 @@ test("DFEN-04 / DFEN-05: a config `enabled` declaration SUPPRESSES `{installs di
       locations.scopeRoot,
     );
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    await listPlugins({ ctx, run, cwd, scope: "user" });
     // assert
     const out = notifications[0]!.message;
     // The row states what an install WOULD do, so it must model the same
@@ -835,7 +893,6 @@ test("DFEN-04 / DFEN-05: a config `enabled` declaration SUPPRESSES `{installs di
     );
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -867,9 +924,9 @@ test("OUT-02: on a `(partially-available)` row the author-declared token appends
       installablePluginDirs: ["zeta"],
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    await listPlugins({ ctx, run, cwd, scope: "user" });
     // assert
     const out = notifications[0]!.message;
     // The ORDER is asserted deliberately, not incidentally: `composeReasons`
@@ -884,7 +941,6 @@ test("OUT-02: on a `(partially-available)` row the author-declared token appends
     );
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -918,9 +974,9 @@ test("OUT-02: NEITHER `(unavailable)` path acquires the token -- not the structu
       // No installablePluginDirs: neither entry resolves.
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    await listPlugins({ ctx, run, cwd, scope: "user" });
     // assert
     const out = notifications[0]!.message;
     // Byte-equal rather than a non-match, so absence is proven together with
@@ -939,7 +995,6 @@ test("OUT-02: NEITHER `(unavailable)` path acquires the token -- not the structu
     );
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -961,9 +1016,9 @@ test("OUT-02 / D-95-02: an INSTALLED plugin's row never acquires the token, thou
       installablePluginDirs: ["alpha"],
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    await listPlugins({ ctx, run, cwd, scope: "user" });
     // assert
     const out = notifications[0]!.message;
     // The durable-versus-transient rule (D-95-02): the token is a claim about an
@@ -975,7 +1030,6 @@ test("OUT-02 / D-95-02: an INSTALLED plugin's row never acquires the token, thou
     assert.equal(out, ["● mp1 [user]", "  ● alpha v1.0.0 (installed)"].join("\n"), out);
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -1003,43 +1057,40 @@ test("RSTA-07 / D-80-07: `--remote` selects only the remote bucket; `--available
 
     // --remote: only the remote git row.
     {
-      const { ctx, pi, notifications, ui } = makeCtx();
+      const { ctx, run, notifications, ui } = makeCtx();
       // act
-      await listPlugins({ ctx, pi, cwd, scope: "user", remote: true });
+      await listPlugins({ ctx, run, cwd, scope: "user", remote: true });
       const out = notifications[0]!.message;
       assert.match(out, /◌ gitplug v2\.0\.0 \(remote\)/, out);
       assert.equal(out.includes("avail"), false, out);
 
       verify(ctx);
-      verify(pi);
       verify(ui);
     }
 
     // --available alone: the cold git source is EXCLUDED (the intended change);
     // only the path-source available row shows.
     {
-      const { ctx, pi, notifications, ui } = makeCtx();
-      await listPlugins({ ctx, pi, cwd, scope: "user", available: true });
+      const { ctx, run, notifications, ui } = makeCtx();
+      await listPlugins({ ctx, run, cwd, scope: "user", available: true });
       const out = notifications[0]!.message;
       assert.match(out, /○ avail v1\.0\.0 \(available\)/, out);
       assert.equal(out.includes("gitplug"), false, out);
 
       verify(ctx);
-      verify(pi);
       verify(ui);
     }
 
     // --available --remote: BOTH rows restore the pre-`defaultEnabled` set.
     {
-      const { ctx, pi, notifications, ui } = makeCtx();
-      await listPlugins({ ctx, pi, cwd, scope: "user", available: true, remote: true });
+      const { ctx, run, notifications, ui } = makeCtx();
+      await listPlugins({ ctx, run, cwd, scope: "user", available: true, remote: true });
       // assert
       const out = notifications[0]!.message;
       assert.match(out, /○ avail v1\.0\.0 \(available\)/, out);
       assert.match(out, /◌ gitplug v2\.0\.0 \(remote\)/, out);
 
       verify(ctx);
-      verify(pi);
       verify(ui);
     }
   });
@@ -1064,9 +1115,9 @@ test("RSTA-05 / D-80-04: a not-installed git source with a WARM clone classifies
     });
     await stageWarmMirror(cwd, canonicalUrl);
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    await listPlugins({ ctx, run, cwd, scope: "user" });
     const out = notifications[0]!.message;
     // A warm tree resolves `installable` -> `(available)`, never `(remote)`.
     assert.match(out, /○ warm-plugin v1\.0\.0 \(available\)/, out);
@@ -1074,28 +1125,25 @@ test("RSTA-05 / D-80-04: a not-installed git source with a WARM clone classifies
 
     // The warm source is NOT in the `--remote` bucket, and DOES pass `--available`.
     {
-      const { ctx: c2, pi: p2, notifications: n2, ui: u2 } = makeCtx();
-      await listPlugins({ ctx: c2, pi: p2, cwd, scope: "user", remote: true });
+      const { ctx: c2, run: r2, notifications: n2, ui: u2 } = makeCtx();
+      await listPlugins({ ctx: c2, run: r2, cwd, scope: "user", remote: true });
       assert.equal(n2[0]!.message.includes("warm-plugin"), false, n2[0]!.message);
 
       verify(c2);
-      verify(p2);
       verify(u2);
     }
 
     {
-      const { ctx: c3, pi: p3, notifications: n3, ui: u3 } = makeCtx();
-      await listPlugins({ ctx: c3, pi: p3, cwd, scope: "user", available: true });
+      const { ctx: c3, run: r3, notifications: n3, ui: u3 } = makeCtx();
+      await listPlugins({ ctx: c3, run: r3, cwd, scope: "user", available: true });
       // assert
       assert.match(n3[0]!.message, /○ warm-plugin v1\.0\.0 \(available\)/, n3[0]!.message);
 
       verify(c3);
-      verify(p3);
       verify(u3);
     }
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -1121,9 +1169,9 @@ test("OUT-05 / DOC-02: a SILENT entry over a warm clone that declares `defaultEn
     // ignoring it a decision rather than an inability.
     await stageWarmMirror(cwd, canonicalUrl, { name: "warmdecl", defaultEnabled: false });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    await listPlugins({ ctx, run, cwd, scope: "user" });
     // assert
     const out = notifications[0]!.message;
     // Three things this pins, in the order they matter (OUT-05 / DOC-02):
@@ -1147,7 +1195,6 @@ test("OUT-05 / DOC-02: a SILENT entry over a warm clone that declares `defaultEn
     assert.equal(out, ["● mp1 [user]", "  ○ warmdecl v1.0.0 (available)"].join("\n"), out);
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -1170,9 +1217,9 @@ test("T-80-08 / D-78-04: an INSTALLED git plugin with a missing clone stays `(in
       installed: { gitplug: { version: "1.0.0" } },
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    await listPlugins({ ctx, run, cwd, scope: "user" });
     // assert
     const out = notifications[0]!.message;
     // The installed path (composeInstalledListRow) never renders `(remote)` -- the
@@ -1182,7 +1229,6 @@ test("T-80-08 / D-78-04: an INSTALLED git plugin with a missing clone stays `(in
     assert.equal(out.includes("(remote)"), false, out);
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -1223,9 +1269,9 @@ test("list flags binaries on candidate and upgrade rows of an official marketpla
       installablePluginDirs: ["fresh", "older"],
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    await listPlugins({ ctx, run, cwd, scope: "user" });
 
     // assert
     const out = notifications[0]!.message;
@@ -1233,7 +1279,6 @@ test("list flags binaries on candidate and upgrade rows of an official marketpla
     assert.match(out, /older v1\.0\.0 \(partially-upgradable\) \{unsupported component\}/, out);
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -1268,23 +1313,22 @@ test("LIST-01 / D-67-01: a not-installed plugin resolving `partially-available` 
     // de-collapsed `(partially-available)` / `⊖` token (USTAT-01). clean/gone
     // are excluded.
     {
-      const { ctx, pi, notifications, ui } = makeCtx();
+      const { ctx, run, notifications, ui } = makeCtx();
       // act
-      await listPlugins({ ctx, pi, cwd, scope: "user", partial: true });
+      await listPlugins({ ctx, run, cwd, scope: "user", partial: true });
       const out = notifications[0]!.message;
       assert.match(out, /⊖ unsup v1\.0\.0 \(partially-available\) \{lsp\}/, out);
       assert.equal(out.includes("clean"), false, out);
       assert.equal(out.includes("gone"), false, out);
 
       verify(ctx);
-      verify(pi);
       verify(ui);
     }
 
     // --unavailable: structural `gone` only; the unsupported `unsup` is NOT here.
     {
-      const { ctx, pi, notifications, ui } = makeCtx();
-      await listPlugins({ ctx, pi, cwd, scope: "user", unavailable: true });
+      const { ctx, run, notifications, ui } = makeCtx();
+      await listPlugins({ ctx, run, cwd, scope: "user", unavailable: true });
       const out = notifications[0]!.message;
       assert.match(out, /⊘ gone v3\.0\.0 \(unavailable\)/, out);
       // Match the row token (the `{unsupported source}` reason contains the
@@ -1293,14 +1337,13 @@ test("LIST-01 / D-67-01: a not-installed plugin resolving `partially-available` 
       assert.equal(out.includes("clean"), false, out);
 
       verify(ctx);
-      verify(pi);
       verify(ui);
     }
 
     // --available: only the clean row.
     {
-      const { ctx, pi, notifications, ui } = makeCtx();
-      await listPlugins({ ctx, pi, cwd, scope: "user", available: true });
+      const { ctx, run, notifications, ui } = makeCtx();
+      await listPlugins({ ctx, run, cwd, scope: "user", available: true });
       // assert
       const out = notifications[0]!.message;
       assert.match(out, /○ clean v2\.0\.0 \(available\)/, out);
@@ -1308,7 +1351,6 @@ test("LIST-01 / D-67-01: a not-installed plugin resolving `partially-available` 
       assert.equal(out.includes("gone"), false, out);
 
       verify(ctx);
-      verify(pi);
       verify(ui);
     }
   });
@@ -1331,26 +1373,24 @@ test("LIST-01 / D-67-01: a structurally-unavailable plugin shows under --unavail
     });
 
     {
-      const { ctx, pi, notifications, ui } = makeCtx();
+      const { ctx, run, notifications, ui } = makeCtx();
       // act
-      await listPlugins({ ctx, pi, cwd, scope: "user", unavailable: true });
+      await listPlugins({ ctx, run, cwd, scope: "user", unavailable: true });
       const out = notifications[0]!.message;
       assert.match(out, /⊘ gone v3\.0\.0 \(unavailable\)/, out);
 
       verify(ctx);
-      verify(pi);
       verify(ui);
     }
 
     {
-      const { ctx, pi, notifications, ui } = makeCtx();
-      await listPlugins({ ctx, pi, cwd, scope: "user", partial: true });
+      const { ctx, run, notifications, ui } = makeCtx();
+      await listPlugins({ ctx, run, cwd, scope: "user", partial: true });
       // assert
       const out = notifications[0]!.message;
       assert.equal(out.includes("gone"), false, out);
 
       verify(ctx);
-      verify(pi);
       verify(ui);
     }
   });
@@ -1376,26 +1416,24 @@ test("LIST-01 / D-67-01: a partially-installed plugin shows under --installed (A
     });
 
     {
-      const { ctx, pi, notifications, ui } = makeCtx();
+      const { ctx, run, notifications, ui } = makeCtx();
       // act
-      await listPlugins({ ctx, pi, cwd, scope: "user", installed: true });
+      await listPlugins({ ctx, run, cwd, scope: "user", installed: true });
       const out = notifications[0]!.message;
       assert.match(out, /◉ forced v1\.0\.0 \(partially-installed\)/, out);
 
       verify(ctx);
-      verify(pi);
       verify(ui);
     }
 
     {
-      const { ctx, pi, notifications, ui } = makeCtx();
-      await listPlugins({ ctx, pi, cwd, scope: "user", partial: true });
+      const { ctx, run, notifications, ui } = makeCtx();
+      await listPlugins({ ctx, run, cwd, scope: "user", partial: true });
       // assert
       const out = notifications[0]!.message;
       assert.equal(out.includes("forced"), false, out);
 
       verify(ctx);
-      verify(pi);
       verify(ui);
     }
   });
@@ -1423,15 +1461,14 @@ test("PHOOK-05 / D-71-04: a partially-installed partial-hook plugin renders the 
       installablePluginDirs: ["hookplug"],
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd, scope: "user", installed: true });
+    await listPlugins({ ctx, run, cwd, scope: "user", installed: true });
     // assert
     const out = notifications[0]!.message;
     assert.match(out, /◉ hookplug v1\.0\.0 \(partially-installed\) \{unsupported hooks\}/, out);
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -1455,15 +1492,14 @@ test("LIST-01 / D-67-01 (A1): a partially-upgradable plugin shows under --instal
       installablePluginDirs: ["fup"],
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd, scope: "user", installed: true });
+    await listPlugins({ ctx, run, cwd, scope: "user", installed: true });
     // assert
     const out = notifications[0]!.message;
     assert.match(out, /● fup v1\.0\.0 \(partially-upgradable\)/, out);
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -1569,9 +1605,9 @@ test("FSTAT-02 / FSTAT-04: same-name partially-installed + partially-upgradable 
       },
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd });
+    await listPlugins({ ctx, run, cwd });
     // assert
     assert.equal(notifications.length, 1);
     const out = notifications[0]!.message;
@@ -1584,7 +1620,6 @@ test("FSTAT-02 / FSTAT-04: same-name partially-installed + partially-upgradable 
     assert.match(out, /● fu \[project\] v1\.0\.0 \(partially-upgradable\)/, out);
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -1613,9 +1648,9 @@ test("USTAT-01 / SNM-11: two same-name not-installed partially-available rows ex
       installablePluginDirs: ["dup"],
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    await listPlugins({ ctx, run, cwd, scope: "user" });
     // assert
     assert.equal(notifications.length, 1);
     const out = notifications[0]!.message;
@@ -1623,7 +1658,6 @@ test("USTAT-01 / SNM-11: two same-name not-installed partially-available rows ex
     assert.equal(matches.length, 2, out);
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -1650,9 +1684,9 @@ test("LIST-01 / D-67-01: passive (no filter flag) shows every bucket and the not
       installablePluginDirs: ["inst", "avail", "unsup"],
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    await listPlugins({ ctx, run, cwd, scope: "user" });
     // assert
     const out = notifications[0]!.message;
     assert.match(out, /● inst v1\.0\.0 \(installed\)/, out);
@@ -1663,7 +1697,6 @@ test("LIST-01 / D-67-01: passive (no filter flag) shows every bucket and the not
     assert.match(out, /⊖ unsup v4\.0\.0 \(partially-available\) \{lsp\}/, out);
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -1690,9 +1723,9 @@ test("ENBL-04: recorded-but-disabled record renders `(disabled)` -- NOT `(instal
       installablePluginDirs: ["alpha"],
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    await listPlugins({ ctx, run, cwd, scope: "user" });
     // assert
     assert.equal(notifications.length, 1);
     const out = notifications[0]!.message;
@@ -1705,7 +1738,6 @@ test("ENBL-04: recorded-but-disabled record renders `(disabled)` -- NOT `(instal
     assert.equal(notifications[0]!.severity, undefined, "disabled inventory routes to info");
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -1727,16 +1759,15 @@ test("ENBL-04: disabled record with drifted manifest version does NOT render `(u
       installablePluginDirs: ["alpha"],
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    await listPlugins({ ctx, run, cwd, scope: "user" });
     // assert
     const out = notifications[0]!.message;
     assert.match(out, /◍ alpha v1\.2\.3 \(disabled\)/, out);
     assert.equal(out.includes("(upgradable)"), false, out);
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -1761,16 +1792,15 @@ test("ENBL-04 / PL-1: --installed filter includes the disabled bucket (a disable
       installablePluginDirs: ["alpha", "beta"],
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd, scope: "user", installed: true });
+    await listPlugins({ ctx, run, cwd, scope: "user", installed: true });
     // assert
     const out = notifications[0]!.message;
     assert.match(out, /◍ alpha v1\.0\.0 \(disabled\)/, out);
     assert.equal(out.includes("○ beta"), false, out);
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -1807,9 +1837,9 @@ test("ENBL-06 / ENBL-16: a manifest-absent disabled PARTIAL renders `(disabled) 
       installablePluginDirs: ["alpha", "beta"],
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    await listPlugins({ ctx, run, cwd, scope: "user" });
 
     // assert
     assert.equal(notifications.length, 1);
@@ -1838,7 +1868,6 @@ test("ENBL-06 / ENBL-16: a manifest-absent disabled PARTIAL renders `(disabled) 
     assert.equal(notifications[0]!.severity, undefined, "disabled inventory routes to info");
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -1848,8 +1877,8 @@ test("ENBL-06 / ENBL-16: a manifest-absent disabled PARTIAL renders `(disabled) 
 // soft-dependency markers derive from, and ENBL-18 lets a disabled record keep
 // them populated, so this is the pair that could leak. The guarantee is
 // STRUCTURAL, not test-enforced: `PluginDisabledMessage` declares no
-// `dependencies` field and the render arm hard-codes both soft-dep arguments
-// false. `makeCtx` probes BOTH companions as UNLOADED, which is exactly the
+// `dependencies` field and list's `disabled` row policy turns markers off.
+// `makeCtx` seeds BOTH companions as UNLOADED, which is exactly the
 // condition under which a leak would render `{requires pi-subagents, requires
 // pi-mcp-adapter}` -- so a bare row here is evidence, not an accident of the harness.
 const DISABLED_BARE_ROW = ["● mp1 [user]", "  ◍ alpha v1.0.0 (disabled)"].join("\n");
@@ -1879,8 +1908,8 @@ async function renderDisabledWithInventory(inventory: {
       installablePluginDirs: ["alpha"],
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
-    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    const { ctx, run, notifications, ui } = makeCtx();
+    await listPlugins({ ctx, run, cwd, scope: "user" });
     assert.equal(notifications.length, 1);
 
     const raw = await readFile(
@@ -1897,7 +1926,6 @@ async function renderDisabledWithInventory(inventory: {
     };
 
     verify(ctx);
-    verify(pi);
     verify(ui);
     return {
       out: notifications[0]!.message,
@@ -1955,16 +1983,15 @@ test("D-63-04: hooks-only installed plugin renders `(installed)` -- NOT `(disabl
       installablePluginDirs: ["hookplug"],
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    await listPlugins({ ctx, run, cwd, scope: "user" });
     // assert
     const out = notifications[0]!.message;
     assert.match(out, /● hookplug v1\.0\.0 \(installed\)/, out);
     assert.equal(out.includes("(disabled)"), false, `must not render (disabled): ${out}`);
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -1994,9 +2021,9 @@ test("SC-6: bare form (no opts.scope) enumerates marketplaces from BOTH scopes",
       manifest: { name: "p-mp", plugins: [] },
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd });
+    await listPlugins({ ctx, run, cwd });
     // assert
     const out = notifications[0]!.message;
     // MSG-GR-3 sort: p-mp < u-mp alphabetically -> p-mp renders first.
@@ -2007,7 +2034,6 @@ test("SC-6: bare form (no opts.scope) enumerates marketplaces from BOTH scopes",
     assert.ok(pIdx >= 0 && uIdx >= 0 && pIdx < uIdx, `expected p-mp before u-mp: ${out}`);
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -2047,9 +2073,9 @@ test("CMC-21 / D-13-17 / D-13-19: same-name marketplace in BOTH scopes renders T
       installablePluginDirs: ["alpha"],
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd });
+    await listPlugins({ ctx, run, cwd });
     // assert
     const out = notifications[0]!.message;
     // Both headers render; project-before-user per MSG-GR-3 tie-break.
@@ -2070,7 +2096,6 @@ test("CMC-21 / D-13-17 / D-13-19: same-name marketplace in BOTH scopes renders T
     assert.equal(out.includes("● alpha [user]"), false, out);
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -2166,9 +2191,9 @@ test("CR-01 / G-21-01: project-scope plugin under a CLONED user marketplace fold
       },
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd });
+    await listPlugins({ ctx, run, cwd });
     // assert
     assert.equal(notifications.length, 1);
     const out = notifications[0]!.message;
@@ -2199,7 +2224,6 @@ test("CR-01 / G-21-01: project-scope plugin under a CLONED user marketplace fold
     );
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -2237,9 +2261,9 @@ test("PL-3: opts.marketplace narrows to a single marketplace; other marketplaces
       installablePluginDirs: ["com-plug"],
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd, scope: "user", marketplace: "official" });
+    await listPlugins({ ctx, run, cwd, scope: "user", marketplace: "official" });
     // assert
     const out = notifications[0]!.message;
     assert.match(out, /official/);
@@ -2248,7 +2272,6 @@ test("PL-3: opts.marketplace narrows to a single marketplace; other marketplaces
     assert.equal(out.includes("com-plug"), false);
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -2274,9 +2297,9 @@ test("PL-5: installed version differs from manifest version -> upgradable", asyn
       installablePluginDirs: ["plug"],
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    await listPlugins({ ctx, run, cwd, scope: "user" });
     // assert
     const out = notifications[0]!.message;
     // CMC-09 (upgradable) carries the ● effective-state
@@ -2285,7 +2308,6 @@ test("PL-5: installed version differs from manifest version -> upgradable", asyn
     assert.equal(out.includes("● plug [user]"), false, out);
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -2307,9 +2329,9 @@ test("PL-5: installed version equals manifest version -> NOT upgradable", async 
       installablePluginDirs: ["plug"],
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    await listPlugins({ ctx, run, cwd, scope: "user" });
     // assert
     const out = notifications[0]!.message;
     // D-16-17 suppresses `[<scope>]` bracket on same-scope rows.
@@ -2318,7 +2340,6 @@ test("PL-5: installed version equals manifest version -> NOT upgradable", async 
     assert.equal(out.includes("upgradable"), false);
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -2340,15 +2361,14 @@ test("PL-5: hash-* versions string-compare (any difference -> upgradable; NOT se
       installablePluginDirs: ["plug"],
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    await listPlugins({ ctx, run, cwd, scope: "user" });
     // assert
     const out = notifications[0]!.message;
     assert.match(out, /\(upgradable\)/);
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -2383,9 +2403,9 @@ test("FSTAT-01 / D-66-01: recorded-installed with compatibility.unsupported deri
       home: await snapshotTree(home),
     };
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    await listPlugins({ ctx, run, cwd, scope: "user" });
     // assert
     assert.deepStrictEqual(notifications, [
       { message: "● mp1 [user]\n  ◉ plug v1.0.0 (partially-installed) {lsp}" },
@@ -2396,7 +2416,6 @@ test("FSTAT-01 / D-66-01: recorded-installed with compatibility.unsupported deri
     );
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -2425,9 +2444,9 @@ test("WR-02 / D-66-01: non-path (npm) recorded-installed plugin with persisted u
       installed: { remote: { version: "1.0.0", unsupported: ["lspServers"] } },
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    await listPlugins({ ctx, run, cwd, scope: "user" });
     // assert
     assert.equal(
       notifications[0]!.message,
@@ -2437,7 +2456,6 @@ test("WR-02 / D-66-01: non-path (npm) recorded-installed plugin with persisted u
     );
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -2462,16 +2480,15 @@ test("FSTAT-04 / D-66-02 (A4): a degraded record with a newer candidate derives 
       installablePluginDirs: ["plug"],
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    await listPlugins({ ctx, run, cwd, scope: "user" });
     // assert
     const out = notifications[0]!.message;
     assert.match(out, /\(partially-installed\)/);
     assert.equal(out.includes("(partially-upgradable)"), false, out);
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -2495,9 +2512,9 @@ test("FSTAT-04 / D-66-02: clean record + candidate resolving `partially-availabl
       installablePluginDirs: ["plug"],
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    await listPlugins({ ctx, run, cwd, scope: "user" });
     const out = notifications[0]!.message;
     // ● glyph (clean today) + `(partially-upgradable)`; version stays the installed
     // record's version. The reasons brace carries the narrowUnsupportedKinds
@@ -2507,7 +2524,6 @@ test("FSTAT-04 / D-66-02: clean record + candidate resolving `partially-availabl
 
     // assert
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -2530,16 +2546,15 @@ test("FSTAT-03 / FSTAT-04: clean record + candidate resolving `installable` deri
       installablePluginDirs: ["plug"],
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    await listPlugins({ ctx, run, cwd, scope: "user" });
     // assert
     const out = notifications[0]!.message;
     assert.match(out, /● plug v1\.0\.0 \(upgradable\)/);
     assert.equal(out.includes("force-"), false, out);
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -2577,9 +2592,9 @@ test("CR-01 / FSTAT-04 / NFR-5: a candidate resolveStrict throw degrades to `(up
       installablePluginDirs: ["good"],
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    await listPlugins({ ctx, run, cwd, scope: "user" });
     // assert
     const out = notifications[0]!.message;
     // The throwing candidate degrades to a plain `(upgradable)` row...
@@ -2591,7 +2606,6 @@ test("CR-01 / FSTAT-04 / NFR-5: a candidate resolveStrict throw degrades to `(up
     assert.equal(out.includes("(list)"), false, out);
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -2613,16 +2627,15 @@ test("FSTAT-03: clean record + no newer candidate derives `(installed)` (auto-re
       installablePluginDirs: ["plug"],
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    await listPlugins({ ctx, run, cwd, scope: "user" });
     // assert
     const out = notifications[0]!.message;
     assert.match(out, /● plug v1\.0\.0 \(installed\)/);
     assert.equal(out.includes("force-"), false, out);
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -2646,9 +2659,9 @@ test("FSTAT-01 / D-64-02: the partially-installed row's reasons are the narrowUn
       installablePluginDirs: ["plug"],
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    await listPlugins({ ctx, run, cwd, scope: "user" });
     const out = notifications[0]!.message;
     const expectedMarkers = narrowUnsupportedKinds(["lspServers", "monitors"]).join(", ");
     // assert
@@ -2656,7 +2669,6 @@ test("FSTAT-01 / D-64-02: the partially-installed row's reasons are the narrowUn
     assert.match(out, new RegExp(`\\{${expectedMarkers}\\}`));
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -2687,9 +2699,9 @@ test("PL-6 / CMC-22: manifest load failure renders the marketplace as a bare V2 
       installed: { stranded: { version: "9.9.9" } },
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    await listPlugins({ ctx, run, cwd, scope: "user" });
     // assert
     assert.equal(notifications.length, 1);
     const note = notifications[0]!;
@@ -2708,7 +2720,6 @@ test("PL-6 / CMC-22: manifest load failure renders the marketplace as a bare V2 
     assert.equal(out.includes("stranded"), false);
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -2730,15 +2741,14 @@ test("PL-7 / CMC-05: marketplace with autoupdate=true renders the <autoupdate> m
       autoupdate: true,
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    await listPlugins({ ctx, run, cwd, scope: "user" });
     // assert
     const out = notifications[0]!.message;
     assert.match(out, /● auto-mp \[user\] <autoupdate>/);
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -2756,16 +2766,15 @@ test("PL-7 / CMC-05: marketplace with autoupdate=false (or undefined) does NOT r
       autoupdate: false,
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    await listPlugins({ ctx, run, cwd, scope: "user" });
     // assert
     const out = notifications[0]!.message;
     assert.match(out, /● plain-mp \[user\]/);
     assert.equal(out.includes("<autoupdate>"), false);
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -2821,9 +2830,9 @@ test("HOOK-01: plugin declaring hooks field with no hooks/hooks.json on disk buc
       installablePluginDirs: ["hooks-plugin"],
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    await listPlugins({ ctx, run, cwd, scope: "user" });
     // assert
     const out = notifications[0]!.message;
     // Plugin admits cleanly (no hooks.json on disk -> no parse-fail flip).
@@ -2832,7 +2841,6 @@ test("HOOK-01: plugin declaring hooks field with no hooks/hooks.json on disk buc
     assert.doesNotMatch(out, /contains hooks/);
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -2855,16 +2863,15 @@ test("gap: plugin declaring lspServers field renders as ⊖ (unsupported) with {
       installablePluginDirs: ["lsp-plugin"],
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    await listPlugins({ ctx, run, cwd, scope: "user" });
     // assert
     const out = notifications[0]!.message;
     assert.match(out, /⊖ lsp-plugin/);
     assert.match(out, /{lsp}/);
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -2894,16 +2901,15 @@ test("HOOK-01: plugin dir with parseable hooks/hooks.json buckets as ○ (availa
     await mkdir(path.join(pluginDir, "hooks"), { recursive: true });
     await writeFile(path.join(pluginDir, "hooks", "hooks.json"), "{}", "utf8");
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    await listPlugins({ ctx, run, cwd, scope: "user" });
     // assert
     const out = notifications[0]!.message;
     assert.match(out, /○ hooks-conv/);
     assert.doesNotMatch(out, /\{hooks\}/);
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -2934,16 +2940,15 @@ test("D-57-04: plugin dir with malformed hooks/hooks.json buckets as ⊘ with {u
     await mkdir(path.join(pluginDir, "hooks"), { recursive: true });
     await writeFile(path.join(pluginDir, "hooks", "hooks.json"), "{ not valid json", "utf8");
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    await listPlugins({ ctx, run, cwd, scope: "user" });
     // assert
     const out = notifications[0]!.message;
     assert.match(out, /⊘ hooks-conv/);
     assert.match(out, /\{unsupported hooks\}/);
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -2971,16 +2976,15 @@ test("gap: plugin dir with .lsp.json file renders as ⊖ (unsupported) via file 
     const pluginDir = path.join(mpRoot, "lsp-conv");
     await writeFile(path.join(pluginDir, ".lsp.json"), "{}", "utf8");
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    await listPlugins({ ctx, run, cwd, scope: "user" });
     // assert
     const out = notifications[0]!.message;
     assert.match(out, /⊖ lsp-conv/);
     assert.match(out, /{lsp}/);
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -3009,9 +3013,9 @@ test("gap: plugin with path-separator in name -- resolveStrict throws, caught as
       // No installablePluginDirs -- resolveStrict throws before stat checks.
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    await listPlugins({ ctx, run, cwd, scope: "user" });
     // assert
     const out = notifications[0]!.message;
     // Row is bucketed as uninstallable; note contains the assertSafeName message.
@@ -3019,7 +3023,6 @@ test("gap: plugin with path-separator in name -- resolveStrict throws, caught as
     assert.match(out, /{unreadable}/);
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -3067,9 +3070,9 @@ test("PL-4: manifest description appears as 4-space-indented second line on inst
       installablePluginDirs: ["alpha", "beta"],
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    await listPlugins({ ctx, run, cwd, scope: "user" });
     // assert
     const out = notifications[0]!.message;
 
@@ -3094,7 +3097,6 @@ test("PL-4: manifest description appears as 4-space-indented second line on inst
     );
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -3116,9 +3118,9 @@ test("PL-4: manifest entry without description renders no second line", async ()
       installablePluginDirs: ["alpha"],
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    await listPlugins({ ctx, run, cwd, scope: "user" });
     // assert
     const out = notifications[0]!.message;
     // Only the plugin row -- no second line follows the (installed) token.
@@ -3127,7 +3129,6 @@ test("PL-4: manifest entry without description renders no second line", async ()
     assert.ok(!out.includes("    "), `unexpected indented second line; got: ${out}`);
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -3151,9 +3152,9 @@ test("gap: manifest load fails + zero installed -> marketplace renders with warn
       // No installed plugins -- collectMarketplacePlugins returns [] immediately.
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    await listPlugins({ ctx, run, cwd, scope: "user" });
     // assert
     const out = notifications[0]!.message;
     // Manifest load failure renders the marketplace as (failed) with error severity.
@@ -3161,7 +3162,6 @@ test("gap: manifest load fails + zero installed -> marketplace renders with warn
     assert.equal(notifications[0]?.severity, "error");
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -3179,9 +3179,9 @@ test("gap: corrupt state.json causes listPlugins to notify an error", async () =
     // Write corrupt JSON -- loadState throws, listPlugins catches it.
     await writeFile(stateJsonPath, "{ this is not valid json }", "utf8");
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    await listPlugins({ ctx, run, cwd, scope: "user" });
     // assert
     assert.equal(notifications.length, 1);
     // notifyError is called; severity should be "error".
@@ -3200,7 +3200,6 @@ test("gap: corrupt state.json causes listPlugins to notify an error", async () =
     assert.match(notifications[0]!.message, /\{unreadable\}/);
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -3234,16 +3233,15 @@ test("RSTA-01 / D-80-03: an uninstalled url-source plugin renders (remote), not 
       },
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    await listPlugins({ ctx, run, cwd, scope: "user" });
     // assert
     const out = notifications[0]!.message;
     assert.match(out, /◌ gplug v1\.0\.0 \(remote\)/, out);
     assert.doesNotMatch(out, /gplug.*\(unavailable\)/, out);
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -3265,16 +3263,15 @@ test("RSTA-01 / D-80-03: an uninstalled github-object-source plugin renders (rem
       },
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    await listPlugins({ ctx, run, cwd, scope: "user" });
     // assert
     const out = notifications[0]!.message;
     assert.match(out, /◌ ghplug v2\.0\.0 \(remote\)/, out);
     assert.doesNotMatch(out, /ghplug.*\(unavailable\)/, out);
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -3300,16 +3297,15 @@ test("RSTA-01 / D-80-03: an uninstalled git-subdir-source plugin renders (remote
       },
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    await listPlugins({ ctx, run, cwd, scope: "user" });
     // assert
     const out = notifications[0]!.message;
     assert.match(out, /◌ subplug v3\.0\.0 \(remote\)/, out);
     assert.doesNotMatch(out, /subplug.*\(unavailable\)/, out);
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -3333,9 +3329,9 @@ test("PURL-08 / D-78-04: an installed git-source plugin with a missing clone kee
       installed: { gplug: { version: "1.0.0" } },
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd, scope: "user", installed: true });
+    await listPlugins({ ctx, run, cwd, scope: "user", installed: true });
     // assert
     const out = notifications[0]!.message;
     assert.match(out, /● gplug v1\.0\.0 \(installed\)/, out);
@@ -3343,7 +3339,6 @@ test("PURL-08 / D-78-04: an installed git-source plugin with a missing clone kee
     assert.doesNotMatch(out, /gplug.*\(partially/, out);
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -3367,16 +3362,15 @@ test("PURL-08 / D-78-04: an installed git-source plugin with a newer manifest an
       installed: { gplug: { version: "1.0.0" } },
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd, scope: "user", installed: true });
+    await listPlugins({ ctx, run, cwd, scope: "user", installed: true });
     // assert
     const out = notifications[0]!.message;
     assert.match(out, /● gplug v1\.0\.0 \(upgradable\)/, out);
     assert.doesNotMatch(out, /gplug.*\(unavailable\)/, out);
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -3396,15 +3390,14 @@ test("RSTA-01: list renders an uninstalled git-source plugin as a `(remote)` row
       },
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    await listPlugins({ ctx, run, cwd, scope: "user" });
     // assert
     const out = notifications[0]!.message;
     assert.match(out, /◌ gplug v1\.0\.0 \(remote\)/, out);
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -3433,9 +3426,9 @@ test("RSTA-01 / SNM-11: a `remote` row sorts by the marketplace scope when its n
       installablePluginDirs: ["caseplug"],
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    await listPlugins({ ctx, run, cwd, scope: "user" });
     // assert
     const out = notifications[0]!.message;
     // Both rows render inside the one mp1 block; the scope tie-break returns
@@ -3444,7 +3437,6 @@ test("RSTA-01 / SNM-11: a `remote` row sorts by the marketplace scope when its n
     assert.match(out, /◌ CasePlug v2\.0\.0 \(remote\)/, out);
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -3466,9 +3458,9 @@ test("plugin list manifest absent: INV-01 exact one-row notification retains `{n
       installed: { alpha: { version: "1.0.0" } },
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx({ recordTally: true });
+    const { ctx, run, notifications, ui } = makeCtx({ recordTally: true });
     // act
-    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    await listPlugins({ ctx, run, cwd, scope: "user" });
     // assert
     assert.deepStrictEqual(notifications, [
       {
@@ -3482,7 +3474,6 @@ test("plugin list manifest absent: INV-01 exact one-row notification retains `{n
     ]);
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -3503,9 +3494,9 @@ test("plugin list manifest absent: INV-01 / MSG-GR-4: the soft-dep marker compos
       },
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    await listPlugins({ ctx, run, cwd, scope: "user" });
     // assert
     assert.equal(notifications.length, 1);
     assert.equal(
@@ -3517,7 +3508,6 @@ test("plugin list manifest absent: INV-01 / MSG-GR-4: the soft-dep marker compos
     );
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -3541,9 +3531,9 @@ test("plugin list manifest absent: INV-01: a record the loaded manifest DOES dec
       installablePluginDirs: ["alpha"],
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    await listPlugins({ ctx, run, cwd, scope: "user" });
     // assert
     assert.equal(notifications.length, 1);
     assert.equal(
@@ -3552,7 +3542,6 @@ test("plugin list manifest absent: INV-01: a record the loaded manifest DOES dec
     );
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -3577,11 +3566,11 @@ test("plugin list manifest absent: INV-01: manifest membership is EXACT string i
       installablePluginDirs: ["Alpha"],
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // `--installed` keeps the undeclared-but-available `Alpha` row out of the
     // expectation so the assertion isolates the membership question.
     // act
-    await listPlugins({ ctx, pi, cwd, scope: "user", installed: true });
+    await listPlugins({ ctx, run, cwd, scope: "user", installed: true });
     // assert
     assert.equal(notifications.length, 1);
     assert.equal(
@@ -3590,7 +3579,6 @@ test("plugin list manifest absent: INV-01: manifest membership is EXACT string i
     );
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -3613,9 +3601,9 @@ test("plugin list manifest absent: INV-02: a manifest-absent degraded record kee
       installed: { plug: { version: "1.0.0", unsupported: ["lspServers"] } },
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    await listPlugins({ ctx, run, cwd, scope: "user" });
     // assert
     assert.equal(notifications.length, 1);
     assert.equal(
@@ -3627,7 +3615,6 @@ test("plugin list manifest absent: INV-02: a manifest-absent degraded record kee
     );
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -3649,9 +3636,9 @@ test("plugin list manifest absent: INV-02: a degraded record its manifest still 
       installablePluginDirs: ["remote"],
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    await listPlugins({ ctx, run, cwd, scope: "user" });
     // assert
     assert.equal(notifications.length, 1);
     assert.equal(
@@ -3664,7 +3651,6 @@ test("plugin list manifest absent: INV-02: a degraded record its manifest still 
     );
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -3685,9 +3671,9 @@ test("plugin list manifest absent: INV-02: a manifest-absent degraded record wit
       installed: { plug: { version: "1.0.0", unsupported: ["themes"] } },
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    await listPlugins({ ctx, run, cwd, scope: "user" });
     // assert
     assert.equal(notifications.length, 1);
     assert.equal(
@@ -3699,7 +3685,6 @@ test("plugin list manifest absent: INV-02: a manifest-absent degraded record wit
     );
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -3728,9 +3713,9 @@ test("plugin list manifest absent: ENBL-16: a manifest-absent disabled record re
       installed: { dis: { version: "1.2.3", disabled: true } },
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    await listPlugins({ ctx, run, cwd, scope: "user" });
     // assert
     assert.equal(notifications.length, 1);
     assert.equal(
@@ -3739,7 +3724,6 @@ test("plugin list manifest absent: ENBL-16: a manifest-absent disabled record re
     );
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -3765,9 +3749,9 @@ test("plugin list manifest absent: ENBL-16: a disabled record its manifest STILL
       installablePluginDirs: ["dis"],
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    await listPlugins({ ctx, run, cwd, scope: "user" });
     // assert
     assert.equal(notifications.length, 1);
     assert.equal(
@@ -3776,7 +3760,6 @@ test("plugin list manifest absent: ENBL-16: a disabled record its manifest STILL
     );
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -3807,9 +3790,9 @@ test("plugin list manifest absent: INV-03: `--installed` spans both manifest-abs
       installablePluginDirs: ["avail"],
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd, scope: "user", installed: true });
+    await listPlugins({ ctx, run, cwd, scope: "user", installed: true });
     // assert
     assert.equal(notifications.length, 1);
     assert.equal(
@@ -3824,7 +3807,6 @@ test("plugin list manifest absent: INV-03: `--installed` spans both manifest-abs
     );
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -3918,9 +3900,9 @@ test("plugin list manifest absent: BOUND-03: a folded row whose project-side man
       version: "1.0.0",
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd });
+    await listPlugins({ ctx, run, cwd });
     // assert
     assert.equal(notifications.length, 1);
     assert.equal(
@@ -3932,7 +3914,6 @@ test("plugin list manifest absent: BOUND-03: a folded row whose project-side man
     );
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -3960,9 +3941,9 @@ test("plugin list manifest absent: BOUND-03: a folded row whose project-side man
       version: "1.0.0",
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd });
+    await listPlugins({ ctx, run, cwd });
     // assert
     assert.equal(notifications.length, 1);
     assert.equal(
@@ -3971,7 +3952,6 @@ test("plugin list manifest absent: BOUND-03: a folded row whose project-side man
     );
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -4013,9 +3993,9 @@ test("plugin list manifest absent: INV-01: a folded row absent from its OWN mani
       version: "1.0.0",
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd });
+    await listPlugins({ ctx, run, cwd });
     // assert
     assert.equal(notifications.length, 1);
     assert.equal(
@@ -4027,7 +4007,6 @@ test("plugin list manifest absent: INV-01: a folded row absent from its OWN mani
     );
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -4074,9 +4053,9 @@ test("plugin list manifest absent: D-96-02: a folded row is NOT upgradable when 
       version: "1.0.0",
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd });
+    await listPlugins({ ctx, run, cwd });
     // assert
     assert.equal(notifications.length, 1);
     assert.equal(
@@ -4088,7 +4067,6 @@ test("plugin list manifest absent: D-96-02: a folded row is NOT upgradable when 
     );
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -4125,9 +4103,9 @@ test("plugin list manifest absent: D-96-02: a folded row IS upgradable when its 
       version: "1.0.0",
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd });
+    await listPlugins({ ctx, run, cwd });
     // assert
     assert.equal(notifications.length, 1);
     assert.equal(
@@ -4140,7 +4118,6 @@ test("plugin list manifest absent: D-96-02: a folded row IS upgradable when its 
     );
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -4195,9 +4172,9 @@ test("plugin list manifest absent: D-96-02: a folded row's description comes fro
       version: "1.0.0",
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd });
+    await listPlugins({ ctx, run, cwd });
     // assert
     assert.equal(notifications.length, 1);
     assert.equal(
@@ -4213,7 +4190,6 @@ test("plugin list manifest absent: D-96-02: a folded row's description comes fro
     );
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -4261,9 +4237,9 @@ test("plugin list manifest absent: BOUND-01: a marketplace whose OWN manifest fa
     // Remove the file the USER record names, so its own manifest read throws.
     await rm(path.join(sharedMpRoot, ".claude-plugin", "marketplace.json"));
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
     // act
-    await listPlugins({ ctx, pi, cwd });
+    await listPlugins({ ctx, run, cwd });
     // assert
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, "error");
@@ -4275,7 +4251,6 @@ test("plugin list manifest absent: BOUND-01: a marketplace whose OWN manifest fa
     );
 
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -4294,10 +4269,10 @@ test("listPlugins renders the installed MCP dependency marker after inventory re
         mcpplug: { version: "1.0.0", resources: { mcpServers: ["mcpplug-server"] } },
       },
     });
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
 
     // act
-    await listPlugins({ ctx, pi, cwd, scope: "user" });
+    await listPlugins({ ctx, run, cwd, scope: "user" });
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -4307,7 +4282,6 @@ test("listPlugins renders the installed MCP dependency marker after inventory re
       },
     ]);
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -4332,12 +4306,10 @@ test("loadPluginListPayload filters project marketplaces and projects autoupdate
       autoupdate: true,
     });
     const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
-    const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
 
     // act
     const marketplaces = await loadPluginListPayload({
       ctx,
-      pi,
       cwd,
       scope: "project",
       marketplace: "alpha",
@@ -4353,7 +4325,6 @@ test("loadPluginListPayload filters project marketplaces and projects autoupdate
       },
     ]);
     verify(ctx);
-    verify(pi);
   });
 });
 
@@ -4376,10 +4347,9 @@ test("loadPluginListPayload preserves input order for case-tied marketplaces in 
       manifest: { name: "bravo", plugins: [] },
     });
     const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
-    const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
 
     // act
-    const marketplaces = await loadPluginListPayload({ ctx, pi, cwd, scope: "project" });
+    const marketplaces = await loadPluginListPayload({ ctx, cwd, scope: "project" });
 
     // assert
     assert.deepStrictEqual(marketplaces, [
@@ -4387,7 +4357,6 @@ test("loadPluginListPayload preserves input order for case-tied marketplaces in 
       { name: "bravo", scope: "project", plugins: [] },
     ]);
     verify(ctx);
-    verify(pi);
   });
 });
 
@@ -4397,10 +4366,10 @@ test("listPlugins defaults a bare orchestration failure to user scope", async ()
     const stateJsonPath = path.join(home, ".pi", "agent", "pi-claude-marketplace", "state.json");
     await mkdir(path.dirname(stateJsonPath), { recursive: true });
     await writeFile(stateJsonPath, "{ this is not valid json }", "utf8");
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
 
     // act
-    await listPlugins({ ctx, pi, cwd });
+    await listPlugins({ ctx, run, cwd });
 
     // assert
     const parseFailure = "Expected property name or '}' in JSON at position 2 (line 1 column 3)";
@@ -4417,7 +4386,6 @@ test("listPlugins defaults a bare orchestration failure to user scope", async ()
       },
     ]);
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -4426,18 +4394,20 @@ test("listPlugins normalizes a non-Error notification failure before reporting i
   await withHermeticHome(async ({ cwd }) => {
     // arrange
     const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
-    const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
     const ui = mock<NotificationUi>({ exactParams: true, name: "notification UI" });
+    const run = runWithNothingLoaded();
     const notifications: NotifyRecord[] = [];
     const notificationFailure = (function* (): Generator<void, void, unknown> {
       yield;
     })();
     notificationFailure.next();
     let notifyCall = 0;
+    when(() => ctx.mode)
+      .thenReturn("tui")
+      .twice();
     when(() => ctx.ui)
       .thenReturn(ui)
       .twice();
-    expectSoftDepProbes(pi, 2);
     when(() => ui.notify)
       .thenReturn((message, severity) => {
         notifyCall += 1;
@@ -4450,7 +4420,7 @@ test("listPlugins normalizes a non-Error notification failure before reporting i
       .twice();
 
     // act
-    await listPlugins({ ctx, pi, cwd });
+    await listPlugins({ ctx, run, cwd });
 
     // assert
     assert.strictEqual(notifyCall, 2);
@@ -4469,7 +4439,6 @@ test("listPlugins normalizes a non-Error notification failure before reporting i
       },
     ]);
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -4508,17 +4477,16 @@ test("WFLW-04: a workflow-bearing available plugin renders the generic available
       'export const meta = { name: "greet", description: "greets" };\n',
       "utf8",
     );
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, run, notifications, ui } = makeCtx();
 
     // act
-    await listPlugins({ ctx, pi, cwd });
+    await listPlugins({ ctx, run, cwd });
 
     // assert
     assert.deepStrictEqual(notifications, [
       { message: ["● official [user]", "  ○ helper v1.0.0 (available)"].join("\n") },
     ]);
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -4541,25 +4509,23 @@ test("WFLW-04: a non-empty persisted workflow inventory leaves the installed row
         alpha: { version: "1.0.0", resources: { workflows: ["alpha:greet", "alpha:shout"] } },
       },
     });
-    const { ctx, pi, notifications, ui } = makeCtx({ toolNames: ["workflow_control"] });
+    const { ctx, run, notifications, ui } = makeCtx({ softDeps: { workflowEngineLoaded: true } });
 
     // act
-    await listPlugins({ ctx, pi, cwd });
+    await listPlugins({ ctx, run, cwd });
 
     // assert -- byte-identical to the same record with an empty inventory.
     assert.deepStrictEqual(notifications, [
       { message: ["● mp1 [user]", "  ● alpha v1.0.0 (installed)"].join("\n") },
     ]);
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
 
 test("WDEP-02: a persisted workflow inventory stamps the host-engine marker when the engine is absent", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
-    // arrange -- the decoy tool name re-proves the WDEP-01 discriminator through
-    // the list surface: `workflow` alone must read as engine-absent.
+    // arrange -- the run's snapshot reports the host engine absent.
     const userRoot = path.join(home, ".pi", "agent");
     await seedMarketplace({
       scope: "user",
@@ -4575,10 +4541,10 @@ test("WDEP-02: a persisted workflow inventory stamps the host-engine marker when
         alpha: { version: "1.0.0", resources: { workflows: ["alpha:greet"] } },
       },
     });
-    const { ctx, pi, notifications, ui } = makeCtx({ toolNames: ["workflow"] });
+    const { ctx, run, notifications, ui } = makeCtx();
 
     // act
-    await listPlugins({ ctx, pi, cwd });
+    await listPlugins({ ctx, run, cwd });
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -4590,7 +4556,6 @@ test("WDEP-02: a persisted workflow inventory stamps the host-engine marker when
       },
     ]);
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });
@@ -4612,17 +4577,16 @@ test("WDEP-02: an empty persisted workflow inventory stamps no host-engine marke
       installablePluginDirs: ["alpha"],
       installed: { alpha: { version: "1.0.0", resources: { workflows: [] } } },
     });
-    const { ctx, pi, notifications, ui } = makeCtx({ toolNames: ["workflow"] });
+    const { ctx, run, notifications, ui } = makeCtx();
 
     // act
-    await listPlugins({ ctx, pi, cwd });
+    await listPlugins({ ctx, run, cwd });
 
     // assert
     assert.deepStrictEqual(notifications, [
       { message: ["● mp1 [user]", "  ● alpha v1.0.0 (installed)"].join("\n") },
     ]);
     verify(ctx);
-    verify(pi);
     verify(ui);
   });
 });

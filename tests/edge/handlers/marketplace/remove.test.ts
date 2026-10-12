@@ -20,13 +20,11 @@
 //
 // This is a state-changing command, so every rejecting case additionally
 // asserts the seeded records are still on disk. A rejecting case sizes the
-// boundary at one emission and zero probes and leaves the working directory
-// UNSTATED, so a workflow that ran would carry strong-mock's pending-call proxy
-// into `removeMarketplace`'s first `locationsFor(scope, opts.cwd)` call. A
-// delegating case states one emission, one soft-dependency probe, and one
-// working-directory read. All four counts were
-// measured against the real module through a counting proxy before this file
-// was written.
+// boundary at one emission and leaves the working directory UNSTATED, so a
+// workflow that ran would carry strong-mock's pending-call proxy into
+// `removeMarketplace`'s first `locationsFor(scope, opts.cwd)` call. A delegating
+// case states one emission and one working-directory read; D-05 has the
+// workflow render from the run the handler receives.
 //
 // The scope-target flag is observable ONLY through which config layer the
 // CFG-03 precondition validates: the removal's config write-back sweeps both
@@ -59,11 +57,15 @@ import https from "node:https";
 import path from "node:path";
 import { test, type TestContext } from "node:test";
 
+import { mock, verify } from "strong-mock";
+
 import { pathSource } from "../../../../extensions/pi-claude-marketplace/domain/source.ts";
 import { makeRemoveHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/marketplace/remove.ts";
 import { locationsFor } from "../../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { createCompletionCache } from "../../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
+import { runWithNothingLoaded } from "../../../shared/notification-run-seeds.ts";
+import { createMachineNotificationBoundary } from "../../notification-boundary.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
 import { mergeMarketplaceIntoState } from "../marketplace-seed.ts";
 
@@ -222,14 +224,14 @@ for (const { args, expectedFootprint, expectedMessage, selection } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, "delegates");
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 1, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
       reads: 1,
       value: workspace.cwd,
     });
-    const removeHandler = makeRemoveHandler(pi, { completionCache: createCompletionCache() });
+    const removeHandler = makeRemoveHandler({ completionCache: createCompletionCache() });
 
     // act
-    await removeHandler(args, ctx);
+    await removeHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [{ message: expectedMessage }]);
@@ -242,11 +244,11 @@ test("supplies the remove usage block, shown when the name positional is missing
   // arrange
   const workspace = await createHermeticWorkspace(t, "missing-name");
   await seedBothScopes(workspace);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-  const removeHandler = makeRemoveHandler(pi, { completionCache: createCompletionCache() });
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+  const removeHandler = makeRemoveHandler({ completionCache: createCompletionCache() });
 
   // act
-  await removeHandler("", ctx);
+  await removeHandler("", ctx, runWithNothingLoaded());
 
   // assert
   assert.deepStrictEqual(notifications, [
@@ -260,11 +262,11 @@ test("rejects surplus input and preserves all recorded marketplaces", async (t) 
   // arrange
   const workspace = await createHermeticWorkspace(t, "surplus");
   await seedBothScopes(workspace);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-  const removeHandler = makeRemoveHandler(pi, { completionCache: createCompletionCache() });
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+  const removeHandler = makeRemoveHandler({ completionCache: createCompletionCache() });
 
   // act
-  await removeHandler("alpha beta", ctx);
+  await removeHandler("alpha beta", ctx, runWithNothingLoaded());
 
   // assert
   assert.deepStrictEqual(notifications, [
@@ -299,14 +301,14 @@ for (const { args, expectedFootprint, expectedNotification, placement } of [
     const workspace = await createHermeticWorkspace(t, "scope-target");
     await seedMarketplace(workspace.cwd, "project", "alpha");
     await seedInvalidLocalConfig(workspace.cwd, "project");
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 1, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
       reads: 1,
       value: workspace.cwd,
     });
-    const removeHandler = makeRemoveHandler(pi, { completionCache: createCompletionCache() });
+    const removeHandler = makeRemoveHandler({ completionCache: createCompletionCache() });
 
     // act
-    await removeHandler(args, ctx);
+    await removeHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [expectedNotification]);
@@ -319,14 +321,14 @@ test("accepts a scope flag beside the scope-target flag and honors the scope it 
   // arrange
   const workspace = await createHermeticWorkspace(t, "both-selectors");
   await seedBothScopes(workspace);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 1, {
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
     reads: 1,
     value: workspace.cwd,
   });
-  const removeHandler = makeRemoveHandler(pi, { completionCache: createCompletionCache() });
+  const removeHandler = makeRemoveHandler({ completionCache: createCompletionCache() });
 
   // act
-  await removeHandler("alpha --scope user --local", ctx);
+  await removeHandler("alpha --scope user --local", ctx, runWithNothingLoaded());
 
   // assert
   assert.deepStrictEqual(notifications, [{ message: USER_ALPHA_REMOVED }]);
@@ -338,11 +340,11 @@ test("supplies the remove usage block beside the unknown-flag sentence and remov
   // arrange
   const workspace = await createHermeticWorkspace(t, "unknown-flag");
   await seedBothScopes(workspace);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-  const removeHandler = makeRemoveHandler(pi, { completionCache: createCompletionCache() });
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+  const removeHandler = makeRemoveHandler({ completionCache: createCompletionCache() });
 
   // act
-  await removeHandler("alpha --frobnicate", ctx);
+  await removeHandler("alpha --frobnicate", ctx, runWithNothingLoaded());
 
   // assert
   assert.deepStrictEqual(notifications, [
@@ -356,11 +358,11 @@ test("supplies the remove usage block beside a verbatim parse diagnostic and rem
   // arrange
   const workspace = await createHermeticWorkspace(t, "invalid-scope");
   await seedBothScopes(workspace);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-  const removeHandler = makeRemoveHandler(pi, { completionCache: createCompletionCache() });
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+  const removeHandler = makeRemoveHandler({ completionCache: createCompletionCache() });
 
   // act
-  await removeHandler("alpha --scope bogus", ctx);
+  await removeHandler("alpha --scope bogus", ctx, runWithNothingLoaded());
 
   // assert
   assert.deepStrictEqual(notifications, [
@@ -372,3 +374,61 @@ test("supplies the remove usage block beside a verbatim parse diagnostic and rem
   assert.deepStrictEqual(await readMarketplaceFootprint(workspace.cwd), BOTH_SCOPES_SEEDED);
   verifyBoundary();
 });
+
+for (const mode of ["json", "rpc"] as const) {
+  for (const { args, message } of [
+    {
+      args: "--scope bad",
+      message: 'Invalid --scope value: "bad". Must be "user" or "project".',
+    },
+    {
+      args: "--bogus",
+      message: 'Unknown flag: "--bogus".',
+    },
+    {
+      args: "",
+      message: "Missing required argument.",
+    },
+    {
+      args: '""',
+      message: "Missing required argument.",
+    },
+    {
+      args: "alpha@official beta@official",
+      message: "Too many arguments.",
+    },
+  ]) {
+    test(`appends marketplace/remove rejection for ${args} in ${mode} (enabled)`, async () => {
+      // arrange
+      const { ctx, run, capture, verifyBoundary } = createMachineNotificationBoundary(mode);
+      const deps = mock<Parameters<typeof makeRemoveHandler>[0]>({
+        exactParams: true,
+        name: "handler dependencies",
+      });
+      const commandHandler = makeRemoveHandler(deps);
+
+      // act
+      await commandHandler(args, ctx, run);
+
+      // assert
+      assert.deepStrictEqual(capture.entries, [
+        {
+          customType: "claude-plugin",
+          payload: {
+            schemaVersion: 1,
+            origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+            kind: "usage-error",
+            severity: "error",
+            needsReload: false,
+            message,
+            usage:
+              "Usage: /claude:plugin marketplace <remove|rm> <name> [--scope user|project] [--local]",
+          },
+        },
+      ]);
+      capture.assertValid();
+      verifyBoundary();
+      verify(deps);
+    });
+  }
+}

@@ -16,8 +16,11 @@
  * header-only `(removed)` cascade with no installed plugins (WILL-03) -- the
  * rendered cascade MUST NOT contain the trailer.
  *
- * The reload-deferral oracle (`shouldEmitReloadHint`) and the trailer literal
- * (`RELOAD_HINT_TRAILER`) live in `shared/notification-summary.ts`, while
+ * The reload-deferral decision is the envelope's `needsReload`, which
+ * `shared/notification-resolve.ts` resolves from the oracle
+ * `shouldEmitReloadHint` in `shared/notification-summary.ts`. The trailer
+ * literal (`RELOAD_HINT_TRAILER`) lives in `shared/notification-grammar.ts`,
+ * whose text strategy appends it when `needsReload` is true, and
  * `shared/notification-dispatch.ts::notify()` owns their only public effect.
  * The assertion therefore observes the oracle through the trailer's presence
  * in the rendered output (WILL-02 leaves the seam to discretion). The file
@@ -30,39 +33,13 @@ import test, { type TestContext } from "node:test";
 
 import { notify } from "../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
 import { type NotificationMessage } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
-import { adapterCommand } from "../platform/pi-inventory-seed.ts";
+import { runWithAllLoaded } from "../shared/notification-run-seeds.ts";
 
-import type {
-  CommandInventoryItem,
-  NotificationContext,
-} from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
-
-// ---------------------------------------------------------------------------
-// Mock helpers -- mirror the catalog-uat / grammar-invariant harness.
-// ---------------------------------------------------------------------------
-
-interface MockTool {
-  name?: string;
-}
-
-interface MockPi {
-  getAllTools: () => MockTool[];
-  getCommands: () => CommandInventoryItem[];
-}
-
-/**
- * Probe reports all three companions loaded -- pi-subagents, pi-mcp-adapter and
- * the host workflow engine -- so no soft-dep marker fires on any row.
- */
-function piWithAllLoaded(): MockPi {
-  return {
-    getAllTools: () => [{ name: "subagent" }, { name: "workflow_control" }],
-    getCommands: () => [adapterCommand()],
-  };
-}
+import type { NotificationContext } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { NotificationRun } from "../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 
 // The trailer literal independently mirrors `RELOAD_HINT_TRAILER` in
-// shared/notification-summary.ts, while the agreement is observed through the
+// shared/notification-grammar.ts, while the agreement is observed through the
 // rendered substring dispatched by shared/notification-dispatch.ts (the same
 // seam tests/architecture/notify-grammar-invariant.test.ts uses).
 const RELOAD_HINT_TRAILER = "/reload to pick up changes";
@@ -76,7 +53,7 @@ const RELOAD_HINT_TRAILER = "/reload to pick up changes";
 interface AgreementFixture {
   readonly label: string;
   readonly pendingToken: string;
-  readonly pi: MockPi;
+  readonly run: NotificationRun;
   readonly message: NotificationMessage;
 }
 
@@ -87,7 +64,7 @@ const RELOAD_DEFERRED_FIXTURES: readonly AgreementFixture[] = [
   {
     label: "plugin install -- realized (installed) row",
     pendingToken: "will install",
-    pi: piWithAllLoaded(),
+    run: runWithAllLoaded(),
     message: {
       marketplaces: [
         {
@@ -110,7 +87,7 @@ const RELOAD_DEFERRED_FIXTURES: readonly AgreementFixture[] = [
   {
     label: "plugin uninstall -- realized (uninstalled) row",
     pendingToken: "will uninstall",
-    pi: piWithAllLoaded(),
+    run: runWithAllLoaded(),
     message: {
       marketplaces: [
         {
@@ -132,7 +109,7 @@ const RELOAD_DEFERRED_FIXTURES: readonly AgreementFixture[] = [
   {
     label: "plugin enable -- re-materialized (installed) row",
     pendingToken: "will enable",
-    pi: piWithAllLoaded(),
+    run: runWithAllLoaded(),
     message: {
       marketplaces: [
         {
@@ -155,7 +132,7 @@ const RELOAD_DEFERRED_FIXTURES: readonly AgreementFixture[] = [
   {
     label: "plugin disable -- realized fresh (disabled) transition row",
     pendingToken: "will disable",
-    pi: piWithAllLoaded(),
+    run: runWithAllLoaded(),
     message: {
       marketplaces: [
         {
@@ -177,7 +154,7 @@ const RELOAD_DEFERRED_FIXTURES: readonly AgreementFixture[] = [
   {
     label: "marketplace remove with installed plugins -- realized (uninstalled) child cascade",
     pendingToken: "will uninstall (per recorded plugin under a bare header)",
-    pi: piWithAllLoaded(),
+    run: runWithAllLoaded(),
     message: {
       marketplaces: [
         {
@@ -199,7 +176,7 @@ const RELOAD_DEFERRED_FIXTURES: readonly AgreementFixture[] = [
     // correctly keeps its `will` token.
     label: "plugin partial install -- realized (partially-installed) row",
     pendingToken: "will partially install",
-    pi: piWithAllLoaded(),
+    run: runWithAllLoaded(),
     message: {
       marketplaces: [
         {
@@ -229,7 +206,7 @@ const IMMEDIATE_FIXTURES: readonly AgreementFixture[] = [
   {
     label: "marketplace add -- realized (added) header, no installed plugins",
     pendingToken: "(retired) will add",
-    pi: piWithAllLoaded(),
+    run: runWithAllLoaded(),
     message: {
       marketplaces: [{ name: "new-mp", scope: "user", status: "added", plugins: [] }],
     },
@@ -237,7 +214,7 @@ const IMMEDIATE_FIXTURES: readonly AgreementFixture[] = [
   {
     label: "marketplace remove with no installed plugins -- realized header-only (removed)",
     pendingToken: "(retired) will remove",
-    pi: piWithAllLoaded(),
+    run: runWithAllLoaded(),
     message: {
       marketplaces: [{ name: "old-mp", scope: "user", status: "removed", plugins: [] }],
     },
@@ -246,8 +223,8 @@ const IMMEDIATE_FIXTURES: readonly AgreementFixture[] = [
 
 function render(t: TestContext, fixture: AgreementFixture): string {
   const uiNotify = t.mock.fn<(message: string, severity?: string) => void>();
-  const ctx: NotificationContext = { ui: { notify: uiNotify } };
-  notify(ctx, fixture.pi, fixture.message);
+  const ctx: NotificationContext = { mode: "tui", ui: { notify: uiNotify } };
+  notify(ctx, fixture.run, fixture.message);
   assert.equal(
     uiNotify.mock.calls.length,
     1,

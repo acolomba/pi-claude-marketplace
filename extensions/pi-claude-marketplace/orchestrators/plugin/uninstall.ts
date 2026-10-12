@@ -52,12 +52,11 @@
 // `resources.agents` / `resources.mcpServers` is normalized to [] by
 // loadState BEFORE the withStateGuard closure observes it.
 //
-// API parameter shape note: `pi` is required because `notify(ctx, pi,
-// message)` consumes it for the single softDepStatus(pi) probe per call.
-// The uninstalled variant has no `dependencies` field by
-// construction (D-15-02 / MSG-SD-3) so the renderer cannot emit
-// `{requires pi-subagents}` / `{requires pi-mcp-adapter}` markers on (uninstalled)
-// rows even though the probe is uniformly threaded.
+// API parameter shape note: `run` is required because every emission renders
+// from the command run's one soft-dep snapshot (D-05). The uninstalled variant
+// has no `dependencies` field by construction (D-15-02 / MSG-SD-3), so the
+// renderer cannot emit `{requires pi-subagents}` / `{requires pi-mcp-adapter}`
+// markers on (uninstalled) rows even though the run is uniformly threaded.
 
 import { rm } from "node:fs/promises";
 import path from "node:path";
@@ -104,9 +103,10 @@ import type { IndexedRecord, ScopeDeclarationIndexResult } from "./dependency-in
 import type { HooksRouting } from "../../bridges/hooks/index.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
-import type { NotificationContext, PiInventory } from "../../platform/pi-api.ts";
+import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
-import type { McpConfigNotice } from "../../shared/notification-dispatch.ts";
+import type { NotificationRun } from "../../shared/notification-run.ts";
+import type { McpConfigNotice } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { UnstageOutcome } from "../marketplace/shared.ts";
 
@@ -176,8 +176,8 @@ export type UninstallPluginOutcome =
  */
 export interface UninstallPluginOptions {
   readonly ctx: NotificationContext;
-  /** Factory `pi` reference -- threaded into `notify()` for the single softDepStatus(pi) probe. */
-  readonly pi: PiInventory;
+  /** The command run. D-05: every emission renders from its one soft-dep snapshot. */
+  readonly run: NotificationRun;
   readonly scope?: Scope;
   /** Project-scope cwd (ignored for user scope; see locationsFor). */
   readonly cwd: string;
@@ -381,7 +381,7 @@ function narrowCascadeFailure(cause: Error): ContentReason {
  */
 function emitCascadeFailure(args: {
   ctx: NotificationContext;
-  pi: PiInventory;
+  run: NotificationRun;
   marketplace: string;
   scope: Scope;
   plugin: string;
@@ -393,7 +393,7 @@ function emitCascadeFailure(args: {
 }): UninstallPluginOutcome {
   const {
     ctx,
-    pi,
+    run,
     marketplace,
     scope,
     plugin,
@@ -434,7 +434,7 @@ function emitCascadeFailure(args: {
     };
     notifyWithContext(
       ctx,
-      pi,
+      run,
       UNINSTALL_CONTEXT,
       [
         {
@@ -446,7 +446,7 @@ function emitCascadeFailure(args: {
       undefined,
       "single",
     );
-    notifyMcpConfigNotices(ctx, mcpConfigNotices);
+    notifyMcpConfigNotices(ctx, run, mcpConfigNotices);
   }
 
   return outcome;
@@ -459,14 +459,14 @@ function emitCascadeFailure(args: {
  */
 function emitConfigInvalid(args: {
   ctx: NotificationContext;
-  pi: PiInventory;
+  run: NotificationRun;
   marketplace: string;
   scope: Scope;
   plugin: string;
   configBasename: string;
   orchestrated: boolean;
 }): UninstallPluginOutcome {
-  const { ctx, pi, marketplace, scope, plugin, configBasename, orchestrated } = args;
+  const { ctx, run, marketplace, scope, plugin, configBasename, orchestrated } = args;
   const cause = `Config file "${configBasename}" failed schema validation.`;
   const invalidErr = new Error(cause);
   const outcome: UninstallPluginOutcome = {
@@ -479,7 +479,7 @@ function emitConfigInvalid(args: {
   if (!orchestrated) {
     notifyWithContext(
       ctx,
-      pi,
+      run,
       UNINSTALL_CONTEXT,
       [
         {
@@ -952,8 +952,8 @@ async function runPostUninstallCleanup({
  *
  * D-01: the STANDALONE user command names an absent target it cannot operate
  * on, so it emits an error row (it was literal silence before). The row is
- * `failed` carrying the `not installed` reason -- uninstall's render map has
- * no `skipped` arm -- and carries no `cause`, so no path redaction applies.
+ * `failed` carrying the `not installed` reason -- uninstall has no `skipped`
+ * row policy -- and carries no `cause`, so no path redaction applies.
  *
  * SCOPE-01: `notInstalledAt` separates the two callers. The cross-scope caller
  * passes the scope the operator named, and the brace additionally names where
@@ -962,14 +962,14 @@ async function runPostUninstallCleanup({
  */
 function emitAlreadyGone(args: {
   readonly ctx: NotificationContext;
-  readonly pi: PiInventory;
+  readonly run: NotificationRun;
   readonly marketplace: string;
   readonly scope: Scope;
   readonly plugin: string;
   readonly orchestrated: boolean;
   readonly notInstalledAt?: Scope;
 }): UninstallPluginOutcome {
-  const { ctx, pi, marketplace, scope, plugin, orchestrated } = args;
+  const { ctx, run, marketplace, scope, plugin, orchestrated } = args;
   if (orchestrated) {
     return { status: "converged", name: plugin };
   }
@@ -983,7 +983,7 @@ function emitAlreadyGone(args: {
   };
   notifyWithContext(
     ctx,
-    pi,
+    run,
     UNINSTALL_CONTEXT,
     [{ name: marketplace, scope, plugins: [failedRow] }],
     undefined,
@@ -1049,7 +1049,7 @@ async function runUninstallOutcome(
   opts: UninstallPluginOptions,
   orchestrated: boolean,
 ): Promise<UninstallPluginOutcome> {
-  const { ctx, pi, cwd, marketplace, plugin } = opts;
+  const { ctx, run, cwd, marketplace, plugin } = opts;
   const cascade = opts.cascade ?? transaction.cascadeUnstagePlugin;
 
   // ATTR-04 / SCOPE-01 / M3 / M4: the discriminated cross-scope resolver
@@ -1076,7 +1076,7 @@ async function runUninstallOutcome(
     if (notInstalledAt !== undefined) {
       return emitAlreadyGone({
         ctx,
-        pi,
+        run,
         marketplace,
         scope: notInstalledAt,
         plugin,
@@ -1087,7 +1087,7 @@ async function runUninstallOutcome(
 
     return emitMarketplaceNotAdded({
       ctx,
-      pi,
+      run,
       marketplace,
       requestedScope: resolution.requestedScope,
       orchestrated,
@@ -1267,7 +1267,7 @@ async function runUninstallOutcome(
     const cause = err as Error;
     return emitCascadeFailure({
       ctx,
-      pi,
+      run,
       marketplace,
       scope,
       plugin,
@@ -1285,7 +1285,7 @@ async function runUninstallOutcome(
   if (configInvalid) {
     return emitConfigInvalid({
       ctx,
-      pi,
+      run,
       marketplace,
       scope,
       plugin,
@@ -1296,7 +1296,7 @@ async function runUninstallOutcome(
 
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- `alreadyGone` is mutated inside the withLockedStateTransaction closure above; TS flow analysis cannot prove the closure executed, so it sees the variable as still `false`. The check is required at runtime.
   if (alreadyGone) {
-    return emitAlreadyGone({ ctx, pi, marketplace, scope, plugin, orchestrated });
+    return emitAlreadyGone({ ctx, run, marketplace, scope, plugin, orchestrated });
   }
 
   if (routeEffect.removeAfterSave) {
@@ -1307,7 +1307,7 @@ async function runUninstallOutcome(
   if (cascadeFailure !== undefined) {
     return emitCascadeFailure({
       ctx,
-      pi,
+      run,
       marketplace,
       scope,
       plugin,
@@ -1392,7 +1392,7 @@ async function runUninstallOutcome(
   });
   notifyWithContext(
     ctx,
-    pi,
+    run,
     UNINSTALL_CONTEXT,
     composeRemovalBlocks({
       primary: { marketplace, row: uninstalledRow },
@@ -1402,7 +1402,7 @@ async function runUninstallOutcome(
     undefined,
     "single",
   );
-  notifyMcpConfigNotices(ctx, mcpConfigNotices);
+  notifyMcpConfigNotices(ctx, run, mcpConfigNotices);
   return outcome;
 }
 

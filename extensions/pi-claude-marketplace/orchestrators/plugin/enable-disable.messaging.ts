@@ -2,15 +2,6 @@ import { isRenderablePluginKey } from "../../domain/dependencies.ts";
 import { compareByNameThenScope } from "../../shared/compare-name-scope.ts";
 import { isErrnoException, PluginShapeError } from "../../shared/errors.ts";
 import {
-  ICON_UNINSTALLABLE,
-  installedLikeRow,
-  partiallyInstalledRow,
-  pluginRow,
-  renderDisabledRow,
-  renderVersion,
-  ICON_INSTALLED,
-} from "../../shared/notification-grammar.ts";
-import {
   type PluginDisabledMessage,
   type PluginFailedMessage,
   type PluginInstalledMessage,
@@ -20,25 +11,8 @@ import {
 } from "../../shared/notification-types.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 
-import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
+import type { CommandContext } from "../../shared/notify-context.ts";
 import type { Scope } from "../../shared/types.ts";
-
-/**
- * enable-disable.messaging.ts -- the command-local notification vocabulary for
- * BOTH `/claude:plugin enable` and `/claude:plugin disable` (MOD-01). The two
- * verbs share one orchestrator file, so this module declares TWO command
- * contexts -- `ENABLE_CONTEXT` and `DISABLE_CONTEXT` -- each with its OWN render
- * map total over its OWN statuses (D-10). The render-arm bodies are lifted
- * VERBATIM from the central `renderPluginRow` switch; the shared presentation
- * vocabulary stays central in `shared/notification-grammar.ts` (D-notification-refactor-01-11)
- * and is CALLED here, never duplicated.
- *
- * UAT-03 / RLD-05 / D-07: the fresh-disable `(disabled)` row's
- * `/reload to pick up changes` trailer is NOT a render concern -- it is driven
- * by the row's caller-stamped `needsReload: true` (the RLD-02 OR-reduce),
- * while the inventory `(disabled)` row stamps `needsReload: false`. The row
- * bytes are byte-identical across both.
- */
 
 /**
  * enable's private status set: a fresh `installed` row, a fresh
@@ -64,62 +38,16 @@ type DisableStatus = "disabled" | "skipped" | "failed";
 /** disable's row message union. */
 export type DisableMsg = PluginDisabledMessage | PluginSkippedMessage | PluginFailedMessage;
 
-/**
- * Render map total over enable's OWN statuses (D-10). The fresh `installed` arm
- * is byte-identical to install's installed arm -- the enable verb constructs the
- * row with `dependencies: []`, so the soft-dep markers never append, but the
- * `dependencies.includes(...)` gating is preserved verbatim for byte parity.
- *
- * ENBL-07 / FSTAT-07 / D-66-04: the `partially-installed` arm CALLS the shared
- * `partiallyInstalledRow` composition site (D-notification-refactor-01-11), so a re-enable that
- * drops component kinds renders the same `◉ ... (partially-installed) {kinds}` bytes
- * the install cascade and the `list` inventory row render for the very same
- * record.
- */
-const ENABLE_RENDER: { [K in EnableStatus]: RenderFn<Extract<EnableMsg, { status: K }>> } = {
-  installed: (p, probe, mpScope) =>
-    installedLikeRow(
-      ICON_INSTALLED,
-      p,
-      mpScope,
-      renderVersion(p.version),
-      "(installed)",
-      p.reasons,
-      probe,
-    ),
-  "partially-installed": (p, probe, mpScope) => partiallyInstalledRow(p, mpScope, probe),
-  // fallow-ignore-next-line code-duplication -- reviewed: per-command typed render-map arms are one-line calls to shared row composers; extracting them needs a cross-command generic.
-  skipped: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(skipped)", probe),
-  failed: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)", probe),
-};
-
-/**
- * Render map total over disable's OWN statuses (D-10). The `disabled` arm uses
- * the dedicated `ICON_DISABLED` glyph.
- *
- * ENBL-16 / D-100-07: the row's `reasons` are THREADED, as in the two sibling
- * arms (`notify.ts`'s central `disabled` arm and `list.messaging.ts`). This
- * command's producer stamps none today -- a fresh disable reaches the requested
- * state, so there is nothing to report and the brace collapses -- so the
- * threading changes no byte now and cannot silently drop a reason a later
- * producer stamps. Both soft-dep flags stay hard-coded false, which keeps a
- * disabled row free of a soft-dep marker whatever inventory the record retained
- * (ENBL-15 / D-100-06).
- */
-const DISABLE_RENDER: { [K in DisableStatus]: RenderFn<Extract<DisableMsg, { status: K }>> } = {
-  disabled: (p, probe, mpScope) => renderDisabledRow(p, probe, mpScope),
-  skipped: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(skipped)", probe),
-  failed: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)", probe),
-};
-
-/**
- * D-04 / D-05: enable's `CommandContext`. The `as const satisfies` pin enforces
- * that enable supplies both `Messaging.label` and a total render map.
- */
+/** The command label and complete per-status reason policy. */
 export const ENABLE_CONTEXT = {
   Messaging: { label: "Plugin enable" },
-  render: ENABLE_RENDER,
-} as const satisfies CommandContext<EnableStatus, EnableMsg>;
+  rowPolicies: {
+    installed: { markers: true, contentReasons: true },
+    "partially-installed": { markers: true, contentReasons: true },
+    skipped: { markers: false, contentReasons: true },
+    failed: { markers: false, contentReasons: true },
+  },
+} as const satisfies CommandContext<EnableStatus>;
 
 /**
  * EDEP-01 / EDEP-03: one row for one member of the enable cascade's
@@ -127,9 +55,9 @@ export const ENABLE_CONTEXT = {
  * `Dependency` union from `shared/concerns/soft-dep.ts` -- that vocabulary
  * names the pi-subagents / pi-mcp-adapter soft-dependency companion
  * extensions, an unrelated concept from a declared PLUGIN dependency. A
- * member renders through the SAME `ENABLE_RENDER` arms as the root (its
- * `status` selects the arm exactly as `dispatchRow` already does), so no new
- * render map is needed -- only the row shape.
+ * member resolves through the SAME `ENABLE_CONTEXT` row policies as the root
+ * (its `status` selects the policy), so no new policy map is needed -- only
+ * the row shape.
  */
 export type EnableCascadeMemberRow = PluginInstalledMessage | PluginSkippedMessage;
 
@@ -160,14 +88,15 @@ export function composeEnableCascadeRows(args: {
   );
 }
 
-/**
- * D-04 / D-05: disable's `CommandContext`. Distinct label and render map from
- * `ENABLE_CONTEXT`.
- */
+/** The command label and complete per-status reason policy. */
 export const DISABLE_CONTEXT = {
   Messaging: { label: "Plugin disable" },
-  render: DISABLE_RENDER,
-} as const satisfies CommandContext<DisableStatus, DisableMsg>;
+  rowPolicies: {
+    disabled: { markers: false, contentReasons: true },
+    skipped: { markers: false, contentReasons: true },
+    failed: { markers: false, contentReasons: true },
+  },
+} as const satisfies CommandContext<DisableStatus>;
 
 /**
  * The dependents as EDEP-02's refusal sentence names them: the keys
@@ -203,7 +132,7 @@ export function composeDisableRefusalCause(target: string, dependents: readonly 
 // ───────────────────────────────────────────────────────────────────────────
 // Failure -> reasons narrowing for both verbs, moved from enable-disable.ts
 // where `staleGateDropped` was reached through a `__test_` re-export. These
-// three produce the reason tokens this module's render map renders, so they
+// three produce the reason tokens the shared grammar renders, so they
 // belong on this side of the line. The private `isErrnoException` copy they
 // shared went to shared/errors.ts, which was already holding two identical
 // twins of it (FLOW-09).

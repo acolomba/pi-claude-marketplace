@@ -9,6 +9,9 @@
 // all-marketplaces run records three, so the recorder discriminates the two arms
 // rather than merely showing that one of them ran.
 //
+// D-05: every emission renders from the run the handler receives, so no case
+// builds the handler with a tool inventory.
+//
 // D-116-05 (O3) places this handler in the injected-port group: `deps.gitOps`
 // and `deps.pluginUpdate` are declared members of `EdgeDeps`, so the plugin
 // update port is a strict interaction mock with exact-parameter matching and the
@@ -73,6 +76,8 @@ import { loadState } from "../../../../extensions/pi-claude-marketplace/persiste
 import { createCompletionCache } from "../../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { createGitOpsFake } from "../../../platform/git-ops-fake.ts";
 import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
+import { runWithNothingLoaded } from "../../../shared/notification-run-seeds.ts";
+import { createMachineNotificationBoundary } from "../../notification-boundary.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
 import { mergeMarketplaceIntoState, seedAutoupdateConfig } from "../marketplace-seed.ts";
 
@@ -280,21 +285,21 @@ test("updates every recorded marketplace in both scopes when no name is supplied
   // arrange
   const { cwd, networkCallCount } = await createHermeticScope(t, "all");
   const clones = await seedThreeMarketplaces(cwd);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(3, 3, {
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(3, {
     value: cwd,
     reads: 1,
   });
   const git = createGitOpsFake({ boundary: "memory" });
   const pluginUpdate = mock<PluginUpdate>({ exactParams: true, name: "plugin update" });
   when(() => pluginUpdate("hello", "alpha", "project")).thenResolve(unchangedHello());
-  const marketplaceUpdateHandler = makeMarketplaceUpdateHandler(pi, {
+  const marketplaceUpdateHandler = makeMarketplaceUpdateHandler({
     completionCache: createCompletionCache(),
     gitOps: git.gitOps,
     beginPluginUpdateRun: () => pluginUpdate,
   });
 
   // act
-  await marketplaceUpdateHandler("", ctx);
+  await marketplaceUpdateHandler("", ctx, runWithNothingLoaded());
 
   // assert
   assert.deepStrictEqual(notifications, [
@@ -319,21 +324,21 @@ for (const { args, label, arity } of [
     // arrange
     const { cwd, networkCallCount } = await createHermeticScope(t, label);
     const clones = await seedThreeMarketplaces(cwd);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 1, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
       value: cwd,
       reads: 1,
     });
     const git = createGitOpsFake({ boundary: "memory" });
     const pluginUpdate = mock<PluginUpdate>({ exactParams: true, name: "plugin update" });
     when(() => pluginUpdate("hello", "alpha", "project")).thenResolve(unchangedHello());
-    const marketplaceUpdateHandler = makeMarketplaceUpdateHandler(pi, {
+    const marketplaceUpdateHandler = makeMarketplaceUpdateHandler({
       completionCache: createCompletionCache(),
       gitOps: git.gitOps,
       beginPluginUpdateRun: () => pluginUpdate,
     });
 
     // act
-    await marketplaceUpdateHandler(args, ctx);
+    await marketplaceUpdateHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [{ message: PROJECT_ALPHA_ROW }]);
@@ -355,7 +360,7 @@ test("D-10-18: begins one cascade run per command and none when the handler is b
   // 1 after both.
   const { cwd, networkCallCount } = await createHermeticScope(t, "run-boundary");
   const clones = await seedThreeMarketplaces(cwd);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(2, 2, {
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2, {
     value: cwd,
     reads: 2,
   });
@@ -365,7 +370,7 @@ test("D-10-18: begins one cascade run per command and none when the handler is b
     .thenResolve(unchangedHello())
     .times(2);
   let runs = 0;
-  const marketplaceUpdateHandler = makeMarketplaceUpdateHandler(pi, {
+  const marketplaceUpdateHandler = makeMarketplaceUpdateHandler({
     completionCache: createCompletionCache(),
     gitOps: git.gitOps,
     beginPluginUpdateRun: () => {
@@ -376,9 +381,9 @@ test("D-10-18: begins one cascade run per command and none when the handler is b
   const atBuild = runs;
 
   // act
-  await marketplaceUpdateHandler("alpha", ctx);
+  await marketplaceUpdateHandler("alpha", ctx, runWithNothingLoaded());
   const afterFirstCommand = runs;
-  await marketplaceUpdateHandler("alpha", ctx);
+  await marketplaceUpdateHandler("alpha", ctx, runWithNothingLoaded());
 
   // assert
   assert.deepStrictEqual([atBuild, afterFirstCommand, runs], [0, 1, 2]);
@@ -395,24 +400,21 @@ test("D-10-18: begins one cascade run per command and none when the handler is b
   verify(pluginUpdate);
 });
 
-for (const { emissions, probes, rows, scope, touched } of [
+for (const { emissions, rows, scope, touched } of [
   {
     emissions: 1,
-    probes: 1,
     rows: [USER_ALPHA_ROW],
     scope: "user",
     touched: (clones: SeededClones): readonly string[] => [clones.userAlpha],
   },
   {
     emissions: 2,
-    probes: 2,
     rows: [PROJECT_ALPHA_ROW, PROJECT_BETA_ROW],
     scope: "project",
     touched: (clones: SeededClones): readonly string[] => [clones.projectAlpha, clones.projectBeta],
   },
 ] satisfies readonly {
   readonly emissions: number;
-  readonly probes: number;
   readonly rows: readonly string[];
   readonly scope: Scope;
   readonly touched: (clones: SeededClones) => readonly string[];
@@ -421,28 +423,24 @@ for (const { emissions, probes, rows, scope, touched } of [
     // arrange
     const { cwd, networkCallCount } = await createHermeticScope(t, `scope-${scope}`);
     const clones = await seedThreeMarketplaces(cwd);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(
-      emissions,
-      probes,
-      {
-        value: cwd,
-        reads: 1,
-      },
-    );
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(emissions, {
+      value: cwd,
+      reads: 1,
+    });
     const git = createGitOpsFake({ boundary: "memory" });
     const pluginUpdate = mock<PluginUpdate>({ exactParams: true, name: "plugin update" });
     if (scope === "project") {
       when(() => pluginUpdate("hello", "alpha", "project")).thenResolve(unchangedHello());
     }
 
-    const marketplaceUpdateHandler = makeMarketplaceUpdateHandler(pi, {
+    const marketplaceUpdateHandler = makeMarketplaceUpdateHandler({
       completionCache: createCompletionCache(),
       gitOps: git.gitOps,
       beginPluginUpdateRun: () => pluginUpdate,
     });
 
     // act
-    await marketplaceUpdateHandler(`--scope ${scope}`, ctx);
+    await marketplaceUpdateHandler(`--scope ${scope}`, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(
@@ -460,17 +458,17 @@ test("reports an unrecognised scope value with the update usage block and never 
   // arrange
   const { cwd, networkCallCount } = await createHermeticScope(t, "invalid-scope");
   await seedThreeMarketplaces(cwd);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
   const git = createGitOpsFake({ boundary: "memory" });
   const pluginUpdate = mock<PluginUpdate>({ exactParams: true, name: "plugin update" });
-  const marketplaceUpdateHandler = makeMarketplaceUpdateHandler(pi, {
+  const marketplaceUpdateHandler = makeMarketplaceUpdateHandler({
     completionCache: createCompletionCache(),
     gitOps: git.gitOps,
     beginPluginUpdateRun: () => pluginUpdate,
   });
 
   // act
-  await marketplaceUpdateHandler("--scope bogus", ctx);
+  await marketplaceUpdateHandler("--scope bogus", ctx, runWithNothingLoaded());
 
   // assert
   assert.deepStrictEqual(notifications, [
@@ -497,17 +495,17 @@ for (const { args, diagnostic } of [
     // arrange
     const { cwd, networkCallCount } = await createHermeticScope(t, "invalid-arguments");
     await seedThreeMarketplaces(cwd);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
     const git = createGitOpsFake({ boundary: "memory" });
     const pluginUpdate = mock<PluginUpdate>({ exactParams: true, name: "plugin update" });
-    const handler = makeMarketplaceUpdateHandler(pi, {
+    const handler = makeMarketplaceUpdateHandler({
       completionCache: createCompletionCache(),
       gitOps: git.gitOps,
       beginPluginUpdateRun: () => pluginUpdate,
     });
 
     // act
-    await handler(args, ctx);
+    await handler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -557,7 +555,7 @@ for (const { args, tally } of [
       '{ "marketplaces": { "alpha": { "source": "./alpha-local", "autoupdate": true } }, "plugins": { "keep@alpha": { "enabled": false } } }\n';
     await writeFile(locations.configJsonPath, sharedBytes);
     await writeFile(locations.configLocalJsonPath, localBytes);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 1, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
       value: cwd,
       reads: 1,
     });
@@ -567,14 +565,14 @@ for (const { args, tally } of [
       completionCache,
     );
     const git = createGitOpsFake({ boundary: "memory" });
-    const handler = makeMarketplaceUpdateHandler(pi, {
+    const handler = makeMarketplaceUpdateHandler({
       completionCache,
       gitOps: git.gitOps,
       beginPluginUpdateRun: operations.beginPluginUpdateRun,
     });
 
     // act
-    await handler(args, ctx);
+    await handler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -603,4 +601,57 @@ for (const { args, tally } of [
     assert.deepStrictEqual(git.state.calls.fetch.map(describeFetch), [fetchOf(cloneDir)]);
     verifyBoundary();
   });
+}
+
+for (const mode of ["json", "rpc"] as const) {
+  for (const { args, message } of [
+    {
+      args: "--scope bad",
+      message: 'Invalid --scope value: "bad". Must be "user" or "project".',
+    },
+    {
+      args: "--bogus",
+      message: 'Unknown flag: "--bogus".',
+    },
+    {
+      args: '""',
+      message: "Argument must not be empty.",
+    },
+    {
+      args: "alpha@official beta@official",
+      message: "Too many arguments.",
+    },
+  ]) {
+    test(`appends marketplace/update rejection for ${args} in ${mode} (enabled)`, async () => {
+      // arrange
+      const { ctx, run, capture, verifyBoundary } = createMachineNotificationBoundary(mode);
+      const deps = mock<Parameters<typeof makeMarketplaceUpdateHandler>[0]>({
+        exactParams: true,
+        name: "handler dependencies",
+      });
+      const commandHandler = makeMarketplaceUpdateHandler(deps);
+
+      // act
+      await commandHandler(args, ctx, run);
+
+      // assert
+      assert.deepStrictEqual(capture.entries, [
+        {
+          customType: "claude-plugin",
+          payload: {
+            schemaVersion: 1,
+            origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+            kind: "usage-error",
+            severity: "error",
+            needsReload: false,
+            message,
+            usage: "Usage: /claude:plugin marketplace update [<name>] [--scope user|project]",
+          },
+        },
+      ]);
+      capture.assertValid();
+      verifyBoundary();
+      verify(deps);
+    });
+  }
 }

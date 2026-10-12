@@ -23,8 +23,10 @@ import {
 } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { withHermeticEnvironment } from "../platform/hermetic-environment.ts";
+import { runWithNothingLoaded } from "../shared/notification-run-seeds.ts";
 
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { NotificationRun } from "../../extensions/pi-claude-marketplace/shared/notification-run.ts";
+import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 // LIFE-01 + LIFE-02 end-to-end integration: a hooks-declaring plugin
 // flows through install -> update -> reinstall -> uninstall and at every
@@ -38,21 +40,19 @@ interface NotifyRecord {
 
 function makeCtx(): {
   ctx: ExtensionContext;
-  pi: ExtensionAPI;
+  run: NotificationRun;
   notifications: NotifyRecord[];
 } {
   const notifications: NotifyRecord[] = [];
   const ctx = {
+    mode: "tui",
     ui: {
       notify: (m: string, s?: string): void => {
         notifications.push(s === undefined ? { message: m } : { message: m, severity: s });
       },
     },
   } as ExtensionContext;
-  const pi = {
-    getAllTools: (): unknown[] => [],
-  } as ExtensionAPI;
-  return { ctx, pi, notifications };
+  return { ctx, run: runWithNothingLoaded(), notifications };
 }
 
 async function withHermeticHome<T>(fn: () => Promise<T>): Promise<T> {
@@ -168,12 +168,12 @@ test("LIFE-01 / LIFE-02 integration: install -> update -> reinstall -> uninstall
       });
 
       {
-        const { ctx, pi, notifications } = makeCtx();
+        const { ctx, run, notifications } = makeCtx();
 
         // act
         await installPlugin({
           ctx,
-          pi,
+          run,
           scope: "project",
           cwd,
           marketplace: "mp",
@@ -215,12 +215,12 @@ test("LIFE-01 / LIFE-02 integration: install -> update -> reinstall -> uninstall
       await writeFile(path.join(seed.pluginRoot, "hooks", "hooks.json"), JSON.stringify(v2Hooks));
 
       {
-        const { ctx, pi, notifications } = makeCtx();
+        const { ctx, run, notifications } = makeCtx();
 
         // act
         await updatePlugins({
           ctx,
-          pi,
+          run,
           scope: "project",
           cwd,
           target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
@@ -243,12 +243,12 @@ test("LIFE-01 / LIFE-02 integration: install -> update -> reinstall -> uninstall
       await writeFile(hooksPath, JSON.stringify({ corrupted: true }));
 
       {
-        const { ctx, pi, notifications } = makeCtx();
+        const { ctx, run, notifications } = makeCtx();
 
         // act
         const outcome = await reinstallPlugin({
           ctx,
-          pi,
+          run,
           scope: "project",
           cwd,
           marketplace: "mp",
@@ -268,7 +268,7 @@ test("LIFE-01 / LIFE-02 integration: install -> update -> reinstall -> uninstall
 
       {
         // arrange
-        const { ctx, pi, notifications } = makeCtx();
+        const { ctx, run, notifications } = makeCtx();
 
         // act
         await createUninstallOperation(
@@ -276,7 +276,7 @@ test("LIFE-01 / LIFE-02 integration: install -> update -> reinstall -> uninstall
           completionCache,
         )({
           ctx,
-          pi,
+          run,
           scope: "project",
           cwd,
           marketplace: "mp",

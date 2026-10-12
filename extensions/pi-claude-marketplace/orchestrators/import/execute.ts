@@ -58,10 +58,11 @@ import type {
 } from "../../orchestrators/marketplace/add.ts";
 import type { InstallHooksRouting } from "../../orchestrators/plugin/install-disable-cascade.ts";
 import type { InstallPluginOutcome } from "../../orchestrators/types.ts";
-import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
+import type { ExtensionContext } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
-import type { McpConfigNotice } from "../../shared/notification-dispatch.ts";
+import type { NotificationRun } from "../../shared/notification-run.ts";
+import type { McpConfigNotice } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 
 export interface MarketplaceAddedOutcome {
@@ -228,7 +229,12 @@ export interface ImportDeps {
 
 export interface ImportClaudeSettingsOptions {
   readonly ctx: ExtensionContext;
-  readonly pi: ExtensionAPI;
+  /**
+   * D-05 / D-07: the command's run. The import cascade, the nested
+   * marketplace adds, and the nested plugin installs read its one
+   * soft-dependency snapshot.
+   */
+  readonly run: NotificationRun;
   readonly cwd: string;
   readonly selectedScopes: readonly Scope[];
   readonly hooksRouting: InstallHooksRouting;
@@ -854,7 +860,7 @@ async function installOnePlannedPlugin(
   try {
     outcome = await installPlugin({
       ctx: opts.ctx,
-      pi: opts.pi,
+      run: opts.run,
       scope: plugin.scope,
       cwd: opts.cwd,
       marketplace: plugin.ref.marketplace,
@@ -941,7 +947,7 @@ async function addOnePlannedMarketplace(
   try {
     const outcome = await addMarketplace({
       ctx: opts.ctx,
-      pi: opts.pi,
+      run: opts.run,
       scope: marketplace.scope,
       cwd: opts.cwd,
       rawSource: marketplace.source,
@@ -1446,6 +1452,7 @@ function dispatchFailedOutcome(
  */
 function surfaceImportDiagnostics(
   ctx: ImportClaudeSettingsOptions["ctx"],
+  run: NotificationRun,
   diagnostics: readonly ImportDiagnostic[],
 ): void {
   if (diagnostics.length === 0) {
@@ -1457,7 +1464,7 @@ function surfaceImportDiagnostics(
     lines.length === 1
       ? "1 import diagnostic surfaced."
       : `${lines.length.toString()} import diagnostics surfaced.`;
-  notifyDiagnostic(ctx, header, lines);
+  notifyDiagnostic(ctx, run, header, lines);
 }
 
 /**
@@ -1503,17 +1510,16 @@ export async function importClaudeSettings(
   // executeScopedPlan try/catch covers expected loadState failures.
   // D-12 / OUT-07: the import cascade is bulk (one import touches many
   // marketplaces) -> Plural row cardinality. D-02: thread IMPORT_CONTEXT + the
-  // rows through notifyWithContext, so import's per-row rendering dispatches
-  // through its own render map (MOD-03), never the central renderPluginRow
-  // switch.
+  // rows through notifyWithContext, so import's rows resolve through its own
+  // row policies (MOD-03).
   const marketplaces: Plural<MarketplaceRows<ImportMsg>> =
     buildImportNotificationMarketplaces(result);
   // OUT-04 / D-04: import is a plural (bulk) operation -> emit the trailing
   // per-operation tally under the `Import` label.
-  notifyWithContext(opts.ctx, opts.pi, IMPORT_CONTEXT, marketplaces, undefined, "plural");
-  surfaceImportDiagnostics(opts.ctx, result.diagnostics);
+  notifyWithContext(opts.ctx, opts.run, IMPORT_CONTEXT, marketplaces, undefined, "plural");
+  surfaceImportDiagnostics(opts.ctx, opts.run, result.diagnostics);
   const { mcpConfigNotices, ...executionResult } = result;
-  notifyMcpConfigNotices(opts.ctx, mcpConfigNotices);
+  notifyMcpConfigNotices(opts.ctx, opts.run, mcpConfigNotices);
 
   return executionResult;
 }

@@ -41,8 +41,16 @@ export interface PruneRestoreFailure {
   readonly cause: Error;
 }
 
-/** Filesystem operations faultable at the restore seam. */
+/**
+ * Filesystem operations that create and remove the prune backup root. The
+ * optional members fault the restore steps.
+ */
 export interface PruneRestoreOps {
+  /**
+   * Creates a new directory whose path is the prefix plus a unique suffix, as
+   * `mkdtemp` does, and returns that path.
+   */
+  readonly createBackupRoot: (prefix: string) => Promise<string>;
   readonly link?: typeof link;
   readonly removeBackup: typeof rm;
   readonly afterMetadataRead?: (target: string) => Promise<void>;
@@ -354,7 +362,9 @@ export async function preparePruneRollback(
   ops: PruneRestoreOps,
 ): Promise<PruneRollback> {
   const targets = await artifactTargets(locations, members);
-  const backupRoot = await mkdtemp(path.join(locations.extensionRoot, "prune-backup-"));
+  const backupRoot = await ops.createBackupRoot(
+    path.join(locations.extensionRoot, "prune-backup-"),
+  );
   const artifacts: SavedPath[] = [];
   let agentsIndex: SavedPath;
   let mcp: SavedPath;

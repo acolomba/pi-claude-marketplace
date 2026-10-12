@@ -104,7 +104,7 @@ import type { ExtensionState, PluginInstallRecord } from "../../persistence/stat
 import type {
   McpMigrationRow,
   McpMigrationUnfinishedRow,
-} from "../../shared/notification-dispatch.ts";
+} from "../../shared/notification-types.ts";
 import type { LockedStateTransaction } from "../../transaction/with-state-guard.ts";
 
 /**

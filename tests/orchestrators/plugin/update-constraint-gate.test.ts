@@ -9,6 +9,7 @@ import {
   evaluateUpdateConstraint,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-constraint-gate.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type { GitBackedSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import type {
@@ -81,7 +82,7 @@ function credentialOps(): CredentialOps {
 
 /** A no-op ui context, for the git-arm cases whose auth threading needs one. */
 function silentCtx(): NotificationContext {
-  return { ui: { notify: () => undefined } };
+  return { mode: "tui", ui: { notify: () => undefined } };
 }
 
 /** The target's own git source repository, for the git-arm cases below. */
@@ -467,8 +468,9 @@ describe("evaluateUpdateConstraint", () => {
     const state = stateOf({ mp: { target: pluginRecord(), alpha: pluginRecord() } });
     const source = gitSource();
     const calls: DependencyTagProbeOptions[] = [];
-    const ctx: NotificationContext = { ui: { notify: () => undefined } };
+    const ctx: NotificationContext = { mode: "tui", ui: { notify: () => undefined } };
     const credOps = credentialOps();
+    const run = runWithNothingLoaded();
     const seam: UpdateConstraintSeam = {
       buildScopeDeclarationDetail: () => Promise.resolve({ ok: true, declarations }),
       probeDependencyTags: (probeOptions) => {
@@ -491,7 +493,7 @@ describe("evaluateUpdateConstraint", () => {
         state,
         entry: { name: "target", source },
         seam,
-        auth: { ctx, credentialOps: credOps },
+        auth: { notification: { ctx, run }, credentialOps: credOps },
       }),
     );
 
@@ -510,7 +512,7 @@ describe("evaluateUpdateConstraint", () => {
     assert.strictEqual(calls[0]?.pluginName, "target");
     assert.deepStrictEqual(calls[0]?.source, source);
     assert.strictEqual(calls[0]?.range, ">=1.0.0 <2.0.0-0");
-    assert.deepStrictEqual(calls[0]?.auth, { ctx, credentialOps: credOps });
+    assert.deepStrictEqual(calls[0]?.auth, { ctx, run, credentialOps: credOps });
   });
 
   test("D-10-20: a commit-pinned git entry still probes tags for its constraint", async () => {
@@ -550,7 +552,10 @@ describe("evaluateUpdateConstraint", () => {
         state,
         entry: { name: "target", source },
         seam,
-        auth: { ctx: silentCtx(), credentialOps: credentialOps() },
+        auth: {
+          notification: { ctx: silentCtx(), run: runWithNothingLoaded() },
+          credentialOps: credentialOps(),
+        },
       }),
     );
 
@@ -575,8 +580,9 @@ describe("evaluateUpdateConstraint", () => {
     ]);
     const state = stateOf({ mp: { target: pluginRecord(), alpha: pluginRecord() } });
     const source = gitSource();
-    const ctx: NotificationContext = { ui: { notify: () => undefined } };
+    const ctx: NotificationContext = { mode: "tui", ui: { notify: () => undefined } };
     const credOps = credentialOps();
+    const run = runWithNothingLoaded();
     const deviceFlowHttp: DeviceFlowHttp = {
       requestCode: () => Promise.reject(new Error("not used")),
       pollToken: () => Promise.reject(new Error("not used")),
@@ -600,7 +606,7 @@ describe("evaluateUpdateConstraint", () => {
         state,
         entry: { name: "target", source },
         seam,
-        auth: { ctx, credentialOps: credOps, deviceFlowHttp, authMemo },
+        auth: { notification: { ctx, run }, credentialOps: credOps, deviceFlowHttp, authMemo },
       }),
     );
 
@@ -609,6 +615,7 @@ describe("evaluateUpdateConstraint", () => {
     // acquisition path (AUTH-09).
     assert.strictEqual(calls.length, 1);
     assert.strictEqual(calls[0]?.auth.ctx, ctx);
+    assert.strictEqual(calls[0]?.auth.run, run);
     assert.strictEqual(calls[0]?.auth.credentialOps, credOps);
     assert.strictEqual(calls[0]?.auth.deviceFlowHttp, deviceFlowHttp);
     assert.strictEqual(calls[0]?.auth.authMemo, authMemo);
@@ -704,7 +711,10 @@ describe("evaluateUpdateConstraint", () => {
         state,
         entry: { name: "target", source: gitSource() },
         seam: seamReturning(declarations),
-        auth: { ctx: silentCtx(), credentialOps: credentialOps() },
+        auth: {
+          notification: { ctx: silentCtx(), run: runWithNothingLoaded() },
+          credentialOps: credentialOps(),
+        },
       }),
     );
 
@@ -771,7 +781,10 @@ describe("evaluateUpdateConstraint", () => {
         state,
         entry: { name: "target", source },
         seam,
-        auth: { ctx: silentCtx(), credentialOps: credentialOps() },
+        auth: {
+          notification: { ctx: silentCtx(), run: runWithNothingLoaded() },
+          credentialOps: credentialOps(),
+        },
       }),
     );
 
@@ -838,7 +851,10 @@ describe("evaluateUpdateConstraint", () => {
         state,
         entry: { name: "target", source },
         seam,
-        auth: { ctx: silentCtx(), credentialOps: credentialOps() },
+        auth: {
+          notification: { ctx: silentCtx(), run: runWithNothingLoaded() },
+          credentialOps: credentialOps(),
+        },
       }),
     );
 
@@ -902,7 +918,10 @@ describe("evaluateUpdateConstraint", () => {
       },
     };
     const tagMemo = new Map<string, readonly RemoteTag[]>();
-    const auth = { ctx: silentCtx(), credentialOps: credentialOps() };
+    const auth = {
+      notification: { ctx: silentCtx(), run: runWithNothingLoaded() },
+      credentialOps: credentialOps(),
+    };
 
     // act
     await evaluateUpdateConstraint(
@@ -975,7 +994,10 @@ describe("evaluateUpdateConstraint", () => {
       },
     };
     const tagMemo = new Map<string, readonly RemoteTag[]>();
-    const auth = { ctx: silentCtx(), credentialOps: credentialOps() };
+    const auth = {
+      notification: { ctx: silentCtx(), run: runWithNothingLoaded() },
+      credentialOps: credentialOps(),
+    };
 
     // act
     const first = await evaluateUpdateConstraint(

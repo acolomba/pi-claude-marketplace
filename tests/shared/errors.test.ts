@@ -13,10 +13,12 @@ import {
   CrossOriginChallengeError,
   CrossPluginConflictError,
   DependencyCascadeError,
+  DeviceFlowUnavailableError,
   errorMessage,
   errorWithCleanupFailures,
   errorWithManualRecovery,
   findManualRecoveryError,
+  formatCauseChain,
   InvalidMarketplaceManifestError,
   isErrnoException,
   ManualRecoveryError,
@@ -27,15 +29,56 @@ import {
   PluginShapeError,
   PluginUpdateConcurrencyError,
   PluginUpdatePhase3Error,
+  serializeCauseChain,
   StaleSourceCloneError,
   StateLockHeldError,
   TooManyRedirectsError,
   UnreadableSourceCloneError,
   UnremovableLeftoverCloneError,
   UnsupportedSourceError,
+  UnsupportedModeError,
   UnsafeGeneratedNameError,
   WorkflowNameCollisionError,
 } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
+
+describe("DeviceFlowUnavailableError", () => {
+  test("names the print refusal and its exact remedy", () => {
+    // arrange
+    const message =
+      "Device-flow authentication is unavailable in print mode. Retry with --mode json or interactive Pi.";
+
+    // act
+    const error = new DeviceFlowUnavailableError();
+
+    // assert
+    assert.ok(error instanceof Error);
+    assert.deepStrictEqual(
+      { name: error.name, message: error.message },
+      { name: "DeviceFlowUnavailableError", message },
+    );
+  });
+});
+
+describe("UnsupportedModeError", () => {
+  test("preserves the unsupported runtime mode as structured data", () => {
+    // arrange
+    const mode = " json";
+
+    // act
+    const error = new UnsupportedModeError(mode);
+
+    // assert
+    assert.ok(error instanceof Error);
+    assert.deepStrictEqual(
+      { name: error.name, mode: error.mode, message: error.message },
+      {
+        name: "UnsupportedModeError",
+        mode,
+        message: "Unsupported notification mode:  json",
+      },
+    );
+  });
+});
 
 import type {
   CleanupFailure,
@@ -278,6 +321,168 @@ describe("causeChainTrailer", () => {
 
     // assert
     assert.strictEqual(trailer, "cause: first -> second -> first -> second -> first (truncated)");
+  });
+
+  test("PMOD-04 shows *** in place of a token carried by a nested link", () => {
+    // arrange
+    const error = new Error("update failed", {
+      cause: new Error("auth with ghp_0123456789abcdefghijklmnopqrstuvwxyz rejected"),
+    });
+
+    // act
+    const trailer = causeChainTrailer(error);
+
+    // assert
+    assert.strictEqual(trailer, "cause: update failed -> auth with *** rejected");
+  });
+});
+
+describe("serializeCauseChain", () => {
+  for (const { title, thrownValue } of [
+    { title: "undefined", thrownValue: undefined },
+    { title: "null", thrownValue: null },
+  ]) {
+    test(`returns no chain for ${title}`, () => {
+      // arrange
+      const expectedChain = undefined;
+
+      // act
+      const chain = serializeCauseChain(thrownValue);
+
+      // assert
+      assert.strictEqual(chain, expectedChain);
+    });
+  }
+
+  test("serializes one Error as a single untruncated link", () => {
+    // arrange
+    const error = new Error("outer");
+
+    // act
+    const chain = serializeCauseChain(error);
+
+    // assert
+    assert.deepStrictEqual(chain, { causeChain: ["outer"], truncated: false });
+  });
+
+  test("keeps five links of a six-deep chain and marks it truncated", () => {
+    // arrange
+    const error = new Error("link-1", {
+      cause: new Error("link-2", {
+        cause: new Error("link-3", {
+          cause: new Error("link-4", {
+            cause: new Error("link-5", { cause: new Error("link-6") }),
+          }),
+        }),
+      }),
+    });
+
+    // act
+    const chain = serializeCauseChain(error);
+
+    // assert
+    assert.deepStrictEqual(chain, {
+      causeChain: ["link-1", "link-2", "link-3", "link-4", "link-5"],
+      truncated: true,
+    });
+  });
+
+  test("stops at one link for a self-referencing cause", () => {
+    // arrange
+    const error = new Error("loop");
+    error.cause = error;
+
+    // act
+    const chain = serializeCauseChain(error);
+
+    // assert
+    assert.deepStrictEqual(chain, { causeChain: ["loop"], truncated: false });
+  });
+
+  test("keeps a string cause verbatim", () => {
+    // arrange
+    const error = new Error("outer", { cause: "  inner text  " });
+
+    // act
+    const chain = serializeCauseChain(error);
+
+    // assert
+    assert.deepStrictEqual(chain, { causeChain: ["outer", "  inner text  "], truncated: false });
+  });
+
+  test("renders a plain-object cause through Object.prototype.toString", () => {
+    // arrange
+    const error = new Error("outer", { cause: { detail: "inner" } });
+
+    // act
+    const chain = serializeCauseChain(error);
+
+    // assert
+    assert.deepStrictEqual(chain, { causeChain: ["outer", "[object Object]"], truncated: false });
+  });
+
+  test("keeps the basename-only cleanup suffix of a CleanupContextError link", () => {
+    // arrange
+    const error = new CleanupContextError(new Error("state save failed"), [
+      {
+        phase: "abort",
+        artifact: "commands",
+        path: "/scope/commands-staging/uuid",
+        cause: new Error("EACCES: /scope/commands-staging/uuid"),
+      },
+    ]);
+
+    // act
+    const chain = serializeCauseChain(error);
+
+    // assert
+    assert.deepStrictEqual(chain, {
+      causeChain: [
+        "state save failed (cleanup: abort commands uuid: EACCES: uuid)",
+        "state save failed",
+      ],
+      truncated: false,
+    });
+  });
+
+  test("PMOD-04 / D-07 redacts the credentials of every serialized link", () => {
+    // arrange
+    const error = new Error("clone https://user:tok@github.com/o/r failed", {
+      cause: new Error("auth with ghp_0123456789abcdefghijklmnopqrstuvwxyz rejected"),
+    });
+
+    // act
+    const chain = serializeCauseChain(error);
+
+    // assert
+    assert.deepStrictEqual(chain, {
+      causeChain: ["clone https://***@github.com/o/r failed", "auth with *** rejected"],
+      truncated: false,
+    });
+  });
+});
+
+describe("formatCauseChain", () => {
+  test("joins the links after the cause prefix", () => {
+    // arrange
+    const chain = { causeChain: ["outer", "inner"], truncated: false };
+
+    // act
+    const line = formatCauseChain(chain);
+
+    // assert
+    assert.strictEqual(line, "cause: outer -> inner");
+  });
+
+  test("appends the truncation marker after the last link", () => {
+    // arrange
+    const chain = { causeChain: ["link-1", "link-5"], truncated: true };
+
+    // act
+    const line = formatCauseChain(chain);
+
+    // assert
+    assert.strictEqual(line, "cause: link-1 -> link-5 (truncated)");
   });
 });
 

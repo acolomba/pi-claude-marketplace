@@ -9,8 +9,8 @@ import { parseArgs } from "../../args.ts";
 
 import type { GitOps } from "../../../orchestrators/marketplace/shared.ts";
 import type { InstallHooksRouting } from "../../../orchestrators/plugin/install-disable-cascade.ts";
-import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
 import type { CompletionCache } from "../../../shared/completion-cache.ts";
+import type { SubcommandHandler } from "../../router.ts";
 
 const USAGE = "Usage: /claude:plugin import [--scope user|project]";
 
@@ -22,17 +22,20 @@ export interface ImportHandlerDeps {
   ) => Promise<ClaudeImportExecutionResult>;
 }
 
+/**
+ * Builds the `import` handler. Import's own cascade and its nested
+ * marketplace adds and plugin installs render from the router's run (D-07).
+ */
 export function makeImportHandler(
-  pi: ExtensionAPI,
   deps: ImportHandlerDeps,
   hooksRouting: InstallHooksRouting,
-): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
-  return async (args, ctx): Promise<void> => {
+): SubcommandHandler {
+  return async (args, ctx, run): Promise<void> => {
     let parsed: ReturnType<typeof parseArgs>;
     try {
       parsed = parseArgs(args);
     } catch (err) {
-      notifyUsageError(ctx, {
+      notifyUsageError(ctx, run, {
         message: errorMessage(err),
         usage: USAGE,
       });
@@ -40,7 +43,7 @@ export function makeImportHandler(
     }
 
     if (parsed.positional.length > 0) {
-      notifyUsageError(ctx, {
+      notifyUsageError(ctx, run, {
         message: "import does not accept positional arguments.",
         usage: USAGE,
       });
@@ -49,7 +52,7 @@ export function makeImportHandler(
 
     const options: ImportClaudeSettingsOptions = {
       ctx,
-      pi,
+      run,
       cwd: ctx.cwd,
       selectedScopes: parsed.scope === undefined ? ["project", "user"] : [parsed.scope],
       gitOps: deps.gitOps,

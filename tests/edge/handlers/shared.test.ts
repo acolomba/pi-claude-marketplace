@@ -11,9 +11,9 @@
 // placement row therefore asserts one identical whole value.
 //
 // `extractLocalFlag` reaches the user only through `notifyUsageError`, which
-// writes straight to the notification channel and runs no soft-dependency probe,
-// so every case sizes the boundary at zero probes. An accepting case sizes it at
-// zero emissions as well, which is what proves a successful scan is silent.
+// writes straight to the notification channel and runs no soft-dependency probe.
+// An accepting case sizes the boundary at zero emissions, which is what proves a
+// successful scan is silent.
 //
 // ER-F19: consuming the `--scope` value is load-bearing and is the one property a
 // scanner rewrite can drop while every other case here stays green. Two cases hold
@@ -31,6 +31,8 @@ import { test } from "node:test";
 
 import { passThroughFlagNames } from "../../../extensions/pi-claude-marketplace/edge/flag-catalog.ts";
 import { extractLocalFlag } from "../../../extensions/pi-claude-marketplace/edge/handlers/shared.ts";
+import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
+import { createMachineNotificationBoundary } from "../notification-boundary.ts";
 import { createNotificationBoundary } from "../notification-boundary.ts";
 
 import type {
@@ -47,10 +49,14 @@ const INSTALL_USAGE =
 
 test("reports the flag off and rejoins the positionals when no flag is supplied", () => {
   // arrange
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
 
   // act
-  const scanned = extractLocalFlag("alpha@official beta@official", ctx, ENABLE_USAGE);
+  const scanned = extractLocalFlag("alpha@official beta@official", {
+    ctx: ctx,
+    run: runWithNothingLoaded(),
+    usage: ENABLE_USAGE,
+  });
 
   // assert
   assert.deepStrictEqual(scanned, {
@@ -68,10 +74,14 @@ for (const { args, placement } of [
 ]) {
   test(`removes the scope-target flag from the residual when it appears ${placement} (WR-02)`, () => {
     // arrange
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
 
     // act
-    const scanned = extractLocalFlag(args, ctx, ENABLE_USAGE);
+    const scanned = extractLocalFlag(args, {
+      ctx: ctx,
+      run: runWithNothingLoaded(),
+      usage: ENABLE_USAGE,
+    });
 
     // assert
     assert.deepStrictEqual(scanned, {
@@ -85,10 +95,14 @@ for (const { args, placement } of [
 
 test("removes every scope-target token when the flag is supplied more than once (WR-02)", () => {
   // arrange
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
 
   // act
-  const scanned = extractLocalFlag("--local alpha@official --local", ctx, ENABLE_USAGE);
+  const scanned = extractLocalFlag("--local alpha@official --local", {
+    ctx: ctx,
+    run: runWithNothingLoaded(),
+    usage: ENABLE_USAGE,
+  });
 
   // assert
   assert.deepStrictEqual(scanned, {
@@ -101,10 +115,14 @@ test("removes every scope-target token when the flag is supplied more than once 
 
 test("leaves both tokens of a scope pair in the residual for the downstream parser", () => {
   // arrange
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
 
   // act
-  const scanned = extractLocalFlag("alpha@official --scope project", ctx, ENABLE_USAGE);
+  const scanned = extractLocalFlag("alpha@official --scope project", {
+    ctx: ctx,
+    run: runWithNothingLoaded(),
+    usage: ENABLE_USAGE,
+  });
 
   // assert
   assert.deepStrictEqual(scanned, {
@@ -117,10 +135,14 @@ test("leaves both tokens of a scope pair in the residual for the downstream pars
 
 test("passes an unrecognised scope value through instead of rejecting it", () => {
   // arrange
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
 
   // act
-  const scanned = extractLocalFlag("alpha@official --scope global", ctx, ENABLE_USAGE);
+  const scanned = extractLocalFlag("alpha@official --scope global", {
+    ctx: ctx,
+    run: runWithNothingLoaded(),
+    usage: ENABLE_USAGE,
+  });
 
   // assert
   assert.deepStrictEqual(scanned, {
@@ -133,10 +155,14 @@ test("passes an unrecognised scope value through instead of rejecting it", () =>
 
 test("consumes the token after the scope flag as its value, so a scope-target token there leaves the flag off", () => {
   // arrange
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
 
   // act
-  const scanned = extractLocalFlag("--scope --local alpha@official", ctx, ENABLE_USAGE);
+  const scanned = extractLocalFlag("--scope --local alpha@official", {
+    ctx: ctx,
+    run: runWithNothingLoaded(),
+    usage: ENABLE_USAGE,
+  });
 
   // assert
   assert.deepStrictEqual(scanned, {
@@ -149,10 +175,14 @@ test("consumes the token after the scope flag as its value, so a scope-target to
 
 test("reports the flag off and raises no usage error when the scope flag has no value to consume", () => {
   // arrange
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
 
   // act
-  const scanned = extractLocalFlag("--scope", ctx, ENABLE_USAGE);
+  const scanned = extractLocalFlag("--scope", {
+    ctx: ctx,
+    run: runWithNothingLoaded(),
+    usage: ENABLE_USAGE,
+  });
 
   // assert
   assert.deepStrictEqual(scanned, {
@@ -165,14 +195,13 @@ test("reports the flag off and raises no usage error when the scope flag has no 
 
 test("keeps a caller-listed long flag verbatim in the residual and leaves the flag off", () => {
   // arrange
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
   const passThroughFlags = passThroughFlagNames("install");
 
   // act
   const scanned = extractLocalFlag(
     "alpha@official --map-model",
-    ctx,
-    INSTALL_USAGE,
+    { ctx: ctx, run: runWithNothingLoaded(), usage: INSTALL_USAGE },
     passThroughFlags,
   );
 
@@ -187,11 +216,15 @@ test("keeps a caller-listed long flag verbatim in the residual and leaves the fl
 
 test("rejects a long flag the caller did not list, naming the offending token (MSG-NC-2)", () => {
   // arrange
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
   const passThroughFlags = passThroughFlagNames("install");
 
   // act
-  const scanned = extractLocalFlag("alpha@official --bogus", ctx, INSTALL_USAGE, passThroughFlags);
+  const scanned = extractLocalFlag(
+    "alpha@official --bogus",
+    { ctx: ctx, run: runWithNothingLoaded(), usage: INSTALL_USAGE },
+    passThroughFlags,
+  );
 
   // assert
   assert.strictEqual(scanned, undefined);
@@ -207,10 +240,14 @@ test("rejects a long flag the caller did not list, naming the offending token (M
 
 test("keeps scanning past an accepted scope-target token and still rejects a later unknown flag (MSG-NC-2)", () => {
   // arrange
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
 
   // act
-  const scanned = extractLocalFlag("--local alpha@official --bogus", ctx, ENABLE_USAGE);
+  const scanned = extractLocalFlag("--local alpha@official --bogus", {
+    ctx: ctx,
+    run: runWithNothingLoaded(),
+    usage: ENABLE_USAGE,
+  });
 
   // assert
   assert.strictEqual(scanned, undefined);
@@ -226,10 +263,14 @@ test("keeps scanning past an accepted scope-target token and still rejects a lat
 
 test("treats a single-dash token as an ordinary residual token rather than a long flag", () => {
   // arrange
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
 
   // act
-  const scanned = extractLocalFlag("-x alpha@official", ctx, ENABLE_USAGE);
+  const scanned = extractLocalFlag("-x alpha@official", {
+    ctx: ctx,
+    run: runWithNothingLoaded(),
+    usage: ENABLE_USAGE,
+  });
 
   // assert
   assert.deepStrictEqual(scanned, {
@@ -248,10 +289,14 @@ for (const { args, spacing } of [
 ]) {
   test(`separates the residual with single spaces and emits no empty token given ${spacing}`, () => {
     // arrange
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
 
     // act
-    const scanned = extractLocalFlag(args, ctx, ENABLE_USAGE);
+    const scanned = extractLocalFlag(args, {
+      ctx: ctx,
+      run: runWithNothingLoaded(),
+      usage: ENABLE_USAGE,
+    });
 
     // assert
     assert.deepStrictEqual(scanned, {
@@ -265,10 +310,14 @@ for (const { args, spacing } of [
 
 test("reports the flag off with an empty residual when no argument text is supplied", () => {
   // arrange
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
 
   // act
-  const scanned = extractLocalFlag("", ctx, ENABLE_USAGE);
+  const scanned = extractLocalFlag("", {
+    ctx: ctx,
+    run: runWithNothingLoaded(),
+    usage: ENABLE_USAGE,
+  });
 
   // assert
   assert.deepStrictEqual(scanned, { local: false, residualArgs: "" } satisfies Scan);
@@ -283,10 +332,14 @@ for (const args of [
 ]) {
   test(`preserves quoted positional spelling while extracting the flag from ${args}`, () => {
     // arrange
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
 
     // act
-    const scanned = extractLocalFlag(args, ctx, ENABLE_USAGE);
+    const scanned = extractLocalFlag(args, {
+      ctx: ctx,
+      run: runWithNothingLoaded(),
+      usage: ENABLE_USAGE,
+    });
 
     // assert
     assert.deepStrictEqual(scanned, {
@@ -300,10 +353,14 @@ for (const args of [
 
 test("preserves quoted whitespace and punctuation without recognizing embedded flags", () => {
   // arrange
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
 
   // act
-  const scanned = extractLocalFlag("'a \"b\" --bogus 🦊' --local", ctx, ENABLE_USAGE);
+  const scanned = extractLocalFlag("'a \"b\" --bogus 🦊' --local", {
+    ctx: ctx,
+    run: runWithNothingLoaded(),
+    usage: ENABLE_USAGE,
+  });
 
   // assert
   assert.deepStrictEqual(scanned, {
@@ -321,10 +378,14 @@ for (const { args, residualArgs } of [
 ]) {
   test(`preserves supplied empty arguments while scanning ${args}`, () => {
     // arrange
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
 
     // act
-    const scanned = extractLocalFlag(args, ctx, ENABLE_USAGE);
+    const scanned = extractLocalFlag(args, {
+      ctx: ctx,
+      run: runWithNothingLoaded(),
+      usage: ENABLE_USAGE,
+    });
 
     // assert
     assert.deepStrictEqual(scanned, { local: true, residualArgs } satisfies Scan);
@@ -335,11 +396,15 @@ for (const { args, residualArgs } of [
 
 test("consuming mode returns an empty flag set when no boolean is present", () => {
   // arrange
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
   const flags: ConsumeLongFlags = { consumeLongFlags: ["--keep-data"] };
 
   // act
-  const scanned = extractLocalFlag("alpha@official", ctx, ENABLE_USAGE, flags);
+  const scanned = extractLocalFlag(
+    "alpha@official",
+    { ctx: ctx, run: runWithNothingLoaded(), usage: ENABLE_USAGE },
+    flags,
+  );
 
   // assert
   assert.deepStrictEqual(scanned, {
@@ -392,12 +457,16 @@ for (const { args, local, residualArgs, consumedFlags } of [
 ]) {
   test(`consuming mode extracts the supplied booleans from "${args}"`, () => {
     // arrange
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
 
     // act
-    const scanned = extractLocalFlag(args, ctx, ENABLE_USAGE, {
-      consumeLongFlags: ["--keep-data", "--another"],
-    });
+    const scanned = extractLocalFlag(
+      args,
+      { ctx: ctx, run: runWithNothingLoaded(), usage: ENABLE_USAGE },
+      {
+        consumeLongFlags: ["--keep-data", "--another"],
+      },
+    );
 
     // assert
     assert.deepStrictEqual(scanned, {
@@ -413,12 +482,16 @@ for (const { args, local, residualArgs, consumedFlags } of [
 for (const scopeValue of ["--keep-data", "--local", "--delete-data", "-y", "--yes", "--prune"]) {
   test(`consuming mode retains "${scopeValue}" as a scope value without enabling a boolean`, () => {
     // arrange
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
 
     // act
-    const scanned = extractLocalFlag(`--scope ${scopeValue} alpha@official`, ctx, ENABLE_USAGE, {
-      consumeLongFlags: ["--keep-data"],
-    });
+    const scanned = extractLocalFlag(
+      `--scope ${scopeValue} alpha@official`,
+      { ctx: ctx, run: runWithNothingLoaded(), usage: ENABLE_USAGE },
+      {
+        consumeLongFlags: ["--keep-data"],
+      },
+    );
 
     // assert
     assert.deepStrictEqual(scanned, {
@@ -438,12 +511,16 @@ for (const flag of ["--delete-data", "-y", "--yes", "--prune", "--keep-data=fals
   ]) {
     test(`consuming mode rejects "${flag}" ${placement}`, () => {
       // arrange
-      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
 
       // act
-      const scanned = extractLocalFlag(args, ctx, ENABLE_USAGE, {
-        consumeLongFlags: ["--keep-data"],
-      });
+      const scanned = extractLocalFlag(
+        args,
+        { ctx: ctx, run: runWithNothingLoaded(), usage: ENABLE_USAGE },
+        {
+          consumeLongFlags: ["--keep-data"],
+        },
+      );
 
       // assert
       assert.strictEqual(scanned, undefined);
@@ -456,4 +533,33 @@ for (const flag of ["--delete-data", "-y", "--yes", "--prune", "--keep-data=fals
       verifyBoundary();
     });
   }
+}
+
+for (const mode of ["json", "rpc"] as const) {
+  test(`appends flag rejection through the supplied run in ${mode}`, () => {
+    // arrange
+    const { ctx, run, capture, verifyBoundary } = createMachineNotificationBoundary(mode);
+
+    // act
+    const scanned = extractLocalFlag("--bogus", { ctx, run, usage: ENABLE_USAGE });
+
+    // assert
+    assert.strictEqual(scanned, undefined);
+    assert.deepStrictEqual(capture.entries, [
+      {
+        customType: "claude-plugin",
+        payload: {
+          schemaVersion: 1,
+          origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+          kind: "usage-error",
+          severity: "error",
+          needsReload: false,
+          message: 'Unknown flag: "--bogus".',
+          usage: ENABLE_USAGE,
+        },
+      },
+    ]);
+    capture.assertValid();
+    verifyBoundary();
+  });
 }

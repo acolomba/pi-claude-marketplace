@@ -17,11 +17,13 @@
  *   - D-79-04: endpoints/clientId/scope/credentialFrom are read from a
  *     GitAuthProvider descriptor; `provider` defaults to GITHUB_PROVIDER so
  *     the github.com path is byte-identical.
- *   - D-32-04: notifyFn callback (no `ctx` import; preserves the
- *     shared/notification-dispatch.ts chokepoint at the boundary).
- *   - D-32-06: AUTH-09 discipline -- user_code and verification_uri MAY
- *     appear in notifyFn; access_token / cred.* / r.accessToken MUST NEVER
- *     appear in notifyFn or new Error(...) interpolation. Enforced by
+ *   - D-32-04 / D-09: the `onDeviceCode` callback receives the prompt values
+ *     (no `ctx` import). The orchestrator binds it to the dispatch module's
+ *     prompt helper, which keeps shared/notification-dispatch.ts the only
+ *     notify site.
+ *   - D-32-06: AUTH-09 discipline -- only user_code and verification_uri
+ *     cross `onDeviceCode`; access_token / cred.* / r.accessToken MUST NEVER
+ *     reach it or a new Error(...) interpolation. Enforced by
  *     tests/architecture/no-credential-leak.test.ts.
  *
  * The GITHUB_PROVIDER.clientId in domain/auth-registry.ts is the registered
@@ -34,9 +36,10 @@
  *
  * AUTH-09 discipline (mechanical lock): the
  * tests/architecture/no-credential-leak.test.ts gate scans THIS file for
- * `new Error(...)` and `notifyFn(...)` calls that interpolate access_token /
- * accessToken / cred.<field> / r.accessToken. The gate is active once this
- * file exists on disk.
+ * `new Error(...)` calls that interpolate access_token / accessToken /
+ * cred.<field> / r.accessToken. It also requires at least one `onDeviceCode`
+ * call and allows only the exact form that passes `verificationUri` and
+ * `userCode` from the device-code response.
  */
 
 import { setTimeout as sleepMs } from "node:timers/promises";
@@ -45,6 +48,7 @@ import { GITHUB_PROVIDER, type GitAuthProvider } from "./auth-registry.ts";
 
 import type { CredentialOps } from "../platform/git-credential.ts";
 import type { GitCredentials } from "../platform/git.ts";
+import type { DeviceFlowPrompt } from "../shared/notification-types.ts";
 
 /**
  * Shape returned by GitHub's `/login/device/code` endpoint. Field-presence
@@ -102,20 +106,18 @@ export interface DeviceFlowHttp {
   pollToken(clientId: string, deviceCode: string, intervalSec: number): Promise<PollResult>;
 }
 
-/**
- * Pre-bound notify callback (D-32-04). Built at the orchestrator call site
- * with `makeRawNotifyFn` from shared/notification-dispatch.ts. Returns `void`
- * -- fire-and-forget per P32-5; do NOT await.
- */
-export type NotifyFn = (message: string, severity?: "info" | "warning" | "error") => void;
-
 export interface InitiateDeviceFlowOpts {
   /** Bare hostname for credentialOps.approve key (e.g. "github.com"). */
   host: string;
   /** CredentialOps instance (default or mock). */
   credentialOps: CredentialOps;
-  /** Pre-bound ctx.ui.notify callback per D-32-04. */
-  notifyFn: NotifyFn;
+  /**
+   * Receives the verification URI and the user code once, before polling
+   * starts (AUTH-03). The orchestrator binds it to the dispatch module's
+   * prompt helper; the domain imports no ctx (D-32-04, D-09). It returns
+   * `void` and is not awaited (P32-5).
+   */
+  onDeviceCode: (prompt: DeviceFlowPrompt) => void;
   /** Defaults to the fetch-backed adapter for the selected provider. */
   http?: DeviceFlowHttp;
   /**
@@ -139,7 +141,7 @@ export type DeviceFlowResult = { ok: true; cred: GitCredentials } | { ok: false;
  * `runPollLoop` uses for poll-error responses. No credential has been
  * issued yet at this point in the flow (this is the pre-token device-code
  * request), so the body's `error` / `error_description` fields are safe to
- * surface -- AUTH-09. The generic new-Error(...)/notifyFn(...) scan in
+ * surface -- AUTH-09. The generic new-Error(...) scan in
  * tests/architecture/no-credential-leak.test.ts cannot see through the
  * describeDeviceCodeErrorBody(res) call at requestCodeImpl's `new
  * Error(...)` site -- a lexical scan only ever sees `res.status` and a
@@ -413,9 +415,12 @@ export async function initiateDeviceFlow(opts: InitiateDeviceFlowOpts): Promise<
     };
   }
 
-  // AUTH-03 + AUTH-09: ONLY user_code + verification_uri interpolated.
-  // Token is not yet acquired; never appears here.
-  opts.notifyFn(`Open ${deviceCode.verification_uri} and enter: ${deviceCode.user_code}`, "info");
+  // AUTH-03 + AUTH-09: only the user code and the verification URI cross the
+  // callback. No token exists yet.
+  opts.onDeviceCode({
+    verificationUri: deviceCode.verification_uri,
+    userCode: deviceCode.user_code,
+  });
 
   return runPollLoop(http, provider, deviceCode, opts);
 }

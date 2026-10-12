@@ -44,6 +44,7 @@ import { readFile } from "node:fs/promises";
 import { hookDebugLog } from "../../../shared/debug-log.ts";
 import { errorMessage } from "../../../shared/errors.ts";
 import { notifyAsyncRewakeSummary } from "../../../shared/notification-dispatch.ts";
+import { openNotificationRun, requireNotificationMode } from "../../../shared/notification-run.ts";
 import { installTimerLadder } from "../exec-timer.ts";
 import { prepareHookEnv } from "../hook-env.ts";
 import { translatePostCompact } from "../payloads/post-compact.ts";
@@ -424,6 +425,13 @@ function finalizeChild(
     return;
   }
 
+  try {
+    requireNotificationMode(ctx.mode);
+  } catch (err: unknown) {
+    hookDebugLog(`async-rewake: mode unavailable (${entry.pluginId}): ${errorMessage(err)}`);
+    return;
+  }
+
   // IL-2 EXEMPTION (T-62-09): `rewakeSummary` is the single sanctioned
   // runtime notify call originating from `bridges/hooks/async-rewake/`,
   // routed through the canonical `shared/notification-dispatch.ts` seam. Fires
@@ -431,7 +439,8 @@ function finalizeChild(
   // status surface, not a success-only signal.
   if (entry.rewakeSummary !== undefined) {
     try {
-      notifyAsyncRewakeSummary(ctx, entry.rewakeSummary);
+      const run = openNotificationRun(pi, { kind: "hook" });
+      notifyAsyncRewakeSummary(ctx, run, entry.rewakeSummary);
     } catch (err) {
       hookDebugLog(`async-rewake: notify failed (${entry.pluginId}): ${errorMessage(err)}`);
     }
@@ -455,9 +464,8 @@ function finalizeChild(
 
   const truncated = stderrText.length > 0 ? stderrTrunc : stdoutTrunc;
   const content = buildInjectionContent(entry.rewakeMessage, body, truncated);
-  const lane: "nextTurn" | "followUp" = ctx.isIdle() ? "nextTurn" : "followUp";
-
   try {
+    const lane: "nextTurn" | "followUp" = ctx.isIdle() ? "nextTurn" : "followUp";
     pi.sendMessage(
       {
         customType: REWAKE_CUSTOM_TYPE,

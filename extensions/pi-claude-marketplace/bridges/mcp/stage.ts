@@ -94,7 +94,7 @@ import type {
   McpOverrideRestoredNotice,
   McpToolRulesUnenforcedNotice,
   McpVariablesMissingNotice,
-} from "../../shared/notification-dispatch.ts";
+} from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 
 /** A file a replace is about to write, and what it held before. */

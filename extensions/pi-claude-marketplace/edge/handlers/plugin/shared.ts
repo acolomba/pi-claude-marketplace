@@ -13,7 +13,9 @@ import { parseArgs } from "../../args.ts";
 import { passThroughFlagNames } from "../../flag-catalog.ts";
 
 import type { ExtensionCommandContext } from "../../../platform/pi-api.ts";
+import type { NotificationRun } from "../../../shared/notification-run.ts";
 import type { Scope } from "../../../shared/types.ts";
+import type { SubcommandHandler } from "../../router.ts";
 
 export interface PluginMarketplaceRef {
   readonly marketplace: string;
@@ -62,6 +64,7 @@ const DOWNSTREAM_BOOLEAN_FLAGS = new Set([
 function parsePositionalsWithFlags(
   tokens: readonly string[],
   ctx: ExtensionCommandContext,
+  run: NotificationRun,
   usage: string,
 ): ParsedPositionalsResult | undefined {
   const flags = new Set<string>();
@@ -73,7 +76,7 @@ function parsePositionalsWithFlags(
       // through to `Unknown flag: "--partial".`.
       flags.add(token);
     } else if (token.startsWith("--")) {
-      notifyUsageError(ctx, { message: `Unknown flag: "${token}".`, usage });
+      notifyUsageError(ctx, run, { message: `Unknown flag: "${token}".`, usage });
       return undefined;
     } else {
       nonFlagPositionals.push(token);
@@ -108,6 +111,7 @@ export interface ParsedMapModelArgs {
 export function parseMapModelArgs(
   args: string,
   ctx: ExtensionCommandContext,
+  run: NotificationRun,
   usage: string,
 ): ParsedMapModelArgs | undefined {
   let parsed;
@@ -116,11 +120,11 @@ export function parseMapModelArgs(
   } catch (err) {
     // MSG-NC-2: argument-parsing failure (invalid --scope value) -- sentence
     // form with Usage block appended after a blank line.
-    notifyUsageError(ctx, { message: errorMessage(err), usage });
+    notifyUsageError(ctx, run, { message: errorMessage(err), usage });
     return undefined;
   }
 
-  const flagged = parsePositionalsWithFlags(parsed.positional, ctx, usage);
+  const flagged = parsePositionalsWithFlags(parsed.positional, ctx, run, usage);
   if (flagged === undefined) {
     return undefined;
   }
@@ -136,6 +140,7 @@ export function parseMapModelArgs(
 export function parseRequiredPluginMarketplaceRef(
   args: string,
   ctx: ExtensionCommandContext,
+  run: NotificationRun,
   usage: string,
 ): ParsedPluginMarketplaceRef | undefined {
   const parsed = parseCommandArgs(
@@ -150,7 +155,7 @@ export function parseRequiredPluginMarketplaceRef(
       // itself on the missing-required-positional path; suppress the
       // duplicate-usage case by stripping when message === usage.
       const head = message === usage ? "Missing required argument." : message;
-      notifyUsageError(ctx, { message: head, usage });
+      notifyUsageError(ctx, run, { message: head, usage });
     },
   );
   if (parsed === undefined) {
@@ -160,7 +165,7 @@ export function parseRequiredPluginMarketplaceRef(
   const ref = splitPluginMarketplaceRef(parsed.ref);
   if (ref === undefined) {
     // PI-1 invalid `<plugin>@<marketplace>` token -- USAGE error per MSG-NC-2.
-    notifyUsageError(ctx, {
+    notifyUsageError(ctx, run, {
       message: `Invalid <plugin>@<marketplace> ref: "${parsed.ref}".`,
       usage,
     });
@@ -181,21 +186,25 @@ export function parseRequiredPluginMarketplaceRef(
  *
  * Every `/claude:plugin` subcommand handler opens this way, so the prelude
  * lives here rather than being restated per handler.
+ *
+ * The returned handler takes the router's notification run and hands it to
+ * `operation` beside the parsed arguments and the context (D-05). An operation
+ * that renders no notification from the run may declare two parameters.
  */
 export function withParsedArgs<P>(
   parse: (args: string) => P,
   usage: string,
-  run: (parsed: P, ctx: ExtensionCommandContext) => Promise<void>,
-): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
-  return async (args, ctx): Promise<void> => {
+  operation: (parsed: P, ctx: ExtensionCommandContext, run: NotificationRun) => Promise<void>,
+): SubcommandHandler {
+  return async (args, ctx, run): Promise<void> => {
     let parsed: P;
     try {
       parsed = parse(args);
     } catch (err) {
-      notifyUsageError(ctx, { message: errorMessage(err), usage });
+      notifyUsageError(ctx, run, { message: errorMessage(err), usage });
       return;
     }
 
-    await run(parsed, ctx);
+    await operation(parsed, ctx, run);
   };
 }

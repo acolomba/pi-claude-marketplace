@@ -54,16 +54,18 @@
 // negative would hold whether or not the workflow ran, because the workflow
 // never writes; an assertion whose subject cannot change proves the module
 // rather than the case. The negative half of D-116-06 is carried by the shape
-// that CAN fail: a rejecting case sizes the boundary at one emission, zero
-// probes, and NO stated `cwd`, so a workflow that did run reads an unstated
-// boundary member and dies where it happens.
+// that CAN fail: a rejecting case sizes the boundary at one emission and NO
+// stated `cwd`, so a workflow that did run reads an unstated boundary member and
+// dies where it happens.
 //
 // Measured boundary counts, taken through a counting context before a case was
 // written, because the two paths disagree:
-//   * a rejection reads `ctx.ui` once, `ctx.cwd` never, and takes no
-//     soft-dependency probe -- `notifyUsageError` writes straight to the channel;
-//   * a delegating command reads `ctx.ui` once, `ctx.cwd` once, and takes ONE
-//     soft-dependency probe, on every filter and scope combination.
+//   * a rejection reads `ctx.ui` once and `ctx.cwd` never -- `notifyUsageError`
+//     writes straight to the channel;
+//   * a delegating command reads `ctx.ui` once and `ctx.cwd` once, on every
+//     filter and scope combination.
+// Neither path reads the tool list: the listing renders from the command run's
+// soft-dependency snapshot (D-05).
 //
 // Both scope roots are values this file chose: `<cwd>/.pi` for the project scope
 // and `<HOME>/.pi/agent` for the user scope, with the agent-directory variable
@@ -103,6 +105,8 @@ import { test, type TestContext } from "node:test";
 import { SCOPE_TARGET_FLAG } from "../../../../extensions/pi-claude-marketplace/edge/flag-catalog.ts";
 import { makeListHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/list.ts";
 import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
+import { runWithNothingLoaded } from "../../../shared/notification-run-seeds.ts";
+import { createMachineNotificationBoundary } from "../../notification-boundary.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
 import { buildInstalledPluginRecord, mergeMarketplaceIntoState } from "../marketplace-seed.ts";
 
@@ -419,14 +423,14 @@ for (const { args, expectedBlocks, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 1, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
       value: workspace.cwd,
       reads: 1,
     });
-    const listHandler = makeListHandler(pi);
+    const listHandler = makeListHandler();
 
     // act
-    await listHandler(args, ctx);
+    await listHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(projectListing(notifications), expectedBlocks);
@@ -465,14 +469,14 @@ for (const { args, expectedBlocks, label } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 1, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
       value: workspace.cwd,
       reads: 1,
     });
-    const listHandler = makeListHandler(pi);
+    const listHandler = makeListHandler();
 
     // act
-    await listHandler(args, ctx);
+    await listHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(projectListing(notifications), expectedBlocks);
@@ -552,14 +556,14 @@ for (const { anchor, args, expectedBlocks, label } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 1, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
       value: workspace.cwd,
       reads: 1,
     });
-    const listHandler = makeListHandler(pi);
+    const listHandler = makeListHandler();
 
     // act
-    await listHandler(args, ctx);
+    await listHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(projectListing(notifications), expectedBlocks);
@@ -611,14 +615,14 @@ for (const { args, expectedBlocks, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 1, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
       value: workspace.cwd,
       reads: 1,
     });
-    const listHandler = makeListHandler(pi);
+    const listHandler = makeListHandler();
 
     // act
-    await listHandler(args, ctx);
+    await listHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(projectListing(notifications), expectedBlocks);
@@ -670,14 +674,14 @@ for (const { args, expectedBlocks, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 1, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
       value: workspace.cwd,
       reads: 1,
     });
-    const listHandler = makeListHandler(pi);
+    const listHandler = makeListHandler();
 
     // act
-    await listHandler(args, ctx);
+    await listHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(projectListing(notifications), expectedBlocks);
@@ -687,9 +691,9 @@ for (const { args, expectedBlocks, label, summary } of [
 }
 
 // ---------------------------------------------------------------------------
-// One above the accepted arity. Rejections size the boundary at one emission,
-// zero probes, and no stated `cwd`, so a workflow that ran would read an
-// unstated boundary member.
+// One above the accepted arity. Rejections size the boundary at one emission
+// and no stated `cwd`, so a workflow that ran would read an unstated boundary
+// member.
 // ---------------------------------------------------------------------------
 
 for (const { args, label, summary } of [
@@ -705,11 +709,11 @@ for (const { args, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-    const listHandler = makeListHandler(pi);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const listHandler = makeListHandler();
 
     // act
-    await listHandler(args, ctx);
+    await listHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -741,11 +745,11 @@ for (const { args, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-    const listHandler = makeListHandler(pi);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const listHandler = makeListHandler();
 
     // act
-    await listHandler(args, ctx);
+    await listHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -774,11 +778,11 @@ for (const { args, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-    const listHandler = makeListHandler(pi);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const listHandler = makeListHandler();
 
     // act
-    await listHandler(args, ctx);
+    await listHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -812,11 +816,11 @@ for (const { args, expectedSentence, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-    const listHandler = makeListHandler(pi);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const listHandler = makeListHandler();
 
     // act
-    await listHandler(args, ctx);
+    await listHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -825,4 +829,50 @@ for (const { args, expectedSentence, label, summary } of [
     assert.strictEqual(workspace.transportCalls(), 0);
     verifyBoundary();
   });
+}
+
+for (const mode of ["json", "rpc"] as const) {
+  for (const { args, message } of [
+    {
+      args: "--scope bad",
+      message: 'Invalid --scope value: "bad". Must be "user" or "project".',
+    },
+    {
+      args: "--bogus",
+      message: 'Unknown option: "--bogus".',
+    },
+    {
+      args: "alpha@official beta@official",
+      message: "Too many arguments.",
+    },
+  ]) {
+    test(`appends plugin/list rejection for ${args} in ${mode} (enabled)`, async () => {
+      // arrange
+      const { ctx, run, capture, verifyBoundary } = createMachineNotificationBoundary(mode);
+
+      const commandHandler = makeListHandler();
+
+      // act
+      await commandHandler(args, ctx, run);
+
+      // assert
+      assert.deepStrictEqual(capture.entries, [
+        {
+          customType: "claude-plugin",
+          payload: {
+            schemaVersion: 1,
+            origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+            kind: "usage-error",
+            severity: "error",
+            needsReload: false,
+            message,
+            usage:
+              "Usage: /claude:plugin list [<marketplace>] [--installed] [--available] [--unavailable] [--partial] [--remote] [--scope user|project]",
+          },
+        },
+      ]);
+      capture.assertValid();
+      verifyBoundary();
+    });
+  }
 }

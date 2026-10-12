@@ -63,9 +63,9 @@
 // have returned (`agent-session.js`: bindExtensions emits session_start,
 // then `extendResourcesFromExtensions` checks
 // `hasHandlers("resources_discover")` -- handlers come from each extension's
-// `pi.on(...)` registration during its factory call). softDepStatus(pi) at
-// apply time therefore observes a stable pi-subagents / pi-mcp-adapter
-// status.
+// `pi.on(...)` registration during its factory call). The soft-dependency
+// snapshot is the run that index.ts opens at the start of the pass (D-05,
+// D-07), so it observes a stable pi-subagents / pi-mcp-adapter status.
 
 import path from "node:path";
 
@@ -119,7 +119,7 @@ import type {
   ScopeReadResult,
 } from "./types.ts";
 import type { loadState } from "../../persistence/state-io.ts";
-import type { McpConfigNotice, McpMigrationRow } from "../../shared/notification-dispatch.ts";
+import type { McpConfigNotice, McpMigrationRow } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 import type {
   EnableDegradationSignals,
@@ -280,7 +280,7 @@ async function applyMarketplaceRemoves(
       // eslint-disable-next-line no-await-in-loop -- each remove locks the scope (retries: 0)
       const result = await removeMarketplace({
         ctx: opts.ctx,
-        pi: opts.pi,
+        run: opts.run,
         name: op.marketplace,
         completionCache: opts.completionCache,
         scope: op.scope,
@@ -395,7 +395,7 @@ async function applyMarketplaceAdds(
     // eslint-disable-next-line no-await-in-loop -- each add locks the scope (retries: 0)
     const result = await addMarketplace({
       ctx: opts.ctx,
-      pi: opts.pi,
+      run: opts.run,
       scope: op.scope,
       cwd: opts.cwd,
       rawSource: op.source,
@@ -435,7 +435,7 @@ async function applyOnePluginUninstall(
   try {
     const result = await uninstallPlugin({
       ctx: opts.ctx,
-      pi: opts.pi,
+      run: opts.run,
       scope: op.scope,
       cwd: opts.cwd,
       marketplace: op.marketplace,
@@ -585,7 +585,7 @@ async function applyPluginInstalls(
     // eslint-disable-next-line no-await-in-loop -- each install locks the scope (retries: 0)
     const result = await installPlugin({
       ctx: opts.ctx,
-      pi: opts.pi,
+      run: opts.run,
       scope: op.scope,
       cwd: opts.cwd,
       marketplace: op.marketplace,
@@ -736,7 +736,7 @@ async function applyDependencyInstalls(
     // eslint-disable-next-line no-await-in-loop -- each install locks the scope (retries: 0)
     const result = await installMissingDependency({
       ctx: opts.ctx,
-      pi: opts.pi,
+      run: opts.run,
       scope: op.scope,
       cwd: opts.cwd,
       marketplace: op.marketplace,
@@ -939,7 +939,7 @@ async function applyPluginToggles(
     // eslint-disable-next-line no-await-in-loop -- each toggle locks the scope (retries: 0)
     const result = await setPluginEnabled({
       ctx: opts.ctx,
-      pi: opts.pi,
+      run: opts.run,
       cwd: opts.cwd,
       marketplace: op.marketplace,
       plugin: op.plugin,
@@ -1067,7 +1067,7 @@ async function applyDependencyDisables(
     // eslint-disable-next-line no-await-in-loop -- each disable locks the scope (retries: 0)
     const result = await setPluginEnabled({
       ctx: opts.ctx,
-      pi: opts.pi,
+      run: opts.run,
       cwd: opts.cwd,
       marketplace: op.marketplace,
       plugin: op.plugin,
@@ -1432,7 +1432,7 @@ async function applyReconcileWithReader(
 
   // AMIG-03: the one migration notice for both scopes comes before the
   // reconcile cascade and speaks even when reconcile has no outcome.
-  notifyMcpMigration(opts.ctx, { rows: migrationRows, notices: migrationNotices });
+  notifyMcpMigration(opts.ctx, opts.run, { rows: migrationRows, notices: migrationNotices });
 
   // Empty-and-clean reconcile -> SILENT (NFR-2 / A4 / RECON-05). The load-
   // time invariant is that a no-op reconcile produces zero notifications;
@@ -1446,12 +1446,12 @@ async function applyReconcileWithReader(
   // error.message never reaches the notify body.
   //
   // D-02 / MOD-03: thread RECONCILE_APPLIED_CONTEXT so the realized transition
-  // rows render through reconcile's own render map, never the central
-  // renderPluginRow switch. The `reconcile-applied-cascade` standalone envelope
+  // rows resolve through reconcile's own row policies. The
+  // `reconcile-applied-cascade` standalone envelope
   // (its content-derived severity + the load-time silence contract) stays
   // central via emitReconcileAppliedContextCascade.
   const message = buildReconcileAppliedCascade(outcomes);
-  notifyReconcileAppliedWithContext(opts.ctx, opts.pi, RECONCILE_APPLIED_CONTEXT, message);
+  notifyReconcileAppliedWithContext(opts.ctx, opts.run, RECONCILE_APPLIED_CONTEXT, message);
 
   // S2 / PR #51: post-cascade hygiene warnings. The cascade carries plugin
   // transition rows (installed/uninstalled/failed) under IL-2's single-
@@ -1574,7 +1574,7 @@ function surfacePostCommitWarnings(
     lines.length === 1
       ? "1 post-install warning surfaced from reconcile installs."
       : `${lines.length.toString()} post-install warnings surfaced from reconcile installs.`;
-  notifyDiagnostic(opts.ctx, header, lines);
+  notifyDiagnostic(opts.ctx, opts.run, header, lines);
 }
 
 /**
@@ -1590,6 +1590,7 @@ function surfaceMcpConfigNotices(
 ): void {
   notifyMcpConfigNotices(
     opts.ctx,
+    opts.run,
     outcomes.flatMap((outcome) =>
       outcome.kind === "invalid-block" || outcome.kind === "source-mismatch"
         ? []

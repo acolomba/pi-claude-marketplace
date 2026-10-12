@@ -5,8 +5,9 @@ import {
   IMPORT_CONTEXT,
   type ImportMsg,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/import/execute.messaging.ts";
+import { composePluginLines } from "../../../extensions/pi-claude-marketplace/shared/notification-grammar.ts";
 
-import type { SoftDepStatus } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { ResolvedRow } from "../../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 
 void ({
   status: "installed",
@@ -33,13 +34,13 @@ test("exports the complete import command context", () => {
   // arrange
   const expectedContext = {
     Messaging: { label: "Import" },
-    render: ["installed", "skipped", "failed", "unavailable"],
+    rowPolicyStatuses: ["installed", "skipped", "failed", "unavailable"],
   };
 
   // act
   const context = {
     Messaging: IMPORT_CONTEXT.Messaging,
-    render: Object.keys(IMPORT_CONTEXT.render),
+    rowPolicyStatuses: Object.keys(IMPORT_CONTEXT.rowPolicies),
   };
 
   // assert
@@ -51,97 +52,72 @@ test("renders an installed row with optional fields omitted", () => {
   const message = {
     status: "installed",
     name: "alpha-plugin",
-    dependencies: [],
+    reasons: [],
     severity: "info",
     needsReload: true,
-  } satisfies ImportMsg;
+  } satisfies ResolvedRow<ImportMsg>;
   const expectedMessage = {
     status: "installed",
     name: "alpha-plugin",
-    dependencies: [],
+    reasons: [],
     severity: "info",
     needsReload: true,
   };
-  const probe = {
-    piSubagentsLoaded: true,
-    piMcpAdapterLoaded: true,
-    workflowEngineLoaded: true,
-  } satisfies SoftDepStatus;
   const expectedRow = "● alpha-plugin (installed)";
 
   // act
-  const row = IMPORT_CONTEXT.render.installed(message, probe, "project");
+  const row = composePluginLines(message, "project")[0]!.slice(2);
 
   // assert
   assert.deepStrictEqual(message, expectedMessage);
   assert.deepStrictEqual(Object.keys(message), [
     "status",
     "name",
-    "dependencies",
+    "reasons",
     "severity",
     "needsReload",
   ]);
   assert.strictEqual(row, expectedRow);
 });
 
-test("renders installed reasons before missing dependency markers", () => {
+test("renders installed content reasons before the resolved markers", () => {
   // arrange
   const message = {
     status: "installed",
     name: "beta-plugin",
     scope: "user",
     version: "1.2.3",
-    dependencies: ["agents", "mcp"],
-    reasons: ["orphan rewake", "malformed skill"],
+    reasons: [
+      "orphan rewake",
+      "malformed skill",
+      "requires pi-subagents",
+      "requires pi-mcp-adapter",
+    ],
     severity: "warning",
     needsReload: true,
-  } satisfies ImportMsg;
+  } satisfies ResolvedRow<ImportMsg>;
   const expectedMessage = {
     status: "installed",
     name: "beta-plugin",
     scope: "user",
     version: "1.2.3",
-    dependencies: ["agents", "mcp"],
-    reasons: ["orphan rewake", "malformed skill"],
+    reasons: [
+      "orphan rewake",
+      "malformed skill",
+      "requires pi-subagents",
+      "requires pi-mcp-adapter",
+    ],
     severity: "warning",
     needsReload: true,
   };
-  const probe = {
-    piSubagentsLoaded: false,
-    piMcpAdapterLoaded: false,
-    workflowEngineLoaded: true,
-  } satisfies SoftDepStatus;
   const expectedRow =
     "● beta-plugin [user] v1.2.3 (installed) {orphan rewake, malformed skill, requires pi-subagents, requires pi-mcp-adapter}";
 
   // act
-  const row = IMPORT_CONTEXT.render.installed(message, probe, "project");
+  const row = composePluginLines(message, "project")[0]!.slice(2);
 
   // assert
   assert.deepStrictEqual(message, expectedMessage);
-  assert.strictEqual(row, expectedRow);
-});
-
-test("omits loaded dependency markers from an installed row", () => {
-  // arrange
-  const message = {
-    status: "installed",
-    name: "gamma-plugin",
-    dependencies: ["agents", "mcp"],
-    severity: "info",
-    needsReload: true,
-  } satisfies ImportMsg;
-  const probe = {
-    piSubagentsLoaded: true,
-    piMcpAdapterLoaded: true,
-    workflowEngineLoaded: true,
-  } satisfies SoftDepStatus;
-  const expectedRow = "● gamma-plugin (installed)";
-
-  // act
-  const row = IMPORT_CONTEXT.render.installed(message, probe, "user");
-
-  // assert
   assert.strictEqual(row, expectedRow);
 });
 
@@ -155,7 +131,7 @@ test("renders a skipped row with a compact hash version", () => {
     reasons: ["already installed"],
     severity: "info",
     needsReload: false,
-  } satisfies ImportMsg;
+  } satisfies ResolvedRow<ImportMsg>;
   const expectedMessage = {
     status: "skipped",
     name: "delta-plugin",
@@ -165,53 +141,47 @@ test("renders a skipped row with a compact hash version", () => {
     severity: "info",
     needsReload: false,
   };
-  const probe = {
-    piSubagentsLoaded: false,
-    piMcpAdapterLoaded: false,
-    workflowEngineLoaded: true,
-  } satisfies SoftDepStatus;
   const expectedRow = "⊘ delta-plugin v#2ea95f8 (skipped) {already installed}";
 
   // act
-  const row = IMPORT_CONTEXT.render.skipped(message, probe, "project");
+  const row = composePluginLines(message, "project")[0]!.slice(2);
 
   // assert
   assert.deepStrictEqual(message, expectedMessage);
   assert.strictEqual(row, expectedRow);
 });
 
-test("renders a failed row without composing its cause trailer", () => {
+test("renders a failed row without composing its failure lines", () => {
   // arrange
-  const cause = new Error("manifest entry disappeared");
+  const failure = {
+    cause: { causeChain: ["manifest entry disappeared"], truncated: false },
+    leaks: [],
+    rollbackPartial: [],
+  };
   const message = {
     status: "failed",
     name: "epsilon-plugin",
     scope: "user",
     version: "3.0.0",
     reasons: ["not in manifest"],
-    cause,
+    failure,
     severity: "error",
     needsReload: false,
-  } satisfies ImportMsg;
+  } satisfies ResolvedRow<ImportMsg>;
   const expectedMessage = {
     status: "failed",
     name: "epsilon-plugin",
     scope: "user",
     version: "3.0.0",
     reasons: ["not in manifest"],
-    cause,
+    failure,
     severity: "error",
     needsReload: false,
   };
-  const probe = {
-    piSubagentsLoaded: false,
-    piMcpAdapterLoaded: false,
-    workflowEngineLoaded: true,
-  } satisfies SoftDepStatus;
   const expectedRow = "⊘ epsilon-plugin [user] v3.0.0 (failed) {not in manifest}";
 
   // act
-  const row = IMPORT_CONTEXT.render.failed(message, probe, "project");
+  const row = composePluginLines(message, "project")[0]!.slice(2);
 
   // assert
   assert.deepStrictEqual(message, expectedMessage);
@@ -226,16 +196,11 @@ test("renders a source-mismatch failure with optional fields omitted", () => {
     reasons: ["source mismatch"],
     severity: "error",
     needsReload: false,
-  } satisfies ImportMsg;
-  const probe = {
-    piSubagentsLoaded: true,
-    piMcpAdapterLoaded: true,
-    workflowEngineLoaded: true,
-  } satisfies SoftDepStatus;
+  } satisfies ResolvedRow<ImportMsg>;
   const expectedRow = "⊘ zeta-plugin (failed) {source mismatch}";
 
   // act
-  const row = IMPORT_CONTEXT.render.failed(message, probe, "user");
+  const row = composePluginLines(message, "user")[0]!.slice(2);
 
   // assert
   assert.deepStrictEqual(Object.keys(message), [
@@ -257,7 +222,7 @@ test("renders an unavailable row without a scope bracket", () => {
     reasons: ["no longer installable"],
     severity: "warning",
     needsReload: false,
-  } satisfies ImportMsg;
+  } satisfies ResolvedRow<ImportMsg>;
   const expectedMessage = {
     status: "unavailable",
     name: "eta-plugin",
@@ -266,18 +231,26 @@ test("renders an unavailable row without a scope bracket", () => {
     severity: "warning",
     needsReload: false,
   };
-  const probe = {
-    piSubagentsLoaded: false,
-    piMcpAdapterLoaded: false,
-    workflowEngineLoaded: true,
-  } satisfies SoftDepStatus;
   const expectedRow = "⊘ eta-plugin v4.0.0 (unavailable) {no longer installable}";
 
   // act
-  const row = IMPORT_CONTEXT.render.unavailable(message, probe, "project");
+  const row = composePluginLines(message, "project")[0]!.slice(2);
 
   // assert
   assert.deepStrictEqual(message, expectedMessage);
   assert.strictEqual(Object.hasOwn(message, "scope"), false);
   assert.strictEqual(row, expectedRow);
+});
+
+test("IMPORT_CONTEXT declares complete row policies", () => {
+  // act
+  const policies = IMPORT_CONTEXT.rowPolicies;
+
+  // assert
+  assert.deepStrictEqual(policies, {
+    installed: { markers: true, contentReasons: true },
+    skipped: { markers: false, contentReasons: true },
+    failed: { markers: false, contentReasons: true },
+    unavailable: { markers: false, contentReasons: true },
+  });
 });

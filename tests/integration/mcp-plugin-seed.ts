@@ -15,29 +15,55 @@ import { createInstallOperation } from "../../extensions/pi-claude-marketplace/o
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import { openNotificationRun } from "../../extensions/pi-claude-marketplace/shared/notification-run.ts";
+import { emptyPiInventory } from "../platform/pi-inventory-seed.ts";
 
+import type { ExtensionContext } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type {
+  NotificationOrigin,
+  NotificationRun,
+} from "../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import type { Scope } from "../../extensions/pi-claude-marketplace/shared/types.ts";
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 export interface NotifyRecord {
   readonly message: string;
   readonly severity: string | undefined;
 }
 
-export function makeCtx(): {
-  session: { ctx: ExtensionContext; pi: ExtensionAPI };
+const TEST_COMMAND: NotificationOrigin = {
+  kind: "command",
+  commandId: "plugin",
+  invocationId: "test-run",
+};
+
+/**
+ * A text-mode session whose notifications are recorded. The run's snapshot
+ * reports no companion loaded (D-05), and `origin` is the root it stands for:
+ * a command by default, or the load pass a reconcile runs in.
+ */
+export function makeCtx(origin: NotificationOrigin = TEST_COMMAND): {
+  session: { ctx: ExtensionContext; run: NotificationRun };
   notifications: NotifyRecord[];
 } {
   const notifications: NotifyRecord[] = [];
   const ctx = {
+    mode: "tui",
     ui: {
       notify: (message: string, severity?: string): void => {
         notifications.push({ message, severity });
       },
     },
   } as ExtensionContext;
-  const pi = { getAllTools: (): unknown[] => [] } as ExtensionAPI;
-  return { session: { ctx, pi }, notifications };
+  const run = openNotificationRun(
+    {
+      ...emptyPiInventory(),
+      appendEntry(): never {
+        throw new Error("a text-mode session appends no entry");
+      },
+    },
+    origin,
+  );
+  return { session: { ctx, run }, notifications };
 }
 
 /**

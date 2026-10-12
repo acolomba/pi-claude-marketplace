@@ -1,53 +1,58 @@
 {
   "contract": "1.0.0",
   "flavor": "core",
-  "milestone": "mcp-4 — MCP 4",
+  "milestone": "json-output",
   "phases": [
     {
       "number": "1",
-      "name": "Pi 1.0 floor and adapter-only detection",
+      "name": "Presentation Model",
       "status": "complete"
     },
     {
       "number": "2",
-      "name": "Adapter-file delivery",
+      "name": "Row Policies",
       "status": "complete"
     },
     {
       "number": "3",
-      "name": "Claude Code tool names and tool search",
+      "name": "Typed Raw Surfaces",
       "status": "complete"
     },
     {
       "number": "4",
-      "name": "Variable expansion at Claude Code parity",
+      "name": "Wire Schema and JSON Strategy",
       "status": "complete"
     },
     {
       "number": "5",
-      "name": "Automatic migration on /reload",
+      "name": "Mode-Selected JSON Sink",
       "status": "complete"
     },
     {
       "number": "6",
-      "name": "Live MCP status in info",
+      "name": "Command-Run Contract",
       "status": "complete"
     },
     {
       "number": "7",
-      "name": "Docs and live proof",
+      "name": "Mode Refusals, Real-Pi Verification, and Docs",
       "status": "complete"
     },
     {
       "number": "8",
-      "name": "Clear milestone debt",
+      "name": "Address tech debt: ledger dispositions and advisory",
+      "status": "complete"
+    },
+    {
+      "number": "9",
+      "name": "Address tech debt: redact LLM tool error text",
       "status": "complete"
     }
   ],
   "next": {
-    "command": "/gsd:new-milestone",
-    "label": "Start a new milestone",
-    "reason": "All phases complete — start a new milestone"
+    "command": "/gsd:progress",
+    "label": "Show progress",
+    "reason": "Unsure of state — showing progress"
   },
-  "updated_at": "2026-10-10T08:26:03.366Z"
+  "updated_at": "2026-10-11T04:55:56.889Z"
 }

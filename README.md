@@ -42,6 +42,8 @@ The `/claude:plugin` command manages Claude marketplaces and plugins, like Claud
 
 ## Usage
 
+For scripts, see [JSON output](docs/json-output.md).
+
 Install the Pi extension:
 
 ```bash

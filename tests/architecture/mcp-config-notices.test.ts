@@ -1,25 +1,28 @@
 // tests/architecture/mcp-config-notices.test.ts
 //
 // Byte-equality lock for the MCP config file notices (AFILE-04, AFILE-02).
-// `notifyMcpConfigNotices` calls ctx.ui.notify directly, outside the structured
-// NotificationMessage entrypoint, so the catalog-uat walk and the
-// notify-grammar invariant never drive it. This dedicated lock reads the
-// `mcp-comments-dropped`, `mcp-config-left-unchanged`, `mcp-override-kept`,
-// `mcp-variables-missing`, `mcp-credentials-blanked`,
+// `notifyMcpConfigNotices` emits the raw `mcp-config-notices` kind (WIRE-01),
+// outside the structured NotificationMessage entrypoint, so the catalog-uat
+// walk and the notify-grammar invariant never drive it. This dedicated lock
+// reads the `mcp-comments-dropped`, `mcp-config-left-unchanged`,
+// `mcp-override-kept`, `mcp-variables-missing`, `mcp-credentials-blanked`,
 // `mcp-tool-rules-unenforced` and `mcp-leftover-removed` blocks from
-// docs/output-catalog.md and asserts that the seam emits each one byte for
-// byte, in one warning-severity call, with a non-empty summary line followed
-// by a blank line (AFILE-06, AVAR-04, AVAR-05, ANAME-07, AMIG-01).
+// docs/output-catalog.md and asserts that the tui text strategy emits each one
+// byte for byte, in one warning-severity call, with a non-empty summary line
+// followed by a blank line (AFILE-06, AVAR-04, AVAR-05, ANAME-07, AMIG-01). In
+// json mode the same notice arrives as one schema-valid entry (JOUT-01).
 
 import assert from "node:assert/strict";
 import test, { type TestContext } from "node:test";
 
 import { notifyMcpConfigNotices } from "../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
+import { createJsonCapture } from "../edge/json-capture.ts";
+import { runWithNothingLoaded } from "../shared/notification-run-seeds.ts";
 
 import { readCatalogBlock } from "./catalog-block.ts";
 
 import type { NotificationContext } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
-import type { McpConfigNotice } from "../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
+import type { McpConfigNotice } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
 interface CatalogNoticeRow {
   readonly state: string;
@@ -96,8 +99,8 @@ type NotifyArguments = [message: string, severity?: string];
 
 function emit(t: TestContext, notice: McpConfigNotice): readonly NotifyArguments[] {
   const notify = t.mock.fn<(...args: NotifyArguments) => void>();
-  const ctx: NotificationContext = { ui: { notify } };
-  notifyMcpConfigNotices(ctx, [notice]);
+  const ctx: NotificationContext = { mode: "tui", ui: { notify } };
+  notifyMcpConfigNotices(ctx, runWithNothingLoaded(), [notice]);
   return notify.mock.calls.map((call) => call.arguments);
 }
 
@@ -130,5 +133,37 @@ for (const { state, notice } of CATALOG_NOTICE_ROWS) {
 
     // assert
     assert.strictEqual(message, expectedMessage);
+  });
+
+  test(`JOUT-01: a ${notice.kind} notice is one schema-valid entry in json mode`, () => {
+    // arrange
+    const capture = createJsonCapture();
+    const ctx = {
+      mode: "json",
+      get ui() {
+        return capture.ui;
+      },
+    };
+
+    // act
+    notifyMcpConfigNotices(ctx, { ...runWithNothingLoaded(), entrySink: capture.entrySink }, [
+      notice,
+    ]);
+
+    // assert
+    assert.deepStrictEqual(
+      capture.entries.map((entry) => entry.payload),
+      [
+        {
+          schemaVersion: 1,
+          origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+          severity: "warning",
+          needsReload: false,
+          kind: "mcp-config-notices",
+          notices: [notice],
+        },
+      ],
+    );
+    capture.assertValid();
   });
 }

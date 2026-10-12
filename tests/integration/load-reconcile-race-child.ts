@@ -20,8 +20,9 @@ import {
 import { createApplyReconcile } from "../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
 import { loadState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import { runWithNothingLoaded } from "../shared/notification-run-seeds.ts";
 
-import { makeNotifyCollectingCtx, makeStubPi, type NotificationRecord } from "./ipc-child.ts";
+import { makeNotifyCollectingCtx, type NotificationRecord } from "./ipc-child.ts";
 
 /**
  * The reconcile composition: the factory bound to the real selected-state
@@ -67,7 +68,7 @@ async function handleMessage(message: unknown): Promise<void> {
   try {
     await applyReconcile({
       ctx,
-      pi: makeStubPi(),
+      run: runWithNothingLoaded(),
       cwd: message.cwd,
       scope: "project",
       completionCache: createCompletionCache(),

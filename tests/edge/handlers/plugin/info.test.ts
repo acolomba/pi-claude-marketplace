@@ -24,7 +24,7 @@
 // tests/orchestrators/plugin/info.test.ts owns that grammar.
 //
 // The negative half of D-116-06 is proven in full. Every rejecting case sizes
-// the boundary at one emission, zero probes, and NO stated `cwd`; both scopes
+// the boundary at one emission and NO stated `cwd`; both scopes
 // are seeded, so a workflow that did run would have a marketplace to project
 // and a cascade to emit. No on-disk footprint is asserted beside
 // `verifyBoundary()`: this read-only surface writes nothing at any time, so an
@@ -32,11 +32,11 @@
 //
 // Measured boundary counts, taken through a counting context before a case was
 // written, because the two emission paths disagree:
-//   * a rejection reads `ctx.ui` once, `ctx.cwd` never, and takes no
-//     soft-dependency probe -- `notifyUsageError` writes straight to the channel;
-//   * a delegating command reads `ctx.ui` once, `ctx.cwd` once, and takes TWO
-//     soft-dependency probes -- the info command takes one to stamp its
-//     `requires:` line (ADET-01), and the cascade runs the other.
+//   * a rejection reads `ctx.ui` once and `ctx.cwd` never -- `notifyUsageError`
+//     writes straight to the channel;
+//   * a delegating command reads `ctx.ui` once and `ctx.cwd` once.
+// Neither path reads the tool list: the projection renders from the command
+// run's soft-dependency snapshot (D-05).
 //
 // NFR-5, scoped: the fetch flag exists to warm a clone cache, so this surface
 // is offline only while the flag is ABSENT, and the claim is stated that way.
@@ -76,6 +76,8 @@ import { parseFlagNames } from "../../../../extensions/pi-claude-marketplace/edg
 import { makePluginInfoHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/info.ts";
 import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
 import { noStatusSnapshot } from "../../../platform/mcp-status-seed.ts";
+import { runWithNothingLoaded } from "../../../shared/notification-run-seeds.ts";
+import { createMachineNotificationBoundary } from "../../notification-boundary.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
 import { mergeMarketplaceIntoState } from "../marketplace-seed.ts";
 
@@ -195,15 +197,14 @@ for (const { args, expectedMessage, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    // +1 probe: the info command's own snapshot for its `requires:` line (ADET-01).
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
       value: workspace.cwd,
       reads: 1,
     });
-    const infoHandler = makePluginInfoHandler(pi, noStatusSnapshot());
+    const infoHandler = makePluginInfoHandler(noStatusSnapshot());
 
     // act
-    await infoHandler(args, ctx);
+    await infoHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [{ message: expectedMessage }]);
@@ -215,14 +216,14 @@ test("reads a git-source plugin from disk alone while the fetch flag is absent, 
   // arrange
   const workspace = await createHermeticWorkspace(t, "offline");
   await seedBothScopes(workspace);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
     value: workspace.cwd,
     reads: 1,
   });
-  const infoHandler = makePluginInfoHandler(pi, noStatusSnapshot());
+  const infoHandler = makePluginInfoHandler(noStatusSnapshot());
 
   // act
-  await infoHandler("gitp@mp", ctx);
+  await infoHandler("gitp@mp", ctx, runWithNothingLoaded());
 
   // assert
   assert.deepStrictEqual(notifications, [
@@ -243,14 +244,14 @@ for (const { args, label, position } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
       value: workspace.cwd,
       reads: 1,
     });
-    const infoHandler = makePluginInfoHandler(pi, noStatusSnapshot());
+    const infoHandler = makePluginInfoHandler(noStatusSnapshot());
 
     // act
-    await infoHandler(args, ctx);
+    await infoHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -277,11 +278,11 @@ for (const { args, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-    const infoHandler = makePluginInfoHandler(pi, noStatusSnapshot());
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const infoHandler = makePluginInfoHandler(noStatusSnapshot());
 
     // act
-    await infoHandler(args, ctx);
+    await infoHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -329,11 +330,11 @@ for (const { args, expectedMessage, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-    const infoHandler = makePluginInfoHandler(pi, noStatusSnapshot());
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const infoHandler = makePluginInfoHandler(noStatusSnapshot());
 
     // act
-    await infoHandler(args, ctx);
+    await infoHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [{ message: expectedMessage, severity: "error" }]);
@@ -368,11 +369,11 @@ for (const { args, expectedMessage, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-    const infoHandler = makePluginInfoHandler(pi, noStatusSnapshot());
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const infoHandler = makePluginInfoHandler(noStatusSnapshot());
 
     // act
-    await infoHandler(args, ctx);
+    await infoHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [{ message: expectedMessage, severity: "error" }]);
@@ -384,11 +385,11 @@ test("carries the tokenizer's own sentence for an unrecognised scope value and n
   // arrange
   const workspace = await createHermeticWorkspace(t, "scope-value");
   await seedBothScopes(workspace);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-  const infoHandler = makePluginInfoHandler(pi, noStatusSnapshot());
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+  const infoHandler = makePluginInfoHandler(noStatusSnapshot());
 
   // act
-  await infoHandler("alpha@mp --scope bogus", ctx);
+  await infoHandler("alpha@mp --scope bogus", ctx, runWithNothingLoaded());
 
   // assert
   assert.deepStrictEqual(notifications, [
@@ -400,3 +401,53 @@ test("carries the tokenizer's own sentence for an unrecognised scope value and n
   ]);
   verifyBoundary();
 });
+
+for (const mode of ["json", "rpc"] as const) {
+  for (const { args, message } of [
+    {
+      args: "--scope bad",
+      message: 'Invalid --scope value: "bad". Must be "user" or "project".',
+    },
+    {
+      args: "--bogus",
+      message: 'Unknown flag: "--bogus".',
+    },
+    {
+      args: "",
+      message: "info requires exactly one <plugin>@<marketplace> argument.",
+    },
+    {
+      args: "invalid",
+      message: 'Invalid <plugin>@<marketplace> ref: "invalid".',
+    },
+  ]) {
+    test(`appends plugin/info rejection for ${args} in ${mode} (enabled)`, async () => {
+      // arrange
+      const { ctx, run, capture, verifyBoundary } = createMachineNotificationBoundary(mode);
+
+      const commandHandler = makePluginInfoHandler(noStatusSnapshot());
+
+      // act
+      await commandHandler(args, ctx, run);
+
+      // assert
+      assert.deepStrictEqual(capture.entries, [
+        {
+          customType: "claude-plugin",
+          payload: {
+            schemaVersion: 1,
+            origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+            kind: "usage-error",
+            severity: "error",
+            needsReload: false,
+            message,
+            usage:
+              "Usage: /claude:plugin info <plugin>@<marketplace> [--fetch] [--scope user|project]",
+          },
+        },
+      ]);
+      capture.assertValid();
+      verifyBoundary();
+    });
+  }
+}

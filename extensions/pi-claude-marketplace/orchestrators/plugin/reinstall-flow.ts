@@ -10,7 +10,7 @@
 // every bridge before physical replacement, then rolls physical resources back
 // if replacement or explicit state persistence fails.
 //
-// Each orchestration arm emits exactly one `notify(ctx, pi, ...)` call.
+// Each orchestration arm emits exactly one `notify(ctx, run, ...)` call.
 // notify() owns severity, the reload-hint trailer, and the cause-chain.
 // Manual-recovery rows are folded into the cascade `plugins[]` array as
 // `PluginManualRecoveryMessage` entries rather than emitted separately.
@@ -104,9 +104,10 @@ import type { PluginEntry } from "../../domain/components/plugin.ts";
 import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
 import type { GitBackedSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
-import type { NotificationContext, PiInventory } from "../../platform/pi-api.ts";
+import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
-import type { McpConfigNotice } from "../../shared/notification-dispatch.ts";
+import type { NotificationRun } from "../../shared/notification-run.ts";
+import type { McpConfigNotice } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
 import type { ReinstallFailedOutcome, ReinstallPluginOutcome } from "../types.ts";
@@ -127,7 +128,8 @@ export type ReinstallHooksRouting = Pick<
 /** Complete inputs for one installed plugin reinstall. */
 export interface ReinstallPluginOptions {
   readonly ctx: NotificationContext;
-  readonly pi: PiInventory;
+  /** The command run. D-05: every emission renders from its one soft-dep snapshot. */
+  readonly run: NotificationRun;
   readonly scope: Scope;
   readonly cwd: string;
   readonly marketplace: string;
@@ -156,7 +158,11 @@ export interface ReinstallPluginOptions {
 /** Complete inputs for targeted or bulk plugin reinstall. */
 export interface ReinstallPluginsOptions {
   readonly ctx: NotificationContext;
-  readonly pi: PiInventory;
+  /**
+   * The command run. D-05: every emission, including each per-plugin
+   * reinstall's, renders from its one soft-dep snapshot.
+   */
+  readonly run: NotificationRun;
   readonly scope?: Scope;
   readonly cwd: string;
   readonly target: ReinstallPluginsTarget;
@@ -290,7 +296,7 @@ async function reinstallPluginWithTransaction(
   env: ClaudeEnv,
   opts: ReinstallPluginOptions,
 ): Promise<ReinstallPluginOutcome> {
-  const { ctx, pi, scope, cwd, marketplace, plugin } = opts;
+  const { ctx, run, scope, cwd, marketplace, plugin } = opts;
   const render = opts.render ?? "default";
   const locations = locationsFor(scope, cwd);
 
@@ -321,7 +327,7 @@ async function reinstallPluginWithTransaction(
       };
       notifyWithContext(
         ctx,
-        pi,
+        run,
         REINSTALL_CONTEXT,
         [{ name: marketplace, scope, plugins: [skippedRow] }],
         undefined,
@@ -388,7 +394,7 @@ async function reinstallPluginWithTransaction(
   );
   notifyWithContext(
     ctx,
-    pi,
+    run,
     REINSTALL_CONTEXT,
     [{ name: marketplace, scope, plugins: [reinstalledRow] }],
     undefined,
@@ -396,7 +402,7 @@ async function reinstallPluginWithTransaction(
   );
   // AFILE-04: this arm renders its own row, so it shows the MCP config file
   // notices after it.
-  notifyMcpConfigNotices(ctx, locked.mcpConfigNotices);
+  notifyMcpConfigNotices(ctx, run, locked.mcpConfigNotices);
 
   // S5: when the config write-back loadConfig returned `invalid`, emit a
   // separate warning row so the user sees that the on-disk artifacts were
@@ -408,7 +414,7 @@ async function reinstallPluginWithTransaction(
     );
     notifyWithContext(
       ctx,
-      pi,
+      run,
       REINSTALL_CONTEXT,
       [
         {
@@ -464,7 +470,7 @@ function handleSinglePluginFailure(
   err: Error,
   render: "default" | "none",
 ): ReinstallFailedOutcome {
-  const { ctx, pi, scope, marketplace, plugin } = opts;
+  const { ctx, run, scope, marketplace, plugin } = opts;
   const outcome = owners.recordReinstallOutcome({
     partition: "failed",
     name: plugin,
@@ -505,7 +511,7 @@ function handleSinglePluginFailure(
         } satisfies PluginFailedMessage);
     notifyWithContext(
       ctx,
-      pi,
+      run,
       REINSTALL_CONTEXT,
       [{ name: marketplace, scope, plugins: [failureRow] }],
       undefined,
@@ -522,7 +528,7 @@ async function reinstallPluginsWith(
   opts: ReinstallPluginsOptions,
   reinstallPlugin: ReinstallPluginFn,
 ): Promise<readonly ReinstallPluginOutcome[]> {
-  const { ctx, pi, cwd } = opts;
+  const { ctx, run, cwd } = opts;
   let selection: {
     readonly cardinality: "single" | "plural";
     readonly targets: readonly SelectedReinstallTarget[];
@@ -549,7 +555,7 @@ async function reinstallPluginsWith(
     // sentinel at the top-level / standalone-cascade boundary; the closest
     // analog is the list-surface `(no marketplaces)` rendering. Severity:
     // undefined (info).
-    notifyWithContext(ctx, pi, REINSTALL_CONTEXT, [], undefined, cardinality);
+    notifyWithContext(ctx, run, REINSTALL_CONTEXT, [], undefined, cardinality);
     return [];
   }
 
@@ -566,7 +572,7 @@ async function reinstallPluginsWith(
       // eslint-disable-next-line no-await-in-loop -- each reinstall locks the scope (retries: 0)
       await reinstallPlugin({
         ctx,
-        pi,
+        run,
         scope: target.scope,
         cwd,
         marketplace: target.marketplace,
@@ -583,9 +589,9 @@ async function reinstallPluginsWith(
     );
   }
 
-  renderReinstallPartitionAndNotify(ctx, pi, outcomes, cardinality);
-  surfaceReinstallDiscoveryWarnings(ctx, outcomes);
-  surfaceReinstallMcpConfigNotices(ctx, outcomes);
+  renderReinstallPartitionAndNotify(ctx, run, outcomes, cardinality);
+  surfaceReinstallDiscoveryWarnings(ctx, run, outcomes);
+  surfaceReinstallMcpConfigNotices(ctx, run, outcomes);
   return Object.freeze(outcomes);
 }
 
@@ -597,10 +603,12 @@ async function reinstallPluginsWith(
  */
 function surfaceReinstallMcpConfigNotices(
   ctx: NotificationContext,
+  run: NotificationRun,
   outcomes: readonly ReinstallPluginOutcome[],
 ): void {
   notifyMcpConfigNotices(
     ctx,
+    run,
     outcomes.flatMap((outcome) =>
       outcome.partition === "reinstalled" ? (outcome.mcpConfigNotices ?? []) : [],
     ),
@@ -623,6 +631,7 @@ function surfaceReinstallMcpConfigNotices(
  */
 function surfaceReinstallDiscoveryWarnings(
   ctx: NotificationContext,
+  run: NotificationRun,
   outcomes: readonly ReinstallPluginOutcome[],
 ): void {
   for (const outcome of outcomes) {
@@ -630,7 +639,7 @@ function surfaceReinstallDiscoveryWarnings(
       continue;
     }
 
-    surfaceDiscoveryWarnings(ctx, {
+    surfaceDiscoveryWarnings(ctx, run, {
       plugin: outcome.name,
       verb: "reinstalled",
       warnings: outcome.discoveryWarnings,
@@ -666,12 +675,12 @@ async function handleEnumerationFailure(
   err: Error,
   cardinality: "single" | "plural",
 ): Promise<void> {
-  const { ctx, pi, cwd } = opts;
+  const { ctx, run, cwd } = opts;
 
   if (err instanceof MarketplaceNotAddedSignal) {
     await emitMarketplaceNotAddedSignal({
       ctx,
-      pi,
+      run,
       cwd,
       context: REINSTALL_CONTEXT,
       cardinality,
@@ -697,7 +706,7 @@ async function handleEnumerationFailure(
   };
   notifyWithContext(
     ctx,
-    pi,
+    run,
     REINSTALL_CONTEXT,
     [{ name: targetingMp, scope: targetingScope, plugins: [failedRow] }],
     undefined,
@@ -773,6 +782,7 @@ async function runLockedReinstall(
       seam: opts.cloneCacheSeam,
     }),
     ctx: opts.ctx,
+    run: opts.run,
     credentialOps: opts.credentialOps ?? DEFAULT_CREDENTIAL_OPS,
     ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
     ...(opts.authMemo !== undefined && { authMemo: opts.authMemo }),
@@ -946,6 +956,7 @@ async function resolveInstallable(
     readonly recordedSha: string | undefined;
     readonly seam?: ReinstallCloneCacheSeam;
     readonly ctx: NotificationContext;
+    readonly run: NotificationRun;
     readonly credentialOps: CredentialOps;
     readonly deviceFlowHttp?: DeviceFlowHttp;
     readonly authMemo?: Map<string, AuthAttemptResult>;
@@ -968,6 +979,7 @@ async function resolveInstallable(
             ...(input.seam !== undefined && { seam: input.seam }),
             auth: {
               ctx: input.ctx,
+              run: input.run,
               credentialOps: input.credentialOps,
               ...(input.deviceFlowHttp !== undefined && { deviceFlowHttp: input.deviceFlowHttp }),
               ...(input.authMemo !== undefined && { authMemo: input.authMemo }),

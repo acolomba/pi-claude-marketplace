@@ -23,6 +23,7 @@ import {
 import { createHooksRuntime } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import { asAbsolutePluginRoot } from "../../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import { locationsFor } from "../../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { createJsonCapture } from "../../../edge/json-capture.ts";
 import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
 
 import type {
@@ -42,6 +43,230 @@ interface SpawnCall {
   readonly command: string;
   readonly args: readonly string[];
   readonly options: SpawnOptions;
+}
+
+for (const scenario of [
+  {
+    name: "json",
+    mode: "json",
+    failure: "none",
+    summary: "scan complete",
+    emits: true,
+    injects: true,
+  },
+  {
+    name: "rpc",
+    mode: "rpc",
+    failure: "none",
+    summary: "scan complete",
+    emits: true,
+    injects: true,
+  },
+  {
+    name: "empty summary",
+    mode: "json",
+    failure: "none",
+    summary: "",
+    emits: false,
+    injects: true,
+  },
+  {
+    name: "whitespace summary",
+    mode: "rpc",
+    failure: "none",
+    summary: " \n",
+    emits: true,
+    injects: true,
+  },
+  {
+    name: "append failure",
+    mode: "json",
+    failure: "append",
+    summary: "scan complete",
+    emits: true,
+    injects: true,
+  },
+  {
+    name: "stale append getter",
+    mode: "json",
+    failure: "sink",
+    summary: "scan complete",
+    emits: false,
+    injects: true,
+  },
+  {
+    name: "unsupported mode",
+    mode: "unknown",
+    failure: "none",
+    summary: "scan complete",
+    emits: false,
+    injects: false,
+  },
+  {
+    name: "stale mode",
+    mode: "json",
+    failure: "mode",
+    summary: "scan complete",
+    emits: false,
+    injects: false,
+  },
+  {
+    name: "stale inventory",
+    mode: "json",
+    failure: "inventory",
+    summary: "scan complete",
+    emits: true,
+    injects: true,
+  },
+  {
+    name: "stale idle getter",
+    mode: "json",
+    failure: "idle",
+    summary: "scan complete",
+    emits: true,
+    injects: false,
+  },
+  {
+    name: "stale generation",
+    mode: "json",
+    failure: "generation",
+    summary: "scan complete",
+    emits: false,
+    injects: false,
+  },
+]) {
+  test(`settles rewake with ${scenario.name} and persists terminal cleanup`, async (t) => {
+    // arrange
+    const root = await mkdtemp(path.join(tmpdir(), "async-machine-"));
+    const runtime = createHooksRuntime();
+    const locations = locationsFor("project", root);
+    const capture = createJsonCapture();
+    const host = createPi();
+    const baseContext = createContext(root, "machine-session", true);
+    let terminal = false;
+    const context = new Proxy(baseContext.context, {
+      get(target, property): unknown {
+        if (property === "mode") {
+          if (terminal && scenario.failure === "mode") {
+            throw new Error("stale mode");
+          }
+
+          return scenario.mode;
+        }
+
+        if (property === "ui") {
+          return capture.ui;
+        }
+
+        if (property === "isIdle" && terminal && scenario.failure === "idle") {
+          throw new Error("stale idle");
+        }
+
+        return Reflect.get(target, property);
+      },
+    });
+    const inventory = t.mock.fn(() => {
+      if (scenario.failure === "inventory") {
+        throw new Error("stale inventory");
+      }
+
+      return [];
+    });
+    const pi = {
+      ...host.pi,
+      getAllTools: inventory,
+      get appendEntry(): ExtensionAPI["appendEntry"] {
+        if (scenario.failure === "sink") {
+          throw new Error("stale sink");
+        }
+
+        return (customType, payload) => {
+          capture.entrySink.appendEntry(customType, payload);
+          if (scenario.failure === "append") {
+            throw new Error("entry unavailable before bind");
+          }
+        };
+      },
+    };
+    const child = createChild(31_001);
+    t.after(async () => {
+      shutdownInMemoryChildren(runtime);
+      destroyChild(child);
+      await waitForPidTable(locations, []);
+      await rm(root, { recursive: true, force: true });
+    });
+    const entry = createEntry(root);
+    await spawnAndRegister(
+      runtime,
+      {
+        ...entry,
+        handlerDecl: { ...entry.handlerDecl, rewakeSummary: scenario.summary },
+      },
+      {},
+      context,
+      pi,
+      locations,
+      {
+        spawnImpl: createSpawn(child.child, []),
+        dispatchId: () => "machine-dispatch",
+      },
+    );
+    assert.strictEqual((await readPidTable(locations)).length, 1);
+    child.stderr.write("finding");
+    if (scenario.failure === "generation") {
+      runtime.advanceGeneration();
+    }
+
+    terminal = true;
+
+    // act
+    child.emitExit(2);
+    child.emitClose();
+    await waitForPidTable(locations, []);
+
+    // assert
+    assert.deepStrictEqual(await readPidTable(locations), []);
+    assert.strictEqual(runtime.takeChild("machine-dispatch"), undefined);
+    assert.deepStrictEqual(
+      host.messages,
+      scenario.injects
+        ? [
+            {
+              message: {
+                customType: "claude-hook-rewake",
+                content: "Review finding:\n\nfinding",
+                display: false,
+                details: { pluginId: "plugin-lifecycle", dispatchId: "machine-dispatch" },
+              },
+              options: { deliverAs: "nextTurn" },
+            },
+          ]
+        : [],
+    );
+    assert.deepStrictEqual(
+      capture.entries,
+      scenario.emits
+        ? [
+            {
+              customType: "claude-plugin",
+              payload: {
+                schemaVersion: 1,
+                origin: { kind: "hook" },
+                kind: "async-rewake-summary",
+                severity: "info",
+                needsReload: false,
+                text: scenario.summary,
+              },
+            },
+          ]
+        : [],
+    );
+    assert.strictEqual(
+      inventory.mock.callCount(),
+      ["mode", "generation"].includes(scenario.failure) || scenario.mode === "unknown" ? 0 : 3,
+    );
+    capture.assertValid();
+  });
 }
 
 interface ChildHarness {
@@ -248,7 +473,7 @@ function createPi(): PiHarness {
     messages.push({ message, options });
   };
 
-  const pi = { sendMessage } as ExtensionAPI;
+  const pi = { sendMessage, getAllTools: () => [] } as unknown as ExtensionAPI;
 
   return {
     pi,

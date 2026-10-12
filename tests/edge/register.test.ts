@@ -44,6 +44,7 @@ import { describe, test, type TestContext } from "node:test";
 
 import lockfile from "proper-lockfile";
 import { It, mock, verify, when } from "strong-mock";
+import { Type } from "typebox";
 
 import {
   createHooksRouting,
@@ -67,17 +68,28 @@ import {
   saveState,
 } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import { UnsupportedModeError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
+import {
+  notify,
+  notifyUsageInfo,
+  notifyUsageError,
+  notifyDiagnostic,
+  notifyDeviceFlowPrompt,
+} from "../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
+import { openNotificationRun } from "../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import { retryTree } from "../orchestrators/plugin/scope-tree-inventory.ts";
 import { createGitOpsFake } from "../platform/git-ops-fake.ts";
 import { createHermeticEnvironment } from "../platform/hermetic-environment.ts";
 import { noStatusSnapshot } from "../platform/mcp-status-seed.ts";
 
 import { buildInstalledPluginRecord } from "./handlers/marketplace-seed.ts";
+import { createJsonCapture } from "./json-capture.ts";
 import { createNotificationBoundary, expectSoftDepProbes } from "./notification-boundary.ts";
 
 import type { Notification } from "./notification-boundary.ts";
 import type { EdgeDeps } from "../../extensions/pi-claude-marketplace/edge/types.ts";
 import type { ClaudeImportExecutionResult } from "../../extensions/pi-claude-marketplace/orchestrators/import/index.ts";
+import type { UpdatePluginsFn } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts";
 import type { PluginUpdateOutcome } from "../../extensions/pi-claude-marketplace/orchestrators/types.ts";
 import type { ExtensionState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type {
@@ -86,7 +98,9 @@ import type {
   ExtensionContext,
   SessionStartEvent,
 } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { NotificationContext } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { CompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import type { NotificationRun } from "../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import type { Scope } from "../../extensions/pi-claude-marketplace/shared/types.ts";
 import type {
   AutocompleteItem,
@@ -159,6 +173,20 @@ interface CommandUnderTest {
   readonly verifyRegistrar: () => void;
 }
 
+/**
+ * The Pi inventory reads a registered command promises. `runs` is the number
+ * of handler invocations: each opens one notification run whose snapshot takes
+ * one soft-dependency probe (D-05; `expectSoftDepProbes` states its reads).
+ */
+interface CommandProbes {
+  readonly runs: number;
+  readonly capture?: Pick<ReturnType<typeof createJsonCapture>, "entrySink">;
+  readonly createInvocationId?: () => string;
+  readonly createRecoveryId?: () => string;
+  readonly appendAttempts?: number;
+  readonly updatePlugins?: UpdatePluginsFn;
+}
+
 interface WrapperUnderTest {
   readonly wrap: AutocompleteProviderFactory;
   readonly verifyBoundary: () => void;
@@ -194,6 +222,25 @@ function installNetworkTrap(t: TestContext): void {
   t.mock.method(https, "request", (): never => {
     throw new Error("the registration glue must not open a network connection");
   });
+}
+
+/**
+ * The tool pi-subagents registers. Its name is what the RH-3 soft-dependency
+ * probe looks for; the other fields only satisfy the Pi tool shape.
+ */
+function subagentTool(): ReturnType<ExtensionAPI["getAllTools"]>[number] {
+  return {
+    name: "subagent",
+    description: "test tool subagent",
+    parameters: Type.Object({}),
+    exposure: "direct",
+    sourceInfo: {
+      origin: "top-level",
+      path: "/test/tools/subagent.ts",
+      scope: "temporary",
+      source: "test",
+    },
+  };
 }
 
 /**
@@ -337,7 +384,7 @@ function registerCommandWithCache(
   completionCache: CompletionCache,
   hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson }),
   importClaudeSettings?: ImportDelegate,
-  expectedNotifications = 0,
+  probes: CommandProbes = { runs: 0 },
   gitOps?: EdgeDeps["gitOps"],
 ): CommandUnderTest {
   const pi = mock<PiRegistrar>({ exactParams: true, name: "extension API" });
@@ -353,15 +400,32 @@ function registerCommandWithCache(
   })
     .thenReturn()
     .times(1);
-  if (expectedNotifications > 0) {
-    expectSoftDepProbes(pi, expectedNotifications);
+  if (probes.capture !== undefined) {
+    const capture = probes.capture;
+    function appendEntry(this: PiRegistrar, customType: string, payload: unknown): void {
+      assert.strictEqual(this, pi);
+      capture.entrySink.appendEntry(customType, payload);
+    }
+
+    when(() => pi.appendEntry)
+      .thenReturn(appendEntry)
+      .times(probes.appendAttempts ?? 1);
   }
+
+  expectSoftDepProbes(pi, probes.runs);
 
   registerClaudePluginCommand(
     pi,
     createEdgeDeps(completionCache, importClaudeSettings, gitOps),
     hooksRouting,
-    createPluginUpdateOperations(hooksRouting, completionCache).updatePlugins,
+    probes.updatePlugins ??
+      createPluginUpdateOperations(hooksRouting, completionCache).updatePlugins,
+    {
+      createInvocationId: probes.createInvocationId ?? (() => "run-list-1"),
+      ...(probes.createRecoveryId === undefined
+        ? {}
+        : { createRecoveryId: probes.createRecoveryId }),
+    },
   );
 
   const registration = commandOptions.value;
@@ -379,9 +443,1264 @@ function registerCommandWithCache(
   };
 }
 
-function registerCommandUnderTest(): CommandUnderTest {
-  return registerCommandWithCache(createCompletionCache());
+function registerCommandUnderTest(probes: CommandProbes): CommandUnderTest {
+  return registerCommandWithCache(createCompletionCache(), undefined, undefined, probes);
 }
+
+for (const mode of ["json", "rpc"]) {
+  for (const ending of ["success", "typed-failure", "missing", "throw"] as const) {
+    test(`awaits delayed ${ending} output before registered settlement in ${mode}`, async (t) => {
+      // arrange
+      const { cwd } = await createHermeticScope(t, "delayed-update");
+      const capture = createJsonCapture();
+      const events: unknown[] = [];
+      let release!: () => void;
+      const pending = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      let late!: () => void;
+      const origin = { kind: "command", commandId: "plugin update", invocationId: "run-list-1" };
+      const prompt = {
+        customType: "claude-plugin",
+        payload: {
+          schemaVersion: 1,
+          origin,
+          kind: "device-flow-prompt",
+          severity: "info",
+          needsReload: false,
+          verificationUri: "https://example.test/device",
+          userCode: "WAIT-1234",
+        },
+      };
+      const warning = {
+        customType: "claude-plugin",
+        payload: {
+          schemaVersion: 1,
+          origin,
+          kind: "prune-committed-warning",
+          severity: "warning",
+          needsReload: true,
+          summary: "Prune committed; finalization needs attention.",
+          scope: "project",
+          cause: { causeChain: ["Saved."], truncated: false },
+        },
+      };
+      const completion =
+        ending === "missing"
+          ? commandErrorEntry("plugin update", "run-list-1", "Command returned without an outcome.")
+          : ending === "throw"
+            ? commandErrorEntry("plugin update", "run-list-1", "Delayed failure.", true)
+            : {
+                customType: "claude-plugin",
+                payload: {
+                  schemaVersion: 1,
+                  origin,
+                  kind: "usage-error",
+                  severity: "error",
+                  needsReload: false,
+                  message: "Update refused.",
+                  usage: "Usage: update",
+                },
+              };
+      const expected =
+        ending === "success"
+          ? [prompt, warning]
+          : ending === "throw"
+            ? [prompt, warning, completion]
+            : [prompt, completion];
+      const { registration, verifyRegistrar } = registerCommandUnderTest({
+        runs: 1,
+        appendAttempts: expected.length,
+        capture: {
+          entrySink: {
+            appendEntry(customType, payload) {
+              capture.entrySink.appendEntry(customType, payload);
+              events.push({ customType, payload });
+            },
+          },
+        },
+        updatePlugins: async ({ ctx, run }) => {
+          late = () => {
+            notifyDiagnostic(ctx, run, "Late.", ["Ignored."]);
+          };
+
+          notifyDeviceFlowPrompt(ctx, run, {
+            verificationUri: "https://example.test/device",
+            userCode: "WAIT-1234",
+          });
+          await pending;
+          if (ending === "success" || ending === "throw") {
+            notify(ctx, run, {
+              kind: "prune-committed-warning",
+              scope: "project",
+              cause: new Error("Saved."),
+            });
+          }
+
+          if (ending === "typed-failure") {
+            notifyUsageError(ctx, run, { message: "Update refused.", usage: "Usage: update" });
+          }
+
+          if (ending === "throw") {
+            throw new Error("Delayed failure.");
+          }
+        },
+      });
+      const ctx = {
+        mode,
+        cwd,
+        get ui() {
+          return capture.ui;
+        },
+      };
+
+      // act
+      const command = Promise.resolve(
+        Reflect.apply(registration.handler, undefined, ["update", ctx]),
+      ).then(() => {
+        events.push("settled");
+      });
+      await Promise.resolve();
+      const beforeRelease = [...events];
+      release();
+      await command;
+      ctx.mode = "invalid-mode";
+      late();
+
+      // assert
+      assert.deepStrictEqual(beforeRelease, [prompt]);
+      assert.deepStrictEqual(events, [...expected, "settled"]);
+      assert.deepStrictEqual(capture.entries, expected);
+      capture.assertValid();
+      verifyRegistrar();
+    });
+  }
+}
+
+function commandErrorEntry(
+  commandId: string,
+  invocationId: string,
+  message: string,
+  needsReload = false,
+): object {
+  return {
+    customType: "claude-plugin",
+    payload: {
+      schemaVersion: 1,
+      kind: "internal-error",
+      origin: { kind: "command", commandId, invocationId },
+      severity: "error",
+      needsReload,
+      summary: "Command failed unexpectedly.",
+      cause: { causeChain: [message], truncated: false },
+    },
+  };
+}
+
+for (const mode of ["json", "rpc"]) {
+  for (const projectSucceeds of [true, false]) {
+    test(`registered marketplace info preserves ${projectSucceeds ? "partial" : "total"} scope failures in ${mode}`, async (t) => {
+      // arrange
+      const { cwd } = await createHermeticScope(t, "info-failures");
+      const records: MarketplaceRecord[] = [];
+      for (const scope of ["project", "user"] as const) {
+        const locations = locationsFor(scope, cwd);
+        const record = { ...marketplaceRecordIn(locations.extensionRoot, "demo"), scope };
+        records.push(record);
+
+        await mkdir(path.dirname(record.manifestPath), { recursive: true });
+
+        await writeFile(
+          record.manifestPath,
+          scope === "project" && projectSucceeds
+            ? JSON.stringify({ name: "demo", plugins: [] })
+            : "{",
+        );
+
+        await saveState(locations.extensionRoot, {
+          schemaVersion: 2,
+          marketplaces: { demo: record },
+        });
+      }
+
+      const capture = createJsonCapture();
+      const { registration, verifyRegistrar } = registerCommandUnderTest({
+        runs: 1,
+        capture,
+        appendAttempts: 2,
+      });
+      const ctx = {
+        mode,
+        cwd,
+        get ui() {
+          return capture.ui;
+        },
+      };
+      const origin = { kind: "command", commandId: "marketplace info", invocationId: "run-list-1" };
+      const expected = [
+        ...(projectSucceeds
+          ? [
+              {
+                customType: "claude-plugin",
+                payload: {
+                  schemaVersion: 1,
+                  origin,
+                  kind: "marketplace-info",
+                  severity: "info",
+                  needsReload: false,
+                  name: "demo",
+                  scope: "project",
+                  details: { autoupdate: false },
+                  source: { sourceKind: "path", absPath: records[0]!.marketplaceRoot },
+                },
+              },
+            ]
+          : []),
+        ...(projectSucceeds ? ["user"] : ["project", "user"]).map((scope) => ({
+          customType: "claude-plugin",
+          payload: {
+            schemaVersion: 1,
+            origin,
+            kind: "plugin-info",
+            severity: "error",
+            needsReload: false,
+            summary: "A plugin operation has failed.",
+            marketplaceName: "demo",
+            marketplaceScope: scope,
+            marketplaceDetails: { autoupdate: false },
+            plugin: {
+              status: "failed",
+              name: "demo",
+              id: "demo@demo",
+              scope,
+              reasons: ["unparseable"],
+              componentsResolved: false,
+            },
+          },
+        })),
+      ];
+
+      // act
+      await Reflect.apply(registration.handler, undefined, ["marketplace info demo", ctx]);
+
+      // assert
+      assert.deepStrictEqual(capture.entries, expected);
+      capture.assertValid();
+      verifyRegistrar();
+    });
+  }
+
+  test(`settles overlapping silent imports independently of lifecycle output in ${mode}`, async (t) => {
+    // arrange
+    const { cwd } = await createHermeticScope(t, "silent-imports");
+    const capture = createJsonCapture();
+    const events: unknown[] = [];
+    const entrySink = {
+      appendEntry(customType: string, payload: unknown): void {
+        capture.entrySink.appendEntry(customType, payload);
+        events.push({ customType, payload });
+      },
+    };
+    let finishFirst!: () => void;
+    let finishSecond!: () => void;
+    const first = new Promise<void>((resolve) => {
+      finishFirst = resolve;
+    });
+    const second = new Promise<void>((resolve) => {
+      finishSecond = resolve;
+    });
+    const completions = [first, second];
+    const ids = ["run-a", "run-b"];
+    const late: Array<() => void> = [];
+    const importClaudeSettings: ImportDelegate = async ({ ctx, run }) => {
+      late.push(() => {
+        notifyUsageInfo(ctx, run, "Too late.");
+      });
+      await completions.shift();
+      return {
+        addedMarketplaces: [],
+        changedResources: false,
+        diagnostics: [],
+        installedPlugins: [],
+        marketplaceFailures: [],
+        skippedExistingMarketplaces: [],
+        skippedExistingPlugins: [],
+        sourceMismatches: [],
+        unexpectedPluginFailures: [],
+        warnings: [],
+      };
+    };
+
+    const { registration, verifyRegistrar } = registerCommandWithCache(
+      createCompletionCache(),
+      undefined,
+      importClaudeSettings,
+      {
+        runs: 2,
+        capture: { entrySink },
+        appendAttempts: 2,
+        createInvocationId: () => ids.shift()!,
+      },
+    );
+    const ctx = {
+      mode,
+      cwd,
+      get ui() {
+        return capture.ui;
+      },
+    };
+    const independent = { ...entrySink, getAllTools: () => [], getCommands: () => [] };
+
+    // act
+    const firstCommand = Promise.resolve(
+      Reflect.apply(registration.handler, undefined, ["import", ctx]),
+    ).then(() => {
+      events.push("settled-a");
+    });
+    notifyUsageInfo(ctx, openNotificationRun(independent, { kind: "hook" }), "Independent.");
+    const secondCommand = Promise.resolve(
+      Reflect.apply(registration.handler, undefined, ["import", ctx]),
+    ).then(() => {
+      events.push("settled-b");
+    });
+    notifyUsageInfo(ctx, openNotificationRun(independent, { kind: "load" }), "Independent.");
+    finishSecond();
+    await secondCommand;
+    finishFirst();
+    await firstCommand;
+
+    // assert
+    const expected = [
+      ...["hook", "load"].map((kind) => ({
+        customType: "claude-plugin",
+        payload: {
+          schemaVersion: 1,
+          origin: { kind },
+          kind: "usage-info",
+          severity: "info",
+          needsReload: false,
+          usage: "Independent.",
+        },
+      })),
+      commandErrorEntry("plugin import", "run-b", "Command returned without an outcome."),
+      commandErrorEntry("plugin import", "run-a", "Command returned without an outcome."),
+    ];
+    assert.deepStrictEqual(capture.entries, expected);
+    assert.deepStrictEqual(events, [
+      expected[0],
+      expected[1],
+      expected[2],
+      "settled-b",
+      expected[3],
+      "settled-a",
+    ]);
+    assert.strictEqual(late.length, 2);
+    ctx.mode = "stale";
+    for (const callback of late) {
+      callback();
+    }
+
+    assert.deepStrictEqual(capture.entries, expected);
+    assert.deepStrictEqual(ids, []);
+    capture.assertValid();
+    verifyRegistrar();
+  });
+
+  for (const recoveryFails of [false, true]) {
+    test(`registered sink recovery ${recoveryFails ? "closes" : "reopens"} delivery in ${mode}`, async (t) => {
+      // arrange
+      const { cwd } = await createHermeticScope(t, "root-recovery");
+      const attempts: object[] = [];
+      const entrySink = {
+        appendEntry(customType: string, payload: unknown): void {
+          attempts.push({ customType, payload });
+          if (attempts.length === 1 || (recoveryFails && attempts.length === 2)) {
+            throw new Error("Append failed.");
+          }
+        },
+      };
+      let late: () => void = () => {
+        throw new Error("Callback not captured");
+      };
+
+      const { registration, verifyRegistrar } = registerCommandUnderTest({
+        runs: 1,
+        capture: { entrySink },
+        appendAttempts: recoveryFails ? 2 : 4,
+        updatePlugins: ({ ctx, run }) => {
+          late = () => {
+            notifyUsageInfo(ctx, run, "Too late.");
+          };
+
+          notifyUsageInfo(ctx, run, "Before.");
+          notify(ctx, run, {
+            kind: "prune-committed-warning",
+            scope: "user",
+            cause: new Error("Saved."),
+          });
+          return Promise.reject(new Error("Later failure."));
+        },
+      });
+      const ctx = {
+        mode,
+        cwd,
+        get ui(): never {
+          throw new Error("Unexpected UI");
+        },
+      };
+      const origin = { kind: "command", commandId: "plugin update", invocationId: "run-list-1" };
+      const expected = [
+        {
+          customType: "claude-plugin",
+          payload: {
+            schemaVersion: 1,
+            origin,
+            kind: "usage-info",
+            severity: "info",
+            needsReload: false,
+            usage: "Before.",
+          },
+        },
+        commandErrorEntry("plugin update", "run-list-1", "Append failed."),
+        ...(recoveryFails
+          ? []
+          : [
+              {
+                customType: "claude-plugin",
+                payload: {
+                  schemaVersion: 1,
+                  origin,
+                  kind: "prune-committed-warning",
+                  severity: "warning",
+                  needsReload: true,
+                  summary: "Prune committed; finalization needs attention.",
+                  scope: "user",
+                  cause: { causeChain: ["Saved."], truncated: false },
+                },
+              },
+              commandErrorEntry("plugin update", "run-list-1", "Later failure.", true),
+            ]),
+      ];
+
+      // act
+      await Reflect.apply(registration.handler, undefined, ["update", ctx]);
+
+      // assert
+      assert.deepStrictEqual(attempts, expected);
+      ctx.mode = "stale";
+      late();
+      assert.deepStrictEqual(attempts, expected);
+      verifyRegistrar();
+    });
+  }
+
+  for (const startup of [false, true]) {
+    test(`registered ${startup ? "allocator" : "missing-outcome"} error cannot restart failed recovery in ${mode}`, async (t) => {
+      // arrange
+      const { cwd } = await createHermeticScope(t, "terminal-recovery");
+      const attempts: object[] = [];
+      const entrySink = {
+        appendEntry(customType: string, payload: unknown): never {
+          attempts.push({ customType, payload });
+          throw new Error("Append failed.");
+        },
+      };
+      const { registration, verifyRegistrar } = registerCommandUnderTest({
+        runs: startup ? 0 : 1,
+        capture: { entrySink },
+        appendAttempts: 2,
+        createInvocationId: () => {
+          if (startup) {
+            throw new Error("ID failed.");
+          }
+
+          return "run-list-1";
+        },
+        createRecoveryId: () => "recovery-a",
+        updatePlugins: () => {
+          assert.strictEqual(startup, false);
+          return Promise.resolve();
+        },
+      });
+      const ctx = {
+        mode,
+        cwd,
+        get ui(): never {
+          throw new Error("Unexpected UI");
+        },
+      };
+
+      // act
+      await Reflect.apply(registration.handler, undefined, ["update", ctx]);
+
+      // assert
+      const invocationId = startup ? "recovery-a" : "run-list-1";
+      assert.deepStrictEqual(attempts, [
+        commandErrorEntry(
+          "plugin update",
+          invocationId,
+          startup ? "ID failed." : "Command returned without an outcome.",
+        ),
+        commandErrorEntry("plugin update", invocationId, "Append failed."),
+      ]);
+      verifyRegistrar();
+    });
+  }
+
+  for (const stale of [false, true]) {
+    test(`registered completion preserves a live ${stale ? "throwing" : "invalid"} mode failure in ${mode}`, async (t) => {
+      // arrange
+      const { cwd } = await createHermeticScope(t, "live-mode");
+      const capture = createJsonCapture();
+      let finished = false;
+      const failure = new Error("Mode getter expired.");
+      const { registration, verifyRegistrar } = registerCommandUnderTest({
+        runs: 1,
+        updatePlugins: () => {
+          finished = true;
+          return Promise.resolve();
+        },
+      });
+      const ctx = {
+        cwd,
+        get mode() {
+          if (!finished) {
+            return mode;
+          }
+
+          if (stale) {
+            throw failure;
+          }
+
+          return "invalid-mode";
+        },
+        get ui() {
+          return capture.ui;
+        },
+      };
+
+      // act & assert
+      await assert.rejects(
+        async () => {
+          await Reflect.apply(registration.handler, undefined, ["update", ctx]);
+        },
+        (error: unknown) => (stale ? error === failure : error instanceof UnsupportedModeError),
+      );
+      assert.deepStrictEqual(capture.entries, []);
+      capture.assertValid();
+      verifyRegistrar();
+    });
+  }
+
+  for (const { name, emit, earlier } of [
+    { name: "silent", emit: () => undefined, earlier: [] },
+    {
+      name: "diagnostic-only",
+      emit: (ctx, run) => {
+        notifyDiagnostic(ctx, run, "Warning.", ["Detail."]);
+      },
+      earlier: [
+        { kind: "diagnostic", severity: "warning", header: "Warning.", lines: ["Detail."] },
+      ],
+    },
+    {
+      name: "prompt-only",
+      emit: (ctx, run) => {
+        notifyDeviceFlowPrompt(ctx, run, {
+          verificationUri: "https://example.test",
+          userCode: "ABCD",
+        });
+      },
+      earlier: [
+        {
+          kind: "device-flow-prompt",
+          severity: "info",
+          verificationUri: "https://example.test",
+          userCode: "ABCD",
+        },
+      ],
+    },
+  ] satisfies Array<{
+    name: string;
+    emit: (ctx: NotificationContext, run: NotificationRun) => void;
+    earlier: object[];
+  }>) {
+    test(`registered ${name} update completes with an error in ${mode}`, async (t) => {
+      // arrange
+      const { cwd } = await createHermeticScope(t, "missing-outcome");
+      const capture = createJsonCapture();
+      let late: () => void = () => {
+        throw new Error("Callback not captured");
+      };
+
+      const { registration, verifyRegistrar } = registerCommandUnderTest({
+        runs: 1,
+        capture,
+        appendAttempts: earlier.length + 1,
+        updatePlugins: ({ ctx, run }) => {
+          emit(ctx, run);
+          late = () => {
+            notifyUsageInfo(ctx, run, "Too late.");
+          };
+
+          return Promise.resolve();
+        },
+      });
+      const ctx = {
+        mode,
+        cwd,
+        get ui() {
+          return capture.ui;
+        },
+      };
+      const expected = [
+        ...earlier.map((payload) => ({
+          customType: "claude-plugin",
+          payload: {
+            schemaVersion: 1,
+            origin: { kind: "command", commandId: "plugin update", invocationId: "run-list-1" },
+            needsReload: false,
+            ...payload,
+          },
+        })),
+        commandErrorEntry("plugin update", "run-list-1", "Command returned without an outcome."),
+      ];
+
+      // act
+      await Reflect.apply(registration.handler, undefined, ["update", ctx]);
+
+      // assert
+      assert.deepStrictEqual(capture.entries, expected);
+      ctx.mode = "stale";
+      late();
+      assert.deepStrictEqual(capture.entries, expected);
+      capture.assertValid();
+      verifyRegistrar();
+    });
+  }
+
+  for (const { args, commandId, payload } of [
+    {
+      args: "list --scope project",
+      commandId: "plugin list",
+      payload: { kind: "cascade", marketplaces: [] },
+    },
+    {
+      args: "update --scope project",
+      commandId: "plugin update",
+      payload: { kind: "cascade", marketplaces: [], noOp: true },
+    },
+    {
+      args: "pending --scope project",
+      commandId: "plugin pending",
+      payload: { kind: "reconcile-pending-empty" },
+    },
+    {
+      args: "prune --scope project",
+      commandId: "plugin prune",
+      payload: { kind: "prune-empty", scope: "project" },
+    },
+    {
+      args: "help",
+      commandId: "plugin help",
+      payload: { kind: "usage-info", usage: EXPECTED_TOP_LEVEL_USAGE },
+    },
+  ]) {
+    test(`registered ${args} accepts its empty or help outcome in ${mode}`, async (t) => {
+      // arrange
+      const { cwd } = await createHermeticScope(t, "valid-empty");
+      const capture = createJsonCapture();
+      const { registration, verifyRegistrar } = registerCommandUnderTest({ runs: 1, capture });
+      const ctx = {
+        mode,
+        cwd,
+        get ui() {
+          return capture.ui;
+        },
+      };
+
+      // act
+      await Reflect.apply(registration.handler, undefined, [args, ctx]);
+
+      // assert
+      assert.deepStrictEqual(capture.entries, [
+        {
+          customType: "claude-plugin",
+          payload: {
+            schemaVersion: 1,
+            origin: { kind: "command", commandId, invocationId: "run-list-1" },
+            severity: "info",
+            needsReload: false,
+            ...payload,
+          },
+        },
+      ]);
+      capture.assertValid();
+      verifyRegistrar();
+    });
+  }
+
+  test(`registered update reports a failed ID allocator before inventory in ${mode}`, async (t) => {
+    // arrange
+    const { cwd } = await createHermeticScope(t, "update-id-failure");
+    const capture = createJsonCapture();
+    const ids = mock<{ primary(): string; recovery(): string }>({
+      exactParams: true,
+      name: "invocation IDs",
+    });
+    when(() => ids.primary())
+      .thenThrow(new Error("ID failed"))
+      .times(1);
+    when(() => ids.recovery())
+      .thenReturn("recovery-a")
+      .times(1);
+    const { registration, verifyRegistrar } = registerCommandUnderTest({
+      runs: 0,
+      capture,
+      createInvocationId: () => ids.primary(),
+      createRecoveryId: () => ids.recovery(),
+      updatePlugins: () => {
+        throw new Error("Unexpected update");
+      },
+    });
+    const ctx = {
+      mode,
+      cwd,
+      get ui() {
+        return capture.ui;
+      },
+    };
+
+    // act
+    await Reflect.apply(registration.handler, undefined, ["update", ctx]);
+
+    // assert
+    assert.deepStrictEqual(capture.entries, [
+      {
+        customType: "claude-plugin",
+        payload: {
+          schemaVersion: 1,
+          kind: "internal-error",
+          origin: { kind: "command", commandId: "plugin update", invocationId: "recovery-a" },
+          severity: "error",
+          needsReload: false,
+          summary: "Command failed unexpectedly.",
+          cause: { causeChain: ["ID failed"], truncated: false },
+        },
+      },
+    ]);
+    capture.assertValid();
+    verifyRegistrar();
+    verify(ids);
+  });
+
+  test(`registered update delivers an unexpected failure before output in ${mode}`, async (t) => {
+    // arrange
+    const { cwd } = await createHermeticScope(t, "update-failure");
+    const capture = createJsonCapture();
+    const { registration, verifyRegistrar } = registerCommandUnderTest({
+      runs: 1,
+      capture,
+      updatePlugins: () => Promise.reject(new Error("Update failed.")),
+    });
+    const ctx = {
+      mode,
+      cwd,
+      get ui() {
+        return capture.ui;
+      },
+    };
+
+    // act
+    const completion = await Promise.resolve()
+      .then(async () => {
+        await Reflect.apply(registration.handler, undefined, ["update", ctx]);
+      })
+      .then(
+        () => "fulfilled",
+        () => "rejected",
+      );
+
+    // assert
+    assert.strictEqual(completion, "fulfilled");
+    assert.deepStrictEqual(capture.entries, [
+      {
+        customType: "claude-plugin",
+        payload: {
+          schemaVersion: 1,
+          kind: "internal-error",
+          origin: { kind: "command", commandId: "plugin update", invocationId: "run-list-1" },
+          severity: "error",
+          needsReload: false,
+          summary: "Command failed unexpectedly.",
+          cause: { causeChain: ["Update failed."], truncated: false },
+        },
+      },
+    ]);
+    capture.assertValid();
+    verifyRegistrar();
+  });
+
+  test(`registered update retains equal earlier entries before failure in ${mode}`, async (t) => {
+    // arrange
+    const { cwd } = await createHermeticScope(t, "update-partial");
+    const capture = createJsonCapture();
+    const { registration, verifyRegistrar } = registerCommandUnderTest({
+      runs: 1,
+      capture,
+      appendAttempts: 3,
+      updatePlugins: ({ ctx, run }) => {
+        notifyUsageInfo(ctx, run, "Updated.");
+        notifyUsageInfo(ctx, run, "Updated.");
+        return Promise.reject(new Error("Update failed."));
+      },
+    });
+    const ctx = {
+      mode,
+      cwd,
+      get ui() {
+        return capture.ui;
+      },
+    };
+    const earlierEntry = {
+      customType: "claude-plugin",
+      payload: {
+        schemaVersion: 1,
+        kind: "usage-info",
+        origin: { kind: "command", commandId: "plugin update", invocationId: "run-list-1" },
+        severity: "info",
+        needsReload: false,
+        usage: "Updated.",
+      },
+    };
+
+    // act
+    await Reflect.apply(registration.handler, undefined, ["update", ctx]);
+
+    // assert
+    assert.deepStrictEqual(capture.entries, [
+      earlierEntry,
+      earlierEntry,
+      {
+        customType: "claude-plugin",
+        payload: {
+          schemaVersion: 1,
+          kind: "internal-error",
+          origin: { kind: "command", commandId: "plugin update", invocationId: "run-list-1" },
+          severity: "error",
+          needsReload: false,
+          summary: "Command failed unexpectedly.",
+          cause: { causeChain: ["Update failed."], truncated: false },
+        },
+      },
+    ]);
+    capture.assertValid();
+    verifyRegistrar();
+  });
+}
+
+for (const mode of ["json", "rpc"]) {
+  for (const { args, commandId } of [
+    { args: "list --scope project", commandId: "plugin list" },
+    { args: "ls --scope project", commandId: "plugin list" },
+  ]) {
+    test(`registered ${JSON.stringify(args)} appends a complete cascade in ${mode} without UI access`, async (t) => {
+      // arrange
+      const { cwd } = await createHermeticScope(t, "machine-list");
+      await seedProjectMarketplace(cwd, "demo");
+      const manifestPath = marketplaceRecordIn(cwd, "demo").manifestPath;
+      await mkdir(path.dirname(manifestPath), { recursive: true });
+      await writeFile(manifestPath, JSON.stringify({ name: "demo", plugins: [] }));
+      const capture = createJsonCapture();
+      const ids = mock<{ createInvocationId(): string }>({
+        exactParams: true,
+        name: "invocation IDs",
+      });
+      when(() => ids.createInvocationId())
+        .thenReturn("run-list-1")
+        .times(1);
+      const { registration, verifyRegistrar } = registerCommandUnderTest({
+        runs: 1,
+        capture,
+        createInvocationId: () => ids.createInvocationId(),
+      });
+      const ctx = {
+        mode,
+        cwd,
+        get ui() {
+          return capture.ui;
+        },
+      };
+
+      // act
+      try {
+        await Reflect.apply(registration.handler, undefined, [args, ctx]);
+      } catch {
+        // The retained capture ledger below must expose caught delivery failures.
+      }
+
+      // assert
+      assert.deepStrictEqual(capture.entries, [
+        {
+          customType: "claude-plugin",
+          payload: {
+            schemaVersion: 1,
+            kind: "cascade",
+            origin: { kind: "command", commandId, invocationId: "run-list-1" },
+            severity: "info",
+            needsReload: false,
+            tally: { label: "Plugin list", success: { count: 0 }, failures: 0, warnings: 0 },
+            marketplaces: [{ name: "demo", scope: "project", plugins: [] }],
+          },
+        },
+      ]);
+      capture.assertValid();
+      verifyRegistrar();
+      verify(ids);
+    });
+  }
+}
+
+for (const mode of ["json", "rpc"] as const) {
+  for (const args of ["browse", "", " \t "]) {
+    test(`registered ${JSON.stringify(args)} refuses each browse invocation in ${mode} without state or UI access`, async () => {
+      // arrange
+      const capture = createJsonCapture();
+      let invocation = 0;
+      const { registration, verifyRegistrar } = registerCommandUnderTest({
+        runs: 2,
+        capture,
+        appendAttempts: 2,
+        createInvocationId: () => `browse-run-${++invocation}`,
+      });
+      const ctx = {
+        mode,
+        get cwd(): string {
+          throw new Error("Browse refusal must not load marketplace state");
+        },
+        get ui() {
+          return capture.ui;
+        },
+      };
+
+      // act
+      await Reflect.apply(registration.handler, undefined, [args, ctx]);
+      await Reflect.apply(registration.handler, undefined, [args, ctx]);
+
+      // assert
+      assert.deepStrictEqual(
+        capture.entries,
+        ["browse-run-1", "browse-run-2"].map((invocationId) => ({
+          customType: "claude-plugin",
+          payload: {
+            schemaVersion: 1,
+            kind: "usage-error",
+            origin: { kind: "command", commandId: "plugin browse", invocationId },
+            severity: "error",
+            needsReload: false,
+            message: `Browse is unavailable in ${mode} mode. Use /claude:plugin list instead.`,
+            usage: "Usage: /claude:plugin browse",
+          },
+        })),
+      );
+      capture.assertValid();
+      verifyRegistrar();
+    });
+  }
+}
+
+for (const mode of ["json", "rpc"] as const) {
+  for (const { args, commandId, message, usage } of [
+    {
+      args: "help marketplace extra",
+      commandId: "plugin help",
+      message: 'Unknown help topic: "marketplace extra".',
+      usage: "Usage: /claude:plugin help [marketplace]",
+    },
+    {
+      args: "help invalid",
+      commandId: "plugin help",
+      message: 'Unknown help topic: "invalid".',
+      usage: "Usage: /claude:plugin help [marketplace]",
+    },
+    {
+      args: "marketplace help extra",
+      commandId: "marketplace help",
+      message: "marketplace help takes no arguments.",
+      usage: "Usage: /claude:plugin marketplace help",
+    },
+  ]) {
+    test(`registered ${args} retains its recognized identity in ${mode}`, async (t) => {
+      // arrange
+      const { cwd } = await createHermeticScope(t, "help-origin");
+      const capture = createJsonCapture();
+      const { registration, verifyRegistrar } = registerCommandUnderTest({
+        runs: 1,
+        capture,
+        createInvocationId: () => "help-run",
+      });
+      const ctx = {
+        mode,
+        cwd,
+        get ui() {
+          return capture.ui;
+        },
+      };
+
+      // act
+      await Reflect.apply(registration.handler, undefined, [args, ctx]);
+
+      // assert
+      assert.deepStrictEqual(capture.entries, [
+        {
+          customType: "claude-plugin",
+          payload: {
+            schemaVersion: 1,
+            kind: "usage-error",
+            severity: "error",
+            needsReload: false,
+            origin: { kind: "command", commandId, invocationId: "help-run" },
+            message,
+            usage,
+          },
+        },
+      ]);
+      capture.assertValid();
+      verifyRegistrar();
+    });
+  }
+
+  test(`keeps overlapping import runs and independent roots ordered in ${mode}`, async (t) => {
+    // arrange
+    const { cwd } = await createHermeticScope(t, "overlapping-imports");
+    const capture = createJsonCapture();
+    let finishFirst!: () => void;
+    let finishSecond!: () => void;
+    const first = new Promise<void>((resolve) => {
+      finishFirst = resolve;
+    });
+    const second = new Promise<void>((resolve) => {
+      finishSecond = resolve;
+    });
+    const completions = [first, second];
+    const invocationIds = ["run-a", "run-b"];
+    const importClaudeSettings: ImportDelegate = async ({ ctx, run }) => {
+      const completion = completions.shift()!;
+      notifyUsageInfo(ctx, run, "same");
+      notifyUsageInfo(ctx, run, "same");
+      await completion;
+      notifyUsageInfo(ctx, run, "same");
+      return {
+        addedMarketplaces: [],
+        changedResources: false,
+        diagnostics: [],
+        installedPlugins: [],
+        marketplaceFailures: [],
+        skippedExistingMarketplaces: [],
+        skippedExistingPlugins: [],
+        sourceMismatches: [],
+        unexpectedPluginFailures: [],
+        warnings: [],
+      };
+    };
+
+    const { registration, verifyRegistrar } = registerCommandWithCache(
+      createCompletionCache(),
+      undefined,
+      importClaudeSettings,
+      { runs: 2, capture, appendAttempts: 6, createInvocationId: () => invocationIds.shift()! },
+    );
+    const ctx = {
+      mode,
+      cwd,
+      get ui() {
+        return capture.ui;
+      },
+    };
+    const independentRoot = { ...capture.entrySink, getAllTools: () => [], getCommands: () => [] };
+
+    // act
+    const firstCommand: unknown = Reflect.apply(registration.handler, undefined, [
+      "import --scope project",
+      ctx,
+    ]);
+    notifyUsageInfo(ctx, openNotificationRun(independentRoot, { kind: "hook" }), "same");
+    const secondCommand: unknown = Reflect.apply(registration.handler, undefined, [
+      "import --scope project",
+      ctx,
+    ]);
+    notifyUsageInfo(ctx, openNotificationRun(independentRoot, { kind: "load" }), "same");
+    finishSecond();
+    await secondCommand;
+    finishFirst();
+    await firstCommand;
+
+    // assert
+    assert.deepStrictEqual(
+      capture.entries,
+      [
+        { kind: "command", commandId: "plugin import", invocationId: "run-a" },
+        { kind: "command", commandId: "plugin import", invocationId: "run-a" },
+        { kind: "hook" },
+        { kind: "command", commandId: "plugin import", invocationId: "run-b" },
+        { kind: "command", commandId: "plugin import", invocationId: "run-b" },
+        { kind: "load" },
+        { kind: "command", commandId: "plugin import", invocationId: "run-b" },
+        { kind: "command", commandId: "plugin import", invocationId: "run-a" },
+      ].map((origin) => ({
+        customType: "claude-plugin",
+        payload: {
+          schemaVersion: 1,
+          kind: "usage-info",
+          severity: "info",
+          needsReload: false,
+          origin,
+          usage: "same",
+        },
+      })),
+    );
+    assert.deepStrictEqual(invocationIds, []);
+    capture.assertValid();
+    verifyRegistrar();
+  });
+
+  test(`keeps the enable origin through delegated installation in ${mode}`, async (t) => {
+    // arrange
+    const { cwd } = await createHermeticScope(t, "enable-delegation");
+    const state = await seedPrunableScope("project", cwd);
+    const plugin = state.marketplaces.mp!.plugins.orphan!;
+    plugin.enabled = false;
+    const sourceSkill = path.join(plugin.resolvedSource, "skills", "orphan-skill", "SKILL.md");
+    await mkdir(path.dirname(sourceSkill), { recursive: true });
+    await writeFile(sourceSkill, "---\nname: orphan-skill\ndescription: A skill\n---\nbody\n");
+    const locations = locationsFor("project", cwd);
+    await rm(path.join(locations.skillsTargetDir, "orphan-skill"), { recursive: true });
+    await saveState(locations.extensionRoot, state);
+    const capture = createJsonCapture();
+    const { registration, verifyRegistrar } = registerCommandUnderTest({
+      runs: 1,
+      capture,
+      createInvocationId: () => "enable-run",
+    });
+    const ctx = {
+      mode,
+      cwd,
+      get ui() {
+        return capture.ui;
+      },
+    };
+
+    // act
+    await Reflect.apply(registration.handler, undefined, ["enable orphan@mp --scope project", ctx]);
+
+    // assert
+    assert.deepStrictEqual(capture.entries, [
+      {
+        customType: "claude-plugin",
+        payload: {
+          schemaVersion: 1,
+          kind: "cascade",
+          severity: "info",
+          needsReload: true,
+          origin: { kind: "command", commandId: "plugin enable", invocationId: "enable-run" },
+          marketplaces: [
+            {
+              name: "mp",
+              scope: "project",
+              plugins: [
+                {
+                  name: "orphan",
+                  id: "orphan@mp",
+                  scope: "project",
+                  status: "installed",
+                  version: "1.0.0",
+                  reasons: [],
+                },
+              ],
+            },
+          ],
+        },
+      },
+    ]);
+    assert.strictEqual(
+      await readFile(path.join(locations.skillsTargetDir, "orphan-skill", "SKILL.md"), "utf8"),
+      "---\nname: orphan-skill\ndescription: A skill\n---\nbody\n",
+    );
+    assert.strictEqual(
+      (await loadState(locations.extensionRoot)).marketplaces.mp!.plugins.orphan!.enabled,
+      true,
+    );
+    capture.assertValid();
+    verifyRegistrar();
+  });
+}
+
+for (const mode of ["", "JSON", " json", "rpc ", "ｊｓｏｎ", "jsоn", "unknown"]) {
+  test(`registered command rejects ${JSON.stringify(mode)} before routing or probing`, async (t) => {
+    // arrange
+    const { cwd } = await createHermeticScope(t, "unsupported-mode");
+    const { registration, verifyRegistrar } = registerCommandUnderTest({
+      runs: 0,
+      createInvocationId: () => {
+        throw new Error("Unexpected ID allocation");
+      },
+    });
+    const work: string[] = [];
+    const ctx = {
+      mode,
+      get cwd() {
+        work.push("route");
+        return cwd;
+      },
+    };
+    const originalPath = process.env.PATH;
+
+    // act & assert
+    assert.throws(
+      () => Reflect.apply(registration.handler, undefined, ["install alpha@demo", ctx]),
+      (error: unknown) => {
+        assert.ok(error instanceof UnsupportedModeError);
+        assert.strictEqual(error.mode, mode);
+        return true;
+      },
+    );
+    assert.deepStrictEqual(work, []);
+    assert.deepStrictEqual(await retryTree(cwd), []);
+    assert.strictEqual(process.env.PATH, originalPath);
+    verifyRegistrar();
+  });
+}
+
+test("a stale command mode getter prevents routing and inventory reads", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticScope(t, "stale-mode");
+  const { registration, verifyRegistrar } = registerCommandUnderTest({
+    runs: 0,
+    createInvocationId: () => {
+      throw new Error("Unexpected ID allocation");
+    },
+  });
+  const stale = new Error("context is stale");
+  const work: string[] = [];
+  const ctx = {
+    get mode(): string {
+      throw stale;
+    },
+    get cwd() {
+      work.push("route");
+      return cwd;
+    },
+  };
+
+  // act & assert
+  assert.throws(
+    () => Reflect.apply(registration.handler, undefined, ["install alpha@demo", ctx]),
+    (error: unknown) => error === stale,
+  );
+  assert.deepStrictEqual(work, []);
+  assert.deepStrictEqual(await retryTree(cwd), []);
+  verifyRegistrar();
+});
 
 function createBootstrapGitOps(sourceTree: string): EdgeDeps["gitOps"] {
   const git = createGitOpsFake({
@@ -403,7 +1722,7 @@ function createBootstrapGitOps(sourceTree: string): EdgeDeps["gitOps"] {
  * hand back the provider factory it installed.
  */
 function installAutocompleteWrapper(): WrapperUnderTest {
-  const { sessionStart, verifyRegistrar } = registerCommandUnderTest();
+  const { sessionStart, verifyRegistrar } = registerCommandUnderTest({ runs: 0 });
   const ui = mock<ExtensionContext["ui"]>({ exactParams: true, name: "session UI" });
   const providerFactory = It.willCapture<AutocompleteProviderFactory>("provider factory");
   when(() => {
@@ -416,6 +1735,9 @@ function installAutocompleteWrapper(): WrapperUnderTest {
     .thenReturn(ui)
     .times(1);
 
+  when(() => ctx.mode)
+    .thenReturn("tui")
+    .times(1);
   sessionStart(SESSION_START, ctx);
 
   const wrap = providerFactory.value;
@@ -440,7 +1762,7 @@ describe("registerClaudePluginCommand", () => {
     const expectedDescription = EXPECTED_COMMAND_DESCRIPTION;
 
     // act
-    const { registration, verifyRegistrar } = registerCommandUnderTest();
+    const { registration, verifyRegistrar } = registerCommandUnderTest({ runs: 0 });
 
     // assert
     assert.deepStrictEqual(registration.description, expectedDescription);
@@ -450,8 +1772,9 @@ describe("registerClaudePluginCommand", () => {
   test("hands the argument text and the command context to the subcommand router (D-04)", async (t) => {
     // arrange
     await createHermeticScope(t, "command-handler");
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
-    const { registration, verifyRegistrar } = registerCommandUnderTest();
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, undefined, 3);
+    // One run per invocation, usage errors included; the usage error probes nothing.
+    const { registration, verifyRegistrar } = registerCommandUnderTest({ runs: 1 });
     const expectedNotifications: readonly Notification[] = [
       {
         message: `Unknown subcommand: "frobnicate".\n\n${EXPECTED_TOP_LEVEL_USAGE}`,
@@ -482,15 +1805,20 @@ describe("registerClaudePluginCommand", () => {
       const untouchedState = await readFile(untouched.stateJsonPath, "utf8");
       const untouchedTree = await retryTree(untouched.scopeRoot);
       const lockSpy = t.mock.method(lockfile, "lock");
-      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0, {
-        value: cwd,
-        reads: 1,
-      });
+      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(
+        1,
+        {
+          value: cwd,
+          reads: 1,
+        },
+        3,
+      );
+      // The one run is the only probe: the prune notification renders from it.
       const { registration, verifyRegistrar } = registerCommandWithCache(
         createCompletionCache(),
         createHooksRouting(createHooksRuntime(), { readHooksJson }),
         undefined,
-        1,
+        { runs: 1 },
       );
 
       // act
@@ -541,8 +1869,9 @@ describe("registerClaudePluginCommand", () => {
       const userTree = await retryTree(user.scopeRoot);
       const projectTree = await retryTree(project.scopeRoot);
       const lockSpy = t.mock.method(lockfile, "lock");
-      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
-      const { registration, verifyRegistrar } = registerCommandUnderTest();
+      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, undefined, 3);
+      // One run per invocation, usage errors included; the usage error probes nothing.
+      const { registration, verifyRegistrar } = registerCommandUnderTest({ runs: 1 });
 
       // act
       await registration.handler(`prune ${operand}`, ctx);
@@ -567,10 +1896,14 @@ describe("registerClaudePluginCommand", () => {
   test("shares the supplied lifecycle routing owner with registered import execution", async (t) => {
     // arrange
     const { cwd } = await createHermeticScope(t, "import-routing-owner");
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0, {
-      value: cwd,
-      reads: 1,
-    });
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(
+      0,
+      {
+        value: cwd,
+        reads: 1,
+      },
+      2,
+    );
     const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
     let forwardedHooksRouting: unknown;
     const importClaudeSettings: ImportDelegate = (options) => {
@@ -589,10 +1922,12 @@ describe("registerClaudePluginCommand", () => {
       });
     };
 
+    // The one run is the only probe: import emits nothing here.
     const { registration, verifyRegistrar } = registerCommandWithCache(
       createCompletionCache(),
       hooksRouting,
       importClaudeSettings,
+      { runs: 1 },
     );
 
     // act
@@ -614,7 +1949,7 @@ describe("registerClaudePluginCommand", () => {
     });
     await seedProjectMarketplace(scope.cwd, "registration-mp");
     await seedProjectMarketplace(laterRoot, "invocation-mp");
-    const { registration, verifyRegistrar } = registerCommandUnderTest();
+    const { registration, verifyRegistrar } = registerCommandUnderTest({ runs: 0 });
     const expectedCandidates = [{ label: "invocation-mp", value: "list invocation-mp " }];
     process.chdir(laterRoot);
 
@@ -708,11 +2043,12 @@ describe("registerClaudePluginCommand", () => {
       () => Promise.resolve([{ name: "peer-stale", status: "available" }]),
     );
     await rm(path.dirname(path.dirname(pluginCachePath)), { force: true, recursive: true });
+    // The one run is the only probe: add and autoupdate render from it.
     const owner = registerCommandWithCache(
       completionCache,
       createHooksRouting(createHooksRuntime(), { readHooksJson }),
       undefined,
-      2,
+      { runs: 1 },
       createBootstrapGitOps(sourceTree),
     );
     const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
@@ -721,6 +2057,9 @@ describe("registerClaudePluginCommand", () => {
     when(() => ctx.cwd)
       .thenReturn(cwd)
       .times(1);
+    when(() => ctx.mode)
+      .thenReturn("tui")
+      .times(4);
     when(() => ctx.ui)
       .thenReturn(ui)
       .times(2);
@@ -835,11 +2174,12 @@ test("rebuilds completion rows through the cache that owns a successful register
     Promise.resolve([{ name: "peer-stale", status: "available" }]),
   );
   await rm(cachePath, { force: true });
+  // The one run is the only probe.
   const owner = registerCommandWithCache(
     ownerCache,
     createHooksRouting(createHooksRuntime(), { readHooksJson }),
     undefined,
-    1,
+    { runs: 1 },
   );
   const peer = registerCommandWithCache(peerCache);
   const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
@@ -848,6 +2188,9 @@ test("rebuilds completion rows through the cache that owns a successful register
   when(() => ctx.cwd)
     .thenReturn(cwd)
     .times(1);
+  when(() => ctx.mode)
+    .thenReturn("tui")
+    .times(3);
   when(() => ctx.ui)
     .thenReturn(ui)
     .times(1);
@@ -925,11 +2268,12 @@ test("rebuilds completion rows through the cache that owns a successful register
     Promise.resolve([{ name: "peer-unrelated", status: "available" }]),
   );
   await rm(unrelatedCachePath, { force: true });
+  // The one run is the only probe: the remove notification renders from it.
   const owner = registerCommandWithCache(
     ownerCache,
     createHooksRouting(createHooksRuntime(), { readHooksJson }),
     undefined,
-    1,
+    { runs: 1 },
   );
   const peer = registerCommandWithCache(peerCache);
   const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
@@ -938,6 +2282,9 @@ test("rebuilds completion rows through the cache that owns a successful register
   when(() => ctx.cwd)
     .thenReturn(cwd)
     .times(1);
+  when(() => ctx.mode)
+    .thenReturn("tui")
+    .times(3);
   when(() => ctx.ui)
     .thenReturn(ui)
     .times(1);
@@ -1033,11 +2380,12 @@ test("rebuilds completion rows through the cache that owns a successful register
     Promise.resolve([{ name: "peer-unrelated", status: "available" }]),
   );
   await rm(unrelatedCachePath, { force: true });
+  // The one run is the only probe: the update notification renders from it.
   const owner = registerCommandWithCache(
     ownerCache,
     createHooksRouting(createHooksRuntime(), { readHooksJson }),
     undefined,
-    1,
+    { runs: 1 },
   );
   const peer = registerCommandWithCache(peerCache);
   const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
@@ -1046,6 +2394,9 @@ test("rebuilds completion rows through the cache that owns a successful register
   when(() => ctx.cwd)
     .thenReturn(cwd)
     .times(1);
+  when(() => ctx.mode)
+    .thenReturn("tui")
+    .times(3);
   when(() => ctx.ui)
     .thenReturn(ui)
     .times(1);
@@ -1137,11 +2488,13 @@ test("rebuilds completion rows through the cache that owns a successful register
     Promise.resolve([{ name: "peer-unrelated", status: "available" }]),
   );
   await rm(unrelatedCachePath, { force: true });
+  // D-05: the run is the only probe; the install stamps severity and renders
+  // its markers from the run's snapshot.
   const owner = registerCommandWithCache(
     ownerCache,
     createHooksRouting(createHooksRuntime(), { readHooksJson }),
     undefined,
-    2,
+    { runs: 1 },
   );
   const peer = registerCommandWithCache(peerCache);
   const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
@@ -1150,6 +2503,9 @@ test("rebuilds completion rows through the cache that owns a successful register
   when(() => ctx.cwd)
     .thenReturn(cwd)
     .times(1);
+  when(() => ctx.mode)
+    .thenReturn("tui")
+    .times(3);
   when(() => ctx.ui)
     .thenReturn(ui)
     .times(1);
@@ -1206,6 +2562,111 @@ test("rebuilds completion rows through the cache that owns a successful register
   peer.verifyRegistrar();
 });
 
+test("one soft-dep snapshot drives both the severity stamp and the markers of a registered install (SC-3, D-08)", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticScope(t, "sc3-one-snapshot");
+  const marketplace = "sc3-marketplace";
+  const sourceRoot = path.join(cwd, "marketplaces", marketplace);
+  const pluginRoot = path.join(sourceRoot, "plugins", "helper");
+  await mkdir(path.join(sourceRoot, ".claude-plugin"), { recursive: true });
+  await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
+  await mkdir(path.join(pluginRoot, "agents"), { recursive: true });
+  await writeFile(
+    path.join(sourceRoot, ".claude-plugin", "marketplace.json"),
+    JSON.stringify({
+      name: marketplace,
+      owner: { name: "snapshot owner" },
+      plugins: [{ name: "helper", source: "./plugins/helper", version: "1.0.0" }],
+    }),
+    "utf8",
+  );
+  await writeFile(
+    path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "helper", version: "1.0.0" }),
+    "utf8",
+  );
+  await writeFile(
+    path.join(pluginRoot, "agents", "helper.md"),
+    "---\nname: helper\ndescription: Helps.\n---\n\nBody.\n",
+    "utf8",
+  );
+  await seedProjectMarketplace(cwd, marketplace);
+  // The inventory answers "no companion" for the three reads one snapshot
+  // takes, and "pi-subagents loaded" on every later read. If the severity
+  // stamp and the renderer took separate probes, the second probe would see
+  // `subagent` loaded: the row would lose its marker while the summary still
+  // said "needs attention", or the reverse.
+  const getAllTools = t.mock.fn<ExtensionAPI["getAllTools"]>(() => [subagentTool()]);
+  getAllTools.mock.mockImplementationOnce(() => [], 0);
+  getAllTools.mock.mockImplementationOnce(() => [], 1);
+  getAllTools.mock.mockImplementationOnce(() => [], 2);
+  const pi = mock<PiRegistrar>({ exactParams: true, name: "extension API" });
+  const commandOptions = It.willCapture<CommandRegistration>("claude:plugin registration");
+  when(() => {
+    pi.registerCommand("claude:plugin", commandOptions);
+  })
+    .thenReturn()
+    .times(1);
+  when(() => {
+    pi.on("session_start", It.willCapture<SessionStartListener>("session start listener"));
+  })
+    .thenReturn()
+    .times(1);
+  when(() => pi.getAllTools)
+    .thenReturn(getAllTools)
+    .atLeast(3);
+  when(() => pi.getCommands())
+    .thenReturn([])
+    .times(1);
+  const completionCache = createCompletionCache();
+  const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
+  registerClaudePluginCommand(
+    pi,
+    createEdgeDeps(completionCache),
+    hooksRouting,
+    createPluginUpdateOperations(hooksRouting, completionCache).updatePlugins,
+  );
+  const registration = commandOptions.value;
+  assert.ok(registration !== undefined, "the registration glue installed no command");
+  const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
+  const ui = mock<NotificationUi>({ exactParams: true, name: "command UI" });
+  const notifications: Notification[] = [];
+  when(() => ctx.cwd)
+    .thenReturn(cwd)
+    .times(1);
+  when(() => ctx.mode)
+    .thenReturn("tui")
+    .times(3);
+  when(() => ctx.ui)
+    .thenReturn(ui)
+    .times(1);
+  when(() => ui.notify)
+    .thenReturn((message, severity) => {
+      notifications.push(severity === undefined ? { message } : { message, severity });
+    })
+    .times(1);
+
+  // act
+  await registration.handler(`install helper@${marketplace} --scope project`, ctx);
+
+  // assert
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "A plugin operation needs attention.\n\n" +
+        "● sc3-marketplace [project]\n" +
+        "  ● helper v1.0.0 (installed) {requires pi-subagents}\n\n" +
+        "/reload to pick up changes",
+      severity: "warning",
+    },
+  ]);
+  // D-05: one probe per command run, three tool reads and one command read.
+  assert.strictEqual(getAllTools.mock.callCount(), 3);
+  verify(ctx);
+  verify(ui);
+  verify(pi);
+});
+
 test("rebuilds completion rows through the cache that owns a successful registered reinstall", async (t) => {
   // arrange
   const { cwd } = await createHermeticScope(t, "reinstall-completion-owner");
@@ -1253,11 +2714,12 @@ test("rebuilds completion rows through the cache that owns a successful register
     Promise.resolve([{ name: "peer-stale", status: "available" }]),
   );
   await rm(cachePath, { force: true });
+  // One run; the reinstall notification renders from it and probes nothing.
   const owner = registerCommandWithCache(
     ownerCache,
     createHooksRouting(createHooksRuntime(), { readHooksJson }),
     undefined,
-    1,
+    { runs: 1 },
   );
   const peer = registerCommandWithCache(peerCache);
   const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
@@ -1266,6 +2728,9 @@ test("rebuilds completion rows through the cache that owns a successful register
   when(() => ctx.cwd)
     .thenReturn(cwd)
     .times(1);
+  when(() => ctx.mode)
+    .thenReturn("tui")
+    .times(3);
   when(() => ctx.ui)
     .thenReturn(ui)
     .times(1);
@@ -1357,11 +2822,12 @@ test("rebuilds completion rows through the cache that owns a successful register
     Promise.resolve([{ name: "owner-unrelated", status: "available" }]),
   );
   await rm(unrelatedCachePath, { force: true });
+  // One run; the uninstall notification renders from it and probes nothing.
   const owner = registerCommandWithCache(
     ownerCache,
     createHooksRouting(createHooksRuntime(), { readHooksJson }),
     undefined,
-    1,
+    { runs: 1 },
   );
   const peer = registerCommandWithCache(peerCache);
   const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
@@ -1370,6 +2836,9 @@ test("rebuilds completion rows through the cache that owns a successful register
   when(() => ctx.cwd)
     .thenReturn(cwd)
     .times(1);
+  when(() => ctx.mode)
+    .thenReturn("tui")
+    .times(3);
   when(() => ctx.ui)
     .thenReturn(ui)
     .times(1);
@@ -1422,6 +2891,45 @@ test("rebuilds completion rows through the cache that owns a successful register
 });
 
 describe("registerClaudePluginCommand autocomplete wrapper", () => {
+  for (const failure of ["unknown-mode", "mode", "ui", "provider"] as const) {
+    test(`contains ${failure} failure during autocomplete setup`, async (t) => {
+      // arrange
+      await createHermeticScope(t, "autocomplete-failure");
+      const { sessionStart, verifyRegistrar } = registerCommandUnderTest({ runs: 0 });
+      const work: string[] = [];
+      const ctx = {
+        get mode(): string {
+          if (failure === "mode") {
+            throw new Error("stale mode");
+          }
+
+          return failure === "unknown-mode" ? "unknown" : "rpc";
+        },
+        get ui() {
+          work.push("ui");
+          if (failure === "ui") {
+            throw new Error("stale ui");
+          }
+
+          return {
+            addAutocompleteProvider() {
+              work.push("provider");
+              throw new Error("stale provider");
+            },
+          };
+        },
+      };
+
+      // act
+      Reflect.apply(sessionStart, undefined, [SESSION_START, ctx]);
+
+      // assert
+      const expected = { "unknown-mode": [], mode: [], ui: ["ui"], provider: ["ui", "provider"] };
+      assert.deepStrictEqual(work, expected[failure]);
+      verifyRegistrar();
+    });
+  }
+
   test("installs exactly one autocomplete provider when the session starts (TC-7)", async (t) => {
     // arrange
     await createHermeticScope(t, "provider-install");
@@ -1847,8 +3355,9 @@ for (const { verb, aliases = [], operand, usage, surplus, unknown } of COMMAND_A
       test(`registered ${spelling} rejects ${kind} before reading runtime context`, async (t) => {
         // arrange
         const { cwd } = await createHermeticScope(t, "reject-arguments");
-        const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
-        const { registration, verifyRegistrar } = registerCommandUnderTest();
+        const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, undefined, 3);
+        // One run per invocation, usage errors included; the usage error probes nothing.
+        const { registration, verifyRegistrar } = registerCommandUnderTest({ runs: 1 });
 
         // act
         await registration.handler(`${spelling} ${operand} ${invalid}`, ctx);
@@ -1876,8 +3385,9 @@ for (const { verb, aliases = [], operand, usage } of COMMAND_ARGUMENT_CASES.filt
       test(`registered ${spelling} rejects the empty scope ${emptyValue} before a valid-looking token`, async (t) => {
         // arrange
         const { cwd } = await createHermeticScope(t, "reject-empty-scope");
-        const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
-        const { registration, verifyRegistrar } = registerCommandUnderTest();
+        const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, undefined, 3);
+        // One run per invocation, usage errors included; the usage error probes nothing.
+        const { registration, verifyRegistrar } = registerCommandUnderTest({ runs: 1 });
 
         // act
         await registration.handler(`${spelling} ${operand} --scope ${emptyValue} project`, ctx);

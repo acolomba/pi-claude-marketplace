@@ -1,4 +1,5 @@
 import { LIST_CONTEXT } from "../../../../extensions/pi-claude-marketplace/orchestrators/plugin/list.messaging.ts";
+import { presentCascade } from "../../../../extensions/pi-claude-marketplace/shared/notification-present.ts";
 import { notifyWithContext } from "../../../../extensions/pi-claude-marketplace/shared/notify-context.ts";
 import {
   piWithAllLoaded,
@@ -7,7 +8,12 @@ import {
   piWithNothingLoaded,
 } from "../mock-pi.ts";
 
+import type { NotificationPresentation } from "../../../../extensions/pi-claude-marketplace/shared/notification-present.ts";
+import type { NotificationRun } from "../../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
+import type { PluginNotificationMessage } from "../../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
+import type { MarketplaceRows } from "../../../../extensions/pi-claude-marketplace/shared/notify-context.ts";
 import type { FixtureMap } from "../fixture-types.ts";
+import type { MockCtx } from "../mock-pi.ts";
 
 const AVAILABLE_INSTALLS_DISABLED_ROWS = [
   {
@@ -44,6 +50,28 @@ const REMOTE_INSTALLS_DISABLED_ROWS = [
     ],
   },
 ] as const;
+
+/**
+ * The list surface's seam pair for one set of rows, stated once. `emit` calls
+ * `notifyWithContext`, the seam `listPlugins` calls; `present` presents the
+ * message that seam builds from the same rows, label, cardinality, and row
+ * policies, so the JSON strategy converts the value the text bytes came from.
+ */
+function listSurfaceSeam<
+  Msg extends PluginNotificationMessage & { status: keyof typeof LIST_CONTEXT.rowPolicies },
+>(rows: readonly MarketplaceRows<Msg>[]) {
+  return {
+    emit: (ctx: MockCtx, run: NotificationRun): void => {
+      notifyWithContext(ctx, run, LIST_CONTEXT, rows, undefined, "plural");
+    },
+    present: (run: NotificationRun): NotificationPresentation =>
+      presentCascade(
+        run,
+        { marketplaces: rows, label: LIST_CONTEXT.Messaging.label, cardinality: "plural" },
+        LIST_CONTEXT.rowPolicies,
+      ),
+  };
+}
 
 /** Catalog fixtures for the plugin list command surface. */
 export const PLUGIN_LIST_FIXTURES: FixtureMap = {
@@ -504,25 +532,15 @@ export const PLUGIN_LIST_FIXTURES: FixtureMap = {
     //
     // Driven through the list surface's own `CommandContext` via `emit`, for
     // the same reason the bulk-update no-op states are: the reason brace on a
-    // `(available)` / `(remote)` row is composed by `LIST_RENDER`, while the
-    // central `renderPluginRow` arms omit `composeReasons` by construction --
-    // no producer that renders through THEM stamps `reasons` on those two
-    // statuses (OUT-05 / RSTA-01). `notifyWithContext` is the seam `listPlugins`
-    // itself
+    // `(available)` / `(remote)` row comes from list's row policies, which
+    // enable content reasons there, while the central row policy turns them
+    // off -- no producer that uses it stamps `reasons` on those two statuses
+    // (OUT-05 / RSTA-01). `notifyWithContext` is the seam `listPlugins` itself
     // calls, so the block below is byte-paired with the real list surface.
     "available-installs-disabled": {
       pi: piWithBothLoaded(),
       message: { marketplaces: AVAILABLE_INSTALLS_DISABLED_ROWS },
-      emit: (ctx, pi) => {
-        notifyWithContext(
-          ctx,
-          pi,
-          LIST_CONTEXT,
-          AVAILABLE_INSTALLS_DISABLED_ROWS,
-          undefined,
-          "plural",
-        );
-      },
+      ...listSurfaceSeam(AVAILABLE_INSTALLS_DISABLED_ROWS),
     },
 
     // RSTA-01 / D-80-03: list-surface inventory row for a not-installed
@@ -588,16 +606,7 @@ export const PLUGIN_LIST_FIXTURES: FixtureMap = {
     "remote-installs-disabled": {
       pi: piWithBothLoaded(),
       message: { marketplaces: REMOTE_INSTALLS_DISABLED_ROWS },
-      emit: (ctx, pi) => {
-        notifyWithContext(
-          ctx,
-          pi,
-          LIST_CONTEXT,
-          REMOTE_INSTALLS_DISABLED_ROWS,
-          undefined,
-          "plural",
-        );
-      },
+      ...listSurfaceSeam(REMOTE_INSTALLS_DISABLED_ROWS),
     },
 
     // WINV-04: a workflow-bearing plugin renders as an ordinary not-installed

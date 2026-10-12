@@ -67,6 +67,7 @@ import {
   type PluginPartiallyInstalledMessage,
   type Reason,
   type ReconcileAppliedCascadeMessage,
+  type WithPlugins,
 } from "../../shared/notification-types.ts";
 import { malformedReasonsForKinds } from "../../shared/notify-reasons.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
@@ -84,7 +85,7 @@ import type {
 import type { PendingMsg, ReconcileAppliedMsg } from "./reconcile.messaging.ts";
 import type { PlannedPluginInstall, ReconcilePlan } from "./types.ts";
 import type { MarketplaceManifest } from "../../domain/manifest.ts";
-import type { MarketplaceRows, WithPlugins } from "../../shared/notify-context.ts";
+import type { MarketplaceRows } from "../../shared/notify-context.ts";
 import type { Scope } from "../../shared/types.ts";
 
 /**
@@ -346,7 +347,7 @@ export async function resolvePendingForceInstalls(
 /**
  * Pure projection: ReconcilePlan[] -> pending marketplace rows. The rows are
  * typed `MarketplaceRows<PendingMsg>` so the projection's plugin children are
- * statically pinned to the pending render map's status set -- the consumer
+ * statically pinned to the pending row policies' status set -- the consumer
  * (`pendingReconcile`) routes them through `notifyWithContext` without a cast.
  *
  * Every plan action is folded into its `(scope, marketplace)` block. The
@@ -1092,12 +1093,14 @@ function reasonAsContent(reason: Reason): readonly ContentReason[] {
  */
 export function buildReconcileAppliedCascade(
   outcomes: readonly PerEntryOutcome[],
-): ReconcileAppliedCascadeMessage {
+): ReconcileAppliedCascadeMessage & {
+  readonly marketplaces: readonly MarketplaceRows<ReconcileAppliedMsg>[];
+} {
   // RECON-04 / WR-02: pin the block's plugin children to the applied context's
   // `ReconcileAppliedMsg` union so each `applyOutcomeToBlock` push is checked
-  // against the render map's status set (installed/uninstalled/disabled/failed).
-  // A status drift between this producer and `RECONCILE_APPLIED_CONTEXT.render`
-  // is then a compile error here, not a reachable `dispatchRow` fallback at load
+  // against the policy map's status set (installed/uninstalled/disabled/failed).
+  // A status drift between this producer and `RECONCILE_APPLIED_CONTEXT.rowPolicies`
+  // is then a compile error here, not a missing-policy diagnostic at load
   // time. The resulting rows widen to the broad `ReconcileAppliedCascadeMessage`
   // shape (a safe upcast, mirroring the pending-cascade pattern).
   const byMp = new Map<string, MarketplaceBlock<ReconcileAppliedMsg>>();

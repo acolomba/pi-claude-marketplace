@@ -11,6 +11,7 @@ import {
 
 import type { GitAuthProvider } from "../../extensions/pi-claude-marketplace/domain/auth-registry.ts";
 import type { GitCredentials } from "../../extensions/pi-claude-marketplace/platform/git.ts";
+import type { DeviceFlowPrompt } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
 export interface DeviceFlowContractScenario {
   readonly deviceCode: DeviceCodeResponse;
@@ -21,10 +22,7 @@ export interface DeviceFlowContractScenario {
 
 export interface DeviceFlowContractObservation {
   readonly deviceFlow: DeviceFlowResult;
-  readonly notifications: ReadonlyArray<{
-    readonly message: string;
-    readonly severity?: "info" | "warning" | "error";
-  }>;
+  readonly prompts: ReadonlyArray<DeviceFlowPrompt>;
   readonly approvedCredentials: ReadonlyArray<{
     readonly host: string;
     readonly credential: GitCredentials;
@@ -103,10 +101,7 @@ export function createDeviceFlowContractParticipant({
 }): DeviceFlowContractParticipant {
   return {
     async run() {
-      const notifications: Array<{
-        message: string;
-        severity?: "info" | "warning" | "error";
-      }> = [];
+      const prompts: DeviceFlowPrompt[] = [];
       const approvedCredentials: Array<{ host: string; credential: GitCredentials }> = [];
       const waits: number[] = [];
       const credentialOps = {
@@ -121,8 +116,8 @@ export function createDeviceFlowContractParticipant({
       const deviceFlow = await initiateDeviceFlow({
         host: "auth.example",
         credentialOps,
-        notifyFn: (message, severity) => {
-          notifications.push(severity === undefined ? { message } : { message, severity });
+        onDeviceCode: (prompt) => {
+          prompts.push(prompt);
         },
         ...(http === undefined ? {} : { http }),
         provider,
@@ -141,7 +136,7 @@ export function createDeviceFlowContractParticipant({
 
       return {
         deviceFlow,
-        notifications,
+        prompts,
         approvedCredentials,
         waits,
       };
@@ -174,10 +169,10 @@ const contractCases: readonly DeviceFlowContractCase[] = [
           ok: true,
           cred: { username: "oauth2", password: "token-1" },
         },
-        notifications: [
+        prompts: [
           {
-            message: "Open https://verify.example/device and enter: CODE-1",
-            severity: "info",
+            verificationUri: "https://verify.example/device",
+            userCode: "CODE-1",
           },
         ],
         approvedCredentials: [
@@ -207,7 +202,7 @@ const contractCases: readonly DeviceFlowContractCase[] = [
           ok: false,
           reason: "Device Flow initialization failed: request offline",
         },
-        notifications: [],
+        prompts: [],
         approvedCredentials: [],
         waits: [],
       });
@@ -252,10 +247,10 @@ const contractCases: readonly DeviceFlowContractCase[] = [
         ok: false,
         reason: expectedReason,
       });
-      assert.deepStrictEqual(observation.notifications, [
+      assert.deepStrictEqual(observation.prompts, [
         {
-          message: "Open https://verify.example/device and enter: CODE-1",
-          severity: "info",
+          verificationUri: "https://verify.example/device",
+          userCode: "CODE-1",
         },
       ]);
       assert.deepStrictEqual(observation.approvedCredentials, []);
@@ -318,10 +313,10 @@ const contractCases: readonly DeviceFlowContractCase[] = [
       const observation = await participant.run();
 
       // assert
-      assert.deepStrictEqual(observation.notifications, [
+      assert.deepStrictEqual(observation.prompts, [
         {
-          message: "Open https://verify.example/device and enter: CODE-1",
-          severity: "info",
+          verificationUri: "https://verify.example/device",
+          userCode: "CODE-1",
         },
       ]);
     },

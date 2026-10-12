@@ -4,9 +4,9 @@
 // `/claude:plugin marketplace <list|ls> [--scope user|project]`.
 // Also reached via the `ls` alias through edge/router.ts.
 //
-// `makeMarketplaceListHandler(pi)` factory threads `pi` down to
-// `listMarketplaces`, following the `makeAddHandler` /
-// `makeAutoupdateHandler` / `makeRemoveHandler` convention.
+// `makeMarketplaceListHandler()` returns a handler that passes the command's
+// notification run down to `listMarketplaces`, which renders from the run's
+// soft-dependency snapshot (D-05).
 //
 // `list` is a merged read that never writes configuration, so a
 // write-target flag has no meaning for it and `parseCommandArgs` rejects
@@ -16,14 +16,12 @@ import { listMarketplaces } from "../../../orchestrators/marketplace/list.ts";
 import { notifyUsageError } from "../../../shared/notification-dispatch.ts";
 import { parseCommandArgs } from "../../args-schema.ts";
 
-import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
+import type { SubcommandHandler } from "../../router.ts";
 
 const USAGE = "Usage: /claude:plugin marketplace <list|ls> [--scope user|project]";
 
-export function makeMarketplaceListHandler(
-  pi: ExtensionAPI,
-): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
-  return async (args, ctx): Promise<void> => {
+export function makeMarketplaceListHandler(): SubcommandHandler {
+  return async (args, ctx, run): Promise<void> => {
     const parsed = parseCommandArgs(
       args,
       {
@@ -31,7 +29,7 @@ export function makeMarketplaceListHandler(
         usage: USAGE,
       },
       (message) => {
-        notifyUsageError(ctx, { message, usage: USAGE });
+        notifyUsageError(ctx, run, { message, usage: USAGE });
       },
     );
     if (parsed === undefined) {
@@ -40,7 +38,7 @@ export function makeMarketplaceListHandler(
 
     await listMarketplaces({
       ctx,
-      pi,
+      run,
       cwd: ctx.cwd,
       ...(parsed.scope !== undefined && { scope: parsed.scope }),
     });

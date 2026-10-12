@@ -1,10 +1,10 @@
 // tests/architecture/catalog-block.ts
 //
-// Shared reader for the out-of-band byte locks. Those seams call
-// ctx.ui.notify directly rather than through a structured NotificationMessage,
-// so catalog-uat never drives them; each lock instead reads its documented
-// block from docs/output-catalog.md at test time, the way catalog-uat reads
-// its own blocks.
+// Shared reader for the out-of-band byte locks. Those seams emit raw surfaces
+// (WIRE-01) rather than a structured NotificationMessage, so catalog-uat never
+// drives them; each lock instead reads its documented block from
+// docs/output-catalog.md at test time, the way catalog-uat reads its own
+// blocks.
 
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";

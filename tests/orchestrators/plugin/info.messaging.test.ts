@@ -5,8 +5,9 @@ import {
   PLUGIN_INFO_CONTEXT,
   type PluginInfoCascadeMsg,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/info.messaging.ts";
+import { composePluginLines } from "../../../extensions/pi-claude-marketplace/shared/notification-grammar.ts";
 
-import type { SoftDepStatus } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { ResolvedRow } from "../../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 
 void ({ status: "skipped", name: "alpha", reasons: [] } satisfies PluginInfoCascadeMsg);
 
@@ -33,12 +34,12 @@ void ({
 
 test("exports the complete plugin-info cascade context", () => {
   // arrange
-  const expectedContextKeys = ["Messaging", "render"];
+  const expectedContextKeys = ["Messaging", "rowPolicies"];
   const expectedRenderKeys = ["skipped"];
 
   // act
   const contextKeys = Object.keys(PLUGIN_INFO_CONTEXT);
-  const renderKeys = Object.keys(PLUGIN_INFO_CONTEXT.render);
+  const renderKeys = Object.keys(PLUGIN_INFO_CONTEXT.rowPolicies);
 
   // assert
   assert.deepStrictEqual(contextKeys, expectedContextKeys);
@@ -52,15 +53,10 @@ test("renders a bare skipped row with truly omitted optional fields", () => {
     status: "skipped",
     name: "alpha",
     reasons: [],
-  } as const satisfies PluginInfoCascadeMsg;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: false,
-    piMcpAdapterLoaded: false,
-    workflowEngineLoaded: true,
-  };
+  } as const satisfies ResolvedRow<PluginInfoCascadeMsg>;
 
   // act
-  const renderedRow = PLUGIN_INFO_CONTEXT.render.skipped(row, probe, "user");
+  const renderedRow = composePluginLines(row, "user")[0]!.slice(2);
 
   // assert
   assert.deepStrictEqual(row, {
@@ -80,15 +76,10 @@ test("folds a same-scope skipped row and preserves version and ordered reasons",
     scope: "project",
     version: "1.2.3",
     reasons: ["already disabled", "up-to-date"],
-  } as const satisfies PluginInfoCascadeMsg;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: true,
-    piMcpAdapterLoaded: true,
-    workflowEngineLoaded: true,
-  };
+  } as const satisfies ResolvedRow<PluginInfoCascadeMsg>;
 
   // act
-  const renderedRow = PLUGIN_INFO_CONTEXT.render.skipped(row, probe, "project");
+  const renderedRow = composePluginLines(row, "project")[0]!.slice(2);
 
   // assert
   assert.deepStrictEqual(row, {
@@ -101,7 +92,7 @@ test("folds a same-scope skipped row and preserves version and ordered reasons",
   assert.strictEqual(renderedRow, "⊘ beta v1.2.3 (skipped) {already disabled, up-to-date}");
 });
 
-test("renders a cross-scope skipped row without soft-dependency markers", () => {
+test("renders a cross-scope skipped row with its resolved reasons", () => {
   // arrange
   const row = {
     status: "skipped",
@@ -109,15 +100,10 @@ test("renders a cross-scope skipped row without soft-dependency markers", () => 
     scope: "project",
     version: "hash-2ea95f85703d",
     reasons: ["not in manifest"],
-  } as const satisfies PluginInfoCascadeMsg;
-  const probe: SoftDepStatus = {
-    piSubagentsLoaded: false,
-    piMcpAdapterLoaded: false,
-    workflowEngineLoaded: true,
-  };
+  } as const satisfies ResolvedRow<PluginInfoCascadeMsg>;
 
   // act
-  const renderedRow = PLUGIN_INFO_CONTEXT.render.skipped(row, probe, "user");
+  const renderedRow = composePluginLines(row, "user")[0]!.slice(2);
 
   // assert
   assert.deepStrictEqual(row, {
@@ -128,4 +114,12 @@ test("renders a cross-scope skipped row without soft-dependency markers", () => 
     reasons: ["not in manifest"],
   });
   assert.strictEqual(renderedRow, "⊘ gamma [project] v#2ea95f8 (skipped) {not in manifest}");
+});
+
+test("PLUGIN_INFO_CONTEXT declares complete row policies", () => {
+  // act
+  const policies = PLUGIN_INFO_CONTEXT.rowPolicies;
+
+  // assert
+  assert.deepStrictEqual(policies, { skipped: { markers: false, contentReasons: true } });
 });

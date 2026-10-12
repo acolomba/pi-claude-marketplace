@@ -34,9 +34,15 @@
 // notifyUsageError; the session_start wrapper installs an autocomplete
 // provider but does NOT emit user-visible messages.
 
+import { randomUUID } from "node:crypto";
+
 import { makeLocationsResolver } from "../orchestrators/edge-deps.ts";
 import { createNodeReinstallPlugins } from "../orchestrators/plugin/reinstall-flow.ts";
+import { hookDebugLog } from "../shared/debug-log.ts";
+import { errorMessage } from "../shared/errors.ts";
+import { openNotificationRun, requireNotificationMode } from "../shared/notification-run.ts";
 
+import { runCommand } from "./command-run.ts";
 import {
   isClaudePluginCommandLine,
   normalizeCompletionWhitespace,
@@ -63,7 +69,7 @@ import { makeReinstallHandler } from "./handlers/plugin/reinstall.ts";
 import { makeUninstallHandler } from "./handlers/plugin/uninstall.ts";
 import { makeUpdateHandler } from "./handlers/plugin/update.ts";
 import { registerListMarketplacesTool, registerListPluginsTool } from "./handlers/tools.ts";
-import { routeClaudePlugin } from "./router.ts";
+import { routeClaudePlugin, selectClaudePluginRoute } from "./router.ts";
 
 import type { SubcommandHandlers } from "./router.ts";
 import type { EdgeDeps } from "./types.ts";
@@ -90,49 +96,68 @@ export function registerClaudePluginCommand(
   deps: EdgeDeps,
   hooksRouting: InstallHooksRouting,
   updatePlugins: UpdatePluginsFn,
+  options: {
+    readonly createInvocationId?: () => string;
+    readonly createRecoveryId?: () => string;
+  } = {},
 ): void {
+  const createInvocationId = options.createInvocationId ?? randomUUID;
+  const createRecoveryId = options.createRecoveryId ?? randomUUID;
   const reinstallPlugins = createNodeReinstallPlugins(hooksRouting, deps.completionCache);
-  const install = makeInstallHandler(pi, hooksRouting, deps.completionCache);
-  const uninstall = makeUninstallHandler(pi, hooksRouting, deps.completionCache);
-  const prune = makePruneHandler(pi, hooksRouting, deps.completionCache);
-  const pluginInfo = makePluginInfoHandler(pi, deps.mcpStatus);
-  const enable = makeEnableDisableHandler(pi, true, hooksRouting);
-  const disable = makeEnableDisableHandler(pi, false, hooksRouting);
-  const list = makeListHandler(pi);
-  const browse = makeBrowseHandler(pi, { list, install, uninstall, pluginInfo, enable, disable });
+  const install = makeInstallHandler(hooksRouting, deps.completionCache);
+  const uninstall = makeUninstallHandler(hooksRouting, deps.completionCache);
+  const prune = makePruneHandler(hooksRouting, deps.completionCache);
+  const pluginInfo = makePluginInfoHandler(deps.mcpStatus);
+  const enable = makeEnableDisableHandler(true, hooksRouting);
+  const disable = makeEnableDisableHandler(false, hooksRouting);
+  const list = makeListHandler();
+  const browse = makeBrowseHandler({ install, uninstall, pluginInfo, enable, disable });
 
   const handlers: SubcommandHandlers = {
-    bootstrap: makeBootstrapHandler(pi, deps),
+    bootstrap: makeBootstrapHandler(deps),
     install,
     uninstall,
     prune,
-    update: makeUpdateHandler(pi, updatePlugins),
-    fetch: makeFetchHandler(pi),
-    reinstall: makeReinstallHandler(pi, reinstallPlugins),
+    update: makeUpdateHandler(updatePlugins),
+    fetch: makeFetchHandler(),
+    reinstall: makeReinstallHandler(reinstallPlugins),
     list,
     pluginInfo,
-    pending: makePendingHandler(pi),
+    pending: makePendingHandler(),
     enable,
     disable,
-    import: makeImportHandler(pi, deps, hooksRouting),
-    marketplaceAdd: makeAddHandler(pi, deps),
-    marketplaceRemove: makeRemoveHandler(pi, deps),
-    marketplaceList: makeMarketplaceListHandler(pi),
-    marketplaceInfo: makeMarketplaceInfoHandler(pi),
-    marketplaceUpdate: makeMarketplaceUpdateHandler(pi, {
+    import: makeImportHandler(deps, hooksRouting),
+    marketplaceAdd: makeAddHandler(deps),
+    marketplaceRemove: makeRemoveHandler(deps),
+    marketplaceList: makeMarketplaceListHandler(),
+    marketplaceInfo: makeMarketplaceInfoHandler(),
+    marketplaceUpdate: makeMarketplaceUpdateHandler({
       completionCache: deps.completionCache,
       gitOps: deps.gitOps,
       beginPluginUpdateRun: deps.beginPluginUpdateRun,
     }),
-    marketplaceAutoupdate: makeAutoupdateHandler(pi, true),
-    marketplaceNoautoupdate: makeAutoupdateHandler(pi, false),
+    marketplaceAutoupdate: makeAutoupdateHandler(true),
+    marketplaceNoautoupdate: makeAutoupdateHandler(false),
     browse,
     help: makeHelpHandler(),
   };
 
   pi.registerCommand("claude:plugin", {
     description: COMMAND_DESCRIPTION,
-    handler: (args, ctx) => routeClaudePlugin(args, handlers, ctx),
+    // D-05 / D-07: one notification run per command invocation, opened
+    // before routing, so every emission of the command reads one snapshot.
+    // A usage error opens its run too.
+    handler: (args, ctx) => {
+      requireNotificationMode(ctx.mode);
+      const route = selectClaudePluginRoute(args, handlers);
+      return runCommand(
+        pi,
+        ctx,
+        route.commandId,
+        (run) => routeClaudePlugin(route, handlers, ctx, run),
+        { createInvocationId, createRecoveryId, openRun: openNotificationRun },
+      );
+    },
     // This `process.cwd()` is the single sanctioned site.
     // The arrow body runs per completion lookup and reads
     // `process.cwd()` there, so a fresh `makeLocationsResolver` is
@@ -150,21 +175,26 @@ export function registerClaudePluginCommand(
   // isClaudePluginCommandLine to keep other extensions' completions
   // untouched.
   pi.on("session_start", (_event, ctx) => {
-    ctx.ui.addAutocompleteProvider((current) => ({
-      getSuggestions: (lines, line, col, options) =>
-        current.getSuggestions(lines, line, col, options),
-      applyCompletion: (lines, line, col, item, prefix) => {
-        const result = current.applyCompletion(lines, line, col, item, prefix);
-        const original = lines[line] ?? "";
-        if (!isClaudePluginCommandLine(original)) {
-          return result;
-        }
+    try {
+      requireNotificationMode(ctx.mode);
+      ctx.ui.addAutocompleteProvider((current) => ({
+        getSuggestions: (lines, line, col, options) =>
+          current.getSuggestions(lines, line, col, options),
+        applyCompletion: (lines, line, col, item, prefix) => {
+          const result = current.applyCompletion(lines, line, col, item, prefix);
+          const original = lines[line] ?? "";
+          if (!isClaudePluginCommandLine(original)) {
+            return result;
+          }
 
-        return normalizeCompletionWhitespace(result);
-      },
-      shouldTriggerFileCompletion: (lines, line, col) =>
-        current.shouldTriggerFileCompletion?.(lines, line, col) ?? true,
-    }));
+          return normalizeCompletionWhitespace(result);
+        },
+        shouldTriggerFileCompletion: (lines, line, col) =>
+          current.shouldTriggerFileCompletion?.(lines, line, col) ?? true,
+      }));
+    } catch (err) {
+      hookDebugLog(`autocomplete setup skipped: ${errorMessage(err)}`, "completions");
+    }
   });
 }
 

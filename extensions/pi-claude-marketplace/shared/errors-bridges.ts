@@ -5,7 +5,7 @@
 // refusal categories via instanceof and so user-visible error messages are
 // uniform.
 
-import type { McpConfigNotice } from "./notification-dispatch.ts";
+import type { McpConfigNotice } from "./notification-types.ts";
 
 /**
  * The (marketplace, plugin) tuple an agent name belongs to. Declared once so

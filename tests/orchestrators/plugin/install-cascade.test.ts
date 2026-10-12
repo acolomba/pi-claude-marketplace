@@ -22,6 +22,7 @@ import { PluginShapeError } from "../../../extensions/pi-claude-marketplace/shar
 import { createRemovalOps } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { runPhases } from "../../../extensions/pi-claude-marketplace/transaction/phase-ledger.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import { retryTree } from "./scope-tree-inventory.ts";
 
@@ -76,7 +77,7 @@ const GIT_SOURCE_URL = "https://example.com/org/repo";
 const PINNED_OID = "0123456789abcdef0123456789abcdef01234567";
 
 function notificationContext(): NotificationContext {
-  return { ui: { notify: () => undefined } };
+  return { mode: "tui", ui: { notify: () => undefined } };
 }
 
 /** A closure member of the fixture marketplace, as the walk would report it. */
@@ -293,6 +294,7 @@ function unmaterializedSummary(
 function ledgerOptionsFor(cwd: string): (member: ResolvedCascadeMember) => InstallLedgerOptions {
   return (member) => ({
     ctx: notificationContext(),
+    run: runWithNothingLoaded(),
     scope: "project",
     cwd,
     marketplace: member.marketplace,
@@ -3318,6 +3320,7 @@ test("AUTH-09 the tag query rides the credential collaborators the member's inst
   };
   const authMemo = new Map<string, AuthAttemptResult>();
   const ctx = notificationContext();
+  const run = runWithNothingLoaded();
   const seen: DependencyTagProbeOptions[] = [];
 
   // act
@@ -3332,6 +3335,7 @@ test("AUTH-09 the tag query rides the credential collaborators the member's inst
     ledgerOptionsFor: (member) => ({
       ...ledgerOptionsFor(environment.cwd)(member),
       ctx,
+      run,
       credentialOps,
       deviceFlowHttp,
       authMemo,
@@ -3350,7 +3354,7 @@ test("AUTH-09 the tag query rides the credential collaborators the member's inst
   assert.strictEqual(cascade.kind, "installed");
   assert.deepStrictEqual(
     seen.map((query) => query.auth),
-    [{ ctx, credentialOps, deviceFlowHttp, authMemo }],
+    [{ ctx, run, credentialOps, deviceFlowHttp, authMemo }],
   );
 });
 

@@ -48,14 +48,12 @@ import {
 } from "../edge/handlers/marketplace-seed.ts";
 import { createHermeticEnvironment } from "../platform/hermetic-environment.ts";
 import { noStatusSnapshot } from "../platform/mcp-status-seed.ts";
-import { emptyPiInventory } from "../platform/pi-inventory-seed.ts";
+import { runWithNothingLoaded } from "../shared/notification-run-seeds.ts";
 
 import type { PluginEntry } from "../../extensions/pi-claude-marketplace/domain/components/plugin.ts";
 import type { ClosureLookupResult } from "../../extensions/pi-claude-marketplace/domain/dependency-closure.ts";
-import type {
-  NotificationContext,
-  PiInventory,
-} from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { NotificationContext } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { NotificationRun } from "../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 
 /** The marketplace entry every case resolves. Its own version is tier 2. */
 const ENTRY: PluginEntry = { name: "alpha", source: "./alpha", version: "1.0.0" };
@@ -203,7 +201,7 @@ for (const { label, prepare, resolution, notification } of [
       '{"name":"alpha","version":"9.9.9","dependencies":[42]}',
     );
     await prepare(path.join(marketplaceRoot, "alpha"));
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
 
     // act
     const resolved = await resolveStrict(ENTRY, {
@@ -218,7 +216,7 @@ for (const { label, prepare, resolution, notification } of [
     const version = await resolvePluginVersion(ENTRY, previousResolution);
     await getPluginInfo({
       ctx,
-      pi,
+      run,
       mcpStatus: noStatusSnapshot(),
       marketplace: "mp",
       plugin: "alpha",
@@ -264,7 +262,7 @@ for (const { label, prepare } of [
     const { agentDir, cwd } = await createHermeticEnvironment(t, "manifest-read-agreement-");
     const marketplaceRoot = await seedScopedMarketplace(agentDir, cwd);
     await prepare(path.join(marketplaceRoot, "alpha"));
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, run, notifications } = makeCtx();
 
     // act
     const resolved = await resolveStrict(ENTRY, {
@@ -275,7 +273,7 @@ for (const { label, prepare } of [
     const version = await resolvePluginVersion(ENTRY, resolved);
     await getPluginInfo({
       ctx,
-      pi,
+      run,
       mcpStatus: noStatusSnapshot(),
       marketplace: "mp",
       plugin: "alpha",
@@ -300,20 +298,21 @@ for (const { label, prepare } of [
 }
 
 /**
- * Builds the two ports `getPluginInfo` takes: a recording notifier and an
- * empty tool inventory.
+ * Builds the two ports `getPluginInfo` takes: a recording notifier and a
+ * notification run that reports no companion loaded.
  */
-function makeCtx(): { ctx: NotificationContext; pi: PiInventory; notifications: string[] } {
+function makeCtx(): { ctx: NotificationContext; run: NotificationRun; notifications: string[] } {
   const notifications: string[] = [];
-  const pi = emptyPiInventory();
+  const run = runWithNothingLoaded();
   const ctx: NotificationContext = {
+    mode: "tui",
     ui: {
       notify: (message) => {
         notifications.push(message);
       },
     },
   };
-  return { ctx, pi, notifications };
+  return { ctx, run, notifications };
 }
 
 /**
@@ -368,7 +367,7 @@ test("all four readers locate one bare manifest, and two let it outrank the entr
   // arrange -- one tree, one manifest, at the bare candidate only.
   const { agentDir, cwd } = await createHermeticEnvironment(t, "manifest-read-agreement-");
   const marketplaceRoot = await seedScopedMarketplace(agentDir, cwd);
-  const { ctx, pi, notifications } = makeCtx();
+  const { ctx, run, notifications } = makeCtx();
 
   // act
   const resolved = await resolveStrict(ENTRY, { marketplaceRoot, marketplaceName: "third-party" });
@@ -376,7 +375,7 @@ test("all four readers locate one bare manifest, and two let it outrank the entr
   const version = await resolvePluginVersion(ENTRY, resolved);
   await getPluginInfo({
     ctx,
-    pi,
+    run,
     mcpStatus: noStatusSnapshot(),
     marketplace: "mp",
     plugin: "alpha",

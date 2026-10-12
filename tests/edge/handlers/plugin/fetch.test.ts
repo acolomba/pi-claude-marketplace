@@ -29,7 +29,7 @@
 // tests/orchestrators/plugin/fetch.test.ts owns that grammar.
 //
 // The negative half of D-116-06 is proven in full. A rejecting case sizes the
-// boundary at one emission, zero probes, and NO stated `cwd`; both scopes are
+// boundary at one emission and NO stated `cwd`; both scopes are
 // seeded, so a workflow that did run would have marketplaces to enumerate and a
 // cascade to emit. No on-disk footprint is asserted beside `verifyBoundary()`:
 // this workflow writes nothing at any time, so an empty-tree assertion would
@@ -37,10 +37,11 @@
 //
 // Measured boundary counts, taken through a counting context before a case was
 // written, because the two emission paths disagree:
-//   * a rejection reads `ctx.ui` once, `ctx.cwd` never, and takes no
-//     soft-dependency probe -- `notifyUsageError` writes straight to the channel;
-//   * a delegating command reads `ctx.ui` once, `ctx.cwd` once, and takes ONE
-//     soft-dependency probe -- the cascade runs it.
+//   * a rejection reads `ctx.ui` once and `ctx.cwd` never -- `notifyUsageError`
+//     writes straight to the channel;
+//   * a delegating command reads `ctx.ui` once and `ctx.cwd` once.
+// Neither path reads the tool list: the cascade renders from the command run's
+// soft-dependency snapshot (D-05).
 //
 // Both scope roots are values this file chose: `<cwd>/.pi` for the project scope
 // and `<HOME>/.pi/agent` for the user scope, with the agent-directory variable
@@ -65,6 +66,8 @@ import { test, type TestContext } from "node:test";
 
 import { makeFetchHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/fetch.ts";
 import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
+import { runWithNothingLoaded } from "../../../shared/notification-run-seeds.ts";
+import { createMachineNotificationBoundary } from "../../notification-boundary.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
 import { mergeMarketplaceIntoState } from "../marketplace-seed.ts";
 
@@ -163,11 +166,11 @@ for (const { args, expectedMessage, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, "validation");
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-    const fetchHandler = makeFetchHandler(pi);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const fetchHandler = makeFetchHandler();
 
     // act
-    await fetchHandler(args, ctx);
+    await fetchHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [{ message: expectedMessage, severity: "error" }]);
@@ -183,11 +186,11 @@ for (const { args, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, "validation");
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-    const fetchHandler = makeFetchHandler(pi);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const fetchHandler = makeFetchHandler();
 
     // act
-    await fetchHandler(args, ctx);
+    await fetchHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -225,11 +228,11 @@ for (const { args, expectedMessage, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, "validation");
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-    const fetchHandler = makeFetchHandler(pi);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const fetchHandler = makeFetchHandler();
 
     // act
-    await fetchHandler(args, ctx);
+    await fetchHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [{ message: expectedMessage, severity: "error" }]);
@@ -241,11 +244,11 @@ test("carries the tokenizer's own sentence for an unrecognised scope value (FTCH
   // arrange
   const workspace = await createHermeticWorkspace(t, "validation");
   await seedBothScopes(workspace);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-  const fetchHandler = makeFetchHandler(pi);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+  const fetchHandler = makeFetchHandler();
 
   // act
-  await fetchHandler("hello@mymkt --scope bogus", ctx);
+  await fetchHandler("hello@mymkt --scope bogus", ctx, runWithNothingLoaded());
 
   // assert
   assert.deepStrictEqual(notifications, [
@@ -290,14 +293,14 @@ for (const { args, expectedMessage, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 1, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
       value: workspace.cwd,
       reads: 1,
     });
-    const fetchHandler = makeFetchHandler(pi);
+    const fetchHandler = makeFetchHandler();
 
     // act
-    await fetchHandler(args, ctx);
+    await fetchHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [{ message: expectedMessage }]);
@@ -325,14 +328,14 @@ for (const { args, expectedMessage, label, scope } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 1, {
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
       value: workspace.cwd,
       reads: 1,
     });
-    const fetchHandler = makeFetchHandler(pi);
+    const fetchHandler = makeFetchHandler();
 
     // act
-    await fetchHandler(args, ctx);
+    await fetchHandler(args, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [{ message: expectedMessage }]);
@@ -344,11 +347,11 @@ test("reports an unknown flag and never reaches the fetch workflow (D-116-06)", 
   // arrange
   const workspace = await createHermeticWorkspace(t, "short-circuit");
   await seedBothScopes(workspace);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-  const fetchHandler = makeFetchHandler(pi);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+  const fetchHandler = makeFetchHandler();
 
   // act
-  await fetchHandler("--bogus", ctx);
+  await fetchHandler("--bogus", ctx, runWithNothingLoaded());
 
   // assert
   assert.deepStrictEqual(notifications, [
@@ -360,3 +363,53 @@ test("reports an unknown flag and never reaches the fetch workflow (D-116-06)", 
   ]);
   verifyBoundary();
 });
+
+for (const mode of ["json", "rpc"] as const) {
+  for (const { args, message } of [
+    {
+      args: "--scope bad",
+      message: 'Invalid --scope value: "bad". Must be "user" or "project".',
+    },
+    {
+      args: "--bogus",
+      message: 'Unknown flag: "--bogus".',
+    },
+    {
+      args: "alpha@official beta@official",
+      message: "Too many arguments.",
+    },
+    {
+      args: "invalid",
+      message: 'Invalid <plugin>@<marketplace> ref: "invalid".',
+    },
+  ]) {
+    test(`appends plugin/fetch rejection for ${args} in ${mode} (enabled)`, async () => {
+      // arrange
+      const { ctx, run, capture, verifyBoundary } = createMachineNotificationBoundary(mode);
+
+      const commandHandler = makeFetchHandler();
+
+      // act
+      await commandHandler(args, ctx, run);
+
+      // assert
+      assert.deepStrictEqual(capture.entries, [
+        {
+          customType: "claude-plugin",
+          payload: {
+            schemaVersion: 1,
+            origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+            kind: "usage-error",
+            severity: "error",
+            needsReload: false,
+            message,
+            usage:
+              "Usage: /claude:plugin fetch [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]",
+          },
+        },
+      ]);
+      capture.assertValid();
+      verifyBoundary();
+    });
+  }
+}

@@ -75,10 +75,10 @@ export function skipSeverity(reasons: readonly Reason[] | undefined): "info" | "
  * declared `mcp` kind requires `pi-mcp-adapter`; a declared `workflows` kind
  * requires the host workflow engine. When a declared companion is unloaded the
  * clean operation is silently degraded -> `warning`; otherwise (companion
- * present, or none declared) -> `info`. The caller passes the single sanctioned
- * `softDepStatus(pi)` probe (the same one the renderer uses for the
- * `{requires pi-...}` marker), so the row bytes are unchanged -- only the
- * desired-state severity moves.
+ * present, or none declared) -> `info`. The caller passes the command run's
+ * snapshot (D-05), the same snapshot resolve reads for the `{requires pi-...}`
+ * marker, so severity and marker never disagree. The row bytes stay the same;
+ * only the desired-state severity moves.
  */
 export function companionSeverity(
   {
