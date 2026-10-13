@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm, stat, watch, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
@@ -50,32 +50,6 @@ async function createExtensionRoot(t: TestContext, prefix: string): Promise<stri
   const extensionRoot = path.join(scopeRoot, "pi-claude-marketplace");
   await mkdir(extensionRoot, { recursive: true });
   return extensionRoot;
-}
-
-/**
- * Resolves once state.json under `extensionRoot` changes. The watcher starts
- * synchronously, so a caller arms it BEFORE the load whose fire-and-forget
- * persistence it is waiting on.
- */
-function stateJsonPersisted(t: TestContext, extensionRoot: string): Promise<void> {
-  const controller = new AbortController();
-  t.after(() => {
-    controller.abort();
-  });
-  const changes = watch(extensionRoot, { signal: controller.signal })[Symbol.asyncIterator]();
-  return (async () => {
-    while (true) {
-      const change = await changes.next();
-      if (change.done) {
-        throw new Error("state.json watcher ended before persistence");
-      }
-
-      if (change.value.filename === "state.json") {
-        await changes.return?.();
-        return;
-      }
-    }
-  })();
 }
 
 /**
@@ -330,9 +304,8 @@ test("a nonpersisting legacy load leaves bytes intact while the default persists
   assert.equal(await readFile(stateJsonPath, "utf8"), originalBytes);
   assert.equal((await stat(stateJsonPath, { bigint: true })).mtimeNs, before.mtimeNs);
 
-  const persisted = stateJsonPersisted(t, extensionRoot);
   assert.deepStrictEqual(await loadState(extensionRoot), loaded);
-  await persisted;
+  await waitForReplacedBytes(stateJsonPath, originalBytes);
   assert.notEqual(await readFile(stateJsonPath, "utf8"), originalBytes);
 });
 
@@ -806,11 +779,10 @@ test(
 }
 `;
     await writeFile(stateJsonPath, JSON.stringify(storedState));
-    const persisted = stateJsonPersisted(t, extensionRoot);
 
     // act
     const state = await loadState(extensionRoot);
-    await persisted;
+    await waitForReplacedBytes(stateJsonPath, JSON.stringify(storedState));
     const persistedBytes = await readFile(stateJsonPath, "utf8");
 
     // assert
