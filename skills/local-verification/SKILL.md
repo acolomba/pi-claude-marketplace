@@ -21,7 +21,7 @@ A build input is a file that a build or a CI job reads. The build inputs are the
 
 `npm run check:commit` runs `check:static`, then the unit tests that have no source pair (`tests/architecture/` and the four fake contract suites), then direct coverage for the staged source-test pairs. It reads only the staged files. Unstaged edits and untracked files do not count. It runs all pairs when a staged file can change the coverage of any pair: a file under `tests/` that is not a `.test.ts` file (a fake, contract, fixture, or harness), `scripts/test-coverage-direct.mjs`, `scripts/test-reporter.mjs`, `package.json`, `package-lock.json`, or `tsconfig.json`.
 
-`npm run check` runs `check:static`, the unit tests that have no source pair, the integration suite, and direct coverage for all pairs. Direct coverage runs the test of each pair alone and requires 100% line, function, and branch coverage of its source. Every source has exactly one paired test, so this also covers the whole unit suite.
+`npm run check` runs `check:static`, the unit tests that have no source pair, the integration suite, the behavioral tests under `features/`, and direct coverage for all pairs. Direct coverage runs the test of each pair alone and requires 100% line, function, and branch coverage of its source. Every source has exactly one paired test, so this also covers the whole unit suite.
 
 Locally, the test and direct coverage steps print nothing when they pass. The all-pair run also prints one `Merged LCOV` line. A failing test prints Node's report and the count line, and a coverage shortfall names the source and its coverage.
 
@@ -35,7 +35,7 @@ Then run `git commit` in the foreground with the longest tool timeout available.
 
 During `git commit`, pre-commit stashes unstaged edits. It does not move untracked files, so stage or remove untracked build inputs before you commit. The pre-commit tool passes no deleted file to a hook, and it applies its top-level `exclude` first. So the hook skips a commit that only deletes build inputs or only changes files under `tests/domain/fixtures/hash-stability/`. Run `npm run check` yourself before such a commit.
 
-Use the owner test (`node --test <test-path>`) or a named suite (`test:modules`, `test:architecture`, `test:integration`, `test:e2e`) for feedback while you edit. Do not run ESLint, type checking, or tests just before a commit. The hook runs them.
+Use the owner test (`node --test <test-path>`) or a named suite (`test:modules`, `test:architecture`, `test:integration`, `test:cucumber`, `test:e2e`) for feedback while you edit. Do not run ESLint, type checking, or tests just before a commit. The hook runs them.
 
 ESLint keeps a cache in `node_modules/.cache/eslint/`. The cache keys each result to the file's content and the configuration. Typed rules also read other files' types, so a cached pass can be stale after another file changes. CI lints from an empty cache and is the backstop. To lint fresh locally, delete that directory first.
 

@@ -44,7 +44,8 @@ Without `--home` or `PI_CODING_AGENT_DIR`, the Pi home is `<prefix>/home`, insid
 ## Checks
 
 ```bash
-npm run check          # full local gate: static checks, unit tests, direct coverage for every pair, integration tests
+npm run check          # full local gate: static checks, unit tests, direct coverage for every pair, integration and behavioral tests
+npm run test:cucumber  # behavioral tests under features/
 npm run check:static   # typecheck, lint, fallow, format check, and gate scripts, in parallel
 npm run lint:fix       # ESLint with autofixes
 npm run format         # Prettier autoformat

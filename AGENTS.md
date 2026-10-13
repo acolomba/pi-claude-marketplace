@@ -36,6 +36,7 @@ Rules for TypeScript live under `skills/` and are not registered with any runtim
 
 - `skills/typescript-google-style-review/SKILL.md` and `skills/typescript-comments/SKILL.md` for every `.ts` file
 - `skills/typescript-unit-testing/SKILL.md` (write) and `skills/typescript-unit-testing-review/SKILL.md` (check) for `tests/**/*.ts`
+- `skills/cucumber-features/SKILL.md` for `features/**/*.feature`, `skills/cucumber-steps/SKILL.md` for `features/steps/**/*.steps.ts` and `features/support/**/*.ts`, and `skills/cucumber-review/SKILL.md` (check) for both
 
 ### Build verification
 
