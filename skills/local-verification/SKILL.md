@@ -21,7 +21,7 @@ A build input is a file that a build or a CI job reads. The build inputs are the
 
 `npm run check:commit` runs `check:static`, then the unit tests that have no source pair (`tests/architecture/` and the four fake contract suites), then direct coverage for the staged source-test pairs. It reads only the staged files. Unstaged edits and untracked files do not count. It runs all pairs when a staged file can change the coverage of any pair: a file under `tests/` that is not a `.test.ts` file (a fake, contract, fixture, or harness), `scripts/test-coverage-direct.mjs`, `scripts/test-reporter.mjs`, `package.json`, `package-lock.json`, or `tsconfig.json`.
 
-`npm run check` runs `check:static`, the unit tests that have no source pair, the integration suite, the behavioral tests under `features/`, and direct coverage for all pairs. Direct coverage runs the test of each pair alone and requires 100% line, function, and branch coverage of its source. Every source has exactly one paired test, so this also covers the whole unit suite.
+`npm run check` runs `check:static`, the unit tests that have no source pair, the integration suite, the behavioral tests under `features/`, and direct coverage for all pairs. `check:commit` does not run the behavioral tests. Direct coverage runs the test of each pair alone and requires 100% line, function, and branch coverage of its source. Every source has exactly one paired test, so this also covers the whole unit suite.
 
 Locally, the test and direct coverage steps print nothing when they pass. The all-pair run also prints one `Merged LCOV` line. A failing test prints Node's report and the count line, and a coverage shortfall names the source and its coverage.
 

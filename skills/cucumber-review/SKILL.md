@@ -26,7 +26,7 @@ Run `npm run test:cucumber` and require every scenario to pass. A failing, undef
 ## Step modules
 
 - Step definitions live only in `features/steps/*.steps.ts`; support code lives only in `features/support/` and registers no steps or hooks (the world excepted).
-- Each step is a named function directly followed by its registration. A `Then` function starts with `assert`, and no other does.
+- Each step and hook is a named function directly followed by its registration. A `Then` function starts with `assert`, and no other does.
 - A step module has an `@fileoverview`, exports nothing, and orders its registrations `Given`, `When`, `Then`.
 - A setup `Given` asserts its own success. A `Then` has no side effects and compares whole values.
 - Step text uses Cucumber expressions, not regular expressions.
@@ -35,5 +35,5 @@ Run `npm run test:cucumber` and require every scenario to pass. A failing, undef
 
 - Scenario state lives on the world; no module-level mutable state.
 - Everything a scenario creates is released in `After()`, in reverse order.
-- Every external service has a local fake; no scenario reaches the network, a real account, or the user's home directory.
+- Every external service has a local stand-in, and a fake for a networked service can be armed to fail; no scenario reaches the network, a real account, or the user's home directory.
 - No defensive `try`/`catch` that logs and continues.

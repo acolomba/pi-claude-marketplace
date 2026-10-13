@@ -7,17 +7,19 @@ import path from "node:path";
 
 import { Given } from "@cucumber/cucumber";
 
-import { writeMarketplace } from "../marketplace-fixture.ts";
-import { runCommand } from "../pi-commands.ts";
+import { writeMarketplace } from "../support/marketplace-fixture.ts";
+import { runCommand } from "../support/pi-commands.ts";
 
-import type { OfferedPlugin } from "../marketplace-fixture.ts";
-import type { PluginWorld } from "../world.ts";
+import type { OfferedPlugin } from "../support/marketplace-fixture.ts";
+import type { PluginWorld } from "../support/world.ts";
 import type { DataTable } from "@cucumber/cucumber";
 
 async function offeredPlugins(this: PluginWorld, name: string, table: DataTable): Promise<void> {
-  const plugins: OfferedPlugin[] = table.hashes().map((row) => ({
-    name: row.name ?? "",
-    version: row.version ?? "",
+  const [header = []] = table.raw();
+  assert.deepStrictEqual(header, ["name", "version"]);
+  const plugins: OfferedPlugin[] = table.rows().map(([pluginName = "", version = ""]) => ({
+    name: pluginName,
+    version,
   }));
   await writeMarketplace(path.join(this.marketplacesRoot, name), name, plugins);
 }

@@ -2,9 +2,10 @@
  * @fileoverview A local marketplace that stands in for a published one.
  *
  * The marketplace is a directory with a `marketplace.json` manifest and one
- * plugin per entry, each with a single skill. Pi adds it as a path source, so
- * no scenario touches the network (NFR-5). Writing it again with new versions
- * publishes an update.
+ * plugin per entry, each with a single skill whose description names the
+ * plugin version, so a new session shows which version is installed. Pi adds
+ * it as a path source, so no scenario touches the network (NFR-5). Writing it
+ * again with new versions publishes an update.
  */
 
 import { mkdir, writeFile } from "node:fs/promises";
@@ -27,7 +28,7 @@ async function writePlugin(root: string, plugin: OfferedPlugin): Promise<void> {
   );
   await writeFile(
     path.join(skillDir, "SKILL.md"),
-    `---\nname: ${plugin.name}-skill\ndescription: A skill of ${plugin.name}.\n---\n\nVersion ${plugin.version}.\n`,
+    `---\nname: ${plugin.name}-skill\ndescription: A skill of ${plugin.name} ${plugin.version}.\n---\n\nVersion ${plugin.version}.\n`,
   );
 }
 

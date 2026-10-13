@@ -14,12 +14,9 @@ The spike added cucumber scenarios for `plugin install`, `uninstall`, and `updat
 - `features/AGENTS.md` -- the file families, for Claude Code and Codex
 - `.planning/config.json` `agent_skills` -- writers get features + steps, `gsd-code-reviewer` and `gsd-verifier` get review
 
-## 1. Migrate the POC to the layout
+## 1. Migrate the POC to the layout -- done
 
-- Move `features/support/steps/{commands,marketplace,results}.ts` to `features/steps/{commands,marketplace,results}.steps.ts`.
-- Set `cucumber.json` `import` to `["features/support/world.ts", "features/steps/**/*.steps.ts"]`.
-- Run `npm run test:cucumber`: 10 scenarios pass.
-- Review the result with `skills/cucumber-review/SKILL.md`. Known gaps to confirm: no fake is "armed to fail" yet (the marketplace fixture is a directory), and `pi-commands.ts` imports the harness from `tests/e2e/_rpc.ts`.
+The step modules live in `features/steps/*.steps.ts`, `cucumber.json` imports only those and `features/support/world.ts`, and the review with `skills/cucumber-review/SKILL.md` is applied: 13 scenarios pass. The review also tightened the scenarios -- a new session must offer the installed skill (and its version), every plugin table names `id`, `status`, and `reasons`, and every result states `severity`, `needsReload`, `noOp`, and `summary` in full. The two known gaps became rules: a directory stand-in is a fixture, not a fake that is armed to fail, and a driver may reuse the `tests/e2e/` process harness.
 
 ## 2. Enforce what a tool can check
 

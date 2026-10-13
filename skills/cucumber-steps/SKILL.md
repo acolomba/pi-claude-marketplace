@@ -68,15 +68,17 @@ Every other `.ts` file under `features/support/` is plain support code: fakes, f
 ## The world
 
 - `features/support/world.ts` declares the world class and registers it. Every scenario gets a fresh world.
+- Write each hook as a named function declaration with a typed `this`, directly followed by its registration, as for steps.
 - Keep scenario state on the world as initialized fields; no module-level mutable state anywhere under `features/`.
 - The world owns the lifetime of everything a scenario creates (temporary directories, fakes, child processes) and releases it in an `After()` hook, in reverse order of creation.
 - A step timeout above the default is a named constant with a comment that says why.
 
 ## Fakes and drivers
 
-- Fake every external service the code talks to with a local stand-in in its own module under `features/support/`, named after what it stands in for (`marketplace-fixture.ts`).
-- A fake records what it receives and can be armed to fail, so scenarios cover error paths.
+- Replace every external service the code talks to with a local stand-in in its own module under `features/support/`, named after what it stands in for (`marketplace-fixture.ts`).
+- A stand-in for a networked service is a fake: it records what it receives and can be armed to fail, so scenarios cover error paths. A stand-in for local input, such as a marketplace directory, is a fixture: scenarios reach its error paths by writing bad input.
 - A driver that runs the code under test (`pi-commands.ts`) validates what it returns against the published contract, such as a JSON schema, before a step reads it.
+- A driver may reuse a process harness from `tests/e2e/` rather than copy it. Nothing else under `features/` imports from `tests/`.
 
 ## Errors
 

@@ -11,7 +11,7 @@ A feature file describes one user-visible capability from the outside. A reader 
 
 - One `Feature:` per file. Files live under `features/`, in subdirectories by area when there are many.
 - The file name is the feature title in kebab case with the `.feature` extension: `Feature: Plugin install` lives in `plugin-install.feature`.
-- No other file type sits beside feature files. Step definitions live under `features/steps/` and support code under `features/support/` (see `skills/cucumber-steps/SKILL.md`).
+- No other file type sits beside feature files, except `features/AGENTS.md`. Step definitions live under `features/steps/` and support code under `features/support/` (see `skills/cucumber-steps/SKILL.md`).
 
 ## Feature description
 

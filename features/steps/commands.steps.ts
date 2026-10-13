@@ -9,9 +9,9 @@ import assert from "node:assert/strict";
 
 import { Given, When } from "@cucumber/cucumber";
 
-import { runCommand } from "../pi-commands.ts";
+import { runCommand } from "../support/pi-commands.ts";
 
-import type { PluginWorld } from "../world.ts";
+import type { PluginWorld } from "../support/world.ts";
 
 async function priorCommand(this: PluginWorld, command: string): Promise<void> {
   const payload = await runCommand(this.sandbox, command);
