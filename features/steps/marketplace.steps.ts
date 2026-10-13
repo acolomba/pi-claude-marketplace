@@ -7,11 +7,11 @@ import path from "node:path";
 
 import { Given } from "@cucumber/cucumber";
 
-import { writeMarketplace } from "../support/marketplace-fixture.ts";
-import { runCommand } from "../support/pi-commands.ts";
+import { writeMarketplace } from "../lib/marketplace-fixture.ts";
+import { runCommand } from "../lib/pi-commands.ts";
 
-import type { OfferedPlugin } from "../support/marketplace-fixture.ts";
-import type { PluginWorld } from "../support/world.ts";
+import type { OfferedPlugin } from "../lib/marketplace-fixture.ts";
+import type { PluginWorld } from "../lib/world.ts";
 import type { DataTable } from "@cucumber/cucumber";
 
 async function offeredPlugins(this: PluginWorld, name: string, table: DataTable): Promise<void> {
@@ -29,7 +29,7 @@ Given("the marketplace {string} offers these plugins:", offeredPlugins);
 async function addedMarketplace(this: PluginWorld, name: string, scope: string): Promise<void> {
   const source = path.join(this.marketplacesRoot, name);
   const payload = await runCommand(
-    this.sandbox,
+    this.pi,
     `/claude:plugin marketplace add ${source} --scope ${scope}`,
   );
   assert.strictEqual(payload.severity, "info", JSON.stringify(payload));

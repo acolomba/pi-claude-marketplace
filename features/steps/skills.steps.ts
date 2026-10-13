@@ -9,16 +9,16 @@ import assert from "node:assert/strict";
 
 import { Then, When } from "@cucumber/cucumber";
 
-import { listSkills } from "../support/pi-commands.ts";
+import { startSession } from "../lib/pi-commands.ts";
 
-import type { PluginWorld } from "../support/world.ts";
+import type { PluginWorld } from "../lib/world.ts";
 import type { DataTable } from "@cucumber/cucumber";
 
-async function startNewSession(this: PluginWorld): Promise<void> {
-  this.skills = await listSkills(this.sandbox);
+async function newSession(this: PluginWorld): Promise<void> {
+  this.skills = await startSession(this.pi);
 }
 
-When("the user starts a new pi session", startNewSession);
+When("the user starts a new pi session", newSession);
 
 function assertOfferedSkills(this: PluginWorld, table: DataTable): void {
   assert.deepStrictEqual(this.sessionSkills(), table.hashes());

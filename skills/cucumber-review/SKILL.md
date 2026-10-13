@@ -17,7 +17,7 @@ Run `npm run test:cucumber` and require every scenario to pass. A failing, undef
 
 ## Feature files
 
-- One feature per file, named in kebab case after the feature title, with a two- or three-line description.
+- One feature per file, in `features/<function>/`, named in kebab case after the feature title without the function word, with a two- or three-line description.
 - Sentence-case scenario titles that name the behavior.
 - Lower-case steps; no `And` or `But`; no `should`; no `Given` after a `When`; a `Background` with `Given` steps only.
 - Steps name user-visible things only.
@@ -25,15 +25,18 @@ Run `npm run test:cucumber` and require every scenario to pass. A failing, undef
 
 ## Step modules
 
-- Step definitions live only in `features/steps/*.steps.ts`; support code lives only in `features/support/` and registers no steps or hooks (the world excepted).
+- Step definitions live only in `features/steps/*.steps.ts`; library code lives only in `features/lib/` and registers no steps or hooks (the world excepted).
 - Each step and hook is a named function directly followed by its registration. A `Then` function starts with `assert`, and no other does.
+- Step modules and library files are organized by vertical function; each step sits in the module of the function it names. A module named after a keyword or a test mechanism (`results.steps.ts`, `rpc.ts`), or a catch-all (`common`, `shared`, `utils`, `helpers`, `support`, `misc`), is a finding.
+- Reusable non-step code lives in `features/lib/`, in modules named after the specific thing they drive or stand in for. A name generic enough to fit several kinds (`marketplace-fixture.ts` when path, git, and url marketplaces exist) is a finding.
 - A step module has an `@fileoverview`, exports nothing, and orders its registrations `Given`, `When`, `Then`.
 - A setup `Given` asserts its own success. A `Then` has no side effects and compares whole values.
 - Step text uses Cucumber expressions, not regular expressions.
 
 ## World and fakes
 
-- Scenario state lives on the world; no module-level mutable state.
+- Scenario state lives on the world; the only module-level state is the run's process in `world.ts`.
+- The `Before()` reset empties every directory the process reads, starts a new session, and asserts a clean baseline; `cucumber.json` keeps `order: random`.
 - Everything a scenario creates is released in `After()`, in reverse order.
 - Every external service has a local stand-in, and a fake for a networked service can be armed to fail; no scenario reaches the network, a real account, or the user's home directory.
 - No defensive `try`/`catch` that logs and continues.

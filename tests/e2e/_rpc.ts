@@ -20,7 +20,7 @@ import { fileURLToPath } from "node:url";
 
 import { resolvePiRuntime } from "../pi-runtime.ts";
 
-import type { ChildProcessByStdio } from "node:child_process";
+import type { ChildProcess, ChildProcessByStdio } from "node:child_process";
 import type { Readable, Writable } from "node:stream";
 
 const REPO_ROOT = fileURLToPath(new URL("../..", import.meta.url));
@@ -284,7 +284,7 @@ function resultOf(state: SessionState, exitCode: number | null): RpcSessionResul
 // the children Pi starts in that group. Pi starts each stdio MCP server in a
 // group of its own and stops it on shutdown, so the group kill does not reach
 // those servers.
-function killProcessGroup(child: SessionState["child"]): void {
+export function killProcessGroup(child: ChildProcess): void {
   if (child.pid === undefined) {
     child.kill("SIGKILL");
     return;
@@ -346,8 +346,11 @@ function collect(state: SessionState, options: RpcSessionOptions): Promise<RpcSe
   });
 }
 
-function startSession(options: RpcSessionOptions, sandbox: RpcSandbox): SessionState {
-  const child = spawn(process.execPath, piArguments(options.extraExtensions ?? []), {
+function spawnPi(
+  sandbox: RpcSandbox,
+  extraExtensions: readonly string[],
+): ChildProcessByStdio<Writable, Readable, Readable> {
+  return spawn(process.execPath, piArguments(extraExtensions), {
     cwd: sandbox.cwd,
     // Its own process group, so the stops can kill Pi's children too. A dead
     // parent closes stdin, and Pi exits on that.
@@ -355,6 +358,10 @@ function startSession(options: RpcSessionOptions, sandbox: RpcSandbox): SessionS
     env: childEnvironment(sandbox),
     stdio: ["pipe", "pipe", "pipe"],
   });
+}
+
+function startSession(options: RpcSessionOptions, sandbox: RpcSandbox): SessionState {
+  const child = spawnPi(sandbox, options.extraExtensions ?? []);
   return {
     child,
     steps: options.steps,
@@ -382,6 +389,18 @@ export async function runRpcSession(options: RpcSessionOptions): Promise<RpcSess
   const sandbox = await resolveSandbox(options.sandbox);
   options.signal?.throwIfAborted();
   return collect(startSession(options, sandbox), options);
+}
+
+/**
+ * Starts the repository's own Pi CLI in RPC mode in `sandbox` and returns the
+ * child, which stays up until its stdin closes. The caller owns the JSONL
+ * exchange and the stop. Rejects as `runRpcSession` does for a sandbox
+ * location outside the temp directory or inside the repository.
+ */
+export async function startRpcPi(
+  sandbox: RpcSandbox,
+): Promise<ChildProcessByStdio<Writable, Readable, Readable>> {
+  return spawnPi(await resolveSandbox(sandbox), []);
 }
 
 /** Returns `data.disposition` of a successful prompt response. */

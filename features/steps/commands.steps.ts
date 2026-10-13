@@ -9,19 +9,19 @@ import assert from "node:assert/strict";
 
 import { Given, When } from "@cucumber/cucumber";
 
-import { runCommand } from "../support/pi-commands.ts";
+import { runCommand } from "../lib/pi-commands.ts";
 
-import type { PluginWorld } from "../support/world.ts";
+import type { PluginWorld } from "../lib/world.ts";
 
 async function priorCommand(this: PluginWorld, command: string): Promise<void> {
-  const payload = await runCommand(this.sandbox, command);
+  const payload = await runCommand(this.pi, command);
   assert.strictEqual(payload.severity, "info", JSON.stringify(payload));
 }
 
 Given("the user has run {string}", priorCommand);
 
 async function runUserCommand(this: PluginWorld, command: string): Promise<void> {
-  this.result = await runCommand(this.sandbox, command);
+  this.result = await runCommand(this.pi, command);
 }
 
 When("the user runs {string}", runUserCommand);

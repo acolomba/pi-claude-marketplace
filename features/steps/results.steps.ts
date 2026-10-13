@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 
 import { Then } from "@cucumber/cucumber";
 
-import type { PluginWorld } from "../support/world.ts";
+import type { PluginWorld } from "../lib/world.ts";
 import type { DataTable } from "@cucumber/cucumber";
 
 // The top-level fields a scenario states in full. `kind`, `schemaVersion`,
