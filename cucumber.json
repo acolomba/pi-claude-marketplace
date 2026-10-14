@@ -3,6 +3,7 @@
     "paths": ["features/**/*.feature"],
     "import": ["features/lib/world.ts", "features/steps/**/*.steps.ts"],
     "format": ["summary"],
-    "order": "random"
+    "order": "random",
+    "parallel": 8
   }
 }
