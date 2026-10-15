@@ -1,10 +1,13 @@
 ---
 created: 2026-10-13
-resolves_phase: 1
 source: cucumber JSON behavioral-test spike (branch features/cucumber-behavioral-tests)
 ---
 
 # Try the cucumber rules on the behavioral-test POC
+
+> **Status (2026-10-15):** §1, §1b and §2 are done in marketplace-features Phase 1 (`01-suite-foundation`):
+> `npm run check:features` in `check:static` (usage gate over every row, layout and Gherkin rules) and the
+> `features/` ESLint blocks. Only §3 (the upstream port) remains open.
 
 The spike added cucumber scenarios for `plugin install`, `uninstall`, and `update` that drive a headless Pi in RPC mode and assert on the JSON entries (`features/`). The rules that govern them are written but not yet applied or enforced:
 
