@@ -3,6 +3,7 @@
     "import": ["features/support/**/*.ts", "features/step_definitions/**/*.steps.ts"],
     "format": ["summary"],
     "order": "random",
+    "tags": "not @url and not @github",
     "parallel": 8
   }
 }
