@@ -1,12 +1,63 @@
 {
   "contract": "1.0.0",
   "flavor": "core",
-  "milestone": "marketplace-features",
-  "phases": [],
+  "milestone": "marketplace-features — Marketplace Behavioral Tests",
+  "phases": [
+    {
+      "number": "1",
+      "name": "Suite Foundation",
+      "status": "pending"
+    },
+    {
+      "number": "2",
+      "name": "GitHub Clone-Base Override",
+      "status": "pending"
+    },
+    {
+      "number": "3",
+      "name": "Marketplace Add",
+      "status": "pending"
+    },
+    {
+      "number": "4",
+      "name": "Marketplace Remove and List",
+      "status": "pending"
+    },
+    {
+      "number": "5",
+      "name": "Marketplace Info",
+      "status": "pending"
+    },
+    {
+      "number": "6",
+      "name": "Marketplace Update and C-10 Fix",
+      "status": "pending"
+    },
+    {
+      "number": "7",
+      "name": "Marketplace Autoupdate",
+      "status": "pending"
+    },
+    {
+      "number": "8",
+      "name": "Marketplace Help and Usage Errors",
+      "status": "pending"
+    },
+    {
+      "number": "9",
+      "name": "URL Source Kind and HTTPS Git Stand-In",
+      "status": "pending"
+    },
+    {
+      "number": "10",
+      "name": "GitHub Source Kind and Suite Close",
+      "status": "pending"
+    }
+  ],
   "next": {
-    "command": "/gsd-discuss-phase",
-    "label": "Discuss the first phase",
-    "reason": "Project initialized — plan your first phase"
+    "command": "/gsd-progress --next",
+    "label": "Advance to the next step",
+    "reason": "Phase 1 of 10 · 0% · executing"
   },
-  "updated_at": "2026-10-15T15:40:29.236Z"
+  "updated_at": "2026-10-15T19:29:51.233Z"
 }

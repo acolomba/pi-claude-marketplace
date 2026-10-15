@@ -102,7 +102,24 @@ pinned as they are, not changed.
 3. Kind-neutral steps publish a marketplace as a dir or file source, add it, and compare result tables through a `<source>` token; `url` and `github` resolve once their kind phase lands. Config steps read and write the user-owned `claude-plugins.json` and `claude-plugins.local.json`. A smoke scenario passes through these steps.
 4. `cucumber.json` runs `not @url and not @github`, so an Outline with untagged, `@url`, and `@github` Examples blocks runs only its local rows. The cucumber skill rules document the multi-kind Outline pattern, the exclusion, and which phase removes each tag.
 5. `npm run check` fails when `cucumber-js --dry-run --format usage` reports an unused, undefined, or ambiguous step.
-**Plans:** TBD
+
+**Plans:** 5 plans
+
+Plans:
+**Wave 1**
+- [ ] 01-01-PLAN.md — Tracer: payload driver and run tokens through one info scenario; kind row in every result table; not-added and usage kinds
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 01-02-PLAN.md — Feature gate in check:static (unused, undefined, ambiguous; layout and Gherkin rules), the @url/@github exclusion, and the features/ lint blocks
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 01-03-PLAN.md — Marketplace row and empty-result steps, publishing by source kind, broken manifests; LS-01, INFO-04, ADD-01, INFO-08 seeds
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 01-04-PLAN.md — Multi-payload envelope and rows steps, read-only config step, new-session setup; UPD-07, ADD-14, ADD-03 seeds
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [ ] 01-05-PLAN.md — Cucumber and local-verification skill docs; phase gate
 
 ### Phase 2: GitHub Clone-Base Override
 
@@ -117,6 +134,7 @@ pinned as they are, not changed.
 3. A set but invalid value (not `https:`, or carrying userinfo, a query, or a fragment) fails the command with a typed error that names the variable.
 4. With the variable unset, every GitHub-source operation behaves byte-identically to before, and `list`, `info`, and `claude-plugins.json` show GitHub sources in github.com terms whether the variable is set or not.
 5. README (with its localized copies) and CHANGELOG document the variable as a divergence from Claude Code.
+
 **Plans:** TBD
 
 ### Phase 3: Marketplace Add
@@ -129,6 +147,7 @@ pinned as they are, not changed.
 1. Adding a marketplace records it in the chosen scope under its manifest name, with dir, file, `@url`, and `@github` rows. An added marketplace appears in `marketplace list` and is still there in a new session, a name the scope already holds fails as `duplicate name`, and a malformed or schema-invalid manifest fails as `invalid manifest`, each with dir and `@url` rows. The local rows pass.
 2. Without `--scope`, `add` uses the user scope; the same marketplace can be added to both scopes independently; and a path that does not exist fails as `source missing`, named by the source as typed.
 3. `add --local` writes the declaration to `claude-plugins.local.json` and `remove --local` clears it, and `add ~/...` keeps the `~` form and resolves it against HOME.
+
 **Plans:** TBD
 
 ### Phase 4: Marketplace Remove and List
@@ -142,6 +161,7 @@ pinned as they are, not changed.
 2. Removing a marketplace with installed plugins uninstalls each one with one `uninstalled` row and needs a reload. After it, a new session offers none of the plugin's skills, `plugin list` omits the plugin, and the marketplace stays removed.
 3. A name the requested scope lacks fails as `marketplace not added`, naming the scope only when the other scope holds the name; a name neither scope holds, without `--scope`, fails with no scope; and a name both scopes hold is removed from the project scope only when `--scope` is absent.
 4. `list` and `ls` show nothing when nothing is added, show every marketplace of both scopes project first with its autoupdate state and last-updated time, and narrow to one scope with `--scope`.
+
 **Plans:** TBD
 
 ### Phase 5: Marketplace Info
@@ -154,6 +174,7 @@ pinned as they are, not changed.
 1. One Outline shows each kind's source details: dir and file rows show the absolute path, autoupdate state, and description; an `@url` row shows the identity URL and ref; and an `@github` row shows owner, repo, and ref. The local rows pass.
 2. A name both scopes hold, without `--scope`, shows one block per scope, project first; a name neither scope holds fails as `marketplace not added` with no scope; and `--scope` naming the scope that misses, while the other holds the name, says which scope missed.
 3. Info on a marketplace whose manifest became invalid reports a failed `invalid manifest` row, and info shows the marketplaces a manifest allows cross-marketplace dependencies on.
+
 **Plans:** TBD
 
 ### Phase 6: Marketplace Update and C-10 Fix
@@ -169,6 +190,7 @@ pinned as they are, not changed.
 3. A bare `update` refreshes every marketplace of both scopes with one result per marketplace, project first, and reports no marketplaces when none is added. Updating a name the scope lacks fails as `marketplace not added`, with and without `--scope`.
 4. A path marketplace whose manifest became invalid fails with an `invalid manifest` row, and one whose directory vanished fails as `source missing`.
 5. A marketplace added from a `marketplace.json` outside `.claude-plugin/` updates by re-reading that file, and `info` shows its path; the scenario failed on the code before the fix.
+
 **Plans:** TBD
 
 ### Phase 7: Marketplace Autoupdate
@@ -182,6 +204,7 @@ pinned as they are, not changed.
 2. A newly added marketplace has autoupdate off, so `noautoupdate` is skipped as `already no autoupdate`, with dir, `@url`, and `@github` rows. The local rows pass.
 3. The setting shows in `list` and `info` and survives a new session.
 4. Without a name, the change applies to every marketplace of both scopes, or gives an empty result when none is added. A name neither scope holds fails as `marketplace not added`, and `autoupdate <name>` without `--scope` changes both scopes that hold the name.
+
 **Plans:** TBD
 
 ### Phase 8: Marketplace Help and Usage Errors
@@ -194,6 +217,7 @@ pinned as they are, not changed.
 1. `marketplace help` and `help marketplace` show the marketplace usage, and `marketplace help` with an argument is rejected.
 2. `marketplace` with no subcommand, or an unknown one, shows the usage with a reason, and `add`, `remove`, and `info` without their argument fail as `Missing required argument.`.
 3. Surplus arguments, unknown flags (including `--local` on `list`, `info`, and `update`), a bad or missing `--scope` value in any position, and an explicitly empty optional argument (`update ""`, `autoupdate ""`) are each rejected.
+
 **Plans:** TBD
 
 ### Phase 9: URL Source Kind and HTTPS Git Stand-In
@@ -209,6 +233,7 @@ pinned as they are, not changed.
 3. A repository armed for 404 fails `add` as `source missing`; one armed for 5xx or a dropped connection fails it as `network unreachable`; and `update` against a host armed for 5xx, 404, or a dropped connection fails as `network unreachable`.
 4. A url source is cloned at exactly the URL typed, with no `.git` appended. A removed git marketplace can be added again from the same source. `list`, `info`, and `remove` of git marketplaces leave the request log exactly empty. Every refused source form fails as `unsupported source` and the stand-in receives no request. The re-add, empty-log, and refused GitHub-form scenarios carry `@github` Examples blocks for Phase 10.
 5. The phase's last plan removes `@url` from the `cucumber.json` exclusion, and every `@url` row the verb phases wrote passes.
+
 **Plans:** TBD
 
 ### Phase 10: GitHub Source Kind and Suite Close
@@ -223,13 +248,14 @@ pinned as they are, not changed.
 2. `GitHub.com`, `www.github.com`, a `.git` suffix, and a trailing slash resolve to one source, and `owner/repo@ref` and `owner/repo#ref` clone that ref.
 3. `add` against a GitHub repository that answers 401 fails as `authentication required` without a stored credential and succeeds with one the scenario stores in the sandbox, which completes ADD-11 with Phase 9's url rows. `update` of a url or GitHub marketplace whose host now answers 401 fails as `authentication required`, with a cause line naming `git credential approve` for that host.
 4. The suite closes clean: a source-walk check fails if `cucumber.json` still excludes any tag; `cucumber-js --dry-run --format usage` reports no unused, undefined, or ambiguous step; the whole suite passes on Node 24 and Node 26; CI timing is recorded; a credential-isolation control run once by hand (a hostile `~/.gitconfig` and a planted system credential helper) changes no result; and a cucumber skill review of the suite finds no BLOCKER.
+
 **Plans:** TBD
 
 ## Progress
 
 | Phase | Plans Complete | Status | Completed |
 | --- | --- | --- | --- |
-| 1. Suite Foundation | 0/TBD | Not started | - |
+| 1. Suite Foundation | 0/5 | Not started | - |
 | 2. GitHub Clone-Base Override | 0/TBD | Not started | - |
 | 3. Marketplace Add | 0/TBD | Not started | - |
 | 4. Marketplace Remove and List | 0/TBD | Not started | - |
