@@ -198,6 +198,14 @@ export default tseslint.config(
         { blankLine: "always", prev: "block-like", next: "*" },
       ],
       "prefer-object-has-own": "error",
+      // The style rules the typescript-style skill relies on the toolchain for.
+      eqeqeq: ["error", "smart"],
+      "prefer-arrow-callback": "error",
+      // Function declarations are hoisted, so a helper may follow its caller.
+      "@typescript-eslint/no-use-before-define": [
+        "error",
+        { functions: false, classes: false, enums: false },
+      ],
       "sonarjs/cognitive-complexity": ["error", 15],
       "sonarjs/no-identical-functions": "error",
       "sonarjs/no-inverted-boolean-check": "error",
