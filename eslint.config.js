@@ -217,9 +217,24 @@ export default tseslint.config(
   {
     // The cucumber skill's steps.md: a step module exports nothing, and its step text is a
     // Cucumber expression written as a string literal, never a regular expression. A literal
-    // is required so a pattern held in a variable cannot hide a regex.
+    // is required so a pattern held in a variable cannot hide a regex. The text checks match
+    // the callee by name, so a step module registers through `Given`, `When`, and `Then`
+    // imported under their own names: no `defineStep`, no renamed import, and no namespace
+    // import whose member calls the checks would miss.
     files: ["features/step_definitions/**/*.steps.ts"],
     rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "@cucumber/cucumber",
+              importNames: ["defineStep"],
+              message: "A step module registers steps through Given, When, and Then.",
+            },
+          ],
+        },
+      ],
       "no-restricted-syntax": [
         "error",
         {
@@ -235,6 +250,34 @@ export default tseslint.config(
         {
           selector: "CallExpression[callee.name=/^(Given|When|Then)$/] > Literal.arguments[regex]",
           message: "Step text uses Cucumber expressions, never regular expressions.",
+        },
+        {
+          selector:
+            "ImportSpecifier[imported.name='Given'][local.name!='Given'], ImportSpecifier[imported.name='When'][local.name!='When'], ImportSpecifier[imported.name='Then'][local.name!='Then']",
+          message: "Import Given, When, and Then under their own names.",
+        },
+        {
+          selector:
+            "ImportDeclaration[source.value='@cucumber/cucumber'] > :matches(ImportNamespaceSpecifier, ImportDefaultSpecifier)",
+          message: "Import the Cucumber functions by name.",
+        },
+      ],
+    },
+  },
+  {
+    // The cucumber skill's layout.md: only step modules call Given, When, or Then.
+    files: ["features/support/**/*.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "@cucumber/cucumber",
+              importNames: ["Given", "When", "Then", "defineStep"],
+              message: "Only step modules register steps.",
+            },
+          ],
         },
       ],
     },
@@ -264,6 +307,8 @@ export default tseslint.config(
                 "defineParameterType",
                 "setWorldConstructor",
                 "setDefaultTimeout",
+                "setDefinitionFunctionWrapper",
+                "setParallelCanAssign",
               ],
               message: "A library module registers nothing.",
             },
