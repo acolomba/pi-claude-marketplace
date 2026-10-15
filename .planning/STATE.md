@@ -5,16 +5,16 @@ milestone_name: Marketplace Behavioral Tests
 current_phase: 1
 current_phase_name: Suite Foundation
 status: executing
-stopped_at: Completed 01-02-PLAN.md
-last_updated: "2026-10-15T19:58:42.256Z"
+stopped_at: Completed 01-03-PLAN.md
+last_updated: "2026-10-15T20:14:21.258Z"
 last_activity: 2026-10-15
 last_activity_desc: Phase 1 execution started
-state_head: cb198e8db21a063e1003fbb4aeb6be5b4295dc72
+state_head: c623ddae48ad044d43696f326603cf4db0312ca9
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 5
-  completed_plans: 2
+  completed_plans: 3
   percent: 0
 ---
 
@@ -32,7 +32,7 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 1 (Suite Foundation) — EXECUTING
-Plan: 3 of 5
+Plan: 4 of 5
 Status: Ready to execute
 Last activity: 2026-10-15 — Phase 1 execution started
 
@@ -181,8 +181,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-15T19:58:35.210Z
-**Stopped at:** Completed 01-02-PLAN.md
+**Last session:** 2026-10-15T20:14:21.169Z
+**Stopped at:** Completed 01-03-PLAN.md
 **Resume file:** None
 
 **Main merge (2026-10-11, quick task 261011-bsm):** `origin/main` at
@@ -299,6 +299,7 @@ archived milestone artifacts.
 | Phase 09 P01 | 10 min | 3 tasks | 3 files |
 | Phase 01 P01 | 8 min | 3 tasks | 12 files |
 | Phase 01 P02 | 13 min | 3 tasks | 4 files |
+| Phase 01 P03 | 13 min | 3 tasks | 10 files |
 
 ## Decisions
 
@@ -370,6 +371,8 @@ archived milestone artifacts.
 - [Phase 01]: [marketplace-features] PluginWorld renamed to ScenarioWorld; {scenario time} window has zero tolerance and opens at world construction
 - [Phase 01]: [marketplace-features] check:features (scripts/check-features.mjs) is the unused/undefined/ambiguous step gate; npx cucumber-js --dry-run --format usage honors the @url/@github exclusion and is no longer a substitute
 - [Phase 01]: [marketplace-features] Feature gate findings name the cucumber skill rule file; ambiguous findings list each matching definition by pattern and source location
+- [Phase 01]: The source kind parameter type is named `source kind` (with a space); Cucumber accepts it
+- [Phase 01]: `offers these plugins:` republishes under the recorded source kind, defaulting to dir
 
 ### mcp-4 decisions
 
