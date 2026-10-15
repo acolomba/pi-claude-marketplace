@@ -8,7 +8,7 @@ Feature: Marketplace info
     Given the marketplace "tools" offers these plugins:
       | name | version |
       | demo | 1.0.0   |
-    Given the user has run "/claude:plugin marketplace add {home}/marketplaces/tools --scope project"
+    Given the user has run "/claude:plugin marketplace add ~/marketplaces/tools --scope project"
     When the user runs "/claude:plugin marketplace info tools --scope project"
     Then the result has these fields:
       | kind                    | marketplace-info          |
