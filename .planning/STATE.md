@@ -2,9 +2,14 @@
 gsd_state_version: "1.0"
 milestone: marketplace-features
 milestone_name: Marketplace Behavioral Tests
+current_phase: 1
+current_phase_name: Suite Foundation
 status: planning
-last_updated: "2026-10-15T16:44:27.000Z"
+stopped_at: Phase 1 context gathered
+last_updated: "2026-10-15T18:09:38.271Z"
 last_activity: 2026-10-15
+last_activity_desc: "Roadmap revised for parallel waves: 10 phases, 85/85 requirements mapped"
+state_head: f7f3ecbc7be84c4b9a0fcdd7e77022d50088f23b
 progress:
   total_phases: 10
   completed_phases: 0
@@ -176,9 +181,9 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-11T04:37:47.633Z
-**Stopped at:** Milestone json-output completed and archived (override close)
-**Resume file:** None
+**Last session:** 2026-10-15T18:09:38.187Z
+**Stopped at:** Phase 1 context gathered
+**Resume file:** .planning/phases/01-suite-foundation/01-CONTEXT.md
 
 **Main merge (2026-10-11, quick task 261011-bsm):** `origin/main` at
 `94160614` (#248, and #250, the mcp-4 milestone released as 0.20.0) is merged
