@@ -103,14 +103,14 @@ pinned as they are, not changed.
 4. `cucumber.json` runs `not @url and not @github`, so an Outline with untagged, `@url`, and `@github` Examples blocks runs only its local rows. The cucumber skill rules document the multi-kind Outline pattern, the exclusion, and which phase removes each tag.
 5. `npm run check` fails when `cucumber-js --dry-run --format usage` reports an unused, undefined, or ambiguous step.
 
-**Plans:** 1/5 plans executed
+**Plans:** 2/5 plans executed
 
 Plans:
 **Wave 1**
 - [x] 01-01-PLAN.md — Tracer: payload driver and run tokens through one info scenario; kind row in every result table; not-added and usage kinds
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 01-02-PLAN.md — Feature gate in check:static (unused, undefined, ambiguous; layout and Gherkin rules), the @url/@github exclusion, and the features/ lint blocks
+- [x] 01-02-PLAN.md — Feature gate in check:static (unused, undefined, ambiguous; layout and Gherkin rules), the @url/@github exclusion, and the features/ lint blocks
 
 **Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 01-03-PLAN.md — Marketplace row and empty-result steps, publishing by source kind, broken manifests; LS-01, INFO-04, ADD-01, INFO-08 seeds
@@ -255,7 +255,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 | --- | --- | --- | --- |
-| 1. Suite Foundation | 1/5 | In Progress | - |
+| 1. Suite Foundation | 2/5 | In Progress | - |
 | 2. GitHub Clone-Base Override | 0/TBD | Not started | - |
 | 3. Marketplace Add | 0/TBD | Not started | - |
 | 4. Marketplace Remove and List | 0/TBD | Not started | - |

@@ -5,16 +5,16 @@ milestone_name: Marketplace Behavioral Tests
 current_phase: 1
 current_phase_name: Suite Foundation
 status: executing
-stopped_at: Completed 01-01-PLAN.md
-last_updated: "2026-10-15T19:41:38.387Z"
+stopped_at: Completed 01-02-PLAN.md
+last_updated: "2026-10-15T19:58:42.256Z"
 last_activity: 2026-10-15
 last_activity_desc: Phase 1 execution started
-state_head: 9a5c5b7d6451576f75a79ba36345e4f9c4ddaac2
+state_head: cb198e8db21a063e1003fbb4aeb6be5b4295dc72
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 5
-  completed_plans: 1
+  completed_plans: 2
   percent: 0
 ---
 
@@ -32,7 +32,7 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 1 (Suite Foundation) — EXECUTING
-Plan: 2 of 5
+Plan: 3 of 5
 Status: Ready to execute
 Last activity: 2026-10-15 — Phase 1 execution started
 
@@ -181,8 +181,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-15T19:41:38.295Z
-**Stopped at:** Completed 01-01-PLAN.md
+**Last session:** 2026-10-15T19:58:35.210Z
+**Stopped at:** Completed 01-02-PLAN.md
 **Resume file:** None
 
 **Main merge (2026-10-11, quick task 261011-bsm):** `origin/main` at
@@ -298,6 +298,7 @@ archived milestone artifacts.
 | Phase 08 P04 | 6 min | 3 tasks | 2 files |
 | Phase 09 P01 | 10 min | 3 tasks | 3 files |
 | Phase 01 P01 | 8 min | 3 tasks | 12 files |
+| Phase 01 P02 | 13 min | 3 tasks | 4 files |
 
 ## Decisions
 
@@ -367,6 +368,8 @@ archived milestone artifacts.
 - [Phase 09]: 04/ deferred item marked status: resolved (not closed) because audit-open treats only resolved or acknowledged as closed
 - [Phase 01]: [marketplace-features] Given setup commands stay on the strict runCommand path (one cascade, severity info); only When stores every payload via runCommandPayloads
 - [Phase 01]: [marketplace-features] PluginWorld renamed to ScenarioWorld; {scenario time} window has zero tolerance and opens at world construction
+- [Phase 01]: [marketplace-features] check:features (scripts/check-features.mjs) is the unused/undefined/ambiguous step gate; npx cucumber-js --dry-run --format usage honors the @url/@github exclusion and is no longer a substitute
+- [Phase 01]: [marketplace-features] Feature gate findings name the cucumber skill rule file; ambiguous findings list each matching definition by pattern and source location
 
 ### mcp-4 decisions
 
