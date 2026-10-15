@@ -17,8 +17,9 @@ Feature: Plugin update
       | demo | 1.1.0   |
     When the user runs "/claude:plugin update demo@fixtures --scope project"
     Then the result has these fields:
-      | severity     | info |
-      | needs reload | true |
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
     Then the result lists these plugins:
       | marketplace name | marketplace scope | id            | name | status  | reasons | scope   | from  | to    |
       | fixtures         | project           | demo@fixtures | demo | updated |         | project | 1.0.0 | 1.1.0 |
@@ -40,6 +41,7 @@ Feature: Plugin update
     Given the user has run "/claude:plugin update demo@fixtures --scope project"
     When the user runs "/claude:plugin list --scope project"
     Then the result has these fields:
+      | kind                | cascade     |
       | severity            | info        |
       | needs reload        | false       |
       | tally label         | Plugin list |
@@ -53,8 +55,9 @@ Feature: Plugin update
   Scenario: Updating a plugin that is up to date skips it as up to date
     When the user runs "/claude:plugin update demo@fixtures --scope project"
     Then the result has these fields:
-      | severity     | info  |
-      | needs reload | false |
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
     Then the result lists these plugins:
       | marketplace name | marketplace scope | id            | name | status  | reasons    | scope   |
       | fixtures         | project           | demo@fixtures | demo | skipped | up-to-date | project |

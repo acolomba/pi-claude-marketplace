@@ -14,8 +14,9 @@ Feature: Plugin uninstall
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
     When the user runs "/claude:plugin uninstall demo@fixtures --scope project"
     Then the result has these fields:
-      | severity     | info |
-      | needs reload | true |
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
     Then the result lists these plugins:
       | marketplace name | marketplace scope | id            | name | status      | reasons | scope   | version |
       | fixtures         | project           | demo@fixtures | demo | uninstalled |         | project | 1.0.0   |
@@ -31,6 +32,7 @@ Feature: Plugin uninstall
     Given the user has run "/claude:plugin uninstall demo@fixtures --scope project"
     When the user runs "/claude:plugin list --scope project"
     Then the result has these fields:
+      | kind                | cascade     |
       | severity            | info        |
       | needs reload        | false       |
       | tally label         | Plugin list |
@@ -44,6 +46,7 @@ Feature: Plugin uninstall
   Scenario: Uninstalling a plugin that is not installed fails as not installed
     When the user runs "/claude:plugin uninstall demo@fixtures --scope project"
     Then the result has these fields:
+      | kind         | cascade                        |
       | severity     | error                          |
       | needs reload | false                          |
       | summary      | A plugin operation has failed. |

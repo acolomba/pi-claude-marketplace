@@ -11,6 +11,7 @@ Feature: Marketplace info
     Given the user has run "/claude:plugin marketplace add {home}/marketplaces/tools --scope project"
     When the user runs "/claude:plugin marketplace info tools --scope project"
     Then the result has these fields:
+      | kind                    | marketplace-info          |
       | name                    | tools                     |
       | scope                   | project                   |
       | details autoupdate      | false                     |

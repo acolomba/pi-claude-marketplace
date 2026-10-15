@@ -13,8 +13,9 @@ Feature: Plugin install
   Scenario: Installing a plugin reports it installed in the chosen scope
     When the user runs "/claude:plugin install demo@fixtures --scope project"
     Then the result has these fields:
-      | severity     | info |
-      | needs reload | true |
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
     Then the result lists these plugins:
       | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
       | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
@@ -30,6 +31,7 @@ Feature: Plugin install
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
     When the user runs "/claude:plugin list --scope project"
     Then the result has these fields:
+      | kind                | cascade     |
       | severity            | info        |
       | needs reload        | false       |
       | tally label         | Plugin list |
@@ -43,6 +45,7 @@ Feature: Plugin install
   Scenario: Installing a plugin the marketplace does not offer fails as not in manifest
     When the user runs "/claude:plugin install missing@fixtures --scope project"
     Then the result has these fields:
+      | kind         | cascade                        |
       | severity     | error                          |
       | needs reload | false                          |
       | summary      | A plugin operation has failed. |
@@ -54,6 +57,7 @@ Feature: Plugin install
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
     When the user runs "/claude:plugin install demo@fixtures --scope project"
     Then the result has these fields:
+      | kind         | cascade                        |
       | severity     | error                          |
       | needs reload | false                          |
       | summary      | A plugin operation has failed. |

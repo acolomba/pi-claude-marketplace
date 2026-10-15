@@ -26,15 +26,11 @@ import type { CascadePayload } from "../lib/pi-commands.ts";
 import type { RunTokens } from "../lib/run-tokens.ts";
 import type { ScenarioWorld } from "../support/world.ts";
 
-// Fields no scenario states: `kind` and `schemaVersion` are fixed by the
-// schema the driver checks, `origin` carries per-run ids, and `marketplaces`
-// has a step of its own.
-const UNSTATED_FIELDS: ReadonlySet<string> = new Set([
-  "kind",
-  "schemaVersion",
-  "origin",
-  "marketplaces",
-]);
+// Fields no scenario states: `schemaVersion` is fixed by the schema the
+// driver checks, `origin` carries per-run ids, and `marketplaces` has a step
+// of its own. Every table states `kind`, as the wire writes it, hyphens
+// included (D-01).
+const UNSTATED_FIELDS: ReadonlySet<string> = new Set(["schemaVersion", "origin", "marketplaces"]);
 
 // Words of a field name, without a leading word its parent already says:
 // `cause.causeChain` is `cause chain`, not `cause cause chain`.
