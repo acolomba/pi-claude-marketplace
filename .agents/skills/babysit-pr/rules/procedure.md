@@ -4,7 +4,7 @@ Part of the `babysit-pr` skill: `.agents/skills/babysit-pr/SKILL.md`.
 
 ## Phase 0 -- Resolve the PR
 
-Run `gh pr view $ARGUMENTS --json number,headRefName,url,state`. If there is no open PR for this branch, stop and say so -- this skill hardens an existing PR, it does not create one. Record the PR number and head branch.
+Run `gh pr view <number> --json number,headRefName,url,state` with the PR number the skill was given, or without a number for the current branch's PR. If there is no open PR for this branch, stop and say so -- this skill hardens an existing PR, it does not create one. Record the PR number and head branch.
 
 ## Phase 1 -- Review convergence (local, fast)
 
@@ -63,13 +63,13 @@ Close the milestone only after Phases 1 and 2 have stopped changing code. A clos
 
 2. **Run the phase-scoped gates before anything is archived.** Archiving moves the phase directories, and these commands cannot find an archived phase afterwards.
 
-   - `/gsd-audit-uat`. If any UAT item is still `testing` or `pending` and the operator has not deferred it in writing, stop and report: a live Pi UAT needs a human, so this phase cannot pass it for them.
+   - `/gsd-audit-uat`. If any UAT item is still `testing` or `pending` and the operator has not deferred it in writing, stop and report: a live UAT needs a human, so this phase cannot pass it for them.
    - `/gsd-secure-phase N` and `/gsd-validate-phase N` for each phase that has no `*-SECURITY.md` or no Nyquist validation.
 
 3. **Close, in this order:**
 
    1. `/gsd-audit-milestone`. Read the status from the audit file you wrote; do not trust a workflow's grep of a guessed path. `gaps_found` stops the phase and is reported.
-   2. `/gsd-complete-milestone`. Skip its git tag: tags here mark npm releases, not milestones. Then do what the command leaves undone: reorganize ROADMAP.md, move PROJECT.md's milestone from Current to Previous, add the RETROSPECTIVE.md section, `git rm` the live REQUIREMENTS.md, stage the deletions it leaves at the original paths (`git add -u` on those paths only), and correct the dates it stamps.
+   2. `/gsd-complete-milestone`. Skip its git tag: tags here mark package releases, not milestones. Then do what the command leaves undone: reorganize ROADMAP.md, move PROJECT.md's milestone from Current to Previous, add the RETROSPECTIVE.md section, `git rm` the live REQUIREMENTS.md, stage the deletions it leaves at the original paths (`git add -u` on those paths only), and correct the dates it stamps.
    3. `/gsd-cleanup`. It archives any phase directory `complete-milestone` left behind; a no-op is the expected result.
 
 4. **Consistency sweep.** `complete-milestone` checks none of these, and each one has drifted on a past close. Fix every hit:
@@ -84,16 +84,11 @@ Close the milestone only after Phases 1 and 2 have stopped changing code. A clos
 
 ## Guards
 
-- **Closeout runs last and once.** Phase 3 never runs while Phases 1 or 2 still change code. On a re-run against an already-closed milestone, only the step 4 sweep runs.
-
 - **Bounded everywhere.** Cap the per-file skill passes, the Phase 1 review rounds, and the Phase 2 Sonar rounds. On oscillation or a no-progress round, stop and report rather than loop.
-
+- **Closeout runs last and once.** Phase 3 never runs while Phases 1 or 2 still change code. On a re-run against an already-closed milestone, only the step 4 sweep runs.
 - **Never bypass hooks.** Every commit passes pre-commit; a failing hook is a defect to fix, not to `--no-verify` past.
-
 - **Don't game either system.** No won't-fix flips, no blanket lint-disables, no deleting the test that caught the problem.
-
 - **Autonomous but bounded.** This pushes fixes straight to your open PR without stopping to ask (that is what "babysit" means here). There is no branch protection on this repo, so treat the caps and the no-gaming rules as the real safety net. If it cannot converge within the caps, it stops and hands you a summary.
-
 - **Subagents carry the weight.** Keep this orchestration turn lean: the skill passes, the review, the fixing, and the Sonar remediation happen in spawned subagents, so their transcripts stay out of the main context.
 
 ## Finish

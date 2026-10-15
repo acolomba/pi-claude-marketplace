@@ -14,11 +14,11 @@ Part of the `typescript-style` skill: `.agents/skills/typescript-style/SKILL.md`
 
 - File order: copyright JSDoc, `@fileoverview` JSDoc, imports, implementation -- each present section separated by exactly one blank line.
 - File names are `kebab-case`: `atomic-json.ts`. *(project)*
-- Same-project imports are relative and carry the `.ts` extension, because Node runs the sources directly with no build step; flag long `../` chains. *(project)*
+- Same-project imports are relative and carry the `.ts` extension, because Node runs the sources directly; flag long `../` chains. *(project)*
 - Import form matches usage: named imports for symbols used often or with clear names; a namespace import for many symbols from one large API or common names such as `defaultGit`; a rename only to avoid a collision, name a generated symbol, or clarify an unclear name.
 - Default imports only for external code that offers nothing else; side-effect imports (`import 'x';`) only to load for side effects.
 - Imports used only as types are marked `import type` (or inline `type`); type re-exports use `export type`.
-- Exports are named. The one permitted default export is the extension factory in `extensions/pi-claude-marketplace/index.ts`, a function declaration, because Pi's loader calls the module's default export; any other default export is a finding. *(project)*
+- Exports are named. A default export is permitted only where a loader requires it of the entry point (Pi calls the default export of `extensions/pi-claude-marketplace/index.ts`); any other default export is a finding. *(project)*
 - Every export is used outside its module. No `export let`; a getter function over a module-local binding. Conditionals run before `export const`.
 - No class of static members as a namespace; constants and functions are exported directly. Code is namespaced with separate files, not `namespace` or `module {}`.
 
