@@ -17,6 +17,8 @@ import { killProcessGroup, startRpcPi } from "../../tests/e2e/_rpc.ts";
 
 import type { RpcSandbox } from "../../tests/e2e/_rpc.ts";
 
+export type { RpcSandbox };
+
 /** A parsed stdout record, read only through narrowing. */
 type RpcRecord = Readonly<Record<string, unknown>>;
 

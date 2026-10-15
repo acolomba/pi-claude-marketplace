@@ -3,6 +3,7 @@
  */
 
 import assert from "node:assert/strict";
+import { rm } from "node:fs/promises";
 import path from "node:path";
 
 import { type DataTable, Given } from "@cucumber/cucumber";
@@ -16,6 +17,7 @@ Given(
   "the marketplace {string} offers these plugins:",
   async function (this: PluginWorld, name: string, table: DataTable) {
     const root = path.join(this.marketplacesRoot, name);
+    this.onRelease(() => rm(root, { recursive: true, force: true }));
     await writeMarketplace(root, name, readOfferedPlugins(table));
   },
 );

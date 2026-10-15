@@ -10,7 +10,7 @@ Feature: Plugin install
       | demo | 1.0.0   |
     Given the marketplace "fixtures" is added to the project scope
 
-  Scenario: The user installs a plugin
+  Scenario: Installing a plugin reports it installed in the chosen scope
     When the user runs "/claude:plugin install demo@fixtures --scope project"
     Then the result has these fields:
       | severity     | info |
@@ -40,7 +40,7 @@ Feature: Plugin install
       | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
       | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
 
-  Scenario: The user installs a plugin the marketplace does not offer
+  Scenario: Installing a plugin the marketplace does not offer fails as not in manifest
     When the user runs "/claude:plugin install missing@fixtures --scope project"
     Then the result has these fields:
       | severity     | error                          |
@@ -50,7 +50,7 @@ Feature: Plugin install
       | marketplace name | marketplace scope | id               | name    | status | reasons         | scope   | cause chain                                           | cause truncated | leaks | rollback partial |
       | fixtures         | project           | missing@fixtures | missing | failed | not in manifest | project | Plugin "missing" not found in marketplace "fixtures". | false           |       |                  |
 
-  Scenario: The user installs a plugin that is already installed
+  Scenario: Installing a plugin that is already installed fails as already installed
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
     When the user runs "/claude:plugin install demo@fixtures --scope project"
     Then the result has these fields:

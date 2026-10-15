@@ -21,7 +21,7 @@ import { AfterAll, Before, BeforeAll } from "@cucumber/cucumber";
 import { runCommand, startSession } from "../lib/pi-commands.ts";
 import { PiProcess } from "../lib/pi-process.ts";
 
-import type { RpcSandbox } from "../../tests/e2e/_rpc.ts";
+import type { RpcSandbox } from "../lib/pi-process.ts";
 
 /** The Pi process and the sandbox it runs in, which last the whole run. */
 export interface PiRun {
@@ -77,7 +77,6 @@ Before(async (): Promise<void> => {
     ),
   );
   await Promise.all(entries.flat().map((entry) => rm(entry, { recursive: true, force: true })));
-  await rm(run.marketplacesRoot, { recursive: true, force: true });
   const skills = await startSession(run.pi);
   const listed = await runCommand(run.pi, "/claude:plugin list");
   assert.deepStrictEqual(

@@ -11,7 +11,7 @@ Feature: Plugin update
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
 
-  Scenario: The user updates a plugin to a new version
+  Scenario: Updating a plugin reports the move from the installed version to the offered one
     Given the marketplace "fixtures" offers these plugins:
       | name | version |
       | demo | 1.1.0   |
@@ -50,7 +50,7 @@ Feature: Plugin update
       | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
       | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.1.0   |
 
-  Scenario: The user updates a plugin that is up to date
+  Scenario: Updating a plugin that is up to date skips it as up to date
     When the user runs "/claude:plugin update demo@fixtures --scope project"
     Then the result has these fields:
       | severity     | info  |

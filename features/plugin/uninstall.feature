@@ -10,7 +10,7 @@ Feature: Plugin uninstall
       | demo | 1.0.0   |
     Given the marketplace "fixtures" is added to the project scope
 
-  Scenario: The user uninstalls an installed plugin
+  Scenario: Uninstalling an installed plugin reports it uninstalled from the chosen scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
     When the user runs "/claude:plugin uninstall demo@fixtures --scope project"
     Then the result has these fields:
@@ -41,7 +41,7 @@ Feature: Plugin uninstall
       | marketplace name | marketplace scope | id            | name | status    | reasons | version |
       | fixtures         | project           | demo@fixtures | demo | available |         | 1.0.0   |
 
-  Scenario: The user uninstalls a plugin that is not installed
+  Scenario: Uninstalling a plugin that is not installed fails as not installed
     When the user runs "/claude:plugin uninstall demo@fixtures --scope project"
     Then the result has these fields:
       | severity     | error                          |
