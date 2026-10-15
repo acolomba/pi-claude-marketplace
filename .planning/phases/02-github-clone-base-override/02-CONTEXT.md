@@ -33,6 +33,12 @@ This is a production change under `extensions/pi-claude-marketplace/` plus a lin
 ### Literal gate
 - **D-06:** The GHB-02 source-walk gate is an ESLint rule over `extensions/pi-claude-marketplace/**`: any string or template literal containing `github.com` fails `npm run lint`, except inside the seam module and at legitimate sites that carry `eslint-disable-next-line <rule> -- <reason>` (the parser's host comparisons, user-facing reason text, the github.com display string, the Device Flow endpoints in `domain/auth-registry.ts`). Comments are ignored. A new literal fails even inside an exempt file. Per CONVENTIONS.md, no committed negative control; plant once by hand.
 
+### Settled after research (orchestrator, within D-01..D-06; 2026-10-15)
+- **D-07:** The rewrite lives where the bytes leave: the four GitHub network calls in `platform/git.ts` (`clone`, `fetch`, `resolveRemoteRef`, `listRemoteTags`) rewrite an exact `https://github.com/` prefix to `<base>/` via the `shared/` seam, and `clone` sets `remote.origin.url` back to the canonical URL. This supersedes the `<code_context>` note that suggested making `networkCloneUrl` follow the seam: that placement would record the override URL as origin and break D-01 (see 02-RESEARCH.md).
+- **D-08:** An invalid set value fails the whole command with the typed error naming the variable (GHB-03), rethrown past per-target catches as `add` already does; no new reason token. The message must avoid a bare `/` path shape, which the json/rpc cause redaction would swallow (02-RESEARCH.md pitfall).
+- **D-09:** Insteadof semantics apply to every `https://github.com/` URL the extension sends, git-subdir sources included; the auth host follows the same rewrite. An empty value counts as unset; the prefix match is exact (no case folding), like git.
+- **D-10:** D-03's "names the URL actually fetched" is realized as a `fetched <wire url>` cause tail added only when the URL was rewritten, so unset output stays byte-identical (GHB-04).
+
 ### Claude's Discretion
 - The seam module's name and API (research suggests `shared/github-base-url.ts`; it must not live under `platform/git*`, which ESLint BLOCK F matches), and whether the auth-host function replaces the `GITHUB_HOST` constant outright so the compiler lists every site.
 - Exactly how each fetch path receives the explicit URL (isomorphic-git `url` option, or a seam helper), and which unit tests gain override cases (each affected owner test gets one, per success criterion 1).
@@ -74,7 +80,7 @@ This is a production change under `extensions/pi-claude-marketplace/` plus a lin
 ## Existing Code Insights
 
 ### Reusable Assets
-- `networkCloneUrl` is already the single wire-URL derivation with 18 callers; making its github arm follow the seam covers every clone path at once.
+- `networkCloneUrl` is the single wire-URL derivation with 18 callers; it keeps producing the canonical github.com URL (D-07 moves the rewrite into `platform/git.ts`).
 - `buildAuthForHost` already falls back to stored-credential auth when no provider matches the host, so an override host gets `git credential` auth and no Device Flow by construction.
 - `platform/workflow-home.ts` is the precedent for an env-var reader with per-test restore (`t.after()`), per research.
 
