@@ -220,7 +220,9 @@ export default tseslint.config(
     // is required so a pattern held in a variable cannot hide a regex. The text checks match
     // the callee by name, so a step module registers through `Given`, `When`, and `Then`
     // imported under their own names: no `defineStep`, no renamed import, and no namespace
-    // import whose member calls the checks would miss.
+    // import whose member calls the checks would miss. A local alias still escapes them, so
+    // scripts/check-features.mjs also rejects every registered pattern that is not a Cucumber
+    // expression. Hooks, parameter types, and the world belong to support modules (layout.md).
     files: ["features/step_definitions/**/*.steps.ts"],
     rules: {
       "no-restricted-imports": [
@@ -231,6 +233,23 @@ export default tseslint.config(
               name: "@cucumber/cucumber",
               importNames: ["defineStep"],
               message: "A step module registers steps through Given, When, and Then.",
+            },
+            {
+              name: "@cucumber/cucumber",
+              importNames: [
+                "Before",
+                "After",
+                "BeforeAll",
+                "AfterAll",
+                "BeforeStep",
+                "AfterStep",
+                "defineParameterType",
+                "setWorldConstructor",
+                "setDefaultTimeout",
+                "setDefinitionFunctionWrapper",
+                "setParallelCanAssign",
+              ],
+              message: "A step module registers steps only; support modules register the rest.",
             },
           ],
         },

@@ -63,7 +63,7 @@ Use `@cucumber/cucumber` for the runner, `node:assert/strict` for assertions, an
 
 - Step text uses Cucumber expressions (`{string}`, `{int}`, `{word}`), never regular expressions. A custom parameter type is defined in the support module named after what it parses.
 
-- Step text is a string literal. Lint rejects a regular expression or a variable in its place. Its check reads the callee by name, so lint also rejects a step registered through `defineStep`, a renamed import of `Given`, `When`, or `Then`, and a namespace import of `@cucumber/cucumber`.
+- Step text is a string literal. Lint rejects a regular expression or a variable in its place. Its check reads the callee by name, so lint also rejects a step registered through `defineStep`, a renamed import of `Given`, `When`, or `Then`, and a namespace import of `@cucumber/cucumber`. A local alias such as `const step = Given` still escapes lint, so `npm run check:features` also fails on any registered step text that is not a Cucumber expression.
 
 - A step that types a command expands the run tokens in it before it sends the command, and a step that reads a result projects the run tokens back. `.agents/skills/cucumber/rules/features.md` lists the tokens. The text of a step definition never contains a token, because a brace in a Cucumber expression names a parameter type.
 

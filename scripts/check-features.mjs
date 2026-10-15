@@ -8,7 +8,7 @@ import { loadConfiguration, runCucumber } from "@cucumber/cucumber/api";
 /**
  * Fails when a cucumber step definition is unused, or when a step in any scenario is undefined or
  * ambiguous (DRV-04). A dry run over the cucumber API reports both through its message stream.
- * It also fails on a file under features/ that breaks the cucumber skill's layout rules, and on a
+ * It also fails on a step definition whose text is a regular expression, on a file under features/ that breaks the cucumber skill's layout rules, and on a
  * feature file that breaks its Gherkin rules, read from the same run's Gherkin documents.
  *
  * It runs through the API rather than the CLI because the CLI's `--tags` is and-joined with the
@@ -141,6 +141,18 @@ function unusedFindings(collection) {
       path: definition.sourceReference.uri,
       line: definition.sourceReference.location?.line ?? 0,
       message: `unused step definition ${JSON.stringify(definition.pattern.source)} (${stepsRule})`,
+    }));
+}
+
+// Reads the registered pattern, so it catches a regular expression whatever name the step
+// function was called through, which the name-based lint selectors cannot.
+function patternFindings(collection) {
+  return collection.definitions
+    .filter((definition) => definition.pattern.type !== "CUCUMBER_EXPRESSION")
+    .map((definition) => ({
+      path: definition.sourceReference.uri,
+      line: definition.sourceReference.location?.line ?? 0,
+      message: `step text is not a Cucumber expression: ${JSON.stringify(definition.pattern.source)} (${stepsRule})`,
     }));
 }
 
@@ -484,6 +496,7 @@ async function main() {
   const findings = [
     ...runFindings(collection),
     ...unusedFindings(collection),
+    ...patternFindings(collection),
     ...matchFindings(collection),
     ...collection.documents.flatMap(documentFindings),
     ...layoutFindings(),
