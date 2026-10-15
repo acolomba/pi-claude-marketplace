@@ -4,7 +4,7 @@ Feature: Marketplace update
   The scenarios run the real extension in a headless Pi and use local
   marketplaces in place of published ones.
 
-  Scenario: A bare update refreshes every marketplace of both scopes, project first
+  Scenario: A bare update reports one result per marketplace of both scopes, project first
     Given the marketplace "beta" is published as a dir source
     Given the marketplace "alpha" is published as a dir source
     Given the marketplace "gamma" is published as a dir source
