@@ -215,6 +215,64 @@ export default tseslint.config(
     },
   },
   {
+    // The cucumber skill's steps.md: a step module exports nothing, and its step text is a
+    // Cucumber expression written as a string literal, never a regular expression. A literal
+    // is required so a pattern held in a variable cannot hide a regex.
+    files: ["features/step_definitions/**/*.steps.ts"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector:
+            "ExportNamedDeclaration, ExportDefaultDeclaration, ExportAllDeclaration, TSExportAssignment",
+          message: "A step module exports nothing.",
+        },
+        {
+          selector:
+            "CallExpression[callee.name=/^(Given|When|Then)$/][arguments.0.type!='Literal']",
+          message: "Step text is a string literal Cucumber expression.",
+        },
+        {
+          selector: "CallExpression[callee.name=/^(Given|When|Then)$/] > Literal.arguments[regex]",
+          message: "Step text uses Cucumber expressions, never regular expressions.",
+        },
+      ],
+    },
+  },
+  {
+    // The cucumber skill's layout.md: a library module registers nothing. Only step modules
+    // register steps and only support modules register hooks, parameter types, or the world.
+    files: ["features/lib/**/*.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "@cucumber/cucumber",
+              importNames: [
+                "Given",
+                "When",
+                "Then",
+                "Before",
+                "After",
+                "BeforeAll",
+                "AfterAll",
+                "BeforeStep",
+                "AfterStep",
+                "defineStep",
+                "defineParameterType",
+                "setWorldConstructor",
+                "setDefaultTimeout",
+              ],
+              message: "A library module registers nothing.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     // IL-2 / IL-3 / OBS-01: the fallow rule pack (rule-packs/architecture.json)
     // owns console discipline in the extension. It bans every console call
     // except the console.warn in persistence/migrate.ts and the console.error
