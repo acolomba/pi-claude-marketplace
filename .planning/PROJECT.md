@@ -1050,7 +1050,7 @@ test.ts` (43 V2 tests, +2 G-21-01 inventory-vs-transition regressions)
 
 ## Constraints
 
-- **Upstream parity:** Claude Code's behavior is the default for every user-visible decision, because this extension installs real Claude plugins and anything it does differently is something a user already learned upstream and must unlearn. Exactly two things license a divergence: a recorded project decision carried here with an ID (SC-1, for instance), or a Pi capability gap that makes parity unavailable. Neither "upstream looks wrong" nor "our way is simpler" qualifies -- those go to the user as a question. Research the upstream contract with `skills/claude-code-compat-research`.
+- **Upstream parity:** Claude Code's behavior is the default for every user-visible decision, because this extension installs real Claude plugins and anything it does differently is something a user already learned upstream and must unlearn. Exactly two things license a divergence: a recorded project decision carried here with an ID (SC-1, for instance), or a Pi capability gap that makes parity unavailable. Neither "upstream looks wrong" nor "our way is simpler" qualifies -- those go to the user as a question. Research the upstream contract with `.agents/skills/claude-code-compat-research`.
 - **Runtime:** Node `^22.22.2 || ^24.15.0 || >=26.0.0` (NFR-4)
 - **Tech stack:** TypeScript strict; the resolver MUST expose discriminated `installable: true | false` so consumers cannot read `pluginRoot` from a non-installable plugin (NFR-7)
 - **Pi API:** `@earendil-works/pi-coding-agent` peer dependency, pinned to `>=1.0.0` (dev `^1.0.0`); the NFR-11 floor-pinning SHOULD is now satisfied

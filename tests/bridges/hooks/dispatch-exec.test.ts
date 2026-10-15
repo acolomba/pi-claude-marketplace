@@ -88,6 +88,7 @@ test("executes a blocking hook through the portable process boundary", async (t)
     ...args: TArgs
   ): ReturnType<typeof setTimeout> {
     const observedCallback = (): void => {
+      // eslint-disable-next-line @typescript-eslint/no-use-before-define -- the timer calls back only after `handle` is assigned
       pendingTimerHandles.delete(handle);
       callback(...args);
     };
