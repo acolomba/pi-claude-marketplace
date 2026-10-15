@@ -4,6 +4,11 @@
  *
  * A `Given` command is setup and must succeed. A `When` command is the action
  * under test, and its result is kept on the world for the `Then` steps.
+ *
+ * The `Then` steps compare the whole result. A field becomes lower-case words
+ * (`needsReload` is `needs reload`), a nested object adds its own words
+ * (`tally.success.count` is `tally success count`), and a list joins with
+ * commas. A field the result leaves out is a field the table leaves out.
  */
 
 import assert from "node:assert/strict";
@@ -12,34 +17,67 @@ import { type DataTable, Given, Then, When } from "@cucumber/cucumber";
 
 import { runCommand } from "../lib/pi-commands.ts";
 
+import type { CascadePayload } from "../lib/pi-commands.ts";
 import type { PluginWorld } from "../support/world.ts";
 
-// The top-level fields a scenario states in full. `kind`, `schemaVersion`,
-// and `origin` are fixed by the schema the driver checks, and `tally` and
-// `marketplaces` have steps of their own.
-const RESULT_FIELDS = ["severity", "needsReload", "noOp", "summary"];
+// Fields no scenario states: `kind` and `schemaVersion` are fixed by the
+// schema the driver checks, `origin` carries per-run ids, and `marketplaces`
+// has a step of its own.
+const UNSTATED_FIELDS: ReadonlySet<string> = new Set([
+  "kind",
+  "schemaVersion",
+  "origin",
+  "marketplaces",
+]);
 
-// The row fields every plugin table names, so a row with an unexpected
-// status or reason never passes unseen.
-const REQUIRED_PLUGIN_COLUMNS = ["id", "status", "reasons"];
+// Words of a field name, without a leading word its parent already says:
+// `cause.causeChain` is `cause chain`, not `cause cause chain`.
+function fieldWords(prefix: readonly string[], key: string): string[] {
+  const words = key.split(/(?=[A-Z])/u).map((word) => word.toLowerCase());
+  return words[0] === prefix.at(-1) ? [...prefix, ...words.slice(1)] : [...prefix, ...words];
+}
 
-// Renders one field of a result as a table cell: a list joins with commas,
-// and an absent field is an empty cell.
+function isPlainObject(value: unknown): value is object {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 function cell(value: unknown): string {
-  if (Array.isArray(value)) {
+  if (Array.isArray(value) && value.every((item) => typeof item === "string")) {
     return value.join(", ");
-  }
-
-  if (value === undefined) {
-    return "";
   }
 
   return typeof value === "string" ? value : JSON.stringify(value);
 }
 
-function project(record: object, columns: readonly string[]): Record<string, string> {
-  const fields = new Map(Object.entries(record));
-  return Object.fromEntries(columns.map((column) => [column, cell(fields.get(column))]));
+// Flattens `record` into one `[name, cell]` pair per leaf field.
+function flatten(record: object, prefix: readonly string[] = []): Array<[string, string]> {
+  return Object.entries(record).flatMap(([key, value]): Array<[string, string]> => {
+    const words = fieldWords(prefix, key);
+    return isPlainObject(value) ? flatten(value, words) : [[words.join(" "), cell(value)]];
+  });
+}
+
+// The names the table states, in its order, that `actual` has, then the ones
+// it has and the table leaves out. Compared against the table, a missing or
+// extra name shows up as the difference.
+function namesLike(stated: readonly string[], actual: ReadonlySet<string>): string[] {
+  return [
+    ...stated.filter((name) => actual.has(name)),
+    ...[...actual].filter((name) => !stated.includes(name)).sort(),
+  ];
+}
+
+// One record per plugin row, carrying its marketplace's fields. A marketplace
+// with no plugin rows still yields one record, so no block goes unseen.
+function pluginRecords(result: CascadePayload): Array<Map<string, string>> {
+  return result.marketplaces.flatMap(({ plugins, ...block }) => {
+    const blockFields = flatten({ marketplace: block });
+    if (plugins.length === 0) {
+      return [new Map(blockFields)];
+    }
+
+    return plugins.map((row) => new Map([...blockFields, ...flatten(row)]));
+  });
 }
 
 Given("the user has run {string}", async function (this: PluginWorld, command: string) {
@@ -52,22 +90,22 @@ When("the user runs {string}", async function (this: PluginWorld, command: strin
 });
 
 Then("the result has these fields:", function (this: PluginWorld, table: DataTable) {
-  const expected = table.rowsHash();
-  assert.deepStrictEqual(Object.keys(expected), RESULT_FIELDS);
-  assert.deepStrictEqual(project(this.lastResult(), RESULT_FIELDS), expected);
+  const stated = table.raw().map(([name]) => String(name));
+  const fields = new Map(
+    flatten(
+      Object.fromEntries(
+        Object.entries(this.lastResult()).filter(([key]) => !UNSTATED_FIELDS.has(key)),
+      ),
+    ),
+  );
+  const rows = namesLike(stated, new Set(fields.keys())).map((name) => [name, fields.get(name)]);
+  assert.deepStrictEqual(rows, table.raw());
 });
 
-// Projects every plugin row onto the table's columns, so a scenario names
-// only the fields it is about and still compares every row.
 Then("the result lists these plugins:", function (this: PluginWorld, table: DataTable) {
-  const expected = table.hashes();
-  const columns = Object.keys(expected[0] ?? {});
-  assert.deepStrictEqual(
-    REQUIRED_PLUGIN_COLUMNS.filter((column) => !columns.includes(column)),
-    [],
-  );
-  const actual = this.lastResult()
-    .marketplaces.flatMap((block) => block.plugins)
-    .map((row) => project(row, columns));
-  assert.deepStrictEqual(actual, expected);
+  const [stated = []] = table.raw();
+  const records = pluginRecords(this.lastResult());
+  const columns = namesLike(stated, new Set(records.flatMap((record) => [...record.keys()])));
+  const rows = records.map((record) => columns.map((column) => record.get(column) ?? ""));
+  assert.deepStrictEqual([columns, ...rows], table.raw());
 });

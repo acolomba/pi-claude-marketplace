@@ -14,13 +14,11 @@ Feature: Plugin uninstall
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
     When the user runs "/claude:plugin uninstall demo@fixtures --scope project"
     Then the result has these fields:
-      | severity    | info |
-      | needsReload | true |
-      | noOp        |      |
-      | summary     |      |
+      | severity     | info |
+      | needs reload | true |
     Then the result lists these plugins:
-      | id            | status      | reasons | scope   | version |
-      | demo@fixtures | uninstalled |         | project | 1.0.0   |
+      | marketplace name | marketplace scope | id            | name | status      | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | uninstalled |         | project | 1.0.0   |
 
   Scenario: A new session no longer offers the skills of the uninstalled plugin
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
@@ -32,17 +30,23 @@ Feature: Plugin uninstall
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
     Given the user has run "/claude:plugin uninstall demo@fixtures --scope project"
     When the user runs "/claude:plugin list --scope project"
+    Then the result has these fields:
+      | severity            | info        |
+      | needs reload        | false       |
+      | tally label         | Plugin list |
+      | tally failures      | 0           |
+      | tally warnings      | 0           |
+      | tally success count | 1           |
     Then the result lists these plugins:
-      | id            | status    | reasons | scope | version |
-      | demo@fixtures | available |         |       | 1.0.0   |
+      | marketplace name | marketplace scope | id            | name | status    | reasons | version |
+      | fixtures         | project           | demo@fixtures | demo | available |         | 1.0.0   |
 
   Scenario: The user uninstalls a plugin that is not installed
     When the user runs "/claude:plugin uninstall demo@fixtures --scope project"
     Then the result has these fields:
-      | severity    | error                          |
-      | needsReload | false                          |
-      | noOp        |                                |
-      | summary     | A plugin operation has failed. |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
     Then the result lists these plugins:
-      | id            | status | reasons       |
-      | demo@fixtures | failed | not installed |
+      | marketplace name | marketplace scope | id            | name | status | reasons       | scope   | leaks | rollback partial |
+      | fixtures         | project           | demo@fixtures | demo | failed | not installed | project |       |                  |

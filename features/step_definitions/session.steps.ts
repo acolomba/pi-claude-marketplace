@@ -18,7 +18,8 @@ When("the user starts a new pi session", async function (this: PluginWorld) {
 });
 
 Then("the session offers these skills:", function (this: PluginWorld, table: DataTable) {
-  assert.deepStrictEqual(this.sessionSkills(), table.hashes());
+  const rows = this.sessionSkills().map((skill) => [skill.command, skill.description]);
+  assert.deepStrictEqual([["command", "description"], ...rows], table.raw());
 });
 
 Then("the session offers no skills", function (this: PluginWorld) {

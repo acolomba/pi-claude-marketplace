@@ -13,13 +13,11 @@ Feature: Plugin install
   Scenario: The user installs a plugin
     When the user runs "/claude:plugin install demo@fixtures --scope project"
     Then the result has these fields:
-      | severity    | info |
-      | needsReload | true |
-      | noOp        |      |
-      | summary     |      |
+      | severity     | info |
+      | needs reload | true |
     Then the result lists these plugins:
-      | id            | status    | reasons | scope   | version |
-      | demo@fixtures | installed |         | project | 1.0.0   |
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
 
   Scenario: A new session offers the skills of the installed plugin
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
@@ -32,33 +30,33 @@ Feature: Plugin install
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
     When the user runs "/claude:plugin list --scope project"
     Then the result has these fields:
-      | severity    | info  |
-      | needsReload | false |
-      | noOp        |       |
-      | summary     |       |
+      | severity            | info        |
+      | needs reload        | false       |
+      | tally label         | Plugin list |
+      | tally failures      | 0           |
+      | tally warnings      | 0           |
+      | tally success count | 1           |
     Then the result lists these plugins:
-      | id            | status    | reasons | scope   | version |
-      | demo@fixtures | installed |         | project | 1.0.0   |
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
 
   Scenario: The user installs a plugin the marketplace does not offer
     When the user runs "/claude:plugin install missing@fixtures --scope project"
     Then the result has these fields:
-      | severity    | error                          |
-      | needsReload | false                          |
-      | noOp        |                                |
-      | summary     | A plugin operation has failed. |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
     Then the result lists these plugins:
-      | id               | status | reasons         |
-      | missing@fixtures | failed | not in manifest |
+      | marketplace name | marketplace scope | id               | name    | status | reasons         | scope   | cause chain                                           | cause truncated | leaks | rollback partial |
+      | fixtures         | project           | missing@fixtures | missing | failed | not in manifest | project | Plugin "missing" not found in marketplace "fixtures". | false           |       |                  |
 
   Scenario: The user installs a plugin that is already installed
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
     When the user runs "/claude:plugin install demo@fixtures --scope project"
     Then the result has these fields:
-      | severity    | error                          |
-      | needsReload | false                          |
-      | noOp        |                                |
-      | summary     | A plugin operation has failed. |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
     Then the result lists these plugins:
-      | id            | status | reasons           |
-      | demo@fixtures | failed | already installed |
+      | marketplace name | marketplace scope | id            | name | status | reasons           | scope   | cause chain                                                   | cause truncated | leaks | rollback partial |
+      | fixtures         | project           | demo@fixtures | demo | failed | already installed | project | Plugin "demo" is already installed in marketplace "fixtures". | false           |       |                  |
