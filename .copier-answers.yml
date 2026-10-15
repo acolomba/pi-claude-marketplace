@@ -1,5 +1,5 @@
 # changes here will be overwritten by copier
-_commit: dd89f30
+_commit: fa8629a
 _src_path: gh:acolomba/blueprint-typescript
 agents:
   - claude

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Internal: the `new-gsd-workspace` skill is now `new-workspace`, and the project skills match the latest TypeScript blueprint. (#263)
+
 - Internal: the project skills match the latest TypeScript blueprint again, and ESLint now checks that variables are declared before use. (#262)
 
 - Scripts can now read `/claude:plugin` output. In Pi's `json` and `rpc` modes, every message arrives as a `claude-plugin` session entry that matches `schema/claude-plugin.schema.json`. See [JSON output](docs/json-output.md). (#251)

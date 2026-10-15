@@ -17,7 +17,7 @@ Pass any other flags through unchanged (`--ws <name>`, `--auto`, `--text`).
 
 ## Before invoking
 
-1. **Not on `main`.** The workflow makes three or four commits, and this repo forbids committing to `main`. If `git branch --show-current` prints `main`, stop and suggest `/new-gsd-workspace <slug>`, then rerun there.
+1. **Not on `main`.** The workflow makes three or four commits, and this repo forbids committing to `main`. If `git branch --show-current` prints `main`, stop and suggest `/new-workspace <slug>`, then rerun there.
 2. **Previous milestone closed.** Run `query init.new-milestone` (read-only). If `phase_dir_count` is above 0 or the file at `requirements_path` exists, the previous milestone looks open. Ask whether to run `/gsd-complete-milestone` first. Nothing in the workflow detects an unclosed milestone: step 6 archives whatever is in the phases directory, and steps 9 and 10 overwrite REQUIREMENTS.md and ROADMAP.md.
 3. **Workstream exists.** With `--ws <name>`, confirm the workstream exists. An unknown name resolves silently to paths that don't exist.
 
