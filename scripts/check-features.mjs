@@ -508,9 +508,5 @@ async function main() {
   process.exitCode = 1;
 }
 
-try {
-  await main();
-} catch (error) {
-  process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
-  process.exitCode = 1;
-}
+// A support or step module that fails to load rejects here; Node prints its stack and exits 1.
+await main();
