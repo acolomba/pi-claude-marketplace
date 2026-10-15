@@ -3,10 +3,10 @@ gsd_state_version: "1.0"
 milestone: marketplace-features
 milestone_name: Marketplace Behavioral Tests
 status: planning
-last_updated: "2026-10-15T15:40:29.228Z"
+last_updated: "2026-10-15T16:44:27.000Z"
 last_activity: 2026-10-15
 progress:
-  total_phases: 0
+  total_phases: 10
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -17,19 +17,21 @@ progress:
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-10-11 after the json-output milestone close)
+See: `.planning/PROJECT.md` (updated 2026-10-15 at the start of the marketplace-features milestone)
 
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** json-output merged to main (PR #251); plan the next milestone
+**Current focus:** marketplace-features Phase 1 (Suite Foundation) and Phase 2 (GitHub Clone-Base Override), wave W0
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 1 of 10 (Suite Foundation)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-10-15 — Milestone marketplace-features started
+Status: Ready to plan
+Last activity: 2026-10-15 — Roadmap revised for parallel waves: 10 phases, 85/85 requirements mapped
+
+Progress: [░░░░░░░░░░] 0%
 
 ### mcp-4 closeout
 

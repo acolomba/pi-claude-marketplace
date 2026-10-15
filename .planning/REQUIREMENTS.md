@@ -158,12 +158,97 @@ Research detail per requirement is in `.planning/research/FEATURES.md`
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
+| DRV-01 | Phase 1 | Pending |
+| DRV-02 | Phase 1 | Pending |
+| DRV-03 | Phase 9 | Pending |
+| DRV-04 | Phase 1 | Pending |
+| HOST-01 | Phase 9 | Pending |
+| HOST-02 | Phase 9 | Pending |
+| HOST-03 | Phase 9 | Pending |
+| HOST-04 | Phase 9 | Pending |
+| GHB-01 | Phase 2 | Pending |
+| GHB-02 | Phase 2 | Pending |
+| GHB-03 | Phase 2 | Pending |
+| GHB-04 | Phase 2 | Pending |
+| GHB-05 | Phase 2 | Pending |
+| FIX-01 | Phase 6 | Pending |
+| ADD-01 | Phase 3 | Pending |
+| ADD-02 | Phase 3 | Pending |
+| ADD-03 | Phase 3 | Pending |
+| ADD-04 | Phase 3 | Pending |
+| ADD-05 | Phase 3 | Pending |
+| ADD-06 | Phase 3 | Pending |
+| ADD-07 | Phase 3 | Pending |
+| ADD-08 | Phase 9 | Pending |
+| ADD-09 | Phase 9 | Pending |
+| ADD-10 | Phase 9 | Pending |
+| ADD-11 | Phase 10 | Pending |
+| ADD-12 | Phase 9 | Pending |
+| ADD-13 | Phase 3 | Pending |
+| ADD-14 | Phase 3 | Pending |
+| RM-01 | Phase 4 | Pending |
+| RM-02 | Phase 4 | Pending |
+| RM-03 | Phase 4 | Pending |
+| RM-04 | Phase 4 | Pending |
+| RM-05 | Phase 4 | Pending |
+| RM-06 | Phase 4 | Pending |
+| RM-07 | Phase 4 | Pending |
+| RM-08 | Phase 4 | Pending |
+| RM-09 | Phase 9 | Pending |
+| LS-01 | Phase 4 | Pending |
+| LS-02 | Phase 4 | Pending |
+| LS-03 | Phase 4 | Pending |
+| LS-04 | Phase 4 | Pending |
+| LS-05 | Phase 9 | Pending |
+| INFO-01 | Phase 5 | Pending |
+| INFO-02 | Phase 5 | Pending |
+| INFO-03 | Phase 5 | Pending |
+| INFO-04 | Phase 5 | Pending |
+| INFO-05 | Phase 5 | Pending |
+| INFO-06 | Phase 5 | Pending |
+| INFO-07 | Phase 9 | Pending |
+| INFO-08 | Phase 5 | Pending |
+| INFO-09 | Phase 5 | Pending |
+| UPD-01 | Phase 6 | Pending |
+| UPD-02 | Phase 6 | Pending |
+| UPD-03 | Phase 6 | Pending |
+| UPD-04 | Phase 6 | Pending |
+| UPD-05 | Phase 6 | Pending |
+| UPD-06 | Phase 6 | Pending |
+| UPD-07 | Phase 6 | Pending |
+| UPD-08 | Phase 6 | Pending |
+| UPD-09 | Phase 6 | Pending |
+| UPD-10 | Phase 6 | Pending |
+| UPD-11 | Phase 9 | Pending |
+| UPD-12 | Phase 10 | Pending |
+| UPD-13 | Phase 6 | Pending |
+| UPD-14 | Phase 6 | Pending |
+| AU-01 | Phase 7 | Pending |
+| AU-02 | Phase 7 | Pending |
+| AU-03 | Phase 7 | Pending |
+| AU-04 | Phase 7 | Pending |
+| AU-05 | Phase 7 | Pending |
+| AU-06 | Phase 7 | Pending |
+| AU-07 | Phase 7 | Pending |
+| AU-08 | Phase 7 | Pending |
+| AU-09 | Phase 7 | Pending |
+| USE-01 | Phase 8 | Pending |
+| USE-02 | Phase 8 | Pending |
+| USE-03 | Phase 8 | Pending |
+| USE-04 | Phase 8 | Pending |
+| USE-05 | Phase 8 | Pending |
+| USE-06 | Phase 8 | Pending |
+| USE-07 | Phase 8 | Pending |
+| USE-08 | Phase 8 | Pending |
+| SRC-01 | Phase 9 | Pending |
+| SRC-02 | Phase 10 | Pending |
+| SRC-03 | Phase 10 | Pending |
 
 **Coverage:**
 - v1 requirements: 85 total
-- Mapped to phases: 0
-- Unmapped: 85
+- Mapped to phases: 85
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-10-15*
-*Last updated: 2026-10-15 after initial definition*
+*Last updated: 2026-10-15 after roadmap revision for parallel waves (10 phases)*
