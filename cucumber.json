@@ -1,7 +1,6 @@
 {
   "default": {
-    "paths": ["features/**/*.feature"],
-    "import": ["features/lib/world.ts", "features/steps/**/*.steps.ts"],
+    "import": ["features/support/**/*.ts", "features/step_definitions/**/*.steps.ts"],
     "format": ["summary"],
     "order": "random",
     "parallel": 8

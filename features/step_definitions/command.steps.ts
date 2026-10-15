@@ -1,13 +1,18 @@
 /**
- * @fileoverview Steps that assert on the JSON result of the last command.
+ * @fileoverview Steps that run `/claude:plugin` commands in a headless Pi and
+ * check the JSON result of the last one.
+ *
+ * A `Given` command is setup and must succeed. A `When` command is the action
+ * under test, and its result is kept on the world for the `Then` steps.
  */
 
 import assert from "node:assert/strict";
 
-import { Then } from "@cucumber/cucumber";
+import { type DataTable, Given, Then, When } from "@cucumber/cucumber";
 
-import type { PluginWorld } from "../lib/world.ts";
-import type { DataTable } from "@cucumber/cucumber";
+import { runCommand } from "../lib/pi-commands.ts";
+
+import type { PluginWorld } from "../support/world.ts";
 
 // The top-level fields a scenario states in full. `kind`, `schemaVersion`,
 // and `origin` are fixed by the schema the driver checks, and `tally` and
@@ -37,17 +42,24 @@ function project(record: object, columns: readonly string[]): Record<string, str
   return Object.fromEntries(columns.map((column) => [column, cell(fields.get(column))]));
 }
 
-function assertResultFields(this: PluginWorld, table: DataTable): void {
+Given("the user has run {string}", async function (this: PluginWorld, command: string) {
+  const payload = await runCommand(this.pi, command);
+  assert.strictEqual(payload.severity, "info", JSON.stringify(payload));
+});
+
+When("the user runs {string}", async function (this: PluginWorld, command: string) {
+  this.result = await runCommand(this.pi, command);
+});
+
+Then("the result has these fields:", function (this: PluginWorld, table: DataTable) {
   const expected = table.rowsHash();
   assert.deepStrictEqual(Object.keys(expected), RESULT_FIELDS);
   assert.deepStrictEqual(project(this.lastResult(), RESULT_FIELDS), expected);
-}
-
-Then("the result has these fields:", assertResultFields);
+});
 
 // Projects every plugin row onto the table's columns, so a scenario names
 // only the fields it is about and still compares every row.
-function assertPluginRows(this: PluginWorld, table: DataTable): void {
+Then("the result lists these plugins:", function (this: PluginWorld, table: DataTable) {
   const expected = table.hashes();
   const columns = Object.keys(expected[0] ?? {});
   assert.deepStrictEqual(
@@ -58,6 +70,4 @@ function assertPluginRows(this: PluginWorld, table: DataTable): void {
     .marketplaces.flatMap((block) => block.plugins)
     .map((row) => project(row, columns));
   assert.deepStrictEqual(actual, expected);
-}
-
-Then("the result lists these plugins:", assertPluginRows);
+});

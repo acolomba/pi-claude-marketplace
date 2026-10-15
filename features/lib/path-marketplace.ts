@@ -11,10 +11,26 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
+import type { DataTable } from "@cucumber/cucumber";
+
 /** One plugin the marketplace offers. */
 export interface OfferedPlugin {
   readonly name: string;
   readonly version: string;
+}
+
+const OFFERED_PLUGIN_COLUMNS = ["name", "version"];
+
+/** Reads a `| name | version |` table, throwing on a missing or unknown column. */
+export function readOfferedPlugins(table: DataTable): OfferedPlugin[] {
+  const [header] = table.raw();
+  if (JSON.stringify(header) !== JSON.stringify(OFFERED_PLUGIN_COLUMNS)) {
+    throw new Error(
+      `expected the columns ${OFFERED_PLUGIN_COLUMNS.join(", ")}, got ${header?.join(", ")}`,
+    );
+  }
+
+  return table.hashes().map((row) => ({ name: String(row.name), version: String(row.version) }));
 }
 
 async function writePlugin(root: string, plugin: OfferedPlugin): Promise<void> {

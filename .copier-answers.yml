@@ -7,7 +7,7 @@ agents:
   - pi
 author_email: acolomba@gmail.com
 author_name: Alessandro Colomba
-behavioral_tests: false
+behavioral_tests: true
 build: false
 codegraph: true
 copyright_license: MIT
