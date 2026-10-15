@@ -1,6 +1,6 @@
 ---
 phase: 01-suite-foundation
-reviewed: 2026-10-15T20:52:55Z
+reviewed: 2026-10-15T21:44:18Z
 depth: standard
 files_reviewed: 30
 files_reviewed_list:
@@ -35,207 +35,123 @@ files_reviewed_list:
   - package.json
   - scripts/check-features.mjs
 findings:
-  critical: 2
-  warning: 7
-  info: 6
-  total: 15
+  critical: 0
+  warning: 0
+  info: 12
+  total: 12
 status: issues_found
 ---
 
 # Phase 1: Code Review Report
 
-**Reviewed:** 2026-10-15T20:52:55Z
+**Reviewed:** 2026-10-15T21:44:18Z
 **Depth:** standard
 **Files Reviewed:** 30
 **Status:** issues_found
-
-## Structural Findings (fallow)
-
-The structural pre-pass reported no findings: 0 unused exports, 0 unused files, 0 duplicate blocks, and 0 circular dependencies. The CRAP-only complexity items that the GSD pre-pass reported for `scripts/check-features.mjs` are left out on purpose. The project turns CRAP off (`maxCrap: 0` in `.fallowrc.json`).
 
 ## Narrative Findings (AI reviewer)
 
 ## Summary
 
-The review covered the shared cucumber machinery, the seeded marketplace and plugin feature files, the new `check:features` gate, the ESLint blocks for `features/`, and the skill documents. I checked them against the cucumber skill, the typescript-style skill, and AGENTS.md.
+This is the re-review after fix iteration 2 (commits `9e81b6a3..9a056f3d`). I checked the 30 files against the cucumber skill, the typescript-style skill, AGENTS.md, and the locked decisions in `01-CONTEXT.md`. The user's rulings on the bare-update scenario (UPD-02) and on INFO-01 (AU-05 belongs to the autoupdate verb phase) are not raised again. CRAP scores are off by project policy, so this report leaves them out.
 
-The driver and the per-payload schema validation are sound. The exact-one-payload checks in `lastResult()` and `runCommand()` are correct. So are the `{scenario time}` round-trip check and the dry run that ignores the tag exclusion. I confirmed that dry run by hand: `CI=1 node scripts/check-features.mjs` reports 29 scenarios, which matches the 26 that run plus the 3 excluded url and github rows.
+All four fixes from iteration 2 hold, and I found no regression from them:
 
-The two blockers are scenarios whose title claims more than the steps prove. A plausible wrong implementation passes each of them, and the cucumber skill names this as its highest-value finding. Most warnings are latent gaps in the shared steps and gates. No current scenario hits them yet, but every later verb phase inherits them, because the point of this phase is that later phases do not touch shared code.
+- CR-01 (`9e81b6a3`): the INFO-01 title now says "the default autoupdate state". This matches what the scenario checks (`details autoupdate | false`) and the user's ruling.
+- WR-01 (`0c035116`): the three row steps call `markRowsCompared()` (`command.steps.ts:131, 138, 180`). `steps.md:58` states the one exception, and `world-and-stand-ins.md:22` names the method. The uncompared-rows check still works: the `After()` check in `world.ts:162-168` and the `When` check in `command.steps.ts:107-111` are unchanged.
+- WR-02 (`b0ae9c12`): `patternFindings()` reads `definition.pattern.type`. Cucumber sets that type from the registered argument (a string is always `CUCUMBER_EXPRESSION`), so the check holds whatever name the step function was called through. Step modules now ban the hook and registration imports. I also checked whether a support or lib module could register a step through a default import (`import cucumber from "@cucumber/cucumber"`). ESLint exits 0 on that form. But the package's ESM wrapper (`lib/wrapper.mjs`) has no default export, so the module fails to load and both the run and the gate fail. That is not a usable bypass.
+- WR-03 (`9a056f3d`): the skill's Outline example now checks `claude-plugins.json` the same way `add.feature` does.
 
-## Critical Issues
+Both gates pass on the current tree. `CI=1 npm run check:features` reports 30 scenarios and 17 step definitions. `npm run test:cucumber` passes 26 scenarios and 206 steps. The sandbox is hermetic: `tests/e2e/_rpc.ts` gives the child its own `HOME` and `PI_CODING_AGENT_DIR`.
 
-### CR-01: The bare-update scenario cannot tell a refresh from a no-op
-
-**File:** `features/marketplace/update.feature:7-24`
-**Issue:** The title says "A bare update refreshes every marketplace of both scopes, project first". But no source changes between the add and the update, so every marketplace is expected as `skipped | up-to-date`. In `orchestrators/marketplace/update.ts:436-450`, the up-to-date verdict comes from comparing the manifest content key before and after the path-source refresh. Several plausible wrong implementations still pass this scenario:
-
-- an update that never re-reads the source;
-- an update that reads the pre-refresh key after the refresh;
-- an update whose (mtime, size) manifest cache serves a stale entry (`domain/manifest-cache.ts:33-36` records this risk).
-
-The scenario proves the visit order and the per-marketplace emission. It does not prove the refresh.
-**Fix:** Change one source before the update, so the expected rows hold one refreshed marketplace beside the skipped ones. Two options:
-
-```gherkin
-    Given the marketplace "gamma" offers these plugins:
-      | name | version |
-      | demo | 1.0.0   |
-    When the user runs "/claude:plugin marketplace update"
-    Then the results list these marketplaces and plugins:
-      | marketplace name | marketplace scope | marketplace status | ... |
-      | alpha            | project           | skipped            | ... |
-      | gamma            | project           | updated            | ... |
-      | beta             | user              | skipped            | ... |
-```
-
-The other option is to retitle the scenario to what it proves ("A bare update visits every marketplace of both scopes, project first"). Then a separate scenario must cover the refresh before the update verb phase closes.
-
-### CR-02: The "absolute path" info scenario types an absolute path, so echoing the input passes
-
-**File:** `features/marketplace/info.feature:7-22`
-**Issue:** The title says "Info on a directory marketplace shows its absolute path". The scenario adds the marketplace with `{home}/marketplaces/tools`, which is already absolute, and expects `source abs path | {home}/marketplaces/tools`. Two wrong implementations produce the same output:
-
-- one that prints the source string the user typed;
-- one that reads the source from `claude-plugins.json`, which keeps the typed form (ADD-14 in `add.feature:33-45`).
-
-Neither resolves anything to an absolute path, and both pass. The resolving behavior that the title names (NFR-9) is never put to the test.
-**Fix:** Add the marketplace in a form that is not absolute, and expect the resolved path:
-
-```gherkin
-    Given the user has run "/claude:plugin marketplace add ~/marketplaces/tools --scope project"
-    When the user runs "/claude:plugin marketplace info tools --scope project"
-    Then the result has these fields:
-      ...
-      | source abs path | {home}/marketplaces/tools |
-```
-
-D-04 keeps the `~/...` form for ADD-14's scenario. This scenario's point is the resolution of the path, so it needs the exception too. Record that in D-04, or retitle the scenario so it no longer claims the resolution.
-
-## Warnings
-
-### WR-01: "Adding a marketplace records it in the chosen scope" checks only the report
-
-**File:** `features/marketplace/add.feature:7-31`
-**Issue:** The Outline asserts the result payload and nothing else. An implementation that reports `tools | project | added` but writes the record to the user scope, or writes no record, passes this scenario. The second Outline (`add.feature:47-72`) catches the dir, file, and url rows through `marketplace list`. That Outline has no `@github` block, so when the github work removes the tag, the only github check of "records it in the chosen scope" is this report-only scenario.
-**Fix:** Retitle it to "Adding a marketplace reports it added in the chosen scope", or add a step that observes the record, such as `Then the "claude-plugins.json" file of the project scope declares these marketplaces:`. Also add a `@github` block to the second Outline when the github stand-in arrives.
-
-### WR-02: Rows that `the result has these fields:` hides are never required to be compared
-
-**File:** `features/step_definitions/command.steps.ts:34-39, 83-90, 141-145`
-**Issue:** `UNSTATED_FIELDS` hides `marketplaces` and `blocks` from `the result has these fields:` and from `the command reports these results:`, for every payload kind. The comment says these rows "have steps of their own". Nothing forces a scenario to call them. A scenario that states only the envelope of a cascade with rows passes whatever the rows are. Two kinds have no row step at all:
-
-- `plugin-info-cascade` has `blocks`, and `marketplaceRecords` accepts only `cascade` and `marketplace-info-cascade`;
-- `reconcile-applied-cascade` has `marketplaces`, and `pluginRecords` and the plugins step accept only `cascade`.
-
-So the shared steps cannot compare those payloads whole. Every current scenario pairs the two steps correctly, so this gap is latent. It is still a shared-machinery hole that the later verb phases inherit.
-**Fix:** Track on the world whether the hidden rows of the last result were compared, and fail in the `After()` hook of `world.ts` when they were not empty and no row step read them. Alternatively, make the envelope steps fail when a hidden array is non-empty and the scenario has not declared a row step. Add `plugin-info-cascade` and `reconcile-applied-cascade` to the row steps, or make the envelope step reject those kinds until they have a row step.
-
-### WR-03: The field-name projection loses information, and collisions are silent
-
-**File:** `features/lib/field-rows.ts:18-21, 43-54`; `features/step_definitions/command.steps.ts:50, 61, 77, 85`; `features/step_definitions/config.steps.ts:55`
-**Issue:** `fieldWords` drops a leading word that repeats the parent, so `source.sourceKind` and `source.kind` both become `source kind` (checked with node). `cause.causeChain` and `cause.chain` also give the same column. A table therefore cannot pin the JSON field names it claims to describe: a rename on the wire that also changes the product's schema passes every scenario. Also, `new Map(flatten(...))` and the merge in `pluginRecords` (`new Map([...blockFields, ...flatten(row)])`) keep the last value for a name that occurs twice, so the first value is never compared. The current schema has no such collision. Nothing detects one when the schema grows, and the module comments promise that no field goes unseen.
-**Fix:** Assert that every flattened name is unique before building a map:
-
-```ts
-function toRecord(pairs: Array<[string, string]>): Map<string, string> {
-  const record = new Map<string, string>();
-  for (const [name, value] of pairs) {
-    assert.ok(!record.has(name), `two fields project to the column "${name}"`);
-    record.set(name, value);
-  }
-  return record;
-}
-```
-
-Use it in place of `new Map(...)` in both step modules. Decide whether to keep the de-duplication of the leading word. If you keep it, record it as a known limit in `features.md`.
-
-### WR-04: A local row in an `@url` or `@github` block is excluded without any report
-
-**File:** `scripts/check-features.mjs:321-327`; `cucumber.json:6`
-**Issue:** The gate checks that only `@url` and `@github` tag an `Examples:` block. It does not check that the rows in a tagged block have the kind of their tag. A `| dir | ... |` row written by mistake into the `@url` block is dropped from every run until the url work removes the tag, and `check:features` still passes, because the dry run finds every step defined. The local behavior that row was meant to prove goes untested, and nothing reports it.
-**Fix:** In `examplesTagFindings`, read the `source kind` column of each tagged block and require it to equal the tag without the `@`. Also require the untagged blocks to hold only `dir` and `file`:
-
-```js
-const kindColumn = examples.tableHeader?.cells.findIndex((c) => c.value === "source kind") ?? -1;
-// for each row: tagged => cell === tag.slice(1); untagged => cell is "dir" or "file"
-```
-
-### WR-05: The ESLint step-text and registration rules have simple bypasses
-
-**File:** `eslint.config.js:217-274`
-**Issue:**
-
-- The literal and no-regex selectors match only bare `Given`, `When`, and `Then` callees. `defineStep(/regex/, ...)`, an aliased import (`import { Given as given }`), and a member call (`cucumber.Given(...)`) are not covered.
-- The block applies only to `features/step_definitions/**/*.steps.ts`. A `Given(/regex/)` in a support module goes unchecked, although `layout.md` says only step modules call `Given`, `When`, or `Then`.
-- The `features/lib/**` import ban does not list `setDefinitionFunctionWrapper` or `setParallelCanAssign`, which are also registration calls.
-
-`steps.md` says "Lint rejects a regular expression or a variable in its place", which overstates what lint does.
-**Fix:** Ban `defineStep` and renamed imports of `Given`, `When`, and `Then` in step modules, using `no-restricted-imports` with `importNames: ["defineStep"]` and a selector on `ImportSpecifier[imported.name=/^(Given|When|Then)$/][local.name!=/^(Given|When|Then)$/]`. Add a `features/support/**` block that bans importing `Given`, `When`, `Then`, and `defineStep`. Add the two missing names to the lib ban.
-
-### WR-06: The publishing steps depend on their order and hide the source kind
-
-**File:** `features/step_definitions/marketplace/publishing.steps.ts:45-58`
-**Issue:**
-
-- `is published as a {source kind} source` always republishes with `[]` plugins. If it follows `offers these plugins:`, it removes the offered plugins without any report. The reverse order works.
-- `offers these plugins:` silently uses `dir` when the marketplace was not published first (`?? "dir"`). A reader of `info.feature:7-11` or of the plugin Backgrounds cannot see the source kind without opening the step.
-- Each call registers another `rm` release for the same root.
-
-Multi-kind install and update Outlines in later phases will combine these two steps, and the wrong order gives a confusing failure far from its cause.
-**Fix:** Make `is published as a ... source` fail when the marketplace was already published in the scenario, or make it keep the plugins that the scenario recorded. Make `offers these plugins:` require an earlier publish step, or name the kind in its text. Register the release only on the first publish of a name.
-
-### WR-07: The feature gate catches its own errors and drops the stack trace
-
-**File:** `scripts/check-features.mjs:463-468`
-**Issue:** The most likely gate failure is that a support or step module fails to load: a syntax error, a bad import, or a parameter type defined twice. `runCucumber` then throws, and the `catch` prints only `error.message`, without the file, the line, or the cause. A top-level `await main()` with no `try` would let Node print the full stack and exit with code 1. `steps.md`'s rule "Let them bubble up: the stack trace is more useful than a log line" says the same about step code.
-**Fix:** Remove the `try`/`catch` and let the rejection propagate, or print `error.stack ?? String(error)`.
+I found no new blocker or warning. I traced every seeded scenario for a plausible wrong implementation that would still pass, and checked the whole-value comparisons, the token projection, the gate's dry run and tag clearing, the Examples-kind check, and the lint selectors. The ten Info items from round 2 were outside the fix scope (`critical_warning`). I checked each one again, and each is still present. They appear below as IN-01..IN-10 with updated line numbers. IN-11 and IN-12 are new and small. IN-11 is a doc drift that the WR-02 fix left behind. IN-12 notes that WR-01's "one write" guarantee is a convention that nothing enforces.
 
 ## Info
 
-### IN-01: The quote stripping treats apostrophes as quotes
+### IN-01: The quote stripping treats apostrophes as quotes (still open)
 
-**File:** `scripts/check-features.mjs:332`
-**Issue:** `/"[^"]*"|'[^']*'/g` treats the span between two apostrophes as a quoted value. In `the user's Plugin list's rows`, the span `'s Plugin list'` is removed, and the upper-case `P` passes the lower-case check (checked with node). `features.md` defines quoted values with double quotes only.
-**Fix:** Strip only double-quoted values: `step.text.replaceAll(/"[^"]*"/g, "")`.
+**File:** `scripts/check-features.mjs:391`
+**Issue:** `/"[^"]*"|'[^']*'/g` removes the text between two apostrophes, as in `the user's Plugin list's rows`. An upper-case letter in that span then passes the lower-case check. `features.md` uses only double quotes for quoted values.
+**Fix:** `step.text.replaceAll(/"[^"]*"/g, "")`.
 
-### IN-02: The list of catch-all names misses common variants
+### IN-02: The list of catch-all names misses common variants (still open)
 
 **File:** `scripts/check-features.mjs:25-34`
-**Issue:** Only exact names are rejected, so `util`, `helper`, `common-steps`, and `shared-steps` pass.
+**Issue:** The gate rejects only exact names, so `util`, `helper`, `common-steps`, and `shared-steps` pass.
 **Fix:** Match the names as words: `/(^|-)(common|shared|utils?|helpers?|support|misc|hooks|parameter-types)(-|$)/`.
 
-### IN-03: A version-bump republish keeps the manifest size the same
+### IN-03: A version-bump republish keeps the manifest size the same (still open)
 
-**File:** `features/lib/path-marketplace.ts:56-75`; `features/plugin/update.feature:14-63`
-**Issue:** `writeInvalidManifest` notes that the manifest cache is keyed on (mtimeMs, size) and changes the size on purpose. The `1.0.0` to `1.1.0` republish in the plugin-update scenarios writes a manifest and a `plugin.json` of the same size. On a filesystem with coarse timestamps, a cache hit would serve the old manifest, and the update scenarios would fail without a clear cause. The risk is low on tmpfs and ext4 with the delays this suite has between writes.
-**Fix:** Add a field to the fixture manifest whose length changes on every write, such as a description that holds a write counter, or document the assumption next to `writeMarketplace`.
+**File:** `features/lib/path-marketplace.ts:55-75`; `features/plugin/update.feature:16-18, 29-31, 39-41`
+**Issue:** The manifest cache keys on (mtimeMs, size) (`domain/manifest-cache.ts:92`). `writeInvalidManifest` changes the size on purpose. The `1.0.0` to `1.1.0` republish does not. On a filesystem with coarse timestamps, the cache could serve the old manifest, and the update scenarios would flake.
+**Fix:** Add a field to the manifest whose length changes on every write, or note this assumption at `writeMarketplace`.
 
-### IN-04: Some table cells lose information
+### IN-04: Some table cells lose information (still open)
 
-**File:** `features/lib/field-rows.ts:34-40, 73-79`
-**Issue:**
+**File:** `features/lib/field-rows.ts:34-40, 90-96`
+**Issue:** In a table with more than one record, a missing field, `[]`, and `""` all show as an empty cell. An empty object (`{}`) disappears from the record entirely. An array of objects (`rollbackPartial`, `components.hooks`, `requires`) becomes a cell through `JSON.stringify` without token projection, so a path inside it cannot be written as `{home}`.
+**Fix:** Write a missing field as a separate marker, and apply `projectTokens` recursively before the stringify.
 
-- In a table with more than one record, a missing field, `[]`, and `""` all show as an empty cell.
-- An array of objects (`rollbackPartial`, `components.hooks`, `requires`) becomes a cell through `JSON.stringify` without token projection. A sandbox path inside it cannot be written as `{home}`.
+### IN-05: The sandbox root leaks when Pi fails to start (still open)
 
-No current scenario depends on either case.
-**Fix:** Write a missing field in a multi-record table as a separate marker, or record the merging of these values in `field-rows.ts` and `features.md`. Apply `projectTokens` recursively before the stringify.
+**File:** `features/support/pi-process.ts:164-182, 209-213`
+**Issue:** `piRun` is set only after `PiProcess.start` resolves. If the start fails, nothing removes the `mkdtemp` root. Then `AfterAll` throws "the run's Pi has not started", and that error hides the real failure.
+**Fix:** Put `PiProcess.start` in a `try` block and remove the root on failure, or return early from `AfterAll` when `piRun` is undefined.
 
-### IN-05: The sandbox root leaks when Pi fails to start
+### IN-06: The layout gate reads untracked and ignored files (still open)
 
-**File:** `features/support/pi-process.ts:47-65, 92-96`
-**Issue:** `piRun` is set only after `PiProcess.start` resolves. If the start fails, nothing removes the `mkdtemp` root, and `AfterAll` throws "the run's Pi has not started", which hides the real failure. The ordering existed before this phase, but this phase changed the `BeforeAll` block.
-**Fix:** Create the root, then use `try` around `PiProcess.start` and `rm` the root on failure. Or make `AfterAll` return early when `piRun` is undefined.
-
-### IN-06: The layout gate reads untracked and ignored files
-
-**File:** `scripts/check-features.mjs:212-219`
-**Issue:** `readdirSync(..., { recursive: true })` lists editor swap files, `.DS_Store`, and `.gitkeep` under `features/` and reports them as unexpected files. The local gate then fails on files that CI never sees.
+**File:** `scripts/check-features.mjs:225-232`
+**Issue:** `readdirSync(..., { recursive: true })` lists editor swap files, `.DS_Store`, and `.gitkeep`, and reports each one as an unexpected file. So the gate can fail locally on files that CI never sees.
 **Fix:** Skip dot-files, or build the file list from `git ls-files features`.
+
+### IN-07: The session `When` neither checks uncompared rows nor clears the last results (still open, widened)
+
+**File:** `.agents/skills/cucumber/rules/world-and-stand-ins.md:22`; `features/step_definitions/session.steps.ts:24-26`
+**Issue:** The rule says "a second `When` fails when the first one's rows went uncompared". Only `When the user runs` checks (`command.steps.ts:107-111`). `When the user starts a new pi session` does not. The `After()` hook still catches the gap, so no scenario can pass with rows left uncompared. The failure just shows up later than the rule says. The session `When` also leaves `this.results` in place. A later `Then the result has these fields:` would then read the earlier command's result, while a reader takes it to mean the session.
+**Fix:** In the session `When`, run the same uncompared-rows check, then set `this.results = undefined`. The other option is to change the sentence to "the next `When the user runs` fails".
+
+### IN-08: An Examples block with both tags passes the kind check with mixed rows (still open)
+
+**File:** `scripts/check-features.mjs:357-386`
+**Issue:** On a block tagged `@url @github`, the allowed kinds are `{url, github}`, so a block that mixes url and github rows passes. When the url work removes `@url`, the url rows in that block stay excluded, because the block still has `@github`. That contradicts "Removing a tag turns on every row of that kind" in `features.md:125`.
+**Fix:** Require exactly one source tag on a tagged block, and report a block that has two.
+
+### IN-09: "source kind" names two different sets of values (still open)
+
+**File:** `features/marketplace/info.feature:20`; `features/marketplace/add.feature:22`; `scripts/check-features.mjs:344-353`
+**Issue:** The `source kind` Examples column holds the fixture kinds `dir`, `file`, `url`, and `github`. The result field `source.sourceKind` also reads as `source kind`, but it holds the wire kinds `path`, `url`, and `github`. So a dir marketplace shows `| source kind | path |`. The info phase's INFO-01 Outline will hold both: a `<source kind>` column of `dir` and `file`, and a result row `source kind | path`. A reader has to open the steps to see why they differ. The gate also treats `source kind` as a reserved column name, so it would flag a later Outline whose Examples column holds wire kinds.
+**Fix:** Rename the fixture column, for example to `published as` (`<published as>`, which matches the step "is published as a ... source"). Update the gate's column name and `features.md` to match.
+
+### IN-10: Two info scenarios set up plugins that their results never show (still open)
+
+**File:** `features/marketplace/info.feature:9-11, 37-39`
+**Issue:** INFO-01 and the two-scope scenario both offer a `demo` plugin, but `marketplace-info` and `marketplace-info-cascade` show no plugins. The invalid-manifest scenario at lines 52-55 shows that info works without them. A reader may think the plugin is part of what the scenario proves.
+**Fix:** Remove the two `offers these plugins:` steps, or keep them only if a later info scenario shows plugins.
+
+### IN-11: The WR-02 fix left the gate's descriptions behind and one comment unwrapped
+
+**File:** `scripts/check-features.mjs:11`; `.agents/skills/cucumber/SKILL.md:26`; `.agents/skills/local-verification/rules/commands.md:5`; `.agents/skills/cucumber/rules/layout.md:17`
+**Issue:** The edited line of the gate's header comment runs to about 160 characters. The rest of the block wraps at 100, and Prettier does not reflow comments. `SKILL.md:26` and `commands.md:5` list what `check:features` fails on, and neither names the new check on step text that is not a Cucumber expression. `commands.md:5` also leaves out the layout rules. `layout.md:17` says `world.ts` holds "its release hook". That `After()` hook now also fails a passing scenario whose rows went uncompared.
+**Fix:** Rewrap line 11. Add "a step definition whose text is not a Cucumber expression" (and, in `commands.md`, "the layout rules") to both lists. Change the `layout.md` cell to "its release hook, which also checks that every row array was compared".
+
+### IN-12: The "one write a `Then` makes" is a convention, and the field stays public
+
+**File:** `features/support/world.ts:42, 111-117`; `features/step_definitions/command.steps.ts:113`
+**Issue:** `markRowsCompared()` says it "is the one write a `Then` step makes to the world", and `steps.md:58` says "No `Then` writes to the world in any other way". But `uncomparedRows` is still a public, writable field, and `When the user runs` assigns it directly at `command.steps.ts:113`. A future `Then` can write `this.uncomparedRows = []`, and neither TypeScript nor lint stops it, so the WR-01 fix's single named write point holds only by convention.
+**Fix:** Make the field `private` and move every read and write of it into world methods. TypeScript's `private` is scoped to the class, not the module, so the `After()` hook needs a method too:
+
+```ts
+private uncomparedRows: readonly string[] = [];
+
+/** Fails when a row array of the last results went uncompared. */
+assertRowsCompared(message: string): void { ... }
+
+/** Keeps `results` as the last command's results, after `assertRowsCompared()`. */
+recordResults(results: readonly NotificationPayload[]): void { ... }
+```
 
 ---
 
-_Reviewed: 2026-10-15T20:52:55Z_
+_Reviewed: 2026-10-15T21:44:18Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
