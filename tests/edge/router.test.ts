@@ -90,6 +90,25 @@ test("executes a selected list route without selecting its handler again", async
   verify(handlers);
 });
 
+const EXPECTED_TOP_LEVEL_USAGE =
+  "Usage: /claude:plugin <bootstrap|install|uninstall|prune|update|fetch|reinstall|list|ls|info|pending|enable|disable|import|browse|marketplace|help> ...\n" +
+  "  bootstrap                                          add anthropics/claude-plugins-official to user scope and enable autoupdate\n" +
+  "  install <plugin>@<marketplace> [--scope user|project]\n" +
+  "  uninstall <plugin>@<marketplace> [--scope user|project] [--keep-data] [--local] [--prune]\n" +
+  "  prune [--scope user|project] [--dry-run]\n" +
+  "  update [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]\n" +
+  "  fetch [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]\n" +
+  "  reinstall [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]\n" +
+  "  list [<marketplace>] [--scope user|project]   (alias: ls)\n" +
+  "  info <plugin>@<marketplace> [--scope user|project]\n" +
+  "  pending [--scope user|project]\n" +
+  "  enable <plugin>@<marketplace> [--scope user|project] [--local]\n" +
+  "  disable <plugin>@<marketplace> [--scope user|project] [--local]\n" +
+  "  import [--scope user|project]\n" +
+  "  browse\n" +
+  "  marketplace <add|remove|rm|list|ls|info|update|autoupdate|noautoupdate> ...\n" +
+  "  help [marketplace]";
+
 test("preserves ordered duplicate rejections around a handler emission on the same run", async () => {
   // arrange
   const capture = createJsonCapture();
@@ -264,25 +283,6 @@ const MARKETPLACE_DISPATCH: readonly DispatchRow[] = [
     operand: "",
   },
 ];
-
-const EXPECTED_TOP_LEVEL_USAGE =
-  "Usage: /claude:plugin <bootstrap|install|uninstall|prune|update|fetch|reinstall|list|ls|info|pending|enable|disable|import|browse|marketplace|help> ...\n" +
-  "  bootstrap                                          add anthropics/claude-plugins-official to user scope and enable autoupdate\n" +
-  "  install <plugin>@<marketplace> [--scope user|project]\n" +
-  "  uninstall <plugin>@<marketplace> [--scope user|project] [--keep-data] [--local] [--prune]\n" +
-  "  prune [--scope user|project] [--dry-run]\n" +
-  "  update [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]\n" +
-  "  fetch [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]\n" +
-  "  reinstall [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]\n" +
-  "  list [<marketplace>] [--scope user|project]   (alias: ls)\n" +
-  "  info <plugin>@<marketplace> [--scope user|project]\n" +
-  "  pending [--scope user|project]\n" +
-  "  enable <plugin>@<marketplace> [--scope user|project] [--local]\n" +
-  "  disable <plugin>@<marketplace> [--scope user|project] [--local]\n" +
-  "  import [--scope user|project]\n" +
-  "  browse\n" +
-  "  marketplace <add|remove|rm|list|ls|info|update|autoupdate|noautoupdate> ...\n" +
-  "  help [marketplace]";
 
 const EXPECTED_MARKETPLACE_USAGE =
   "Usage: /claude:plugin marketplace <add|remove|rm|list|ls|info|update|autoupdate|noautoupdate> ...\n" +

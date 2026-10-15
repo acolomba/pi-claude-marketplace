@@ -54,6 +54,9 @@ test("strict resolution rejects invalid dependencies in the selected manifest", 
   });
 });
 
+const marketplaceRoot = "/abs/marketplace";
+const pathUnderMarketplace = (rel: string): string => path.resolve(marketplaceRoot, rel);
+
 test("strict resolution reports the isolated marketplace-entry dependencies defect ahead of an unrelated bad source", async () => {
   // arrange -- domain/manifest.ts::normalizeDependencyEntries keeps the
   // malformed `dependencies` value on the entry it isolates; the resolver
@@ -164,9 +167,6 @@ function resolveContext(
     },
   };
 }
-
-const marketplaceRoot = "/abs/marketplace";
-const pathUnderMarketplace = (rel: string): string => path.resolve(marketplaceRoot, rel);
 
 const FIXTURE_DIR = path.dirname(fileURLToPath(import.meta.url));
 
