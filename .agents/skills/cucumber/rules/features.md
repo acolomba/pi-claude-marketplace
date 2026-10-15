@@ -58,7 +58,7 @@ Feature: Orders checkout
 
 A marketplace can be published as one of several source kinds: `dir`, `file`, `url`, and `github`. A behavior that several kinds share is one `Scenario Outline`:
 
-- An untagged `Examples:` block holds the local kinds, `dir` and `file`. An `@url` block holds the url kind, and an `@github` block holds the github kind.
+- An untagged `Examples:` block holds the local kinds, `dir` and `file`. An `@url` block holds the url kind, and an `@github` block holds the github kind. `npm run check:features` fails on a row whose `source kind` does not belong in its block, and on a tagged block with no `source kind` column.
 - The kind reaches the steps through a `<source kind>` column, and the source the user types reaches them through a `<source>` column.
 - Tags appear only on `Examples:` blocks, and the only tags are `@url` and `@github`. A tag on a feature or a scenario would also drop its local rows.
 

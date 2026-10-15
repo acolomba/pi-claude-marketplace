@@ -33,6 +33,7 @@ const catchAllNames = new Set([
   "parameter-types",
 ]);
 const sourceTags = new Set(["@url", "@github"]);
+const localKinds = new Set(["dir", "file"]);
 
 function createCollection() {
   return {
@@ -326,6 +327,52 @@ function examplesTagFindings(uri, examples) {
     );
 }
 
+// The rows of an Examples block with the cell of their `source kind` column, or undefined when
+// the block has no such column.
+function sourceKindRows(examples) {
+  const column =
+    examples.tableHeader?.cells.findIndex((cell) => cell.value === "source kind") ?? -1;
+
+  if (column === -1) {
+    return undefined;
+  }
+
+  return examples.tableBody.map((row) => ({ row, kind: row.cells[column]?.value }));
+}
+
+// A row whose source kind does not match its block's tag is dropped or run by mistake: an
+// untagged block holds the local kinds, and a block tagged @url or @github holds that kind only.
+function examplesKindFindings(uri, examples) {
+  const tags = examples.tags.filter((tag) => sourceTags.has(tag.name)).map((tag) => tag.name);
+  const rows = sourceKindRows(examples);
+
+  if (rows === undefined) {
+    return tags.length === 0
+      ? []
+      : [
+          gherkinFinding(
+            uri,
+            examples,
+            `an Examples block tagged ${tags.join(" ")} has no source kind column`,
+          ),
+        ];
+  }
+
+  const allowed = tags.length === 0 ? localKinds : new Set(tags.map((tag) => tag.slice(1)));
+  const block =
+    tags.length === 0 ? "an untagged Examples block" : `an Examples block tagged ${tags.join(" ")}`;
+
+  return rows
+    .filter(({ kind }) => !allowed.has(kind))
+    .map(({ row, kind }) =>
+      gherkinFinding(
+        uri,
+        row,
+        `source kind ${JSON.stringify(kind)} in ${block}, which holds ${[...allowed].join(" and ")} only`,
+      ),
+    );
+}
+
 function stepWordingFindings(uri, step) {
   const findings = [];
   const keyword = step.keyword.trim();
@@ -391,6 +438,7 @@ function scenarioFindings(uri, scenario) {
     ...scenarioTitleFindings(uri, scenario),
     ...misplacedTagFindings(uri, scenario),
     ...scenario.examples.flatMap((examples) => examplesTagFindings(uri, examples)),
+    ...scenario.examples.flatMap((examples) => examplesKindFindings(uri, examples)),
     ...scenario.steps.flatMap((step) => stepWordingFindings(uri, step)),
     ...stepOrderFindings(uri, scenario.steps),
   ];
