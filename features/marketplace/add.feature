@@ -43,3 +43,30 @@ Feature: Marketplace add
     Then the "claude-plugins.json" file of the user scope declares these marketplaces:
       | name  | source               |
       | tools | ~/marketplaces/tools |
+
+  Scenario Outline: An added marketplace is still listed in a new session
+    Given the marketplace "tools" is published as a <source kind> source
+    Given the marketplace "tools" is added to the project scope
+    Given the user has started a new pi session
+    When the user runs "/claude:plugin marketplace list"
+    Then the result has these fields:
+      | kind                | cascade          |
+      | severity            | info             |
+      | needs reload        | false            |
+      | tally label         | Marketplace list |
+      | tally failures      | 0                |
+      | tally warnings      | 0                |
+      | tally success count | 1                |
+    Then the result lists these marketplaces:
+      | name  | scope   | details autoupdate | details last updated at |
+      | tools | project | false              | {scenario time}         |
+
+    Examples:
+      | source kind |
+      | dir         |
+      | file        |
+
+    @url
+    Examples:
+      | source kind |
+      | url         |
