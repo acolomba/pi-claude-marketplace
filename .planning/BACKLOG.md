@@ -3935,3 +3935,18 @@ Scope when picked up: decide which verdict an invalid root name should get,
 check what Claude Code's `/plugin install` prints for such a name first, then
 either run the resolver before the closure root check or give the root check
 its own cause, and update the catalog and the pinned case together.
+
+## MKTPAR-01: three Claude Code marketplace behaviors are missing
+
+Found by the marketplace-features research (2026-10-15,
+`.planning/research/FEATURES.md`). Claude Code's `/plugin marketplace`:
+
+- refuses reserved official marketplace names; this extension accepts them;
+- adds a marketplace from a plain https URL to a hosted `marketplace.json`;
+  here that URL parses as a git `url` source and the clone fails;
+- accepts `market` as an alias of `marketplace`; here it is
+  `Unknown subcommand`.
+
+The marketplace-features milestone keeps them out of scope. Scope when picked
+up: confirm each against the upstream docs and binary first, then implement it
+with a behavioral scenario under `features/marketplace/`.

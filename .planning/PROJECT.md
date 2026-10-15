@@ -28,9 +28,13 @@ kind, so a regression in marketplace behavior fails a scenario named after it.
   around `git http-backend` with a run-time openssl certificate trusted through
   `NODE_EXTRA_CA_CERTS`. It records requests and can be armed to answer 401,
   404, 5xx, or to drop the connection.
-- `GITHUB_BASE_URL`: an environment variable that, when set, replaces
-  `https://github.com` as the clone base for GitHub sources, so the suite can
-  serve them from the stand-in. Unset, behavior is unchanged.
+- `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL`: an environment variable that, when
+  set, replaces `https://github.com` as the clone base for GitHub sources, so
+  the suite can serve them from the stand-in. One seam covers the clone URL,
+  origin matching, update, and the auth host. Unset, behavior is unchanged; an
+  invalid value fails with a typed error.
+- Fix C-10: `update` of a marketplace added from a `marketplace.json` outside
+  `.claude-plugin/` re-reads the manifest the user added.
 - Driver support for the non-cascade payload kinds marketplace commands emit
   (`marketplace-info`, `marketplace-info-cascade`, `marketplace-not-added`,
   `usage-error`) and for one payload per marketplace from a bare `update`.
@@ -40,7 +44,9 @@ except where `marketplace remove` and `marketplace update` cascade onto plugins
 already installed. A spike on 2026-10-15 proved the CGI wrapper serves
 isomorphic-git clone and fetch over HTTPS on 127.0.0.1 in about 25 lines;
 `git-http-mock-server` (HTTP only), `mockttp` (about 40 dependencies) and
-`node-git-server` were considered and not adopted.
+`node-git-server` were considered and not adopted. Claude Code's reserved
+official names, hosted `marketplace.json` URLs, and `/plugin market` alias are
+out of scope (BACKLOG `MKTPAR-01`).
 
 ## Previous Milestone: json-output -- Mode-Keyed Presentation Strategies (branch: features/json, started 2026-09-28, completed 2026-10-11, merged 2026-10-11 as PR #251, no npm release)
 
@@ -1218,7 +1224,7 @@ test.ts` (43 V2 tests, +2 G-21-01 inventory-vs-transition regressions)
 | **D-06-01/06a/09 (mcp-4, Phase 6): status in Claude Code's words from the adapter's status events** — nine closed tokens, an explicit unknown, and `overridden by project scope` for a user row shadowed by a project install | Parity with Claude Code's `/mcp` wording; never import the adapter | ✓ Good |
 | **D-07-02/07/11 (mcp-4, Phase 7): operator-run live canary, adapter floor `>=5.2.0 <6`, 0.20.0 bump offered at PR time** | A real Pi 1.0 plus adapter run proves the whole path; 5.2.0 fixes GHSA-6qxp-vccf-f47h | ✓ Good; bump still to offer |
 | **D-08-02/05/07 (mcp-4, Phase 8): choices survive uninstall and disable; remedies must clear their cause; state maps are read by own key** — choices move to `_piClaudeMarketplace.serverChoices`; `reinstall` falls back to the recorded-sha clone; `constructor`/`__proto__` names behave like any other | The first audit's `tech_debt`: a remedy that cannot fix its cause breaks NFR-3, and inherited keys misread records | ✓ Good; ROOTKEY-01 carried |
-| **D-MF-01 (marketplace-features): `GITHUB_BASE_URL` overrides the github.com clone base for GitHub sources** — read only when set; unset is byte-identical behavior | Lets the behavioral suite serve `owner/repo` sources from a loopback stand-in; Claude Code has no such override, so this is a recorded divergence that changes nothing for a user who never sets it | — Pending |
+| **D-MF-01 (marketplace-features): `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL` overrides the github.com clone base for GitHub sources** — read per call; one seam covers the clone URL, origin matching, update and the auth host (bound to the override host, so Device Flow never fires); unset is byte-identical; an invalid value is a typed error. Amended 2026-10-15 from `GITHUB_BASE_URL`, which the Terraform GitHub provider reads as an API URL | Lets the behavioral suite serve `owner/repo` sources from a loopback stand-in; Claude Code has no such override, so this is a recorded divergence that changes nothing for a user who never sets it | — Pending |
 
 ## Evolution
 
