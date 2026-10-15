@@ -277,6 +277,14 @@ function isAdmitted(verdict: WorkflowVerdict): verdict is AdmittedWorkflow {
   return verdict.outcome === "named";
 }
 
+const SKIPPED_REASONS: Readonly<Record<SkippedCause, (fileName: string) => string>> = {
+  "no-meta": noMetaReason,
+  "meta-not-object-literal": metaNotObjectLiteralReason,
+  "meta-spread": metaSpreadReason,
+  "meta-computed-key": metaComputedKeyReason,
+  "no-literal-name": noLiteralNameReason,
+};
+
 /**
  * WNAM-03: the five skip shapes carry distinct causes because they are distinct
  * facts about the script, but they share one argument for skipping rather than
@@ -292,14 +300,6 @@ function skippedVerdict(fileName: string, kind: SkippedCause): SkippedWorkflow {
     cause: kind,
   };
 }
-
-const SKIPPED_REASONS: Readonly<Record<SkippedCause, (fileName: string) => string>> = {
-  "no-meta": noMetaReason,
-  "meta-not-object-literal": metaNotObjectLiteralReason,
-  "meta-spread": metaSpreadReason,
-  "meta-computed-key": metaComputedKeyReason,
-  "no-literal-name": noLiteralNameReason,
-};
 
 function namedVerdict(
   pluginName: string,
@@ -428,6 +428,24 @@ interface DeterminismViolation {
 
 type Range = readonly [number, number];
 
+/** Where one blocklist match sits relative to the script's non-executable text. */
+type MatchRegion = "comment" | "literal" | "split" | "code";
+
+const REGION_CAUSES: Readonly<Record<Exclude<MatchRegion, "code">, DeterminismViolation["cause"]>> =
+  {
+    comment: "determinism-comment",
+    literal: "determinism-string",
+    split: "determinism-split",
+  };
+
+const REGION_REASONS: Readonly<
+  Record<Exclude<MatchRegion, "code">, (fileName: string, matched: string) => string>
+> = {
+  comment: determinismCommentReason,
+  literal: determinismStringReason,
+  split: determinismSplitReason,
+};
+
 /**
  * WVAL-03: the engine answers "this script is nondeterministic"; we answer where
  * the match actually sits. Containment is tested against acorn's own comment
@@ -466,24 +484,6 @@ function findDeterminismViolation(
 
   return nonExecutable;
 }
-
-/** Where one blocklist match sits relative to the script's non-executable text. */
-type MatchRegion = "comment" | "literal" | "split" | "code";
-
-const REGION_CAUSES: Readonly<Record<Exclude<MatchRegion, "code">, DeterminismViolation["cause"]>> =
-  {
-    comment: "determinism-comment",
-    literal: "determinism-string",
-    split: "determinism-split",
-  };
-
-const REGION_REASONS: Readonly<
-  Record<Exclude<MatchRegion, "code">, (fileName: string, matched: string) => string>
-> = {
-  comment: determinismCommentReason,
-  literal: determinismStringReason,
-  split: determinismSplitReason,
-};
 
 /**
  * WVAL-03: the WHOLE match span is tested, not just its start. The blocklist's
@@ -763,6 +763,25 @@ function literalString(node: Property["value"]): string | undefined {
 }
 
 /**
+ * WGATE-01: one predicate per gate, each answering "would the engine refuse
+ * HERE?".
+ *
+ * The explicit `Record<WorkflowGate, ...>` annotation is the totality lock: a
+ * seventh member of `GATE_ORDER` cannot compile without an entry here. It is
+ * annotated rather than inferred, and keyed by the union rather than by `string`,
+ * because either of those weakenings would make the map accept an incomplete
+ * set.
+ */
+const GATE_PREDICATES: Record<WorkflowGate, (ctx: GateContext) => boolean> = {
+  "meta-not-first-export": (ctx) => ctx.first?.type !== "ExportNamedDeclaration",
+  "meta-not-const-export": (ctx) => ctx.declaration?.kind !== "const",
+  "meta-not-sole-declarator": (ctx) => ctx.declaration?.declarations.length !== 1,
+  "meta-not-named-meta": (ctx) => ctx.declaratorName !== "meta",
+  "meta-not-pure-literal": (ctx) => !isLiteralObject(ctx.elements, 0),
+  "meta-fields-invalid": (ctx) => metaFieldsFailValidation(ctx.elements),
+};
+
+/**
  * WGATE-01: the FIRST engine gate this script would be refused at, or
  * `undefined` when the engine would load it.
  *
@@ -823,25 +842,6 @@ function gateContext(ast: Program, elements: readonly MetaElement[]): GateContex
     elements,
   };
 }
-
-/**
- * WGATE-01: one predicate per gate, each answering "would the engine refuse
- * HERE?".
- *
- * The explicit `Record<WorkflowGate, ...>` annotation is the totality lock: a
- * seventh member of `GATE_ORDER` cannot compile without an entry here. It is
- * annotated rather than inferred, and keyed by the union rather than by `string`,
- * because either of those weakenings would make the map accept an incomplete
- * set.
- */
-const GATE_PREDICATES: Record<WorkflowGate, (ctx: GateContext) => boolean> = {
-  "meta-not-first-export": (ctx) => ctx.first?.type !== "ExportNamedDeclaration",
-  "meta-not-const-export": (ctx) => ctx.declaration?.kind !== "const",
-  "meta-not-sole-declarator": (ctx) => ctx.declaration?.declarations.length !== 1,
-  "meta-not-named-meta": (ctx) => ctx.declaratorName !== "meta",
-  "meta-not-pure-literal": (ctx) => !isLiteralObject(ctx.elements, 0),
-  "meta-fields-invalid": (ctx) => metaFieldsFailValidation(ctx.elements),
-};
 
 /**
  * WGATE-01: how deep into a `meta` literal the gate walk goes before it stops
