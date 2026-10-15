@@ -743,6 +743,17 @@ function narrowListFailReason(err: unknown): ListReason {
 }
 
 /**
+ * WR-03: synthetic identities used by the list-orchestration catch path.
+ * Held as module-level constants so tests can assert against them and
+ * future changes are gated behind a single edit point. Both render under
+ * the cascade grammar as parens-wrapped tokens -- the renderer does
+ * not special-case parens, so the visual marker reads as "synthetic
+ * placeholder" to an operator scanning output.
+ */
+const SYNTHETIC_LIST_FAILURE_MARKETPLACE_NAME = "(list)";
+const SYNTHETIC_LIST_FAILURE_PLUGIN_NAME = "(list)";
+
+/**
  * D-06 orchestrator entrypoint. Read-only listing of plugins. Constructs
  * the `NotificationMessage` payload inline and forwards it to a single
  * `notifyWithContext(ctx, run, ...)` call per orchestration arm (success or
@@ -815,14 +826,3 @@ export async function listPlugins(opts: ListPluginsOptions): Promise<void> {
     notifyWithContext(ctx, run, LIST_CONTEXT, failureRows, undefined, "plural");
   }
 }
-
-/**
- * WR-03: synthetic identities used by the list-orchestration catch path.
- * Held as module-level constants so tests can assert against them and
- * future changes are gated behind a single edit point. Both render under
- * the cascade grammar as parens-wrapped tokens -- the renderer does
- * not special-case parens, so the visual marker reads as "synthetic
- * placeholder" to an operator scanning output.
- */
-const SYNTHETIC_LIST_FAILURE_MARKETPLACE_NAME = "(list)";
-const SYNTHETIC_LIST_FAILURE_PLUGIN_NAME = "(list)";

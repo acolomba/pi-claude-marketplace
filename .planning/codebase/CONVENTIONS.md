@@ -142,7 +142,7 @@ Errors that wrap an underlying cause pass `{ cause }` through the `Error` constr
 
 **When to Comment:**
 
-- Non-obvious "why", not "what" — see `skills/typescript-comments/SKILL.md` and `.claude/rules/typescript-style.md`
+- Non-obvious "why", not "what" — see `.agents/skills/typescript-style/rules/comments.md`
 - Comments and test titles cite durable spec IDs (`D-NN`, `NFR-N`, `PRL-NN`, `MA-N`, `ATTR-NN`, etc.) as traceability anchors, not GSD process artifacts (no `Phase NN`, `Plan NN`, `Wave N`, `Pitfall N` references — these rot as planning docs are archived)
 - File-level or class-level JSDoc-style block comments explain rationale, cross-references to sibling files, and behavior contracts (see `tests/platform/git-ops-fake.ts`, and `extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts` describing why the module exists where it does and the import invariant that keeps a cycle from reforming)
 

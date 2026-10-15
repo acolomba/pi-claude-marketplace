@@ -57,6 +57,7 @@ function observeTimers(t: TestContext): TimerObservation {
     ...args: TArgs
   ): ReturnType<typeof setTimeout> {
     const observedCallback = (): void => {
+      // eslint-disable-next-line @typescript-eslint/no-use-before-define -- the timer calls back only after `handle` is assigned
       pendingHandles.delete(handle);
       callback(...args);
     };
