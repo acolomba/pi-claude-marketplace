@@ -3,90 +3,120 @@ phase: 01
 review: 01-REVIEW.md
 titles: json
 findings:
-  - id: CR-01
-    severity: critical
-    disposition: open
-    title: "The bare-update scenario cannot tell a refresh from a no-op"
-  - id: CR-02
-    severity: critical
-    disposition: open
-    title: "The \"absolute path\" info scenario types an absolute path, so echoing the input passes"
-  - id: WR-01
-    severity: warning
-    disposition: open
-    title: "\"Adding a marketplace records it in the chosen scope\" checks only the report"
-  - id: WR-02
-    severity: warning
-    disposition: open
-    title: "Rows that `the result has these fields:` hides are never required to be compared"
-  - id: WR-03
-    severity: warning
-    disposition: open
-    title: "The field-name projection loses information, and collisions are silent"
-  - id: WR-04
-    severity: warning
-    disposition: open
-    title: "A local row in an `@url` or `@github` block is excluded without any report"
-  - id: WR-05
-    severity: warning
-    disposition: open
-    title: "The ESLint step-text and registration rules have simple bypasses"
-  - id: WR-06
-    severity: warning
-    disposition: open
-    title: "The publishing steps depend on their order and hide the source kind"
-  - id: WR-07
-    severity: warning
-    disposition: open
-    title: "The feature gate catches its own errors and drops the stack trace"
   - id: IN-01
     severity: info
     disposition: open
-    title: "The quote stripping treats apostrophes as quotes"
+    title: "The quote stripping treats apostrophes as quotes (still open)"
   - id: IN-02
     severity: info
     disposition: open
-    title: "The list of catch-all names misses common variants"
+    title: "The list of catch-all names misses common variants (still open)"
   - id: IN-03
     severity: info
     disposition: open
-    title: "A version-bump republish keeps the manifest size the same"
+    title: "A version-bump republish keeps the manifest size the same (still open)"
   - id: IN-04
     severity: info
     disposition: open
-    title: "Some table cells lose information"
+    title: "Some table cells lose information (still open)"
   - id: IN-05
     severity: info
     disposition: open
-    title: "The sandbox root leaks when Pi fails to start"
+    title: "The sandbox root leaks when Pi fails to start (still open)"
   - id: IN-06
     severity: info
     disposition: open
-    title: "The layout gate reads untracked and ignored files"
-open: 15
-total: 15
-recorded: 2026-10-15T20:55:37.632Z
+    title: "The layout gate reads untracked and ignored files (still open)"
+  - id: IN-07
+    severity: info
+    disposition: open
+    title: "The session `When` neither checks uncompared rows nor clears the last results (still open, widened)"
+  - id: IN-08
+    severity: info
+    disposition: open
+    title: "An Examples block with both tags passes the kind check with mixed rows (still open)"
+  - id: IN-09
+    severity: info
+    disposition: open
+    title: "\"source kind\" names two different sets of values (still open)"
+  - id: IN-10
+    severity: info
+    disposition: open
+    title: "Two info scenarios set up plugins that their results never show (still open)"
+  - id: IN-11
+    severity: info
+    disposition: open
+    title: "The WR-02 fix left the gate's descriptions behind and one comment unwrapped"
+  - id: IN-12
+    severity: info
+    disposition: open
+    title: "The \"one write a `Then` makes\" is a convention, and the field stays public"
+  - id: CR-01
+    severity: critical
+    disposition: fixed
+    title: "The INFO-01 title claims the autoupdate state, but the scenario checks only the default"
+  - id: CR-02
+    severity: critical
+    disposition: fixed
+    title: "The \"absolute path\" info scenario types an absolute path, so echoing the input passes"
+  - id: WR-01
+    severity: warning
+    disposition: fixed
+    title: "The uncompared-rows check makes `Then` steps write to the world, which `steps.md` forbids"
+  - id: WR-02
+    severity: warning
+    disposition: fixed
+    title: "A local alias of `Given` still registers a regular-expression step, and no gate catches it"
+  - id: WR-03
+    severity: warning
+    disposition: fixed
+    title: "The skill's Outline example still teaches the report-only scenario that WR-01 called out"
+  - id: WR-04
+    severity: warning
+    disposition: fixed
+    title: "A local row in an `@url` or `@github` block is excluded without any report"
+  - id: WR-05
+    severity: warning
+    disposition: fixed
+    title: "The ESLint step-text and registration rules have simple bypasses"
+  - id: WR-06
+    severity: warning
+    disposition: fixed
+    title: "The publishing steps depend on their order and hide the source kind"
+  - id: WR-07
+    severity: warning
+    disposition: fixed
+    title: "The feature gate catches its own errors and drops the stack trace"
+open: 12
+total: 21
+recorded: 2026-10-15T21:45:54.241Z
 ---
 
 # Phase 01: Code Review Disposition
 
 | Finding | Severity | Disposition | Source |
 |---------|----------|-------------|--------|
-| CR-01 | critical | open | - |
-| CR-02 | critical | open | - |
-| WR-01 | warning | open | - |
-| WR-02 | warning | open | - |
-| WR-03 | warning | open | - |
-| WR-04 | warning | open | - |
-| WR-05 | warning | open | - |
-| WR-06 | warning | open | - |
-| WR-07 | warning | open | - |
 | IN-01 | info | open | - |
 | IN-02 | info | open | - |
 | IN-03 | info | open | - |
 | IN-04 | info | open | - |
 | IN-05 | info | open | - |
 | IN-06 | info | open | - |
+| IN-07 | info | open | - |
+| IN-08 | info | open | - |
+| IN-09 | info | open | - |
+| IN-10 | info | open | - |
+| IN-11 | info | open | - |
+| IN-12 | info | open | - |
+| CR-01 | critical | fixed | 01-REVIEW-FIX.md (not in the current review) |
+| CR-02 | critical | fixed | 01-REVIEW-FIX.iter2.md (not in the current review) |
+| WR-01 | warning | fixed | 01-REVIEW-FIX.md (not in the current review) |
+| WR-02 | warning | fixed | 01-REVIEW-FIX.md (not in the current review) |
+| WR-03 | warning | fixed | 01-REVIEW-FIX.md (not in the current review) |
+| WR-04 | warning | fixed | 01-REVIEW-FIX.iter2.md (not in the current review) |
+| WR-05 | warning | fixed | 01-REVIEW-FIX.iter2.md (not in the current review) |
+| WR-06 | warning | fixed | 01-REVIEW-FIX.iter2.md (not in the current review) |
+| WR-07 | warning | fixed | 01-REVIEW-FIX.iter2.md (not in the current review) |
 
 Dispositions: `open` (recorded, not yet triaged), `fixed`, `skipped`, `deferred`.
 Set `deferred` by hand and put the reason in the Source cell; both are preserved. A `|` in the reason is kept as prose and escaped on the next run.
