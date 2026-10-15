@@ -46,3 +46,23 @@ Feature: Marketplace info
       | name  | scope   | details autoupdate | details last updated at | source kind | source abs path           |
       | tools | project | false              | {scenario time}         | path        | {home}/marketplaces/tools |
       | tools | user    | false              | {scenario time}         | path        | {home}/marketplaces/tools |
+
+  Scenario: Info on a marketplace whose manifest became invalid reports a failed invalid manifest row
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" is added to the project scope
+    Given the manifest of the marketplace "tools" has become invalid
+    When the user runs "/claude:plugin marketplace info tools --scope project"
+    Then the result has these fields:
+      | kind                           | plugin-info                    |
+      | severity                       | error                          |
+      | needs reload                   | false                          |
+      | summary                        | A plugin operation has failed. |
+      | marketplace name               | tools                          |
+      | marketplace scope              | project                        |
+      | marketplace details autoupdate | false                          |
+      | plugin status                  | failed                         |
+      | plugin name                    | tools                          |
+      | plugin id                      | tools@tools                    |
+      | plugin reasons                 | invalid manifest               |
+      | plugin scope                   | project                        |
+      | plugin components resolved     | false                          |

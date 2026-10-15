@@ -11,7 +11,7 @@ import { type DataTable, Given } from "@cucumber/cucumber";
 
 import { readOfferedPlugins } from "../../lib/path-marketplace.ts";
 import { runCommand } from "../../lib/pi-commands.ts";
-import { publishMarketplace } from "../../lib/published-marketplace.ts";
+import { invalidateManifest, publishMarketplace } from "../../lib/published-marketplace.ts";
 
 import type { OfferedPlugin } from "../../lib/path-marketplace.ts";
 import type { PublishedMarketplace, SourceKind } from "../../lib/published-marketplace.ts";
@@ -66,5 +66,12 @@ Given(
       `/claude:plugin marketplace add ${source} --scope ${scope}`,
     );
     assert.strictEqual(payload.severity, "info", JSON.stringify(payload));
+  },
+);
+
+Given(
+  "the manifest of the marketplace {string} has become invalid",
+  async function (this: ScenarioWorld, name: string) {
+    await invalidateManifest(this.marketplacesRoot, name, requirePublished(this, name));
   },
 );

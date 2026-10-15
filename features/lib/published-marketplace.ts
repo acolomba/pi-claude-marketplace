@@ -8,7 +8,7 @@
 
 import path from "node:path";
 
-import { writeMarketplace } from "./path-marketplace.ts";
+import { writeInvalidManifest, writeMarketplace } from "./path-marketplace.ts";
 
 import type { OfferedPlugin } from "./path-marketplace.ts";
 
@@ -59,5 +59,25 @@ export async function publishMarketplace(
     case "url":
     case "github":
       throw noStandIn(kind);
+  }
+}
+
+/**
+ * Breaks the manifest of the marketplace `name`, published as `published`, so
+ * it no longer matches the manifest schema.
+ */
+export async function invalidateManifest(
+  marketplacesRoot: string,
+  name: string,
+  published: PublishedMarketplace,
+): Promise<void> {
+  switch (published.kind) {
+    case "dir":
+    case "file":
+      await writeInvalidManifest(path.join(marketplacesRoot, name), name);
+      return;
+    case "url":
+    case "github":
+      throw noStandIn(published.kind);
   }
 }

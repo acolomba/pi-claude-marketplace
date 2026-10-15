@@ -33,6 +33,10 @@ export function readOfferedPlugins(table: DataTable): OfferedPlugin[] {
   return table.hashes().map((row) => ({ name: String(row.name), version: String(row.version) }));
 }
 
+function manifestPath(root: string): string {
+  return path.join(root, ".claude-plugin", "marketplace.json");
+}
+
 async function writePlugin(root: string, plugin: OfferedPlugin): Promise<void> {
   const pluginRoot = path.join(root, "plugins", plugin.name);
   const skillDir = path.join(pluginRoot, "skills", `${plugin.name}-skill`);
@@ -57,7 +61,7 @@ export async function writeMarketplace(
   await Promise.all(plugins.map((plugin) => writePlugin(root, plugin)));
   await mkdir(path.join(root, ".claude-plugin"), { recursive: true });
   await writeFile(
-    path.join(root, ".claude-plugin", "marketplace.json"),
+    manifestPath(root),
     JSON.stringify({
       name,
       owner: { name: "features" },
@@ -67,5 +71,18 @@ export async function writeMarketplace(
         version: plugin.version,
       })),
     }),
+  );
+}
+
+/**
+ * Rewrites the manifest of the marketplace `name` under `root` as valid JSON
+ * that breaks the manifest schema: `plugins` is a string. Valid JSON keeps the
+ * failure text the extension's own, and the new size defeats a manifest cache
+ * keyed by modification time and size.
+ */
+export async function writeInvalidManifest(root: string, name: string): Promise<void> {
+  await writeFile(
+    manifestPath(root),
+    JSON.stringify({ name, owner: { name: "features" }, plugins: "nope" }),
   );
 }
