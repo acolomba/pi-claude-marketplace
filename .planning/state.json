@@ -6,7 +6,7 @@
     {
       "number": "1",
       "name": "Suite Foundation",
-      "status": "in_progress"
+      "status": "complete"
     },
     {
       "number": "2",
@@ -57,7 +57,7 @@
   "next": {
     "command": "/gsd-progress --next",
     "label": "Advance to the next step (verify)",
-    "reason": "Phase 1 of 10 · 0% · ready to verify"
+    "reason": "Phase 2 of 10 · 10% · ready to verify"
   },
-  "updated_at": "2026-10-15T20:37:58.581Z"
+  "updated_at": "2026-10-15T21:50:50.713Z"
 }

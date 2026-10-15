@@ -54,7 +54,7 @@ path), **url** (https git URL on the loopback stand-in), and **gh**
   rows green. The `npm run check` merge gate enforces this.
 - The last phase asserts that no tag exclusion remains.
 
-- [ ] **Phase 1: Suite Foundation** — The payload driver, exact-token comparison, the shared kind-neutral steps and local fixtures, the tag mechanism, and the unused-step gate that every other suite phase builds on
+- [x] **Phase 1: Suite Foundation** — The payload driver, exact-token comparison, the shared kind-neutral steps and local fixtures, the tag mechanism, and the unused-step gate that every other suite phase builds on (completed 2026-10-15)
 - [ ] **Phase 2: GitHub Clone-Base Override** — `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL` sends every GitHub clone, fetch, origin match, and auth lookup to one configured base; unset, nothing changes
 - [ ] **Phase 3: Marketplace Add** — `marketplace add` scenarios, with dir, file, `@url`, and `@github` rows for every multi-kind add behavior
 - [ ] **Phase 4: Marketplace Remove and List** — `remove`/`rm` with the plugin cascade, and `list`/`ls` across both scopes
@@ -99,11 +99,11 @@ pinned as they are, not changed.
 
 1. A marketplace scenario receives every payload its command emits, each validated against the published notification schema, and fails on a wrong payload kind, an extra payload, or a missing one. The driver covers `cascade`, `marketplace-info`, `marketplace-info-cascade`, `marketplace-not-added`, `usage-error`, `usage-info`, `plugin-info`, and one payload per marketplace from a bare `update`.
 2. Sandbox paths appear in scenarios as exact tokens, substituted in both directions, and `lastUpdatedAt` is checked within a time window rather than hidden. The stand-in origin token joins the same mechanism in Phase 9.
-3. Kind-neutral steps publish a marketplace as a dir or file source, add it, and compare result tables through a `<source>` token; `url` and `github` resolve once their kind phase lands. Config steps read and write the user-owned `claude-plugins.json` and `claude-plugins.local.json`. A smoke scenario passes through these steps.
+3. Kind-neutral steps publish a marketplace as a dir or file source, add it, and compare result tables through `{home}`-style tokens; `url` and `github` resolve once their kind phase lands. Config steps read the user-owned `claude-plugins.json` and `claude-plugins.local.json` (D-07: read only until a requirement needs a write). Each shared step has its first use in a real seed scenario in the verb feature file it belongs to (D-06), not in a smoke feature.
 4. `cucumber.json` runs `not @url and not @github`, so an Outline with untagged, `@url`, and `@github` Examples blocks runs only its local rows. The cucumber skill rules document the multi-kind Outline pattern, the exclusion, and which phase removes each tag.
-5. `npm run check` fails when `cucumber-js --dry-run --format usage` reports an unused, undefined, or ambiguous step.
+5. `npm run check` fails on an unused, undefined, or ambiguous step: `npm run check:features` (in `check:static`) dry-runs every scenario through the cucumber API with the tag exclusion cleared, so excluded `@url` and `@github` rows count (D-09, D-10).
 
-**Plans:** 5/5 plans executed
+**Plans:** 5/5 plans complete
 
 Plans:
 **Wave 1**
@@ -255,7 +255,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 | --- | --- | --- | --- |
-| 1. Suite Foundation | 5/5 | In Progress | - |
+| 1. Suite Foundation | 5/5 | Complete    | 2026-10-15 |
 | 2. GitHub Clone-Base Override | 0/TBD | Not started | - |
 | 3. Marketplace Add | 0/TBD | Not started | - |
 | 4. Marketplace Remove and List | 0/TBD | Not started | - |

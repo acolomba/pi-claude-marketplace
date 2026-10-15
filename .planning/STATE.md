@@ -2,20 +2,20 @@
 gsd_state_version: "1.0"
 milestone: marketplace-features
 milestone_name: Marketplace Behavioral Tests
-current_phase: 1
-current_phase_name: Suite Foundation
-status: verifying
-stopped_at: Completed 01-05-PLAN.md
-last_updated: "2026-10-15T20:38:07.904Z"
+current_phase: 2
+current_phase_name: GitHub Clone-Base Override
+status: planning
+stopped_at: Phase 1 complete; Phase 2 not started
+last_updated: "2026-10-15T21:50:50.639Z"
 last_activity: 2026-10-15
-last_activity_desc: Phase 1 execution started
-state_head: 0a8019fc3d8786b4d24edad17e9ac0ca8534e3b6
+last_activity_desc: Phase 1 complete, transitioned to Phase 2
+state_head: 14f33ffc285f248fad05e7f1ee6dbfa4e648a68b
 progress:
   total_phases: 10
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 5
   completed_plans: 5
-  percent: 0
+  percent: 10
 ---
 
 # Project State
@@ -31,12 +31,12 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: 1 (Suite Foundation) — EXECUTING
-Plan: 5 of 5
-Status: Phase complete — ready for verification
-Last activity: 2026-10-15 — Phase 1 execution started
+Phase: 2 of 10 (GitHub Clone-Base Override)
+Plan: —
+Status: Ready to discuss
+Last activity: 2026-10-15 — Phase 1 complete, transitioned to Phase 2
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [█░░░░░░░░░] 10%
 
 ### mcp-4 closeout
 
@@ -182,7 +182,7 @@ hit the same wall; convert it rather than re-disclosing it.
 ## Session Continuity
 
 **Last session:** 2026-10-15T20:38:07.793Z
-**Stopped at:** Completed 01-05-PLAN.md
+**Stopped at:** Phase 1 complete; Phase 2 not started
 **Resume file:** None
 
 **Main merge (2026-10-11, quick task 261011-bsm):** `origin/main` at
