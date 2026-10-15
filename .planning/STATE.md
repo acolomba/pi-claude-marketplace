@@ -25,7 +25,7 @@ See: `.planning/PROJECT.md` (updated 2026-10-11 after the json-output milestone 
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** json-output complete and archived; merge `features/json`, then plan the next milestone
+**Current focus:** json-output merged to main (PR #251); plan the next milestone
 
 ## Current Position
 
@@ -244,13 +244,9 @@ archived milestone artifacts.
 
 ## Operator Next Steps
 
-- json-output is archived under `.planning/milestones/json-output-*` on
-  `features/json`, which is not yet merged. main (#248, #250) is merged into
-  `features/json`. Next: PR #251, which is open. Offer the version bump first
-  (per AGENTS.md; the CHANGELOG bullet already sits under `[Unreleased]`,
-  above `0.20.0`), then squash-merge.
-- Optional before merge: live-runtime UAT of the json/rpc output and the
-  LLM tools in a sandboxed Pi (`/gsd-verify-work`).
+- json-output is archived under `.planning/milestones/json-output-*` and
+  merged to main as PR #251 (squash `0e45ffd9`); its CHANGELOG bullet waits
+  under `[Unreleased]` for the next release.
 - Open user choice (Phase 9 D-03): keep the returned `isError: true` that
   Pi 0.87.1 ignores, or throw a redacted Error so Pi flags the failure.
 - Start the next milestone with /gsd-new-milestone.

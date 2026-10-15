@@ -10,7 +10,7 @@
 
 A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artifact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install.
 
-## Previous Milestone: json-output -- Mode-Keyed Presentation Strategies (branch: features/json, started 2026-09-28, completed 2026-10-11, not yet merged, no npm release)
+## Previous Milestone: json-output -- Mode-Keyed Presentation Strategies (branch: features/json, started 2026-09-28, completed 2026-10-11, merged 2026-10-11 as PR #251, no npm release)
 
 **Goal:** `/claude:plugin` output is produced by one of two architecturally
 uniform presentation strategies selected by Pi's `ctx.mode` -- text for `tui` and
@@ -539,7 +539,7 @@ by `ctx.mode`. JSON and RPC consumers receive versioned, schema-valid
 is unchanged. Credentials are redacted at every serialization site, including
 LLM tool text. The re-audit reads `tech_debt` with no blockers; it is an
 override close (phases 1-7 digests stale by decision 08 D-12). The milestone
-lives on `features/json` and is not yet merged to `main`.
+merged to `main` as PR #251 on 2026-10-11.
 
 **Merged and released:** mcp-4 closed 2026-10-10 on `features/mcp-4` (Phases 1-8, 73 plans;
 archived to `.planning/milestones/mcp-4-*`), merged to main via PR #250 on 2026-10-10 and
@@ -619,8 +619,8 @@ been declared in `package.json` and invoked by nothing, now run: the three fast 
 
 **Shipped:** url-source URL Sources (2026-07-13, Phases 76-79). Arbitrary public HTTPS git URLs are first-class sources for both marketplaces and plugins: `marketplace add/update/remove/info` clone `source.url` directly (no github.com reconstruction); the resolver classifies `url` / `git-subdir` / `github`-object plugin sources installable through a source-addressed refcounted clone cache (`plugin-clones/<urlhash12>-<sha12>/`, one external-monorepo clone serving every referencing plugin, warm-cache operations offline); the full plugin lifecycle works for git sources (sha-change atomic swaps, last-reference clone GC on uninstall/update/marketplace-remove, network-free list/info + install-completion parity); and the GitHub-only Device Flow generalized into a `GitAuthProvider` registry (public repos on any host clone unauthenticated, registered hosts run their flow host-keyed via `CredentialOps`, no-provider hosts fail clean, no-credential-leak gate covers every provider file). `npm run check` GREEN (2739 unit + 16 integration).
 
-**Next:** merge `features/json` into main through PR #251, then define the next
-milestone (`/gsd-new-milestone`). The live credential
+**Next:** define the next milestone (`/gsd-new-milestone`); json-output merged
+to main as PR #251 on 2026-10-11. The live credential
 challenge deferred in the v1.20 audit passed on 2026-09-30. Earlier context carried forward, all
 deliberate: **two** accepted direct-coverage shortfalls, down from seven
 (`bridges/commands/discover.ts` and `orchestrators/plugin/install-outcome.ts`, both pinned

@@ -1,6 +1,6 @@
 # Milestones: pi-claude-marketplace
 
-## json-output -- Mode-Keyed Presentation Strategies (Completed: 2026-10-11; branch `features/json`, not yet merged, not yet in an npm release)
+## json-output -- Mode-Keyed Presentation Strategies (Completed: 2026-10-11; merged to main 2026-10-11 as PR #251, squash `0e45ffd9`, not yet in an npm release)
 
 **Phases completed:** 9 phases (1-9), 50 plans, 72 tasks; 36/36 requirements
 
