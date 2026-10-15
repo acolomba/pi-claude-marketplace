@@ -5,16 +5,16 @@ milestone_name: Marketplace Behavioral Tests
 current_phase: 1
 current_phase_name: Suite Foundation
 status: executing
-stopped_at: Phase 1 context gathered
-last_updated: "2026-10-15T19:30:59.602Z"
+stopped_at: Completed 01-01-PLAN.md
+last_updated: "2026-10-15T19:41:38.387Z"
 last_activity: 2026-10-15
 last_activity_desc: Phase 1 execution started
-state_head: b6f1d666277c74de311caa0cf16a390757715ac6
+state_head: 9a5c5b7d6451576f75a79ba36345e4f9c4ddaac2
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 5
-  completed_plans: 0
+  completed_plans: 1
   percent: 0
 ---
 
@@ -32,8 +32,8 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 1 (Suite Foundation) — EXECUTING
-Plan: 1 of 5
-Status: Executing Phase 1
+Plan: 2 of 5
+Status: Ready to execute
 Last activity: 2026-10-15 — Phase 1 execution started
 
 Progress: [░░░░░░░░░░] 0%
@@ -181,9 +181,9 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-15T18:09:38.187Z
-**Stopped at:** Phase 1 context gathered
-**Resume file:** .planning/phases/01-suite-foundation/01-CONTEXT.md
+**Last session:** 2026-10-15T19:41:38.295Z
+**Stopped at:** Completed 01-01-PLAN.md
+**Resume file:** None
 
 **Main merge (2026-10-11, quick task 261011-bsm):** `origin/main` at
 `94160614` (#248, and #250, the mcp-4 milestone released as 0.20.0) is merged
@@ -297,6 +297,7 @@ archived milestone artifacts.
 | Phase 08 P03 | 4 min | 2 tasks | 4 files |
 | Phase 08 P04 | 6 min | 3 tasks | 2 files |
 | Phase 09 P01 | 10 min | 3 tasks | 3 files |
+| Phase 01 P01 | 8 min | 3 tasks | 12 files |
 
 ## Decisions
 
@@ -364,6 +365,8 @@ archived milestone artifacts.
 - [Phase 09]: LLM tool content is redacted at the tool return through one module-private textContent builder (PMOD-04); details stay as presentCascade redacts them
 - [Phase 09]: D-03 kept: both LLM tools return the TC-9 isError shape instead of throwing, though Pi 0.87.1 ignores a returned isError; throwing a redacted Error is left for the user to decide
 - [Phase 09]: 04/ deferred item marked status: resolved (not closed) because audit-open treats only resolved or acknowledged as closed
+- [Phase 01]: [marketplace-features] Given setup commands stay on the strict runCommand path (one cascade, severity info); only When stores every payload via runCommandPayloads
+- [Phase 01]: [marketplace-features] PluginWorld renamed to ScenarioWorld; {scenario time} window has zero tolerance and opens at world construction
 
 ### mcp-4 decisions
 
