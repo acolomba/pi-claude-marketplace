@@ -14,6 +14,9 @@ Feature: Marketplace add
     Then the result lists these marketplaces:
       | name  | scope   | status |
       | tools | project | added  |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name  | source   |
+      | tools | <source> |
 
     Examples:
       | source kind | source                                                    |
@@ -70,3 +73,8 @@ Feature: Marketplace add
     Examples:
       | source kind |
       | url         |
+
+    @github
+    Examples:
+      | source kind |
+      | github      |
