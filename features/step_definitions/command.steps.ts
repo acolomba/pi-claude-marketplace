@@ -128,14 +128,14 @@ Then("the result lists these plugins:", function (this: ScenarioWorld, table: Da
   }
 
   assert.deepStrictEqual(recordTable(stated, pluginRecords(result, this.tokens)), table.raw());
-  this.uncomparedRows = [];
+  this.markRowsCompared();
 });
 
 Then("the result lists these marketplaces:", function (this: ScenarioWorld, table: DataTable) {
   const [stated = []] = table.raw();
   const records = marketplaceRecords(this.lastResult(), this.tokens);
   assert.deepStrictEqual(recordTable(stated, records), table.raw());
-  this.uncomparedRows = [];
+  this.markRowsCompared();
 });
 
 // A table cannot state an empty result: its columns come from the records,
@@ -177,6 +177,6 @@ Then(
       return pluginRecords(result, this.tokens);
     });
     assert.deepStrictEqual(recordTable(stated, records), table.raw());
-    this.uncomparedRows = [];
+    this.markRowsCompared();
   },
 );

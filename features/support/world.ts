@@ -38,7 +38,7 @@ export class ScenarioWorld extends World {
   results: readonly NotificationPayload[] | undefined = undefined;
   // The non-empty row arrays of `results` that no step has compared yet, as
   // `<kind> <field>`. The steps that state a result's fields hide them, so a
-  // row step must read them.
+  // row step must read them and then call `markRowsCompared()`.
   uncomparedRows: readonly string[] = [];
   // Cucumber builds the world before any `Before()` hook, so the
   // `{scenario time}` window opens before any setup command runs (D-05).
@@ -106,6 +106,14 @@ export class ScenarioWorld extends World {
     }
 
     return this.results;
+  }
+
+  /**
+   * Records that a row step compared the row arrays of the last results. This
+   * is the one write a `Then` step makes to the world.
+   */
+  markRowsCompared(): void {
+    this.uncomparedRows = [];
   }
 
   /** Records how this scenario published the marketplace `name`. */

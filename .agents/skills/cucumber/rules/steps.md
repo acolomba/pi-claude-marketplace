@@ -55,7 +55,7 @@ Use `@cucumber/cucumber` for the runner, `node:assert/strict` for assertions, an
 
 - A `Given` that performs setup asserts that the setup succeeded, so a broken precondition fails in the `Given` and not in a later `Then`.
 
-- A `Then` has no side effects. It reads what the `When` left on the world.
+- A `Then` has no side effects. It reads what the `When` left on the world. One exception: a step that compares the row arrays of the last results calls `this.markRowsCompared()` after its comparison, so the world can fail a scenario whose rows no step compared (`.agents/skills/cucumber/rules/world-and-stand-ins.md`). No `Then` writes to the world in any other way.
 
 - Assert with `node:assert/strict`, comparing whole values: build the expected record or row set from the step argument and `deepStrictEqual` it against the same projection of the actual value. No `assert.ok(x.includes(...))`.
 
