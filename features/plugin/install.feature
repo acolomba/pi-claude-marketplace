@@ -5,6 +5,7 @@ Feature: Plugin install
   and use a local marketplace in place of a published one.
 
   Background:
+    Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
       | name | version |
       | demo | 1.0.0   |

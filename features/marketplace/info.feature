@@ -5,6 +5,7 @@ Feature: Marketplace info
   and use local marketplaces in place of published ones.
 
   Scenario: Info on a directory marketplace shows its absolute path and autoupdate state
+    Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins:
       | name | version |
       | demo | 1.0.0   |
@@ -32,6 +33,7 @@ Feature: Marketplace info
       | reasons      | marketplace not added               |
 
   Scenario: Info on a marketplace both scopes hold shows one block per scope, project first
+    Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins:
       | name | version |
       | demo | 1.0.0   |
