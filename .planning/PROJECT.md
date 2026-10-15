@@ -681,6 +681,12 @@ validated and archived in [milestones/json-output-REQUIREMENTS.md](milestones/js
 
 ### Validated
 
+- ✓ The cucumber suite's shared foundation: a driver that returns and schema-validates every
+  payload a command emits, `{home}` and `{scenario time}` run tokens compared in both directions,
+  kind-neutral publishing, adding, result and read-only config steps, the `@url`/`@github`
+  exclusion, and `npm run check:features` failing on an unused, undefined, or ambiguous step
+  over every row — marketplace-features Phase 1, 2026-10-15 (DRV-01, DRV-02, DRV-04).
+
 - ✓ Both LLM tools redact credentials in every text they return to the model,
   and neither lets a thrown error reach Pi; the phase 04 deferred item is
   resolved. Pi 0.87.1 ignores a returned `isError`, so the model sees the
@@ -1423,4 +1429,4 @@ _Last updated: 2026-10-11 after the json-output milestone: 9 phases and
 under `.planning/milestones/json-output-*`. Merge of `features/json` and the
 next milestone remain._
 
-_Last updated: 2026-10-15 at the start of the marketplace-features milestone._
+_Last updated: 2026-10-15 after marketplace-features Phase 1 (Suite Foundation)._

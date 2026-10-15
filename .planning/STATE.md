@@ -22,12 +22,12 @@ progress:
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-10-15 at the start of the marketplace-features milestone)
+See: `.planning/PROJECT.md` (updated 2026-10-15 after marketplace-features Phase 1)
 
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 1 — Suite Foundation
+**Current focus:** Phase 2 — GitHub Clone-Base Override
 
 ## Current Position
 
@@ -181,7 +181,7 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-15T20:38:07.793Z
+**Last session:** 2026-10-15T21:58:00.000Z
 **Stopped at:** Phase 1 complete; Phase 2 not started
 **Resume file:** None
 
