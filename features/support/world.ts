@@ -66,6 +66,18 @@ export class ScenarioWorld extends World {
     return result;
   }
 
+  /**
+   * Returns every result of the last command in emission order, which a
+   * `When` step must have run. The driver guarantees at least one (DRV-01).
+   */
+  allResults(): readonly NotificationPayload[] {
+    if (this.results === undefined) {
+      throw new Error("no command has run in this scenario");
+    }
+
+    return this.results;
+  }
+
   /** Records how this scenario published the marketplace `name`. */
   recordPublished(name: string, published: PublishedMarketplace): void {
     this.published.set(name, published);

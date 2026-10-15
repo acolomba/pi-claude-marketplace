@@ -126,6 +126,17 @@ function marketplaceRecords(
   });
 }
 
+// The fields of one result that a scenario states, flattened: every field
+// except the ones `UNSTATED_FIELDS` hides.
+function envelopeFields(result: NotificationPayload, tokens: RunTokens): Map<string, string> {
+  return new Map(
+    flatten(
+      Object.fromEntries(Object.entries(result).filter(([key]) => !UNSTATED_FIELDS.has(key))),
+      tokens,
+    ),
+  );
+}
+
 // The table of `records` the way a scenario states it: the stated columns the
 // records have, then the ones the table leaves out, and an empty cell where a
 // record lacks a column.
@@ -148,14 +159,7 @@ When("the user runs {string}", async function (this: ScenarioWorld, command: str
 
 Then("the result has these fields:", function (this: ScenarioWorld, table: DataTable) {
   const stated = table.raw().map(([name]) => String(name));
-  const fields = new Map(
-    flatten(
-      Object.fromEntries(
-        Object.entries(this.lastResult()).filter(([key]) => !UNSTATED_FIELDS.has(key)),
-      ),
-      this.tokens,
-    ),
-  );
+  const fields = envelopeFields(this.lastResult(), this.tokens);
   const rows = namesLike(stated, new Set(fields.keys())).map((name) => [name, fields.get(name)]);
   assert.deepStrictEqual(rows, table.raw());
 });
@@ -186,3 +190,34 @@ Then("the result lists no marketplaces", function (this: ScenarioWorld) {
 
   assert.deepStrictEqual(result.marketplaces, []);
 });
+
+// D-02: one row per result of a command that emits several, in emission
+// order, so the table pins their count, order, and kinds. Nothing is merged,
+// deduplicated, or sorted: two identical results are two rows. A field one
+// result lacks is an empty cell. A multi-result command with no cascade, such
+// as `info <name>` over two scopes when one manifest is broken, has no row
+// arrays, so this table alone compares it whole.
+Then("the command reports these results:", function (this: ScenarioWorld, table: DataTable) {
+  const [stated = []] = table.raw();
+  const records = this.allResults().map((result) => envelopeFields(result, this.tokens));
+  assert.deepStrictEqual(recordTable(stated, records), table.raw());
+});
+
+// D-02: the marketplace and plugin rows of every result, in emission order.
+// Every result must be a cascade, so no row goes unseen.
+Then(
+  "the results list these marketplaces and plugins:",
+  function (this: ScenarioWorld, table: DataTable) {
+    const [stated = []] = table.raw();
+    const records = this.allResults().flatMap((result) => {
+      if (result.kind !== "cascade") {
+        assert.fail(
+          `expected every result to be a cascade, got ${result.kind}: ${JSON.stringify(result)}`,
+        );
+      }
+
+      return pluginRecords(result, this.tokens);
+    });
+    assert.deepStrictEqual(recordTable(stated, records), table.raw());
+  },
+);
