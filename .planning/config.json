@@ -49,55 +49,15 @@
   },
   "agent_skills": {
     "gsd-discuss-phase": [
-      "skills/claude-code-compat-research"
+      ".agents/skills/claude-code-compat-research",
+      ".agents/skills/typescript-unit-tests"
     ],
     "gsd-advisor-researcher": [
-      "skills/claude-code-compat-research"
+      ".agents/skills/claude-code-compat-research",
+      ".agents/skills/typescript-unit-tests"
     ],
-    "gsd-executor": [
-      "skills/typescript-comments",
-      "skills/typescript-unit-testing",
-      "skills/typescript-google-style-review",
-      "skills/local-verification",
-      "skills/cucumber-features",
-      "skills/cucumber-steps"
-    ],
-    "gsd-debugger": [
-      "skills/typescript-comments",
-      "skills/typescript-unit-testing",
-      "skills/typescript-google-style-review",
-      "skills/local-verification",
-      "skills/cucumber-features",
-      "skills/cucumber-steps"
-    ],
-    "gsd-code-fixer": [
-      "skills/typescript-comments",
-      "skills/typescript-unit-testing",
-      "skills/typescript-google-style-review",
-      "skills/local-verification",
-      "skills/cucumber-features",
-      "skills/cucumber-steps"
-    ],
-    "gsd-nyquist-auditor": [
-      "skills/typescript-comments",
-      "skills/typescript-unit-testing",
-      "skills/typescript-google-style-review",
-      "skills/cucumber-features",
-      "skills/cucumber-steps"
-    ],
-    "gsd-code-reviewer": [
-      "skills/typescript-comments",
-      "skills/typescript-google-style-review",
-      "skills/typescript-unit-testing-review",
-      "skills/cucumber-review"
-    ],
-    "gsd-verifier": [
-      "skills/typescript-unit-testing-review",
-      "skills/local-verification",
-      "skills/cucumber-review"
-    ],
-    "gsd-planner": [
-      "skills/local-verification"
+    "gsd-assumptions-analyzer": [
+      ".agents/skills/typescript-unit-tests"
     ]
   },
   "mode": "yolo",

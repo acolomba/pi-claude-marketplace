@@ -834,6 +834,14 @@ function narrowDirectFailReason(err: Error): ContentReason {
 }
 
 /**
+ * WR-05: synthetic placeholder for the bare-form enumerate-failure path.
+ * Held as a module-level constant so a future change has a single edit
+ * point. Mirrors the `"(reinstall)"` precedent in
+ * `orchestrators/plugin/reinstall-flow.ts`.
+ */
+const SYNTHETIC_UPDATE_PLACEHOLDER_NAME = "(update)";
+
+/**
  * WR-05: bare-form (`target.kind === "all"`) enumerate-failure emission.
  * Distinct from the marketplace/plugin failure path because the bare
  * form has no marketplace identity to thread into the row; using the
@@ -887,14 +895,6 @@ function notifyBareFormEnumerateFailure(args: {
     args.cardinality,
   );
 }
-
-/**
- * WR-05: synthetic placeholder for the bare-form enumerate-failure path.
- * Held as a module-level constant so a future change has a single edit
- * point. Mirrors the `"(reinstall)"` precedent in
- * `orchestrators/plugin/reinstall-flow.ts`.
- */
-const SYNTHETIC_UPDATE_PLACEHOLDER_NAME = "(update)";
 
 // The renderer (shared/notification-grammar.ts) owns version-arrow composition
 // via the PluginUpdatedMessage's required from/to fields.
