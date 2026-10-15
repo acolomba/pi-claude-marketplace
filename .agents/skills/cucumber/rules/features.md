@@ -73,6 +73,9 @@ A marketplace can be published as one of several source kinds: `dir`, `file`, `u
     Then the result lists these marketplaces:
       | name  | scope   | status |
       | tools | project | added  |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name  | source   |
+      | tools | <source> |
 
     Examples:
       | source kind | source                                                    |
