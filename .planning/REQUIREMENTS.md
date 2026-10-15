@@ -17,10 +17,10 @@ Research detail per requirement is in `.planning/research/FEATURES.md`
 
 ### Suite infrastructure
 
-- [ ] **DRV-01**: The driver returns every payload a command emits, validates each against the published notification schema, and asserts the expected kinds and count (`cascade`, `marketplace-info`, `marketplace-info-cascade`, `marketplace-not-added`, `usage-error`, `usage-info`, `plugin-info`; one payload per marketplace from a bare `update`)
-- [ ] **DRV-02**: Run-specific values (sandbox paths, the stand-in origin) are written in scenarios as exact tokens substituted in both directions, and `lastUpdatedAt` is checked within a time window, never hidden
+- [x] **DRV-01**: The driver returns every payload a command emits, validates each against the published notification schema, and asserts the expected kinds and count (`cascade`, `marketplace-info`, `marketplace-info-cascade`, `marketplace-not-added`, `usage-error`, `usage-info`, `plugin-info`; one payload per marketplace from a bare `update`)
+- [x] **DRV-02**: Run-specific values (sandbox paths, the stand-in origin) are written in scenarios as exact tokens substituted in both directions, and `lastUpdatedAt` is checked within a time window, never hidden
 - [ ] **DRV-03**: Pi, the stand-in, and every fixture `git` run with a hermetic git environment (`GIT_CONFIG_NOSYSTEM=1`, a sandbox global config, no inherited `GIT_*`), so no scenario reads the developer's credential helpers or git config
-- [ ] **DRV-04**: A gate fails when a step definition is unused, undefined, or ambiguous (`cucumber-js --dry-run --format usage`)
+- [x] **DRV-04**: A gate fails when a step definition is unused, undefined, or ambiguous (`cucumber-js --dry-run --format usage`)
 
 ### HTTPS git stand-in
 
@@ -158,10 +158,10 @@ Research detail per requirement is in `.planning/research/FEATURES.md`
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DRV-01 | Phase 1 | Pending |
-| DRV-02 | Phase 1 | Pending |
+| DRV-01 | Phase 1 | Complete |
+| DRV-02 | Phase 1 | Complete |
 | DRV-03 | Phase 9 | Pending |
-| DRV-04 | Phase 1 | Pending |
+| DRV-04 | Phase 1 | Complete |
 | HOST-01 | Phase 9 | Pending |
 | HOST-02 | Phase 9 | Pending |
 | HOST-03 | Phase 9 | Pending |
