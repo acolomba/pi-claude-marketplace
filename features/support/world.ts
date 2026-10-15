@@ -9,6 +9,7 @@
  */
 
 import assert from "node:assert/strict";
+import path from "node:path";
 
 import { After, setDefaultTimeout, setWorldConstructor, World } from "@cucumber/cucumber";
 
@@ -42,6 +43,23 @@ export class ScenarioWorld extends World {
   /** The directory the marketplace steps write local marketplaces into. */
   get marketplacesRoot(): string {
     return currentRun().marketplacesRoot;
+  }
+
+  /**
+   * Returns the root directory of `scope`, where its configuration files live:
+   * the sandbox agent directory for `user`, and `.pi` under the sandbox
+   * project for `project`.
+   */
+  scopeRoot(scope: string): string {
+    const { sandbox } = currentRun();
+    switch (scope) {
+      case "user":
+        return sandbox.agentDir;
+      case "project":
+        return path.join(sandbox.cwd, ".pi");
+      default:
+        throw new Error(`unknown scope ${scope}; expected user or project`);
+    }
   }
 
   /** The values the run tokens of this scenario stand for. */

@@ -29,3 +29,17 @@ Feature: Marketplace add
     Examples:
       | source kind | source     |
       | github      | acme/tools |
+
+  Scenario: Adding a marketplace by a home-relative path keeps the ~ form in the user configuration
+    Given the marketplace "tools" is published as a dir source
+    When the user runs "/claude:plugin marketplace add ~/marketplaces/tools"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these marketplaces:
+      | name  | scope | status |
+      | tools | user  | added  |
+    Then the "claude-plugins.json" file of the user scope declares these marketplaces:
+      | name  | source               |
+      | tools | ~/marketplaces/tools |
