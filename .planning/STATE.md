@@ -5,16 +5,16 @@ milestone_name: Marketplace Behavioral Tests
 current_phase: 1
 current_phase_name: Suite Foundation
 status: executing
-stopped_at: Completed 01-03-PLAN.md
-last_updated: "2026-10-15T20:14:21.258Z"
+stopped_at: Completed 01-04-PLAN.md
+last_updated: "2026-10-15T20:30:02.485Z"
 last_activity: 2026-10-15
 last_activity_desc: Phase 1 execution started
-state_head: c623ddae48ad044d43696f326603cf4db0312ca9
+state_head: 9be52117ff847fda2b317fc3e23d8d1b1d31accb
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 5
-  completed_plans: 3
+  completed_plans: 4
   percent: 0
 ---
 
@@ -32,7 +32,7 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 1 (Suite Foundation) — EXECUTING
-Plan: 4 of 5
+Plan: 5 of 5
 Status: Ready to execute
 Last activity: 2026-10-15 — Phase 1 execution started
 
@@ -181,8 +181,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-15T20:14:21.169Z
-**Stopped at:** Completed 01-03-PLAN.md
+**Last session:** 2026-10-15T20:30:02.392Z
+**Stopped at:** Completed 01-04-PLAN.md
 **Resume file:** None
 
 **Main merge (2026-10-11, quick task 261011-bsm):** `origin/main` at
@@ -300,6 +300,7 @@ archived milestone artifacts.
 | Phase 01 P01 | 8 min | 3 tasks | 12 files |
 | Phase 01 P02 | 13 min | 3 tasks | 4 files |
 | Phase 01 P03 | 13 min | 3 tasks | 10 files |
+| Phase 01 P04 | 12 min | 3 tasks | 7 files |
 
 ## Decisions
 
@@ -373,6 +374,8 @@ archived milestone artifacts.
 - [Phase 01]: [marketplace-features] Feature gate findings name the cucumber skill rule file; ambiguous findings list each matching definition by pattern and source location
 - [Phase 01]: The source kind parameter type is named `source kind` (with a space); Cucumber accepts it
 - [Phase 01]: `offers these plugins:` republishes under the recorded source kind, defaulting to dir
+- [Phase 01]: D-02 multi-payload results are read with 'the command reports these results:' (envelope row per payload) and 'the results list these marketplaces and plugins:' (rows across every cascade payload)
+- [Phase 01]: The config read step fails on a missing claude-plugins file and names its path: an absent base file is rebuilt from records on load (MIG-01), so missing is not an empty declaration
 
 ### mcp-4 decisions
 
