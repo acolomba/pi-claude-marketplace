@@ -54,6 +54,23 @@ export function flatten(
 }
 
 /**
+ * Builds the record of the `[name, cell]` pairs, throwing when two fields
+ * project to the same name, so no field's value is dropped unseen.
+ */
+export function fieldRecord(pairs: ReadonlyArray<readonly [string, string]>): Map<string, string> {
+  const record = new Map<string, string>();
+  for (const [name, value] of pairs) {
+    if (record.has(name)) {
+      throw new Error(`two fields project to the column "${name}"`);
+    }
+
+    record.set(name, value);
+  }
+
+  return record;
+}
+
+/**
  * Returns the names the table states, in its order, that `actual` has, then
  * the ones it has and the table leaves out. Compared against the table, a
  * missing or extra name shows up as the difference.

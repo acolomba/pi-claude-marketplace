@@ -49,6 +49,7 @@ Feature: Orders checkout
 ## Data tables
 
 - Header cells name the fields of the thing they describe in lower-case words: `unit price` for `unitPrice`.
+- A nested field drops a leading word that its parent already says: `cause.causeChain` is `cause chain`. So `source.kind` and `source.sourceKind` read the same, and a table cannot tell those two spellings apart. When two fields of one record read the same, the step fails rather than compare one of them.
 - A table lists every row the outcome contains, not a sample. The step compares the whole set.
 - A result with no rows has its own step, such as `the result lists no marketplaces`. A table with only a header row cannot be compared.
 - Align the columns.

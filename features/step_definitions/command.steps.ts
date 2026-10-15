@@ -19,7 +19,7 @@ import assert from "node:assert/strict";
 
 import { type DataTable, Given, Then, When } from "@cucumber/cucumber";
 
-import { flatten, namesLike, recordTable } from "../lib/field-rows.ts";
+import { fieldRecord, flatten, namesLike, recordTable } from "../lib/field-rows.ts";
 import { runCommand, runCommandPayloads } from "../lib/pi-commands.ts";
 import { expandTokens } from "../lib/run-tokens.ts";
 
@@ -53,10 +53,10 @@ function pluginRecords(result: CascadePayload, tokens: RunTokens): Array<Map<str
   return result.marketplaces.flatMap(({ plugins, ...block }) => {
     const blockFields = flatten({ marketplace: block }, tokens);
     if (plugins.length === 0) {
-      return [new Map(blockFields)];
+      return [fieldRecord(blockFields)];
     }
 
-    return plugins.map((row) => new Map([...blockFields, ...flatten(row, tokens)]));
+    return plugins.map((row) => fieldRecord([...blockFields, ...flatten(row, tokens)]));
   });
 }
 
@@ -67,7 +67,7 @@ function marketplaceRecords(
   tokens: RunTokens,
 ): Array<Map<string, string>> {
   if (result.kind === "marketplace-info-cascade") {
-    return result.blocks.map((block) => new Map(flatten(block, tokens)));
+    return result.blocks.map((block) => fieldRecord(flatten(block, tokens)));
   }
 
   if (result.kind !== "cascade") {
@@ -83,14 +83,14 @@ function marketplaceRecords(
       );
     }
 
-    return new Map(flatten(block, tokens));
+    return fieldRecord(flatten(block, tokens));
   });
 }
 
 // The fields of one result that a scenario states, flattened: every field
 // except the ones `UNSTATED_FIELDS` hides.
 function envelopeFields(result: NotificationPayload, tokens: RunTokens): Map<string, string> {
-  return new Map(
+  return fieldRecord(
     flatten(
       Object.fromEntries(Object.entries(result).filter(([key]) => !UNSTATED_FIELDS.has(key))),
       tokens,

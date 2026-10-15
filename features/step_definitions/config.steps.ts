@@ -19,7 +19,7 @@ import path from "node:path";
 
 import { type DataTable, Then } from "@cucumber/cucumber";
 
-import { flatten, isPlainObject, recordTable } from "../lib/field-rows.ts";
+import { fieldRecord, flatten, isPlainObject, recordTable } from "../lib/field-rows.ts";
 
 import type { ScenarioWorld } from "../support/world.ts";
 
@@ -52,7 +52,7 @@ Then(
         assert.fail(`the marketplace ${name} in ${file} is not an object: ${content}`);
       }
 
-      return new Map([["name", name], ...flatten(entry, this.tokens)]);
+      return fieldRecord([["name", name], ...flatten(entry, this.tokens)]);
     });
     const [stated = []] = table.raw();
     assert.deepStrictEqual(recordTable(stated, records), table.raw());
