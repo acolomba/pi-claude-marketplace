@@ -5,13 +5,21 @@
  * scenario share and reaches the run's one headless Pi, which
  * `support/pi-process.ts` resets before every scenario. Whatever a step or
  * hook creates registers its release here, and the world runs those releases
- * in reverse order when the scenario ends.
+ * in reverse order when the scenario ends. A passing scenario also fails
+ * there when a row array of its last results went uncompared.
  */
 
 import assert from "node:assert/strict";
 import path from "node:path";
 
-import { After, setDefaultTimeout, setWorldConstructor, World } from "@cucumber/cucumber";
+import {
+  After,
+  type ITestCaseHookParameter,
+  setDefaultTimeout,
+  setWorldConstructor,
+  Status,
+  World,
+} from "@cucumber/cucumber";
 
 import { currentRun } from "./pi-process.ts";
 
@@ -28,6 +36,10 @@ setDefaultTimeout(STEP_TIMEOUT_MS);
 
 export class ScenarioWorld extends World {
   results: readonly NotificationPayload[] | undefined = undefined;
+  // The non-empty row arrays of `results` that no step has compared yet, as
+  // `<kind> <field>`. The steps that state a result's fields hide them, so a
+  // row step must read them.
+  uncomparedRows: readonly string[] = [];
   // Cucumber builds the world before any `Before()` hook, so the
   // `{scenario time}` window opens before any setup command runs (D-05).
   readonly startedAt = Date.now();
@@ -139,6 +151,10 @@ export class ScenarioWorld extends World {
 
 setWorldConstructor(ScenarioWorld);
 
-After(async function (this: ScenarioWorld): Promise<void> {
+After(async function (this: ScenarioWorld, { result }: ITestCaseHookParameter): Promise<void> {
+  const uncompared = this.uncomparedRows;
   await this.release();
+  if (result?.status === Status.PASSED) {
+    assert.deepStrictEqual(uncompared, [], "no step compared these rows of the last results");
+  }
 });

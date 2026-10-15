@@ -27,16 +27,25 @@ import type { CascadePayload, NotificationPayload } from "../lib/pi-commands.ts"
 import type { RunTokens } from "../lib/run-tokens.ts";
 import type { ScenarioWorld } from "../support/world.ts";
 
+// The row arrays of a result: the marketplace rows of `marketplaces` and an
+// info fan-out's `blocks`. They have steps of their own, and a passing
+// scenario fails when one of them is not empty and no row step read it.
+const ROW_FIELDS: ReadonlySet<string> = new Set(["marketplaces", "blocks"]);
+
 // Fields no scenario states: `schemaVersion` is fixed by the schema the
-// driver checks, `origin` carries per-run ids, and the marketplace rows of
-// `marketplaces` and an info fan-out's `blocks` have steps of their own. Every
-// table states `kind`, as the wire writes it, hyphens included (D-01).
-const UNSTATED_FIELDS: ReadonlySet<string> = new Set([
-  "schemaVersion",
-  "origin",
-  "marketplaces",
-  "blocks",
-]);
+// driver checks, `origin` carries per-run ids, and the row arrays have steps
+// of their own. Every table states `kind`, as the wire writes it, hyphens
+// included (D-01).
+const UNSTATED_FIELDS: ReadonlySet<string> = new Set(["schemaVersion", "origin", ...ROW_FIELDS]);
+
+// The non-empty row arrays of `results`, as `<kind> <field>`.
+function rowArrays(results: readonly NotificationPayload[]): string[] {
+  return results.flatMap((result) =>
+    Object.entries(result)
+      .filter(([key, value]) => ROW_FIELDS.has(key) && Array.isArray(value) && value.length > 0)
+      .map(([key]) => `${result.kind} ${key}`),
+  );
+}
 
 // One record per plugin row, carrying its marketplace's fields. A marketplace
 // with no plugin rows still yields one record, so no block goes unseen.
@@ -95,7 +104,13 @@ Given("the user has run {string}", async function (this: ScenarioWorld, command:
 });
 
 When("the user runs {string}", async function (this: ScenarioWorld, command: string) {
+  assert.deepStrictEqual(
+    this.uncomparedRows,
+    [],
+    "no step compared these rows of the previous results",
+  );
   this.results = await runCommandPayloads(this.pi, expandTokens(command, this.tokens));
+  this.uncomparedRows = rowArrays(this.results);
 });
 
 Then("the result has these fields:", function (this: ScenarioWorld, table: DataTable) {
@@ -113,12 +128,14 @@ Then("the result lists these plugins:", function (this: ScenarioWorld, table: Da
   }
 
   assert.deepStrictEqual(recordTable(stated, pluginRecords(result, this.tokens)), table.raw());
+  this.uncomparedRows = [];
 });
 
 Then("the result lists these marketplaces:", function (this: ScenarioWorld, table: DataTable) {
   const [stated = []] = table.raw();
   const records = marketplaceRecords(this.lastResult(), this.tokens);
   assert.deepStrictEqual(recordTable(stated, records), table.raw());
+  this.uncomparedRows = [];
 });
 
 // A table cannot state an empty result: its columns come from the records,
@@ -160,5 +177,6 @@ Then(
       return pluginRecords(result, this.tokens);
     });
     assert.deepStrictEqual(recordTable(stated, records), table.raw());
+    this.uncomparedRows = [];
   },
 );
