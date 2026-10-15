@@ -1,5 +1,6 @@
 ---
 created: 2026-10-13
+resolves_phase: 1
 source: cucumber JSON behavioral-test spike (branch features/cucumber-behavioral-tests)
 ---
 
