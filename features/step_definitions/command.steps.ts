@@ -22,15 +22,20 @@ import { type DataTable, Given, Then, When } from "@cucumber/cucumber";
 import { runCommand, runCommandPayloads } from "../lib/pi-commands.ts";
 import { expandTokens, projectTokens } from "../lib/run-tokens.ts";
 
-import type { CascadePayload } from "../lib/pi-commands.ts";
+import type { CascadePayload, NotificationPayload } from "../lib/pi-commands.ts";
 import type { RunTokens } from "../lib/run-tokens.ts";
 import type { ScenarioWorld } from "../support/world.ts";
 
 // Fields no scenario states: `schemaVersion` is fixed by the schema the
-// driver checks, `origin` carries per-run ids, and `marketplaces` has a step
-// of its own. Every table states `kind`, as the wire writes it, hyphens
-// included (D-01).
-const UNSTATED_FIELDS: ReadonlySet<string> = new Set(["schemaVersion", "origin", "marketplaces"]);
+// driver checks, `origin` carries per-run ids, and the marketplace rows of
+// `marketplaces` and an info fan-out's `blocks` have steps of their own. Every
+// table states `kind`, as the wire writes it, hyphens included (D-01).
+const UNSTATED_FIELDS: ReadonlySet<string> = new Set([
+  "schemaVersion",
+  "origin",
+  "marketplaces",
+  "blocks",
+]);
 
 // Words of a field name, without a leading word its parent already says:
 // `cause.causeChain` is `cause chain`, not `cause cause chain`.
@@ -94,6 +99,44 @@ function pluginRecords(result: CascadePayload, tokens: RunTokens): Array<Map<str
   });
 }
 
+// One record per marketplace row: a cascade's blocks or an info fan-out's
+// blocks. A cascade block with plugin rows fails, so no plugin row goes unseen.
+function marketplaceRecords(
+  result: NotificationPayload,
+  tokens: RunTokens,
+): Array<Map<string, string>> {
+  if (result.kind === "marketplace-info-cascade") {
+    return result.blocks.map((block) => new Map(flatten(block, tokens)));
+  }
+
+  if (result.kind !== "cascade") {
+    assert.fail(
+      `expected a cascade or marketplace-info-cascade result, got ${JSON.stringify(result)}`,
+    );
+  }
+
+  return result.marketplaces.map(({ plugins, ...block }) => {
+    if (plugins.length > 0) {
+      assert.fail(
+        `marketplace ${block.name} has plugin rows; compare them with "the result lists these plugins:"`,
+      );
+    }
+
+    return new Map(flatten(block, tokens));
+  });
+}
+
+// The table of `records` the way a scenario states it: the stated columns the
+// records have, then the ones the table leaves out, and an empty cell where a
+// record lacks a column.
+function recordTable(
+  stated: readonly string[],
+  records: ReadonlyArray<ReadonlyMap<string, string>>,
+): string[][] {
+  const columns = namesLike(stated, new Set(records.flatMap((record) => [...record.keys()])));
+  return [columns, ...records.map((record) => columns.map((column) => record.get(column) ?? ""))];
+}
+
 Given("the user has run {string}", async function (this: ScenarioWorld, command: string) {
   const payload = await runCommand(this.pi, expandTokens(command, this.tokens));
   assert.strictEqual(payload.severity, "info", JSON.stringify(payload));
@@ -124,8 +167,22 @@ Then("the result lists these plugins:", function (this: ScenarioWorld, table: Da
     assert.fail(`expected a cascade result, got ${JSON.stringify(result)}`);
   }
 
-  const records = pluginRecords(result, this.tokens);
-  const columns = namesLike(stated, new Set(records.flatMap((record) => [...record.keys()])));
-  const rows = records.map((record) => columns.map((column) => record.get(column) ?? ""));
-  assert.deepStrictEqual([columns, ...rows], table.raw());
+  assert.deepStrictEqual(recordTable(stated, pluginRecords(result, this.tokens)), table.raw());
+});
+
+Then("the result lists these marketplaces:", function (this: ScenarioWorld, table: DataTable) {
+  const [stated = []] = table.raw();
+  const records = marketplaceRecords(this.lastResult(), this.tokens);
+  assert.deepStrictEqual(recordTable(stated, records), table.raw());
+});
+
+// A table cannot state an empty result: its columns come from the records,
+// and an empty result has none.
+Then("the result lists no marketplaces", function (this: ScenarioWorld) {
+  const result = this.lastResult();
+  if (result.kind !== "cascade") {
+    assert.fail(`expected a cascade result, got ${JSON.stringify(result)}`);
+  }
+
+  assert.deepStrictEqual(result.marketplaces, []);
 });

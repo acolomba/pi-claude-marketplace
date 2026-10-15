@@ -30,3 +30,19 @@ Feature: Marketplace info
       | summary      | A marketplace operation has failed. |
       | name         | tools                               |
       | reasons      | marketplace not added               |
+
+  Scenario: Info on a marketplace both scopes hold shows one block per scope, project first
+    Given the marketplace "tools" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "tools" is added to the user scope
+    Given the marketplace "tools" is added to the project scope
+    When the user runs "/claude:plugin marketplace info tools"
+    Then the result has these fields:
+      | kind         | marketplace-info-cascade |
+      | severity     | info                     |
+      | needs reload | false                    |
+    Then the result lists these marketplaces:
+      | name  | scope   | details autoupdate | details last updated at | source kind | source abs path           |
+      | tools | project | false              | {scenario time}         | path        | {home}/marketplaces/tools |
+      | tools | user    | false              | {scenario time}         | path        | {home}/marketplaces/tools |
