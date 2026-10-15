@@ -5,11 +5,11 @@ milestone_name: Marketplace Behavioral Tests
 current_phase: 2
 current_phase_name: GitHub Clone-Base Override
 status: planning
-stopped_at: Phase 1 complete; Phase 2 not started
-last_updated: "2026-10-15T21:50:50.639Z"
+stopped_at: Phase 2 context gathered
+last_updated: "2026-10-15T23:01:48.782Z"
 last_activity: 2026-10-15
 last_activity_desc: Phase 1 complete, transitioned to Phase 2
-state_head: 14f33ffc285f248fad05e7f1ee6dbfa4e648a68b
+state_head: e2f268829a1baf15d7002e22c4807a06420381cc
 progress:
   total_phases: 10
   completed_phases: 1
@@ -181,9 +181,9 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-15T21:58:00.000Z
-**Stopped at:** Phase 1 complete; Phase 2 not started
-**Resume file:** None
+**Last session:** 2026-10-15T23:01:48.649Z
+**Stopped at:** Phase 2 context gathered
+**Resume file:** .planning/phases/02-github-clone-base-override/02-CONTEXT.md
 
 **Main merge (2026-10-11, quick task 261011-bsm):** `origin/main` at
 `94160614` (#248, and #250, the mcp-4 milestone released as 0.20.0) is merged
