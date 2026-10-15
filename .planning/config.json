@@ -49,45 +49,15 @@
   },
   "agent_skills": {
     "gsd-discuss-phase": [
-      "skills/claude-code-compat-research"
+      ".agents/skills/claude-code-compat-research",
+      ".agents/skills/typescript-unit-tests"
     ],
     "gsd-advisor-researcher": [
-      "skills/claude-code-compat-research"
+      ".agents/skills/claude-code-compat-research",
+      ".agents/skills/typescript-unit-tests"
     ],
-    "gsd-executor": [
-      "skills/typescript-comments",
-      "skills/typescript-unit-testing",
-      "skills/typescript-google-style-review",
-      "skills/local-verification"
-    ],
-    "gsd-debugger": [
-      "skills/typescript-comments",
-      "skills/typescript-unit-testing",
-      "skills/typescript-google-style-review",
-      "skills/local-verification"
-    ],
-    "gsd-code-fixer": [
-      "skills/typescript-comments",
-      "skills/typescript-unit-testing",
-      "skills/typescript-google-style-review",
-      "skills/local-verification"
-    ],
-    "gsd-nyquist-auditor": [
-      "skills/typescript-comments",
-      "skills/typescript-unit-testing",
-      "skills/typescript-google-style-review"
-    ],
-    "gsd-code-reviewer": [
-      "skills/typescript-comments",
-      "skills/typescript-google-style-review",
-      "skills/typescript-unit-testing-review"
-    ],
-    "gsd-verifier": [
-      "skills/typescript-unit-testing-review",
-      "skills/local-verification"
-    ],
-    "gsd-planner": [
-      "skills/local-verification"
+    "gsd-assumptions-analyzer": [
+      ".agents/skills/typescript-unit-tests"
     ]
   },
   "mode": "yolo",
