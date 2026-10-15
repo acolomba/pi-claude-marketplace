@@ -573,7 +573,7 @@ interface FaultedCleanup {
    * message could be built from some other bridge's call.
    *
    * This is a stated trade against
-   * `.claude/rules/typescript-unit-testing.md`'s "build expected values
+   * the typescript-unit-tests skill's "build expected values
    * independently": the cases interpolate this value into their expected
    * message, so the assertion cannot fail on a wrong path WITHIN the right
    * staging parent. The parent is the part the case can pin and does -- the

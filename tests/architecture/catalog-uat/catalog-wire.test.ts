@@ -344,16 +344,6 @@ function tupleKeys(entries: readonly { section: string; state: string }[]): stri
   return entries.map(({ section, state }) => tupleKey(section, state));
 }
 
-function realPayloads(): {
-  readonly key: string;
-  readonly payload: ReturnType<typeof toWirePayload>;
-}[] {
-  return PRESENTED.map(({ section, state, source, origin }) => ({
-    key: tupleKey(section, state),
-    payload: toWirePayload(source, origin),
-  }));
-}
-
 function cascadeRows(
   payload: ReturnType<typeof toWirePayload>,
 ): { readonly status: string; readonly reasons: readonly string[] }[] {
@@ -457,6 +447,16 @@ const FIXTURES = mergeFixtureMaps(FIXTURE_MAPS);
 const CATALOG_PRESENTED = EXAMPLES.map((example) => presentExample(example, FIXTURES));
 const RAW_PRESENTED = presentRawSamples();
 const PRESENTED: readonly PresentedSource[] = [...CATALOG_PRESENTED, ...RAW_PRESENTED];
+
+function realPayloads(): {
+  readonly key: string;
+  readonly payload: ReturnType<typeof toWirePayload>;
+}[] {
+  return PRESENTED.map(({ section, state, source, origin }) => ({
+    key: tupleKey(section, state),
+    payload: toWirePayload(source, origin),
+  }));
+}
 
 test("WIRE-02: the retained inventory and separate command error cover all 21 kinds", () => {
   // arrange

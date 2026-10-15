@@ -911,6 +911,14 @@ function assistantForBookkeeping(): AssistantMessage {
   };
 }
 
+/** An empty-state reader, so registration hydrates without touching disk state. */
+const EMPTY_STATE_READER: HooksHydrationDeps = {
+  loadState(): Promise<ExtensionState> {
+    return Promise.resolve({ schemaVersion: 2, marketplaces: {} });
+  },
+  readHooksJson,
+};
+
 for (const mode of ["tui", "print", "json", "rpc"]) {
   for (const { failure, rejectMode } of [
     { failure: "unknown mode", rejectMode: (): string => "unknown" },
@@ -2722,14 +2730,6 @@ function observeRouterDebug(t: TestContext): () => string[] {
   });
   return () => [...diagnostics];
 }
-
-/** An empty-state reader, so registration hydrates without touching disk state. */
-const EMPTY_STATE_READER: HooksHydrationDeps = {
-  loadState(): Promise<ExtensionState> {
-    return Promise.resolve({ schemaVersion: 2, marketplaces: {} });
-  },
-  readHooksJson,
-};
 
 for (const { claudeEvent, event } of [
   { claudeEvent: "SessionEnd", event: { type: "session_shutdown" } },
