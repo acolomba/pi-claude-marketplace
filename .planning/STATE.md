@@ -1,19 +1,16 @@
 ---
 gsd_state_version: "1.0"
-milestone: json-output
-status: Awaiting next milestone
-stopped_at: Milestone json-output completed and archived (override close)
-last_updated: "2026-10-12T15:17:00.781Z"
-last_activity: 2026-10-11
-last_activity_desc: Milestone json-output completed and archived
-state_head: 0e45ffd9205db854979d483490fcbdad75323731
-milestone_name: Mode-Keyed Presentation Strategies
-current_phase: 09
+milestone: marketplace-features
+milestone_name: Marketplace Behavioral Tests
+status: planning
+last_updated: "2026-10-15T15:40:29.228Z"
+last_activity: 2026-10-15
 progress:
-  total_phases: 9
-  completed_phases: 9
-  total_plans: 50
-  completed_plans: 50
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -29,10 +26,10 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: Milestone json-output complete
+Phase: Not started (defining requirements)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-10-11 - Completed quick task 261011-gl6: integration tests install pinned optional peers and no longer skip
+Status: Defining requirements
+Last activity: 2026-10-15 — Milestone marketplace-features started
 
 ### mcp-4 closeout
 
