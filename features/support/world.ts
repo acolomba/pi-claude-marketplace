@@ -16,6 +16,7 @@ import { currentRun } from "./pi-process.ts";
 
 import type { NotificationPayload, OfferedSkill } from "../lib/pi-commands.ts";
 import type { PiProcess } from "../lib/pi-process.ts";
+import type { PublishedMarketplace } from "../lib/published-marketplace.ts";
 import type { RunTokens } from "../lib/run-tokens.ts";
 
 // Starting Pi takes most of a second and a command a tenth of that; the
@@ -30,6 +31,7 @@ export class ScenarioWorld extends World {
   // `{scenario time}` window opens before any setup command runs (D-05).
   readonly startedAt = Date.now();
   skills: readonly OfferedSkill[] | undefined = undefined;
+  private readonly published = new Map<string, PublishedMarketplace>();
   private readonly releases: Array<() => Promise<void> | void> = [];
 
   /** The run's Pi, which the `Before()` hook has reset for this scenario. */
@@ -62,6 +64,16 @@ export class ScenarioWorld extends World {
     }
 
     return result;
+  }
+
+  /** Records how this scenario published the marketplace `name`. */
+  recordPublished(name: string, published: PublishedMarketplace): void {
+    this.published.set(name, published);
+  }
+
+  /** Returns how this scenario published the marketplace `name`, if it did. */
+  publishedMarketplace(name: string): PublishedMarketplace | undefined {
+    return this.published.get(name);
   }
 
   /** Returns the skills of the last new session, which a `When` step must have started. */
