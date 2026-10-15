@@ -1,9 +1,9 @@
 ---
-name: new-gsd-workspace
-description: Create a ready-to-use git worktree for the current repository at ~/src/<repo>-<name> on a new branch features/<name>, branched from a freshly fetched origin/main, then run the repo's scripts/init.sh in it so dependencies, GSD, skills, and agent tooling are installed. Use when the user asks to create a new workspace, worktree, or feature-branch environment for the current repo, or invokes /new-gsd-workspace <name>.
+name: new-workspace
+description: Create a ready-to-use git worktree for the current repository at ~/src/<repo>-<name> on a new branch features/<name>, branched from a freshly fetched origin/main, then run the repo's scripts/init.sh in it so dependencies, skills, and agent tooling are installed. Use when the user asks to create a new workspace, worktree, or feature-branch environment for the current repo, or invokes /new-workspace <name>.
 ---
 
-# New GSD Workspace
+# New Workspace
 
 Create a worktree that is ready to use: when this skill finishes, the user can open a new terminal, `cd ~/src/<repo>-<name>`, start an agent, and work.
 
