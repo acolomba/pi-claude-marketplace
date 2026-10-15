@@ -198,6 +198,9 @@ export default tseslint.config(
         { blankLine: "always", prev: "block-like", next: "*" },
       ],
       "prefer-object-has-own": "error",
+      // The style rules the typescript-style skill relies on the toolchain for.
+      eqeqeq: ["error", "smart"],
+      "prefer-arrow-callback": "error",
       "sonarjs/cognitive-complexity": ["error", 15],
       "sonarjs/no-identical-functions": "error",
       "sonarjs/no-inverted-boolean-check": "error",

@@ -11,6 +11,8 @@
   - Credentials no longer appear in any output, including JSON entries and the text the LLM tools return to the model.
   - Internal: integration tests now install the optional peers at their declared floors, so they run the same locally and in CI, with no skips.
 
+- Internal: the project tooling and agent skills now follow the latest TypeScript blueprint. (#261)
+
 ## [0.20.1] - 2026-10-11
 
 - `/claude:plugin update` now authenticates when it refreshes a marketplace from a private GitHub repository, as `/claude:plugin marketplace update` does. Before, the refresh failed with `{authentication required}` ([#249](https://github.com/acolomba/pi-claude-marketplace/issues/249)).

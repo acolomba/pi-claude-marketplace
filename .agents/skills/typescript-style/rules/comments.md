@@ -1,15 +1,16 @@
----
-name: typescript-comments
-description: Comment and test-title policy for TypeScript -- describe what and why, cite durable spec IDs, never GSD planning artifacts. Apply when writing or changing comments or test titles in any .ts file.
----
+# Comments and test titles
 
-# TypeScript comment policy
+Part of the `typescript-style` skill: `.agents/skills/typescript-style/SKILL.md`.
 
-Comments and test/describe titles describe **what the code does** and, when non-obvious, **why**. They do not record which GSD milestone, phase, plan, wave, or task produced the code. Git history owns process history.
+Comments and test/describe titles describe **what the code does** and, when non-obvious, **why**. They do not record which planning milestone, phase, plan, wave, or task produced the code. Git history owns process history.
+
+## Before you write
+
+Load the `simple-english` skill in Plain mode and the `humanizer` skill. Apply both to every comment and test title you add or change, then run their self-checks.
 
 ## Forbidden in comments and test titles
 
-- `Phase NN`, `Plan NN`, `Plan NN-NN`, `Wave N`, `Task N` references to GSD planning steps.
+- `Phase NN`, `Plan NN`, `Plan NN-NN`, `Wave N`, `Task N` references to planning steps.
 
 - `milestone vX.Y`, `vX.Y milestone`, and UAT-decision parentheticals such as `(v1.12 milestone UAT decision 2026-06-11)`.
 
@@ -44,30 +45,25 @@ becomes
 becomes
 
 ```text
-// ATTR-09: a content/ownership mismatch is not a manifest absence, so the
-// truthful member is `"source mismatch"` and not `"not in manifest"`.
+// ATTR-09: a content/ownership mismatch leaves the plugin in the manifest,
+// so the truthful member is `"source mismatch"`.
 ```
 
 ## Prose
 
-- One idea per sentence. Short sentences, active voice, present tense.
-- Say what the code does, not how good it is: no `robust`, `seamless`, `comprehensive`, `crucial`.
-- No `not X but Y` or `not just X, it's Y` framing. State Y.
-- No padding a list to three items. List what exists.
-- No hedges (`essentially`, `simply`, `basically`) and no chatbot register (`Note that`, `It's worth noting`).
-- Use the domain word the code uses. Define a term at first use only when a reader of this file could not infer it.
+Use the domain word the code uses. Define a term at first use only when a reader of this file could not infer it.
 
 ## Allowed (and encouraged) as traceability anchors
 
 - Decision IDs: `D-01`, `D-21`, `D-54-01`, `D-15-11`, `D-17.1-01`, etc.
 - Requirement and finding IDs: `PRL-NN`, `AUTH-NN`, `DIFF-NN`, `ATTR-NN`, `RECON-NN`, `ENBL-NN`, `SPLIT-NN`, `WR-NN`, `CR-NN`, `UAT-NN`, `SNM-NN`, `TYPE-NN`, `SC-N`, `NFR-N`, `Mxx` matrix IDs.
-- GitHub issue/PR references like `#2916`.
+- GitHub issue/PR references like `#2916`, in comments only. Test titles state behavior and carry no ticket references.
 
 These anchors link the code to a specification row, not to a planning step.
 
-## Domain language is not GSD history
+## Domain language is not planning history
 
-Words like `phase` that name domain concepts in the code itself are **not** GSD references and must be preserved unchanged. Examples:
+Words like `phase` that name domain concepts in the code itself are **not** planning references and must be preserved unchanged. Examples:
 
 - The two-phase commit narration in `bridges/agents/stage.ts` (`Phase 2: remove old target files ...`).
 - The `phase ledger` transaction concept and any body text under `tests/transaction/phase-ledger.test.ts` that talks about the ledger's own phases (e.g. `4 phases, phase 3 throws`).
