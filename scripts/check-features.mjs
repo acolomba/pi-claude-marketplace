@@ -1,3 +1,4 @@
+import { readdirSync } from "node:fs";
 import path from "node:path";
 import { Writable } from "node:stream";
 import { fileURLToPath } from "node:url";
@@ -7,6 +8,8 @@ import { loadConfiguration, runCucumber } from "@cucumber/cucumber/api";
 /**
  * Fails when a cucumber step definition is unused, or when a step in any scenario is undefined or
  * ambiguous (DRV-04). A dry run over the cucumber API reports both through its message stream.
+ * It also fails on a file under features/ that breaks the cucumber skill's layout rules, and on a
+ * feature file that breaks its Gherkin rules, read from the same run's Gherkin documents.
  *
  * It runs through the API rather than the CLI because the CLI's `--tags` is and-joined with the
  * profile's `not @url and not @github`, so only the API can clear that exclusion: a step that only
@@ -16,6 +19,20 @@ import { loadConfiguration, runCucumber } from "@cucumber/cucumber/api";
 
 const projectRoot = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const stepsRule = ".agents/skills/cucumber/rules/steps.md";
+const featuresRule = ".agents/skills/cucumber/rules/features.md";
+const layoutRule = ".agents/skills/cucumber/rules/layout.md";
+const codeRoots = new Set(["step_definitions", "support", "lib"]);
+const catchAllNames = new Set([
+  "common",
+  "shared",
+  "utils",
+  "helpers",
+  "support",
+  "misc",
+  "hooks",
+  "parameter-types",
+]);
+const sourceTags = new Set(["@url", "@github"]);
 
 function createCollection() {
   return {
@@ -23,6 +40,7 @@ function createCollection() {
     pickleSteps: new Map(),
     testCases: [],
     stepLines: new Map(),
+    documents: [],
     parseErrors: [],
     undefinedParameterTypes: [],
   };
@@ -49,6 +67,8 @@ function gherkinSteps(children) {
 }
 
 function collectGherkinDocument(collection, document) {
+  collection.documents.push(document);
+
   for (const step of gherkinSteps(document.feature?.children ?? [])) {
     collection.stepLines.set(step.id, step.location.line);
   }
@@ -189,6 +209,224 @@ function runFindings(collection) {
   return findings;
 }
 
+function featureTree() {
+  const root = path.join(projectRoot, "features");
+
+  return readdirSync(root, { recursive: true, withFileTypes: true }).map((entry) => ({
+    parts: path.relative(root, path.join(entry.parentPath, entry.name)).split(path.sep),
+    directory: entry.isDirectory(),
+  }));
+}
+
+function moduleName(name) {
+  return name.replace(/(\.steps)?\.ts$/, "");
+}
+
+function isAllowedFile(parts) {
+  const name = parts.at(-1);
+  const depth = parts.length;
+
+  if (parts[0] === "step_definitions") {
+    return depth <= 3 && name.endsWith(".steps.ts");
+  }
+
+  if (codeRoots.has(parts[0])) {
+    return depth <= 3 && name.endsWith(".ts") && !name.endsWith(".steps.ts");
+  }
+
+  return depth === 2 && name.endsWith(".feature");
+}
+
+function layoutFinding(parts, message) {
+  return { path: ["features", ...parts].join("/"), line: 0, message: `${message} (${layoutRule})` };
+}
+
+function codeModuleFindings(entry, directories) {
+  const name = entry.directory ? entry.parts.at(-1) : moduleName(entry.parts.at(-1));
+  const findings = [];
+
+  if (catchAllNames.has(name)) {
+    findings.push(layoutFinding(entry.parts, `catch-all module name "${name}"`));
+  }
+
+  const sibling = [...entry.parts.slice(0, -1), name].join("/");
+
+  if (!entry.directory && directories.has(sibling)) {
+    findings.push(
+      layoutFinding(entry.parts, `module beside its own directory features/${sibling}/`),
+    );
+  }
+
+  return findings;
+}
+
+function entryFindings(entry, directories) {
+  const findings = [];
+
+  if (!entry.directory && !isAllowedFile(entry.parts)) {
+    findings.push(
+      layoutFinding(
+        entry.parts,
+        "unexpected file: features/ holds <function>/<capability>.feature files and step_definitions, support, and lib modules",
+      ),
+    );
+  }
+
+  if (codeRoots.has(entry.parts[0]) && entry.parts.length > 1) {
+    findings.push(...codeModuleFindings(entry, directories));
+  }
+
+  return findings;
+}
+
+function layoutFindings() {
+  const entries = featureTree();
+  const directories = new Set(
+    entries.filter((entry) => entry.directory).map((entry) => entry.parts.join("/")),
+  );
+
+  return entries.flatMap((entry) => entryFindings(entry, directories));
+}
+
+function gherkinFinding(uri, node, message) {
+  return { path: uri, line: node.location.line, message: `${message} (${featuresRule})` };
+}
+
+function kebabCase(text) {
+  return text.trim().toLowerCase().split(/\s+/).join("-");
+}
+
+function titleFindings(uri, feature) {
+  const match = /^features\/([^/]+)\/([^/]+)\.feature$/.exec(uri);
+
+  if (match === null || kebabCase(feature.name) === `${match[1]}-${match[2]}`) {
+    return [];
+  }
+
+  return [
+    {
+      path: uri,
+      line: feature.location.line,
+      message: `feature title ${JSON.stringify(feature.name)} is not "<function> <capability>" of its file name (${layoutRule})`,
+    },
+  ];
+}
+
+function misplacedTagFindings(uri, node) {
+  return node.tags.map((tag) =>
+    gherkinFinding(uri, tag, `tag ${tag.name} is not on an Examples block`),
+  );
+}
+
+function examplesTagFindings(uri, examples) {
+  return examples.tags
+    .filter((tag) => !sourceTags.has(tag.name))
+    .map((tag) =>
+      gherkinFinding(uri, tag, `tag ${tag.name} on an Examples block is not @url or @github`),
+    );
+}
+
+function stepWordingFindings(uri, step) {
+  const findings = [];
+  const keyword = step.keyword.trim();
+  const unquoted = step.text.replaceAll(/"[^"]*"|'[^']*'/g, "");
+
+  if (step.keywordType === "Conjunction" || step.keywordType === "Unknown") {
+    findings.push(gherkinFinding(uri, step, `step keyword ${keyword}: use Given, When, or Then`));
+  }
+
+  if (/[A-Z]/.test(unquoted)) {
+    findings.push(gherkinFinding(uri, step, "step text is not lower case outside quoted values"));
+  }
+
+  if (/\bshould\b/i.test(unquoted)) {
+    findings.push(gherkinFinding(uri, step, "step text says should"));
+  }
+
+  return findings;
+}
+
+function stepOrderFindings(uri, steps) {
+  const findings = [];
+  let acted = false;
+
+  for (const step of steps) {
+    if (step.keywordType === "Context" && acted) {
+      findings.push(gherkinFinding(uri, step, "a Given step follows a When or Then step"));
+    }
+
+    acted ||= step.keywordType === "Action" || step.keywordType === "Outcome";
+  }
+
+  return findings;
+}
+
+function backgroundFindings(uri, background) {
+  const notGiven = background.steps.filter((step) => step.keywordType !== "Context");
+
+  return [
+    ...notGiven.map((step) =>
+      gherkinFinding(uri, step, `a Background holds Given steps only, not ${step.keyword.trim()}`),
+    ),
+    ...background.steps.flatMap((step) => stepWordingFindings(uri, step)),
+  ];
+}
+
+function scenarioTitleFindings(uri, scenario) {
+  if (/^[A-Z]/.test(scenario.name)) {
+    return [];
+  }
+
+  return [
+    gherkinFinding(
+      uri,
+      scenario,
+      `scenario title ${JSON.stringify(scenario.name)} does not start with an upper-case letter`,
+    ),
+  ];
+}
+
+function scenarioFindings(uri, scenario) {
+  return [
+    ...scenarioTitleFindings(uri, scenario),
+    ...misplacedTagFindings(uri, scenario),
+    ...scenario.examples.flatMap((examples) => examplesTagFindings(uri, examples)),
+    ...scenario.steps.flatMap((step) => stepWordingFindings(uri, step)),
+    ...stepOrderFindings(uri, scenario.steps),
+  ];
+}
+
+function childFindings(uri, child) {
+  if (child.rule !== undefined) {
+    return [
+      ...misplacedTagFindings(uri, child.rule),
+      ...child.rule.children.flatMap((ruleChild) => childFindings(uri, ruleChild)),
+    ];
+  }
+
+  if (child.background !== undefined) {
+    return backgroundFindings(uri, child.background);
+  }
+
+  return scenarioFindings(uri, child.scenario);
+}
+
+function documentFindings(document) {
+  const { uri, feature } = document;
+
+  if (feature === undefined) {
+    return [{ path: uri, line: 0, message: `the file holds no Feature (${featuresRule})` }];
+  }
+
+  const findings = [...titleFindings(uri, feature), ...misplacedTagFindings(uri, feature)];
+
+  if (feature.description.trim() === "") {
+    findings.push(gherkinFinding(uri, feature, "the feature has no description"));
+  }
+
+  return [...findings, ...feature.children.flatMap((child) => childFindings(uri, child))];
+}
+
 function byLocation(left, right) {
   return left.path.localeCompare(right.path) || left.line - right.line;
 }
@@ -199,6 +437,8 @@ async function main() {
     ...runFindings(collection),
     ...unusedFindings(collection),
     ...matchFindings(collection),
+    ...collection.documents.flatMap(documentFindings),
+    ...layoutFindings(),
   ].sort(byLocation);
 
   if (findings.length === 0) {
@@ -212,7 +452,8 @@ async function main() {
   }
 
   for (const finding of findings) {
-    process.stderr.write(`${finding.path}:${finding.line}: ${finding.message}\n`);
+    const where = finding.line === 0 ? finding.path : `${finding.path}:${finding.line}`;
+    process.stderr.write(`${where}: ${finding.message}\n`);
   }
 
   process.stderr.write(`Feature gate failed with ${findings.length} finding(s).\n`);
