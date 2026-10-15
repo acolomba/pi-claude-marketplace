@@ -16,4 +16,9 @@ Part of the `cucumber` skill: `.agents/skills/cucumber/SKILL.md`.
 
 - A fake listens on loopback only, records what it receives, and can be armed to fail, so scenarios cover error paths. A fixture reaches its error paths through bad input that scenarios write.
 - A driver that runs the code under test validates what it returns against the published contract, such as a JSON schema, before a step reads it.
+- The command driver returns every payload a command emits, in the order the command emits them. It validates each payload against the published payload schema (DRV-01).
+- A step that expects one result asserts that there is exactly one payload. It never picks one payload out of several.
+- A command with several payloads is compared in two steps (D-02). The first step, `the command reports these results:`, lists one row per payload. The second step, `the results list these marketplaces and plugins:`, lists the rows across all the payloads. When no payload carries rows, the first table alone is the whole value. An info fan-out, whose payloads are a marketplace-info and a plugin-info, is an example.
+- Local marketplace fixtures live under the sandbox home directory.
+- The world records the source kind of each published marketplace, and the library code dispatches on it. A new source kind changes library code only, not the steps.
 - A driver may reuse a process harness from `tests/` rather than copy it.

@@ -44,7 +44,7 @@ Use `@cucumber/cucumber` for the runner, `node:assert/strict` for assertions, an
 ## Step modules
 
 - Start each module with an `@fileoverview` that says what its steps own.
-- A step module exports nothing.
+- A step module exports nothing. Lint rejects a step module that exports anything.
 - Order the registrations `Given`, then `When`, then `Then`.
 
 ## Steps
@@ -63,7 +63,11 @@ Use `@cucumber/cucumber` for the runner, `node:assert/strict` for assertions, an
 
 - Step text uses Cucumber expressions (`{string}`, `{int}`, `{word}`), never regular expressions. A custom parameter type is defined in the support module named after what it parses.
 
-- Every step text matches exactly one definition, and every definition is used by at least one scenario. `npm run test:cucumber` fails on an undefined or ambiguous step but passes with an unused one; `npx cucumber-js --dry-run --format usage` lists unused definitions as `UNUSED`.
+- Step text is a string literal. Lint rejects a regular expression or a variable in its place.
+
+- A step that types a command expands the run tokens in it before it sends the command, and a step that reads a result projects the run tokens back. `.agents/skills/cucumber/rules/features.md` lists the tokens. The text of a step definition never contains a token, because a brace in a Cucumber expression names a parameter type.
+
+- Every step text matches exactly one definition, and every definition is used. `npm run test:cucumber` fails on an undefined or ambiguous step in the rows it runs. `npm run check:features` fails on an unused, undefined, or ambiguous step in every row, including the rows that `cucumber.json` excludes.
 
 ## Errors
 

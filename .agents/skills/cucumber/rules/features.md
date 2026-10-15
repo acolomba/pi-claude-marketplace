@@ -32,6 +32,7 @@ Feature: Orders checkout
 - Titles use sentence case and name the behavior. No `works`, `happy path`, `test`, or ticket and plan references.
 - One scenario proves one behavior. A scenario that needs a second `When` to prove its point usually hides a second behavior; split it.
 - A `Scenario Outline` is for three or more variants of one behavior. Its `<placeholder>` names say what each value is: `<quantity>`, not `<n>`.
+- The three variants of an Outline count the rows of every `Examples:` block, tagged or not.
 
 ## Steps
 
@@ -49,7 +50,57 @@ Feature: Orders checkout
 
 - Header cells name the fields of the thing they describe in lower-case words: `unit price` for `unitPrice`.
 - A table lists every row the outcome contains, not a sample. The step compares the whole set.
+- A result with no rows has its own step, such as `the result lists no marketplaces`. A table with only a header row cannot be compared.
 - Align the columns.
+
+## Source kinds
+
+A marketplace can be published as one of several source kinds: `dir`, `file`, `url`, and `github`. A behavior that several kinds share is one `Scenario Outline`:
+
+- An untagged `Examples:` block holds the local kinds, `dir` and `file`. An `@url` block holds the url kind, and an `@github` block holds the github kind.
+- The kind reaches the steps through a `<source kind>` column, and the source the user types reaches them through a `<source>` column.
+- Tags appear only on `Examples:` blocks, and the only tags are `@url` and `@github`. A tag on a feature or a scenario would also drop its local rows.
+
+```gherkin
+  Scenario Outline: Adding a marketplace records it in the chosen scope
+    Given the marketplace "tools" is published as a <source kind> source
+    When the user runs "/claude:plugin marketplace add <source> --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these marketplaces:
+      | name  | scope   | status |
+      | tools | project | added  |
+
+    Examples:
+      | source kind | source                                                    |
+      | dir         | {home}/marketplaces/tools                                 |
+      | file        | {home}/marketplaces/tools/.claude-plugin/marketplace.json |
+
+    @url
+    Examples:
+      | source kind | source                            |
+      | url         | https://{git host}/acme/tools.git |
+
+    @github
+    Examples:
+      | source kind | source     |
+      | github      | acme/tools |
+```
+
+`cucumber.json` runs the tag expression `not @url and not @github` until each kind has its stand-in. The work that adds the url source kind removes `@url`, and the work that adds the github source kind removes `@github`. Removing a tag turns on every row of that kind, with no edit to a feature file.
+
+A behavior that only one kind has lives in a feature file of its own.
+
+## Run tokens
+
+A scenario cannot know where its sandbox lives or when it runs. It writes each run-specific value as a brace token (D-03):
+
+- `{home}` is the home directory of the sandbox. A command expands it to the real path, and a result shows `{home}` wherever the real path appears.
+- `{scenario time}` in a `last updated at` cell matches any exact ISO timestamp between the start of the scenario and the check. Any other value stays as written, so a stale, future, or malformed time fails (D-05).
+
+A token never uses `<...>`, because an Outline uses that form for its placeholders. A token never uses `~`, because the product prints `~` itself. An `Examples:` cell can hold a token: `| dir | {home}/marketplaces/tools |`. A stand-in whose address shows up in a command or a result gets its own token in the same way. For example, the url rows write `{git host}` for the git host that the url source kind adds.
 
 ## Background
 

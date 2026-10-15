@@ -41,6 +41,10 @@ Every file is organized by vertical function: the user-facing function it is abo
 - A library module's name is itself the vertical: the specific thing it drives or stands in for. Name the kind, not the role: a name that would fit a second kind of the same stand-in says nothing once that second kind arrives.
 - No catch-all module in `step_definitions/`, `support/`, or `lib/`: no `common`, `shared`, `utils`, `helpers`, `support`, or `misc`. If a step or helper seems to fit no function, name the function it exercises.
 - A module that grows splits into a directory of the same name with files named for their parts: `step_definitions/<function>/<topic>.steps.ts`, `support/<name>/`, `lib/<name>/`.
+- When several verbs of one function share steps, a topic module under `step_definitions/<function>/` holds the shared steps, and each verb has its own `<verb>.steps.ts` beside it. For marketplaces, `marketplace/publishing.steps.ts` holds the shared steps. A shared topic module never takes the name of a verb (D-08).
+- The step text of a verb module names its verb, so two verb modules never define the same text. When a second verb needs a step of a verb module, the work that finds the second use moves the step to the shared topic module, in a commit of its own (D-08).
+
+`npm run check:features` checks the file families and the names that this file describes.
 
 ## Boundaries
 
