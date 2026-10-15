@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Internal: the `new-gsd-workspace` skill is now `new-workspace`, and the project skills match the latest TypeScript blueprint. (#263)
+
+- Internal: the project skills match the latest TypeScript blueprint again, and ESLint now checks that variables are declared before use. (#262)
+
 - Scripts can now read `/claude:plugin` output. In Pi's `json` and `rpc` modes, every message arrives as a `claude-plugin` session entry that matches `schema/claude-plugin.schema.json`. See [JSON output](docs/json-output.md). (#251)
 
   - The `tui` and `print` modes keep their text output byte for byte.
@@ -10,6 +14,8 @@
   - The two LLM tools return the same structured rows as their `details`.
   - Credentials no longer appear in any output, including JSON entries and the text the LLM tools return to the model.
   - Internal: integration tests now install the optional peers at their declared floors, so they run the same locally and in CI, with no skips.
+
+- Internal: the project tooling and agent skills now follow the latest TypeScript blueprint. (#261)
 
 ## [0.20.1] - 2026-10-11
 
