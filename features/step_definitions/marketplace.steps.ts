@@ -11,11 +11,11 @@ import { type DataTable, Given } from "@cucumber/cucumber";
 import { readOfferedPlugins, writeMarketplace } from "../lib/path-marketplace.ts";
 import { runCommand } from "../lib/pi-commands.ts";
 
-import type { PluginWorld } from "../support/world.ts";
+import type { ScenarioWorld } from "../support/world.ts";
 
 Given(
   "the marketplace {string} offers these plugins:",
-  async function (this: PluginWorld, name: string, table: DataTable) {
+  async function (this: ScenarioWorld, name: string, table: DataTable) {
     const root = path.join(this.marketplacesRoot, name);
     this.onRelease(() => rm(root, { recursive: true, force: true }));
     await writeMarketplace(root, name, readOfferedPlugins(table));
@@ -24,7 +24,7 @@ Given(
 
 Given(
   "the marketplace {string} is added to the {word} scope",
-  async function (this: PluginWorld, name: string, scope: string) {
+  async function (this: ScenarioWorld, name: string, scope: string) {
     const source = path.join(this.marketplacesRoot, name);
     const payload = await runCommand(
       this.pi,

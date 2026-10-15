@@ -12,7 +12,7 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -45,7 +45,9 @@ export function currentRun(): PiRun {
 }
 
 BeforeAll(async (): Promise<void> => {
-  const root = await mkdtemp(path.join(tmpdir(), "pi-cm-features-"));
+  // Pi receives the realpath of each sandbox location, so the run uses the
+  // same spelling and `{home}` matches the paths Pi reports.
+  const root = await realpath(await mkdtemp(path.join(tmpdir(), "pi-cm-features-")));
   const sandbox = {
     home: path.join(root, "home"),
     agentDir: path.join(root, "agent"),
@@ -55,7 +57,9 @@ BeforeAll(async (): Promise<void> => {
   piRun = {
     root,
     sandbox,
-    marketplacesRoot: path.join(root, "marketplaces"),
+    // Local marketplaces live under HOME, so a command types them through
+    // `{home}` (D-04).
+    marketplacesRoot: path.join(sandbox.home, "marketplaces"),
     pi: await PiProcess.start(sandbox),
   };
 });

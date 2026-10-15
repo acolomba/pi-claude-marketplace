@@ -8,12 +8,15 @@
  * in reverse order when the scenario ends.
  */
 
+import assert from "node:assert/strict";
+
 import { After, setDefaultTimeout, setWorldConstructor, World } from "@cucumber/cucumber";
 
 import { currentRun } from "./pi-process.ts";
 
-import type { CascadePayload, OfferedSkill } from "../lib/pi-commands.ts";
+import type { NotificationPayload, OfferedSkill } from "../lib/pi-commands.ts";
 import type { PiProcess } from "../lib/pi-process.ts";
+import type { RunTokens } from "../lib/run-tokens.ts";
 
 // Starting Pi takes most of a second and a command a tenth of that; the
 // margin covers a loaded CI runner.
@@ -21,8 +24,11 @@ const STEP_TIMEOUT_MS = 30_000;
 
 setDefaultTimeout(STEP_TIMEOUT_MS);
 
-export class PluginWorld extends World {
-  result: CascadePayload | undefined = undefined;
+export class ScenarioWorld extends World {
+  results: readonly NotificationPayload[] | undefined = undefined;
+  // Cucumber builds the world before any `Before()` hook, so the
+  // `{scenario time}` window opens before any setup command runs (D-05).
+  readonly startedAt = Date.now();
   skills: readonly OfferedSkill[] | undefined = undefined;
   private readonly releases: Array<() => Promise<void> | void> = [];
 
@@ -36,13 +42,26 @@ export class PluginWorld extends World {
     return currentRun().marketplacesRoot;
   }
 
-  /** Returns the result of the last command, which a `When` step must have run. */
-  lastResult(): CascadePayload {
-    if (this.result === undefined) {
+  /** The values the run tokens of this scenario stand for. */
+  get tokens(): RunTokens {
+    return { home: currentRun().sandbox.home, scenarioStartedAt: this.startedAt };
+  }
+
+  /**
+   * Returns the one result of the last command, which a `When` step must have
+   * run. Fails when the command emitted more than one payload (DRV-01).
+   */
+  lastResult(): NotificationPayload {
+    if (this.results === undefined) {
       throw new Error("no command has run in this scenario");
     }
 
-    return this.result;
+    const [result, ...others] = this.results;
+    if (result === undefined || others.length > 0) {
+      assert.fail(`expected exactly one result, got ${JSON.stringify(this.results)}`);
+    }
+
+    return result;
   }
 
   /** Returns the skills of the last new session, which a `When` step must have started. */
@@ -76,8 +95,8 @@ export class PluginWorld extends World {
   }
 }
 
-setWorldConstructor(PluginWorld);
+setWorldConstructor(ScenarioWorld);
 
-After(async function (this: PluginWorld): Promise<void> {
+After(async function (this: ScenarioWorld): Promise<void> {
   await this.release();
 });
