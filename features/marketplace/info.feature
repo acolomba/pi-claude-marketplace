@@ -20,3 +20,13 @@ Feature: Marketplace info
       | source abs path         | {home}/marketplaces/tools |
       | severity                | info                      |
       | needs reload            | false                     |
+
+  Scenario: Info on a marketplace neither scope holds fails as not added
+    When the user runs "/claude:plugin marketplace info tools"
+    Then the result has these fields:
+      | kind         | marketplace-not-added               |
+      | severity     | error                               |
+      | needs reload | false                               |
+      | summary      | A marketplace operation has failed. |
+      | name         | tools                               |
+      | reasons      | marketplace not added               |
