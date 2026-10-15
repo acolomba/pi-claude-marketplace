@@ -4,7 +4,7 @@ Feature: Marketplace info
   The scenarios run the real extension in a headless Pi, read its JSON results,
   and use local marketplaces in place of published ones.
 
-  Scenario: Info on a directory marketplace shows its absolute path and autoupdate state
+  Scenario: Info on a directory marketplace shows its absolute path and the default autoupdate state
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins:
       | name | version |
