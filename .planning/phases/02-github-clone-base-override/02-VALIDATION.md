@@ -38,18 +38,24 @@ created: "2026-10-15"
 
 ## Per-Task Verification Map
 
-Filled by the planner from PLAN.md `<verify>` blocks. Requirement → command map (from 02-RESEARCH.md):
+Filled by the planner from PLAN.md `<verify>` blocks. Every command is repo-root-relative; each
+direct-coverage run is `npm run test:coverage:direct -- <source>` for the task's changed sources.
 
-| Requirement | Behavior | Test Type | Automated Command | File Exists | Status |
-|-------------|----------|-----------|-------------------|-------------|--------|
-| GHB-01 | prefix rewrite (base, path prefix, trailing slash); identity when unset or not a github URL | unit | `node --test tests/shared/github-base-url.test.ts` | ❌ W0 | ⬜ pending |
-| GHB-01 / D-02 | clone/fetch/resolveRemoteRef/listRemoteTags send the wire URL; clone records the canonical origin; fetch leaves config unchanged | unit | `node --test tests/platform/git.test.ts` | ✅ | ⬜ pending |
-| GHB-02 | auth host follows the override; stored-credential bundle (no Device Flow) under the override | unit | `node --test tests/orchestrators/auth-host.test.ts` | ✅ | ⬜ pending |
-| GHB-02 | add / update / update-flow bind the override host; path-only runs never read the variable | unit | owner tests under `tests/orchestrators/` | ✅ | ⬜ pending |
-| GHB-02 | new `github.com` literal fails lint | lint | `npm run lint` | config | ⬜ pending |
-| GHB-03 | each refused form throws the typed error naming the variable, slash-free message | unit | `node --test tests/shared/github-base-url.test.ts` | ❌ W0 | ⬜ pending |
-| GHB-04 | unset path byte-identical; existing suites unchanged | unit + full | `npm run check` | ✅ | ⬜ pending |
-| GHB-05 | README (+ localized copies) and CHANGELOG document the divergence | docs | `pre-commit run --files README*.md CHANGELOG.md` | docs | ⬜ pending |
+| Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
+|---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
+| 2-01-01 | 01 | 1 | GHB-01, GHB-03, GHB-04 | T-02-01, T-02-02, T-02-03, T-02-04 | value never echoed; non-https refused before any network call; exact prefix only; canonical origin restored | unit (tracer) | `node --test tests/shared/github-base-url.test.ts tests/shared/errors.test.ts tests/platform/git.test.ts` + direct coverage (seam, errors, git) | ❌ W0 (seam test created in this task) | ⬜ pending |
+| 2-01-02 | 01 | 1 | GHB-01, GHB-04 | T-02-04, T-02-05 | fetch passes the wire URL as an option and never writes config | unit | `node --test tests/platform/git.test.ts` + direct coverage (git) | ✅ | ⬜ pending |
+| 2-02-01 | 02 | 2 | GHB-02, GHB-04 | T-02-06, T-02-07, T-02-08 | stored credential bound to the override host; no Device Flow under the override | unit | `node --test tests/shared/github-base-url.test.ts tests/orchestrators/auth-host.test.ts tests/orchestrators/marketplace/add.test.ts tests/orchestrators/marketplace/update.test.ts tests/orchestrators/plugin/update-flow.test.ts` + direct coverage (auth-host, seam) | ✅ | ⬜ pending |
+| 2-02-02 | 02 | 2 | GHB-02, GHB-04 | T-02-06, T-02-08 | path and url sources never read the variable | unit | `node --test tests/orchestrators/marketplace/add.test.ts tests/orchestrators/marketplace/update.test.ts tests/orchestrators/plugin/update-flow.test.ts` | ✅ | ⬜ pending |
+| 2-03-01 | 03 | 3 | GHB-03 | T-02-09, T-02-11 | typed error rethrown, never a misleading row; json cause unredacted | unit | `node --test tests/shared/errors.test.ts tests/shared/notification-command-error.test.ts tests/orchestrators/marketplace/add.test.ts tests/orchestrators/marketplace/update.test.ts` + direct coverage (errors) | ✅ | ⬜ pending |
+| 2-03-02 | 03 | 3 | GHB-03 | T-02-09 | install and import fail as a whole | unit | `node --test tests/orchestrators/plugin/install-flow.test.ts tests/orchestrators/import/execute.test.ts` + direct coverage (install-flow, execute) | ✅ | ⬜ pending |
+| 2-03-03 | 03 | 3 | GHB-03 | T-02-09, T-02-10 | enable fails as a whole; reconcile still catches it (NFR-2) | unit | `node --test tests/orchestrators/plugin/enable-disable.test.ts tests/edge/handlers/plugin/enable-disable.test.ts tests/index.test.ts tests/orchestrators/reconcile/apply.test.ts` + direct coverage (enable-disable, edge handler) | ✅ | ⬜ pending |
+| 2-04-01 | 04 | 4 | GHB-03 | T-02-12, T-02-13 | reinstall and fetch fail as a whole | unit | `node --test tests/orchestrators/plugin/reinstall-flow.test.ts tests/orchestrators/plugin/fetch.test.ts` + direct coverage (fetch, reinstall-flow) | ✅ | ⬜ pending |
+| 2-04-02 | 04 | 4 | GHB-03, GHB-04 | T-02-12, T-02-14 | info --fetch fails as a whole; bare info never reads the variable | unit | `node --test tests/orchestrators/plugin/info.test.ts` + direct coverage (info) | ✅ | ⬜ pending |
+| 2-04-03 | 04 | 4 | GHB-03 | T-02-12, T-02-13 | plugin update fails as a whole in sync, direct, and cascade paths | unit | `node --test tests/orchestrators/plugin/update-preflight.test.ts tests/orchestrators/plugin/update-flow.test.ts tests/orchestrators/marketplace/update.test.ts` + direct coverage (update-flow, update-preflight) | ✅ | ⬜ pending |
+| 2-05-01 | 05 | 5 | GHB-02, GHB-04 | T-02-15 | a new github.com literal outside the seam fails lint | lint + unit | `npm run lint` (empty cache); `node --test tests/domain/clone-key.test.ts tests/domain/source.test.ts tests/shared/github-base-url.test.ts` + direct coverage (clone-key) | ✅ | ⬜ pending |
+| 2-05-02 | 05 | 5 | GHB-05 | T-02-16 | credential example uses placeholders only | docs lint | `SKIP=npm-check pre-commit run --files README.md README.es.md CHANGELOG.md` | ✅ | ⬜ pending |
+| 2-05-03 | 05 | 5 | GHB-01..GHB-05 | — | N/A | phase gate | `npm run check` | ✅ | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -57,7 +63,8 @@ Filled by the planner from PLAN.md `<verify>` blocks. Requirement → command ma
 
 ## Wave 0 Requirements
 
-- [ ] `tests/shared/github-base-url.test.ts` — paired test for the new seam (100% direct coverage)
+- [ ] `tests/shared/github-base-url.test.ts` — paired test for the new seam (100% direct coverage); created by task 2-01-01 together with the seam, because the commit hook requires 100% direct coverage for every staged pair
+- [ ] `tests/shared/github-base-url-environment.ts` — `setGitHubBaseUrl(t, value)`, the one way every later case sets or clears the variable (task 2-01-01)
 
 ---
 
@@ -65,7 +72,7 @@ Filled by the planner from PLAN.md `<verify>` blocks. Requirement → command ma
 
 | Behavior | Requirement | Why Manual | Test Instructions |
 |----------|-------------|------------|-------------------|
-| The literal gate fails a planted `github.com` literal | GHB-02 | CONVENTIONS forbids committed negative controls | Plant once, run `npm run lint`, confirm failure, revert, record in SUMMARY |
+| The literal gate fails a planted `github.com` literal | GHB-02 | CONVENTIONS forbids committed negative controls | Task 2-05-01 step 7: plant in a non-exempt file, plant a new line in `domain/source.ts`, and plant a comment; run `npx eslint <file>` each time; the first two must report `local/no-github-literal`, the comment must not; revert and record in 02-05-SUMMARY.md |
 
 ---
 
