@@ -30,9 +30,10 @@ async function breakManifest(
   await invalidateManifest(name, world.requirePublished(name), problem);
 }
 
-// Two literal texts rather than one with a parameter: a misspelled problem in
-// a row the default profile excludes is then an undefined step, which the
-// feature gate rejects (ADD-07).
+// One literal text per row variant rather than one text with a parameter: a
+// misspelled variant is then an undefined step, which the feature gate rejects
+// even in a row the default profile excludes
+// (`.agents/skills/cucumber/rules/steps.md`).
 Given(
   "the manifest of the marketplace {string} to add is not valid json",
   async function (this: ScenarioWorld, name: string) {
@@ -60,6 +61,8 @@ Given(
   },
 );
 
+// One literal text per directory state, for the reason given above the
+// manifest problems.
 Given(
   "the directory {string} to add does not exist",
   async function (this: ScenarioWorld, directory: string) {
