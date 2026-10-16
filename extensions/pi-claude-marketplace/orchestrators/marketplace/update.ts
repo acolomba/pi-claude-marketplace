@@ -121,7 +121,7 @@ import {
   withLockedStateTransaction,
   type LockedStateTransactionDeps,
 } from "../../transaction/with-state-guard.ts";
-import { DEFAULT_CREDENTIAL_OPS, buildAuthForHost, hostFromCloneUrl } from "../auth-host.ts";
+import { DEFAULT_CREDENTIAL_OPS, buildGitHubAuth } from "../auth-host.ts";
 // WR-12 / WR-03: the `(updated)` row composer, imported from the LEAF module
 // that holds it rather than from the plugin-update ledger. The ledger stays
 // behind the injected `pluginUpdate` seam -- and now stays out of this module's
@@ -387,20 +387,17 @@ async function refreshRecord(
     const preKey = await manifestContentKey(record);
     if (source.kind === "github") {
       const cloneDir = await locations.sourceCloneDir(name);
-      // AUTH-02 / D-79-05: buildAuthForHost binds the GitHub provider's
-      // Device Flow as the onAuthRequired closure for this fetch.
+      // AUTH-02 / D-79-05: buildGitHubAuth binds github.com with the GitHub
+      // provider's Device Flow as the onAuthRequired closure for this fetch,
+      // or the override host with a stored credential and no Device Flow when
+      // PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL is set (GHB-02).
       // platform/git.ts::buildAuthCallbacks first consults
       // credentialOps.fill(host); on a hit (the post-add common case) the
       // stored token is returned and Device Flow does NOT trigger -- this is
       // the AUTH-02 silent-reuse contract. AUTH-09: only the user code and
       // the verification URI cross the flow's onDeviceCode callback.
       const { ctx, credentialOps, deviceFlowHttp } = args;
-      const host = hostFromCloneUrl(
-        `https://github.com/${source.owner}/${source.repo}.git`,
-        "github",
-      );
-      const auth = buildAuthForHost({
-        host,
+      const auth = buildGitHubAuth({
         credentialOps,
         ctx,
         run: args.run,

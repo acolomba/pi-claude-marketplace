@@ -15,10 +15,20 @@ import { InvalidGitHubBaseUrlError } from "./errors.ts";
 
 const GITHUB_BASE_URL_VARIABLE = "PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL";
 
-const GITHUB_ORIGIN = "https://github.com";
+/**
+ * The host of every GitHub source while the variable is unset. The github.com
+ * host literal lives in this module only, so the D-06 literal rule has one
+ * exempt module.
+ */
+export const GITHUB_HOST = "github.com";
 
-/** The base with every trailing slash removed, or undefined when the variable is unset or empty. */
-function readGitHubBase(): string | undefined {
+const GITHUB_ORIGIN = `https://${GITHUB_HOST}`;
+
+/**
+ * The base with every trailing slash removed, and its WHATWG `host` (with a
+ * non-default port), or undefined when the variable is unset or empty.
+ */
+function readGitHubBase(): { url: string; host: string } | undefined {
   const value = process.env[GITHUB_BASE_URL_VARIABLE];
   if (value === undefined || value === "") {
     return undefined;
@@ -52,7 +62,7 @@ function readGitHubBase(): string | undefined {
     pathname = pathname.slice(0, -1);
   }
 
-  return `${base.origin}${pathname}`;
+  return { url: `${base.origin}${pathname}`, host: base.host };
 }
 
 /**
@@ -72,5 +82,16 @@ export function gitHubWireUrl(url: string): string {
   }
 
   const base = readGitHubBase();
-  return base === undefined ? url : `${base}${url.slice(GITHUB_ORIGIN.length)}`;
+  return base === undefined ? url : `${base.url}${url.slice(GITHUB_ORIGIN.length)}`;
+}
+
+/**
+ * GHB-02: returns the base's `host[:port]`, the host a GitHub credential is
+ * bound to while the variable is set, or undefined when it is unset or empty.
+ * WHATWG drops a default port and keeps IPv6 brackets, which is the form
+ * `onAuth` compares. Like `gitHubWireUrl`, it reads the variable on every call
+ * and throws `InvalidGitHubBaseUrlError` for an invalid value.
+ */
+export function gitHubOverrideHost(): string | undefined {
+  return readGitHubBase()?.host;
 }

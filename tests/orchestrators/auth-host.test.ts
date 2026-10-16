@@ -8,18 +8,23 @@ import {
   NO_STORED_CREDENTIAL_CAUSE,
   buildAuthForHost,
   buildCloneAuth,
+  buildGitHubAuth,
   buildStoredCredentialAuth,
   hostFromCloneUrl,
 } from "../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
 import { buildAuthCallbacks } from "../../extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts";
 import { createCredentialOps } from "../../extensions/pi-claude-marketplace/platform/git-credential.ts";
-import { DeviceFlowUnavailableError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
+import {
+  DeviceFlowUnavailableError,
+  InvalidGitHubBaseUrlError,
+} from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { openNotificationRun } from "../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import { createDeviceFlowFake } from "../domain/device-flow-fake.ts";
 import { createJsonCapture } from "../edge/json-capture.ts";
 import { createCredentialOpsFake } from "../platform/credential-ops-fake.ts";
 import { captureDebugLog } from "../platform/debug-log-capture.ts";
 import { createGitOpsFake } from "../platform/git-ops-fake.ts";
+import { setGitHubBaseUrl } from "../shared/github-base-url-environment.ts";
 import { runWithNothingLoaded } from "../shared/notification-run-seeds.ts";
 
 import type {
@@ -103,6 +108,39 @@ describe("hostFromCloneUrl", () => {
 
     // act & assert
     assert.throws(() => hostFromCloneUrl(cloneUrl, "url"), TypeError);
+  });
+
+  test("GHB-02: binds a GitHub source to the override host", (t) => {
+    // arrange
+    setGitHubBaseUrl(t, "https://mirror.example:8443/git");
+
+    // act
+    const host = hostFromCloneUrl("https://github.com/acme/tools.git", "github");
+
+    // assert
+    assert.strictEqual(host, "mirror.example:8443");
+  });
+
+  test("D-09: binds a github.com git-subdir url to the override host", (t) => {
+    // arrange
+    setGitHubBaseUrl(t, "https://mirror.example:8443/git");
+
+    // act
+    const host = hostFromCloneUrl("https://github.com/acme/tools.git#plugin", "git-subdir");
+
+    // assert
+    assert.strictEqual(host, "mirror.example:8443");
+  });
+
+  test("a url source host ignores an invalid override", (t) => {
+    // arrange
+    setGitHubBaseUrl(t, "http://mirror.example");
+
+    // act
+    const host = hostFromCloneUrl("https://gitlab.example.com/acme/tools", "url");
+
+    // assert
+    assert.strictEqual(host, "gitlab.example.com");
   });
 });
 
@@ -1282,6 +1320,116 @@ describe("buildStoredCredentialAuth", () => {
   });
 });
 
+describe("buildGitHubAuth", () => {
+  test("GHB-02: returns a stored-credential bundle for the override host", (t) => {
+    // arrange
+    setGitHubBaseUrl(t, "https://mirror.example:8443/git");
+    const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
+    const deviceFlowHttp = mock<DeviceFlowHttp>({ exactParams: true, name: "device HTTP" });
+    const credentials = createCredentialOpsFake({ boundary: "memory" });
+    const authMemo = new Map<string, AuthAttemptResult>();
+
+    // act
+    const auth = buildGitHubAuth({
+      credentialOps: credentials.credentialOps,
+      ctx,
+      run: runWithNothingLoaded(),
+      deviceFlowHttp,
+      authMemo,
+    });
+
+    // assert
+    assert.deepStrictEqual(auth, {
+      kind: "stored-credential",
+      credentialOps: credentials.credentialOps,
+      host: "mirror.example:8443",
+    });
+    assert.deepStrictEqual(authMemo, new Map());
+    assert.deepStrictEqual(credentials.calls, { fill: [], approve: [], reject: [] });
+    verify(deviceFlowHttp);
+    verify(ctx);
+  });
+
+  for (const { base, host } of [
+    { base: "https://github.com/mirror", host: "github.com" },
+    { base: "https://gitlab.com/mirror", host: "gitlab.com" },
+  ]) {
+    test(`D-04: starts no Device Flow for a ${base} base`, (t) => {
+      // arrange
+      setGitHubBaseUrl(t, base);
+      const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
+      const credentials = createCredentialOpsFake({ boundary: "memory" });
+
+      // act
+      const auth = buildGitHubAuth({
+        credentialOps: credentials.credentialOps,
+        ctx,
+        run: runWithNothingLoaded(),
+      });
+
+      // assert
+      assert.deepStrictEqual(auth, {
+        kind: "stored-credential",
+        credentialOps: credentials.credentialOps,
+        host,
+      });
+      verify(ctx);
+    });
+  }
+
+  test("returns the github.com device-flow bundle when unset", (t) => {
+    // arrange
+    setGitHubBaseUrl(t, undefined);
+    const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
+    const credentials = createCredentialOpsFake({ boundary: "memory" });
+
+    // act
+    const auth = expectDeviceFlow(
+      buildGitHubAuth({
+        credentialOps: credentials.credentialOps,
+        ctx,
+        run: runWithNothingLoaded(),
+      }),
+    );
+
+    // assert
+    assert.deepStrictEqual(auth, {
+      credentialOps: credentials.credentialOps,
+      host: "github.com",
+      kind: "device-flow",
+      onAuthRequired: auth.onAuthRequired,
+    });
+    assert.deepStrictEqual(credentials.calls, { fill: [], approve: [], reject: [] });
+    verify(ctx);
+  });
+
+  test("GHB-03: throws the typed error for an invalid override", (t) => {
+    // arrange
+    setGitHubBaseUrl(t, "http://mirror.example");
+    const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
+    const credentials = createCredentialOpsFake({ boundary: "memory" });
+
+    // act & assert
+    assert.throws(
+      () =>
+        buildGitHubAuth({
+          credentialOps: credentials.credentialOps,
+          ctx,
+          run: runWithNothingLoaded(),
+        }),
+      (error: unknown) => {
+        assert.ok(error instanceof InvalidGitHubBaseUrlError);
+        assert.deepStrictEqual(
+          { variable: error.variable, problem: error.problem },
+          { variable: "PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL", problem: "scheme" },
+        );
+        return true;
+      },
+    );
+    verify(ctx);
+  });
+});
+
 describe("buildCloneAuth", () => {
   test("forwards the canonical GitHub host and both optional collaborators", async () => {
     // arrange
@@ -1460,6 +1608,41 @@ describe("buildCloneAuth", () => {
     assert.deepStrictEqual(credentials.calls, { fill: [], approve: [], reject: [] });
     verify(ctx);
   });
+
+  for (const { clone, kind, cloneUrl } of [
+    { clone: "GHB-02: a GitHub", kind: "github", cloneUrl: "https://github.com/acme/tools.git" },
+    {
+      clone: "D-09: a github.com git-subdir",
+      kind: "git-subdir",
+      cloneUrl: "https://github.com/acme/tools.git#plugin",
+    },
+  ] as const) {
+    test(`${clone} clone under the override gets the override-host stored credential`, (t) => {
+      // arrange
+      setGitHubBaseUrl(t, "https://mirror.example:8443/git");
+      const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
+      const deviceFlowHttp = mock<DeviceFlowHttp>({ exactParams: true, name: "device HTTP" });
+      const credentials = createCredentialOpsFake({ boundary: "memory" });
+
+      // act
+      const auth = buildCloneAuth(cloneUrl, kind, {
+        ctx,
+        run: runWithNothingLoaded(),
+        credentialOps: credentials.credentialOps,
+        deviceFlowHttp,
+        authMemo: new Map(),
+      });
+
+      // assert
+      assert.deepStrictEqual(auth, {
+        kind: "stored-credential",
+        credentialOps: credentials.credentialOps,
+        host: "mirror.example:8443",
+      });
+      verify(deviceFlowHttp);
+      verify(ctx);
+    });
+  }
 
   test("binds an unregistered port-bearing git-subdir host to its own bundle", () => {
     // arrange

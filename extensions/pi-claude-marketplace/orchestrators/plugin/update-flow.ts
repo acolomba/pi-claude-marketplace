@@ -76,7 +76,7 @@ import { type ContentReason } from "../../shared/notification-types.ts";
 import { type PluginFailedMessage } from "../../shared/notification-types.ts";
 import { notifyUpdateNoOpWithContext, notifyWithContext } from "../../shared/notify-context.ts";
 import { ownValue } from "../../shared/own-key.ts";
-import { DEFAULT_CREDENTIAL_OPS, GITHUB_HOST, buildAuthForHost } from "../auth-host.ts";
+import { DEFAULT_CREDENTIAL_OPS, buildGitHubAuth } from "../auth-host.ts";
 import { DEFAULT_GIT_OPS, refreshGitHubClone, refreshUrlClone } from "../marketplace/shared.ts";
 import { marketplaceInOtherScope } from "../marketplace/shared.ts";
 
@@ -135,9 +135,11 @@ type UpdateCascadeComposer = (
  * does. Throws on git-side failures.
  *
  * AUTH-02: the fetch carries the same host-keyed auth bundle as `marketplace
- * update` (github.com for GitHub sources, the clone URL's host for url
- * sources), plus the run's `authMemo`, so a private marketplace reaches the
- * credential helper and, on a miss, the Device Flow. `updatePluginsWith`
+ * update` (github.com or the GitHub override host for GitHub sources, the
+ * clone URL's host for url sources), plus the run's `authMemo`, so a private
+ * marketplace reaches the credential helper and, on a miss, the Device Flow.
+ * The GitHub bundle is built inside the github arm, so a path-only run never
+ * reads PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL (GHB-02). `updatePluginsWith`
  * allocates the `authMemo` when the caller supplies none and passes it here
  * (D-79-02), so that flow runs at most once per host across the marketplace
  * syncs and the plugin clones.
@@ -147,14 +149,6 @@ function makeSyncCloneOnce(
 ): (scope: Scope, mpName: string, locations: ScopedLocations) => Promise<void> {
   const gitOps = opts.gitOps ?? DEFAULT_GIT_OPS;
   const credentialOps = opts.credentialOps ?? DEFAULT_CREDENTIAL_OPS;
-  const auth = buildAuthForHost({
-    host: GITHUB_HOST,
-    credentialOps,
-    ctx: opts.ctx,
-    run: opts.run,
-    ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
-    ...(opts.authMemo !== undefined && { authMemo: opts.authMemo }),
-  });
   const synced = new Set<string>();
   return async (scope, mpName, locations) => {
     const key = `${scope}/${mpName}`;
@@ -173,6 +167,13 @@ function makeSyncCloneOnce(
     const source = mp.source as ParsedSource;
     if (source.kind === "github") {
       const cloneDir = await locations.sourceCloneDir(mpName);
+      const auth = buildGitHubAuth({
+        credentialOps,
+        ctx: opts.ctx,
+        run: opts.run,
+        ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
+        ...(opts.authMemo !== undefined && { authMemo: opts.authMemo }),
+      });
       await refreshGitHubClone(cloneDir, source.ref, gitOps, undefined, auth);
     } else if (source.kind === "url") {
       await refreshUrlClone({

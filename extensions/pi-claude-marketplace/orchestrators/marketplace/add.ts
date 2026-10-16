@@ -92,8 +92,8 @@ import { assertPathInside } from "../../shared/path-safety.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 import {
   DEFAULT_CREDENTIAL_OPS,
-  GITHUB_HOST,
   buildAuthForHost,
+  buildGitHubAuth,
   hostFromCloneUrl,
 } from "../auth-host.ts";
 import { seedSameRepoPluginMirrors } from "../plugin/clone-cache.ts";
@@ -968,12 +968,9 @@ async function addGithubInGuard(args: {
   // AUTH-09: the closure passes ONLY user_code + verification_uri, through
   // initiateDeviceFlow's onDeviceCode callback -- the access token is acquired
   // LATER in the poll loop and is never passed back to a notify or Error.
-  // D-77-06: this arm's source is statically `github`, whose host is the literal
-  // `GITHUB_HOST` -- `hostFromCloneUrl` returns it without reading a url, so
-  // there is nothing to derive here.
-  const host = GITHUB_HOST;
-  const auth = buildAuthForHost({
-    host,
+  // GHB-02: buildGitHubAuth binds github.com, or the override host with a
+  // stored credential when PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL is set.
+  const auth = buildGitHubAuth({
     credentialOps,
     ctx,
     run: args.run,
