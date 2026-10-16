@@ -681,6 +681,15 @@ validated and archived in [milestones/json-output-REQUIREMENTS.md](milestones/js
 
 ### Validated
 
+- ✓ `marketplace add` scenarios: every add behavior, with multi-kind behaviors as
+  Outlines whose dir and file rows pass and whose `@url`/`@github` rows wait for the
+  stand-ins: the chosen and default scope, both scopes, duplicate name (keyed on the
+  manifest name, record left intact), source missing named as typed, invalid manifest
+  (malformed and schema-invalid), and the `--local` round trip in a new
+  `remove.feature`. Discussion found a `--local` declaration leak into
+  `claude-plugins.json` on the first-run migration, now FIX-02 in inserted Phase 3.1
+  — marketplace-features Phase 3, 2026-10-16 (ADD-01..ADD-07, ADD-13, ADD-14).
+
 - ✓ The cucumber suite's shared foundation: a driver that returns and schema-validates every
   payload a command emits, `{home}` and `{scenario time}` run tokens compared in both directions,
   kind-neutral publishing, adding, result and read-only config steps, the `@url`/`@github`
@@ -1429,4 +1438,4 @@ _Last updated: 2026-10-11 after the json-output milestone: 9 phases and
 under `.planning/milestones/json-output-*`. Merge of `features/json` and the
 next milestone remain._
 
-_Last updated: 2026-10-15 after marketplace-features Phase 1 (Suite Foundation)._
+_Last updated: 2026-10-16 after marketplace-features Phase 3 (Marketplace Add)._
