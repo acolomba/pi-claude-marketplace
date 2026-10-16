@@ -2,20 +2,20 @@
 gsd_state_version: "1.0"
 milestone: marketplace-features
 milestone_name: Marketplace Behavioral Tests
-current_phase: 2
-current_phase_name: GitHub Clone-Base Override
-status: verifying
-stopped_at: Completed 02-05-PLAN.md
-last_updated: "2026-10-16T01:46:20.442Z"
-last_activity: 2026-10-15
-last_activity_desc: Phase 2 execution started
-state_head: 3ff8a299cfe375f7687b1ef6826d20307532f593
+current_phase: 3
+current_phase_name: Marketplace Add
+status: planning
+stopped_at: Phase 2 complete, ready to plan Phase 3
+last_updated: "2026-10-16T10:58:03.828Z"
+last_activity: 2026-10-16
+last_activity_desc: Phase 2 complete, transitioned to Phase 3
+state_head: dda3917963e8ee12035dab91edd825ff67c14b7b
 progress:
   total_phases: 10
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 10
   completed_plans: 10
-  percent: 10
+  percent: 20
 ---
 
 # Project State
@@ -31,12 +31,12 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: 2 (GitHub Clone-Base Override) — EXECUTING
-Plan: 5 of 5
-Status: Phase complete — ready for verification
-Last activity: 2026-10-15 — Phase 2 execution started
+Phase: 3 — Marketplace Add
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-10-16 — Phase 2 complete, transitioned to Phase 3
 
-Progress: [█░░░░░░░░░] 10%
+Progress: [██░░░░░░░░] 20%
 
 ### mcp-4 closeout
 
@@ -182,7 +182,7 @@ hit the same wall; convert it rather than re-disclosing it.
 ## Session Continuity
 
 **Last session:** 2026-10-16T04:00:00Z
-**Stopped at:** Session resumed; CR-01 ruled option 1 (cause child row on add/import failures under the override), proceeding to review-fix iteration 2
+**Stopped at:** Phase 2 complete (verified, npm run check green at e542527d), ready to plan Phase 3
 **Resume file:** None
 
 **Main merge (2026-10-11, quick task 261011-bsm):** `origin/main` at

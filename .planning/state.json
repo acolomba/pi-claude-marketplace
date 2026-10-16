@@ -11,7 +11,7 @@
     {
       "number": "2",
       "name": "GitHub Clone-Base Override",
-      "status": "in_progress"
+      "status": "complete"
     },
     {
       "number": "3",
@@ -57,7 +57,7 @@
   "next": {
     "command": "/gsd-progress --next",
     "label": "Advance to the next step (verify)",
-    "reason": "Phase 2 of 10 · 10% · ready to verify"
+    "reason": "Phase 3 of 10 · 20% · ready to verify"
   },
-  "updated_at": "2026-10-16T01:46:20.548Z"
+  "updated_at": "2026-10-16T10:58:03.897Z"
 }
