@@ -196,14 +196,14 @@ Plans:
 3. A scope whose records hold marketplaces added without `--local` still gets `claude-plugins.json` written from those records on its first load (MIG-01 unchanged for them).
 4. A command naming a plugin (install, enable, disable, reinstall, update) is refused when it would write that plugin into `claude-plugins.json` while its marketplace is declared only in `claude-plugins.local.json`; the failed row suggests `--local`, and nothing is written. Forms naming no plugin write no shared declaration under a local-only marketplace (FIX-03).
 
-**Plans:** 1/5 plans executed
+**Plans:** 2/5 plans executed
 
 Plans:
 **Wave 1**
 - [x] 03.1-01-PLAN.md — Tracer: the first-run migration leaves out what the local file declares, test-first through a real Pi (SC1); remove --local stays removed (SC2); the pending mirror and the plugin-path proofs (FIX-02)
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 03.1-02-PLAN.md — The `marketplace declared locally` reason, the shared refusal rule, and the refused install, with a real-Pi scenario (FIX-03)
+- [x] 03.1-02-PLAN.md — The `marketplace declared locally` reason, the shared refusal rule, and the refused install, with a real-Pi scenario (FIX-03)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 03.1-03-PLAN.md — Refused enable and disable; the update and reinstall write-back made hermetic per layer, so a --local plugin never reaches claude-plugins.json (FIX-03, D-08)
@@ -348,7 +348,7 @@ Plans:
 | 1. Suite Foundation | 5/5 | Complete    | 2026-10-15 |
 | 2. GitHub Clone-Base Override | 5/5 | Complete    | 2026-10-16 |
 | 3. Marketplace Add | 3/3 | Complete    | 2026-10-16 |
-| 3.1. Local Declaration Leak Fix | 1/5 | In Progress | - |
+| 3.1. Local Declaration Leak Fix | 2/5 | In Progress | - |
 | 3.2. Marketplace Layer Partition | 0/TBD | Not started | - |
 | 3.3. Plugin Layer Partition | 0/TBD | Not started | - |
 | 4. Marketplace Remove and List | 0/TBD | Not started | - |

@@ -5,16 +5,16 @@ milestone_name: Marketplace Behavioral Tests
 current_phase: "03.1"
 current_phase_name: Local Declaration Leak Fix
 status: executing
-stopped_at: Completed 03.1-01-PLAN.md
-last_updated: "2026-10-16T16:22:18.432Z"
+stopped_at: Completed 03.1-02-PLAN.md
+last_updated: "2026-10-16T16:45:37.796Z"
 last_activity: 2026-10-16
-last_activity_desc: Completed 03.1-01 (FIX-02 first-run migration leak fix)
-state_head: 0a5c2bbf557e0750dfe57fced2f0da465303a6ea
+last_activity_desc: Completed 03.1-02 (FIX-03 install refusal under a local-only marketplace)
+state_head: 4ac6b0af4f8cee85d8026c1df0677c13ff955f8a
 progress:
   total_phases: 13
   completed_phases: 3
   total_plans: 18
-  completed_plans: 14
+  completed_plans: 15
   percent: 23
 ---
 
@@ -32,9 +32,9 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 03.1 (Local Declaration Leak Fix) — EXECUTING
-Plan: 2 of 5
+Plan: 3 of 5
 Status: Ready to execute
-Last activity: 2026-10-16 — Completed 03.1-01 (FIX-02 first-run migration leak fix)
+Last activity: 2026-10-16 — Completed 03.1-02 (FIX-03 install refusal under a local-only marketplace)
 
 Progress: [██░░░░░░░░] 23%
 
@@ -181,8 +181,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-16T16:22:17.596Z
-**Stopped at:** Completed 03.1-01-PLAN.md
+**Last session:** 2026-10-16T16:45:12.450Z
+**Stopped at:** Completed 03.1-02-PLAN.md
 **Resume file:** None
 
 **Main merge (2026-10-11, quick task 261011-bsm):** `origin/main` at
@@ -311,6 +311,7 @@ archived milestone artifacts.
 | Phase 03 P02 | 5 min | 2 tasks | 3 files |
 | Phase 03 P03 | 7 min | 2 tasks | 3 files |
 | Phase 03.1 P01 | 21min | 3 tasks | 12 files |
+| Phase 03.1 P02 | 20min | 3 tasks | 13 files |
 
 ## Decisions
 
@@ -404,6 +405,8 @@ archived milestone artifacts.
 - [Phase 03]: [marketplace-features] Review WARNING recorded: the published-marketplace lookup is duplicated in add.steps.ts and publishing.steps.ts; move it to features/lib when publishing.steps.ts next changes
 - [Phase 03.1]: The first-run migration leaves out what claude-plugins.local.json declares and declines with local-invalid on an unreadable local file (FIX-02, D-01, D-02)
 - [Phase 03.1]: A reload after a local install writes no base file, because the install adopts the marketplace into the local file (CR-02); D-04's plugin-key rule is proven by unit and convergence cases
+- [Phase 03.1]: FIX-03: the refusal token is the closed-set reason 'marketplace declared locally' in the shared FailureReason group; the --local remedy rides the cause line (D-07)
+- [Phase 03.1]: FIX-03: localOnlyMarketplaceRefusal (plugin/shared.ts) is the single rule; install refuses inside the lock right after the write-target selection, before the D-04-07 promotion and the cascade, standalone only (D-06)
 
 ### mcp-4 decisions
 
