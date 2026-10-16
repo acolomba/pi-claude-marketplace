@@ -885,9 +885,12 @@ async function installOnePlannedPlugin(
     rethrowInvalidGitHubBaseUrl(err);
     // The orchestrated install returns a typed outcome for every failure
     // except an invalid GitHub base override, which the call above rethrows so
-    // the whole import fails (GHB-03). Anything else is a defensive arm; it
-    // takes the same redacted head-plus-chain route as a returned failure so
-    // no path can leak through it either.
+    // the whole import fails (GHB-03). An install that fails on it after
+    // leaving a rollback partial or an MCP config rewrite (AFILE-04) returns
+    // its failed outcome instead, so the import continues past that plugin,
+    // and a later target that reads the base ends it. Anything else is a
+    // defensive arm; it takes the same redacted head-plus-chain route as a
+    // returned failure so no path can leak through it either.
     pushUnexpectedFailure(
       result,
       plugin,

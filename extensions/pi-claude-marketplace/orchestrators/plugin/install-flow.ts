@@ -1483,7 +1483,9 @@ type InstallTransactionOutcome =
  * exactly one notification per orchestration arm; orchestrated-mode emits
  * none and returns the typed outcome. GHB-03: the one exception is an
  * `InvalidGitHubBaseUrlError`, from the plugin or from a dependency, which it
- * rethrows in both modes so the whole command fails.
+ * rethrows in both modes so the whole command fails, unless the failure left a
+ * rollback partial or an MCP config rewrite (AFILE-04). Then it is this
+ * plugin's failed outcome, whose cause names the variable.
  *
  * Failure modes funnel through three paths inside the single catch
  * site:
@@ -2348,7 +2350,9 @@ function assertOrchestratedFailedOutcome(
  * the same contract `installPlugin` documents, so `apply.ts` reads its
  * outcome without a guard. GHB-03: the one exception is an
  * `InvalidGitHubBaseUrlError`, which it rethrows so the whole reconcile pass
- * fails.
+ * fails, unless the failure left a rollback partial or an MCP config rewrite
+ * (AFILE-04). Then it is this dependency's failed outcome, whose cause names
+ * the variable.
  */
 async function installMissingDependencyWithTransaction(
   transaction: InstallTransaction,

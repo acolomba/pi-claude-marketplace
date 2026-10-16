@@ -47,7 +47,10 @@
 //     and toggle loops need it as defense-in-depth even though their three
 //     entrypoints are documented to handle every throw internally and always
 //     answer with a typed outcome, except an InvalidGitHubBaseUrlError, which
-//     ends the pass (GHB-03) -- see the note above each loop.
+//     ends the pass (GHB-03). An install or enable that fails on it after
+//     leaving a rollback partial or an MCP config rewrite (AFILE-04) answers
+//     with its failed outcome instead; the pass continues, and a later target
+//     that reads the base ends it -- see the note above each loop.
 //   - AMIG-01 MCP MOVE per scope, after the read pass and before the apply
 //     pass, also when the config is invalid and never after a read pass that
 //     threw (`mcp-migration.ts`). It takes its own scope lock; a throw out of
@@ -580,7 +583,10 @@ function redactedDependencyCascadeError(error: DependencyCascadeError): Dependen
  * outcome without a guard of its own. The exception is an
  * `InvalidGitHubBaseUrlError`, which the catch rethrows: it ends the reconcile
  * pass, and the resources_discover handler reports it as reconcile-aborted,
- * so the throw never leaves the Pi event (NFR-2, GHB-03).
+ * so the throw never leaves the Pi event (NFR-2, GHB-03). An install that
+ * fails on it after leaving a rollback partial or an MCP config rewrite
+ * (AFILE-04) returns its failed outcome instead: the pass continues past that
+ * plugin, and a later target that reads the base ends it.
  */
 async function applyPluginInstalls(
   opts: ApplyReconcileOptions,
@@ -925,7 +931,10 @@ function installedRowDegradation(
  * exception is an enable that fails on an `InvalidGitHubBaseUrlError`, which
  * the mapping rethrows: it ends the reconcile pass, and the resources_discover
  * handler reports it as reconcile-aborted, so the throw never leaves the Pi
- * event (NFR-2, GHB-03).
+ * event (NFR-2, GHB-03). An enable that fails on it after leaving a rollback
+ * partial or an MCP config rewrite (AFILE-04) returns its failed outcome
+ * instead: the pass continues past that plugin, and a later target that reads
+ * the base ends it.
  */
 async function applyPluginToggles(
   opts: ApplyReconcileOptions,

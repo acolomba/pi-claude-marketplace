@@ -2157,7 +2157,9 @@ async function runFreshEnableCascadeWithRoot(args: {
  * single `notify()` call per IL-2 (standalone) OR a typed outcome per
  * RECON-03 (orchestrated). GHB-03: the one exception is an enable that fails
  * on an `InvalidGitHubBaseUrlError`, which it rethrows in both modes so the
- * whole command fails.
+ * whole command fails, unless the failure left a rollback partial or an MCP
+ * config rewrite (AFILE-04). Then it is this plugin's failed outcome, whose
+ * cause names the variable.
  *
  * Y3 (PR #51): overload pair so the orchestrated-mode return is narrowed to
  * `Promise<EnableDisablePluginOutcome>` (no `| undefined`) at the call site.

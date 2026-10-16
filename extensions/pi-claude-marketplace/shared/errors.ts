@@ -766,7 +766,7 @@ export function findManualRecoveryError(err: unknown): ManualRecoveryError | und
  * GHB-03: rethrow an `InvalidGitHubBaseUrlError` found anywhere in the cause
  * chain, so an invalid variable fails the whole command instead of becoming
  * one target's failed row. Every per-target catch on a GitHub network path
- * calls this first.
+ * calls this before it composes a row that would hide the variable.
  *
  * The walk finds the error under wrappers such as `MarketplaceUpdateError`
  * and the lock wrapper that `withScopeLock` adds when the release also fails.
