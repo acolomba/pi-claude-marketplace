@@ -41,6 +41,18 @@ Research detail per requirement is in `.planning/research/FEATURES.md`
 
 - [ ] **FIX-01**: `marketplace update` of a marketplace added from a `marketplace.json` outside `.claude-plugin/` re-reads the manifest the user added instead of failing as `source missing`, and `info` shows the right path (C-10)
 - [ ] **FIX-02**: A marketplace added with `--local` is never written into the scope's `claude-plugins.json`: after `add --local` and a reload, only `claude-plugins.local.json` declares it, and after `remove --local` and a reload it stays removed (the first-run migration leak found in Phase 3 discussion)
+- [ ] **FIX-03**: A command that would write a plugin declaration into a scope's `claude-plugins.json` is refused when that plugin's marketplace is declared only in the scope's `claude-plugins.local.json`; the failed row suggests `--local` (D-MF-02)
+
+### Config layers (D-MF-03)
+
+A scope has two layers: shared (`claude-plugins.json`) and local (`claude-plugins.local.json`). Mutations that name a marketplace or plugin are partitioned by layer: shared by default, local with `--local`.
+
+- [ ] **LAYER-01**: The same marketplace may be declared in both layers of a scope; adding it to one layer while the other declares it succeeds
+- [ ] **LAYER-02**: `marketplace remove`, `autoupdate`, and `noautoupdate` naming a marketplace change only the target layer and fail when that layer does not declare it
+- [ ] **LAYER-03**: Removing a marketplace from a layer uninstalls only the plugins that layer declares from it
+- [ ] **LAYER-04**: Plugin verbs naming a plugin (install, uninstall, enable, disable, update, reinstall) act only on the target layer and fail when it does not declare the plugin (install declares it); a verb naming no plugin covers every layer
+- [ ] **LAYER-05**: A plugin is declared in at most one layer of a scope; installing it into one layer while the other declares it fails
+- [ ] **LAYER-06**: On load, a shared plugin whose marketplace only the local layer declares is ignored, not installed and not an error
 
 ### marketplace add
 
@@ -174,6 +186,13 @@ Research detail per requirement is in `.planning/research/FEATURES.md`
 | GHB-05 | Phase 2 | Complete |
 | FIX-01 | Phase 6 | Pending |
 | FIX-02 | Phase 3.1 | Pending |
+| FIX-03 | Phase 3.1 | Pending |
+| LAYER-01 | Phase 3.2 | Pending |
+| LAYER-02 | Phase 3.2 | Pending |
+| LAYER-03 | Phase 3.2 | Pending |
+| LAYER-04 | Phase 3.3 | Pending |
+| LAYER-05 | Phase 3.3 | Pending |
+| LAYER-06 | Phase 3.3 | Pending |
 | ADD-01 | Phase 3 | Complete |
 | ADD-02 | Phase 3 | Complete |
 | ADD-03 | Phase 3 | Complete |
@@ -247,8 +266,8 @@ Research detail per requirement is in `.planning/research/FEATURES.md`
 | SRC-03 | Phase 10 | Pending |
 
 **Coverage:**
-- v1 requirements: 86 total
-- Mapped to phases: 86
+- v1 requirements: 93 total
+- Mapped to phases: 93
 - Unmapped: 0
 
 ---

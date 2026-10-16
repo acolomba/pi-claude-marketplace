@@ -58,6 +58,8 @@ path), **url** (https git URL on the loopback stand-in), and **gh**
 - [x] **Phase 2: GitHub Clone-Base Override** — `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL` sends every GitHub clone, fetch, origin match, and auth lookup to one configured base; unset, nothing changes (completed 2026-10-16)
 - [x] **Phase 3: Marketplace Add** — `marketplace add` scenarios, with dir, file, `@url`, and `@github` rows for every multi-kind add behavior (completed 2026-10-16)
 - [ ] **Phase 3.1: Local Declaration Leak Fix** (INSERTED) — A marketplace added with `--local` stays out of `claude-plugins.json` across a reload, written test-first
+- [ ] **Phase 3.2: Marketplace Layer Partition** (INSERTED) — The same marketplace may live in both layers, and named marketplace mutations change only their own layer
+- [ ] **Phase 3.3: Plugin Layer Partition** (INSERTED) — Named plugin mutations change only their own layer, a plugin lives in one layer, and shared plugins never depend on local-only marketplaces
 - [ ] **Phase 4: Marketplace Remove and List** — `remove`/`rm` with the plugin cascade, and `list`/`ls` across both scopes
 - [ ] **Phase 5: Marketplace Info** — `info` source details for every kind, scope fan-out, not-added forms, and a broken manifest
 - [ ] **Phase 6: Marketplace Update and C-10 Fix** — Single and bare `update`, with and without autoupdate, path-source failures, and the C-10 fix written test-first
@@ -74,8 +76,10 @@ W1  Phase 3  Phase 4  Phase 5  Phase 6  Phase 7  Phase 8  Phase 9   (each needs 
 W2  Phase 10 (needs Phases 1-9)
 ```
 
-Phase 3.1 was inserted after Phase 3 and needs it: its scenarios extend
-Phase 3's `--local` files.
+Phases 3.1, 3.2, and 3.3 were inserted after Phase 3 and run in that order:
+3.1 stops the `--local` leaks, then 3.2 and 3.3 partition marketplace and
+plugin mutations between a scope's shared and local layers (D-MF-03). Their
+rules are what the later verb phases pin.
 
 Phase 2 touches nothing under `features/` and can run from day one; only
 Phase 10 waits for it. The seven W1 phases share no file, so they can run as
@@ -184,12 +188,39 @@ Plans:
 
 **Goal:** A marketplace added with `--local` never reaches the scope's `claude-plugins.json`, even when the next load runs the first-run config migration, so `remove --local` stays removed after a reload.
 **Depends on:** Phase 3
-**Requirements:** FIX-02
+**Requirements:** FIX-02, FIX-03
 **Success Criteria** (what must be TRUE):
 
 1. In a scope with no `claude-plugins.json`, a marketplace added with `--local` is still not declared in `claude-plugins.json` after a new session, and `claude-plugins.local.json` still declares it. The scenario failed on the code before the fix.
 2. After `remove --local` and a new session, the marketplace stays removed: `marketplace list` omits it, and no config file declares it.
 3. A scope whose records hold marketplaces added without `--local` still gets `claude-plugins.json` written from those records on its first load (MIG-01 unchanged for them).
+4. Installing, enabling, disabling, reinstalling, or updating a plugin into `claude-plugins.json` is refused when its marketplace is declared only in `claude-plugins.local.json`; the failed row suggests `--local`, and nothing is written (FIX-03).
+
+**Plans:** TBD
+
+### Phase 3.2: Marketplace Layer Partition (INSERTED)
+
+**Goal:** Every marketplace mutation named on the command line is partitioned between a scope's shared layer (`claude-plugins.json`) and local layer (`claude-plugins.local.json`): the same marketplace may be declared in both layers, and a command without `--local` changes only shared entries while `--local` changes only local ones.
+**Depends on:** Phase 3.1
+**Requirements:** LAYER-01, LAYER-02, LAYER-03
+**Success Criteria** (what must be TRUE):
+
+1. `marketplace add <src> --local` of a marketplace the shared layer already declares succeeds and declares it in the local layer as well; the reverse also succeeds (LAYER-01).
+2. `marketplace remove`, `autoupdate`, and `noautoupdate` naming a marketplace act only on the target layer (shared by default, local with `--local`) and fail when that layer does not declare the marketplace, leaving the other layer untouched (LAYER-02).
+3. Removing a marketplace from a layer uninstalls only the plugins that layer declares from it; plugins the other layer declares from the same marketplace stay installed (LAYER-03).
+
+**Plans:** TBD
+
+### Phase 3.3: Plugin Layer Partition (INSERTED)
+
+**Goal:** Every plugin mutation named on the command line is partitioned between the shared and local layers, a plugin is installed from one layer only, and a shared plugin never depends on a local-only marketplace.
+**Depends on:** Phase 3.2
+**Requirements:** LAYER-04, LAYER-05, LAYER-06
+**Success Criteria** (what must be TRUE):
+
+1. `plugin install`, `uninstall`, `enable`, `disable`, `update`, and `reinstall` naming a plugin act only on the target layer (shared by default, local with `--local`) and fail when that layer does not declare the plugin (install excepted, which declares it); a command naming no plugin operates on every layer (LAYER-04).
+2. A plugin cannot be declared in both layers: installing it into one layer while the other layer declares it fails, because Pi loads one copy (LAYER-05).
+3. On load, a shared plugin whose marketplace only the local layer declares is ignored: it is not installed and does not fail the load (LAYER-06).
 
 **Plans:** TBD
 
@@ -302,6 +333,8 @@ Plans:
 | 2. GitHub Clone-Base Override | 5/5 | Complete    | 2026-10-16 |
 | 3. Marketplace Add | 3/3 | Complete    | 2026-10-16 |
 | 3.1. Local Declaration Leak Fix | 0/TBD | Not started | - |
+| 3.2. Marketplace Layer Partition | 0/TBD | Not started | - |
+| 3.3. Plugin Layer Partition | 0/TBD | Not started | - |
 | 4. Marketplace Remove and List | 0/TBD | Not started | - |
 | 5. Marketplace Info | 0/TBD | Not started | - |
 | 6. Marketplace Update and C-10 Fix | 0/TBD | Not started | - |

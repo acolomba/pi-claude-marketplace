@@ -6,16 +6,16 @@ current_phase: "03.1"
 current_phase_name: Local Declaration Leak Fix
 status: planning
 stopped_at: Phase 3 complete, ready to plan Phase 03.1
-last_updated: "2026-10-16T14:04:04.664Z"
+last_updated: "2026-10-16T15:10:08.149Z"
 last_activity: 2026-10-16
 last_activity_desc: Phase 3 complete, transitioned to Phase 03.1
-state_head: 9f8c75f6f1db5235a3c886869c04f35f36179f1e
+state_head: f1b842711654d21ad4e2b0344c2e7642363f5748
 progress:
-  total_phases: 11
+  total_phases: 13
   completed_phases: 3
   total_plans: 13
   completed_plans: 13
-  percent: 27
+  percent: 23
 ---
 
 # Project State
@@ -36,7 +36,7 @@ Plan: Not started
 Status: Ready to plan
 Last activity: 2026-10-16 — Phase 3 complete, transitioned to Phase 03.1
 
-Progress: [███░░░░░░░] 27%
+Progress: [██░░░░░░░░] 23%
 
 ### mcp-4 closeout
 
@@ -579,3 +579,5 @@ in the phase deferred items. The milestone remains open for audit and archival.
 - Phase 8 added: Address tech debt: ledger dispositions and advisory
 - Phase 9 added: Address tech debt: redact LLM tool error text
 - Phase 3.1 inserted after Phase 3: Local Declaration Leak Fix: a --local marketplace leaks into claude-plugins.json on the first-run migration (FIX-02), found in Phase 3 discussion
+- Phase 3.2 inserted after Phase 3.1: Marketplace Layer Partition (LAYER-01..03, D-MF-03)
+- Phase 3.3 inserted after Phase 3.2: Plugin Layer Partition (LAYER-04..06, D-MF-03)
