@@ -2488,6 +2488,7 @@ async function runSetEnabledOutcome(
     };
   }
 
+  rethrowInvalidGitHubBaseUrlUnlessLeftBehind(outcome, sink.mcpConfigNotices);
   if (!orchestrated) {
     dispatchOutcome({
       ctx,
@@ -2720,6 +2721,26 @@ function freshOutcomeToTypedResult(
 }
 
 /**
+ * GHB-03 / D-08: an enable that failed on an invalid GitHub base override
+ * fails the whole command, unless it left something behind that only its
+ * failed row reports: a rollback partial, or an MCP config rewrite
+ * (AFILE-04). Then the row is the report, and its cause line still names the
+ * variable.
+ */
+function rethrowInvalidGitHubBaseUrlUnlessLeftBehind(
+  outcome: SetEnabledOutcome,
+  mcpConfigNotices: readonly McpConfigNotice[],
+): void {
+  if (
+    outcome.kind === "enable-failed" &&
+    (outcome.rollbackPartials ?? []).length === 0 &&
+    mcpConfigNotices.length === 0
+  ) {
+    rethrowInvalidGitHubBaseUrl(outcome.cause);
+  }
+}
+
+/**
  * RECON-03: map the internal `SetEnabledOutcome` sentinel to the typed
  * `EnableDisablePluginOutcome` for orchestrated callers. Mirrors the
  * standalone `composeOutcomeRow` taxonomy.
@@ -2753,7 +2774,6 @@ function outcomeToTypedResult(args: {
     }
 
     case "enable-failed": {
-      rethrowInvalidGitHubBaseUrl(outcome.cause);
       // I4: orchestrated callers cannot consume the structured
       // `rollbackPartial[]` rows (they aggregate into the reconcile cascade
       // which already composes its own per-plugin rows), but the
@@ -2973,7 +2993,6 @@ function enableFailedRow(
   plugin: string,
   outcome: Extract<SetEnabledOutcome, { kind: "enable-failed" }>,
 ): PluginFailedMessage {
-  rethrowInvalidGitHubBaseUrl(outcome.cause);
   const partials = outcome.rollbackPartials ?? [];
   const staleGate = partials.length > 0 ? undefined : staleGateDropped(outcome.cause);
   const baseReasons =

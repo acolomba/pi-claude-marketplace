@@ -11141,6 +11141,153 @@ test("GHB-03: the missing-dependency install rethrows an invalid base", async (t
   });
 });
 
+/**
+ * GHB-03: a GitHub-source `gh` whose marketplace entry declares the
+ * path-source `dep`. With no clone on disk the walk reads the entry's list, so
+ * `dep` commits before `gh` reads the base. Returns the clone fixture's root.
+ */
+async function seedGitHubRootWithPathDependency(
+  cwd: string,
+  depMcpServers?: Record<string, unknown>,
+): Promise<string> {
+  const fixtureRepoDir = path.join(cwd, "repo-fixture");
+  const marketplaceRoot = path.join(cwd, "mp-src");
+  const githubSource = { source: "github", repo: "org/repo", sha: GIT_SOURCE_SHA };
+  await seedGitSourceMarketplace({
+    cwd,
+    fixtureRepoDir,
+    marketplaceName: "mp",
+    marketplaceRoot,
+    pluginName: "gh",
+    source: githubSource,
+  });
+  const depRoot = path.join(marketplaceRoot, "plugins", "dep");
+  await mkdir(path.join(depRoot, "skills", "greet"), { recursive: true });
+  await writeFile(
+    path.join(depRoot, "skills", "greet", "SKILL.md"),
+    "---\nname: greet\n---\n\nHello.\n",
+  );
+  if (depMcpServers !== undefined) {
+    await writeFile(path.join(depRoot, ".mcp.json"), JSON.stringify({ mcpServers: depMcpServers }));
+  }
+
+  await writeFile(
+    path.join(marketplaceRoot, ".claude-plugin", "marketplace.json"),
+    JSON.stringify({
+      name: "mp",
+      plugins: [
+        { name: "gh", source: githubSource, dependencies: [{ name: "dep" }] },
+        { name: "dep", source: "./plugins/dep", version: "0.0.1" },
+      ],
+    }),
+  );
+  return fixtureRepoDir;
+}
+
+test("GHB-03: an invalid base after a dependency's undo failed reports the rollback partial instead of rethrowing", async (t) => {
+  await withHermeticHome(async ({ installPlugin, transactionControl }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-ghb03-rollback-partial-"));
+    try {
+      // arrange
+      setGitHubBaseUrl(t, "http://mirror.example");
+      const fixtureRepoDir = await seedGitHubRootWithPathDependency(cwd);
+      transactionControl.runPhases = async <C>(phases: readonly Phase<C>[], ctx: C) =>
+        runPhases(
+          phases.map((phase): Phase<C> =>
+            phase.name === "dep@mp"
+              ? {
+                  ...phase,
+                  undo: () => {
+                    throw new Error("dep undo denied");
+                  },
+                }
+              : phase,
+          ),
+          ctx,
+        );
+      const git = createGitOps({ fixtureSourceDir: fixtureRepoDir });
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        cloneCacheSeam: seamWith(git.gitOps),
+        ctx,
+        cwd,
+        marketplace: "mp",
+        run,
+        plugin: "gh",
+        scope: "project",
+      });
+
+      // assert
+      const variableMessage = "PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL must use the https scheme.";
+      assert.deepStrictEqual(outcome, {
+        status: "failed",
+        error: new InvalidGitHubBaseUrlError("PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL", "scheme"),
+        cause: `${variableMessage}\n\ncause: ${variableMessage}`,
+      });
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n" +
+            "● mp [project]\n" +
+            "  ⊘ gh (failed) {rollback partial}\n" +
+            `    cause: ${variableMessage}\n` +
+            "    [dep@mp] (rollback failed)\n" +
+            "      cause: dep undo denied",
+          severity: "error",
+        },
+      ]);
+      assert.deepStrictEqual(git.state.cloneCalls, []);
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("GHB-03: an invalid base after a dependency rewrote the MCP config reports the notice instead of rethrowing", async (t) => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-ghb03-mcp-notice-"));
+    try {
+      // arrange
+      setGitHubBaseUrl(t, "http://mirror.example");
+      const fixtureRepoDir = await seedGitHubRootWithPathDependency(cwd, {
+        server2: { command: "node" },
+      });
+      await writeCommentedProjectAdapterFile(cwd);
+      const git = createGitOps({ fixtureSourceDir: fixtureRepoDir });
+      const { ctx, run, notifications } = makeCtx({ piMcpAdapterLoaded: true });
+
+      // act
+      await installPlugin({
+        cloneCacheSeam: seamWith(git.gitOps),
+        ctx,
+        cwd,
+        marketplace: "mp",
+        run,
+        plugin: "gh",
+        scope: "project",
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n" +
+            "● mp [project]\n" +
+            "  ⊘ gh (failed)\n" +
+            "    cause: PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL must use the https scheme.",
+          severity: "error",
+        },
+        PROJECT_COMMENTS_DROPPED_NOTICE,
+      ]);
+      assert.deepStrictEqual(git.state.cloneCalls, []);
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
 test("plugin install authentication: threads a host-keyed bundle for a host the registry does not claim", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-auth-providerless-"));

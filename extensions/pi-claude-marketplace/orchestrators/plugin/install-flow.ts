@@ -1343,6 +1343,40 @@ function handleInstallThrow(args: {
 }
 
 /**
+ * The failure an install's lock closure threw, composed into its failed
+ * outcome. RESV-06: a dependency is what failed when the cascade recorded a
+ * subject, so the block names it. Otherwise the single-row path reports the
+ * requested plugin.
+ *
+ * GHB-03 / D-08: an invalid GitHub base override fails the whole command,
+ * unless the failed install left something behind that only its failed row
+ * reports: a rollback partial, or an MCP config rewrite (AFILE-04). Then the
+ * row is the report, and its cause line still names the variable.
+ */
+function handleCaughtInstallFailure(args: {
+  readonly err: unknown;
+  readonly ctx: NotificationContext;
+  readonly run: NotificationRun;
+  readonly marketplace: string;
+  readonly scope: Scope;
+  readonly plugin: string;
+  readonly rootKey: string;
+  readonly capture: InstallFailureCapture;
+  readonly cascadeFailure: CascadeFailureSink;
+  readonly orchestrated: boolean;
+}): InstallPluginOutcome {
+  const { err, capture, cascadeFailure, ...target } = args;
+  if (capture.rollbackPartials.length === 0 && cascadeFailure.mcpConfigNotices.length === 0) {
+    rethrowInvalidGitHubBaseUrl(err);
+  }
+
+  const subject = cascadeFailure.subject;
+  return subject !== undefined
+    ? handleCascadeThrow({ ...target, subject })
+    : handleInstallThrow({ ...target, err, capture });
+}
+
+/**
  * RESV-06 failure routing for a throw a DEPENDENCY caused.
  *
  * Distinct from `handleInstallThrow` in exactly one respect: the block it emits
@@ -1965,41 +1999,25 @@ async function installPluginWithTransaction(
       },
     );
   } catch (err) {
-    rethrowInvalidGitHubBaseUrl(err);
-    // RESV-06: a dependency is what failed, so the block names it. Routed here
-    // rather than through the single-row path below, which would report the
-    // plugin the user typed for something one of its dependencies did.
-    //
-    // Otherwise, Pattern S-1 single chokepoint for user-visible errors: one
+    // Pattern S-1 single chokepoint for user-visible errors: one
     // notify(ctx, run, ...) call carrying a per-variant
     // PluginFailedMessage / PluginUnavailableMessage. Severity derives to
     // "error" structurally and neither variant triggers the reload hint.
     //
-    // AFILE-04: either way, the notices of the dependencies that committed
-    // before the failure follow the failed row.
-    const subject = cascadeFailure.subject;
-    const failed =
-      subject !== undefined
-        ? handleCascadeThrow({
-            ctx,
-            run,
-            marketplace,
-            scope,
-            plugin,
-            rootKey,
-            subject,
-            orchestrated,
-          })
-        : handleInstallThrow({
-            err,
-            ctx,
-            run,
-            marketplace,
-            scope,
-            plugin,
-            capture,
-            orchestrated,
-          });
+    // AFILE-04: the notices of the dependencies that committed before the
+    // failure follow the failed row.
+    const failed = handleCaughtInstallFailure({
+      err,
+      ctx,
+      run,
+      marketplace,
+      scope,
+      plugin,
+      rootKey,
+      capture,
+      cascadeFailure,
+      orchestrated,
+    });
     return withMcpConfigNotices(ctx, run, orchestrated, failed, cascadeFailure.mcpConfigNotices);
   }
 
@@ -2489,30 +2507,19 @@ async function installMissingDependencyWithTransaction(
       },
     );
   } catch (err) {
-    rethrowInvalidGitHubBaseUrl(err);
+    const failed = handleCaughtInstallFailure({
+      err,
+      ctx,
+      run,
+      marketplace,
+      scope,
+      plugin,
+      rootKey,
+      capture,
+      cascadeFailure,
+      orchestrated: true,
+    });
     const subject = cascadeFailure.subject;
-    const failed =
-      subject !== undefined
-        ? handleCascadeThrow({
-            ctx,
-            run,
-            marketplace,
-            scope,
-            plugin,
-            rootKey,
-            subject,
-            orchestrated: true,
-          })
-        : handleInstallThrow({
-            err,
-            ctx,
-            run,
-            marketplace,
-            scope,
-            plugin,
-            capture,
-            orchestrated: true,
-          });
     assertOrchestratedFailedOutcome(failed);
     const failedWithNotices = {
       ...failed,

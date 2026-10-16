@@ -2558,6 +2558,77 @@ test("GHB-03: an orchestrated enable rethrows an invalid base", async (t) => {
   });
 });
 
+test("GHB-03: an enable whose ledger left a rollback partial reports it instead of rethrowing an invalid base", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    await seedRealDisabledMarketplace(home, {
+      marketplaceName: "mp",
+      pluginName: "foo",
+      version: "1.2.3",
+    });
+    const invalidBase = new InvalidGitHubBaseUrlError(
+      "PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL",
+      "scheme",
+    );
+    const transaction: EnableDisableTransaction = {
+      ...REAL_ENABLE_DISABLE_TRANSACTION,
+      runInstallLedger(_state, _locations, _options, capture) {
+        assert.ok(capture !== undefined);
+        capture.version = "1.2.3";
+        capture.rollbackPartials = [{ msg: "skill rollback denied", phase: "skills" }];
+        return rejectUnknown(invalidBase);
+      },
+    };
+    const setPluginEnabledForOwner = createSetPluginEnabled(
+      transaction,
+      createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    );
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabledForOwner({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo",
+      enable: true,
+      scope: "user",
+    });
+    const typedFailure = await setPluginEnabledForOwner({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo",
+      enable: true,
+      scope: "user",
+      notifications: { mode: "orchestrated" },
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        severity: "error",
+        message: [
+          "A plugin operation has failed.",
+          "",
+          "● mp [user]",
+          "  ⊘ foo v1.2.3 (failed) {rollback partial}",
+          "    cause: PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL must use the https scheme.",
+          "    [skills] (rollback failed)",
+        ].join("\n"),
+      },
+    ]);
+    assert.deepStrictEqual(typedFailure, {
+      status: "failed",
+      reason: "rollback partial",
+      error: invalidBase,
+      cause: "PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL must use the https scheme.",
+    });
+  });
+});
+
 // ──────────────────────────────────────────────────────────────────────────
 // ENBL idempotency arm
 // ──────────────────────────────────────────────────────────────────────────
@@ -7429,46 +7500,81 @@ const ROOT_LEDGER_FAILED_ROW: NotifyRecord = {
   ].join("\n"),
 };
 
-test("AFILE-04: an enable cascade that unwinds after a member rewrote the file still shows the notice", async () => {
-  await withHermeticHome(async ({ cwd, home }) => {
-    // arrange
-    await seedMcpEnableCascade(home);
-    await writeCommentedUserAdapterFile(home);
-    const transaction: EnableDisableTransaction = {
-      ...REAL_ENABLE_DISABLE_TRANSACTION,
-      async runInstallLedger(state, locations, options, capture) {
-        if (options.plugin === "a") {
-          return rejectUnknown(new Error("a's own ledger failed"));
-        }
+/**
+ * GHB-03: the root's failed row when its ledger reads an invalid GitHub base
+ * after a member rewrote the MCP config. The row reports the rewrite, and its
+ * cause names the variable.
+ */
+const INVALID_BASE_ROOT_FAILED_ROW: NotifyRecord = {
+  severity: "error",
+  message: [
+    "A plugin operation has failed.",
+    "",
+    "● official [user]",
+    "  ⊘ a v1.0.0 (failed)",
+    "    cause: PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL must use the https scheme.",
+  ].join("\n"),
+};
 
-        return REAL_ENABLE_DISABLE_TRANSACTION.runInstallLedger(state, locations, options, capture);
-      },
-    };
-    const setPluginEnabledForOwner = createSetPluginEnabled(
-      transaction,
-      createHooksRouting(createHooksRuntime(), { readHooksJson }),
-    );
-    const { ctx, notifications } = makeCtx(cwd);
+for (const { rootFailure, failedRow, when } of [
+  {
+    rootFailure: () => new Error("a's own ledger failed"),
+    failedRow: ROOT_LEDGER_FAILED_ROW,
+    when: "the root's own ledger fails",
+  },
+  {
+    rootFailure: () =>
+      new InvalidGitHubBaseUrlError("PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL", "scheme"),
+    failedRow: INVALID_BASE_ROOT_FAILED_ROW,
+    when: "the root reads an invalid GitHub base",
+  },
+]) {
+  test(`AFILE-04: an enable cascade that unwinds after a member rewrote the file still shows the notice when ${when}`, async () => {
+    await withHermeticHome(async ({ cwd, home }) => {
+      // arrange
+      await seedMcpEnableCascade(home);
+      await writeCommentedUserAdapterFile(home);
+      const transaction: EnableDisableTransaction = {
+        ...REAL_ENABLE_DISABLE_TRANSACTION,
+        async runInstallLedger(state, locations, options, capture) {
+          if (options.plugin === "a") {
+            return rejectUnknown(rootFailure());
+          }
 
-    // act
-    await setPluginEnabledForOwner({
-      ctx,
-      run: runWithMcpAdapterLoaded(),
-      cwd,
-      marketplace: "official",
-      plugin: "a",
-      enable: true,
-      scope: "user",
+          return REAL_ENABLE_DISABLE_TRANSACTION.runInstallLedger(
+            state,
+            locations,
+            options,
+            capture,
+          );
+        },
+      };
+      const setPluginEnabledForOwner = createSetPluginEnabled(
+        transaction,
+        createHooksRouting(createHooksRuntime(), { readHooksJson }),
+      );
+      const { ctx, notifications } = makeCtx(cwd);
+
+      // act
+      await setPluginEnabledForOwner({
+        ctx,
+        run: runWithMcpAdapterLoaded(),
+        cwd,
+        marketplace: "official",
+        plugin: "a",
+        enable: true,
+        scope: "user",
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [failedRow, USER_COMMENTS_DROPPED_NOTICE]);
+      assert.equal(
+        await readFile(userAdapterPath(home), "utf8"),
+        '{\n  "mcpServers": {\n    "mine": {\n      "command": "my-server"\n    }\n  }\n}\n',
+      );
     });
-
-    // assert
-    assert.deepStrictEqual(notifications, [ROOT_LEDGER_FAILED_ROW, USER_COMMENTS_DROPPED_NOTICE]);
-    assert.equal(
-      await readFile(userAdapterPath(home), "utf8"),
-      '{\n  "mcpServers": {\n    "mine": {\n      "command": "my-server"\n    }\n  }\n}\n',
-    );
   });
-});
+}
 
 test("AFILE-04: an enable cascade undo that unstages from a commented mcp-adapter.json shows the notice", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
