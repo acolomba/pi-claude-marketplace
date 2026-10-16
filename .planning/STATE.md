@@ -181,8 +181,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-16T01:45:22.963Z
-**Stopped at:** Completed 02-05-PLAN.md
+**Last session:** 2026-10-16T04:00:00Z
+**Stopped at:** Session resumed; CR-01 ruled option 1 (cause child row on add/import failures under the override), proceeding to review-fix iteration 2
 **Resume file:** None
 
 **Main merge (2026-10-11, quick task 261011-bsm):** `origin/main` at
