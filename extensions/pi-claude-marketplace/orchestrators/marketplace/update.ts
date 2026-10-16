@@ -27,6 +27,9 @@
 //  header plus a synthetic `PluginFailedMessage` child carrying
 //  `cause: err` so the underlying MarketplaceUpdateError reaches the user
 //  (`err.retryHint` remains on the error for programmatic inspection).
+//  - invalid GitHub base override: an `InvalidGitHubBaseUrlError` from the
+//  refresh or from a cascade plugin update fails the whole command; no row is
+//  rendered (GHB-03).
 //  - empty targets (no marketplaces configured): `{ marketplaces: [] }`
 //  renders the `(no marketplaces)` sentinel.
 //  - post-success cache cleanup: a `rm` runs to drop the stale completion
@@ -105,6 +108,7 @@ import {
   PluginShapeError,
   composeErrorWithCauseChain,
   errorMessage,
+  rethrowInvalidGitHubBaseUrl,
 } from "../../shared/errors.ts";
 import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
 import { notifyMcpConfigNotices } from "../../shared/notification-dispatch.ts";
@@ -531,6 +535,7 @@ async function cascadeAutoupdates(
       // eslint-disable-next-line no-await-in-loop -- each update locks the scope (retries: 0)
       outcomes.push(await pluginUpdate(plugin, name, scope));
     } catch (err) {
+      rethrowInvalidGitHubBaseUrl(err);
       // `notes` is consumed by callers OUTSIDE the notify path (e.g.
       // JSON-mode outcome aggregation in tests) and by the
       // narrowFailReason notes-substring fallback below, so the cause-chain
@@ -676,6 +681,7 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
   try {
     snapshot = await snapshotAfterRefresh(args);
   } catch (err) {
+    rethrowInvalidGitHubBaseUrl(err);
     // A marketplace refresh failure renders as the header
     // `⊘ <name> [<scope>] (failed)`. The MarketplaceNotificationMessage
     // shape carries no `cause` (SNM-10 confines `cause` to plugin-level

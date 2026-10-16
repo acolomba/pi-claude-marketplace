@@ -30,6 +30,7 @@ import {
   PluginShapeError,
   PluginUpdateConcurrencyError,
   PluginUpdatePhase3Error,
+  rethrowInvalidGitHubBaseUrl,
   serializeCauseChain,
   StaleSourceCloneError,
   StateLockHeldError,
@@ -1677,6 +1678,69 @@ describe("findManualRecoveryError", () => {
 
     // assert
     assert.strictEqual(found, undefined);
+  });
+});
+
+describe("rethrowInvalidGitHubBaseUrl", () => {
+  test("returns for an unrelated error", () => {
+    // arrange
+    const error = new Error("outer", { cause: new Error("inner") });
+
+    // act & assert
+    assert.doesNotThrow(() => {
+      rethrowInvalidGitHubBaseUrl(error);
+    });
+  });
+
+  test("returns for a thrown string", () => {
+    // arrange
+    const thrown = "PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL must use the https scheme.";
+
+    // act & assert
+    assert.doesNotThrow(() => {
+      rethrowInvalidGitHubBaseUrl(thrown);
+    });
+  });
+
+  test("rethrows the invalid base error itself", () => {
+    // arrange
+    const invalid = new InvalidGitHubBaseUrlError(
+      "PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL",
+      "scheme",
+    );
+
+    // act & assert
+    assert.throws(
+      () => {
+        rethrowInvalidGitHubBaseUrl(invalid);
+      },
+      (error: unknown) => {
+        assert.strictEqual(error, invalid);
+        return true;
+      },
+    );
+  });
+
+  test("rethrows the invalid base error from under a marketplace update wrapper", () => {
+    // arrange
+    const invalid = new InvalidGitHubBaseUrlError(
+      "PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL",
+      "scheme",
+    );
+    const wrapped = new MarketplaceUpdateError('Failed to update marketplace "mp".', {
+      cause: invalid,
+    });
+
+    // act & assert
+    assert.throws(
+      () => {
+        rethrowInvalidGitHubBaseUrl(wrapped);
+      },
+      (error: unknown) => {
+        assert.strictEqual(error, invalid);
+        return true;
+      },
+    );
   });
 });
 

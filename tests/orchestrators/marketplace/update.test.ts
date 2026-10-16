@@ -30,6 +30,7 @@ import { buildAuthCallbacks } from "../../../extensions/pi-claude-marketplace/pl
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import {
   CrossOriginChallengeError,
+  InvalidGitHubBaseUrlError,
   PluginShapeError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
@@ -3812,6 +3813,93 @@ test("GHB-02: updating a GitHub marketplace under the override fetches with the 
       state.fetchCalls.map(({ auth }) => auth),
       [{ credentialOps, host: "mirror.example:8443", kind: "stored-credential" }],
     );
+  });
+});
+
+test("GHB-03: updating a GitHub marketplace on an invalid base fails the command instead of rendering a row", async (t) => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    setGitHubBaseUrl(t, "http://mirror.example");
+    await seedGithubMarketplace({ cwd, name: "ref-mp", ref: "main" });
+    const stateJsonPath = locationsFor("project", cwd).stateJsonPath;
+    const stateBefore = await readFile(stateJsonPath, "utf8");
+    const { ctx, run, notifications } = makeCtx();
+    const { credOps: credentialOps } = createCredentialOps();
+    const { gitOps, state } = createGitOps({
+      remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000021" },
+    });
+
+    // act & assert
+    await assert.rejects(
+      () =>
+        updateMarketplace({
+          completionCache: createCompletionCache(),
+          ctx,
+          run,
+          name: "ref-mp",
+          scope: "project",
+          cwd,
+          gitOps,
+          credentialOps,
+        }),
+      (error: unknown) => {
+        assert.deepStrictEqual(
+          error,
+          new InvalidGitHubBaseUrlError("PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL", "scheme"),
+        );
+        return true;
+      },
+    );
+    assert.deepStrictEqual(notifications, []);
+    assert.deepStrictEqual(state.fetchCalls, []);
+    assert.strictEqual(await readFile(stateJsonPath, "utf8"), stateBefore);
+  });
+});
+
+test("GHB-03: an autoupdate cascade plugin failing on an invalid base fails the command", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    await seedGithubMarketplace({
+      cwd,
+      name: "auto-mp",
+      ref: "main",
+      autoupdate: true,
+      plugins: { alpha: makePluginRecord(), beta: makePluginRecord() },
+    });
+    const { ctx, run, notifications } = makeCtx();
+    const { gitOps } = createGitOps({
+      remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000004" },
+    });
+    const invalid = new InvalidGitHubBaseUrlError(
+      "PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL",
+      "scheme",
+    );
+    const calls: string[] = [];
+    const pluginUpdate: PluginUpdateFn = async (plugin) => {
+      calls.push(plugin);
+      return Promise.reject(invalid);
+    };
+
+    // act & assert
+    await assert.rejects(
+      () =>
+        updateMarketplace({
+          completionCache: createCompletionCache(),
+          ctx,
+          run,
+          name: "auto-mp",
+          scope: "project",
+          cwd,
+          gitOps,
+          pluginUpdate,
+        }),
+      (error: unknown) => {
+        assert.strictEqual(error, invalid);
+        return true;
+      },
+    );
+    assert.deepStrictEqual(notifications, []);
+    assert.deepStrictEqual(calls, ["alpha"]);
   });
 });
 

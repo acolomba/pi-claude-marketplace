@@ -71,6 +71,7 @@ import {
   UnsupportedSourceError,
   appendLeakToError,
   errorMessage,
+  rethrowInvalidGitHubBaseUrl,
 } from "../../shared/errors.ts";
 import {
   cleanupStaging,
@@ -555,6 +556,8 @@ function removalAdvisories(err: unknown): readonly string[] | undefined {
  * classified by `classifyAddError`'s errno ladder (WR-03 -- the github
  * guard's clone-catch only cleans staging and rethrows unclassified), so an
  * unrecognised throw is by construction an opaque source-tree shape.
+ * GHB-03: an `InvalidGitHubBaseUrlError` is the exception. Both modes rethrow
+ * it, so an invalid variable fails the whole command.
  *
  * WR-02 / MA-14: the standalone row of a leftover the add could not remove
  * carries one advisory line naming the cleanup failure; the orchestrated
@@ -568,6 +571,7 @@ function handleAddFailure(
   const reason = classifyAddError(err);
   const wrapped = err instanceof Error ? err : new Error(errorMessage(err));
   if (reason === undefined) {
+    rethrowInvalidGitHubBaseUrl(err);
     if (!orchestrated) {
       // Not an enumerated add precondition (e.g. a StateLockHeldError or an
       // unforeseen catastrophic error) -- never swallow it in standalone mode.

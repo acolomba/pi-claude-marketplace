@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { InvalidGitHubBaseUrlError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { resolveCommandError } from "../../extensions/pi-claude-marketplace/shared/notification-command-error.ts";
 
 for (const root of [
@@ -371,5 +372,25 @@ test("contains a throwing cause accessor without serializing the secondary error
     needsReload: true,
     summary: "Command failed unexpectedly.",
     cause: { causeChain: ["Unable to read command failure."], truncated: false },
+  });
+});
+
+test("GHB-03: a command failing on an invalid base reports the variable unredacted", () => {
+  // arrange
+  const invalid = new InvalidGitHubBaseUrlError("PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL", "scheme");
+
+  // act
+  const presentation = resolveCommandError(invalid, false);
+
+  // assert
+  assert.deepStrictEqual(presentation, {
+    kind: "internal-error",
+    severity: "error",
+    needsReload: false,
+    summary: "Command failed unexpectedly.",
+    cause: {
+      causeChain: ["PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL must use the https scheme."],
+      truncated: false,
+    },
   });
 });

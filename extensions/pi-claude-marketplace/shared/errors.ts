@@ -736,6 +736,25 @@ export function findManualRecoveryError(err: unknown): ManualRecoveryError | und
 }
 
 /**
+ * GHB-03: rethrow an `InvalidGitHubBaseUrlError` found anywhere in the cause
+ * chain, so an invalid variable fails the whole command instead of becoming
+ * one target's failed row. Every per-target catch on a GitHub network path
+ * calls this first.
+ *
+ * The walk finds the error under wrappers such as `MarketplaceUpdateError`
+ * and the lock wrapper that `withScopeLock` adds when the release also fails.
+ * It throws the typed error itself, so the command failure names the
+ * variable. For any other value it returns.
+ */
+export function rethrowInvalidGitHubBaseUrl(err: unknown): void {
+  for (const link of causeChain(err)) {
+    if (link instanceof InvalidGitHubBaseUrlError) {
+      throw link;
+    }
+  }
+}
+
+/**
  * AS-7: the leaked paths from the first `ManualRecoveryError` in the chain
  * that carries any, so a rendered manual-recovery row can name the files the
  * user must clean up by hand. Empty when the chain holds none.

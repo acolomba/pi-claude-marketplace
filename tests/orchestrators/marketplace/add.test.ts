@@ -28,6 +28,7 @@ import { buildAuthCallbacks } from "../../../extensions/pi-claude-marketplace/pl
 import { listRemotes } from "../../../extensions/pi-claude-marketplace/platform/git.ts";
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import {
+  InvalidGitHubBaseUrlError,
   MarketplaceDuplicateNameError,
   StaleSourceCloneError,
   UnremovableLeftoverCloneError,
@@ -3741,6 +3742,72 @@ test("GHB-02: a GitHub add under the override clones the canonical URL with the 
         },
       ],
     );
+  });
+});
+
+test("GHB-03: a standalone GitHub add fails the command on an invalid base", async (t) => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    setGitHubBaseUrl(t, "http://mirror.example");
+    const { ctx, run } = makeCtx(0);
+    const { gitOps, state } = createGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+    });
+
+    // act & assert
+    await assert.rejects(
+      () =>
+        addMarketplace({
+          ctx,
+          run,
+          scope: "project",
+          cwd,
+          rawSource: "anthropics/claude-plugins-official",
+          gitOps,
+        }),
+      (error: unknown) => {
+        assert.deepStrictEqual(
+          error,
+          new InvalidGitHubBaseUrlError("PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL", "scheme"),
+        );
+        return true;
+      },
+    );
+    assert.deepStrictEqual(state.cloneCalls, []);
+    assert.equal(await pathExists(locations.stateJsonPath), false);
+  });
+});
+
+test("GHB-03: an orchestrated GitHub add rethrows an invalid base instead of returning unparseable", async (t) => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    setGitHubBaseUrl(t, "http://mirror.example");
+    const { ctx, run } = makeCtx(0);
+    const { gitOps } = createGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+    });
+
+    // act & assert
+    await assert.rejects(
+      () =>
+        addMarketplace({
+          ctx,
+          run,
+          scope: "project",
+          cwd,
+          rawSource: "anthropics/claude-plugins-official",
+          gitOps,
+          notifications: { mode: "orchestrated" },
+        }),
+      (error: unknown) => {
+        assert.deepStrictEqual(
+          error,
+          new InvalidGitHubBaseUrlError("PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL", "scheme"),
+        );
+        return true;
+      },
+    );
+    assert.equal(await pathExists(locations.stateJsonPath), false);
   });
 });
 
