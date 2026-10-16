@@ -5,16 +5,16 @@ milestone_name: Marketplace Behavioral Tests
 current_phase: 2
 current_phase_name: GitHub Clone-Base Override
 status: executing
-stopped_at: Completed 02-01-PLAN.md
-last_updated: "2026-10-16T00:30:13.246Z"
+stopped_at: Completed 02-02-PLAN.md
+last_updated: "2026-10-16T00:48:33.833Z"
 last_activity: 2026-10-15
 last_activity_desc: Phase 2 execution started
-state_head: 43e084b7686e9d6e34e4242feec2ef23394df615
+state_head: d50b794d9aa475d02c106c100351135d0087d8f9
 progress:
   total_phases: 10
   completed_phases: 1
   total_plans: 10
-  completed_plans: 6
+  completed_plans: 7
   percent: 10
 ---
 
@@ -32,7 +32,7 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 2 (GitHub Clone-Base Override) — EXECUTING
-Plan: 2 of 5
+Plan: 3 of 5
 Status: Ready to execute
 Last activity: 2026-10-15 — Phase 2 execution started
 
@@ -181,8 +181,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-16T00:30:13.106Z
-**Stopped at:** Completed 02-01-PLAN.md
+**Last session:** 2026-10-16T00:48:33.704Z
+**Stopped at:** Completed 02-02-PLAN.md
 **Resume file:** None
 
 **Main merge (2026-10-11, quick task 261011-bsm):** `origin/main` at
@@ -303,6 +303,7 @@ archived milestone artifacts.
 | Phase 01 P04 | 12 min | 3 tasks | 7 files |
 | Phase 01 P05 | 4 min | 2 tasks | 6 files |
 | Phase 02 P01 | 14min | 2 tasks | 7 files |
+| Phase 02 P02 | 13 min | 2 tasks | 10 files |
 
 ## Decisions
 
@@ -381,6 +382,8 @@ archived milestone artifacts.
 - [Phase 01]: The cucumber skill names source kinds and decision IDs, never phases; reviewers gate on npm run check:features, not the CLI usage report (D-09)
 - [Phase 02]: setGitHubBaseUrl restores the variable once per test (first call), because node:test runs after hooks FIFO
 - [Phase 02]: platform/git.ts fetch passes remote and the wire url together only when the override rewrites the recorded origin; otherwise the previous options
+- [Phase 02]: GitHub auth bundles come from buildGitHubAuth: a stored credential bound to the override host with no Device Flow while PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL is set, today's github.com bundle when unset (GHB-02, D-04)
+- [Phase 02]: GITHUB_HOST lives in shared/github-base-url.ts so the github.com host literal has one home for the D-06 rule
 
 ### mcp-4 decisions
 

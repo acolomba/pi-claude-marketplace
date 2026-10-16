@@ -135,14 +135,14 @@ Plans:
 4. With the variable unset, every GitHub-source operation behaves byte-identically to before, and `list`, `info`, and `claude-plugins.json` show GitHub sources in github.com terms whether the variable is set or not.
 5. README (with its localized copies) and CHANGELOG document the variable as a divergence from Claude Code.
 
-**Plans:** 1/5 plans executed
+**Plans:** 2/5 plans executed
 
 Plans:
 **Wave 1**
 - [x] 02-01-PLAN.md — Tracer: a github.com clone goes to the base and keeps its canonical origin; the seam, the typed error, and the four rewritten platform calls with the fetched cause tail
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 02-02-PLAN.md — One GitHub auth helper binds the override host with a stored credential (no Device Flow); add, update, and the plugin-update sync switched; an override case in each owner test
+- [x] 02-02-PLAN.md — One GitHub auth helper binds the override host with a stored credential (no Device Flow); add, update, and the plugin-update sync switched; an override case in each owner test
 
 **Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 02-03-PLAN.md — An invalid base fails marketplace add and update, install, enable, and import as a whole (D-08)
@@ -272,7 +272,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 | --- | --- | --- | --- |
 | 1. Suite Foundation | 5/5 | Complete    | 2026-10-15 |
-| 2. GitHub Clone-Base Override | 1/5 | In Progress | - |
+| 2. GitHub Clone-Base Override | 2/5 | In Progress | - |
 | 3. Marketplace Add | 0/TBD | Not started | - |
 | 4. Marketplace Remove and List | 0/TBD | Not started | - |
 | 5. Marketplace Info | 0/TBD | Not started | - |
