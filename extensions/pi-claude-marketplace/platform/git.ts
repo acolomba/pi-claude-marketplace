@@ -392,6 +392,38 @@ async function withFetchedUrlCause<T>(
   }
 }
 
+/**
+ * The protocol version 2 ref advertisement that `resolveRemoteRef` and
+ * `listRemoteTags` both read, with annotated tags peeled. `extra` carries the
+ * one option each caller adds. Returns the URL sent (GHB-01), which the caller
+ * names in its own refusals.
+ *
+ * Same conditional-spread + AuthFailureCallback cast idiom as `clone()`: the
+ * callbacks are built only when `opts.auth` is defined, so the public-only
+ * listing stays byte-identical.
+ */
+async function listServerRefsAt(
+  opts: { readonly url: string; readonly auth?: BuildAuthCallbacksOpts | undefined },
+  extra: { readonly symrefs?: true; readonly prefix?: string },
+): Promise<{ readonly wireUrl: string; readonly refs: git.ServerRef[] }> {
+  const authCbs = opts.auth === undefined ? undefined : buildAuthCallbacks(opts.auth);
+  const wireUrl = gitHubWireUrl(opts.url);
+  const refs = await withFetchedUrlCause(wireUrl, opts.url, () =>
+    git.listServerRefs({
+      http,
+      url: wireUrl,
+      protocolVersion: 2,
+      peelTags: true,
+      ...extra,
+      ...(authCbs !== undefined && {
+        onAuth: authCbs.onAuth,
+        onAuthFailure: authCbs.onAuthFailure as git.AuthFailureCallback,
+      }),
+    }),
+  );
+  return { wireUrl, refs };
+}
+
 export async function clone(opts: CloneOptions): Promise<void> {
   // When opts.auth is provided, build the isomorphic-git callbacks
   // up-front and conditionally spread them. When omitted, the public-only
@@ -514,24 +546,7 @@ export async function resolveRef(opts: ResolveRefOptions): Promise<string> {
  * Promise<ServerRef[]>, where each ServerRef is { ref, oid, target?, peeled? }.
  */
 export async function resolveRemoteRef(opts: ResolveRemoteRefOptions): Promise<string> {
-  // Same conditional-spread + AuthFailureCallback cast idiom as clone() at the
-  // top of this file: build the callbacks only when opts.auth is defined so the
-  // public-only resolution stays byte-identical.
-  const authCbs = opts.auth === undefined ? undefined : buildAuthCallbacks(opts.auth);
-  const wireUrl = gitHubWireUrl(opts.url);
-  const refs = await withFetchedUrlCause(wireUrl, opts.url, () =>
-    git.listServerRefs({
-      http,
-      url: wireUrl,
-      protocolVersion: 2,
-      symrefs: true,
-      peelTags: true,
-      ...(authCbs !== undefined && {
-        onAuth: authCbs.onAuth,
-        onAuthFailure: authCbs.onAuthFailure as git.AuthFailureCallback,
-      }),
-    }),
-  );
+  const { wireUrl, refs } = await listServerRefsAt(opts, { symrefs: true });
 
   if (opts.ref === undefined) {
     const head = refs.find((r) => r.ref === "HEAD");
@@ -602,24 +617,7 @@ const PEELED_REF_SUFFIX = "^{}";
  * Promise<ServerRef[]>, where each ServerRef is { ref, oid, target?, peeled? }.
  */
 export async function listRemoteTags(opts: ListRemoteTagsOptions): Promise<RemoteTag[]> {
-  // Same conditional-spread + AuthFailureCallback cast idiom as clone() at the
-  // top of this file: build the callbacks only when opts.auth is defined so the
-  // public-only listing stays byte-identical.
-  const authCbs = opts.auth === undefined ? undefined : buildAuthCallbacks(opts.auth);
-  const wireUrl = gitHubWireUrl(opts.url);
-  const refs = await withFetchedUrlCause(wireUrl, opts.url, () =>
-    git.listServerRefs({
-      http,
-      url: wireUrl,
-      protocolVersion: 2,
-      prefix: TAG_REF_PREFIX,
-      peelTags: true,
-      ...(authCbs !== undefined && {
-        onAuth: authCbs.onAuth,
-        onAuthFailure: authCbs.onAuthFailure as git.AuthFailureCallback,
-      }),
-    }),
-  );
+  const { refs } = await listServerRefsAt(opts, { prefix: TAG_REF_PREFIX });
 
   const tags: RemoteTag[] = [];
   for (const advertised of refs) {
