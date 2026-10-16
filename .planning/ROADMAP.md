@@ -196,7 +196,7 @@ Plans:
 3. A scope whose records hold marketplaces added without `--local` still gets `claude-plugins.json` written from those records on its first load (MIG-01 unchanged for them).
 4. A command naming a plugin (install, enable, disable, reinstall, update) is refused when it would write that plugin into `claude-plugins.json` while its marketplace is declared only in `claude-plugins.local.json`; the failed row suggests `--local`, and nothing is written. Forms naming no plugin write no shared declaration under a local-only marketplace (FIX-03).
 
-**Plans:** 4/5 plans executed
+**Plans:** 5/5 plans executed
 
 Plans:
 **Wave 1**
@@ -212,7 +212,7 @@ Plans:
 - [x] 03.1-04-PLAN.md — Refused named update and reinstall before anything moves, the reinstall row's cause line, and the S5 file naming (FIX-03)
 
 **Wave 5** *(blocked on Wave 4 completion)*
-- [ ] 03.1-05-PLAN.md — The catalog row, the JSON output reason, the CHANGELOG bullet with the manual cleanup, the cucumber review, and the phase gate
+- [x] 03.1-05-PLAN.md — The catalog row, the JSON output reason, the CHANGELOG bullet with the manual cleanup, the cucumber review, and the phase gate
 
 ### Phase 3.2: Marketplace Layer Partition (INSERTED)
 
@@ -348,7 +348,7 @@ Plans:
 | 1. Suite Foundation | 5/5 | Complete    | 2026-10-15 |
 | 2. GitHub Clone-Base Override | 5/5 | Complete    | 2026-10-16 |
 | 3. Marketplace Add | 3/3 | Complete    | 2026-10-16 |
-| 3.1. Local Declaration Leak Fix | 4/5 | In Progress | - |
+| 3.1. Local Declaration Leak Fix | 5/5 | In Progress | - |
 | 3.2. Marketplace Layer Partition | 0/TBD | Not started | - |
 | 3.3. Plugin Layer Partition | 0/TBD | Not started | - |
 | 4. Marketplace Remove and List | 0/TBD | Not started | - |
