@@ -4,17 +4,17 @@ milestone: marketplace-features
 milestone_name: Marketplace Behavioral Tests
 current_phase: 2
 current_phase_name: GitHub Clone-Base Override
-status: executing
-stopped_at: Completed 02-04-PLAN.md
-last_updated: "2026-10-16T01:27:32.667Z"
+status: verifying
+stopped_at: Completed 02-05-PLAN.md
+last_updated: "2026-10-16T01:46:20.442Z"
 last_activity: 2026-10-15
 last_activity_desc: Phase 2 execution started
-state_head: 4559e8952ad96f953f9ccbf4ad9ec1b37c8c576d
+state_head: 3ff8a299cfe375f7687b1ef6826d20307532f593
 progress:
   total_phases: 10
   completed_phases: 1
   total_plans: 10
-  completed_plans: 9
+  completed_plans: 10
   percent: 10
 ---
 
@@ -33,7 +33,7 @@ component as a working Pi artifact.
 
 Phase: 2 (GitHub Clone-Base Override) — EXECUTING
 Plan: 5 of 5
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-10-15 — Phase 2 execution started
 
 Progress: [█░░░░░░░░░] 10%
@@ -181,8 +181,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-16T01:27:32.529Z
-**Stopped at:** Completed 02-04-PLAN.md
+**Last session:** 2026-10-16T01:45:22.963Z
+**Stopped at:** Completed 02-05-PLAN.md
 **Resume file:** None
 
 **Main merge (2026-10-11, quick task 261011-bsm):** `origin/main` at
@@ -306,6 +306,7 @@ archived milestone artifacts.
 | Phase 02 P02 | 13 min | 2 tasks | 10 files |
 | Phase 02 P03 | 18 min | 3 tasks | 16 files |
 | Phase 02 P04 | 15 min | 3 tasks | 10 files |
+| Phase 02 P05 | 14 min | 3 tasks | 10 files |
 
 ## Decisions
 
@@ -390,6 +391,8 @@ archived milestone artifacts.
 - [Phase 02]: marketplace add rethrows inside the unclassified branch of handleAddFailure, because an exotic-throw case pins the exact prototype-read count of classification
 - [Phase 02]: Plugin reinstall, fetch, info --fetch, and update (direct, bulk, autoupdate cascade) rethrow InvalidGitHubBaseUrlError from every per-target catch; transport failures keep their existing rows (GHB-03, D-08)
 - [Phase 02]: Bare info never reads PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL; a GHB-04 / NFR-5 case pins its unchanged row and zero git calls with an invalid value set
+- [Phase 02]: D-06 literal gate is a local ESLint rule, local/no-github-literal, on for the extension and turned off (not ignored) for shared/github-base-url.ts; seven per-line disables carry reasons
+- [Phase 02]: canonicalCloneUrl builds the GitHub identity from the exported GITHUB_ORIGIN, the same prefix gitHubWireUrl matches
 
 ### mcp-4 decisions
 

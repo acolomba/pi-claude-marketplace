@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 0
+open_count: 1
 waived_count: 51
 fixed_count: 41
-total_count: 92
-last_updated: 2026-10-10T20:21:09.962Z
+total_count: 93
+last_updated: 2026-10-16T01:44:57.366Z
 ---
 
 # Broken Windows Ledger
@@ -107,6 +107,7 @@ last_updated: 2026-10-10T20:21:09.962Z
 | 90 | 08 | deviation | extensions/pi-claude-marketplace/domain/dependency-closure.ts | 490 | [mcp-4] install __proto__@<mp> is refused by the closure root-key token rule as (failed) {invalid manifest} with the cause 'declares an unusable dependency (root: ...)', not the resolver's (unavailable) {unsupported source}; the same cause text reaches any root name outside the dependency token alphabet (e.g. _x@mp) | waived | [mcp-4] Carried by BACKLOG.md ROOTKEY-01 (f47a2c9e): the refusal is correct and no record or file changes; only the cause text misleads, and choosing the right verdict for an invalid root name needs an upstream check first. Not fixed in the debt phase. | 2026-10-10T06:58:57.793Z | 2026-10-10T07:14:44.742Z |
 | 91 | 04 | deviation | extensions/pi-claude-marketplace/shared/notification-dispatch.ts |  | [json-output] composeContextBlocks kept in dispatch: renderMpHeader and composePluginLines have no other production reader; ~110 test sites import them | waived | [json-output] Accepted design: composeContextBlocks stays in shared/notification-dispatch.ts as the one production reader of renderMpHeader and composePluginLines; removing it fails the fallow dead-code gate, 15 test files hold 138 references to the two exports, and the catalog gate pins the output bytes either way. Reversible: a later change can still move the composer. | 2026-10-03T15:02:22.034Z | 2026-10-10T20:21:09.615Z |
 | 92 | 07 | skipped-test | tests/integration/skill-path-resolution.test.ts | 124 | [json-output] Existing optional pi-subagents resolver integration case skips because its module is unavailable; no new test skip was introduced. Evidence: TEST-07-06-01 in phase deferred-items.md. | fixed |  | 2026-10-10T04:04:37.773Z | 2026-10-10T20:21:09.962Z |
+| 93 | 2 | deviation | README.es.md |  | [marketplace-features] README.es.md drifted from README.md before this phase: it lacks the GitLab marketplace paragraph and its note under Mercado, and its --local paragraph says something different | open |  | 2026-10-16T01:44:57.366Z |  |
 
 ````json
 [
@@ -1248,6 +1249,19 @@ last_updated: 2026-10-10T20:21:09.962Z
     "reason": "",
     "recorded_at": "2026-10-10T04:04:37.773Z",
     "resolved_at": "2026-10-10T20:21:09.962Z",
+    "milestone": null
+  },
+  {
+    "id": 93,
+    "kind": "deviation",
+    "phase": "2",
+    "file": "README.es.md",
+    "line": null,
+    "description": "[marketplace-features] README.es.md drifted from README.md before this phase: it lacks the GitLab marketplace paragraph and its note under Mercado, and its --local paragraph says something different",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-10-16T01:44:57.366Z",
+    "resolved_at": null,
     "milestone": null
   }
 ]
