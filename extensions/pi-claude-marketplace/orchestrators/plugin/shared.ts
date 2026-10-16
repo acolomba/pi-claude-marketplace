@@ -1430,10 +1430,12 @@ function flaglessLayerWriteBack(args: {
 
 /**
  * FIX-03 / D-MF-02: the refusal a named flagless update or reinstall meets
- * before anything is staged. It reads the same decision the post-success
- * write-back reads, so the check before staging and the write after it cannot
- * disagree. An unreadable file is not a refusal: the write-back reports it
- * after the swap (S5).
+ * before anything is staged. It applies the same decision rule as the
+ * post-success write-back, but the write-back reads both files again later.
+ * If the user edits a file in between, the two can disagree. Neither outcome
+ * leaks a declaration: a refused check stops the command, and a write-back
+ * that sees a local-only marketplace writes nothing. An unreadable file is not a
+ * refusal: the write-back reports it after the swap (S5).
  */
 export async function writeBackRefusal(opts: {
   readonly locations: ScopedLocations;
