@@ -19,6 +19,11 @@
       "status": "pending"
     },
     {
+      "number": "3.1",
+      "name": "Local Declaration Leak Fix",
+      "status": "pending"
+    },
+    {
       "number": "4",
       "name": "Marketplace Remove and List",
       "status": "pending"
@@ -56,8 +61,8 @@
   ],
   "next": {
     "command": "/gsd-progress --next",
-    "label": "Advance to the next step (plan phase 3)",
-    "reason": "Phase 3 of 11 — needs a plan"
+    "label": "Advance to the next step",
+    "reason": "Phase 3 of 11 · 18% · executing"
   },
-  "updated_at": "2026-10-16T11:40:56.883Z"
+  "updated_at": "2026-10-16T12:32:50.862Z"
 }
