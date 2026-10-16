@@ -111,8 +111,10 @@ const GITHUB_LITERAL = /github\.com/i;
  * GHB-02 / D-MF-01: a github.com URL belongs in shared/github-base-url.ts.
  * That module is the one place the clone-base override reads, so a github.com
  * literal anywhere else in the extension would send bytes or credentials
- * around the override. The rule reports string literals and template text.
- * Comments are not AST nodes, so a comment never matches.
+ * around the override. The rule reports string literals, template text after
+ * escapes are resolved, and regular expression literals with their `\.`
+ * escapes read as dots. Comments are not AST nodes, so a comment never
+ * matches.
  */
 const LOCAL_PLUGIN = {
   rules: {
@@ -128,12 +130,13 @@ const LOCAL_PLUGIN = {
       create(context) {
         return {
           Literal(node) {
-            if (typeof node.value === "string" && GITHUB_LITERAL.test(node.value)) {
+            const text = typeof node.value === "string" ? node.value : node.regex?.pattern;
+            if (text !== undefined && GITHUB_LITERAL.test(text.replaceAll("\\.", "."))) {
               context.report({ node, messageId: "found" });
             }
           },
           TemplateElement(node) {
-            if (GITHUB_LITERAL.test(node.value.raw)) {
+            if (GITHUB_LITERAL.test(node.value.cooked ?? node.value.raw)) {
               context.report({ node, messageId: "found" });
             }
           },
