@@ -50,6 +50,8 @@ Given(
 
 // Every row of the duplicate-name Outline runs this step, so the rows that add
 // the first marketplace again also publish this one, and never add it (ADD-04).
+// It offers a plugin the first does not, so only the shared name explains the
+// failure.
 Given(
   "a second marketplace declaring the name {string} is ready to add from {string}",
   async function (this: ScenarioWorld, name: string, location: string) {
@@ -57,7 +59,9 @@ Given(
     const root = await requireFreeRoot(this.marketplacesRoot, location, kind);
     this.onRelease(() => rm(root, { recursive: true, force: true }));
     // Not recorded: the world keys marketplaces by name, so it would replace the first.
-    await publishMarketplaceIn(this.marketplacesRoot, location, name, kind, []);
+    await publishMarketplaceIn(this.marketplacesRoot, location, name, kind, [
+      { name: "formatter", version: "1.0.0" },
+    ]);
   },
 );
 
