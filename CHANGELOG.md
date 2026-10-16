@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Internal: the repository no longer tracks the generated `.planning/state.json` file. (#264)
+
 - Internal: the `new-gsd-workspace` skill is now `new-workspace`, and the project skills match the latest TypeScript blueprint. (#263)
 
 - Internal: the project skills match the latest TypeScript blueprint again, and ESLint now checks that variables are declared before use. (#262)
