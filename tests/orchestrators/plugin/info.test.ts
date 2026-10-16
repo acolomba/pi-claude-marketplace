@@ -39,7 +39,10 @@ import test from "node:test";
 import * as git from "isomorphic-git";
 import { mock, verify, when } from "strong-mock";
 
-import { pluginMirrorKey } from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
+import {
+  pluginCloneKey,
+  pluginMirrorKey,
+} from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
 import {
   githubSource,
   pathSource,
@@ -6083,6 +6086,75 @@ test("GHB-04 / NFR-5: bare info on a GitHub plugin ignores an invalid base", asy
           "● mp [user] <no autoupdate>",
           "  ◌ gplug v1.0.0 (remote)",
           "    components: not resolved",
+        ].join("\n"),
+      },
+    ]);
+    assert.deepStrictEqual(gitState.cloneCalls, []);
+    assert.deepStrictEqual(gitState.fetchCalls, []);
+  });
+});
+
+test("NFR-5: info --fetch on an installed pinned GitHub plugin with a warm clone ignores an invalid base", async (t) => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const GIT_SHA = "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678";
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          {
+            name: "gplug",
+            source: { source: "github", repo: "owner/gh-mp", sha: GIT_SHA },
+            version: "1.0.0",
+          },
+        ],
+      },
+      installed: { gplug: { version: "1.0.0" } },
+    });
+    const cloneRoot = await locationsFor("user", cwd).pluginCloneDir(
+      pluginCloneKey("https://github.com/owner/gh-mp", GIT_SHA),
+    );
+    await mkdir(path.join(cloneRoot, ".claude-plugin"), { recursive: true });
+    await writeFile(
+      path.join(cloneRoot, ".claude-plugin", "plugin.json"),
+      JSON.stringify({ name: "gplug" }),
+    );
+    await mkdir(path.join(cloneRoot, "skills", "warm-skill"), { recursive: true });
+    await writeFile(
+      path.join(cloneRoot, "skills", "warm-skill", "SKILL.md"),
+      `---\nname: warm-skill\n---\n\nHello.\n`,
+    );
+    setGitHubBaseUrl(t, "http://mirror.example");
+    const { gitOps, state: gitState } = createGitOps({
+      cloneThrows: new Error("network unreachable: clone"),
+    });
+    const { credOps: credentialOps } = createCredentialOps();
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({
+      ctx,
+      run,
+      marketplace: "mp",
+      plugin: "gplug",
+      scope: "user",
+      cwd,
+      fetch: true,
+      cloneCacheSeam: fetchSeamWith(gitOps),
+      credentialOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ● gplug v1.0.0 (installed)",
+          "    skills: warm-skill",
         ].join("\n"),
       },
     ]);

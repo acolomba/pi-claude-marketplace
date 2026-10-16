@@ -12,6 +12,8 @@ import {
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
 import { createJsonCapture } from "../../edge/json-capture.ts";
+import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+import { setGitHubBaseUrl } from "../../shared/github-base-url-environment.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type { GitBackedSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
@@ -185,6 +187,42 @@ test("returns a materialized pinned cache result and its resolved sha", async (t
     resolvedSha: SHA,
   });
   assert.deepStrictEqual(calls, ["resolve", "materialize"]);
+});
+
+test("NFR-5: a pinned GitHub source the seam finds warm never reads an invalid base", async (testContext) => {
+  // arrange
+  await createHermeticEnvironment(testContext, "install-clone-probe-warm-home-");
+  const { locations, root } = await freshLocations(testContext);
+  setGitHubBaseUrl(testContext, "http://mirror.example");
+  const cloneRoot = path.join(root, "warm-clone");
+  await mkdir(cloneRoot, { recursive: true });
+  const source: GitBackedSource = {
+    kind: "github",
+    raw: "owner/repo",
+    owner: "owner",
+    repo: "repo",
+    sha: SHA,
+  };
+  const seam: InstallCloneCacheSeam = {
+    resolvePluginPin() {
+      return Promise.resolve({ cloneUrl: "https://github.com/owner/repo", pin: SHA });
+    },
+    materializePluginClone() {
+      return Promise.resolve(cloneRoot);
+    },
+    materializeOrRefreshPluginMirror() {
+      return Promise.reject(new Error("unexpected mirror materialization"));
+    },
+  };
+
+  // act
+  const outcome = await probeInstallClone({ source, seam, locations, auth: auth() });
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    result: { kind: "materialized", pluginRoot: cloneRoot, resolvedSha: SHA },
+    resolvedSha: SHA,
+  });
 });
 
 // D-2-01 / D-2-03: both seam calls take the identity `cloneUrl` AND the wire

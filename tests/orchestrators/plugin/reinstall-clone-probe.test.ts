@@ -13,6 +13,8 @@ import {
   type ReinstallCloneCacheSeam,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-clone-probe.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+import { setGitHubBaseUrl } from "../../shared/github-base-url-environment.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type { GitBackedSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
@@ -65,6 +67,43 @@ test("uses the production seam for a warm pinned clone", async (testContext) => 
     source,
     locations,
     recordedSha: SHA,
+    auth: auth(),
+  });
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    kind: "materialized",
+    pluginRoot: cloneRoot,
+    resolvedSha: SHA,
+  });
+});
+
+test("NFR-5: a pinned GitHub source the seam finds warm never reads an invalid base", async (testContext) => {
+  // arrange
+  await createHermeticEnvironment(testContext, "reinstall-clone-probe-warm-home-");
+  const { locations, root } = await freshLocations(testContext);
+  setGitHubBaseUrl(testContext, "http://mirror.example");
+  const cloneRoot = path.join(root, "warm-clone");
+  await mkdir(cloneRoot, { recursive: true });
+  const source: GitBackedSource = {
+    kind: "github",
+    raw: "owner/repo",
+    owner: "owner",
+    repo: "repo",
+    sha: SHA,
+  };
+  const seam: ReinstallCloneCacheSeam = {
+    materializePluginClone() {
+      return Promise.resolve(cloneRoot);
+    },
+  };
+
+  // act
+  const outcome = await probeReinstallClone({
+    source,
+    locations,
+    recordedSha: SHA,
+    seam,
     auth: auth(),
   });
 
