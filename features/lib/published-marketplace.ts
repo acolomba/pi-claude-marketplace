@@ -8,7 +8,11 @@
 
 import path from "node:path";
 
-import { writeInvalidManifest, writeMarketplace } from "./path-marketplace.ts";
+import {
+  writeInvalidManifest,
+  writeMalformedManifest,
+  writeMarketplace,
+} from "./path-marketplace.ts";
 
 import type { OfferedPlugin } from "./path-marketplace.ts";
 
@@ -16,6 +20,19 @@ import type { OfferedPlugin } from "./path-marketplace.ts";
 export type SourceKind = "dir" | "file" | "url" | "github";
 
 const SOURCE_KINDS: readonly SourceKind[] = ["dir", "file", "url", "github"];
+
+/**
+ * A way a manifest is broken: JSON that does not parse, or JSON that breaks
+ * the manifest schema.
+ */
+export type ManifestProblem = "malformed" | "schema-invalid";
+
+const MANIFEST_WRITERS: Readonly<
+  Record<ManifestProblem, (root: string, name: string) => Promise<void>>
+> = {
+  malformed: writeMalformedManifest,
+  "schema-invalid": writeInvalidManifest,
+};
 
 /** A published marketplace: its kind, and the source a user types to add it. */
 export interface PublishedMarketplace {
@@ -63,18 +80,20 @@ export async function publishMarketplace(
 }
 
 /**
- * Breaks the manifest of the marketplace `name`, published as `published`, so
- * it no longer matches the manifest schema.
+ * Breaks the manifest of the marketplace `name`, published as `published`,
+ * with `problem`: JSON that does not parse, or JSON that breaks the manifest
+ * schema (D-04).
  */
 export async function invalidateManifest(
   marketplacesRoot: string,
   name: string,
   published: PublishedMarketplace,
+  problem: ManifestProblem,
 ): Promise<void> {
   switch (published.kind) {
     case "dir":
     case "file":
-      await writeInvalidManifest(path.join(marketplacesRoot, name), name);
+      await MANIFEST_WRITERS[problem](path.join(marketplacesRoot, name), name);
       return;
     case "url":
     case "github":

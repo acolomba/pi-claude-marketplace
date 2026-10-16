@@ -69,6 +69,11 @@ Given(
 Given(
   "the manifest of the marketplace {string} has become invalid",
   async function (this: ScenarioWorld, name: string) {
-    await invalidateManifest(this.marketplacesRoot, name, requirePublished(this, name));
+    await invalidateManifest(
+      this.marketplacesRoot,
+      name,
+      requirePublished(this, name),
+      "schema-invalid",
+    );
   },
 );

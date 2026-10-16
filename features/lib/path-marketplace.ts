@@ -52,6 +52,18 @@ async function writePlugin(root: string, plugin: OfferedPlugin): Promise<void> {
   );
 }
 
+function manifestText(name: string, plugins: readonly OfferedPlugin[]): string {
+  return JSON.stringify({
+    name,
+    owner: { name: "features" },
+    plugins: plugins.map((plugin) => ({
+      name: plugin.name,
+      source: `./plugins/${plugin.name}`,
+      version: plugin.version,
+    })),
+  });
+}
+
 /** Writes the marketplace `name` under `root`, offering `plugins`. */
 export async function writeMarketplace(
   root: string,
@@ -60,18 +72,7 @@ export async function writeMarketplace(
 ): Promise<void> {
   await Promise.all(plugins.map((plugin) => writePlugin(root, plugin)));
   await mkdir(path.join(root, ".claude-plugin"), { recursive: true });
-  await writeFile(
-    manifestPath(root),
-    JSON.stringify({
-      name,
-      owner: { name: "features" },
-      plugins: plugins.map((plugin) => ({
-        name: plugin.name,
-        source: `./plugins/${plugin.name}`,
-        version: plugin.version,
-      })),
-    }),
-  );
+  await writeFile(manifestPath(root), manifestText(name, plugins));
 }
 
 /**
@@ -85,4 +86,15 @@ export async function writeInvalidManifest(root: string, name: string): Promise<
     manifestPath(root),
     JSON.stringify({ name, owner: { name: "features" }, plugins: "nope" }),
   );
+}
+
+/**
+ * Rewrites the manifest of the marketplace `name` under `root` as JSON that
+ * does not parse: the manifest with no plugins, short of its last character.
+ * The manifest cache keys on modification time and size, remembers a failed
+ * parse, and outlives a new session, so this text has a size of its own,
+ * one byte less than the valid manifest.
+ */
+export async function writeMalformedManifest(root: string, name: string): Promise<void> {
+  await writeFile(manifestPath(root), manifestText(name, []).slice(0, -1));
 }

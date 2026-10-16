@@ -78,3 +78,29 @@ Feature: Marketplace add
     Examples:
       | source kind |
       | github      |
+
+  Scenario Outline: Adding a marketplace with a malformed or schema-invalid manifest fails as invalid manifest
+    Given the marketplace "tools" is published as a <source kind> source
+    Given the manifest of the marketplace "tools" to add <manifest problem>
+    When the user runs "/claude:plugin marketplace add <source> --scope project"
+    Then the result has these fields:
+      | kind         | cascade                             |
+      | severity     | error                               |
+      | needs reload | false                               |
+      | summary      | A marketplace operation has failed. |
+    Then the result lists these marketplaces:
+      | name     | scope   | status | reasons          |
+      | <source> | project | failed | invalid manifest |
+
+    Examples:
+      | manifest problem           | source kind | source                                                    |
+      | is not valid json          | dir         | {home}/marketplaces/tools                                 |
+      | breaks the manifest schema | dir         | {home}/marketplaces/tools                                 |
+      | is not valid json          | file        | {home}/marketplaces/tools/.claude-plugin/marketplace.json |
+      | breaks the manifest schema | file        | {home}/marketplaces/tools/.claude-plugin/marketplace.json |
+
+    @url
+    Examples:
+      | manifest problem           | source kind | source                            |
+      | is not valid json          | url         | https://{git host}/acme/tools.git |
+      | breaks the manifest schema | url         | https://{git host}/acme/tools.git |
