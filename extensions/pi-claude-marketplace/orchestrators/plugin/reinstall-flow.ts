@@ -59,6 +59,7 @@ import {
   composeErrorWithCauseChain,
   errorMessage,
   errorWithManualRecovery,
+  rethrowInvalidGitHubBaseUrl,
 } from "../../shared/errors.ts";
 import { notifyMcpConfigNotices } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
@@ -308,6 +309,7 @@ async function reinstallPluginWithTransaction(
       opts.stateTransaction,
     );
   } catch (err) {
+    rethrowInvalidGitHubBaseUrl(err);
     return handleSinglePluginFailure(owners, opts, err as Error, render);
   }
 

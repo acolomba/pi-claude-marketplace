@@ -24,10 +24,12 @@ import {
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { buildAuthCallbacks } from "../../../extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts";
+import { InvalidGitHubBaseUrlError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+import { setGitHubBaseUrl } from "../../shared/github-base-url-environment.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type { MarketplaceManifest } from "../../../extensions/pi-claude-marketplace/domain/manifest.ts";
@@ -1913,6 +1915,52 @@ test("classifies a denied Device Flow as authentication required", async () => {
       requestCode: [{ clientId: "Ov23liNcyK08uGdU0mMl", scope: "repo" }],
     });
     verifyNotifications(boundary);
+  });
+});
+
+test("GHB-03: fetching a GitHub-source plugin on an invalid base fails the command instead of rendering a failed row", async (t) => {
+  await withWorkspace(async ({ cwd }) => {
+    // arrange
+    setGitHubBaseUrl(t, "http://mirror.example");
+    const marketplace = await marketplaceRecord({
+      cwd,
+      entries: [
+        { name: "first", source: { source: "github", repo: "acme/first" } },
+        { name: "second", source: { source: "github", repo: "acme/second" } },
+      ],
+      name: "marketplace",
+      scope: "project",
+    });
+    await saveMarketplaces(cwd, "project", [marketplace]);
+    const git = gitBoundary({ allowedRemoteUrls: [] });
+    const cache = cacheBoundary(git.gitOps);
+    const credentials = createCredentialOpsFake({ boundary: "memory" });
+    const ctx = mock<ExtensionContext>({ exactParams: true, name: "invalid base context" });
+
+    // act & assert
+    await assert.rejects(
+      () =>
+        fetchPlugins({
+          cloneCacheSeam: cache.seam,
+          credentialOps: credentials.credentialOps,
+          ctx,
+          cwd,
+          run: runWithNothingLoaded(),
+          scope: "project",
+          target: { kind: "marketplace", marketplace: "marketplace" },
+        }),
+      (error: unknown) => {
+        assert.deepStrictEqual(
+          error,
+          new InvalidGitHubBaseUrlError("PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL", "scheme"),
+        );
+        return true;
+      },
+    );
+    assert.deepStrictEqual(cache.calls, []);
+    assert.deepStrictEqual(git.schedule, []);
+    assert.deepStrictEqual(credentials.calls, { approve: [], fill: [], reject: [] });
+    verify(ctx);
   });
 });
 

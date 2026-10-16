@@ -73,6 +73,7 @@ import {
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import { InvalidGitHubBaseUrlError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
 import { createJsonCapture } from "../../edge/json-capture.ts";
@@ -80,6 +81,7 @@ import { createNotificationBoundary } from "../../edge/notification-boundary.ts"
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+import { setGitHubBaseUrl } from "../../shared/github-base-url-environment.ts";
 import { runWithNothingLoaded, runWithSoftDeps } from "../../shared/notification-run-seeds.ts";
 
 import { retryTree } from "./scope-tree-inventory.ts";
@@ -4030,6 +4032,50 @@ test("a cold-cache git-source reinstall re-materializes from the recorded sha wi
         "checkout pins the recorded sha, not a re-resolved ref",
       );
       assert.equal(gitState.resolveRemoteRefCalls.length, 0, "no ref re-resolution");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("GHB-03: reinstalling a pinned GitHub-source plugin on an invalid base fails the command", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-ghb03-"));
+    try {
+      // arrange
+      await seedInstalledGitSourcePlugin({
+        cwd,
+        marketplaceName: "mp",
+        pluginName: "gp",
+        source: { source: "github", repo: "org/repo", sha: GIT_SOURCE_SHA },
+      });
+      setGitHubBaseUrl(t, "http://mirror.example");
+      const fixtureRepoDir = path.join(cwd, "repo-fixture");
+      const { gitOps, state: gitState } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
+      const { ctx, verifyBoundary } = createNotificationBoundary(0);
+
+      // act & assert
+      await assert.rejects(
+        () =>
+          reinstallPlugin({
+            ctx,
+            run: runWithNothingLoaded(),
+            scope: "project",
+            cwd,
+            marketplace: "mp",
+            plugin: "gp",
+            cloneCacheSeam: reinstallSeamWith(gitOps),
+          }),
+        (error: unknown) => {
+          assert.deepStrictEqual(
+            error,
+            new InvalidGitHubBaseUrlError("PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL", "scheme"),
+          );
+          return true;
+        },
+      );
+      assert.deepStrictEqual(gitState.cloneCalls, []);
+      verifyBoundary();
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
