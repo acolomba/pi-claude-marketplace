@@ -112,7 +112,11 @@ import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { McpConfigNotice } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
-import type { ReinstallFailedOutcome, ReinstallPluginOutcome } from "../types.ts";
+import type {
+  ReinstallFailedOutcome,
+  ReinstallOutcomeBase,
+  ReinstallPluginOutcome,
+} from "../types.ts";
 import type { ReinstallCloneCacheSeam } from "./reinstall-clone-probe.ts";
 import type {
   ReinstallMaintenanceInput,
@@ -371,6 +375,9 @@ async function reinstallPluginWithTransaction(
         discoveryWarnings: locked.discoveryWarnings,
       }),
       ...(locked.mcpConfigNotices.length > 0 && { mcpConfigNotices: locked.mcpConfigNotices }),
+      ...(locked.invalidConfigFile !== undefined && {
+        invalidConfigFile: locked.invalidConfigFile,
+      }),
     };
   }
 
@@ -416,39 +423,57 @@ async function reinstallPluginWithTransaction(
   // notices after it.
   notifyMcpConfigNotices(ctx, run, locked.mcpConfigNotices);
 
-  // S5: when the config write-back loadConfig returned `invalid`, emit a
-  // separate warning row so the user sees that the on-disk artifacts were
-  // reinstalled but the config entry was not written. Pre-S5 this arm
-  // silently dropped the warning while the success notify proceeded.
   if (locked.invalidConfigFile !== undefined) {
-    const targetBasename = path.basename(locked.invalidConfigFile);
-    notifyWithContext(
+    notifyInvalidConfigWriteBack(
       ctx,
       run,
-      REINSTALL_CONTEXT,
-      [
-        {
-          name: marketplace,
-          scope,
-          plugins: [
-            {
-              status: "failed",
-              name: plugin,
-              reasons: ["invalid manifest"] as const,
-              cause: new Error(`Config file "${targetBasename}" failed schema validation.`),
-              // D-03/D-06: invalid config write-back -> error, no reload.
-              severity: "error" as const,
-              needsReload: false,
-            },
-          ],
-        },
-      ],
-      undefined,
+      { name: plugin, marketplace, scope },
+      locked.invalidConfigFile,
       "single",
     );
   }
 
   return locked.outcome;
+}
+
+/**
+ * S5: when the config write-back could not read a config file, emit a
+ * separate `(failed)` row so the user sees that the on-disk artifacts were
+ * reinstalled but the config entry was not written. The row names the file
+ * by its basename only.
+ */
+function notifyInvalidConfigWriteBack(
+  ctx: NotificationContext,
+  run: NotificationRun,
+  target: ReinstallOutcomeBase,
+  filePath: string,
+  cardinality: "single" | "plural",
+): void {
+  const targetBasename = path.basename(filePath);
+  notifyWithContext(
+    ctx,
+    run,
+    REINSTALL_CONTEXT,
+    [
+      {
+        name: target.marketplace,
+        scope: target.scope,
+        plugins: [
+          {
+            status: "failed",
+            name: target.name,
+            reasons: ["invalid manifest"] as const,
+            cause: new Error(`Config file "${targetBasename}" failed schema validation.`),
+            // D-03/D-06: invalid config write-back -> error, no reload.
+            severity: "error" as const,
+            needsReload: false,
+          },
+        ],
+      },
+    ],
+    undefined,
+    cardinality,
+  );
 }
 
 function maintenanceInput(opts: ReinstallPluginOptions): ReinstallMaintenanceInput {
@@ -603,7 +628,25 @@ async function reinstallPluginsWith(
   renderReinstallPartitionAndNotify(ctx, run, outcomes, cardinality);
   surfaceReinstallDiscoveryWarnings(ctx, run, outcomes);
   surfaceReinstallMcpConfigNotices(ctx, run, outcomes);
+  surfaceReinstallInvalidConfigFiles(ctx, run, outcomes, cardinality);
   return Object.freeze(outcomes);
+}
+
+/**
+ * S5: show one `(failed)` row for each reinstalled plugin whose config
+ * write-back could not read a file, after the cascade and its notices.
+ */
+function surfaceReinstallInvalidConfigFiles(
+  ctx: NotificationContext,
+  run: NotificationRun,
+  outcomes: readonly ReinstallPluginOutcome[],
+  cardinality: "single" | "plural",
+): void {
+  for (const outcome of outcomes) {
+    if (outcome.partition === "reinstalled" && outcome.invalidConfigFile !== undefined) {
+      notifyInvalidConfigWriteBack(ctx, run, outcome, outcome.invalidConfigFile, cardinality);
+    }
+  }
 }
 
 /**

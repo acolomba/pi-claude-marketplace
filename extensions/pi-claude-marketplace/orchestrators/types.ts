@@ -119,6 +119,14 @@ export interface ReinstallReinstalledOutcome extends ReinstallOutcomeBase {
    * omitted when there are none (NREG-01).
    */
   readonly mcpConfigNotices?: readonly McpConfigNotice[];
+  /**
+   * S5: the config file the write-back could not read, so the plugin
+   * reinstalled but its config entry was not written. `reinstallPlugins`
+   * renders it as a `(failed)` row naming the file's basename. Populated only
+   * on the `render: "none"` arm, and omitted when the write-back could read
+   * every file (NREG-01).
+   */
+  readonly invalidConfigFile?: string;
 }
 
 export interface ReinstallSkippedOutcome extends ReinstallOutcomeBase {

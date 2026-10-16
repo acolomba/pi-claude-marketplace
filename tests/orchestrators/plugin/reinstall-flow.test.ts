@@ -3285,10 +3285,19 @@ test("S5: a flagless reinstall whose local file cannot be read names claude-plug
       const { ctx, run, notifications } = makeCtx();
 
       // act
-      const outcome = await reinstallDefault(cwd, ctx, run);
+      const outcomes = await reinstallPlugins({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", marketplace: "mp", plugin: "hello" },
+      });
 
       // assert
-      assert.equal(outcome.partition, "reinstalled");
+      assert.deepEqual(
+        outcomes.map((outcome) => outcome.partition),
+        ["reinstalled"],
+      );
       assert.deepEqual(notifications, [
         { message: "● mp [project]\n  ● hello v1.0.0 (reinstalled)\n\n/reload to pick up changes" },
         {
