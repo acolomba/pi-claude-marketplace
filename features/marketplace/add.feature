@@ -148,7 +148,7 @@ Feature: Marketplace add
   Scenario Outline: Adding a marketplace whose name the scope already holds fails as a duplicate name
     Given the marketplace "tools" is published as a <source kind> source
     Given the marketplace "tools" is added to the project scope
-    Given a second marketplace declaring the name "tools" can be added from "tools-copy"
+    Given a second marketplace declaring the name "tools" is ready to add from "tools-copy"
     When the user runs "/claude:plugin marketplace add <second source> --scope project"
     Then the result has these fields:
       | kind         | cascade                             |

@@ -51,7 +51,7 @@ Given(
 // Every row of the duplicate-name Outline runs this step, so the rows that add
 // the first marketplace again also publish this one, and never add it (ADD-04).
 Given(
-  "a second marketplace declaring the name {string} can be added from {string}",
+  "a second marketplace declaring the name {string} is ready to add from {string}",
   async function (this: ScenarioWorld, name: string, location: string) {
     const { kind } = this.requirePublished(name);
     const root = await requireFreeRoot(this.marketplacesRoot, location, kind);
