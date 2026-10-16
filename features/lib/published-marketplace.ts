@@ -6,6 +6,8 @@
  * that publish a marketplace do not change when they do.
  */
 
+import assert from "node:assert/strict";
+import { stat } from "node:fs/promises";
 import path from "node:path";
 
 import {
@@ -56,6 +58,34 @@ export function parseSourceKind(text: string): SourceKind {
 
 function noStandIn(kind: SourceKind): Error {
   return new Error(`the ${kind} source kind has no stand-in yet`);
+}
+
+/**
+ * Returns the directory that a `kind` marketplace published in `directory`
+ * under `marketplacesRoot` lives in, failing when a marketplace is published
+ * there already. The url and github kinds throw until they have a stand-in.
+ */
+export async function requireFreeRoot(
+  marketplacesRoot: string,
+  directory: string,
+  kind: SourceKind,
+): Promise<string> {
+  switch (kind) {
+    case "dir":
+    case "file": {
+      const root = path.join(marketplacesRoot, directory);
+      await assert.rejects(
+        stat(root),
+        { code: "ENOENT" },
+        `${directory} already holds a marketplace`,
+      );
+      return root;
+    }
+
+    case "url":
+    case "github":
+      throw noStandIn(kind);
+  }
 }
 
 /**

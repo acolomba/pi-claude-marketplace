@@ -13,7 +13,11 @@ import path from "node:path";
 
 import { Given } from "@cucumber/cucumber";
 
-import { invalidateManifest, publishMarketplaceIn } from "../../lib/published-marketplace.ts";
+import {
+  invalidateManifest,
+  publishMarketplaceIn,
+  requireFreeRoot,
+} from "../../lib/published-marketplace.ts";
 
 import type { ManifestProblem } from "../../lib/published-marketplace.ts";
 import type { ScenarioWorld } from "../../support/world.ts";
@@ -43,26 +47,16 @@ Given(
   },
 );
 
+// Every row of the duplicate-name Outline runs this step, so the rows that add
+// the first marketplace again also publish this one, and never add it (ADD-04).
 Given(
-  "the marketplace {string} to add again is the one already added",
-  function (this: ScenarioWorld, name: string) {
-    this.requirePublished(name);
-  },
-);
-
-Given(
-  "the marketplace {string} to add again is also published in the directory {string}",
-  async function (this: ScenarioWorld, name: string, directory: string) {
+  "a second marketplace declaring the name {string} can be added from {string}",
+  async function (this: ScenarioWorld, name: string, location: string) {
     const { kind } = this.requirePublished(name);
-    const root = path.join(this.marketplacesRoot, directory);
-    await assert.rejects(
-      stat(root),
-      { code: "ENOENT" },
-      `${directory} already holds a marketplace`,
-    );
+    const root = await requireFreeRoot(this.marketplacesRoot, location, kind);
     this.onRelease(() => rm(root, { recursive: true, force: true }));
-    // Not recorded: the world keys marketplaces by name, so it would replace the first (ADD-04).
-    await publishMarketplaceIn(this.marketplacesRoot, directory, name, kind, []);
+    // Not recorded: the world keys marketplaces by name, so it would replace the first.
+    await publishMarketplaceIn(this.marketplacesRoot, location, name, kind, []);
   },
 );
 
