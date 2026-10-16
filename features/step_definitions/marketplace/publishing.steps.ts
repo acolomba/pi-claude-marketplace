@@ -9,13 +9,16 @@
 
 import assert from "node:assert/strict";
 import { rm } from "node:fs/promises";
-import path from "node:path";
 
 import { type DataTable, Given } from "@cucumber/cucumber";
 
 import { readOfferedPlugins } from "../../lib/path-marketplace.ts";
 import { runCommand } from "../../lib/pi-commands.ts";
-import { invalidateManifest, publishMarketplace } from "../../lib/published-marketplace.ts";
+import {
+  invalidateManifest,
+  publishMarketplace,
+  requireFreeRoot,
+} from "../../lib/published-marketplace.ts";
 
 import type { SourceKind } from "../../lib/published-marketplace.ts";
 import type { ScenarioWorld } from "../../support/world.ts";
@@ -27,7 +30,7 @@ Given(
       assert.fail(`the marketplace ${name} is already published in this scenario`);
     }
 
-    const root = path.join(this.marketplacesRoot, name);
+    const root = await requireFreeRoot(this.marketplacesRoot, name, kind);
     this.onRelease(() => rm(root, { recursive: true, force: true }));
     this.recordPublished(name, await publishMarketplace(this.marketplacesRoot, name, kind, []));
   },
