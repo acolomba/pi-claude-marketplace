@@ -5,16 +5,16 @@ milestone_name: Marketplace Behavioral Tests
 current_phase: "03.1"
 current_phase_name: Local Declaration Leak Fix
 status: executing
-stopped_at: Completed 03.1-03-PLAN.md
-last_updated: "2026-10-16T17:05:35.343Z"
+stopped_at: Completed 03.1-04-PLAN.md
+last_updated: "2026-10-16T17:24:38.543Z"
 last_activity: 2026-10-16
 last_activity_desc: Completed 03.1-02 (FIX-03 install refusal under a local-only marketplace)
-state_head: 3db8f2ece79b18e7ff4861c7f231981f93aad4b1
+state_head: 69bad81e483ebf183b71e55cbd335a58878d5634
 progress:
   total_phases: 13
   completed_phases: 3
   total_plans: 18
-  completed_plans: 16
+  completed_plans: 17
   percent: 23
 ---
 
@@ -32,7 +32,7 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 03.1 (Local Declaration Leak Fix) — EXECUTING
-Plan: 4 of 5
+Plan: 5 of 5
 Status: Ready to execute
 Last activity: 2026-10-16 — Completed 03.1-02 (FIX-03 install refusal under a local-only marketplace)
 
@@ -181,8 +181,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-16T17:05:34.443Z
-**Stopped at:** Completed 03.1-03-PLAN.md
+**Last session:** 2026-10-16T17:24:37.745Z
+**Stopped at:** Completed 03.1-04-PLAN.md
 **Resume file:** None
 
 **Main merge (2026-10-11, quick task 261011-bsm):** `origin/main` at
@@ -313,6 +313,7 @@ archived milestone artifacts.
 | Phase 03.1 P01 | 21min | 3 tasks | 12 files |
 | Phase 03.1 P02 | 20min | 3 tasks | 13 files |
 | Phase 03.1 P03 | 16min | 2 tasks | 7 files |
+| Phase 03.1 P04 | 16min | 3 tasks | 11 files |
 
 ## Decisions
 
@@ -410,6 +411,8 @@ archived milestone artifacts.
 - [Phase 03.1]: FIX-03: localOnlyMarketplaceRefusal (plugin/shared.ts) is the single rule; install refuses inside the lock right after the write-target selection, before the D-04-07 promotion and the cascade, standalone only (D-06)
 - [Phase 03.1]: Standalone enable and disable refuse a shared write under a local-only marketplace right after the not-installed check; orchestrated calls never refuse (FIX-03, D-06)
 - [Phase 03.1]: Update and reinstall keep the flag as the write-back target; without the flag they write nothing for a local key or under a local-only marketplace and report an unreadable local file (D-08, D-MF-03)
+- [Phase 03.1]: A named flagless update is refused between the preflight and the swap, and a named flagless reinstall inside the lock before resolution; both read writeBackRefusal over selectLayerWriteBack; nameless forms, autoupdate, and the backfill are never refused (FIX-03, D-08)
+- [Phase 03.1]: ReinstallFailedOutcome.cause is set only for MarketplaceDeclaredLocallyError, so no other failed reinstall row gains a cause line (FIX-03, D-07)
 
 ### mcp-4 decisions
 

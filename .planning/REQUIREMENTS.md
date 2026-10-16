@@ -41,7 +41,7 @@ Research detail per requirement is in `.planning/research/FEATURES.md`
 
 - [ ] **FIX-01**: `marketplace update` of a marketplace added from a `marketplace.json` outside `.claude-plugin/` re-reads the manifest the user added instead of failing as `source missing`, and `info` shows the right path (C-10)
 - [x] **FIX-02**: A marketplace added with `--local` is never written into the scope's `claude-plugins.json`: after `add --local` and a reload, only `claude-plugins.local.json` declares it, and after `remove --local` and a reload it stays removed (the first-run migration leak found in Phase 3 discussion)
-- [ ] **FIX-03**: A command that would write a plugin declaration into a scope's `claude-plugins.json` is refused when that plugin's marketplace is declared only in the scope's `claude-plugins.local.json`; the failed row suggests `--local` (D-MF-02)
+- [x] **FIX-03**: A command that would write a plugin declaration into a scope's `claude-plugins.json` is refused when that plugin's marketplace is declared only in the scope's `claude-plugins.local.json`; the failed row suggests `--local` (D-MF-02)
 
 ### Config layers (D-MF-03)
 
@@ -186,7 +186,7 @@ A scope has two layers: shared (`claude-plugins.json`) and local (`claude-plugin
 | GHB-05 | Phase 2 | Complete |
 | FIX-01 | Phase 6 | Pending |
 | FIX-02 | Phase 3.1 | Complete |
-| FIX-03 | Phase 3.1 | Pending |
+| FIX-03 | Phase 3.1 | Complete |
 | LAYER-01 | Phase 3.2 | Pending |
 | LAYER-02 | Phase 3.2 | Pending |
 | LAYER-03 | Phase 3.2 | Pending |
