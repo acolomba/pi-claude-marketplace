@@ -44,9 +44,9 @@ Research detail per requirement is in `.planning/research/FEATURES.md`
 
 ### marketplace add
 
-- [ ] **ADD-01**: Adding a marketplace records it in the chosen scope under its manifest name (dir, file, url, gh)
+- [x] **ADD-01**: Adding a marketplace records it in the chosen scope under its manifest name (dir, file, url, gh)
 - [x] **ADD-02**: Without `--scope`, add uses the user scope
-- [ ] **ADD-03**: An added marketplace appears in `marketplace list` and is still there in a new session (dir, url)
+- [x] **ADD-03**: An added marketplace appears in `marketplace list` and is still there in a new session (dir, url)
 - [x] **ADD-04**: Adding a name the scope already holds fails as `duplicate name` (dir, url)
 - [x] **ADD-05**: The same marketplace can be added to both scopes independently
 - [x] **ADD-06**: A path that does not exist fails as `source missing`, named by the source as typed
@@ -56,8 +56,8 @@ Research detail per requirement is in `.planning/research/FEATURES.md`
 - [ ] **ADD-10**: A url clone answered with 5xx, or whose connection drops, fails as `network unreachable`
 - [ ] **ADD-11**: A clone answered with 401 and no stored credential fails as `authentication required`; with a stored credential in the sandbox, it succeeds (url, gh)
 - [ ] **ADD-12**: A removed git marketplace can be added again from the same source (url, gh)
-- [ ] **ADD-13**: `add --local` writes the declaration to `claude-plugins.local.json`, and `remove --local` clears it
-- [ ] **ADD-14**: `add ~/...` keeps the `~` form and resolves it against HOME
+- [x] **ADD-13**: `add --local` writes the declaration to `claude-plugins.local.json`, and `remove --local` clears it
+- [x] **ADD-14**: `add ~/...` keeps the `~` form and resolves it against HOME
 
 ### marketplace remove / rm
 
@@ -174,9 +174,9 @@ Research detail per requirement is in `.planning/research/FEATURES.md`
 | GHB-05 | Phase 2 | Complete |
 | FIX-01 | Phase 6 | Pending |
 | FIX-02 | Phase 3.1 | Pending |
-| ADD-01 | Phase 3 | Pending |
+| ADD-01 | Phase 3 | Complete |
 | ADD-02 | Phase 3 | Complete |
-| ADD-03 | Phase 3 | Pending |
+| ADD-03 | Phase 3 | Complete |
 | ADD-04 | Phase 3 | Complete |
 | ADD-05 | Phase 3 | Complete |
 | ADD-06 | Phase 3 | Complete |
@@ -186,8 +186,8 @@ Research detail per requirement is in `.planning/research/FEATURES.md`
 | ADD-10 | Phase 9 | Pending |
 | ADD-11 | Phase 10 | Pending |
 | ADD-12 | Phase 9 | Pending |
-| ADD-13 | Phase 3 | Pending |
-| ADD-14 | Phase 3 | Pending |
+| ADD-13 | Phase 3 | Complete |
+| ADD-14 | Phase 3 | Complete |
 | RM-01 | Phase 4 | Pending |
 | RM-02 | Phase 4 | Pending |
 | RM-03 | Phase 4 | Pending |

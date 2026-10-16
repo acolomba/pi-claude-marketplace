@@ -168,7 +168,7 @@ Plans:
 2. Without `--scope`, `add` uses the user scope; the same marketplace can be added to both scopes independently; and a path that does not exist fails as `source missing`, named by the source as typed.
 3. `add --local` writes the declaration to `claude-plugins.local.json` and `remove --local` clears it, and `add ~/...` keeps the `~` form and resolves it against HOME.
 
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans executed
 
 Plans:
 **Wave 1**
@@ -178,7 +178,7 @@ Plans:
 - [x] 03-02-PLAN.md — A name the scope already holds fails as duplicate name, for the same source and for another directory (ADD-04); both scopes (ADD-05); the default user scope (ADD-02)
 
 **Wave 3** *(blocked on Wave 2 completion)*
-- [ ] 03-03-PLAN.md — add --local and remove --local declarations, with a new remove.feature (ADD-13); cucumber review of the ADD-01, ADD-03, and ADD-14 seeds; phase gate
+- [x] 03-03-PLAN.md — add --local and remove --local declarations, with a new remove.feature (ADD-13); cucumber review of the ADD-01, ADD-03, and ADD-14 seeds; phase gate
 
 ### Phase 3.1: Local Declaration Leak Fix (INSERTED)
 
@@ -300,7 +300,7 @@ Plans:
 | --- | --- | --- | --- |
 | 1. Suite Foundation | 5/5 | Complete    | 2026-10-15 |
 | 2. GitHub Clone-Base Override | 5/5 | Complete    | 2026-10-16 |
-| 3. Marketplace Add | 2/3 | In Progress | - |
+| 3. Marketplace Add | 3/3 | In Progress | - |
 | 3.1. Local Declaration Leak Fix | 0/TBD | Not started | - |
 | 4. Marketplace Remove and List | 0/TBD | Not started | - |
 | 5. Marketplace Info | 0/TBD | Not started | - |

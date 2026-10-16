@@ -4,17 +4,17 @@ milestone: marketplace-features
 milestone_name: Marketplace Behavioral Tests
 current_phase: 03
 current_phase_name: Marketplace Add
-status: executing
-stopped_at: Completed 03-02-PLAN.md
-last_updated: "2026-10-16T12:52:40.932Z"
+status: verifying
+stopped_at: Completed 03-03-PLAN.md
+last_updated: "2026-10-16T13:03:20.991Z"
 last_activity: 2026-10-16
 last_activity_desc: Phase 03 execution started
-state_head: e90fae7fae739b6ad9a15ffb681a21d3dbbe30db
+state_head: c584048df9997aee54dc63a7eee10b3fefdb2c53
 progress:
   total_phases: 11
   completed_phases: 2
   total_plans: 13
-  completed_plans: 12
+  completed_plans: 13
   percent: 18
 ---
 
@@ -33,7 +33,7 @@ component as a working Pi artifact.
 
 Phase: 03 (Marketplace Add) — EXECUTING
 Plan: 3 of 3
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-10-16 — Phase 03 execution started
 
 Progress: [██░░░░░░░░] 18%
@@ -181,8 +181,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-16T12:52:40.539Z
-**Stopped at:** Completed 03-02-PLAN.md
+**Last session:** 2026-10-16T13:03:20.681Z
+**Stopped at:** Completed 03-03-PLAN.md
 **Resume file:** None
 
 **Main merge (2026-10-11, quick task 261011-bsm):** `origin/main` at
@@ -309,6 +309,7 @@ archived milestone artifacts.
 | Phase 02 P05 | 14 min | 3 tasks | 10 files |
 | Phase 03 P01 | 7 min | 2 tasks | 5 files |
 | Phase 03 P02 | 5 min | 2 tasks | 3 files |
+| Phase 03 P03 | 7 min | 2 tasks | 3 files |
 
 ## Decisions
 
@@ -398,6 +399,8 @@ archived milestone artifacts.
 - [Phase 03]: [marketplace-features] invalidateManifest takes a ManifestProblem and picks its writer from a total record, so the kind switch stays single (D-04)
 - [Phase 03]: [marketplace-features] The malformed manifest is the valid no-plugin manifest minus its last byte: 56 vs 57 valid vs 61 schema-invalid, so the manifest cache never serves another content's parse
 - [Phase 03]: [marketplace-features] publishMarketplace delegates to publishMarketplaceIn (directory = name), so the kind switch stays single; the second-publish step records nothing on the world (D-01)
+- [Phase 03]: [marketplace-features] remove --local is shown by a second local entry that stays (Option 1), so no remove.steps.ts and no zero-declaration step exist
+- [Phase 03]: [marketplace-features] Review WARNING recorded: the published-marketplace lookup is duplicated in add.steps.ts and publishing.steps.ts; move it to features/lib when publishing.steps.ts next changes
 
 ### mcp-4 decisions
 
