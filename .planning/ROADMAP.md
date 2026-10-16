@@ -218,12 +218,13 @@ Plans:
 
 **Goal:** Every marketplace mutation named on the command line is partitioned between a scope's shared layer (`claude-plugins.json`) and local layer (`claude-plugins.local.json`): the same marketplace may be declared in both layers, and a command without `--local` changes only shared entries while `--local` changes only local ones.
 **Depends on:** Phase 3.1
-**Requirements:** LAYER-01, LAYER-02, LAYER-03
+**Requirements:** LAYER-01, LAYER-02, LAYER-03, LAYER-07
 **Success Criteria** (what must be TRUE):
 
 1. `marketplace add <src> --local` of a marketplace the shared layer already declares succeeds and declares it in the local layer as well; the reverse also succeeds (LAYER-01).
 2. `marketplace remove`, `autoupdate`, and `noautoupdate` naming a marketplace act only on the target layer (shared by default, local with `--local`) and fail when that layer does not declare the marketplace, leaving the other layer untouched (LAYER-02).
 3. Removing a marketplace from a layer uninstalls only the plugins that layer declares from it; plugins the other layer declares from the same marketplace stay installed (LAYER-03).
+4. A project-scope install from a user-scope marketplace declares the marketplace in the project config and gives the project its own record and clone; removing the marketplace from the user scope leaves the project's plugins, list, info, and `marketplace update` working (LAYER-07, D-MF-04).
 
 **Plans:** TBD
 

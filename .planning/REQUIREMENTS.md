@@ -53,6 +53,7 @@ A scope has two layers: shared (`claude-plugins.json`) and local (`claude-plugin
 - [ ] **LAYER-04**: Plugin verbs naming a plugin (install, uninstall, enable, disable, update, reinstall) act only on the target layer and fail when it does not declare the plugin (install declares it); a verb naming no plugin covers every layer
 - [ ] **LAYER-05**: A plugin is declared in at most one layer of a scope; installing it into one layer while the other declares it fails
 - [ ] **LAYER-06**: On load, a shared plugin whose marketplace only the local layer declares is ignored, not installed and not an error
+- [ ] **LAYER-07**: A project-scope install that uses a user-scope marketplace declares it in the project config and gives the project its own record and clone; a user-scope remove leaves the project scope working (D-MF-04)
 
 ### marketplace add
 
@@ -193,6 +194,7 @@ A scope has two layers: shared (`claude-plugins.json`) and local (`claude-plugin
 | LAYER-04 | Phase 3.3 | Pending |
 | LAYER-05 | Phase 3.3 | Pending |
 | LAYER-06 | Phase 3.3 | Pending |
+| LAYER-07 | Phase 3.2 | Pending |
 | ADD-01 | Phase 3 | Complete |
 | ADD-02 | Phase 3 | Complete |
 | ADD-03 | Phase 3 | Complete |
@@ -266,8 +268,8 @@ A scope has two layers: shared (`claude-plugins.json`) and local (`claude-plugin
 | SRC-03 | Phase 10 | Pending |
 
 **Coverage:**
-- v1 requirements: 93 total
-- Mapped to phases: 93
+- v1 requirements: 94 total
+- Mapped to phases: 94
 - Unmapped: 0
 
 ---
