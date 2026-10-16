@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import {
   chmod,
+  cp,
   mkdir,
   mkdtemp,
   readdir,
@@ -9740,7 +9741,7 @@ function captureInstallAuth(inner: InstallCloneCacheSeam): {
     seam: {
       materializeOrRefreshPluginMirror: inner.materializeOrRefreshPluginMirror,
       materializePluginClone: (options) => {
-        calls.push({ auth: options.auth, cloneUrl: options.cloneUrl });
+        calls.push({ auth: options.resolveAuth(), cloneUrl: options.cloneUrl });
         return inner.materializePluginClone(options);
       },
       resolvePluginPin: inner.resolvePluginPin,
@@ -11035,6 +11036,52 @@ test("GHB-03: installing a GitHub-source plugin on an invalid base fails the com
       );
       assert.deepStrictEqual(git.state.cloneCalls, []);
       verifyBoundary();
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("NFR-5: installing a pinned GitHub-source plugin from a warm clone ignores an invalid base", async (t) => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-ghb-warm-"));
+    try {
+      // arrange
+      setGitHubBaseUrl(t, "http://mirror.example");
+      const fixtureRepoDir = path.join(cwd, "repo-fixture");
+      await seedGitSourceMarketplace({
+        cwd,
+        fixtureRepoDir,
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "gh",
+        source: { source: "github", repo: "org/repo", sha: GIT_SOURCE_SHA },
+      });
+      const cloneRoot = await locationsFor("project", cwd).pluginCloneDir(
+        pluginCloneKey("https://github.com/org/repo", GIT_SOURCE_SHA),
+      );
+      await cp(fixtureRepoDir, cloneRoot, { recursive: true });
+      const git = createGitOps({
+        fixtureSourceDir: fixtureRepoDir,
+        cloneThrows: new Error("network unreachable: clone"),
+      });
+      const { ctx, run } = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        cloneCacheSeam: seamWith(git.gitOps),
+        ctx,
+        cwd,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        run,
+        plugin: "gh",
+        scope: "project",
+      });
+
+      // assert
+      assert.strictEqual(outcome.status, "installed");
+      assert.deepStrictEqual(git.state.cloneCalls, []);
     } finally {
       await rm(cwd, { force: true, recursive: true });
     }

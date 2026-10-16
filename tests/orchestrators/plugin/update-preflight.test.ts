@@ -1283,7 +1283,7 @@ test("passes authenticated clone context and refs through both clone arms", asyn
       return Promise.resolve({ cloneUrl: "https://github.com/org/repo", pin: sha, ref: "stable" });
     },
     materializePluginClone: (options) => {
-      assert.strictEqual(options.auth?.host, "github.com");
+      assert.strictEqual(options.resolveAuth().host, "github.com");
       assert.strictEqual(options.ref, "stable");
       return Promise.resolve(pinned.pluginRoot);
     },
@@ -1347,7 +1347,7 @@ test("D-3-04: gives the autoupdate cascade a github.com stored-credential bundle
       return Promise.resolve({ cloneUrl: "https://github.com/org/repo", pin: sha, ref: "stable" });
     },
     materializePluginClone: (options) => {
-      assert.deepStrictEqual(options.auth, {
+      assert.deepStrictEqual(options.resolveAuth(), {
         kind: "stored-credential",
         credentialOps,
         host: "github.com",

@@ -2097,14 +2097,13 @@ function makeFetchProbe(locations: ScopedLocations, fetchCtx: InfoFetchContext):
 
   const probePinned = async (gitSource: GitBackedSource): Promise<GitPluginRootResult> => {
     const { cloneUrl, pin, ref } = await fetchCtx.seam.resolvePluginPin({ source: gitSource });
-    const authBundle = buildCloneAuth(cloneUrl, gitSource.kind, fetchCtx);
     const cloneRoot = await fetchCtx.seam.materializePluginClone({
       locations,
       cloneUrl,
       networkUrl: networkCloneUrl(gitSource),
       pin,
       ...(ref !== undefined && { ref }),
-      auth: authBundle,
+      resolveAuth: () => buildCloneAuth(cloneUrl, gitSource.kind, fetchCtx),
     });
     return resolveGitPluginRootWithSubdir(gitSource, cloneRoot, pin);
   };

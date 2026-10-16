@@ -3518,7 +3518,7 @@ function capturingReinstallSeam(gitOps: GitOps): {
   };
   const seam: ReinstallCloneCacheSeam = {
     materializePluginClone: (args) => {
-      captured.auth = args.auth;
+      captured.auth = args.resolveAuth();
       captured.count += 1;
       return materializePluginClone({ ...args, gitOps });
     },
@@ -3837,7 +3837,7 @@ test("plugin reinstall authentication: a bulk cold-cache sweep shares one host m
       const bundles: (GitAuthBundle | undefined)[] = [];
       const seam: ReinstallCloneCacheSeam = {
         materializePluginClone: (args) => {
-          bundles.push(args.auth);
+          bundles.push(args.resolveAuth());
           return materializePluginClone({ ...args, gitOps });
         },
       };
@@ -4038,7 +4038,7 @@ test("a cold-cache git-source reinstall re-materializes from the recorded sha wi
   });
 });
 
-test("GHB-03: reinstalling a pinned GitHub-source plugin on an invalid base fails the command", async (t) => {
+test("GHB-03: reinstalling a pinned GitHub-source plugin whose clone is gone fails the command on an invalid base", async (t) => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-ghb03-"));
     try {
@@ -4049,6 +4049,13 @@ test("GHB-03: reinstalling a pinned GitHub-source plugin on an invalid base fail
         pluginName: "gp",
         source: { source: "github", repo: "org/repo", sha: GIT_SOURCE_SHA },
       });
+      const locations = locationsFor("project", cwd);
+      await rm(
+        await locations.pluginCloneDir(
+          pluginCloneKey("https://github.com/org/repo", GIT_SOURCE_SHA),
+        ),
+        { recursive: true, force: true },
+      );
       setGitHubBaseUrl(t, "http://mirror.example");
       const fixtureRepoDir = path.join(cwd, "repo-fixture");
       const { gitOps, state: gitState } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
@@ -4076,6 +4083,44 @@ test("GHB-03: reinstalling a pinned GitHub-source plugin on an invalid base fail
       );
       assert.deepStrictEqual(gitState.cloneCalls, []);
       verifyBoundary();
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("NFR-5: a warm-cache pinned GitHub-source reinstall ignores an invalid base and stays offline", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-ghb-warm-"));
+    try {
+      // arrange
+      await seedInstalledGitSourcePlugin({
+        cwd,
+        marketplaceName: "mp",
+        pluginName: "gp",
+        source: { source: "github", repo: "org/repo", sha: GIT_SOURCE_SHA },
+      });
+      setGitHubBaseUrl(t, "http://mirror.example");
+      const { gitOps, state: gitState } = createGitOps({
+        cloneThrows: new Error("network unreachable: clone"),
+      });
+      const { ctx, run } = makeCtx();
+
+      // act
+      const outcome = await reinstallPlugin({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "gp",
+        render: "none",
+        cloneCacheSeam: reinstallSeamWith(gitOps),
+      });
+
+      // assert
+      assert.strictEqual(outcome.partition, "reinstalled");
+      assert.deepStrictEqual(gitState.cloneCalls, []);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

@@ -410,14 +410,13 @@ async function materializeThroughSeam(
   }
 
   const { cloneUrl, pin, ref } = await deps.seam.resolvePluginPin({ source: gitSource });
-  const auth = buildCloneAuth(cloneUrl, gitSource.kind, deps);
   await deps.seam.materializePluginClone({
     locations,
     cloneUrl,
     networkUrl: networkCloneUrl(gitSource),
     pin,
     ...(ref !== undefined && { ref }),
-    auth,
+    resolveAuth: () => buildCloneAuth(cloneUrl, gitSource.kind, deps),
   });
 }
 

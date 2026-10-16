@@ -64,13 +64,12 @@ export async function probeReinstallClone(
     }
   }
 
-  const auth = buildCloneAuth(cloneUrl, source.kind, options.auth);
   const cloneRoot = await seam.materializePluginClone({
     locations,
     cloneUrl,
     networkUrl: networkCloneUrl(source),
     pin: recordedSha,
-    auth,
+    resolveAuth: () => buildCloneAuth(cloneUrl, source.kind, options.auth),
   });
   if (source.kind === "git-subdir") {
     return resolveSubdir(source.path, cloneRoot, recordedSha);

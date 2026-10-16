@@ -264,7 +264,7 @@ function makeUpdateCloneProbe(
       networkUrl: networkCloneUrl(gitSource),
       pin: pin.pin,
       ...(pin.ref !== undefined && { ref: pin.ref }),
-      auth: authBundle,
+      resolveAuth: () => authBundle,
     });
     if (gitSource.kind === "git-subdir") {
       const subdir = await resolveGitSubdirRoot(cloneRoot, gitSource.path);

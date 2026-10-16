@@ -192,10 +192,11 @@ test("falls back from an absent unpinned mirror to the recorded sha", async (tes
   const seam: ReinstallCloneCacheSeam = {
     // The bundle carries closures, so the recorded call keeps only the two
     // comparable fields: the bound host and the injected credential ops.
-    materializePluginClone({ auth: bundle, ...cloneOptions }) {
+    materializePluginClone({ resolveAuth, ...cloneOptions }) {
+      const bundle = resolveAuth();
       calls.push({
         ...cloneOptions,
-        auth: { credentialOps: bundle?.credentialOps, host: bundle?.host },
+        auth: { credentialOps: bundle.credentialOps, host: bundle.host },
       });
       return Promise.resolve(cloneRoot);
     },
@@ -238,7 +239,7 @@ test("D-08-05: falls back from a headless unpinned mirror to the recorded sha", 
   const source: GitBackedSource = { kind: "url", raw: cloneUrl, url: cloneUrl };
   const calls: unknown[] = [];
   const seam: ReinstallCloneCacheSeam = {
-    materializePluginClone({ auth: _bundle, ...cloneOptions }) {
+    materializePluginClone({ resolveAuth: _resolveAuth, ...cloneOptions }) {
       calls.push(cloneOptions);
       return Promise.resolve(cloneRoot);
     },
@@ -282,7 +283,7 @@ test("D-08-05: resolves a git-subdir under the recorded-sha clone behind a headl
   };
   const calls: unknown[] = [];
   const seam: ReinstallCloneCacheSeam = {
-    materializePluginClone({ auth: _bundle, ...cloneOptions }) {
+    materializePluginClone({ resolveAuth: _resolveAuth, ...cloneOptions }) {
       calls.push(cloneOptions);
       return Promise.resolve(cloneRoot);
     },
@@ -322,7 +323,7 @@ test("threads provider auth while resolving a pinned git-subdir", async (testCon
   const calls: unknown[] = [];
   const seam: ReinstallCloneCacheSeam = {
     materializePluginClone(options) {
-      calls.push(options);
+      calls.push({ auth: options.resolveAuth() });
       return Promise.resolve(cloneRoot);
     },
   };

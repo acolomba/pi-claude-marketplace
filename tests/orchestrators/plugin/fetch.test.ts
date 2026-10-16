@@ -238,7 +238,7 @@ function cacheBoundary(gitOps: GitOps): CacheBoundary {
     },
     async materializePluginClone(args) {
       calls.push(
-        `clone ${args.cloneUrl} pin=${args.pin} ref=${args.ref ?? "-"} auth=${args.auth?.host ?? "-"}`,
+        `clone ${args.cloneUrl} pin=${args.pin} ref=${args.ref ?? "-"} auth=${args.resolveAuth().host}`,
       );
       return materializePluginClone({ ...args, gitOps });
     },
@@ -833,7 +833,7 @@ test("reuses a stored GitHub credential without Device Flow", async () => {
         return Promise.reject(new Error("unexpected mirror call"));
       },
       async materializePluginClone(args) {
-        const callbacks = buildAuthCallbacks(requiredAuth(args.auth));
+        const callbacks = buildAuthCallbacks(requiredAuth(args.resolveAuth()));
         assert.deepStrictEqual(await callbacks.onAuth(`${cloneUrl}.git`), storedCredential);
         return path.join(cwd, "not-written");
       },
@@ -905,7 +905,7 @@ test("memoizes one accepted Device Flow result across a same-host sweep", async 
         return Promise.reject(new Error("unexpected mirror call"));
       },
       async materializePluginClone(args) {
-        const auth = requiredAuth(args.auth);
+        const auth = requiredAuth(args.resolveAuth());
         assert.ok(auth.kind === "device-flow");
         authResults.push(await auth.onAuthRequired());
         return path.join(cwd, "not-written");
@@ -1870,7 +1870,7 @@ test("classifies a denied Device Flow as authentication required", async () => {
         return Promise.reject(new Error("unexpected mirror call"));
       },
       async materializePluginClone(args) {
-        const callbacks = buildAuthCallbacks(requiredAuth(args.auth));
+        const callbacks = buildAuthCallbacks(requiredAuth(args.resolveAuth()));
         assert.deepStrictEqual(await callbacks.onAuth(`${cloneUrl}.git`), { cancel: true });
         throw Object.assign(new Error("The operation was canceled."), {
           code: "UserCanceledError",
@@ -2005,7 +2005,7 @@ test("fails cleanly when Device Flow credential approval rejects", async () => {
         return Promise.reject(new Error("unexpected mirror call"));
       },
       async materializePluginClone(args) {
-        const callbacks = buildAuthCallbacks(requiredAuth(args.auth));
+        const callbacks = buildAuthCallbacks(requiredAuth(args.resolveAuth()));
         assert.deepStrictEqual(await callbacks.onAuth(`${cloneUrl}.git`), { cancel: true });
         throw Object.assign(new Error("The operation was canceled."), {
           code: "UserCanceledError",
@@ -2082,7 +2082,7 @@ test("rejects a stale credential and contains a reject failure", async () => {
         return Promise.reject(new Error("unexpected mirror call"));
       },
       async materializePluginClone(args) {
-        const callbacks = buildAuthCallbacks(requiredAuth(args.auth));
+        const callbacks = buildAuthCallbacks(requiredAuth(args.resolveAuth()));
         assert.deepStrictEqual(await callbacks.onAuthFailure(`${cloneUrl}.git`, staleCredential), {
           cancel: true,
         });

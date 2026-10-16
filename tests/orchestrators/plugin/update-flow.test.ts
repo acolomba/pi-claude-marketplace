@@ -394,7 +394,7 @@ function capturingUpdateSeam(gitOps: GitOps): {
       return resolvePluginPin({ ...args, gitOps });
     },
     materializePluginClone: (args) => {
-      captured.cloneAuth = args.auth;
+      captured.cloneAuth = args.resolveAuth();
       return materializePluginClone({ ...args, gitOps });
     },
     materializeOrRefreshPluginMirror: (args) => {
@@ -8790,8 +8790,9 @@ test("plugin update authentication: a run without a supplied authMemo shares one
       const clonePullSeam: UpdateCloneCacheSeam = {
         ...seam,
         materializePluginClone: async (args) => {
-          if (args.auth?.kind === "device-flow") {
-            await args.auth.onAuthRequired();
+          const auth = args.resolveAuth();
+          if (auth.kind === "device-flow") {
+            await auth.onAuthRequired();
           }
 
           return seam.materializePluginClone(args);
