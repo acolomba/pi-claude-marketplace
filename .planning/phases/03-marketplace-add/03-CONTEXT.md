@@ -31,7 +31,7 @@ This phase changes no production code. The `--local` leak found during discussio
 
 ### Duplicate name (ADD-04)
 - **D-01:** One Outline with two variants: the same source added twice, and a second marketplace published from another directory whose manifest declares the same name. Each variant has a dir row and an `@url` row. The duplicate check compares only the manifest name (`newMarketplaceName`), so only the second variant catches an implementation that compares sources instead.
-- **D-02:** The scenario checks the failed row: the manifest name, `failed`, `duplicate name`, and error severity. It also checks that the scope's `claude-plugins.json` still declares the original source, which catches an add that reports the duplicate but still overwrites the record.
+- **D-02:** The scenario checks the whole failed result: the envelope (`cascade`, error severity, no reload, the failure summary) and the failed row (the manifest name, `failed`, `duplicate name`). It also checks that the scope's `claude-plugins.json` still declares the original source, which catches an add that reports the duplicate but still overwrites the record. (Research correction: the wire row carries no `severity` field, so severity is stated in the envelope table.)
 
 ### Failure inputs (ADD-06, ADD-07)
 - **D-03:** ADD-06 is one Outline with local rows only, one for each of four spellings:
@@ -47,7 +47,7 @@ This phase changes no production code. The `--local` leak found during discussio
 ### `--local` round trip (ADD-13)
 - **D-06:** The `add --local` scenario first adds another marketplace without `--local`, so the base file exists. After `add --local`, the base `claude-plugins.json` declares only that first marketplace, and `claude-plugins.local.json` declares only the new one. Both checks use the existing read-only config step. This setup is also how real users meet `--local`, and it avoids the first-run migration path (D-08).
 - **D-07:** The `remove --local` scenario lives in a new `features/marketplace/remove.feature` (`Feature: Marketplace remove`). Phase 3 creates it and Phase 4 extends it. This works because this run executes phases one at a time. A step that only `remove` uses goes in `features/step_definitions/marketplace/remove.steps.ts`. No reload or new session separates the add from the remove.
-- **D-08:** A defect found while reading the code during discussion, not yet confirmed on a real Pi.
+- **D-08:** A defect found while reading the code during discussion, and confirmed on a real Pi during research (03-RESEARCH.md, "D-08 Leak Confirmation").
   - **The leak.** `migrateFirstRunConfig` (`persistence/migrate-config.ts:181`, MIG-01) checks only the base file. In a scope whose first add was `--local`, `state.json` exists but `claude-plugins.json` does not. On the next load (`orchestrators/reconcile/apply.ts::readPassForScope`), `buildConfigFromState` therefore writes the base file from the records, and the `--local` marketplace goes with them. That puts a per-machine entry in the shared, possibly committed, base file.
   - **The consequence.** After that, `remove --local` clears the local entry and the record, but the base file still declares the marketplace, so the next reload adds it back.
   - **The decision.** The user chose to fix it test-first in an inserted Phase 3.1, under a new requirement FIX-02, as Phase 6 does for C-10. Phase 3's own scenarios never reload between `add --local` and their checks, so they pass on today's code.
@@ -131,9 +131,9 @@ These steps already exist:
 `publishMarketplace` and `invalidateManifest` choose their behavior by source kind; url and github throw `noStandIn` until Phases 9 and 10.
 
 ### Established Patterns
-- A failed add row reads `{name, scope, status: "failed", reasons: [reason], severity: "error", plugins: []}`, with no cause (SNM-10). The tables therefore do not change across Node versions. Only under the GitHub base override does a synthetic child row carry the fetched URL (Phase 10).
+- A failed add row reads `{name, scope, status: "failed", reasons: [reason], plugins: []}` on the wire, with no cause (SNM-10) and no `severity` (the payload envelope carries severity `error` and the summary). The tables therefore do not change across Node versions. Only under the GitHub base override does a synthetic child row carry the fetched URL (Phase 10).
 - `check:features` dry-runs every row, the excluded ones included. A tagged block must have a `source kind` column. An untagged block holds only dir and file rows, and a kind-less local Outline such as ADD-06 needs no `source kind` column.
-- Each worker reuses one HOME path, so the same fixture path recurs across scenarios. The manifest cache keys on mtime and size and remembers a failed parse until the file changes. A broken manifest and a valid one written at the same path must therefore differ in size (PITFALLS).
+- Each worker reuses one HOME path, so the same fixture path recurs across scenarios. The manifest cache keys on mtime and size and remembers a failed parse until the file changes, and research showed the cache also survives a new session within one worker. Every manifest content written at one path must therefore have its own size (03-RESEARCH.md: valid 57 bytes, schema-invalid 61, malformed 56).
 - A config file that does not exist is not "zero declarations": the extension rebuilds a missing base file from its records on the next load (MIG-01, and the D-08 leak).
 
 ### Integration Points
