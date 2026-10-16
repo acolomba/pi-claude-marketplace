@@ -4,7 +4,7 @@
  * declares a name already published.
  *
  * Each step text names add, so no other verb module defines the same text
- * (D-08 of the suite foundation).
+ * (D-08 in `.agents/skills/cucumber/rules/layout.md`).
  */
 
 import assert from "node:assert/strict";
