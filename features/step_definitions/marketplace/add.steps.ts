@@ -47,6 +47,11 @@ Given(
   "another marketplace named {string} to add is published as a {source kind} source in {string}",
   async function (this: ScenarioWorld, name: string, kind: SourceKind, directory: string) {
     const root = path.join(this.marketplacesRoot, directory);
+    await assert.rejects(
+      stat(root),
+      { code: "ENOENT" },
+      `${directory} already holds a marketplace`,
+    );
     this.onRelease(() => rm(root, { recursive: true, force: true }));
     // Not recorded: the world keys marketplaces by name, so it would replace the first (ADD-04).
     await publishMarketplaceIn(this.marketplacesRoot, directory, name, kind, []);
