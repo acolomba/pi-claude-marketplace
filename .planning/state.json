@@ -21,7 +21,7 @@
     {
       "number": "3.1",
       "name": "Local Declaration Leak Fix",
-      "status": "in_progress"
+      "status": "complete"
     },
     {
       "number": "3.2",
@@ -71,8 +71,8 @@
   ],
   "next": {
     "command": "/gsd-progress --next",
-    "label": "Advance to the next step (verify)",
-    "reason": "Phase 4 of 13 · 23% · ready to verify"
+    "label": "Advance to the next step (plan phase 03.2)",
+    "reason": "Phase 5 of 13 — needs a plan"
   },
-  "updated_at": "2026-10-16T17:36:44.816Z"
+  "updated_at": "2026-10-16T18:57:55.201Z"
 }

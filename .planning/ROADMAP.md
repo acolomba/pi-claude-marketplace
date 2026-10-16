@@ -57,7 +57,7 @@ path), **url** (https git URL on the loopback stand-in), and **gh**
 - [x] **Phase 1: Suite Foundation** — The payload driver, exact-token comparison, the shared kind-neutral steps and local fixtures, the tag mechanism, and the unused-step gate that every other suite phase builds on (completed 2026-10-15)
 - [x] **Phase 2: GitHub Clone-Base Override** — `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL` sends every GitHub clone, fetch, origin match, and auth lookup to one configured base; unset, nothing changes (completed 2026-10-16)
 - [x] **Phase 3: Marketplace Add** — `marketplace add` scenarios, with dir, file, `@url`, and `@github` rows for every multi-kind add behavior (completed 2026-10-16)
-- [ ] **Phase 3.1: Local Declaration Leak Fix** (INSERTED) — A marketplace added with `--local` stays out of `claude-plugins.json` across a reload, written test-first
+- [x] **Phase 3.1: Local Declaration Leak Fix** (INSERTED) — A marketplace added with `--local` stays out of `claude-plugins.json` across a reload, written test-first (completed 2026-10-16)
 - [ ] **Phase 3.2: Marketplace Layer Partition** (INSERTED) — The same marketplace may live in both layers, and named marketplace mutations change only their own layer
 - [ ] **Phase 3.3: Plugin Layer Partition** (INSERTED) — Named plugin mutations change only their own layer, a plugin lives in one layer, and shared plugins never depend on local-only marketplaces
 - [ ] **Phase 4: Marketplace Remove and List** — `remove`/`rm` with the plugin cascade, and `list`/`ls` across both scopes
@@ -196,7 +196,7 @@ Plans:
 3. A scope whose records hold marketplaces added without `--local` still gets `claude-plugins.json` written from those records on its first load (MIG-01 unchanged for them).
 4. A command naming a plugin (install, enable, disable, reinstall, update) is refused when it would write that plugin into `claude-plugins.json` while its marketplace is declared only in `claude-plugins.local.json`; the failed row suggests `--local`, and nothing is written. Forms naming no plugin write no shared declaration under a local-only marketplace (FIX-03).
 
-**Plans:** 5/5 plans executed
+**Plans:** 5/5 plans complete
 
 Plans:
 **Wave 1**
@@ -348,7 +348,7 @@ Plans:
 | 1. Suite Foundation | 5/5 | Complete    | 2026-10-15 |
 | 2. GitHub Clone-Base Override | 5/5 | Complete    | 2026-10-16 |
 | 3. Marketplace Add | 3/3 | Complete    | 2026-10-16 |
-| 3.1. Local Declaration Leak Fix | 5/5 | In Progress | - |
+| 3.1. Local Declaration Leak Fix | 5/5 | Complete    | 2026-10-16 |
 | 3.2. Marketplace Layer Partition | 0/TBD | Not started | - |
 | 3.3. Plugin Layer Partition | 0/TBD | Not started | - |
 | 4. Marketplace Remove and List | 0/TBD | Not started | - |
