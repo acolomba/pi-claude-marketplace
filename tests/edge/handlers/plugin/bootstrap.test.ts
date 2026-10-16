@@ -92,8 +92,10 @@ import { makeBootstrapHandler } from "../../../../extensions/pi-claude-marketpla
 import { BOOTSTRAP_MARKETPLACE_NAME } from "../../../../extensions/pi-claude-marketplace/orchestrators/plugin/bootstrap.ts";
 import { locationsFor } from "../../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { createCompletionCache } from "../../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import { InvalidGitHubBaseUrlError } from "../../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { createGitOpsFake } from "../../../platform/git-ops-fake.ts";
 import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
+import { setGitHubBaseUrl } from "../../../shared/github-base-url-environment.ts";
 import { runWithNothingLoaded } from "../../../shared/notification-run-seeds.ts";
 import { createMachineNotificationBoundary } from "../../notification-boundary.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
@@ -380,6 +382,29 @@ test("converts a thrown bootstrap failure into one failed marketplace row carryi
   // assert
   assert.deepStrictEqual(notifications, [{ message: FAILED_ROW_MESSAGE, severity: "error" }]);
   assert.deepStrictEqual(describeClones(git.clones, userStagingRoot(cwd)), [BOOTSTRAP_CLONE]);
+  assert.strictEqual(networkCallCount(), 0);
+  verifyBoundary();
+});
+
+test("GHB-03: fails the command with the typed error naming the variable when the GitHub base is invalid", async (t) => {
+  // arrange
+  const { cwd, sourceTree, networkCallCount } = await createHermeticScope(t, "invalid-base");
+  setGitHubBaseUrl(t, "http://mirror.test");
+  const { ctx, verifyBoundary } = createNotificationBoundary(0, { value: cwd, reads: 1 });
+  const git = createGitPort(sourceTree);
+  const bootstrapHandler = makeBootstrapHandler(createBootstrapDeps(git.gitOps));
+
+  // act & assert
+  await assert.rejects(
+    () => bootstrapHandler("", ctx, runWithNothingLoaded()),
+    (error: unknown) => {
+      assert.ok(error instanceof InvalidGitHubBaseUrlError);
+      assert.strictEqual(error.variable, "PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL");
+      assert.strictEqual(error.problem, "scheme");
+      return true;
+    },
+  );
+  assert.deepStrictEqual(git.clones, []);
   assert.strictEqual(networkCallCount(), 0);
   verifyBoundary();
 });

@@ -23,7 +23,7 @@ import {
   bootstrapClaudePlugin,
   BOOTSTRAP_MARKETPLACE_NAME,
 } from "../../../orchestrators/plugin/bootstrap.ts";
-import { errorMessage } from "../../../shared/errors.ts";
+import { errorMessage, rethrowInvalidGitHubBaseUrl } from "../../../shared/errors.ts";
 import { notify, notifyUsageError } from "../../../shared/notification-dispatch.ts";
 import { parseArgs } from "../../args.ts";
 
@@ -67,7 +67,10 @@ export function makeBootstrapHandler(
         completionCache: deps.completionCache,
         gitOps: deps.gitOps,
       });
-    } catch {
+    } catch (err) {
+      // GHB-03: an invalid GitHub base override fails the command instead of
+      // becoming the causeless failed row below, so the user sees the variable.
+      rethrowInvalidGitHubBaseUrl(err);
       // `addMarketplace`'s default contract (used by the public `marketplace
       // add` command) routes precondition failures through `notify` instead
       // of throwing (ATTR-07). `bootstrapClaudePlugin` passes
