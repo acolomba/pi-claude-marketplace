@@ -7,6 +7,8 @@
  */
 
 import assert from "node:assert/strict";
+import { mkdir, rm, stat } from "node:fs/promises";
+import path from "node:path";
 
 import { Given } from "@cucumber/cucumber";
 
@@ -42,5 +44,17 @@ Given(
   "the manifest of the marketplace {string} to add breaks the manifest schema",
   async function (this: ScenarioWorld, name: string) {
     await breakManifest(this, name, "schema-invalid");
+  },
+);
+
+Given(
+  "the directory {string} to add holds no marketplace manifest",
+  async function (this: ScenarioWorld, name: string) {
+    const directory = path.join(this.marketplacesRoot, name);
+    this.onRelease(() => rm(directory, { recursive: true, force: true }));
+    await mkdir(directory, { recursive: true });
+    await assert.rejects(stat(path.join(directory, ".claude-plugin", "marketplace.json")), {
+      code: "ENOENT",
+    });
   },
 );

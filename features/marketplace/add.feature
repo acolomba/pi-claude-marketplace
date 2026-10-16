@@ -79,6 +79,25 @@ Feature: Marketplace add
       | source kind |
       | github      |
 
+  Scenario Outline: Adding a path that holds no marketplace manifest fails as source missing, named as typed
+    Given the directory "empty" to add holds no marketplace manifest
+    When the user runs "/claude:plugin marketplace add <source> --scope project"
+    Then the result has these fields:
+      | kind         | cascade                             |
+      | severity     | error                               |
+      | needs reload | false                               |
+      | summary      | A marketplace operation has failed. |
+    Then the result lists these marketplaces:
+      | name     | scope   | status | reasons        |
+      | <source> | project | failed | source missing |
+
+    Examples:
+      | source                                                      |
+      | {home}/marketplaces/missing                                 |
+      | ~/marketplaces/missing                                      |
+      | {home}/marketplaces/missing/.claude-plugin/marketplace.json |
+      | {home}/marketplaces/empty                                   |
+
   Scenario Outline: Adding a marketplace with a malformed or schema-invalid manifest fails as invalid manifest
     Given the marketplace "tools" is published as a <source kind> source
     Given the manifest of the marketplace "tools" to add <manifest problem>
