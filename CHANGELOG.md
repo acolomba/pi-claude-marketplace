@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- A marketplace you add or a plugin you install with `--local` now stays out of `claude-plugins.json`. If a reload already copied one there, remove that entry and run `/reload`.
+
+  - Installing, enabling, disabling, updating, or reinstalling a plugin into `claude-plugins.json` now fails and suggests `--local` when only `claude-plugins.local.json` declares its marketplace.
+
 - GitHub sources clone and fetch from another https git host, such as a mirror, when you set `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL`, a setting that Claude Code lacks.
 
 - Internal: the `new-gsd-workspace` skill is now `new-workspace`, and the project skills match the latest TypeScript blueprint. (#263)
