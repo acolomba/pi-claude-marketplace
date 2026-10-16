@@ -5138,7 +5138,7 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable of a LOCALLY-declared pl
       target: { kind: "plugin", marketplace: "mp", plugin: "foo" },
     });
     const afterUpdate = await observe();
-    const baseAfterUpdate = await readConfig(configPath);
+    const baseExistsAfterUpdate = await fileExists(configPath);
     await createReinstallPlugin()({
       ctx: reinstallContext.ctx,
       cwd,
@@ -5148,6 +5148,7 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable of a LOCALLY-declared pl
       scope: "user",
     });
     const afterReinstall = await observe();
+    const baseExistsAfterReinstall = await fileExists(configPath);
     await applyReconcile({
       ctx: secondReload.ctx,
       run: runWithNothingLoaded(),
@@ -5189,11 +5190,11 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable of a LOCALLY-declared pl
       skills: ["foo-s1"],
       version: "2.0.0",
     });
-    assert.deepStrictEqual(
-      (baseAfterUpdate as { plugins?: Record<string, unknown> }).plugins?.["foo@mp"],
-      {},
-    );
+    // D-MF-03: the local file declares the plugin, so neither the flagless
+    // update nor the flagless reinstall writes a base config.
+    assert.equal(baseExistsAfterUpdate, false);
     assert.deepStrictEqual(afterReinstall, afterUpdate);
+    assert.equal(baseExistsAfterReinstall, false);
     assert.deepStrictEqual(secondReload.notifications, []);
     assert.deepStrictEqual(afterSecondReload, afterUpdate);
     assert.equal(enableContext.notifications.length, 1);

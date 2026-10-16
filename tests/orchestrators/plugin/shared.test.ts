@@ -2038,7 +2038,10 @@ describe("maybeWritePluginConfigBack", () => {
       });
 
       // assert
-      assert.deepStrictEqual(writeBack, { invalidConfig: true });
+      assert.deepStrictEqual(writeBack, {
+        invalidConfig: true,
+        filePath: locations.configJsonPath,
+      });
       assert.equal(await readFile(locations.configJsonPath, "utf8"), "{");
     });
   });
@@ -2110,6 +2113,100 @@ describe("maybeWritePluginConfigBack", () => {
         await readFile(locations.configLocalJsonPath, "utf8"),
         '{\n  "schemaVersion": 1,\n  "plugins": {\n    "alpha@mp": {}\n  }\n}\n',
       );
+    });
+  });
+
+  test("D-MF-03: writes nothing to claude-plugins.json for a key the local file declares", async () => {
+    // arrange
+    await withTempScopes(async ({ cwd }) => {
+      const locations = locationsFor("project", cwd);
+      await writeConfig(locations.configLocalJsonPath, {
+        schemaVersion: 1,
+        plugins: { "alpha@mp": {} },
+      });
+
+      // act
+      const writeBack = await maybeWritePluginConfigBack({
+        locations,
+        marketplace: "mp",
+        plugin: "alpha",
+        local: false,
+      });
+
+      // assert
+      assert.deepStrictEqual(writeBack, { invalidConfig: false });
+      await assert.rejects(readFile(locations.configJsonPath, "utf8"), { code: "ENOENT" });
+    });
+  });
+
+  test("FIX-03: writes no shared declaration under a marketplace only the local file declares", async () => {
+    // arrange
+    await withTempScopes(async ({ cwd }) => {
+      const locations = locationsFor("project", cwd);
+      await writeConfig(locations.configLocalJsonPath, {
+        schemaVersion: 1,
+        marketplaces: { mp: { source: "./mp" } },
+      });
+
+      // act
+      const writeBack = await maybeWritePluginConfigBack({
+        locations,
+        marketplace: "mp",
+        plugin: "alpha",
+        local: false,
+      });
+
+      // assert
+      assert.deepStrictEqual(writeBack, { invalidConfig: false });
+      await assert.rejects(readFile(locations.configJsonPath, "utf8"), { code: "ENOENT" });
+    });
+  });
+
+  test("reports an unreadable local file and writes no base declaration on a flagless call", async () => {
+    // arrange
+    await withTempScopes(async ({ cwd }) => {
+      const locations = locationsFor("project", cwd);
+      await mkdir(path.dirname(locations.configLocalJsonPath), { recursive: true });
+      await writeFile(locations.configLocalJsonPath, "{");
+
+      // act
+      const writeBack = await maybeWritePluginConfigBack({
+        locations,
+        marketplace: "mp",
+        plugin: "alpha",
+        local: false,
+      });
+
+      // assert
+      assert.deepStrictEqual(writeBack, {
+        invalidConfig: true,
+        filePath: locations.configLocalJsonPath,
+      });
+      await assert.rejects(readFile(locations.configJsonPath, "utf8"), { code: "ENOENT" });
+      assert.equal(await readFile(locations.configLocalJsonPath, "utf8"), "{");
+    });
+  });
+
+  test("--local leaves an existing local declaration byte-identical", async () => {
+    // arrange
+    await withTempScopes(async ({ cwd }) => {
+      const locations = locationsFor("project", cwd);
+      const original = '{"schemaVersion":1,"plugins":{"alpha@mp":{"enabled":false}}}';
+      await mkdir(path.dirname(locations.configLocalJsonPath), { recursive: true });
+      await writeFile(locations.configLocalJsonPath, original);
+
+      // act
+      const writeBack = await maybeWritePluginConfigBack({
+        locations,
+        marketplace: "mp",
+        plugin: "alpha",
+        local: true,
+      });
+
+      // assert
+      assert.deepStrictEqual(writeBack, { invalidConfig: false });
+      assert.equal(await readFile(locations.configLocalJsonPath, "utf8"), original);
+      await assert.rejects(readFile(locations.configJsonPath, "utf8"), { code: "ENOENT" });
     });
   });
 });

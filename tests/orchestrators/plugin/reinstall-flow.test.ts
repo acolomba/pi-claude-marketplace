@@ -3067,6 +3067,97 @@ test("WB-01: --local reinstall targets the local file; base file untouched", asy
   });
 });
 
+/**
+ * Install `hello` from marketplace `mp` in the project scope, then replace
+ * both configuration files with the given bytes.
+ */
+async function seedLocalLayerReinstall(
+  cwd: string,
+  baseBytes: string,
+  localBytes: string,
+): Promise<ReturnType<typeof locationsFor>> {
+  await seedMarketplace({
+    cwd,
+    marketplaceRoot: path.join(cwd, "mp-src"),
+    resources: { skill: "s" },
+    install: true,
+  });
+  const locations = locationsFor("project", cwd);
+  await writeFile(locations.configJsonPath, baseBytes, "utf8");
+  await writeFile(locations.configLocalJsonPath, localBytes, "utf8");
+  return locations;
+}
+
+test("D-MF-03: a flagless reinstall of a plugin the local file declares writes nothing to claude-plugins.json", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-local-key-"));
+    try {
+      // arrange
+      const baseBytes = JSON.stringify({
+        schemaVersion: 1,
+        marketplaces: { mp: { source: "./mp-src" } },
+      });
+      const localBytes = JSON.stringify({ schemaVersion: 1, plugins: { "hello@mp": {} } });
+      const locations = await seedLocalLayerReinstall(cwd, baseBytes, localBytes);
+      const { ctx, run } = makeCtx();
+
+      // act
+      const outcomes = await reinstallPlugins({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", marketplace: "mp", plugin: "hello" },
+      });
+
+      // assert
+      assert.deepEqual(
+        outcomes.map((outcome) => outcome.partition),
+        ["reinstalled"],
+      );
+      assert.equal(await readFile(locations.configJsonPath, "utf8"), baseBytes);
+      assert.equal(await readFile(locations.configLocalJsonPath, "utf8"), localBytes);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("FIX-03: a bare reinstall under a marketplace only the local file declares writes no declaration", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-local-mp-"));
+    try {
+      // arrange
+      const baseBytes = JSON.stringify({ schemaVersion: 1 });
+      const localBytes = JSON.stringify({
+        schemaVersion: 1,
+        marketplaces: { mp: { source: "./mp-src" } },
+      });
+      const locations = await seedLocalLayerReinstall(cwd, baseBytes, localBytes);
+      const { ctx, run } = makeCtx();
+
+      // act
+      const outcomes = await reinstallPlugins({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "all" },
+      });
+
+      // assert
+      assert.deepEqual(
+        outcomes.map((outcome) => outcome.partition),
+        ["reinstalled"],
+      );
+      assert.equal(await readFile(locations.configJsonPath, "utf8"), baseBytes);
+      assert.equal(await readFile(locations.configLocalJsonPath, "utf8"), localBytes);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 // WR-03 / D-60-05: after reinstallPlugin succeeds, the hooks-bridge routing
 // table reflects the post-reinstall entry set. Reinstall does NOT delegate

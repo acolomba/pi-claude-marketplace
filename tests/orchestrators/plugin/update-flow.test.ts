@@ -5295,6 +5295,131 @@ test("WB-01: --local update targets the local file; base file untouched", async 
   });
 });
 
+/**
+ * Seed `hello` 1.0.0 installed in the project scope with 1.0.1 offered, write
+ * `localBytes` into the local file, and leave the base file absent.
+ */
+async function seedLocalLayerUpdate(
+  cwd: string,
+  localBytes: string,
+): Promise<ReturnType<typeof locationsFor>> {
+  const locations = locationsFor("project", cwd);
+  await seedPathMarketplace({
+    cwd,
+    marketplaceRoot: path.join(cwd, "mp-src"),
+    marketplaceName: "mp",
+    manifestPlugins: { hello: { version: "1.0.1", hasSkill: true } },
+    installedVersions: { hello: "1.0.0" },
+  });
+  await writeFile(locations.configLocalJsonPath, localBytes, "utf8");
+  return locations;
+}
+
+async function recordedHelloVersion(
+  locations: ReturnType<typeof locationsFor>,
+): Promise<string | undefined> {
+  return (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.hello?.version;
+}
+
+test("D-MF-03: a flagless update of a plugin the local file declares writes nothing to claude-plugins.json", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-local-key-");
+    try {
+      // arrange
+      const localBytes = JSON.stringify({ schemaVersion: 1, plugins: { "hello@mp": {} } });
+      const locations = await seedLocalLayerUpdate(cwd, localBytes);
+      const { ctx, run } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      // assert
+      assert.equal(await recordedHelloVersion(locations), "1.0.1");
+      assert.equal(await pathExists(locations.configJsonPath), false);
+      assert.equal(await readFile(locations.configLocalJsonPath, "utf8"), localBytes);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("FIX-03: a bare update under a marketplace only the local file declares updates and writes no declaration", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-local-mp-");
+    try {
+      // arrange
+      const localBytes = JSON.stringify({
+        schemaVersion: 1,
+        marketplaces: { mp: { source: path.join(cwd, "mp-src") } },
+      });
+      const locations = await seedLocalLayerUpdate(cwd, localBytes);
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await updatePlugins({ ctx, run, scope: "project", cwd, target: { kind: "all" } });
+
+      // assert
+      assert.equal(await recordedHelloVersion(locations), "1.0.1");
+      assert.equal(await pathExists(locations.configJsonPath), false);
+      assert.equal(await readFile(locations.configLocalJsonPath, "utf8"), localBytes);
+      assert.deepEqual(
+        notifications.filter((n) => n.message.includes("(failed)")),
+        [],
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("S5: a flagless update whose local file cannot be read names claude-plugins.local.json", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-local-invalid-");
+    try {
+      // arrange
+      const locations = await seedLocalLayerUpdate(cwd, "{ not json");
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      // assert
+      assert.equal(await recordedHelloVersion(locations), "1.0.1");
+      assert.equal(await pathExists(locations.configJsonPath), false);
+      assert.deepEqual(notifications, [
+        {
+          message: [
+            "A plugin operation has failed.",
+            "",
+            "● mp [project]",
+            "  ⊘ hello (failed) {invalid manifest}",
+            '    cause: Config file "claude-plugins.local.json" failed schema validation.',
+          ].join("\n"),
+          severity: "error",
+        },
+        {
+          message:
+            "● mp [project]\n  ● hello v1.0.0 → v1.0.1 (updated)\n\n/reload to pick up changes",
+        },
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 // ─── D-UPD: update vs disabled plugin ──────────────────────────────────────
 
 test("WR-02 / NFR-3: an already-current disabled record does not take the scope lock", async () => {

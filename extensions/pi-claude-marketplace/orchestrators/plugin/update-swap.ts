@@ -854,11 +854,11 @@ async function finalizeUpdateRecord(
   phase3aFailures: readonly Phase3Failure[],
   hookEntries: readonly HookSummaryEntry[] | undefined,
   workflows: WorkflowsCommitReport,
-): Promise<{ readonly invalidConfigWriteBack: boolean }> {
+): Promise<{ readonly invalidConfigFile: string | undefined }> {
   const { plugin, marketplace, locations } = args;
   const { installable } = preflight;
   const allSucceeded = phase3aFailures.length === 0;
-  let invalidConfigWriteBack = false;
+  let invalidConfigFile: string | undefined;
 
   await withStateGuard(
     locations,
@@ -916,7 +916,7 @@ async function finalizeUpdateRecord(
           local: args.local === true,
         });
         if (writeResult.invalidConfig) {
-          invalidConfigWriteBack = true;
+          invalidConfigFile = writeResult.filePath;
         }
       }
     },
@@ -929,7 +929,7 @@ async function finalizeUpdateRecord(
     await refreshHooksCacheAfterUpdate(args, installable);
   }
 
-  return { invalidConfigWriteBack };
+  return { invalidConfigFile };
 }
 
 /**
@@ -1286,12 +1286,11 @@ function composePhase3FailureOutcome(
  * separate warning AFTER the success row, so the user knows the on-disk
  * artifacts were updated but the config entry was not written. The cascade
  * path never calls the write-back (gated by `!args.cascade`), so it is
- * structurally unaffected.
+ * structurally unaffected. The row names `filePath`, the file the write-back
+ * could not read, by its basename only.
  */
-function notifyInvalidConfigWriteBack(args: DirectThreePhaseArgs): void {
-  const targetBasename = path.basename(
-    args.local === true ? args.locations.configLocalJsonPath : args.locations.configJsonPath,
-  );
+function notifyInvalidConfigWriteBack(args: DirectThreePhaseArgs, filePath: string): void {
+  const targetBasename = path.basename(filePath);
   notifyWithContext(
     args.ctx,
     args.run,
@@ -1408,7 +1407,7 @@ export async function swapPluginUpdate(
   // `msg` field carries the explicit `state finalize failed:` text so
   // operator diagnostics see the truthful cause. A dedicated
   // `phase: "finalize"` Phase3Failure member is deferred.
-  let invalidConfigWriteBack = false;
+  let invalidConfigFile: string | undefined;
   try {
     const finalizeResult = await finalizeUpdateRecord(
       args,
@@ -1418,7 +1417,7 @@ export async function swapPluginUpdate(
       hookEntries,
       workflowsCommit,
     );
-    invalidConfigWriteBack = finalizeResult.invalidConfigWriteBack;
+    invalidConfigFile = finalizeResult.invalidConfigFile;
   } catch (finalizeErr) {
     phase3aFailures.push({
       phase: "mcp",
@@ -1486,8 +1485,8 @@ export async function swapPluginUpdate(
   );
   const updateWarnings = collectUpdateWarnings(handles, args.cascade);
   await dropPluginCompletionCache(args);
-  if (isDirectUpdate(args) && invalidConfigWriteBack) {
-    notifyInvalidConfigWriteBack(args);
+  if (isDirectUpdate(args) && invalidConfigFile !== undefined) {
+    notifyInvalidConfigWriteBack(args, invalidConfigFile);
   }
 
   return {

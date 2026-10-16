@@ -1340,58 +1340,139 @@ export function removePluginRecord(
 }
 
 /**
- * WB-01 / A7: deep-equal short-circuited plugin write-back shared by the
- * update and reinstall post-success paths. Loads the target config (base or
- * local per `--local`), compares the prospective patched entry against the
- * existing entry, and writes back ONLY when they differ. RECON-05
- * fixed-point: a byte-stable update / reinstall leaves the config file's
- * mtime + bytes untouched.
+ * One write-back decision of `maybeWritePluginConfigBack` (D-MF-03). Only
+ * `add` writes; `unreadable` names the file that could not be read.
+ */
+type LayerWriteBack =
+  | { readonly kind: "unreadable"; readonly filePath: string }
+  | { readonly kind: "declared" }
+  | { readonly kind: "local-only-marketplace"; readonly refusal: MarketplaceDeclaredLocallyError }
+  | { readonly kind: "add"; readonly targetConfigPath: string; readonly current: ScopeConfig };
+
+/**
+ * D-MF-03: decide the update and reinstall write-back so each configuration
+ * layer stays hermetic. The flag alone picks the target: `--local` writes the
+ * local file and no flag writes the base file (D-08 keeps the flag as the
+ * target, never the declaring file). A key the target already declares is
+ * left alone (RECON-05).
  *
- * S5: an `invalid` config returns `{ invalidConfig: true }` so the caller
- * surfaces the abort via a warning row -- the state mutation already
- * committed (finalize ran), so the byte form is the success payload (the
- * plugin DID update / reinstall on disk) plus the invalid-manifest warning.
- * Sibling CFG-03 aborts (at preflight) render `(skipped) {invalid manifest}`;
- * here the mutation already landed so a skip would lie -- the warning row
- * says "wrote state, could not write config".
+ * Without the flag, three more checks keep the base file free of what belongs
+ * to the local layer:
+ * - an unreadable local file returns `unreadable`, because nothing can tell
+ *   whether the plugin was installed with `--local`;
+ * - a key the local file declares writes nothing (FIX-02: a `--local` plugin
+ *   never reaches `claude-plugins.json` on a flagless command);
+ * - a key under a marketplace only the local file declares writes nothing
+ *   (FIX-03: a teammate who reads the shared file cannot resolve it).
+ */
+async function selectLayerWriteBack(opts: {
+  readonly locations: ScopedLocations;
+  readonly local: boolean;
+  readonly marketplace: string;
+  readonly plugin: string;
+}): Promise<LayerWriteBack> {
+  const [baseCfg, localCfg] = await Promise.all([
+    loadConfig(opts.locations.configJsonPath),
+    loadConfig(opts.locations.configLocalJsonPath),
+  ]);
+  const { targetConfigPath } = selectConfigWriteTarget(opts.locations, opts.local);
+  const targetCfg = targetConfigPath === opts.locations.configLocalJsonPath ? localCfg : baseCfg;
+  if (targetCfg.status === "invalid") {
+    return { kind: "unreadable", filePath: targetCfg.filePath };
+  }
+
+  const current = configOrEmpty(targetCfg);
+  const key = `${opts.plugin}@${opts.marketplace}`;
+  if (ownValue(current.plugins, key) !== undefined) {
+    return { kind: "declared" };
+  }
+
+  if (opts.local) {
+    return { kind: "add", targetConfigPath, current };
+  }
+
+  return flaglessLayerWriteBack({
+    targetConfigPath,
+    current,
+    localCfg,
+    key,
+    marketplace: opts.marketplace,
+  });
+}
+
+/** The flagless half of `selectLayerWriteBack`, once the base file lacks the key. */
+function flaglessLayerWriteBack(args: {
+  readonly targetConfigPath: string;
+  readonly current: ScopeConfig;
+  readonly localCfg: ConfigLoadResult;
+  readonly key: string;
+  readonly marketplace: string;
+}): LayerWriteBack {
+  if (args.localCfg.status === "invalid") {
+    return { kind: "unreadable", filePath: args.localCfg.filePath };
+  }
+
+  const sibling = configOrEmpty(args.localCfg);
+  if (ownValue(sibling.plugins, args.key) !== undefined) {
+    return { kind: "declared" };
+  }
+
+  const refusal = localOnlyMarketplaceRefusal(
+    { targetIsLocal: false, current: args.current, sibling },
+    args.marketplace,
+  );
+  if (refusal !== undefined) {
+    return { kind: "local-only-marketplace", refusal };
+  }
+
+  return { kind: "add", targetConfigPath: args.targetConfigPath, current: args.current };
+}
+
+/**
+ * WB-01: the plugin write-back shared by the update and reinstall
+ * post-success paths, which the load-time backfill also reaches through the
+ * reinstall. It re-reads both configuration files inside the caller's guard
+ * and writes only a missing key, so a byte-stable update or reinstall leaves
+ * the file's bytes and mtime untouched (RECON-05 fixed point). D-04: the
+ * patch is `{}`, which keeps the consume-time `enabled` default and any
+ * forward-compat keys.
  *
- * D-04: update / reinstall preserves the consume-time `enabled` default and
- * any forward-compat keys; the patch carries no per-operation mutation. The
- * patched shape is therefore `{...existing, ...{}}` -- byte-identical to the
- * existing entry. So the gate is: if the key is ALREADY PRESENT,
- * writing back would produce a byte-identical file -- SKIP to preserve
- * RECON-05 mtime stability. If the key is ABSENT, writing back ADDS the key
- * so the user-authored config gains the implicit declaration.
+ * The target and the hermetic-layer rules are `selectLayerWriteBack`'s
+ * (D-MF-03). Under a marketplace only the local file declares, it writes
+ * nothing: a named command already refused before staging, and a nameless
+ * command, like the load-time backfill, covers every layer and authors no
+ * shared declaration.
+ *
+ * S5: an unreadable file returns `invalidConfig: true` with that file's path,
+ * so the caller can name it in a warning row. The state mutation has already
+ * committed, so the plugin DID update or reinstall on disk; the row says
+ * "wrote state, could not write config". Sibling CFG-03 aborts at preflight
+ * render `(skipped) {invalid manifest}`; here a skip would be false.
  */
 export async function maybeWritePluginConfigBack(opts: {
   readonly locations: ScopedLocations;
   readonly marketplace: string;
   readonly plugin: string;
   readonly local: boolean;
-}): Promise<{ readonly invalidConfig: boolean }> {
-  const targetConfigPath = opts.local
-    ? opts.locations.configLocalJsonPath
-    : opts.locations.configJsonPath;
-  const cfg = await loadConfig(targetConfigPath);
-  if (cfg.status === "invalid") {
-    return { invalidConfig: true };
+}): Promise<
+  { readonly invalidConfig: false } | { readonly invalidConfig: true; readonly filePath: string }
+> {
+  const decision = await selectLayerWriteBack(opts);
+  if (decision.kind === "unreadable") {
+    return { invalidConfig: true, filePath: decision.filePath };
   }
 
-  const current: ScopeConfig = cfg.status === "valid" ? cfg.config : { schemaVersion: 1 };
-  const key = `${opts.plugin}@${opts.marketplace}`;
-  const existingEntry = ownValue(current.plugins, key);
-  if (existingEntry !== undefined) {
-    return { invalidConfig: false };
+  if (decision.kind === "add") {
+    await writePluginConfigEntry(
+      decision.current,
+      decision.targetConfigPath,
+      opts.locations.scopeRoot,
+      opts.plugin,
+      opts.marketplace,
+      {},
+    );
   }
 
-  await writePluginConfigEntry(
-    current,
-    targetConfigPath,
-    opts.locations.scopeRoot,
-    opts.plugin,
-    opts.marketplace,
-    {},
-  );
   return { invalidConfig: false };
 }
 
