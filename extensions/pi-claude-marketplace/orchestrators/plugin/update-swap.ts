@@ -1281,9 +1281,10 @@ function composePhase3FailureOutcome(
 }
 
 /**
- * S5: an invalid config file silently skipped the write-back while the
- * success notify proceeded. Direct-path callers surface the abort as a
- * separate warning AFTER the success row, so the user knows the on-disk
+ * S5: when a config file cannot be read, the write-back is skipped but the
+ * update still succeeds. Direct-path callers report the skip as a separate
+ * `(failed)` row at error severity. The row is emitted here, BEFORE the
+ * cascade renders the `(updated)` row, so the user knows the on-disk
  * artifacts were updated but the config entry was not written. The cascade
  * path never calls the write-back (gated by `!args.cascade`), so it is
  * structurally unaffected. The row names `filePath`, the file the write-back
