@@ -5,16 +5,16 @@ milestone_name: Marketplace Behavioral Tests
 current_phase: 2
 current_phase_name: GitHub Clone-Base Override
 status: executing
-stopped_at: Completed 02-03-PLAN.md
-last_updated: "2026-10-16T01:09:51.852Z"
+stopped_at: Completed 02-04-PLAN.md
+last_updated: "2026-10-16T01:27:32.667Z"
 last_activity: 2026-10-15
 last_activity_desc: Phase 2 execution started
-state_head: 021de31a5644310f9d3296363f99eeec16c67902
+state_head: 4559e8952ad96f953f9ccbf4ad9ec1b37c8c576d
 progress:
   total_phases: 10
   completed_phases: 1
   total_plans: 10
-  completed_plans: 8
+  completed_plans: 9
   percent: 10
 ---
 
@@ -32,7 +32,7 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 2 (GitHub Clone-Base Override) — EXECUTING
-Plan: 4 of 5
+Plan: 5 of 5
 Status: Ready to execute
 Last activity: 2026-10-15 — Phase 2 execution started
 
@@ -181,8 +181,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-16T01:09:36.477Z
-**Stopped at:** Completed 02-03-PLAN.md
+**Last session:** 2026-10-16T01:27:32.529Z
+**Stopped at:** Completed 02-04-PLAN.md
 **Resume file:** None
 
 **Main merge (2026-10-11, quick task 261011-bsm):** `origin/main` at
@@ -305,6 +305,7 @@ archived milestone artifacts.
 | Phase 02 P01 | 14min | 2 tasks | 7 files |
 | Phase 02 P02 | 13 min | 2 tasks | 10 files |
 | Phase 02 P03 | 18 min | 3 tasks | 16 files |
+| Phase 02 P04 | 15 min | 3 tasks | 10 files |
 
 ## Decisions
 
@@ -387,6 +388,8 @@ archived milestone artifacts.
 - [Phase 02]: GITHUB_HOST lives in shared/github-base-url.ts so the github.com host literal has one home for the D-06 rule
 - [Phase 02]: rethrowInvalidGitHubBaseUrl rethrows InvalidGitHubBaseUrlError from every per-target catch on a GitHub path (add, update, install, missing-dependency install, import, enable), so an invalid override fails the whole command with no new reason token (GHB-03, D-08)
 - [Phase 02]: marketplace add rethrows inside the unclassified branch of handleAddFailure, because an exotic-throw case pins the exact prototype-read count of classification
+- [Phase 02]: Plugin reinstall, fetch, info --fetch, and update (direct, bulk, autoupdate cascade) rethrow InvalidGitHubBaseUrlError from every per-target catch; transport failures keep their existing rows (GHB-03, D-08)
+- [Phase 02]: Bare info never reads PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL; a GHB-04 / NFR-5 case pins its unchanged row and zero git calls with an invalid value set
 
 ### mcp-4 decisions
 

@@ -135,7 +135,7 @@ Plans:
 4. With the variable unset, every GitHub-source operation behaves byte-identically to before, and `list`, `info`, and `claude-plugins.json` show GitHub sources in github.com terms whether the variable is set or not.
 5. README (with its localized copies) and CHANGELOG document the variable as a divergence from Claude Code.
 
-**Plans:** 3/5 plans executed
+**Plans:** 4/5 plans executed
 
 Plans:
 **Wave 1**
@@ -148,7 +148,7 @@ Plans:
 - [x] 02-03-PLAN.md — An invalid base fails marketplace add and update, install, enable, and import as a whole (D-08)
 
 **Wave 4** *(blocked on Wave 3 completion)*
-- [ ] 02-04-PLAN.md — An invalid base fails reinstall, fetch, info --fetch, and plugin update as a whole; bare info never reads it
+- [x] 02-04-PLAN.md — An invalid base fails reinstall, fetch, info --fetch, and plugin update as a whole; bare info never reads it
 
 **Wave 5** *(blocked on Wave 4 completion)*
 - [ ] 02-05-PLAN.md — The github.com literal gate, the identity on the seam's constant, README and CHANGELOG divergence docs, and the phase gate
@@ -272,7 +272,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 | --- | --- | --- | --- |
 | 1. Suite Foundation | 5/5 | Complete    | 2026-10-15 |
-| 2. GitHub Clone-Base Override | 3/5 | In Progress | - |
+| 2. GitHub Clone-Base Override | 4/5 | In Progress | - |
 | 3. Marketplace Add | 0/TBD | Not started | - |
 | 4. Marketplace Remove and List | 0/TBD | Not started | - |
 | 5. Marketplace Info | 0/TBD | Not started | - |
