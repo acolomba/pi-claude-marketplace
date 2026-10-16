@@ -223,7 +223,7 @@ The setting has these limits:
   printf 'protocol=https\nhost=git.example.com\nusername=<user>\npassword=<token>\n\n' | git credential approve
   ```
 
-- `list`, `info`, `claude-plugins.json`, and command output keep showing `https://github.com/...` URLs.
+- `list`, `info`, `claude-plugins.json`, and command results keep showing `https://github.com/...` URLs. When a fetch fails, the error names the URL that the command actually fetched, so a wrong value is easy to see.
 
 - A changed value applies on the next fetch. You do not have to add the marketplace again.
 

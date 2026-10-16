@@ -221,7 +221,7 @@ La configuración tiene estos límites:
   printf 'protocol=https\nhost=git.example.com\nusername=<user>\npassword=<token>\n\n' | git credential approve
   ```
 
-- `list`, `info`, `claude-plugins.json` y la salida de los comandos siguen mostrando URLs `https://github.com/...`.
+- `list`, `info`, `claude-plugins.json` y los resultados de los comandos siguen mostrando URLs `https://github.com/...`. Cuando una descarga falla, el error nombra la URL que el comando descargó realmente, así que un valor incorrecto es fácil de ver.
 
 - Un valor modificado se aplica en la siguiente descarga. No hace falta volver a agregar el mercado.
 
