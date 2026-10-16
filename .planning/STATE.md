@@ -2,19 +2,19 @@
 gsd_state_version: "1.0"
 milestone: marketplace-features
 milestone_name: Marketplace Behavioral Tests
-current_phase: 3
+current_phase: 03
 current_phase_name: Marketplace Add
 status: executing
-stopped_at: Phase 3 context gathered
-last_updated: "2026-10-16T12:32:50.776Z"
+stopped_at: Completed 03-01-PLAN.md
+last_updated: "2026-10-16T12:44:21.136Z"
 last_activity: 2026-10-16
-last_activity_desc: Phase 2 complete, transitioned to Phase 3
-state_head: 25d7ae50ce12362410e07c82bedd7856186069ba
+last_activity_desc: Phase 03 execution started
+state_head: 8be82946479423556ec3e59a1caea891ef3546f6
 progress:
   total_phases: 11
   completed_phases: 2
   total_plans: 13
-  completed_plans: 10
+  completed_plans: 11
   percent: 18
 ---
 
@@ -27,14 +27,14 @@ See: `.planning/PROJECT.md` (updated 2026-10-15 after marketplace-features Phase
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 2 — GitHub Clone-Base Override
+**Current focus:** Phase 03 — Marketplace Add
 
 ## Current Position
 
-Phase: 3 (Marketplace Add) — READY TO EXECUTE
-Plan: Not started
+Phase: 03 (Marketplace Add) — EXECUTING
+Plan: 2 of 3
 Status: Ready to execute
-Last activity: 2026-10-16 — Phase 2 complete, transitioned to Phase 3
+Last activity: 2026-10-16 — Phase 03 execution started
 
 Progress: [██░░░░░░░░] 18%
 
@@ -181,9 +181,9 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-16T11:40:39.079Z
-**Stopped at:** Phase 3 context gathered
-**Resume file:** .planning/phases/03-marketplace-add/03-CONTEXT.md
+**Last session:** 2026-10-16T12:44:20.791Z
+**Stopped at:** Completed 03-01-PLAN.md
+**Resume file:** None
 
 **Main merge (2026-10-11, quick task 261011-bsm):** `origin/main` at
 `94160614` (#248, and #250, the mcp-4 milestone released as 0.20.0) is merged
@@ -307,6 +307,7 @@ archived milestone artifacts.
 | Phase 02 P03 | 18 min | 3 tasks | 16 files |
 | Phase 02 P04 | 15 min | 3 tasks | 10 files |
 | Phase 02 P05 | 14 min | 3 tasks | 10 files |
+| Phase 03 P01 | 7 min | 2 tasks | 5 files |
 
 ## Decisions
 
@@ -393,6 +394,8 @@ archived milestone artifacts.
 - [Phase 02]: Bare info never reads PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL; a GHB-04 / NFR-5 case pins its unchanged row and zero git calls with an invalid value set
 - [Phase 02]: D-06 literal gate is a local ESLint rule, local/no-github-literal, on for the extension and turned off (not ignored) for shared/github-base-url.ts; seven per-line disables carry reasons
 - [Phase 02]: canonicalCloneUrl builds the GitHub identity from the exported GITHUB_ORIGIN, the same prefix gitHubWireUrl matches
+- [Phase 03]: [marketplace-features] invalidateManifest takes a ManifestProblem and picks its writer from a total record, so the kind switch stays single (D-04)
+- [Phase 03]: [marketplace-features] The malformed manifest is the valid no-plugin manifest minus its last byte: 56 vs 57 valid vs 61 schema-invalid, so the manifest cache never serves another content's parse
 
 ### mcp-4 decisions
 
