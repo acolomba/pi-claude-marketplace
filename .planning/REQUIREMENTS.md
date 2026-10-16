@@ -45,10 +45,10 @@ Research detail per requirement is in `.planning/research/FEATURES.md`
 ### marketplace add
 
 - [ ] **ADD-01**: Adding a marketplace records it in the chosen scope under its manifest name (dir, file, url, gh)
-- [ ] **ADD-02**: Without `--scope`, add uses the user scope
+- [x] **ADD-02**: Without `--scope`, add uses the user scope
 - [ ] **ADD-03**: An added marketplace appears in `marketplace list` and is still there in a new session (dir, url)
-- [ ] **ADD-04**: Adding a name the scope already holds fails as `duplicate name` (dir, url)
-- [ ] **ADD-05**: The same marketplace can be added to both scopes independently
+- [x] **ADD-04**: Adding a name the scope already holds fails as `duplicate name` (dir, url)
+- [x] **ADD-05**: The same marketplace can be added to both scopes independently
 - [x] **ADD-06**: A path that does not exist fails as `source missing`, named by the source as typed
 - [x] **ADD-07**: A malformed or schema-invalid manifest fails as `invalid manifest` (dir, url)
 - [ ] **ADD-08**: Refused source forms (`http://`, `ssh://`, `git@host:...`, GitHub `/tree/` URLs, `https://github.com/o`, a bare word, `a/b/c`, `~other/...`) fail as `unsupported source`, and the stand-in receives no request
@@ -175,10 +175,10 @@ Research detail per requirement is in `.planning/research/FEATURES.md`
 | FIX-01 | Phase 6 | Pending |
 | FIX-02 | Phase 3.1 | Pending |
 | ADD-01 | Phase 3 | Pending |
-| ADD-02 | Phase 3 | Pending |
+| ADD-02 | Phase 3 | Complete |
 | ADD-03 | Phase 3 | Pending |
-| ADD-04 | Phase 3 | Pending |
-| ADD-05 | Phase 3 | Pending |
+| ADD-04 | Phase 3 | Complete |
+| ADD-05 | Phase 3 | Complete |
 | ADD-06 | Phase 3 | Complete |
 | ADD-07 | Phase 3 | Complete |
 | ADD-08 | Phase 9 | Pending |

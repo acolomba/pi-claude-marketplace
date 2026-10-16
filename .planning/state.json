@@ -16,7 +16,7 @@
     {
       "number": "3",
       "name": "Marketplace Add",
-      "status": "pending"
+      "status": "in_progress"
     },
     {
       "number": "3.1",
@@ -64,5 +64,5 @@
     "label": "Advance to the next step",
     "reason": "Phase 3 of 11 · 18% · executing"
   },
-  "updated_at": "2026-10-16T12:44:17.170Z"
+  "updated_at": "2026-10-16T12:52:37.802Z"
 }
