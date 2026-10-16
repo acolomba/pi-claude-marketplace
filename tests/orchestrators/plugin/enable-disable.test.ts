@@ -77,6 +77,36 @@ const REAL_ENABLE_DISABLE_TRANSACTION: EnableDisableTransaction = {
   writeConfigEntries: writeAdoptingConfigEntries,
 };
 
+/**
+ * The real transaction with counters on the cascade unstage and the save, so a
+ * refusal case can prove that neither ran.
+ */
+function countingTransaction(): {
+  transaction: EnableDisableTransaction;
+  calls: { cascadeUnstage: number; save: number };
+} {
+  const calls = { cascadeUnstage: 0, save: 0 };
+  const transaction: EnableDisableTransaction = {
+    ...REAL_ENABLE_DISABLE_TRANSACTION,
+    async cascadeUnstagePlugin(plugin, marketplace, locations, installedPlugin) {
+      calls.cascadeUnstage += 1;
+      return cascadeUnstagePlugin(plugin, marketplace, locations, installedPlugin);
+    },
+    async withLockedStateTransaction(locations, run) {
+      return withLockedStateTransaction(locations, async (tx) => {
+        return run({
+          state: tx.state,
+          save: async () => {
+            calls.save += 1;
+            await tx.save();
+          },
+        });
+      });
+    },
+  };
+  return { transaction, calls };
+}
+
 function transactionFailingAfterHookDrop(cause: Error): EnableDisableTransaction {
   return {
     ...REAL_ENABLE_DISABLE_TRANSACTION,
@@ -906,6 +936,181 @@ test("CFG-03 / D-103-13: an UNREADABLE local config aborts a flagless enable rat
     assert.equal(await readFile(configPath, "utf8"), baseBytes);
     assert.equal(await readFile(statePath, "utf8"), statePre);
     assert.equal((await stat(statePath)).mtimeMs, mtimePre);
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// FIX-03: no shared declaration under a marketplace only the local file declares
+// ──────────────────────────────────────────────────────────────────────────
+
+/** Declare marketplace `mp` in the local file only, and return the bytes written. */
+async function writeLocalOnlyMarketplace(configLocalPath: string, mpRoot: string): Promise<string> {
+  const localBytes = JSON.stringify({ schemaVersion: 1, marketplaces: { mp: { source: mpRoot } } });
+  await writeFile(configLocalPath, localBytes, "utf8");
+  return localBytes;
+}
+
+for (const { verb, enable, seed } of [
+  {
+    verb: "enable",
+    enable: true,
+    seed: (home: string) =>
+      seedRealDisabledMarketplace(home, {
+        marketplaceName: "mp",
+        pluginName: "foo",
+        version: "1.2.3",
+      }),
+  },
+  {
+    verb: "disable",
+    enable: false,
+    seed: (home: string) =>
+      writeUserState(home, { marketplaceName: "mp", pluginName: "foo", disabled: false }),
+  },
+]) {
+  test(`FIX-03: a flagless ${verb} under a marketplace only the local file declares is refused and writes nothing`, async () => {
+    await withHermeticHome(async ({ cwd, home }) => {
+      // arrange
+      const { statePath, configPath, configLocalPath, mpRoot } = await seed(home);
+      const localBytes = await writeLocalOnlyMarketplace(configLocalPath, mpRoot);
+      const stateBytes = await readFile(statePath, "utf8");
+      const mtimeBefore = (await stat(statePath)).mtimeMs;
+      const { transaction, calls } = countingTransaction();
+      const setPluginEnabledForOwner = createSetPluginEnabled(
+        transaction,
+        createHooksRouting(createHooksRuntime(), { readHooksJson }),
+      );
+      const { ctx, notifications } = makeCtx(cwd);
+
+      // act
+      await setPluginEnabledForOwner({
+        ctx,
+        run: runWithNothingLoaded(),
+        cwd,
+        marketplace: "mp",
+        plugin: "foo",
+        enable,
+        scope: "user",
+      });
+
+      // assert
+      assert.deepEqual(notifications, [
+        {
+          message: [
+            "A plugin operation has failed.",
+            "",
+            "● mp [user]",
+            "  ⊘ foo (failed) {marketplace declared locally}",
+            "    cause: The marketplace mp is declared only in claude-plugins.local.json. Run the command again with --local.",
+          ].join("\n"),
+          severity: "error",
+        },
+      ]);
+      assert.deepEqual(calls, { cascadeUnstage: 0, save: 0 });
+      assert.equal(await readFile(statePath, "utf8"), stateBytes);
+      assert.equal((await stat(statePath)).mtimeMs, mtimeBefore);
+      assert.equal(await fileExists(configPath), false);
+      assert.equal(await readFile(configLocalPath, "utf8"), localBytes);
+    });
+  });
+}
+
+test("FIX-03: enable --local under a marketplace only the local file declares writes the local entry", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { configPath, configLocalPath, mpRoot } = await seedRealDisabledMarketplace(home, {
+      marketplaceName: "mp",
+      pluginName: "foo",
+      version: "1.2.3",
+    });
+    await writeLocalOnlyMarketplace(configLocalPath, mpRoot);
+    const { ctx } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo",
+      enable: true,
+      scope: "user",
+      local: true,
+    });
+
+    // assert
+    assert.deepEqual(await readConfig(configLocalPath), {
+      schemaVersion: 1,
+      marketplaces: { mp: { source: mpRoot } },
+      plugins: { "foo@mp": { enabled: true } },
+    });
+    assert.equal(await fileExists(configPath), false);
+  });
+});
+
+test("FIX-03: an orchestrated enable under a marketplace only the local file declares is not refused", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { configLocalPath, mpRoot } = await seedRealDisabledMarketplace(home, {
+      marketplaceName: "mp",
+      pluginName: "foo",
+      version: "1.2.3",
+    });
+    await writeLocalOnlyMarketplace(configLocalPath, mpRoot);
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    const outcome = await setPluginEnabled({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo",
+      enable: true,
+      scope: "user",
+      notifications: { mode: "orchestrated" },
+    });
+
+    // assert
+    assert.deepEqual(outcome, { status: "enabled", name: "foo", version: "1.2.3" });
+    assert.deepEqual(notifications, []);
+  });
+});
+
+test("FIX-03: a plugin that is not installed under a local-only marketplace reports not installed", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { configLocalPath, mpRoot } = await writeUserState(home, {
+      marketplaceName: "mp",
+      pluginName: "other-plugin",
+      disabled: false,
+    });
+    await writeLocalOnlyMarketplace(configLocalPath, mpRoot);
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert
+    assert.deepEqual(notifications, [
+      {
+        message: [
+          "A plugin operation has failed.",
+          "",
+          "● mp [user]",
+          "  ⊘ foo (skipped) {not installed}",
+        ].join("\n"),
+        severity: "error",
+      },
+    ]);
   });
 });
 
@@ -6808,26 +7013,7 @@ test("EDEP-02: a disable is refused while an installed and enabled plugin still 
       { name: "shared-lib", version: "1.0.0", enabled: true },
       { name: "helper", version: "1.0.0", dependencies: [{ name: "shared-lib" }], enabled: true },
     ]);
-    let cascadeUnstageCalls = 0;
-    let saveCalls = 0;
-    const transaction: EnableDisableTransaction = {
-      ...REAL_ENABLE_DISABLE_TRANSACTION,
-      async cascadeUnstagePlugin(plugin, marketplace, locations, installedPlugin) {
-        cascadeUnstageCalls += 1;
-        return cascadeUnstagePlugin(plugin, marketplace, locations, installedPlugin);
-      },
-      async withLockedStateTransaction(locations, run) {
-        return withLockedStateTransaction(locations, async (tx) => {
-          return run({
-            state: tx.state,
-            save: async () => {
-              saveCalls += 1;
-              await tx.save();
-            },
-          });
-        });
-      },
-    };
+    const { transaction, calls } = countingTransaction();
     const setPluginEnabledForOwner = createSetPluginEnabled(
       transaction,
       createHooksRouting(createHooksRuntime(), { readHooksJson }),
@@ -6858,8 +7044,7 @@ test("EDEP-02: a disable is refused while an installed and enabled plugin still 
         "    cause: Disable helper@official first, then shared-lib@official.",
       ].join("\n"),
     );
-    assert.equal(cascadeUnstageCalls, 0);
-    assert.equal(saveCalls, 0);
+    assert.deepEqual(calls, { cascadeUnstage: 0, save: 0 });
     assert.equal((await stat(statePath)).mtimeMs, mtimeBefore);
   });
 });

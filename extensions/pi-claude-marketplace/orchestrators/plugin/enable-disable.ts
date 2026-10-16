@@ -101,6 +101,7 @@ import {
   emitMarketplaceNotAdded,
   missIsNotInstalled,
   enableRowDependencies,
+  localOnlyMarketplaceRefusal,
   overwriteDisabledMemberEntries,
   resolveCrossScopePluginTarget,
   retiresWorkflowCommand,
@@ -535,7 +536,9 @@ async function runEnableBranch(
  * record's declarations could not be established, or the declared graph
  * closes on itself. On the disable branch (EDEP-02, `readEnabledDependents`),
  * an installed and ENABLED plugin in the same scope still declares the
- * target. Mirrors `uninstall.ts::UninstallRefusedError` exactly: the reason
+ * target. On either branch (FIX-03, `refuseLocalOnlyMarketplace`), a
+ * standalone call would write its flag into `claude-plugins.json` under a
+ * marketplace only `claude-plugins.local.json` declares. Mirrors `uninstall.ts::UninstallRefusedError` exactly: the reason
  * is a closed-set token and `message` IS the rendered cause line, so it
  * carries only `name@marketplace` keys, field paths or already-redacted
  * text -- never an absolute path -- with no `{ cause }` chained behind it.
@@ -1571,6 +1574,29 @@ async function readEnabledDependents(args: {
 }
 
 /**
+ * FIX-03 / D-MF-02: refuse a standalone enable or disable that would write its
+ * flag into `claude-plugins.json` while only `claude-plugins.local.json`
+ * declares the marketplace, because a teammate who reads the shared file
+ * cannot resolve it. It runs before anything is resolved, materialized, or
+ * saved. An orchestrated call reads its input from the configuration and is
+ * never refused.
+ */
+function refuseLocalOnlyMarketplace(args: {
+  readonly selection: SelectedConfigWriteTarget;
+  readonly marketplace: string;
+  readonly orchestrated: boolean;
+}): void {
+  if (args.orchestrated) {
+    return;
+  }
+
+  const refusal = localOnlyMarketplaceRefusal(args.selection, args.marketplace);
+  if (refusal !== undefined) {
+    throw new EnableRefusedError("marketplace declared locally", refusal.message);
+  }
+}
+
+/**
  * Run the disable branch: cascade-unstage every artifact via the existing
  * `cascadeUnstagePlugin` primitive, then flip the record to its disabled form
  * (ENBL-02 / ENBL-18: `enabled: false` plus a fresh `updatedAt`, everything
@@ -2328,6 +2354,8 @@ async function runSetEnabledOutcome(
           return { kind: "not-recorded" };
         }
 
+        refuseLocalOnlyMarketplace({ selection, marketplace, orchestrated });
+
         // EDEP-01 / EDEP-03: resolve (never materialize yet) the enable
         // cascade BEFORE the root's own idempotency is decided (D-08-03), so
         // a dependency that is disabled still turns on even when the root
@@ -2455,8 +2483,9 @@ async function runSetEnabledOutcome(
     if (!orchestrated) {
       // D-04: the `failed` row's bytes are identical across both verbs; emit it
       // through the active verb's CommandContext for naming consistency.
-      // EDEP-01: an `EnableRefusedError` (cycle / unreadable declarer) is the
-      // one transaction throw this catch classifies for standalone mode -- its
+      // EDEP-01 / EDEP-02 / FIX-03: an `EnableRefusedError` (cycle, unreadable
+      // declarer, enabled dependents, or a local-only marketplace) is the one
+      // transaction throw this catch classifies for standalone mode -- its
       // reason names the fact the cause line states. Every other transaction
       // throw keeps the pre-existing brace-less `(failed)` row.
       emitEnableDisableFailedRow({
