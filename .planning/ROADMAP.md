@@ -194,9 +194,25 @@ Plans:
 1. In a scope with no `claude-plugins.json`, a marketplace added with `--local` is still not declared in `claude-plugins.json` after a new session, and `claude-plugins.local.json` still declares it. The scenario failed on the code before the fix.
 2. After `remove --local` and a new session, the marketplace stays removed: `marketplace list` omits it, and no config file declares it.
 3. A scope whose records hold marketplaces added without `--local` still gets `claude-plugins.json` written from those records on its first load (MIG-01 unchanged for them).
-4. Installing, enabling, disabling, reinstalling, or updating a plugin into `claude-plugins.json` is refused when its marketplace is declared only in `claude-plugins.local.json`; the failed row suggests `--local`, and nothing is written (FIX-03).
+4. A command naming a plugin (install, enable, disable, reinstall, update) is refused when it would write that plugin into `claude-plugins.json` while its marketplace is declared only in `claude-plugins.local.json`; the failed row suggests `--local`, and nothing is written. Forms naming no plugin write no shared declaration under a local-only marketplace (FIX-03).
 
-**Plans:** TBD
+**Plans:** 5 plans
+
+Plans:
+**Wave 1**
+- [ ] 03.1-01-PLAN.md — Tracer: the first-run migration leaves out what the local file declares, test-first through a real Pi (SC1); remove --local stays removed (SC2); the pending mirror and the plugin-path proofs (FIX-02)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 03.1-02-PLAN.md — The `marketplace declared locally` reason, the shared refusal rule, and the refused install, with a real-Pi scenario (FIX-03)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 03.1-03-PLAN.md — Refused enable and disable; the update and reinstall write-back made hermetic per layer, so a --local plugin never reaches claude-plugins.json (FIX-03, D-08)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 03.1-04-PLAN.md — Refused named update and reinstall before anything moves, the reinstall row's cause line, and the S5 file naming (FIX-03)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [ ] 03.1-05-PLAN.md — The catalog row, the JSON output reason, the CHANGELOG bullet with the manual cleanup, the cucumber review, and the phase gate
 
 ### Phase 3.2: Marketplace Layer Partition (INSERTED)
 

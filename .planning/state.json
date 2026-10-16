@@ -24,6 +24,16 @@
       "status": "pending"
     },
     {
+      "number": "3.2",
+      "name": "Marketplace Layer Partition",
+      "status": "pending"
+    },
+    {
+      "number": "3.3",
+      "name": "Plugin Layer Partition",
+      "status": "pending"
+    },
+    {
       "number": "4",
       "name": "Marketplace Remove and List",
       "status": "pending"
@@ -61,8 +71,8 @@
   ],
   "next": {
     "command": "/gsd-progress --next",
-    "label": "Advance to the next step (plan phase 03.1)",
-    "reason": "Phase 4 of 13 — needs a plan"
+    "label": "Advance to the next step",
+    "reason": "Phase 4 of 13 · 23% · executing"
   },
-  "updated_at": "2026-10-16T15:09:33.377Z"
+  "updated_at": "2026-10-16T16:00:23.588Z"
 }
