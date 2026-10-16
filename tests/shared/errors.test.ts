@@ -19,6 +19,7 @@ import {
   errorWithManualRecovery,
   findManualRecoveryError,
   formatCauseChain,
+  InvalidGitHubBaseUrlError,
   InvalidMarketplaceManifestError,
   isErrnoException,
   ManualRecoveryError,
@@ -934,6 +935,51 @@ describe("TooManyRedirectsError", () => {
       expectedError,
     );
   });
+});
+
+describe("InvalidGitHubBaseUrlError", () => {
+  for (const { problem, message } of [
+    {
+      problem: "not-a-url",
+      message: "PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL is not a valid URL.",
+    },
+    {
+      problem: "scheme",
+      message: "PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL must use the https scheme.",
+    },
+    {
+      problem: "userinfo",
+      message: "PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL must not contain a user name or password.",
+    },
+    {
+      problem: "query",
+      message: "PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL must not contain a query.",
+    },
+    {
+      problem: "fragment",
+      message: "PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL must not contain a fragment.",
+    },
+  ] as const) {
+    test(`names the variable and the ${problem} rule`, () => {
+      // arrange
+      const variable = "PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL";
+
+      // act
+      const error = new InvalidGitHubBaseUrlError(variable, problem);
+
+      // assert
+      assert.ok(error instanceof Error);
+      assert.deepStrictEqual(
+        {
+          name: error.name,
+          variable: error.variable,
+          problem: error.problem,
+          message: error.message,
+        },
+        { name: "InvalidGitHubBaseUrlError", variable, problem, message },
+      );
+    });
+  }
 });
 
 describe("InvalidMarketplaceManifestError", () => {

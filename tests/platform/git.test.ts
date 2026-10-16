@@ -32,6 +32,7 @@ import {
   DeviceFlowUnavailableError,
   TooManyRedirectsError,
 } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
+import { setGitHubBaseUrl } from "../shared/github-base-url-environment.ts";
 
 import { createCredentialOpsFake } from "./credential-ops-fake.ts";
 import { registerGitOpsContract } from "./git-ops-contract.ts";
@@ -969,6 +970,39 @@ describe("clone", () => {
       expectedCrossOriginWireLog(OTHER_PORT_INFO_URL),
     );
     assert.deepStrictEqual(credentials.calls, { fill: [], approve: [], reject: [] });
+  });
+
+  test("GHB-01: clones a github.com URL from the base and records the canonical origin", async (t) => {
+    // arrange
+    const repository = await createGitTestRepository(t, { boundary: "local" });
+    const dir = await createGitTestDirectory(t, { boundary: "local" });
+    await installRepositoryTransport(t, repository);
+    setGitHubBaseUrl(t, `https://${HOST}`);
+
+    // act
+    await clone({ dir, url: "https://github.com/owner/repo.git" });
+
+    // assert
+    assert.strictEqual(await resolveRef({ dir, ref: "HEAD" }), repository.initialOid);
+    assert.deepStrictEqual(await listRemotes({ dir }), {
+      kind: "origin",
+      url: "https://github.com/owner/repo.git",
+    });
+  });
+
+  test("GHB-04: a clone of a non-GitHub URL ignores an invalid base", async (t) => {
+    // arrange
+    const repository = await createGitTestRepository(t, { boundary: "local" });
+    const dir = await createGitTestDirectory(t, { boundary: "local" });
+    await installRepositoryTransport(t, repository);
+    setGitHubBaseUrl(t, "http://mirror.example");
+
+    // act
+    await clone({ dir, url: REMOTE_URL });
+
+    // assert
+    assert.strictEqual(await resolveRef({ dir, ref: "HEAD" }), repository.initialOid);
+    assert.deepStrictEqual(await listRemotes({ dir }), { kind: "origin", url: REMOTE_URL });
   });
 });
 

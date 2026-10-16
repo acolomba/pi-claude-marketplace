@@ -411,6 +411,37 @@ export class TooManyRedirectsError extends Error {
   }
 }
 
+const INVALID_GITHUB_BASE_URL_RULES = {
+  "not-a-url": "is not a valid URL.",
+  scheme: "must use the https scheme.",
+  userinfo: "must not contain a user name or password.",
+  query: "must not contain a query.",
+  fragment: "must not contain a fragment.",
+} as const;
+
+/**
+ * GHB-03: the GitHub base URL variable is set to a value the override refuses.
+ * `problem` names the first rule the value breaks.
+ *
+ * AUTH-09: the message names the variable and the rule, never the value, which
+ * can carry a token. It contains no slash, because json and rpc command-failure
+ * output treats a slash outside a complete URL as a local path and replaces the
+ * message.
+ */
+export class InvalidGitHubBaseUrlError extends Error {
+  readonly variable: string;
+  readonly problem: "not-a-url" | "scheme" | "userinfo" | "query" | "fragment";
+  constructor(
+    variable: string,
+    problem: "not-a-url" | "scheme" | "userinfo" | "query" | "fragment",
+  ) {
+    super(`${variable} ${INVALID_GITHUB_BASE_URL_RULES[problem]}`);
+    this.name = "InvalidGitHubBaseUrlError";
+    this.variable = variable;
+    this.problem = problem;
+  }
+}
+
 /**
  * D-48-B: typed marketplace-manifest parse/validation failure.
  *

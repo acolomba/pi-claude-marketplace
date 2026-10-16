@@ -5,6 +5,7 @@ import * as git from "isomorphic-git";
 import nodeHttpClient from "isomorphic-git/http/node";
 
 import { CrossOriginChallengeError, TooManyRedirectsError } from "../shared/errors.ts";
+import { gitHubWireUrl } from "../shared/github-base-url.ts";
 
 import { buildAuthCallbacks } from "./git-auth-callbacks.ts";
 
@@ -50,6 +51,9 @@ export interface CloneOptions {
    * stored identity form is `.git`-stripped; the wire form is not. Callers
    * pass a host-keyed `opts.auth` bundle (GAUTH-03); a public clone never
    * challenges, so the bundle is not consulted.
+   *
+   * The URL actually sent is `shared/github-base-url.ts::gitHubWireUrl` of
+   * this value; the clone's recorded origin stays this value.
    */
   url: string;
   /** Optional ref (branch/tag/SHA) to check out. If omitted, the default branch. */
@@ -374,11 +378,12 @@ export async function clone(opts: CloneOptions): Promise<void> {
   // it only takes the `url: string` parameter -- no contravariant
   // GitAuth-typed slot.
   const authCbs = opts.auth === undefined ? undefined : buildAuthCallbacks(opts.auth);
+  const wireUrl = gitHubWireUrl(opts.url);
   await git.clone({
     fs,
     http,
     dir: opts.dir,
-    url: opts.url,
+    url: wireUrl,
     ...(opts.ref !== undefined && { ref: opts.ref }),
     ...(opts.singleBranch !== undefined && { singleBranch: opts.singleBranch }),
     ...(authCbs !== undefined && {
@@ -387,6 +392,11 @@ export async function clone(opts: CloneOptions): Promise<void> {
     }),
     // No depth (full history is kept). No corsProxy (Node only).
   });
+  if (wireUrl !== opts.url) {
+    // GHB-01: isomorphic-git records the URL it fetched as origin. The clone
+    // keeps its canonical identity; only the bytes came from the base.
+    await git.setConfig({ fs, dir: opts.dir, path: "remote.origin.url", value: opts.url });
+  }
 }
 
 export async function fetch(opts: FetchOptions): Promise<void> {
