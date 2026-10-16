@@ -83,3 +83,4 @@ Feature: Plugin install
       | tools            | project           | pp@tools | pp   | failed | marketplace declared locally | project | The marketplace tools is declared only in claude-plugins.local.json. Run the command again with --local. | false           |       |                  |
     Then the "claude-plugins.json" file of the project scope declares no plugins
     Then the "claude-plugins.local.json" file of the project scope declares no plugins
+    Then the project scope has no installed plugins
