@@ -15,7 +15,7 @@ import { Given } from "@cucumber/cucumber";
 
 import { invalidateManifest, publishMarketplaceIn } from "../../lib/published-marketplace.ts";
 
-import type { ManifestProblem, SourceKind } from "../../lib/published-marketplace.ts";
+import type { ManifestProblem } from "../../lib/published-marketplace.ts";
 import type { ScenarioWorld } from "../../support/world.ts";
 
 async function breakManifest(
@@ -44,8 +44,16 @@ Given(
 );
 
 Given(
-  "another marketplace named {string} to add is published as a {source kind} source in {string}",
-  async function (this: ScenarioWorld, name: string, kind: SourceKind, directory: string) {
+  "the marketplace {string} to add again is the one already added",
+  function (this: ScenarioWorld, name: string) {
+    this.requirePublished(name);
+  },
+);
+
+Given(
+  "the marketplace {string} to add again is also published in the directory {string}",
+  async function (this: ScenarioWorld, name: string, directory: string) {
+    const { kind } = this.requirePublished(name);
     const root = path.join(this.marketplacesRoot, directory);
     await assert.rejects(
       stat(root),
@@ -55,6 +63,13 @@ Given(
     this.onRelease(() => rm(root, { recursive: true, force: true }));
     // Not recorded: the world keys marketplaces by name, so it would replace the first (ADD-04).
     await publishMarketplaceIn(this.marketplacesRoot, directory, name, kind, []);
+  },
+);
+
+Given(
+  "the directory {string} to add does not exist",
+  async function (this: ScenarioWorld, directory: string) {
+    await assert.rejects(stat(path.join(this.marketplacesRoot, directory)), { code: "ENOENT" });
   },
 );
 

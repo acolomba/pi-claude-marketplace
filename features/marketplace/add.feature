@@ -148,7 +148,7 @@ Feature: Marketplace add
   Scenario Outline: Adding a marketplace whose name the scope already holds fails as a duplicate name
     Given the marketplace "tools" is published as a <source kind> source
     Given the marketplace "tools" is added to the project scope
-    Given another marketplace named "tools" to add is published as a <source kind> source in "tools-copy"
+    Given the marketplace "tools" to add again <second marketplace>
     When the user runs "/claude:plugin marketplace add <second source> --scope project"
     Then the result has these fields:
       | kind         | cascade                             |
@@ -163,18 +163,18 @@ Feature: Marketplace add
       | tools | <source> |
 
     Examples:
-      | source kind | source                    | second source                  |
-      | dir         | {home}/marketplaces/tools | {home}/marketplaces/tools      |
-      | dir         | {home}/marketplaces/tools | {home}/marketplaces/tools-copy |
+      | source kind | source                    | second marketplace                              | second source                  |
+      | dir         | {home}/marketplaces/tools | is the one already added                        | {home}/marketplaces/tools      |
+      | dir         | {home}/marketplaces/tools | is also published in the directory "tools-copy" | {home}/marketplaces/tools-copy |
 
     @url
     Examples:
-      | source kind | source                            | second source                          |
-      | url         | https://{git host}/acme/tools.git | https://{git host}/acme/tools.git      |
-      | url         | https://{git host}/acme/tools.git | https://{git host}/acme/tools-copy.git |
+      | source kind | source                            | second marketplace                              | second source                          |
+      | url         | https://{git host}/acme/tools.git | is the one already added                        | https://{git host}/acme/tools.git      |
+      | url         | https://{git host}/acme/tools.git | is also published in the directory "tools-copy" | https://{git host}/acme/tools-copy.git |
 
   Scenario Outline: Adding a path that holds no marketplace manifest fails as source missing, named as typed
-    Given the directory "empty" to add holds no marketplace manifest
+    Given the directory "<directory>" to add <directory state>
     When the user runs "/claude:plugin marketplace add <source> --scope project"
     Then the result has these fields:
       | kind         | cascade                             |
@@ -186,11 +186,11 @@ Feature: Marketplace add
       | <source> | project | failed | source missing |
 
     Examples:
-      | source                                                      |
-      | {home}/marketplaces/missing                                 |
-      | ~/marketplaces/missing                                      |
-      | {home}/marketplaces/missing/.claude-plugin/marketplace.json |
-      | {home}/marketplaces/empty                                   |
+      | directory | directory state               | source                                                      |
+      | missing   | does not exist                | {home}/marketplaces/missing                                 |
+      | missing   | does not exist                | ~/marketplaces/missing                                      |
+      | missing   | does not exist                | {home}/marketplaces/missing/.claude-plugin/marketplace.json |
+      | empty     | holds no marketplace manifest | {home}/marketplaces/empty                                   |
 
   Scenario Outline: Adding a marketplace with a malformed or schema-invalid manifest fails as invalid manifest
     Given the marketplace "tools" is published as a <source kind> source
