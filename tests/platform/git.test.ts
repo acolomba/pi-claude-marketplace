@@ -409,7 +409,10 @@ async function createProductionGitOps(t: TestContext): Promise<GitOpsContractPar
   };
 }
 
-function isExpectedDiscoveryError(error: unknown, caller: "git.clone" | "git.fetch"): boolean {
+function isExpectedDiscoveryError(
+  error: unknown,
+  caller: "git.clone" | "git.fetch" | "git.listServerRefs",
+): boolean {
   assert.ok(error instanceof git.Errors.HttpError);
   assert.strictEqual(error.caller, caller);
   assert.deepStrictEqual(error.data, {
@@ -417,6 +420,23 @@ function isExpectedDiscoveryError(error: unknown, caller: "git.clone" | "git.fet
     statusMessage: "Unavailable",
     response: "offline",
   });
+  return true;
+}
+
+/**
+ * D-10: the discovery failure stays the error itself, so the classifiers still
+ * read its code at depth 0, and its cause names the URL actually fetched.
+ */
+function isFetchedUrlDiscoveryError(
+  error: unknown,
+  caller: "git.clone" | "git.listServerRefs",
+): boolean {
+  assert.ok(isExpectedDiscoveryError(error, caller));
+  assert.ok(error instanceof Error && error.cause instanceof Error);
+  assert.deepStrictEqual(
+    { name: error.cause.name, message: error.cause.message, cause: error.cause.cause },
+    { name: "Error", message: `fetched ${REMOTE_URL}`, cause: undefined },
+  );
   return true;
 }
 
@@ -1003,6 +1023,22 @@ describe("clone", () => {
     assert.deepStrictEqual(await listRemotes({ dir }), { kind: "origin", url: REMOTE_URL });
   });
 
+  test("D-10: a failed clone from the base names the fetched URL", async (t) => {
+    // arrange
+    const requests = installFailedDiscoveryTransport(t);
+    const dir = await createGitTestDirectory(t, { boundary: "local" });
+    setGitHubBaseUrl(t, `https://${HOST}`);
+
+    // act
+    const cloning = clone({ dir, url: GITHUB_REMOTE_URL });
+
+    // assert
+    await assert.rejects(cloning, (error: unknown) =>
+      isFetchedUrlDiscoveryError(error, "git.clone"),
+    );
+    assert.deepStrictEqual(requests, [expectedDiscoveryRequest()]);
+  });
+
   test("D-10: a rewritten failure keeps a cause it already carries", async (t) => {
     // arrange
     const firstCause = new Error("connection reset");
@@ -1321,6 +1357,21 @@ describe("resolveRemoteRef", () => {
       message: `remote ${REMOTE_URL} advertised no HEAD ref`,
     });
     assert.deepStrictEqual(requests, expectedPublicRequests());
+  });
+
+  test("D-10: a failed resolution from the base names the fetched URL", async (t) => {
+    // arrange
+    const requests = installFailedDiscoveryTransport(t);
+    setGitHubBaseUrl(t, `https://${HOST}`);
+
+    // act
+    const resolution = resolveRemoteRef({ url: GITHUB_REMOTE_URL });
+
+    // assert
+    await assert.rejects(resolution, (error: unknown) =>
+      isFetchedUrlDiscoveryError(error, "git.listServerRefs"),
+    );
+    assert.deepStrictEqual(requests, [expectedDiscoveryRequest({ "Git-Protocol": "version=2" })]);
   });
 
   test("keeps auth callbacks idle for a successful public response", async (t) => {
@@ -2103,6 +2154,21 @@ describe("listRemoteTags", () => {
       { name: "v2.0.0", oid: OID_PEELED },
     ]);
     assert.deepStrictEqual(requests, expectedTagRequests());
+  });
+
+  test("D-10: a failed listing from the base names the fetched URL", async (t) => {
+    // arrange
+    const requests = installFailedDiscoveryTransport(t);
+    setGitHubBaseUrl(t, `https://${HOST}`);
+
+    // act
+    const listing = listRemoteTags({ url: GITHUB_REMOTE_URL });
+
+    // assert
+    await assert.rejects(listing, (error: unknown) =>
+      isFetchedUrlDiscoveryError(error, "git.listServerRefs"),
+    );
+    assert.deepStrictEqual(requests, [expectedDiscoveryRequest({ "Git-Protocol": "version=2" })]);
   });
 
   test("D-03-02.2: an entry naming an annotated tag's peel is not a second tag", async (t) => {
