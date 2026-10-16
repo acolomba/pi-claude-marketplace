@@ -31,7 +31,7 @@ Research detail per requirement is in `.planning/research/FEATURES.md`
 
 ### GitHub clone-base override (D-MF-01)
 
-- [ ] **GHB-01**: With `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL` set, GitHub sources (`owner/repo`, `https://github.com/o/r[.git][#ref]`) clone from `<base>/<owner>/<repo>.git`
+- [x] **GHB-01**: With `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL` set, GitHub sources (`owner/repo`, `https://github.com/o/r[.git][#ref]`) clone from `<base>/<owner>/<repo>.git`
 - [ ] **GHB-02**: The override reaches every GitHub site through one seam: origin matching for leftover clones, marketplace update, and the auth host (bound to the override host, so Device Flow never runs against it); a source-walk gate fails on a new hard-coded `github.com` URL outside the seam
 - [ ] **GHB-03**: A set but invalid override (not `https:`, carries userinfo, a query, or a fragment) fails with a typed error that names the variable
 - [ ] **GHB-04**: With the override unset, behavior is byte-identical to today, and `list`, `info`, and `claude-plugins.json` show GitHub sources in github.com terms either way
@@ -166,7 +166,7 @@ Research detail per requirement is in `.planning/research/FEATURES.md`
 | HOST-02 | Phase 9 | Pending |
 | HOST-03 | Phase 9 | Pending |
 | HOST-04 | Phase 9 | Pending |
-| GHB-01 | Phase 2 | Pending |
+| GHB-01 | Phase 2 | Complete |
 | GHB-02 | Phase 2 | Pending |
 | GHB-03 | Phase 2 | Pending |
 | GHB-04 | Phase 2 | Pending |

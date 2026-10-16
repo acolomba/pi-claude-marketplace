@@ -5,16 +5,16 @@ milestone_name: Marketplace Behavioral Tests
 current_phase: 2
 current_phase_name: GitHub Clone-Base Override
 status: executing
-stopped_at: Phase 2 context gathered
-last_updated: "2026-10-16T00:14:50.876Z"
+stopped_at: Completed 02-01-PLAN.md
+last_updated: "2026-10-16T00:30:13.246Z"
 last_activity: 2026-10-15
 last_activity_desc: Phase 2 execution started
-state_head: cc708955b5b8a245d0fbf1db721e73444c87b77c
+state_head: 43e084b7686e9d6e34e4242feec2ef23394df615
 progress:
   total_phases: 10
   completed_phases: 1
   total_plans: 10
-  completed_plans: 5
+  completed_plans: 6
   percent: 10
 ---
 
@@ -32,8 +32,8 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 2 (GitHub Clone-Base Override) — EXECUTING
-Plan: 1 of 5
-Status: Executing Phase 2
+Plan: 2 of 5
+Status: Ready to execute
 Last activity: 2026-10-15 — Phase 2 execution started
 
 Progress: [█░░░░░░░░░] 10%
@@ -181,9 +181,9 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-15T23:01:48.649Z
-**Stopped at:** Phase 2 context gathered
-**Resume file:** .planning/phases/02-github-clone-base-override/02-CONTEXT.md
+**Last session:** 2026-10-16T00:30:13.106Z
+**Stopped at:** Completed 02-01-PLAN.md
+**Resume file:** None
 
 **Main merge (2026-10-11, quick task 261011-bsm):** `origin/main` at
 `94160614` (#248, and #250, the mcp-4 milestone released as 0.20.0) is merged
@@ -302,6 +302,7 @@ archived milestone artifacts.
 | Phase 01 P03 | 13 min | 3 tasks | 10 files |
 | Phase 01 P04 | 12 min | 3 tasks | 7 files |
 | Phase 01 P05 | 4 min | 2 tasks | 6 files |
+| Phase 02 P01 | 14min | 2 tasks | 7 files |
 
 ## Decisions
 
@@ -378,6 +379,8 @@ archived milestone artifacts.
 - [Phase 01]: D-02 multi-payload results are read with 'the command reports these results:' (envelope row per payload) and 'the results list these marketplaces and plugins:' (rows across every cascade payload)
 - [Phase 01]: The config read step fails on a missing claude-plugins file and names its path: an absent base file is rebuilt from records on load (MIG-01), so missing is not an empty declaration
 - [Phase 01]: The cucumber skill names source kinds and decision IDs, never phases; reviewers gate on npm run check:features, not the CLI usage report (D-09)
+- [Phase 02]: setGitHubBaseUrl restores the variable once per test (first call), because node:test runs after hooks FIFO
+- [Phase 02]: platform/git.ts fetch passes remote and the wire url together only when the override rewrites the recorded origin; otherwise the previous options
 
 ### mcp-4 decisions
 
