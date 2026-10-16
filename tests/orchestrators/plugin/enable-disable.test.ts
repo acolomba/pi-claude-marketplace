@@ -1114,6 +1114,90 @@ test("FIX-03: a plugin that is not installed under a local-only marketplace repo
   });
 });
 
+for (const { verb, enable, disabled } of [
+  { verb: "enable", enable: true, disabled: false },
+  { verb: "disable", enable: false, disabled: true },
+]) {
+  test(`FIX-03: an idempotent ${verb} under a marketplace only the local file declares is skipped and writes nothing`, async () => {
+    await withHermeticHome(async ({ cwd, home }) => {
+      // arrange
+      const { statePath, configPath, configLocalPath, mpRoot } = await writeUserState(home, {
+        marketplaceName: "mp",
+        pluginName: "foo",
+        disabled,
+      });
+      const localBytes = await writeLocalOnlyMarketplace(configLocalPath, mpRoot);
+      const stateBytes = await readFile(statePath, "utf8");
+      const { ctx, notifications } = makeCtx(cwd);
+
+      // act
+      await setPluginEnabled({
+        ctx,
+        run: runWithNothingLoaded(),
+        cwd,
+        marketplace: "mp",
+        plugin: "foo",
+        enable,
+        scope: "user",
+      });
+
+      // assert
+      assert.deepEqual(notifications, [
+        { message: ["● mp [user]", `  ⊘ foo (skipped) {already ${verb}d}`].join("\n") },
+      ]);
+      assert.equal(await readFile(statePath, "utf8"), stateBytes);
+      assert.equal(await fileExists(configPath), false);
+      assert.equal(await readFile(configLocalPath, "utf8"), localBytes);
+    });
+  });
+}
+
+test("FIX-03: an idempotent enable that would rewrite the shared flag under a local-only marketplace is refused", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { statePath, configPath, configLocalPath, mpRoot } = await writeUserState(home, {
+      marketplaceName: "mp",
+      pluginName: "foo",
+      disabled: false,
+    });
+    await writeLocalOnlyMarketplace(configLocalPath, mpRoot);
+    const baseBytes = JSON.stringify({
+      schemaVersion: 1,
+      plugins: { "foo@mp": { enabled: false } },
+    });
+    await writeFile(configPath, baseBytes, "utf8");
+    const stateBytes = await readFile(statePath, "utf8");
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert
+    assert.deepEqual(notifications, [
+      {
+        message: [
+          "A plugin operation has failed.",
+          "",
+          "● mp [user]",
+          "  ⊘ foo (failed) {marketplace declared locally}",
+          "    cause: The marketplace mp is declared only in claude-plugins.local.json. Run the command again with --local.",
+        ].join("\n"),
+        severity: "error",
+      },
+    ]);
+    assert.equal(await readFile(statePath, "utf8"), stateBytes);
+    assert.equal(await readFile(configPath, "utf8"), baseBytes);
+  });
+});
+
 // ──────────────────────────────────────────────────────────────────────────
 // ENBL-02 / ENBL-18: disable preserves the version pin AND the inventory
 // ──────────────────────────────────────────────────────────────────────────

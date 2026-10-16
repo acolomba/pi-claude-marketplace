@@ -1579,18 +1579,22 @@ async function readEnabledDependents(args: {
  * declares the marketplace, because a teammate who reads the shared file
  * cannot resolve it. It runs before anything is resolved, materialized, or
  * saved. An orchestrated call reads its input from the configuration and is
- * never refused.
+ * never refused. D-06 scopes the refusal to a call that would write: an
+ * idempotent call that writes no flag (`idempotentWritesFlag`) is not refused
+ * and keeps its `(skipped)` row.
  */
 function refuseLocalOnlyMarketplace(args: {
   readonly selection: SelectedConfigWriteTarget;
-  readonly marketplace: string;
-  readonly orchestrated: boolean;
+  readonly write: EnabledFlagWriteTarget;
+  readonly installed: InstalledPluginRecord;
 }): void {
-  if (args.orchestrated) {
+  const { selection, write, installed } = args;
+  const idempotent = isRecordedButDisabled(installed) === !write.enable;
+  if (write.orchestrated || (idempotent && !idempotentWritesFlag(write, selection))) {
     return;
   }
 
-  const refusal = localOnlyMarketplaceRefusal(args.selection, args.marketplace);
+  const refusal = localOnlyMarketplaceRefusal(selection, write.marketplace);
   if (refusal !== undefined) {
     throw new EnableRefusedError("marketplace declared locally", refusal.message);
   }
@@ -1953,14 +1957,25 @@ async function resolveIdempotentOutcome(
   state: ExtensionState,
   installed: { readonly version: string },
 ): Promise<SetEnabledOutcome> {
-  const { marketplace, plugin, enable, orchestrated } = write;
-  const configEnabled = ownValue(selection.current.plugins, `${plugin}@${marketplace}`)?.enabled;
-  if (orchestrated || configEnabled === undefined || configEnabled === enable) {
+  if (write.orchestrated || !idempotentWritesFlag(write, selection)) {
     return { kind: "idempotent" };
   }
 
   await writeEnabledFlagBack(transaction, write, selection, state);
   return { kind: "fresh", version: installed.version };
+}
+
+/**
+ * ENBL-05: whether an idempotent call still writes its flag, because the
+ * targeted config carries the OPPOSITE explicit `enabled` value.
+ */
+function idempotentWritesFlag(
+  write: EnabledFlagWriteTarget,
+  selection: SelectedConfigWriteTarget,
+): boolean {
+  const key = `${write.plugin}@${write.marketplace}`;
+  const configEnabled = ownValue(selection.current.plugins, key)?.enabled;
+  return configEnabled !== undefined && configEnabled !== write.enable;
 }
 
 /**
@@ -2354,7 +2369,7 @@ async function runSetEnabledOutcome(
           return { kind: "not-recorded" };
         }
 
-        refuseLocalOnlyMarketplace({ selection, marketplace, orchestrated });
+        refuseLocalOnlyMarketplace({ selection, write, installed });
 
         // EDEP-01 / EDEP-03: resolve (never materialize yet) the enable
         // cascade BEFORE the root's own idempotency is decided (D-08-03), so
