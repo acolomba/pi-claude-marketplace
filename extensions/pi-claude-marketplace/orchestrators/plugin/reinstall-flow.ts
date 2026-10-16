@@ -97,6 +97,7 @@ import {
   maybeWritePluginConfigBack,
   removePluginRecord,
   surfaceDiscoveryWarnings,
+  writeBackRefusal,
 } from "./shared.ts";
 
 import type { HooksRouting } from "../../bridges/hooks/index.ts";
@@ -137,6 +138,15 @@ export interface ReinstallPluginOptions {
   readonly plugin: string;
   readonly render?: "default" | "none";
   readonly local?: boolean;
+  /**
+   * FIX-03 / D-MF-02: the command named this plugin (`<plugin>@<marketplace>`).
+   * A named flagless reinstall that would declare the plugin in
+   * `claude-plugins.json` under a marketplace only `claude-plugins.local.json`
+   * declares is refused. A nameless form, the reconcile backfill, and any
+   * other caller that omits it cover every layer and are never refused
+   * (D-MF-03).
+   */
+  readonly named?: boolean;
   readonly credentialOps?: CredentialOps;
   readonly deviceFlowHttp?: DeviceFlowHttp;
   readonly authMemo?: Map<string, AuthAttemptResult>;
@@ -273,13 +283,13 @@ interface LockedSuccess {
   /** AFILE-04: the MCP replace's file notices; empty for a skipped reinstall. */
   readonly mcpConfigNotices: readonly McpConfigNotice[];
   /**
-   * S5: when the config-back loadConfig returned `invalid`, the write-back
-   * was skipped while the success notify proceeded. The single-plugin caller
-   * surfaces this as a separate warning row AFTER the reinstall success row
-   * so the user knows the on-disk artifacts were reinstalled but the config
-   * entry was not written.
+   * S5: the configuration file the write-back could not read, so it was
+   * skipped while the success notify proceeded. The single-plugin caller
+   * surfaces this as a separate warning row AFTER the reinstall success row,
+   * naming this file, so the user knows the on-disk artifacts were reinstalled
+   * but the config entry was not written.
    */
-  readonly invalidConfigWriteBack?: boolean;
+  readonly invalidConfigFile?: string;
 }
 
 // ATTR-03 / D-47-A: the structural marketplace-not-added signal thrown by the
@@ -410,10 +420,8 @@ async function reinstallPluginWithTransaction(
   // separate warning row so the user sees that the on-disk artifacts were
   // reinstalled but the config entry was not written. Pre-S5 this arm
   // silently dropped the warning while the success notify proceeded.
-  if (locked.invalidConfigWriteBack === true) {
-    const targetBasename = path.basename(
-      opts.local === true ? locations.configLocalJsonPath : locations.configJsonPath,
-    );
+  if (locked.invalidConfigFile !== undefined) {
+    const targetBasename = path.basename(locked.invalidConfigFile);
     notifyWithContext(
       ctx,
       run,
@@ -581,6 +589,7 @@ async function reinstallPluginsWith(
         plugin: target.plugin,
         render: "none",
         ...(opts.local === true && { local: true }),
+        ...(opts.target.kind === "plugin" && { named: true }),
         ...(opts.credentialOps !== undefined && { credentialOps: opts.credentialOps }),
         ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
         authMemo,
@@ -772,6 +781,7 @@ async function runLockedReinstall(
     };
   }
 
+  await refuseLocalOnlyMarketplaceReinstall(locations, opts);
   const oldSnapshot = clonePluginRecord(oldRecord);
   const entry = await loadCachedEntry(mp.manifestPath, marketplace, plugin);
   const installable = await resolveInstallable(owners, {
@@ -815,7 +825,7 @@ async function runLockedReinstall(
   );
 
   const sourceKind = parsePluginSource(entry.source).kind;
-  let invalidConfigWriteBack: boolean;
+  let invalidConfigFile: string | undefined;
   let outcome: ReinstallPluginOutcome;
   try {
     outcome = owners.recordReinstallOutcome({
@@ -852,7 +862,7 @@ async function runLockedReinstall(
       plugin,
       local: opts.local === true,
     });
-    invalidConfigWriteBack = writeResult.invalidConfig;
+    invalidConfigFile = writeResult.invalidConfig ? writeResult.filePath : undefined;
 
     await tx.save();
   } catch (err) {
@@ -917,8 +927,32 @@ async function runLockedReinstall(
     discoveryWarnings: replacement.discoveryWarnings,
     bridgeWarnings,
     mcpConfigNotices: replacement.mcpConfigNotices,
-    ...(invalidConfigWriteBack && { invalidConfigWriteBack: true }),
+    ...(invalidConfigFile !== undefined && { invalidConfigFile }),
   };
+}
+
+/**
+ * FIX-03 / D-MF-02: refuse a named flagless reinstall before anything is
+ * resolved or replaced, so the write-back's rollback `catch` is never reached
+ * and the locked closure leaves without a save (NFR-3).
+ */
+async function refuseLocalOnlyMarketplaceReinstall(
+  locations: ScopedLocations,
+  opts: ReinstallPluginOptions,
+): Promise<void> {
+  if (opts.named !== true) {
+    return;
+  }
+
+  const refusal = await writeBackRefusal({
+    locations,
+    local: opts.local === true,
+    marketplace: opts.marketplace,
+    plugin: opts.plugin,
+  });
+  if (refusal !== undefined) {
+    throw refusal;
+  }
 }
 
 async function loadCachedEntry(
