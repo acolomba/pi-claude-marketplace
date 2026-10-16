@@ -4,7 +4,11 @@ import * as path from "node:path";
 import * as git from "isomorphic-git";
 import nodeHttpClient from "isomorphic-git/http/node";
 
-import { CrossOriginChallengeError, TooManyRedirectsError } from "../shared/errors.ts";
+import {
+  CrossOriginChallengeError,
+  FetchedUrlCause,
+  TooManyRedirectsError,
+} from "../shared/errors.ts";
 import { gitHubWireUrl } from "../shared/github-base-url.ts";
 
 import { buildAuthCallbacks } from "./git-auth-callbacks.ts";
@@ -365,10 +369,10 @@ const http: HttpClient = { request: requestWithinOrigin };
 
 /**
  * GHB-01: runs one network call. When the call sends `wireUrl` in place of the
- * caller's `url` and fails with an error that has no cause, the error gains the
- * cause `fetched <wireUrl>`, so a wrong base shows in the failure output. The
- * code-bearing error stays at depth 0 for the failure classifiers. An
- * unrewritten call runs with no `try` and its failure is unchanged (GHB-04).
+ * caller's `url` and fails with an error that has no cause, the error gains a
+ * `FetchedUrlCause` naming `wireUrl`, so a wrong base shows in the failure
+ * output. The code-bearing error stays at depth 0 for the failure classifiers.
+ * An unrewritten call runs with no `try` and its failure is unchanged (GHB-04).
  */
 async function withFetchedUrlCause<T>(
   wireUrl: string,
@@ -385,7 +389,7 @@ async function withFetchedUrlCause<T>(
     // isomorphic-git and the HTTP client above reject only with Error instances.
     const failure = error as Error;
     if (failure.cause === undefined) {
-      failure.cause = new Error(`fetched ${wireUrl}`);
+      failure.cause = new FetchedUrlCause(wireUrl);
     }
 
     throw failure;

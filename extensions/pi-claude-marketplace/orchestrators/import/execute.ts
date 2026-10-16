@@ -21,6 +21,7 @@ import {
   ConcurrentInstallError,
   DependencyCascadeError,
   errorMessage,
+  hasFetchedUrlCause,
   PluginShapeError,
   rethrowInvalidGitHubBaseUrl,
 } from "../../shared/errors.ts";
@@ -143,6 +144,13 @@ export interface MarketplaceFailureOutcome {
   readonly marketplace: string;
   readonly reason: "add-failed";
   readonly cause: string;
+  /**
+   * GHB-01 / GHB-04: the redacted, rebuilt onward cause chain beyond `cause`'s
+   * head, present only when the GitHub base override rewrote the URL the add
+   * fetched, so the rendered cause line ends with that URL. Omitted for every
+   * other failure, whose row renders `cause` alone.
+   */
+  readonly causeChain?: Error;
 }
 
 export interface SourceMismatchOutcome {
@@ -381,7 +389,7 @@ interface MarketplaceBlock {
    * classify) -- undefined otherwise, e.g. for a source-mismatch failure,
    * whose per-plugin child rows already carry the mismatch reason.
    */
-  cause?: string;
+  cause?: Error;
 }
 
 function setMarketplaceStatus(
@@ -389,7 +397,7 @@ function setMarketplaceStatus(
   scope: Scope,
   marketplaceName: string,
   status: ImportBlockStatus,
-  cause?: string,
+  cause?: Error,
 ): void {
   const key = `${scope}:${marketplaceName}`;
   const existing = byMp.get(key);
@@ -445,15 +453,17 @@ function importWarningReason(reason: RenderedWarningReason): ContentReason {
 }
 
 /**
- * WR-03: the row's cause as one Error. `UnexpectedPluginFailureOutcome.cause`
- * carries the redacted head text, always populated; wrapping it in an Error
- * lets the depth-5 cause-chain trailer emit a diagnostic line instead of
- * discarding the message. T-55-02-02 / T-53-02-02: `causeChain` (when
- * present) becomes that Error's OWN `.cause` rather than being re-embedded in
- * the head text, so the trailer walker renders the onward chain exactly once
- * instead of a second time over a pre-flattened string.
+ * WR-03: the row's cause as one Error. The outcome's `cause` carries the head
+ * text, always populated; wrapping it in an Error lets the depth-5 cause-chain
+ * trailer emit a diagnostic line instead of discarding the message.
+ * T-55-02-02 / T-53-02-02: `causeChain` (when present) becomes that Error's
+ * OWN `.cause` rather than being re-embedded in the head text, so the trailer
+ * walker renders the onward chain exactly once instead of a second time over a
+ * pre-flattened string.
  */
-function unexpectedFailureCause(outcome: UnexpectedPluginFailureOutcome): Error {
+function failureCause(
+  outcome: Pick<UnexpectedPluginFailureOutcome | MarketplaceFailureOutcome, "cause" | "causeChain">,
+): Error {
   return outcome.causeChain === undefined
     ? new Error(outcome.cause)
     : new Error(outcome.cause, { cause: outcome.causeChain });
@@ -525,7 +535,7 @@ function buildImportNotificationMarketplaces(
   }
 
   for (const o of result.marketplaceFailures) {
-    setMarketplaceStatus(byMp, o.scope, o.marketplace, "failed", o.cause);
+    setMarketplaceStatus(byMp, o.scope, o.marketplace, "failed", failureCause(o));
   }
 
   // Source-mismatch supersedes any prior status (the import for that
@@ -587,7 +597,7 @@ function buildImportNotificationMarketplaces(
       status: "failed",
       name: o.plugin,
       reasons: [unexpectedFailureReason(o.reason)],
-      cause: unexpectedFailureCause(o),
+      cause: failureCause(o),
       // D-03/D-06: an unexpected import failure -> error, no reload.
       severity: "error",
       needsReload: false,
@@ -679,7 +689,7 @@ function blockToMarketplaceMessage(
         status: "failed",
         name,
         reasons: [],
-        cause: new Error(block.cause),
+        cause: block.cause,
         severity: "error",
         needsReload: false,
       };
@@ -719,6 +729,7 @@ function recordMarketplaceAddFailure(
   scopePlan: ScopedImportPlan,
   marketplace: ScopedImportPlan["marketplacesToEnsure"][number],
   cause: string,
+  causeChain?: Error,
 ): void {
   blockedMarketplaces.add(marketplace.marketplace);
   result.marketplaceFailures.push({
@@ -727,6 +738,7 @@ function recordMarketplaceAddFailure(
     marketplace: marketplace.marketplace,
     reason: "add-failed",
     cause,
+    ...(causeChain !== undefined && { causeChain }),
   });
   for (const plugin of pluginsForMarketplace(scopePlan.pluginsToInstall, marketplace.marketplace)) {
     pushPluginWarning(result, plugin, "marketplace-failed", cause);
@@ -975,6 +987,7 @@ async function addOnePlannedMarketplace(
       scopePlan,
       marketplace,
       outcome?.cause ?? "addMarketplace returned no outcome in orchestrated mode",
+      outcome === undefined ? undefined : fetchedUrlCauseChain(outcome.error),
     );
   } catch (err) {
     rethrowInvalidGitHubBaseUrl(err);
@@ -990,6 +1003,16 @@ async function addOnePlannedMarketplace(
       errorMessage(err),
     );
   }
+}
+
+/**
+ * GHB-01 / GHB-04: the onward cause chain of a failed add, redacted like
+ * `pushUnexpectedFailure`'s, when the GitHub base override rewrote the URL the
+ * add fetched. Any other failure yields `undefined`, so its row keeps the head
+ * cause alone.
+ */
+function fetchedUrlCauseChain(error: Error): Error | undefined {
+  return hasFetchedUrlCause(error) ? redactCauseChain(error.cause) : undefined;
 }
 
 // The import workflow is intentionally linear: ensure marketplaces, record

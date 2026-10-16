@@ -30,6 +30,7 @@ import {
 import {
   CrossOriginChallengeError,
   DeviceFlowUnavailableError,
+  FetchedUrlCause,
   TooManyRedirectsError,
 } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { setGitHubBaseUrl } from "../shared/github-base-url-environment.ts";
@@ -432,10 +433,14 @@ function isFetchedUrlDiscoveryError(
   caller: "git.clone" | "git.listServerRefs",
 ): boolean {
   assert.ok(isExpectedDiscoveryError(error, caller));
-  assert.ok(error instanceof Error && error.cause instanceof Error);
+  assert.ok(error instanceof Error && error.cause instanceof FetchedUrlCause);
   assert.deepStrictEqual(
-    { name: error.cause.name, message: error.cause.message, cause: error.cause.cause },
-    { name: "Error", message: `fetched ${REMOTE_URL}`, cause: undefined },
+    {
+      message: error.cause.message,
+      url: error.cause.url,
+      cause: error.cause.cause,
+    },
+    { message: `fetched ${REMOTE_URL}`, url: REMOTE_URL, cause: undefined },
   );
   return true;
 }
@@ -1202,10 +1207,14 @@ describe("fetch", () => {
     // assert
     await assert.rejects(fetching, (error: unknown) => {
       assert.ok(isExpectedDiscoveryError(error, "git.fetch"));
-      assert.ok(error instanceof Error && error.cause instanceof Error);
+      assert.ok(error instanceof Error && error.cause instanceof FetchedUrlCause);
       assert.deepStrictEqual(
-        { name: error.cause.name, message: error.cause.message, cause: error.cause.cause },
-        { name: "Error", message: `fetched ${REMOTE_URL}`, cause: undefined },
+        {
+          message: error.cause.message,
+          url: error.cause.url,
+          cause: error.cause.cause,
+        },
+        { message: `fetched ${REMOTE_URL}`, url: REMOTE_URL, cause: undefined },
       );
       return true;
     });

@@ -63,6 +63,7 @@ import { locationsFor } from "../../persistence/locations.ts";
 import { atomicWriteJson } from "../../shared/atomic-json.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import {
+  FetchedUrlCause,
   InvalidMarketplaceManifestError,
   MarketplaceDuplicateNameError,
   StaleSourceCloneError,
@@ -71,6 +72,7 @@ import {
   UnsupportedSourceError,
   appendLeakToError,
   errorMessage,
+  hasFetchedUrlCause,
   rethrowInvalidGitHubBaseUrl,
 } from "../../shared/errors.ts";
 import {
@@ -82,7 +84,7 @@ import {
 import { classifyGitSourceAccessFailure } from "../../shared/git-failure-classifiers.ts";
 import { composeLeftoverRemovalAdvisories } from "../../shared/notification-summary.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
-import { type Reason } from "../../shared/notification-types.ts";
+import { type PluginFailedMessage, type Reason } from "../../shared/notification-types.ts";
 import {
   notifyWithContext,
   type MarketplaceRows,
@@ -232,6 +234,9 @@ export interface AddMarketplaceOptions {
  * the unwrapped (no-leak) and wrapped (leak) shapes must classify identically,
  * so ATTR-07 routing survives a cleanup leak. Single level only --
  * a deeper chain is not an add-precondition shape this orchestrator produces.
+ *
+ * GHB-01: a clone failure whose cause is a `FetchedUrlCause` is the failure
+ * itself, so it is not unwrapped; its code stays readable to the classifier.
  */
 function unwrapAddError(err: unknown): unknown {
   if (
@@ -244,7 +249,7 @@ function unwrapAddError(err: unknown): unknown {
     return err;
   }
 
-  if (err instanceof Error && err.cause !== undefined) {
+  if (err instanceof Error && err.cause !== undefined && !(err.cause instanceof FetchedUrlCause)) {
     return err.cause;
   }
 
@@ -543,6 +548,45 @@ function removalAdvisories(err: unknown): readonly string[] | undefined {
 }
 
 /**
+ * The standalone failed-add row, `(failed) {<reason>}` with no child row.
+ *
+ * GHB-01 / GHB-04: a marketplace row carries no cause (SNM-10). When the GitHub
+ * base override rewrote the URL the add fetched, the reason moves to one
+ * synthetic failed child row whose cause line ends with the fetched URL, the
+ * same shape `marketplace update` renders for a failed refresh. A failure the
+ * override did not rewrite keeps the bare row.
+ */
+function failedAddRow(
+  subject: string,
+  scope: Scope,
+  reason: ContentReason,
+  error: Error,
+): MarketplaceRows<PluginFailedMessage> {
+  if (!hasFetchedUrlCause(error)) {
+    // D-03: a failed marketplace add -> error.
+    return {
+      name: subject,
+      scope,
+      status: "failed",
+      reasons: [reason],
+      severity: "error",
+      plugins: [],
+    };
+  }
+
+  const fetchedRow: PluginFailedMessage = {
+    status: "failed",
+    name: subject,
+    reasons: [reason],
+    cause: error,
+    // D-03/D-06: a failed marketplace add -> error, no reload.
+    severity: "error",
+    needsReload: false,
+  };
+  return { name: subject, scope, status: "failed", severity: "error", plugins: [fetchedRow] };
+}
+
+/**
  * RECON-03: route the catch arm of `addMarketplace` to a typed
  * `AddMarketplaceOutcome`, emitting the standalone notify() row first when the
  * caller is not orchestrated. The outcome is returned on BOTH paths; the
@@ -562,6 +606,9 @@ function removalAdvisories(err: unknown): readonly string[] | undefined {
  * WR-02 / MA-14: the standalone row of a leftover the add could not remove
  * carries one advisory line naming the cleanup failure; the orchestrated
  * outcome carries the same leak in `cause`.
+ *
+ * GHB-01: the standalone row names the URL actually fetched when the GitHub base
+ * override rewrote it (see `failedAddRow`).
  */
 function handleAddFailure(
   opts: AddMarketplaceOptions,
@@ -590,16 +637,8 @@ function handleAddFailure(
     // OUT-07 / D-12: `marketplace add` is a single-target op -> Single 1-tuple.
     // The `(failed) {<reason>}` header renders via the central renderMpHeader seam
     // the spine reuses; ADD_CONTEXT carries the localized add vocabulary.
-    const failedRows: Single<MarketplaceRows<never>> = [
-      {
-        name: addSubjectName(err, opts.rawSource),
-        scope: opts.scope,
-        status: "failed",
-        reasons: [reason],
-        // D-03: a failed marketplace add -> error.
-        severity: "error",
-        plugins: [],
-      },
+    const failedRows: Single<MarketplaceRows<PluginFailedMessage>> = [
+      failedAddRow(addSubjectName(err, opts.rawSource), opts.scope, reason, wrapped),
     ];
     const advisories = removalAdvisories(err);
     notifyWithContext(opts.ctx, opts.run, ADD_CONTEXT, failedRows, undefined, "single", {

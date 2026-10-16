@@ -57,6 +57,7 @@ import { createCompletionCache } from "../../../extensions/pi-claude-marketplace
 import {
   ConcurrentInstallError,
   DependencyCascadeError,
+  FetchedUrlCause,
   InvalidGitHubBaseUrlError,
   PluginShapeError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
@@ -1554,6 +1555,68 @@ test("GHB-03: an installer failing on an invalid base fails the whole import", a
     },
   );
   assert.deepStrictEqual(attempted, ["target"]);
+  verifyBoundary();
+});
+
+test("GHB-01: a marketplace add failing under the GitHub base override names the fetched URL", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticScopes(t, "add-fetched-url");
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+  const error = Object.assign(new Error("HTTP Error: 404"), {
+    code: "HttpError",
+    data: { statusCode: 404 },
+    cause: new FetchedUrlCause("https://mirror.example/git/owner/mp.git"),
+  });
+  const expectedResult: ClaudeImportExecutionResult = {
+    ...emptyImportResult(),
+    marketplaceFailures: [
+      {
+        ...addFailed("mp", "user", "HTTP Error: 404"),
+        causeChain: new Error("fetched https://mirror.example/git/owner/mp.git"),
+      },
+    ],
+    warnings: [warned("p", "mp", "user", "marketplace-failed", "HTTP Error: 404")],
+  };
+
+  // act
+  const importResult = await importClaudeSettings({
+    ctx,
+    run: runWithNothingLoaded(),
+    cwd,
+    deps: collaborators({
+      addMarketplace: () =>
+        Promise.resolve({
+          status: "failed",
+          reason: "source missing",
+          error,
+          cause: "HTTP Error: 404",
+        }),
+      loadSettings: () =>
+        Promise.resolve(
+          claudeSettings({
+            enabledPlugins: { "p@mp": true },
+            extraKnownMarketplaces: { mp: { github: { repo: "owner/mp" } } },
+          }),
+        ),
+      loadState: () => Promise.resolve(recordedState([])),
+    }),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["user"],
+  });
+
+  // assert
+  assert.deepStrictEqual(importResult, expectedResult);
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "Some operations have failed.\n\n" +
+        "⊘ mp [user] (failed)\n" +
+        "  ⊘ mp (failed)\n" +
+        "    cause: HTTP Error: 404 -> fetched https://mirror.example/git/owner/mp.git\n\n" +
+        "Import: 2 failures",
+      severity: "error",
+    },
+  ]);
   verifyBoundary();
 });
 

@@ -28,6 +28,7 @@ import { buildAuthCallbacks } from "../../../extensions/pi-claude-marketplace/pl
 import { listRemotes } from "../../../extensions/pi-claude-marketplace/platform/git.ts";
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import {
+  FetchedUrlCause,
   InvalidGitHubBaseUrlError,
   MarketplaceDuplicateNameError,
   StaleSourceCloneError,
@@ -3811,14 +3812,96 @@ test("GHB-03: an orchestrated GitHub add rethrows an invalid base instead of ret
   });
 });
 
+test("GHB-01: a GitHub add failing under the override names the fetched URL on a failed child row", async (t) => {
+  await createHermeticEnvironment(t, "mp-add-fetched-url-home-");
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    setGitHubBaseUrl(t, "https://mirror.example/git");
+    const { ctx, run, notifications } = makeCtx();
+    const { credOps: credentialOps } = createCredentialOps();
+    const cloneThrows = Object.assign(httpError(404), {
+      cause: new FetchedUrlCause(
+        "https://mirror.example/git/anthropics/claude-plugins-official.git",
+      ),
+    });
+    const { gitOps } = createGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+      cloneThrows,
+    });
+
+    // act
+    await addMarketplace({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource: "anthropics/claude-plugins-official",
+      gitOps,
+      credentialOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "Some operations have failed.\n\n" +
+          "⊘ anthropics/claude-plugins-official [project] (failed)\n" +
+          "  ⊘ anthropics/claude-plugins-official (failed) {source missing}\n" +
+          "    cause: HTTP Error: 404 -> fetched https://mirror.example/git/anthropics/claude-plugins-official.git",
+        severity: "error",
+      },
+    ]);
+    assert.equal(await pathExists(locations.stateJsonPath), false);
+  });
+});
+
+test("GHB-01: an orchestrated GitHub add failing under the override still classifies the clone failure", async (t) => {
+  await createHermeticEnvironment(t, "mp-add-fetched-url-orchestrated-home-");
+  await withTmpScope(async ({ cwd }) => {
+    // arrange
+    setGitHubBaseUrl(t, "https://mirror.example/git");
+    const { ctx, run } = makeCtx(0);
+    const { credOps: credentialOps } = createCredentialOps();
+    const cloneThrows = Object.assign(httpError(404), {
+      cause: new FetchedUrlCause(
+        "https://mirror.example/git/anthropics/claude-plugins-official.git",
+      ),
+    });
+    const { gitOps } = createGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+      cloneThrows,
+    });
+
+    // act
+    const outcome = await addMarketplace({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource: "anthropics/claude-plugins-official",
+      gitOps,
+      credentialOps,
+      notifications: { mode: "orchestrated" },
+    });
+
+    // assert
+    assert.deepStrictEqual(outcome, {
+      status: "failed",
+      reason: "source missing",
+      error: cloneThrows,
+      cause: "HTTP Error: 404",
+    });
+  });
+});
+
 test("D-79-03: a url add that 401s on a host with no Device Flow renders the bare (failed) {authentication required} row with NO cause line", async () => {
   await withTmpScope(async ({ cwd }) => {
     // arrange
     const { ctx, run, notifications } = makeCtx();
-    // D-79-03 (amended): marketplace add keeps its no-child-rows invariant
-    // (D-01/D-10), so the stored-credential cause line renders ONLY on the
-    // update path's cause-carrying child row -- the add row stays the bare
-    // closed-set token.
+    // D-79-03 (amended): a url add that the GitHub base override did not
+    // rewrite renders no child row (D-01/D-10, GHB-04), so the stored-credential
+    // cause line renders ONLY on the update path's cause-carrying child row --
+    // the add row stays the bare closed-set token.
     const { credOps: credentialOps } = createCredentialOps();
     const httpErr = Object.assign(new Error("HTTP 401 from clone"), {
       code: "HttpError",

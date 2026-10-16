@@ -17,8 +17,10 @@ import {
   errorMessage,
   errorWithCleanupFailures,
   errorWithManualRecovery,
+  FetchedUrlCause,
   findManualRecoveryError,
   formatCauseChain,
+  hasFetchedUrlCause,
   InvalidGitHubBaseUrlError,
   InvalidMarketplaceManifestError,
   isErrnoException,
@@ -936,6 +938,58 @@ describe("TooManyRedirectsError", () => {
       expectedError,
     );
   });
+});
+
+describe("FetchedUrlCause", () => {
+  test("names the URL actually fetched", () => {
+    // arrange
+    const url = "https://mirror.example/git/owner/repo.git";
+
+    // act
+    const cause = new FetchedUrlCause(url);
+
+    // assert
+    assert.ok(cause instanceof Error);
+    assert.deepStrictEqual(
+      { name: cause.name, message: cause.message, url: cause.url, cause: cause.cause },
+      {
+        name: "FetchedUrlCause",
+        message: "fetched https://mirror.example/git/owner/repo.git",
+        url,
+        cause: undefined,
+      },
+    );
+  });
+});
+
+describe("hasFetchedUrlCause", () => {
+  for (const { title, err, expected } of [
+    {
+      title: "a fetched-URL cause under a wrapper",
+      err: new Error("outer", {
+        cause: new Error("HTTP Error: 404", {
+          cause: new FetchedUrlCause("https://mirror.example/o/r.git"),
+        }),
+      }),
+      expected: true,
+    },
+    {
+      title: "a chain whose cause only reads like a fetched URL",
+      err: new Error("HTTP Error: 404", {
+        cause: new Error("fetched https://mirror.example/o/r.git"),
+      }),
+      expected: false,
+    },
+    { title: "a thrown string", err: "fetched https://mirror.example/o/r.git", expected: false },
+  ]) {
+    test(`answers ${expected} for ${title}`, () => {
+      // act
+      const found = hasFetchedUrlCause(err);
+
+      // assert
+      assert.strictEqual(found, expected);
+    });
+  }
 });
 
 describe("InvalidGitHubBaseUrlError", () => {

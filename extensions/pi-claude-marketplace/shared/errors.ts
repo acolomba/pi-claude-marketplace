@@ -411,6 +411,33 @@ export class TooManyRedirectsError extends Error {
   }
 }
 
+/**
+ * GHB-01: the cause `platform/git.ts` attaches to a failed network call whose
+ * URL the GitHub base override rewrote. `url` is the URL actually fetched.
+ */
+export class FetchedUrlCause extends Error {
+  readonly url: string;
+  constructor(url: string) {
+    super(`fetched ${url}`);
+    this.name = "FetchedUrlCause";
+    this.url = url;
+  }
+}
+
+/**
+ * GHB-01 / GHB-04: whether the cause chain holds a `FetchedUrlCause`, which is
+ * true only when the GitHub base override rewrote the failed call's URL.
+ */
+export function hasFetchedUrlCause(err: unknown): boolean {
+  for (const link of causeChain(err)) {
+    if (link instanceof FetchedUrlCause) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 const INVALID_GITHUB_BASE_URL_RULES = {
   "not-a-url": "is not a valid URL.",
   scheme: "must use the https scheme.",
