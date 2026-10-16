@@ -6,9 +6,11 @@
  *
  * A missing file fails every step that reads one; it never reads as zero
  * declarations. A file whose `marketplaces` map is empty declares that no
- * marketplace is wanted. `does not exist` is the step that asserts a file is
- * absent: after a load, a missing `claude-plugins.json` means the first-run
- * migration declined to write it (FIX-02, MIG-01).
+ * marketplace is wanted. `declares no marketplaces` passes on an empty or an
+ * absent `marketplaces` map, because the configuration schema reads an absent
+ * map as no declarations (CFG-01). `does not exist` is the step that asserts
+ * a file is absent: after a load, a missing `claude-plugins.json` means the
+ * first-run migration declined to write it (FIX-02, MIG-01).
  */
 
 import assert from "node:assert/strict";
@@ -35,18 +37,24 @@ function configFilePath(world: ScenarioWorld, fileName: string, scope: string): 
   return path.join(world.scopeRoot(scope), fileName);
 }
 
+// Reads the file as a JSON object, failing on a missing file or other content.
+async function readConfigObject(file: string): Promise<{ config: object; content: string }> {
+  assert.ok(existsSync(file), `${file} does not exist, which is not an empty declaration`);
+  const content = await readFile(file, "utf8");
+  const config: unknown = JSON.parse(content);
+  if (!isPlainObject(config)) {
+    assert.fail(`${file} is not a JSON object: ${content}`);
+  }
+
+  return { config, content };
+}
+
 Then(
   "the {string} file of the {word} scope declares these marketplaces:",
   async function (this: ScenarioWorld, fileName: string, scope: string, table: DataTable) {
     const file = configFilePath(this, fileName, scope);
-    assert.ok(existsSync(file), `${file} does not exist, which is not an empty declaration`);
-    const content = await readFile(file, "utf8");
-    const config: unknown = JSON.parse(content);
-    if (
-      !isPlainObject(config) ||
-      !("marketplaces" in config) ||
-      !isPlainObject(config.marketplaces)
-    ) {
+    const { config, content } = await readConfigObject(file);
+    if (!("marketplaces" in config) || !isPlainObject(config.marketplaces)) {
       assert.fail(`${file} has no marketplaces object: ${content}`);
     }
 
@@ -67,5 +75,19 @@ Then(
   function (this: ScenarioWorld, fileName: string, scope: string) {
     const file = configFilePath(this, fileName, scope);
     assert.strictEqual(existsSync(file), false, `${file} exists`);
+  },
+);
+
+Then(
+  "the {string} file of the {word} scope declares no marketplaces",
+  async function (this: ScenarioWorld, fileName: string, scope: string) {
+    const file = configFilePath(this, fileName, scope);
+    const { config, content } = await readConfigObject(file);
+    const marketplaces = "marketplaces" in config ? config.marketplaces : {};
+    if (!isPlainObject(marketplaces)) {
+      assert.fail(`${file} has a marketplaces member that is not an object: ${content}`);
+    }
+
+    assert.deepStrictEqual(Object.keys(marketplaces), [], `${file} declares marketplaces`);
   },
 );

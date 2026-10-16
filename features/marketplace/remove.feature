@@ -25,3 +25,18 @@ Feature: Marketplace remove
     Then the "claude-plugins.json" file of the project scope declares these marketplaces:
       | name | source                   |
       | base | {home}/marketplaces/base |
+
+  Scenario: A marketplace removed with --local stays removed in a new session
+    Given the marketplace "tools" is published as a dir source
+    Given the user has run "/claude:plugin marketplace add {home}/marketplaces/tools --scope project --local"
+    Given the user has started a new pi session
+    Given the user has run "/claude:plugin marketplace remove tools --scope project --local"
+    Given the user has started a new pi session
+    When the user runs "/claude:plugin marketplace list"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists no marketplaces
+    Then the "claude-plugins.json" file of the project scope does not exist
+    Then the "claude-plugins.local.json" file of the project scope declares no marketplaces
