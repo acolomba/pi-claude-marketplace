@@ -28,7 +28,7 @@ async function breakManifest(
 
 // Two literal texts rather than one with a parameter: a misspelled problem in
 // a row the default profile excludes is then an undefined step, which the
-// feature gate rejects (D-04).
+// feature gate rejects (ADD-07).
 Given(
   "the manifest of the marketplace {string} to add is not valid json",
   async function (this: ScenarioWorld, name: string) {
@@ -48,7 +48,7 @@ Given(
   async function (this: ScenarioWorld, name: string, kind: SourceKind, directory: string) {
     const root = path.join(this.marketplacesRoot, directory);
     this.onRelease(() => rm(root, { recursive: true, force: true }));
-    // Not recorded: the world keys marketplaces by name, so it would replace the first (D-01).
+    // Not recorded: the world keys marketplaces by name, so it would replace the first (ADD-04).
     await publishMarketplaceIn(this.marketplacesRoot, directory, name, kind, []);
   },
 );

@@ -76,7 +76,7 @@ export function publishMarketplace(
  * Publishes a marketplace whose manifest declares `name` in the directory
  * `directory` under `marketplacesRoot`, as a `kind` source offering
  * `plugins`. For a git kind, `directory` is the repository its stand-in
- * serves (D-01, D-04).
+ * serves (ADD-04).
  */
 export async function publishMarketplaceIn(
   marketplacesRoot: string,
@@ -102,7 +102,7 @@ export async function publishMarketplaceIn(
 /**
  * Breaks the manifest of the marketplace `name` in the directory `published`
  * records, with `problem`: JSON that does not parse, or JSON that breaks the
- * manifest schema (D-04).
+ * manifest schema (ADD-07).
  */
 export async function invalidateManifest(
   name: string,
