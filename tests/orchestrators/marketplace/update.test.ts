@@ -40,6 +40,7 @@ import { createJsonCapture } from "../../edge/json-capture.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+import { setGitHubBaseUrl } from "../../shared/github-base-url-environment.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
@@ -802,6 +803,44 @@ test("MURL-03 + D-14: url source refreshes via fetch+forceUpdateRef+checkout car
       host: "gitlab.example.com",
       kind: "stored-credential",
     });
+  });
+});
+
+test("GHB-04: updating a url marketplace ignores an invalid override", async (t) => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    setGitHubBaseUrl(t, "http://mirror.example");
+    await seedUrlMarketplace({ cwd, name: "urlmp", ref: "main" });
+    const { ctx, run, notifications } = makeCtx();
+    const { credOps: credentialOps } = createCredentialOps();
+    const { gitOps, state } = createGitOps({
+      remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000009" },
+    });
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      name: "urlmp",
+      scope: "project",
+      cwd,
+      gitOps,
+      credentialOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      { message: "● urlmp [project] (skipped) {up-to-date}" },
+    ]);
+    assert.deepStrictEqual(
+      state.forceUpdateRefCalls.map(({ ref, value }) => ({ ref, value })),
+      [{ ref: "refs/heads/main", value: "abcdef0000000000000000000000000000000009" }],
+    );
+    assert.deepStrictEqual(
+      state.fetchCalls.map(({ auth }) => auth),
+      [{ credentialOps, host: "gitlab.example.com", kind: "stored-credential" }],
+    );
   });
 });
 
@@ -3739,6 +3778,40 @@ test("AUTH-02 update: the GitAuthBundle is forwarded by reference into refreshGi
     // proves no re-bundling occurred.
     assert.strictEqual(state.fetchCalls[0]?.auth?.credentialOps, credentialOps);
     assert.equal(state.fetchCalls[0]?.auth?.kind, "device-flow");
+  });
+});
+
+test("GHB-02: updating a GitHub marketplace under the override fetches with the override-host bundle", async (t) => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    setGitHubBaseUrl(t, "https://mirror.example:8443/git");
+    await seedGithubMarketplace({ cwd, name: "ref-mp", ref: "main" });
+    const { ctx, run, notifications } = makeCtx();
+    const { credOps: credentialOps } = createCredentialOps();
+    const { gitOps, state } = createGitOps({
+      remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000021" },
+    });
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      name: "ref-mp",
+      scope: "project",
+      cwd,
+      gitOps,
+      credentialOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      { message: "● ref-mp [project] (skipped) {up-to-date}" },
+    ]);
+    assert.deepStrictEqual(
+      state.fetchCalls.map(({ auth }) => auth),
+      [{ credentialOps, host: "mirror.example:8443", kind: "stored-credential" }],
+    );
   });
 });
 

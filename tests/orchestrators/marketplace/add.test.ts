@@ -39,6 +39,7 @@ import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+import { setGitHubBaseUrl } from "../../shared/github-base-url-environment.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type {
@@ -576,6 +577,38 @@ for (const { rawSource, origin } of MA12_RECOGNIZED_ORIGINS) {
     });
   });
 }
+
+test("GHB-02 / D-02: an owned leftover with a canonical origin recovers under the override", async (t) => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    setGitHubBaseUrl(t, "https://mirror.example:8443/git");
+    const { ctx, run, notifications } = makeCtx();
+    const finalDir = await arrangeLeftover(locations, { owned: true });
+    const { gitOps } = createGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+      listRemotesResult: {
+        kind: "origin",
+        url: "https://github.com/anthropics/claude-plugins-official.git",
+      },
+    });
+
+    // act
+    await addMarketplace({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource: "anthropics/claude-plugins-official",
+      gitOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [{ message: "● valid-marketplace [project] (added)" }]);
+    const persisted = await loadState(locations.extensionRoot);
+    assert.strictEqual(persisted.marketplaces["valid-marketplace"]?.marketplaceRoot, finalDir);
+    assert.strictEqual(await pathExists(path.join(finalDir, ".leftover-sentinel")), false);
+  });
+});
 
 test("MA-13 / WR-03: a leftover without the ownership marker refuses as stale clone and stays on disk", async () => {
   await withTmpScope(async ({ cwd, locations }) => {
@@ -3672,6 +3705,41 @@ test("MURL-01 regression: github source is byte-identical -- Device Flow auth st
     assert.ok(
       buildAuthCallbacks(cloneCall.auth),
       "github auth bundle must be buildAuthCallbacks-compatible",
+    );
+  });
+});
+
+test("GHB-02: a GitHub add under the override clones the canonical URL with the override-host stored credential", async (t) => {
+  await withTmpScope(async ({ cwd }) => {
+    // arrange
+    setGitHubBaseUrl(t, "https://mirror.example:8443/git");
+    const { ctx, run, notifications } = makeCtx();
+    const { credOps: credentialOps } = createCredentialOps();
+    const { gitOps, state } = createGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+    });
+
+    // act
+    await addMarketplace({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource: "anthropics/claude-plugins-official",
+      gitOps,
+      credentialOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [{ message: "● valid-marketplace [project] (added)" }]);
+    assert.deepStrictEqual(
+      state.cloneCalls.map(({ url, auth }) => ({ url, auth })),
+      [
+        {
+          url: "https://github.com/anthropics/claude-plugins-official.git",
+          auth: { kind: "stored-credential", credentialOps, host: "mirror.example:8443" },
+        },
+      ],
     );
   });
 });

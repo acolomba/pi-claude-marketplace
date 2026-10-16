@@ -63,6 +63,7 @@ import { createNotificationBoundary } from "../../edge/notification-boundary.ts"
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+import { setGitHubBaseUrl } from "../../shared/github-base-url-environment.ts";
 import { runWithNothingLoaded, runWithSoftDeps } from "../../shared/notification-run-seeds.ts";
 
 import type { ParsedSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
@@ -1496,6 +1497,43 @@ test("PUP-2 / AUTH-02: the github marketplace sync fetch carries the github.com 
   });
 });
 
+test("GHB-02: the GitHub marketplace sync under the override binds the override host", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-sync-override-");
+    try {
+      // arrange
+      setGitHubBaseUrl(t, "https://mirror.example:8443/git");
+      await seedGithubMarketplaceForSync(cwd);
+      const { gitOps, state } = createGitOps({
+        remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000001" },
+      });
+      const credentialOps = makeCredentialOps();
+      const { ctx, run } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "marketplace", marketplace: "official" },
+        gitOps,
+        credentialOps,
+        deviceFlowHttp: makeDeviceFlowHttp(),
+        authMemo: new Map<string, AuthAttemptResult>(),
+      });
+
+      // assert
+      assert.deepStrictEqual(
+        state.fetchCalls.map(({ auth }) => auth),
+        [{ kind: "stored-credential", credentialOps, host: "mirror.example:8443" }],
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("PUP-2 / D-79-02: two marketplaces on one Device Flow host without a supplied authMemo request one device code", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-sync-memo-");
@@ -1700,6 +1738,49 @@ test("NFR-5: path-source marketplace update calls zero gitOps primitives", async
       assert.equal(state.forceUpdateRefCalls.length, 0);
       assert.equal(state.checkoutCalls.length, 0);
       assert.equal(state.resolveRefCalls.length, 0);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("GHB-04: a path-only update ignores an invalid override", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-path-override-");
+    try {
+      // arrange
+      setGitHubBaseUrl(t, "http://mirror.example");
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.0.0", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      const { ctx, run, notifications } = makeCtx();
+      const { gitOps, state } = createGitOps();
+
+      // act
+      await updatePlugins({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "marketplace", marketplace: "mp" },
+        gitOps,
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [{ message: "Plugin update: nothing to update" }]);
+      assert.deepStrictEqual(
+        {
+          fetch: state.fetchCalls.length,
+          forceUpdateRef: state.forceUpdateRefCalls.length,
+          checkout: state.checkoutCalls.length,
+          resolveRef: state.resolveRefCalls.length,
+        },
+        { fetch: 0, forceUpdateRef: 0, checkout: 0, resolveRef: 0 },
+      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
