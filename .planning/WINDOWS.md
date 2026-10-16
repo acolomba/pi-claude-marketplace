@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 2
+open_count: 3
 waived_count: 51
 fixed_count: 41
-total_count: 94
-last_updated: 2026-10-16T16:20:58.926Z
+total_count: 95
+last_updated: 2026-10-16T17:04:18.661Z
 ---
 
 # Broken Windows Ledger
@@ -109,6 +109,7 @@ last_updated: 2026-10-16T16:20:58.926Z
 | 92 | 07 | skipped-test | tests/integration/skill-path-resolution.test.ts | 124 | [json-output] Existing optional pi-subagents resolver integration case skips because its module is unavailable; no new test skip was introduced. Evidence: TEST-07-06-01 in phase deferred-items.md. | fixed |  | 2026-10-10T04:04:37.773Z | 2026-10-10T20:21:09.962Z |
 | 93 | 2 | deviation | README.es.md |  | [marketplace-features] README.es.md drifted from README.md before this phase: it lacks the GitLab marketplace paragraph and its note under Mercado, and its --local paragraph says something different | open |  | 2026-10-16T01:44:57.366Z |  |
 | 94 | 03.1 | deviation | tests/orchestrators/plugin/install-flow.test.ts |  | [marketplace-features] FIX-02 D-04 truth 'reload after a local plugin install writes a base file with the shared marketplace and no plugin key' is unreachable: install adopts the marketplace into claude-plugins.local.json (CR-02), so the reload writes no base file; the DFEN-06 case pins ENOENT and rule 2 is proven by unit and convergence cases instead | open |  | 2026-10-16T16:20:58.926Z |  |
+| 95 | 03.1 | deviation | extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts |  | [marketplace-features] notifyInvalidConfigWriteBack JSDoc says the S5 warning follows the success row; measured, the S5 row is emitted first (update-flow S5 local-file case) | open |  | 2026-10-16T17:04:18.661Z |  |
 
 ````json
 [
@@ -1275,6 +1276,19 @@ last_updated: 2026-10-16T16:20:58.926Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-10-16T16:20:58.926Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 95,
+    "kind": "deviation",
+    "phase": "03.1",
+    "file": "extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts",
+    "line": null,
+    "description": "[marketplace-features] notifyInvalidConfigWriteBack JSDoc says the S5 warning follows the success row; measured, the S5 row is emitted first (update-flow S5 local-file case)",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-10-16T17:04:18.661Z",
     "resolved_at": null,
     "milestone": null
   }

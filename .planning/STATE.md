@@ -5,16 +5,16 @@ milestone_name: Marketplace Behavioral Tests
 current_phase: "03.1"
 current_phase_name: Local Declaration Leak Fix
 status: executing
-stopped_at: Completed 03.1-02-PLAN.md
-last_updated: "2026-10-16T16:45:37.796Z"
+stopped_at: Completed 03.1-03-PLAN.md
+last_updated: "2026-10-16T17:05:35.343Z"
 last_activity: 2026-10-16
 last_activity_desc: Completed 03.1-02 (FIX-03 install refusal under a local-only marketplace)
-state_head: 4ac6b0af4f8cee85d8026c1df0677c13ff955f8a
+state_head: 3db8f2ece79b18e7ff4861c7f231981f93aad4b1
 progress:
   total_phases: 13
   completed_phases: 3
   total_plans: 18
-  completed_plans: 15
+  completed_plans: 16
   percent: 23
 ---
 
@@ -32,7 +32,7 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 03.1 (Local Declaration Leak Fix) — EXECUTING
-Plan: 3 of 5
+Plan: 4 of 5
 Status: Ready to execute
 Last activity: 2026-10-16 — Completed 03.1-02 (FIX-03 install refusal under a local-only marketplace)
 
@@ -181,8 +181,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-16T16:45:12.450Z
-**Stopped at:** Completed 03.1-02-PLAN.md
+**Last session:** 2026-10-16T17:05:34.443Z
+**Stopped at:** Completed 03.1-03-PLAN.md
 **Resume file:** None
 
 **Main merge (2026-10-11, quick task 261011-bsm):** `origin/main` at
@@ -312,6 +312,7 @@ archived milestone artifacts.
 | Phase 03 P03 | 7 min | 2 tasks | 3 files |
 | Phase 03.1 P01 | 21min | 3 tasks | 12 files |
 | Phase 03.1 P02 | 20min | 3 tasks | 13 files |
+| Phase 03.1 P03 | 16min | 2 tasks | 7 files |
 
 ## Decisions
 
@@ -407,6 +408,8 @@ archived milestone artifacts.
 - [Phase 03.1]: A reload after a local install writes no base file, because the install adopts the marketplace into the local file (CR-02); D-04's plugin-key rule is proven by unit and convergence cases
 - [Phase 03.1]: FIX-03: the refusal token is the closed-set reason 'marketplace declared locally' in the shared FailureReason group; the --local remedy rides the cause line (D-07)
 - [Phase 03.1]: FIX-03: localOnlyMarketplaceRefusal (plugin/shared.ts) is the single rule; install refuses inside the lock right after the write-target selection, before the D-04-07 promotion and the cascade, standalone only (D-06)
+- [Phase 03.1]: Standalone enable and disable refuse a shared write under a local-only marketplace right after the not-installed check; orchestrated calls never refuse (FIX-03, D-06)
+- [Phase 03.1]: Update and reinstall keep the flag as the write-back target; without the flag they write nothing for a local key or under a local-only marketplace and report an unreadable local file (D-08, D-MF-03)
 
 ### mcp-4 decisions
 
