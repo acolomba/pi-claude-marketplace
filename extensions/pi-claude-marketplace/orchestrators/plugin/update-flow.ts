@@ -1105,6 +1105,7 @@ export interface PluginUpdateOperations {
  * exactly that gap.
  */
 async function runPluginUpdate(args: ThreePhaseArgs): Promise<UpdateRunOutcome> {
+  await refuseLocalOnlyMarketplaceUpdate(args);
   const preflight = await preparePluginUpdate({
     ...args,
     ...(!args.cascade && { notification: { ctx: args.ctx, run: args.run } }),
@@ -1113,7 +1114,6 @@ async function runPluginUpdate(args: ThreePhaseArgs): Promise<UpdateRunOutcome> 
     return preflight;
   }
 
-  await refuseLocalOnlyMarketplaceUpdate(args);
   return swapPluginUpdate(args, preflight);
 }
 
@@ -1124,6 +1124,13 @@ async function runPluginUpdate(args: ThreePhaseArgs): Promise<UpdateRunOutcome> 
  * `<plugin>@<marketplace>` invocation form (OUT-04); the `@<marketplace>` and
  * bare forms and the autoupdate cascade name no plugin and cover every layer
  * (D-MF-03).
+ *
+ * The check reads only the two config files, and it runs before the
+ * preflight. So a refused update builds no credentials, lists no tags, and
+ * clones nothing. The cost of this order: an up-to-date plugin is refused
+ * too, although its update would write nothing. Knowing that a
+ * git-source plugin is up to date needs the network, which a refusal must not
+ * touch.
  */
 async function refuseLocalOnlyMarketplaceUpdate(args: ThreePhaseArgs): Promise<void> {
   if (args.cascade || args.cardinality !== "single") {

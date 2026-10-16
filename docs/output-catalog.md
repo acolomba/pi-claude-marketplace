@@ -833,7 +833,7 @@ A marketplace operation has failed.
 
 A standalone install without `--local` writes the plugin's declaration into `claude-plugins.json`. If only `claude-plugins.local.json` declares the plugin's marketplace, a teammate who reads the shared file cannot resolve that declaration. Thus the command is refused before anything is written. The `cause:` line carries the remedy.
 
-`enable`, `disable`, `update <plugin>@<marketplace>`, and `reinstall <plugin>@<marketplace>` render the same row. A reload, an import, and the `update` and `reinstall` forms that name no plugin are never refused. Severity `error`; no reload-hint (nothing landed).
+`enable`, `disable`, `update <plugin>@<marketplace>`, and `reinstall <plugin>@<marketplace>` render the same row. A reload, an import, and the `update` and `reinstall` forms that name no plugin are never refused. An `enable` or `disable` that writes nothing keeps its `(skipped) {already enabled}` or `(skipped) {already disabled}` row. A named `update` is refused before it looks for a new version, because that check can need the network. So an up-to-date plugin is refused too. Severity `error`; no reload-hint (nothing landed).
 
 <!-- catalog-state: failure-marketplace-declared-locally -->
 

@@ -5505,7 +5505,7 @@ test("FIX-03: a named update with --local under a marketplace only the local fil
   });
 });
 
-test("FIX-03: an up-to-date named update under a marketplace only the local file declares is not refused", async () => {
+test("FIX-03: an up-to-date named update under a marketplace only the local file declares is refused before the version check", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-local-mp-current-");
     try {
@@ -5524,7 +5524,16 @@ test("FIX-03: an up-to-date named update under a marketplace only the local file
 
       // assert
       assert.deepEqual(notifications, [
-        { message: "● mp [project]\n  ⊘ hello (skipped) {up-to-date}" },
+        {
+          message: [
+            "A plugin operation has failed.",
+            "",
+            "● mp [project]",
+            "  ⊘ hello (failed) {marketplace declared locally}",
+            "    cause: The marketplace mp is declared only in claude-plugins.local.json. Run the command again with --local.",
+          ].join("\n"),
+          severity: "error",
+        },
       ]);
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -7678,6 +7687,69 @@ test("PURL-06 / D-78-05 pinned sha-change: manifest sha differs from recorded ->
         gitState.cloneCalls[0]?.url,
         rawUrl,
         "the wire url preserves the manifest's .git decision (source.raw)",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("FIX-03: a refused named update of a git-source plugin clones and fetches nothing", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-local-mp-git-");
+    try {
+      // arrange
+      const cloneUrl = "https://example.com/org/repo";
+      const fixtureRepoDir = path.join(cwd, "repo-fixture-new");
+      await seedGitPluginMarketplace({
+        cwd,
+        cloneUrl,
+        fixtureRepoDir,
+        versionTag: "9.9.9",
+        entrySource: { source: "url", url: cloneUrl, sha: SHA_NEW },
+        recordedSha: SHA_OLD,
+      });
+      const locations = locationsFor("project", cwd);
+      await writeFile(locations.configLocalJsonPath, localOnlyMarketplaceBytes(cwd), "utf8");
+      const stateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const { gitOps, state: gitState } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "gp", marketplace: "mp" },
+        cloneCacheSeam: seamWith(gitOps),
+      });
+
+      // assert
+      assert.deepEqual(notifications, [
+        {
+          message: [
+            "A plugin operation has failed.",
+            "",
+            "● mp [project]",
+            "  ⊘ gp (failed) {marketplace declared locally}",
+            "    cause: The marketplace mp is declared only in claude-plugins.local.json. Run the command again with --local.",
+          ].join("\n"),
+          severity: "error",
+        },
+      ]);
+      assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
+      assert.equal(
+        await pathExists(await locations.pluginCloneDir(pluginCloneKey(cloneUrl, SHA_NEW))),
+        false,
+      );
+      assert.deepEqual(
+        {
+          clone: gitState.cloneCalls,
+          fetch: gitState.fetchCalls,
+          resolveRemoteRef: gitState.resolveRemoteRefCalls,
+        },
+        { clone: [], fetch: [], resolveRemoteRef: [] },
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });
