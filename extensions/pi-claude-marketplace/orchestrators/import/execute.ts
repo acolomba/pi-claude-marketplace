@@ -22,6 +22,7 @@ import {
   DependencyCascadeError,
   errorMessage,
   PluginShapeError,
+  rethrowInvalidGitHubBaseUrl,
 } from "../../shared/errors.ts";
 import { notifyDiagnostic, notifyMcpConfigNotices } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
@@ -869,9 +870,12 @@ async function installOnePlannedPlugin(
       ...(promoting !== undefined && !promoting.compatibility.installable && { partial: true }),
     });
   } catch (err) {
-    // The orchestrated install never re-throws by contract, so this is a
-    // defensive arm; it takes the same redacted head-plus-chain route as a
-    // returned failure so no path can leak through it either.
+    rethrowInvalidGitHubBaseUrl(err);
+    // The orchestrated install returns a typed outcome for every failure
+    // except an invalid GitHub base override, which the call above rethrows so
+    // the whole import fails (GHB-03). Anything else is a defensive arm; it
+    // takes the same redacted head-plus-chain route as a returned failure so
+    // no path can leak through it either.
     pushUnexpectedFailure(
       result,
       plugin,
@@ -973,8 +977,11 @@ async function addOnePlannedMarketplace(
       outcome?.cause ?? "addMarketplace returned no outcome in orchestrated mode",
     );
   } catch (err) {
+    rethrowInvalidGitHubBaseUrl(err);
     // Defensive: orchestrated mode coerces classified failures into typed
-    // outcomes, so only a genuinely unexpected throw lands here.
+    // outcomes, and the call above rethrows an invalid GitHub base override so
+    // the whole import fails (GHB-03). Only a genuinely unexpected throw is
+    // recorded here.
     recordMarketplaceAddFailure(
       result,
       blockedMarketplaces,

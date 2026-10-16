@@ -15,7 +15,7 @@ import { writePluginConfigEntry } from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { isRecordedButDisabled } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
-import { errorMessage } from "../../shared/errors.ts";
+import { errorMessage, rethrowInvalidGitHubBaseUrl } from "../../shared/errors.ts";
 import { createRemovalOps } from "../../shared/fs-utils.ts";
 import { notify, notifyMcpConfigNotices } from "../../shared/notification-dispatch.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
@@ -1447,7 +1447,9 @@ type InstallTransactionOutcome =
  * via a single `notify()` call carrying a `PluginFailedMessage`
  * (Pattern S-1 single chokepoint, IL-2 lint gate). Standalone-mode emits
  * exactly one notification per orchestration arm; orchestrated-mode emits
- * none and returns the typed outcome.
+ * none and returns the typed outcome. GHB-03: the one exception is an
+ * `InvalidGitHubBaseUrlError`, from the plugin or from a dependency, which it
+ * rethrows in both modes so the whole command fails.
  *
  * Failure modes funnel through three paths inside the single catch
  * site:
@@ -1963,6 +1965,7 @@ async function installPluginWithTransaction(
       },
     );
   } catch (err) {
+    rethrowInvalidGitHubBaseUrl(err);
     // RESV-06: a dependency is what failed, so the block names it. Routed here
     // rather than through the single-row path below, which would report the
     // plugin the user typed for something one of its dependencies did.
@@ -2325,7 +2328,9 @@ function assertOrchestratedFailedOutcome(
  * enabled whatever its own `defaultEnabled` says, because it exists to
  * satisfy a declaration (ENBL-DEP-01). It never notifies and never re-throws,
  * the same contract `installPlugin` documents, so `apply.ts` reads its
- * outcome without a guard.
+ * outcome without a guard. GHB-03: the one exception is an
+ * `InvalidGitHubBaseUrlError`, which it rethrows so the whole reconcile pass
+ * fails.
  */
 async function installMissingDependencyWithTransaction(
   transaction: InstallTransaction,
@@ -2484,6 +2489,7 @@ async function installMissingDependencyWithTransaction(
       },
     );
   } catch (err) {
+    rethrowInvalidGitHubBaseUrl(err);
     const subject = cascadeFailure.subject;
     const failed =
       subject !== undefined

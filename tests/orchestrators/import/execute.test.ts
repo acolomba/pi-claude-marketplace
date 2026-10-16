@@ -57,6 +57,7 @@ import { createCompletionCache } from "../../../extensions/pi-claude-marketplace
 import {
   ConcurrentInstallError,
   DependencyCascadeError,
+  InvalidGitHubBaseUrlError,
   PluginShapeError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { openNotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
@@ -1514,6 +1515,90 @@ for (const { cause, installPlugin, order, title } of [
     verifyBoundary();
   });
 }
+
+test("GHB-03: an installer failing on an invalid base fails the whole import", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticScopes(t, "install-invalid-base");
+  const { ctx, verifyBoundary } = createNotificationBoundary(0);
+  const invalid = new InvalidGitHubBaseUrlError("PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL", "scheme");
+  const attempted: string[] = [];
+
+  // act & assert
+  await assert.rejects(
+    () =>
+      importClaudeSettings({
+        ctx,
+        run: runWithNothingLoaded(),
+        cwd,
+        deps: collaborators({
+          addMarketplace: () => Promise.resolve(addedOutcome("mp")),
+          installPlugin: (options) => {
+            attempted.push(options.plugin);
+            return Promise.reject(invalid);
+          },
+          loadSettings: () =>
+            Promise.resolve(
+              claudeSettings({
+                enabledPlugins: { "target@mp": true, "after@mp": true },
+                extraKnownMarketplaces: { mp: { directory: "./mp" } },
+              }),
+            ),
+          loadState: () => Promise.resolve(recordedState([])),
+        }),
+        hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+        selectedScopes: ["user"],
+      }),
+    (error: unknown) => {
+      assert.strictEqual(error, invalid);
+      return true;
+    },
+  );
+  assert.deepStrictEqual(attempted, ["target"]);
+  verifyBoundary();
+});
+
+test("GHB-03: a marketplace add failing on an invalid base fails the whole import", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticScopes(t, "add-invalid-base");
+  const { ctx, verifyBoundary } = createNotificationBoundary(0);
+  const invalid = new InvalidGitHubBaseUrlError("PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL", "scheme");
+  const attempted: string[] = [];
+
+  // act & assert
+  await assert.rejects(
+    () =>
+      importClaudeSettings({
+        ctx,
+        run: runWithNothingLoaded(),
+        cwd,
+        deps: collaborators({
+          addMarketplace: (options) => {
+            attempted.push(options.rawSource);
+            return Promise.reject(invalid);
+          },
+          loadSettings: () =>
+            Promise.resolve(
+              claudeSettings({
+                enabledPlugins: { "a@mp-a": true, "b@mp-b": true },
+                extraKnownMarketplaces: {
+                  "mp-a": { directory: "./a" },
+                  "mp-b": { directory: "./b" },
+                },
+              }),
+            ),
+          loadState: () => Promise.resolve(recordedState([])),
+        }),
+        hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+        selectedScopes: ["user"],
+      }),
+    (error: unknown) => {
+      assert.strictEqual(error, invalid);
+      return true;
+    },
+  );
+  assert.deepStrictEqual(attempted, ["./a"]);
+  verifyBoundary();
+});
 
 // A `DependencyCascadeError` thrown by a dependency cascade (closure,
 // constraint, or a dependency member's own ledger, RESV-06) must not read as

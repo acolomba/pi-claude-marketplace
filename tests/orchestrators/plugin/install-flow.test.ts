@@ -52,6 +52,7 @@ import { createCompletionCache } from "../../../extensions/pi-claude-marketplace
 import { McpServerCollisionError } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 import {
   DependencyCascadeError,
+  InvalidGitHubBaseUrlError,
   InvalidMarketplaceManifestError,
   PluginShapeError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
@@ -72,6 +73,7 @@ import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { captureDebugLog } from "../../platform/debug-log-capture.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+import { setGitHubBaseUrl } from "../../shared/github-base-url-environment.ts";
 import { runWithNothingLoaded, runWithSoftDeps } from "../../shared/notification-run-seeds.ts";
 
 import { retryTree } from "./scope-tree-inventory.ts";
@@ -10987,6 +10989,152 @@ test("plugin install authentication: threads a GitHub provider bundle to the pin
       );
       assert.deepStrictEqual(credentials.calls, { approve: [], fill: [], reject: [] });
       assert.deepStrictEqual(deviceFlow.calls, { pollToken: [], requestCode: [] });
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("GHB-03: installing a GitHub-source plugin on an invalid base fails the command and renders no row", async (t) => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-ghb03-standalone-"));
+    try {
+      // arrange
+      setGitHubBaseUrl(t, "http://mirror.example");
+      const fixtureRepoDir = path.join(cwd, "repo-fixture");
+      await seedGitSourceMarketplace({
+        cwd,
+        fixtureRepoDir,
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "gh",
+        source: { source: "github", repo: "org/repo", sha: GIT_SOURCE_SHA },
+      });
+      const git = createGitOps({ fixtureSourceDir: fixtureRepoDir });
+      const { ctx, verifyBoundary } = createNotificationBoundary(0);
+
+      // act & assert
+      await assert.rejects(
+        () =>
+          installPlugin({
+            cloneCacheSeam: seamWith(git.gitOps),
+            ctx,
+            cwd,
+            marketplace: "mp",
+            run: runWithNothingLoaded(),
+            plugin: "gh",
+            scope: "project",
+          }),
+        (error: unknown) => {
+          assert.deepStrictEqual(
+            error,
+            new InvalidGitHubBaseUrlError("PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL", "scheme"),
+          );
+          return true;
+        },
+      );
+      assert.deepStrictEqual(git.state.cloneCalls, []);
+      verifyBoundary();
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("GHB-03: an orchestrated install rethrows an invalid base", async (t) => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-ghb03-orchestrated-"));
+    try {
+      // arrange
+      setGitHubBaseUrl(t, "http://mirror.example");
+      const fixtureRepoDir = path.join(cwd, "repo-fixture");
+      await seedGitSourceMarketplace({
+        cwd,
+        fixtureRepoDir,
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "gh",
+        source: { source: "github", repo: "org/repo", sha: GIT_SOURCE_SHA },
+      });
+      const git = createGitOps({ fixtureSourceDir: fixtureRepoDir });
+      const { ctx, verifyBoundary } = createNotificationBoundary(0);
+
+      // act & assert
+      await assert.rejects(
+        () =>
+          installPlugin({
+            cloneCacheSeam: seamWith(git.gitOps),
+            ctx,
+            cwd,
+            marketplace: "mp",
+            notifications: { mode: "orchestrated" },
+            run: runWithNothingLoaded(),
+            plugin: "gh",
+            scope: "project",
+          }),
+        (error: unknown) => {
+          assert.deepStrictEqual(
+            error,
+            new InvalidGitHubBaseUrlError("PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL", "scheme"),
+          );
+          return true;
+        },
+      );
+      assert.deepStrictEqual(git.state.cloneCalls, []);
+      verifyBoundary();
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("GHB-03: the missing-dependency install rethrows an invalid base", async (t) => {
+  await withHermeticHome(async ({ installMissingDependency }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-ghb03-missing-dep-"));
+    try {
+      // arrange
+      setGitHubBaseUrl(t, "http://mirror.example");
+      const fixtureRepoDir = path.join(cwd, "repo-fixture");
+      await seedGitSourceMarketplace({
+        cwd,
+        fixtureRepoDir,
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "gp",
+        source: { source: "github", repo: "org/repo", sha: GIT_SOURCE_SHA },
+      });
+      const git = createGitOps({ fixtureSourceDir: fixtureRepoDir });
+      const locations = locationsFor("project", cwd);
+      const { ctx, verifyBoundary } = createNotificationBoundary(0);
+
+      // act & assert
+      await assert.rejects(
+        () =>
+          installMissingDependency({
+            ctx,
+            run: runWithNothingLoaded(),
+            scope: "project",
+            cwd,
+            marketplace: "mp",
+            plugin: "gp",
+            ranges: [],
+            requiredBy: "deploy-kit@mp",
+            cloneCacheSeam: seamWith(git.gitOps),
+          }),
+        (error: unknown) => {
+          assert.deepStrictEqual(
+            error,
+            new InvalidGitHubBaseUrlError("PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL", "scheme"),
+          );
+          return true;
+        },
+      );
+      assert.deepStrictEqual(git.state.cloneCalls, []);
+      assert.strictEqual(
+        (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins["gp"],
+        undefined,
+      );
+      verifyBoundary();
     } finally {
       await rm(cwd, { force: true, recursive: true });
     }
