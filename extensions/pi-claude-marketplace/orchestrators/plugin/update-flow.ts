@@ -85,10 +85,12 @@ import { marketplaceInOtherScope } from "../marketplace/shared.ts";
 import { garbageCollectPluginClones } from "./clone-gc.ts";
 import {
   emitMarketplaceNotAddedSignal,
+  MarketplaceDeclaredLocallyError,
   MarketplaceNotAddedSignal,
   resolveInstalledMarketplaceTarget,
   resolveInstalledPluginTarget,
   surfaceDiscoveryWarnings,
+  writeBackRefusal,
 } from "./shared.ts";
 import { composeUpdateCascade } from "./update-cascade.ts";
 import { isUpdatePreflightOutcome, preparePluginUpdate } from "./update-preflight.ts";
@@ -828,6 +830,10 @@ function narrowDirectFailReason(err: Error): ContentReason {
     return "invalid manifest";
   }
 
+  if (primary instanceof MarketplaceDeclaredLocallyError) {
+    return "marketplace declared locally";
+  }
+
   const transportReason = classifyGitTransportFailure(primary);
   if (transportReason !== undefined) {
     return transportReason;
@@ -1107,7 +1113,32 @@ async function runPluginUpdate(args: ThreePhaseArgs): Promise<UpdateRunOutcome> 
     return preflight;
   }
 
+  await refuseLocalOnlyMarketplaceUpdate(args);
   return swapPluginUpdate(args, preflight);
+}
+
+/**
+ * FIX-03 / D-MF-02: refuse a named flagless update whose write-back would
+ * declare the plugin in `claude-plugins.json` under a marketplace only
+ * `claude-plugins.local.json` declares. The `single` cardinality is the
+ * `<plugin>@<marketplace>` invocation form (OUT-04); the `@<marketplace>` and
+ * bare forms and the autoupdate cascade name no plugin and cover every layer
+ * (D-MF-03).
+ */
+async function refuseLocalOnlyMarketplaceUpdate(args: ThreePhaseArgs): Promise<void> {
+  if (args.cascade || args.cardinality !== "single") {
+    return;
+  }
+
+  const refusal = await writeBackRefusal({
+    locations: args.locations,
+    local: args.local === true,
+    marketplace: args.marketplace,
+    plugin: args.plugin,
+  });
+  if (refusal !== undefined) {
+    throw refusal;
+  }
 }
 
 /**

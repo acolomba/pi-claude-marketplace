@@ -32,6 +32,7 @@ import {
   splitStagingWarnings,
   surfaceDiscoveryWarnings,
   writeAdoptingConfigEntries,
+  writeBackRefusal,
   type CrossPluginGeneratedNames,
   type CrossScopePluginResolution,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts";
@@ -2209,6 +2210,87 @@ describe("maybeWritePluginConfigBack", () => {
       await assert.rejects(readFile(locations.configJsonPath, "utf8"), { code: "ENOENT" });
     });
   });
+});
+
+describe("writeBackRefusal", () => {
+  test("FIX-03: refuses a flagless key under a marketplace only the local file declares", async () => {
+    // arrange
+    await withTempScopes(async ({ cwd }) => {
+      const locations = locationsFor("project", cwd);
+      await writeConfig(locations.configLocalJsonPath, {
+        schemaVersion: 1,
+        marketplaces: { mp: { source: "./mp" } },
+      });
+
+      // act
+      const refusal = await writeBackRefusal({
+        locations,
+        local: false,
+        marketplace: "mp",
+        plugin: "alpha",
+      });
+
+      // assert
+      assert.ok(refusal instanceof MarketplaceDeclaredLocallyError);
+      assert.deepStrictEqual(
+        { marketplace: refusal.marketplace, message: refusal.message },
+        {
+          marketplace: "mp",
+          message:
+            "The marketplace mp is declared only in claude-plugins.local.json. Run the command again with --local.",
+        },
+      );
+    });
+  });
+
+  for (const { situation, local, base, localFile } of [
+    {
+      situation: "the command carries --local",
+      local: true,
+      base: '{"schemaVersion":1}',
+      localFile: '{"schemaVersion":1,"marketplaces":{"mp":{"source":"./mp"}}}',
+    },
+    {
+      situation: "the local file declares the key",
+      local: false,
+      base: '{"schemaVersion":1}',
+      localFile:
+        '{"schemaVersion":1,"marketplaces":{"mp":{"source":"./mp"}},"plugins":{"alpha@mp":{}}}',
+    },
+    {
+      situation: "the base file cannot be read",
+      local: false,
+      base: "{",
+      localFile: '{"schemaVersion":1,"marketplaces":{"mp":{"source":"./mp"}}}',
+    },
+    {
+      situation: "the base file declares the marketplace too",
+      local: false,
+      base: '{"schemaVersion":1,"marketplaces":{"mp":{"source":"./mp"}}}',
+      localFile: '{"schemaVersion":1,"marketplaces":{"mp":{"source":"./mp"}}}',
+    },
+  ]) {
+    test(`FIX-03: does not refuse when ${situation}`, async () => {
+      // arrange
+      await withTempScopes(async ({ cwd }) => {
+        const locations = locationsFor("project", cwd);
+        await mkdir(path.dirname(locations.configJsonPath), { recursive: true });
+        await writeFile(locations.configJsonPath, base);
+        await writeFile(locations.configLocalJsonPath, localFile);
+
+        // act
+        const refusal = await writeBackRefusal({
+          locations,
+          local,
+          marketplace: "mp",
+          plugin: "alpha",
+        });
+
+        // assert
+        assert.equal(refusal, undefined);
+      });
+    });
+  }
 });
 
 describe("applyPartialCascadeFold", () => {

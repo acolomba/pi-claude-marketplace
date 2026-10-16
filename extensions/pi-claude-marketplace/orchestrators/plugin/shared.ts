@@ -1429,6 +1429,23 @@ function flaglessLayerWriteBack(args: {
 }
 
 /**
+ * FIX-03 / D-MF-02: the refusal a named flagless update or reinstall meets
+ * before anything is staged. It reads the same decision the post-success
+ * write-back reads, so the check before staging and the write after it cannot
+ * disagree. An unreadable file is not a refusal: the write-back reports it
+ * after the swap (S5).
+ */
+export async function writeBackRefusal(opts: {
+  readonly locations: ScopedLocations;
+  readonly local: boolean;
+  readonly marketplace: string;
+  readonly plugin: string;
+}): Promise<MarketplaceDeclaredLocallyError | undefined> {
+  const decision = await selectLayerWriteBack(opts);
+  return decision.kind === "local-only-marketplace" ? decision.refusal : undefined;
+}
+
+/**
  * WB-01: the plugin write-back shared by the update and reinstall
  * post-success paths, which the load-time backfill also reaches through the
  * reinstall. It re-reads both configuration files inside the caller's guard

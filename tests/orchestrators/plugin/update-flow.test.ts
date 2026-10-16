@@ -5302,13 +5302,14 @@ test("WB-01: --local update targets the local file; base file untouched", async 
 async function seedLocalLayerUpdate(
   cwd: string,
   localBytes: string,
+  offeredVersion = "1.0.1",
 ): Promise<ReturnType<typeof locationsFor>> {
   const locations = locationsFor("project", cwd);
   await seedPathMarketplace({
     cwd,
     marketplaceRoot: path.join(cwd, "mp-src"),
     marketplaceName: "mp",
-    manifestPlugins: { hello: { version: "1.0.1", hasSkill: true } },
+    manifestPlugins: { hello: { version: offeredVersion, hasSkill: true } },
     installedVersions: { hello: "1.0.0" },
   });
   await writeFile(locations.configLocalJsonPath, localBytes, "utf8");
@@ -5413,6 +5414,117 @@ test("S5: a flagless update whose local file cannot be read names claude-plugins
           message:
             "● mp [project]\n  ● hello v1.0.0 → v1.0.1 (updated)\n\n/reload to pick up changes",
         },
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+function localOnlyMarketplaceBytes(cwd: string): string {
+  return JSON.stringify({
+    schemaVersion: 1,
+    marketplaces: { mp: { source: path.join(cwd, "mp-src") } },
+  });
+}
+
+test("FIX-03: a named update without --local under a marketplace only the local file declares is refused before staging", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-local-mp-named-");
+    try {
+      // arrange
+      const localBytes = localOnlyMarketplaceBytes(cwd);
+      const locations = await seedLocalLayerUpdate(cwd, localBytes);
+      const stateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const stateMtime = (await stat(locations.stateJsonPath)).mtimeMs;
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      // assert
+      assert.deepEqual(notifications, [
+        {
+          message: [
+            "A plugin operation has failed.",
+            "",
+            "● mp [project]",
+            "  ⊘ hello (failed) {marketplace declared locally}",
+            "    cause: The marketplace mp is declared only in claude-plugins.local.json. Run the command again with --local.",
+          ].join("\n"),
+          severity: "error",
+        },
+      ]);
+      assert.equal(await recordedHelloVersion(locations), "1.0.0");
+      assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
+      assert.equal((await stat(locations.stateJsonPath)).mtimeMs, stateMtime);
+      assert.equal(await readFile(locations.configLocalJsonPath, "utf8"), localBytes);
+      assert.equal(await pathExists(locations.configJsonPath), false);
+      assert.equal(await pathExists(locations.skillsTargetDir), false);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("FIX-03: a named update with --local under a marketplace only the local file declares updates and declares the plugin locally", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-local-mp-flag-");
+    try {
+      // arrange
+      const locations = await seedLocalLayerUpdate(cwd, localOnlyMarketplaceBytes(cwd));
+      const { ctx, run } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+        local: true,
+      });
+
+      // assert
+      assert.equal(await recordedHelloVersion(locations), "1.0.1");
+      assert.deepEqual(JSON.parse(await readFile(locations.configLocalJsonPath, "utf8")), {
+        schemaVersion: 1,
+        marketplaces: { mp: { source: path.join(cwd, "mp-src") } },
+        plugins: { "hello@mp": {} },
+      });
+      assert.equal(await pathExists(locations.configJsonPath), false);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("FIX-03: an up-to-date named update under a marketplace only the local file declares is not refused", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-local-mp-current-");
+    try {
+      // arrange
+      await seedLocalLayerUpdate(cwd, localOnlyMarketplaceBytes(cwd), "1.0.0");
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      // assert
+      assert.deepEqual(notifications, [
+        { message: "● mp [project]\n  ⊘ hello (skipped) {up-to-date}" },
       ]);
     } finally {
       await rm(cwd, { recursive: true, force: true });
