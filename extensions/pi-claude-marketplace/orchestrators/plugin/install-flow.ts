@@ -1348,7 +1348,7 @@ function handleInstallThrow(args: {
  * subject, so the block names it. Otherwise the single-row path reports the
  * requested plugin.
  *
- * GHB-03 / D-08: an invalid GitHub base override fails the whole command,
+ * GHB-03: an invalid GitHub base override fails the whole command,
  * unless the failed install left something behind that only its failed row
  * reports: a rollback partial, or an MCP config rewrite (AFILE-04). Then the
  * row is the report, and its cause line still names the variable.

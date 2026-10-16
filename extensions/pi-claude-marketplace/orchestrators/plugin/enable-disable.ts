@@ -2723,7 +2723,7 @@ function freshOutcomeToTypedResult(
 }
 
 /**
- * GHB-03 / D-08: an enable that failed on an invalid GitHub base override
+ * GHB-03: an enable that failed on an invalid GitHub base override
  * fails the whole command, unless it left something behind that only its
  * failed row reports: a rollback partial, or an MCP config rewrite
  * (AFILE-04). Then the row is the report, and its cause line still names the
