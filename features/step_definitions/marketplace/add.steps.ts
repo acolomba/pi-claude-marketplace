@@ -28,7 +28,7 @@ async function breakManifest(
     assert.fail(`the marketplace ${name} is not published in this scenario`);
   }
 
-  await invalidateManifest(world.marketplacesRoot, name, published, problem);
+  await invalidateManifest(name, published, problem);
 }
 
 // Two literal texts rather than one with a parameter: a misspelled problem in

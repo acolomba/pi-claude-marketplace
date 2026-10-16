@@ -34,9 +34,13 @@ const MANIFEST_WRITERS: Readonly<
   "schema-invalid": writeInvalidManifest,
 };
 
-/** A published marketplace: its kind, and the source a user types to add it. */
+/**
+ * A published marketplace: its kind, the directory it is published in, and
+ * the source a user types to add it.
+ */
 export interface PublishedMarketplace {
   readonly kind: SourceKind;
+  readonly root: string;
   readonly source: string;
 }
 
@@ -85,10 +89,10 @@ export async function publishMarketplaceIn(
   switch (kind) {
     case "dir":
       await writeMarketplace(root, name, plugins);
-      return { kind, source: root };
+      return { kind, root, source: root };
     case "file":
       await writeMarketplace(root, name, plugins);
-      return { kind, source: path.join(root, ".claude-plugin", "marketplace.json") };
+      return { kind, root, source: path.join(root, ".claude-plugin", "marketplace.json") };
     case "url":
     case "github":
       throw noStandIn(kind);
@@ -96,12 +100,11 @@ export async function publishMarketplaceIn(
 }
 
 /**
- * Breaks the manifest of the marketplace `name`, published as `published`,
- * with `problem`: JSON that does not parse, or JSON that breaks the manifest
- * schema (D-04).
+ * Breaks the manifest of the marketplace `name` in the directory `published`
+ * records, with `problem`: JSON that does not parse, or JSON that breaks the
+ * manifest schema (D-04).
  */
 export async function invalidateManifest(
-  marketplacesRoot: string,
   name: string,
   published: PublishedMarketplace,
   problem: ManifestProblem,
@@ -109,7 +112,7 @@ export async function invalidateManifest(
   switch (published.kind) {
     case "dir":
     case "file":
-      await MANIFEST_WRITERS[problem](path.join(marketplacesRoot, name), name);
+      await MANIFEST_WRITERS[problem](published.root, name);
       return;
     case "url":
     case "github":
