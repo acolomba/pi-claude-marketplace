@@ -113,13 +113,15 @@ function narrowStateLoadFailReason(err: unknown): ContentReason {
  * MIG-01 pre-migration window (DIFF-01): pick the merged desired-state view
  * the planner runs against. When the BASE config file is ABSENT, the apply
  * path migrates FIRST inside its lock (apply.ts::readPassForScope step 1
- * writes `buildConfigFromState(state)` to `claude-plugins.json`, then plans
- * against the merged view). A pending-list that planned against the raw
+ * writes the `buildConfigFromState` projection to `claude-plugins.json`, then
+ * plans against the merged view). A pending-list that planned against the raw
  * merged view (absent base == empty desired state) would render a misleading
  * mass-uninstall plan for a populated state. Mirror the post-migration
  * merged view READ-ONLY instead: plan against the PURE
  * `buildConfigFromState` projection merged with the local arm -- no write,
- * no migration side effect (NFR-5 read-surface discipline). A pristine
+ * no migration side effect (NFR-5 read-surface discipline). The projection
+ * leaves out what the local file declares, as the migration does (FIX-02),
+ * so pending and the load plan the same view. A pristine
  * scope (empty state) projects an empty config, so the empty-advisory
  * behavior is unchanged; an invalid base/local arm never reaches this
  * helper (CFG-03 abort happens first).
@@ -130,7 +132,7 @@ function mergedViewForPlanning(outcome: ScopeLoadOutcome, state: ExtensionState)
   }
 
   const local = outcome.local.status === "valid" ? outcome.local.config : {};
-  return mergeScopeConfigs(buildConfigFromState(state), local);
+  return mergeScopeConfigs(buildConfigFromState(state, local), local);
 }
 
 /**

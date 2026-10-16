@@ -138,7 +138,7 @@ test("migrates populated state to the declared marketplace and plugin config", (
   const expectedConfig = declaredConfigForMixedState();
 
   // act
-  const config = buildConfigFromState(state);
+  const config = buildConfigFromState(state, {});
 
   // assert
   assert.deepStrictEqual(config, expectedConfig);
@@ -147,7 +147,7 @@ test("migrates populated state to the declared marketplace and plugin config", (
 test("config migration, merge, and planning converge populated state for project scope", () => {
   // arrange
   const state = populatedMixedState();
-  const config = buildConfigFromState(state);
+  const config = buildConfigFromState(state, {});
   const merged = mergeScopeConfigs(config, {});
 
   // act
@@ -171,7 +171,7 @@ test("config migration, merge, and planning converge populated state for project
 test("config migration, merge, and planning converge populated state for user scope", () => {
   // arrange
   const state = populatedMixedState();
-  const config = buildConfigFromState(state);
+  const config = buildConfigFromState(state, {});
   const merged = mergeScopeConfigs(config, {});
 
   // act
@@ -320,7 +320,7 @@ function unsatisfiedDependencyState(recordVault: boolean): ExtensionState {
 test("D-09-16: a recorded plugin declaring a missing key plans the bucket, and the recorded dependency plans nothing", () => {
   // arrange
   const state = unsatisfiedDependencyState(false);
-  const config = buildConfigFromState(state);
+  const config = buildConfigFromState(state, {});
   const merged = mergeScopeConfigs(config, {});
   const verdict: ScopeSatisfactionVerdict = {
     ok: true,
@@ -365,7 +365,7 @@ test("D-09-16: a recorded plugin declaring a missing key plans the bucket, and t
   // + plan pipeline the file's other cases span, with an empty (satisfied)
   // verdict.
   const satisfiedState = unsatisfiedDependencyState(true);
-  const satisfiedConfig = buildConfigFromState(satisfiedState);
+  const satisfiedConfig = buildConfigFromState(satisfiedState, {});
   const satisfiedMerged = mergeScopeConfigs(satisfiedConfig, {});
 
   // act
@@ -382,7 +382,7 @@ test("D-09-14: an unsatisfied declaration re-plans the same bucket entry", () =>
   // arrange -- no backoff, no persisted failure marker: the same inputs
   // re-plan the same bucket, a deliberate non-fixpoint (D-09-14).
   const state = unsatisfiedDependencyState(false);
-  const config = buildConfigFromState(state);
+  const config = buildConfigFromState(state, {});
   const merged = mergeScopeConfigs(config, {});
   const verdict: ScopeSatisfactionVerdict = {
     ok: true,
