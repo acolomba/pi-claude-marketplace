@@ -363,6 +363,35 @@ async function requestWithinOrigin(original: GitHttpRequest): Promise<GitHttpRes
  */
 const http: HttpClient = { request: requestWithinOrigin };
 
+/**
+ * GHB-01: runs one network call. When the call sends `wireUrl` in place of the
+ * caller's `url` and fails with an error that has no cause, the error gains the
+ * cause `fetched <wireUrl>`, so a wrong base shows in the failure output. The
+ * code-bearing error stays at depth 0 for the failure classifiers. An
+ * unrewritten call runs with no `try` and its failure is unchanged (GHB-04).
+ */
+async function withFetchedUrlCause<T>(
+  wireUrl: string,
+  url: string,
+  call: () => Promise<T>,
+): Promise<T> {
+  if (wireUrl === url) {
+    return call();
+  }
+
+  try {
+    return await call();
+  } catch (error: unknown) {
+    // isomorphic-git and the HTTP client above reject only with Error instances.
+    const failure = error as Error;
+    if (failure.cause === undefined) {
+      failure.cause = new Error(`fetched ${wireUrl}`);
+    }
+
+    throw failure;
+  }
+}
+
 export async function clone(opts: CloneOptions): Promise<void> {
   // When opts.auth is provided, build the isomorphic-git callbacks
   // up-front and conditionally spread them. When omitted, the public-only
@@ -379,19 +408,21 @@ export async function clone(opts: CloneOptions): Promise<void> {
   // GitAuth-typed slot.
   const authCbs = opts.auth === undefined ? undefined : buildAuthCallbacks(opts.auth);
   const wireUrl = gitHubWireUrl(opts.url);
-  await git.clone({
-    fs,
-    http,
-    dir: opts.dir,
-    url: wireUrl,
-    ...(opts.ref !== undefined && { ref: opts.ref }),
-    ...(opts.singleBranch !== undefined && { singleBranch: opts.singleBranch }),
-    ...(authCbs !== undefined && {
-      onAuth: authCbs.onAuth,
-      onAuthFailure: authCbs.onAuthFailure as git.AuthFailureCallback,
+  await withFetchedUrlCause(wireUrl, opts.url, () =>
+    git.clone({
+      fs,
+      http,
+      dir: opts.dir,
+      url: wireUrl,
+      ...(opts.ref !== undefined && { ref: opts.ref }),
+      ...(opts.singleBranch !== undefined && { singleBranch: opts.singleBranch }),
+      ...(authCbs !== undefined && {
+        onAuth: authCbs.onAuth,
+        onAuthFailure: authCbs.onAuthFailure as git.AuthFailureCallback,
+      }),
+      // No depth (full history is kept). No corsProxy (Node only).
     }),
-    // No depth (full history is kept). No corsProxy (Node only).
-  });
+  );
   if (wireUrl !== opts.url) {
     // GHB-01: isomorphic-git records the URL it fetched as origin. The clone
     // keeps its canonical identity; only the bytes came from the base.
@@ -399,19 +430,40 @@ export async function clone(opts: CloneOptions): Promise<void> {
   }
 }
 
+/**
+ * Fetches `opts.remote` (default "origin") into its remote-tracking refs.
+ *
+ * GHB-01: the remote's recorded url is read and sent as
+ * `shared/github-base-url.ts::gitHubWireUrl` of it, never as recorded. A
+ * rewritten url goes to isomorphic-git as an explicit `url` beside the remote
+ * name, so the tracking refs update and `.git/config` keeps the canonical url.
+ */
 export async function fetch(opts: FetchOptions): Promise<void> {
   const authCbs = opts.auth === undefined ? undefined : buildAuthCallbacks(opts.auth);
-  await git.fetch({
+  const remote = opts.remote ?? "origin";
+  const recordedUrl: unknown = await git.getConfig({
     fs,
-    http,
     dir: opts.dir,
-    ...(opts.remote !== undefined && { remote: opts.remote }),
-    ...(opts.ref !== undefined && { ref: opts.ref }),
-    ...(authCbs !== undefined && {
-      onAuth: authCbs.onAuth,
-      onAuthFailure: authCbs.onAuthFailure as git.AuthFailureCallback,
-    }),
+    path: `remote.${remote}.url`,
   });
+  // A remote with no recorded url sends nothing new, so isomorphic-git raises
+  // its own MissingParameterError.
+  const url = typeof recordedUrl === "string" ? recordedUrl : "";
+  const wireUrl = gitHubWireUrl(url);
+  await withFetchedUrlCause(wireUrl, url, () =>
+    git.fetch({
+      fs,
+      http,
+      dir: opts.dir,
+      ...(opts.remote !== undefined && { remote: opts.remote }),
+      ...(wireUrl !== url && { remote, url: wireUrl }),
+      ...(opts.ref !== undefined && { ref: opts.ref }),
+      ...(authCbs !== undefined && {
+        onAuth: authCbs.onAuth,
+        onAuthFailure: authCbs.onAuthFailure as git.AuthFailureCallback,
+      }),
+    }),
+  );
 }
 
 export async function checkout(opts: CheckoutOptions): Promise<void> {
@@ -454,6 +506,9 @@ export async function resolveRef(opts: ResolveRefOptions): Promise<string> {
  * public-only path. No sparse/partial fetch is exposed (documented
  * divergence; see the NOT-exposed list above).
  *
+ * GHB-01: the URL sent, and named in the two refusals below, is
+ * `shared/github-base-url.ts::gitHubWireUrl` of `opts.url`.
+ *
  * Source: node_modules/isomorphic-git/index.d.ts -- listServerRefs({ http,
  * url, onAuth, onAuthFailure, protocolVersion, symrefs, peelTags }) =>
  * Promise<ServerRef[]>, where each ServerRef is { ref, oid, target?, peeled? }.
@@ -463,22 +518,25 @@ export async function resolveRemoteRef(opts: ResolveRemoteRefOptions): Promise<s
   // top of this file: build the callbacks only when opts.auth is defined so the
   // public-only resolution stays byte-identical.
   const authCbs = opts.auth === undefined ? undefined : buildAuthCallbacks(opts.auth);
-  const refs = await git.listServerRefs({
-    http,
-    url: opts.url,
-    protocolVersion: 2,
-    symrefs: true,
-    peelTags: true,
-    ...(authCbs !== undefined && {
-      onAuth: authCbs.onAuth,
-      onAuthFailure: authCbs.onAuthFailure as git.AuthFailureCallback,
+  const wireUrl = gitHubWireUrl(opts.url);
+  const refs = await withFetchedUrlCause(wireUrl, opts.url, () =>
+    git.listServerRefs({
+      http,
+      url: wireUrl,
+      protocolVersion: 2,
+      symrefs: true,
+      peelTags: true,
+      ...(authCbs !== undefined && {
+        onAuth: authCbs.onAuth,
+        onAuthFailure: authCbs.onAuthFailure as git.AuthFailureCallback,
+      }),
     }),
-  });
+  );
 
   if (opts.ref === undefined) {
     const head = refs.find((r) => r.ref === "HEAD");
     if (head === undefined) {
-      throw new Error(`remote ${opts.url} advertised no HEAD ref`);
+      throw new Error(`remote ${wireUrl} advertised no HEAD ref`);
     }
 
     return head.oid;
@@ -489,7 +547,7 @@ export async function resolveRemoteRef(opts: ResolveRemoteRefOptions): Promise<s
       r.ref === `refs/heads/${opts.ref}` || r.ref === `refs/tags/${opts.ref}` || r.ref === opts.ref,
   );
   if (match === undefined) {
-    throw new Error(`remote ${opts.url} has no ref "${opts.ref}"`);
+    throw new Error(`remote ${wireUrl} has no ref "${opts.ref}"`);
   }
 
   // For an annotated tag the `peeled` field carries the commit the tag points
@@ -536,6 +594,9 @@ const PEELED_REF_SUFFIX = "^{}";
  * `resolveRemoteRef` takes, so a private source repository needs no second
  * credential path; omitted = the public-only path.
  *
+ * GHB-01: the URL sent is `shared/github-base-url.ts::gitHubWireUrl` of
+ * `opts.url`.
+ *
  * Source: node_modules/isomorphic-git/index.d.ts -- listServerRefs({ http,
  * url, onAuth, onAuthFailure, protocolVersion, prefix, peelTags }) =>
  * Promise<ServerRef[]>, where each ServerRef is { ref, oid, target?, peeled? }.
@@ -545,17 +606,20 @@ export async function listRemoteTags(opts: ListRemoteTagsOptions): Promise<Remot
   // top of this file: build the callbacks only when opts.auth is defined so the
   // public-only listing stays byte-identical.
   const authCbs = opts.auth === undefined ? undefined : buildAuthCallbacks(opts.auth);
-  const refs = await git.listServerRefs({
-    http,
-    url: opts.url,
-    protocolVersion: 2,
-    prefix: TAG_REF_PREFIX,
-    peelTags: true,
-    ...(authCbs !== undefined && {
-      onAuth: authCbs.onAuth,
-      onAuthFailure: authCbs.onAuthFailure as git.AuthFailureCallback,
+  const wireUrl = gitHubWireUrl(opts.url);
+  const refs = await withFetchedUrlCause(wireUrl, opts.url, () =>
+    git.listServerRefs({
+      http,
+      url: wireUrl,
+      protocolVersion: 2,
+      prefix: TAG_REF_PREFIX,
+      peelTags: true,
+      ...(authCbs !== undefined && {
+        onAuth: authCbs.onAuth,
+        onAuthFailure: authCbs.onAuthFailure as git.AuthFailureCallback,
+      }),
     }),
-  });
+  );
 
   const tags: RemoteTag[] = [];
   for (const advertised of refs) {

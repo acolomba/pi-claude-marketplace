@@ -67,6 +67,7 @@ void ({} satisfies { readonly retired?: GitPlatform.ListBranchesOptions });
 
 const HOST = "git.example.invalid";
 const REMOTE_URL = `https://${HOST}/owner/repo.git`;
+const GITHUB_REMOTE_URL = "https://github.com/owner/repo.git";
 const OTHER_HOST = "other.example.invalid";
 const OTHER_REMOTE_URL = `https://${OTHER_HOST}/owner/repo.git`;
 const OID_MAIN = "1111111111111111111111111111111111111111";
@@ -980,14 +981,11 @@ describe("clone", () => {
     setGitHubBaseUrl(t, `https://${HOST}`);
 
     // act
-    await clone({ dir, url: "https://github.com/owner/repo.git" });
+    await clone({ dir, url: GITHUB_REMOTE_URL });
 
     // assert
     assert.strictEqual(await resolveRef({ dir, ref: "HEAD" }), repository.initialOid);
-    assert.deepStrictEqual(await listRemotes({ dir }), {
-      kind: "origin",
-      url: "https://github.com/owner/repo.git",
-    });
+    assert.deepStrictEqual(await listRemotes({ dir }), { kind: "origin", url: GITHUB_REMOTE_URL });
   });
 
   test("GHB-04: a clone of a non-GitHub URL ignores an invalid base", async (t) => {
@@ -1003,6 +1001,25 @@ describe("clone", () => {
     // assert
     assert.strictEqual(await resolveRef({ dir, ref: "HEAD" }), repository.initialOid);
     assert.deepStrictEqual(await listRemotes({ dir }), { kind: "origin", url: REMOTE_URL });
+  });
+
+  test("D-10: a rewritten failure keeps a cause it already carries", async (t) => {
+    // arrange
+    const firstCause = new Error("connection reset");
+    const failure = new Error("socket hang up", { cause: firstCause });
+    t.mock.method(http, "request", () => Promise.reject(failure));
+    const dir = await createGitTestDirectory(t, { boundary: "local" });
+    setGitHubBaseUrl(t, `https://${HOST}`);
+
+    // act
+    const cloning = clone({ dir, url: GITHUB_REMOTE_URL });
+
+    // assert
+    await assert.rejects(cloning, (error: unknown) => {
+      assert.strictEqual(error, failure);
+      assert.strictEqual(failure.cause, firstCause);
+      return true;
+    });
   });
 });
 
@@ -1109,6 +1126,93 @@ describe("fetch", () => {
     );
     assert.deepStrictEqual(credentials.calls, { fill: [], approve: [], reject: [] });
   });
+
+  test("GHB-01 / D-02: fetches a canonical github.com origin from the base and keeps the recorded origin", async (t) => {
+    // arrange
+    const remote = await createGitTestRepository(t, { boundary: "local" });
+    const updatedOid = await remote.commit(
+      [{ filepath: "README.md", contents: "# updated\n" }],
+      "updated",
+    );
+    const worktree = await createGitTestRepository(t, { boundary: "local" });
+    await git.addRemote({ fs, dir: worktree.dir, remote: "origin", url: GITHUB_REMOTE_URL });
+    await installRepositoryTransport(t, remote);
+    setGitHubBaseUrl(t, `https://${HOST}`);
+
+    // act
+    await fetch({ dir: worktree.dir, remote: "origin" });
+
+    // assert
+    assert.strictEqual(
+      await resolveRef({ dir: worktree.dir, ref: "refs/remotes/origin/main" }),
+      updatedOid,
+    );
+    assert.deepStrictEqual(await listRemotes({ dir: worktree.dir }), {
+      kind: "origin",
+      url: GITHUB_REMOTE_URL,
+    });
+  });
+
+  test("D-10: a failed fetch from the base names the fetched URL", async (t) => {
+    // arrange
+    const requests = installFailedDiscoveryTransport(t);
+    const repository = await createGitTestRepository(t, { boundary: "local" });
+    await git.addRemote({ fs, dir: repository.dir, remote: "origin", url: GITHUB_REMOTE_URL });
+    setGitHubBaseUrl(t, `https://${HOST}`);
+
+    // act
+    const fetching = fetch({ dir: repository.dir });
+
+    // assert
+    await assert.rejects(fetching, (error: unknown) => {
+      assert.ok(isExpectedDiscoveryError(error, "git.fetch"));
+      assert.ok(error instanceof Error && error.cause instanceof Error);
+      assert.deepStrictEqual(
+        { name: error.cause.name, message: error.cause.message, cause: error.cause.cause },
+        { name: "Error", message: `fetched ${REMOTE_URL}`, cause: undefined },
+      );
+      return true;
+    });
+    assert.deepStrictEqual(requests, [expectedDiscoveryRequest()]);
+  });
+
+  test("a fetch whose remote records no url passes none and fails as before", async (t) => {
+    // arrange
+    const requests = installFailedDiscoveryTransport(t);
+    const repository = await createGitTestRepository(t, { boundary: "local" });
+    setGitHubBaseUrl(t, `https://${HOST}`);
+
+    // act
+    const fetching = fetch({ dir: repository.dir });
+
+    // assert
+    await assert.rejects(fetching, (error: unknown) => {
+      assert.ok(error instanceof git.Errors.MissingParameterError);
+      assert.strictEqual(error.cause, undefined);
+      return true;
+    });
+    assert.deepStrictEqual(requests, []);
+  });
+
+  test("GHB-04: an unrewritten failed fetch carries no fetched cause", async (t) => {
+    // arrange
+    const requests = installFailedDiscoveryTransport(t);
+    const repository = await createGitTestRepository(t, { boundary: "local" });
+    await git.addRemote({ fs, dir: repository.dir, remote: "origin", url: REMOTE_URL });
+    setGitHubBaseUrl(t, undefined);
+
+    // act
+    const fetching = fetch({ dir: repository.dir });
+
+    // assert
+    await assert.rejects(fetching, (error: unknown) => {
+      assert.ok(isExpectedDiscoveryError(error, "git.fetch"));
+      assert.ok(error instanceof Error);
+      assert.strictEqual(error.cause, undefined);
+      return true;
+    });
+    assert.deepStrictEqual(requests, [expectedDiscoveryRequest()]);
+  });
 });
 
 describe("resolveRemoteRef", () => {
@@ -1186,6 +1290,35 @@ describe("resolveRemoteRef", () => {
     await assert.rejects(resolution, {
       name: "Error",
       message: `remote ${REMOTE_URL} has no ref "missing"`,
+    });
+    assert.deepStrictEqual(requests, expectedPublicRequests());
+  });
+
+  test("GHB-01: resolves a github.com URL against the base", async (t) => {
+    // arrange
+    const requests = installRemoteTransport(t, FULL_ADVERTISEMENT);
+    setGitHubBaseUrl(t, `https://${HOST}`);
+
+    // act
+    const oid = await resolveRemoteRef({ url: GITHUB_REMOTE_URL });
+
+    // assert
+    assert.strictEqual(oid, OID_MAIN);
+    assert.deepStrictEqual(requests, expectedPublicRequests());
+  });
+
+  test("names the wire URL when the base advertises no HEAD", async (t) => {
+    // arrange
+    const requests = installRemoteTransport(t, [`${OID_DEV} refs/heads/dev`]);
+    setGitHubBaseUrl(t, `https://${HOST}`);
+
+    // act
+    const resolution = resolveRemoteRef({ url: GITHUB_REMOTE_URL });
+
+    // assert
+    await assert.rejects(resolution, {
+      name: "Error",
+      message: `remote ${REMOTE_URL} advertised no HEAD ref`,
     });
     assert.deepStrictEqual(requests, expectedPublicRequests());
   });
@@ -1948,6 +2081,25 @@ describe("listRemoteTags", () => {
     assert.deepStrictEqual(tags, [
       { name: "v1.0.0", oid: OID_LIGHTWEIGHT },
       { name: "v1.1.0", oid: OID_MAIN },
+      { name: "v2.0.0", oid: OID_PEELED },
+    ]);
+    assert.deepStrictEqual(requests, expectedTagRequests());
+  });
+
+  test("GHB-01: lists the tags of a github.com URL from the base", async (t) => {
+    // arrange
+    const requests = installRemoteTransport(t, [
+      `${OID_LIGHTWEIGHT} refs/tags/v1.0.0`,
+      `${OID_TAG} refs/tags/v2.0.0 peeled:${OID_PEELED}`,
+    ]);
+    setGitHubBaseUrl(t, `https://${HOST}`);
+
+    // act
+    const tags = await listRemoteTags({ url: GITHUB_REMOTE_URL });
+
+    // assert
+    assert.deepStrictEqual(tags, [
+      { name: "v1.0.0", oid: OID_LIGHTWEIGHT },
       { name: "v2.0.0", oid: OID_PEELED },
     ]);
     assert.deepStrictEqual(requests, expectedTagRequests());
