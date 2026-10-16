@@ -223,7 +223,7 @@ The setting has these limits:
   printf 'protocol=https\nhost=git.example.com\nusername=<user>\npassword=<token>\n\n' | git credential approve
   ```
 
-- `list`, `info`, `claude-plugins.json`, and command results keep showing `https://github.com/...` URLs. When a fetch fails, the error names the URL that the command actually fetched, so a wrong value is easy to see. There are two exceptions: `/claude:plugin bootstrap`, and a marketplace that `/reload` adds from `claude-plugins.json`. Their errors show only the reason.
+- `list`, `info`, `claude-plugins.json`, and command results keep showing `https://github.com/...` URLs. When a command's fetch fails, the error names the URL that the command actually fetched, so a wrong value is easy to see. `/claude:plugin bootstrap` does not show this URL, and errors from `/reload` do not always show it.
 
 - A changed value applies on the next fetch. You do not have to add the marketplace again.
 

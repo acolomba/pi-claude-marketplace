@@ -635,8 +635,9 @@ function handleAddFailure(
 
   if (!orchestrated) {
     // OUT-07 / D-12: `marketplace add` is a single-target op -> Single 1-tuple.
-    // The `(failed) {<reason>}` header renders via the central renderMpHeader seam
-    // the spine reuses; ADD_CONTEXT carries the localized add vocabulary.
+    // The `(failed) {<reason>}` header, or under the GitHub base override a bare
+    // `(failed)` header with a failed child row (see `failedAddRow`), renders via
+    // the central renderMpHeader seam; ADD_CONTEXT carries the add vocabulary.
     const failedRows: Single<MarketplaceRows<PluginFailedMessage>> = [
       failedAddRow(addSubjectName(err, opts.rawSource), opts.scope, reason, wrapped),
     ];

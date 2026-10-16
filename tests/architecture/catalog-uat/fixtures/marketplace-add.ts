@@ -179,6 +179,40 @@ export const MARKETPLACE_ADD_FIXTURES: FixtureMap = {
       },
     },
 
+    // GHB-01 / D-03: under the GitHub base override, a failed add names the
+    // fetched URL on a synthetic-child failed row (SNM-10).
+    "add-fetched-url": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        label: "Marketplace add",
+        cardinality: "single",
+        marketplaces: [
+          {
+            name: "anthropics/claude-plugins-official",
+            scope: "project",
+            status: "failed",
+            severity: "error",
+            needsReload: false,
+            plugins: [
+              {
+                status: "failed",
+                name: "anthropics/claude-plugins-official",
+                reasons: ["source missing"],
+                cause: new Error("HTTP Error: 404", {
+                  cause: new Error(
+                    "fetched https://mirror.example/git/anthropics/claude-plugins-official.git",
+                  ),
+                }),
+                severity: "error",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     // D-76-08: a url-source `marketplace add` whose clone hits an HTTP auth
     // challenge (401/403). Truthful attribution -- `{authentication required}`,
     // NOT `{network unreachable}`. The reason + HTTP cause chain ride a

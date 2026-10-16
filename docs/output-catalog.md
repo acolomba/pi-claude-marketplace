@@ -2309,7 +2309,7 @@ ______________________________________________________________________
 
 ## `/claude:plugin marketplace add <source>`
 
-Single-marketplace command. The marketplace header alone is the body -- no plugin children.
+Single-marketplace command. The marketplace header alone is the body -- no plugin children, except under the GitHub base override (see _Failure -- fetched URL under the GitHub base override_).
 
 D-48-A / ATTR-07: the `failed` marketplace header MAY now carry a closed-set reason brace (`(failed) {<reason>}`) when a precondition fails and there is no plugin child row to carry the cause. The five `marketplace add` preconditions -- duplicate name, stale clone, unsupported source, missing path source, invalid manifest -- each render their matching closed-set `REASONS` member on the marketplace subject instead of throwing raw past the orchestrator. The `failure-unreachable` state below carries NO reason brace (`reasons` omitted -> `composeReasons` returns `""` -> the brace collapses to a bare `(failed)`), so its byte form is unchanged. Post-manifest failures (duplicate name, stale clone) render the derived marketplace name as the subject; pre-clone/pre-manifest failures (unsupported source, source missing, invalid manifest) render the user-typed source string as the subject (A2).
 
@@ -2346,6 +2346,20 @@ A marketplace operation has failed.
 Bare `failed` marketplace header at column 0; no plugin children. Severity: `error`. No reload-hint per D-16-12 (failed marketplace status does not trigger).
 
 > Note: the v2 `notify()` renderer's `composeMarketplaceBlock` does not emit a marketplace-level cause-chain trailer below the failed header. The v2 type model places `cause?: Error` on plugin variants only; orchestrators wanting to surface the diagnostic must construct the payload as a per-plugin failed/manual-recovery row with `cause?: Error`. This catalog state is the bare failed-marketplace header byte form. D-48-A: this bare-`(failed)` form (reasons omitted) is byte-unchanged by the ATTR-07 reason-brace addition.
+
+### Failure -- fetched URL under the GitHub base override (GHB-01)
+
+Triggered when `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL` rewrote the clone URL and the clone fails. The marketplace header is a bare `(failed)`, and one failed child row carries the reason and a cause line that names the fetched URL (D-03), the same shape `marketplace update` uses (SNM-10). With the variable unset, the failure renders as the reason-brace header above, byte-unchanged (GHB-04). Severity `error`; no reload-hint.
+
+<!-- catalog-state: add-fetched-url -->
+
+```text
+Some operations have failed.
+
+⊘ anthropics/claude-plugins-official [project] (failed)
+  ⊘ anthropics/claude-plugins-official (failed) {source missing}
+    cause: HTTP Error: 404 -> fetched https://mirror.example/git/anthropics/claude-plugins-official.git
+```
 
 ### Failure -- duplicate name (ATTR-07)
 
