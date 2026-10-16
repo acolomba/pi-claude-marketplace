@@ -538,8 +538,9 @@ async function runEnableBranch(
  * an installed and ENABLED plugin in the same scope still declares the
  * target. On either branch (FIX-03, `refuseLocalOnlyMarketplace`), a
  * standalone call would write its flag into `claude-plugins.json` under a
- * marketplace only `claude-plugins.local.json` declares. Mirrors `uninstall.ts::UninstallRefusedError` exactly: the reason
- * is a closed-set token and `message` IS the rendered cause line, so it
+ * marketplace only `claude-plugins.local.json` declares. Mirrors
+ * `uninstall.ts::UninstallRefusedError` exactly: the reason is a closed-set
+ * token and `message` IS the rendered cause line, so it
  * carries only `name@marketplace` keys, field paths or already-redacted
  * text -- never an absolute path -- with no `{ cause }` chained behind it.
  * Widened for the disable guard rather than paired with a second class,
