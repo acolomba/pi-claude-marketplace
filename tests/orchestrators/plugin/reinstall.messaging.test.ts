@@ -9,6 +9,7 @@ import {
   renderReinstallPartitionAndNotify,
   reinstalledRowFromOutcome,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts";
+import { MarketplaceDeclaredLocallyError } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts";
 import { type Severity } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
@@ -491,6 +492,38 @@ test("renderReinstallPartitionAndNotify narrows a rollback note for an ordinary 
       marketplace: "official",
       scope: "project",
       notes: ["rollback failed at commands"],
+    },
+  ];
+
+  // act
+  renderReinstallPartitionAndNotify(harness.ctx, harness.run, outcomes, "single");
+
+  // assert
+  verify(harness.ctx);
+  verify(harness.ui);
+});
+
+test("FIX-03: a failed reinstall that carries a cause renders its cause line", () => {
+  // arrange
+  const harness = createNotifyHarness({
+    message: [
+      "A plugin operation has failed.",
+      "",
+      "● mp [project]",
+      "  ⊘ hello (failed) {marketplace declared locally}",
+      "    cause: The marketplace mp is declared only in claude-plugins.local.json. Run the command again with --local.",
+    ].join("\n"),
+    severity: "error",
+  });
+  const outcomes: readonly ReinstallFailedOutcome[] = [
+    {
+      partition: "failed",
+      name: "hello",
+      marketplace: "mp",
+      scope: "project",
+      notes: ["refused"],
+      reasons: ["marketplace declared locally"],
+      cause: new MarketplaceDeclaredLocallyError("mp"),
     },
   ];
 

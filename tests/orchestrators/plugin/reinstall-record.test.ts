@@ -5,6 +5,7 @@ import {
   recordReinstallOutcome,
   reinstallReasonsFromError,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-record.ts";
+import { MarketplaceDeclaredLocallyError } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts";
 import {
   ManualRecoveryError,
   PluginShapeError,
@@ -514,4 +515,32 @@ test("composes ordinary, typed, errno, and manual-recovery failures", () => {
       notes: ["broken\n\ncause: broken"],
     },
   );
+});
+
+test("FIX-03: a local-only marketplace refusal carries its reason and its cause", () => {
+  // arrange
+  const refusal = new MarketplaceDeclaredLocallyError("mp");
+
+  // act
+  const outcome = recordReinstallOutcome({
+    partition: "failed",
+    name: "hello",
+    marketplace: "mp",
+    scope: "project",
+    error: refusal,
+  });
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    partition: "failed",
+    name: "hello",
+    marketplace: "mp",
+    scope: "project",
+    notes: [
+      "The marketplace mp is declared only in claude-plugins.local.json. Run the command again with --local.\n\ncause: The marketplace mp is declared only in claude-plugins.local.json. Run the command again with --local.",
+    ],
+    reasons: ["marketplace declared locally"],
+    cause: refusal,
+  });
+  assert.strictEqual(outcome.cause, refusal);
 });

@@ -155,6 +155,13 @@ export interface ReinstallFailedOutcome extends ReinstallOutcomeBase {
    * the structural `marketplace not added` marker is never a per-plugin outcome reason.
    */
   readonly reasons?: readonly ContentReason[];
+  /**
+   * FIX-03 / D-MF-02: set only for the local-only-marketplace refusal. Its
+   * message is the row's cause line, built from a safe marketplace name and
+   * fixed text. Every other failure keeps its text in `notes` only, because
+   * that text is not prepared for a rendered cause line.
+   */
+  readonly cause?: Error;
 }
 
 export type ReinstallPluginOutcome =

@@ -7,7 +7,7 @@ import {
 } from "../../shared/errors.ts";
 import { ownValue, setOwn } from "../../shared/own-key.ts";
 
-import { retiresWorkflowCommand } from "./shared.ts";
+import { MarketplaceDeclaredLocallyError, retiresWorkflowCommand } from "./shared.ts";
 
 import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
 import type { ExtensionState, PluginInstallRecord } from "../../persistence/state-io.ts";
@@ -104,6 +104,10 @@ export function reinstallReasonsFromError(error: unknown): readonly ContentReaso
     return ["lock held"] as const;
   }
 
+  if (error instanceof MarketplaceDeclaredLocallyError) {
+    return ["marketplace declared locally"] as const;
+  }
+
   if (error instanceof Error) {
     const code = (error as NodeJS.ErrnoException).code;
     if (code === "EACCES" || code === "EPERM") {
@@ -140,6 +144,7 @@ function failedOutcome(input: RecordFailedOutcomeInput): ReinstallFailedOutcome 
     notes: [message],
     ...(isManualRecovery && { failureClass: "manual-recovery" as const }),
     ...(typedReasons !== undefined && { reasons: typedReasons }),
+    ...(input.error instanceof MarketplaceDeclaredLocallyError && { cause: input.error }),
   };
 }
 
