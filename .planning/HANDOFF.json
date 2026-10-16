@@ -1,0 +1,50 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-10-16T03:15:00.964Z",
+  "phase": "2",
+  "phase_name": "GitHub Clone-Base Override",
+  "phase_dir": ".planning/phases/02-github-clone-base-override",
+  "plan": 5,
+  "task": null,
+  "total_tasks": null,
+  "status": "paused",
+  "completed_tasks": [
+    {"id": "02-01", "name": "Seam + platform rewrite", "status": "done", "commit": "b90326ca"},
+    {"id": "02-02", "name": "GitHub auth host follows the override", "status": "done", "commit": "4b0f7bea"},
+    {"id": "02-03", "name": "Invalid base fails add/update/install/import/enable", "status": "done", "commit": "080fc727"},
+    {"id": "02-04", "name": "Invalid base fails reinstall/fetch/info --fetch/update", "status": "done", "commit": "5f199e96"},
+    {"id": "02-05", "name": "Literal gate, README/CHANGELOG, phase gate (npm run check exit 0 at 3ff8a299)", "status": "done", "commit": "3839055c"},
+    {"id": "verify:post", "name": "Nyquist validation + security audit", "status": "done", "commit": "02-SECURITY.md committed"},
+    {"id": "review-fix-1", "name": "Code review round 1 + fixer iteration 1 (7 fixed: 15cc2626..636b6467)", "status": "done", "commit": "636b6467"},
+    {"id": "review-2", "name": "Re-review iteration 2 (1 critical, 2 warnings, 7 info)", "status": "in_progress", "progress": "02-REVIEW.md overwritten, uncommitted; waiting on the user's CR-01 ruling"}
+  ],
+  "remaining_tasks": [
+    {"id": "fix-2", "name": "Fixer iteration 2 (CR-01 per ruling, WR-01 stale comments, WR-02 lazy-auth test for info probePinned)", "status": "not_started"},
+    {"id": "review-3", "name": "Re-review iteration 3 (last), commit REVIEW.md + REVIEW-FIX.md, reconcile disposition, move .iter backups to scratch", "status": "not_started"},
+    {"id": "gate", "name": "npm run check on the final tree", "status": "not_started"},
+    {"id": "verify", "name": "gsd-verifier for phase 2, phase.complete, fix STATE position lines by hand, transition bookkeeping", "status": "not_started"},
+    {"id": "phases-3-10", "name": "Continue /gsd-autonomous --interactive from phase 3", "status": "not_started"}
+  ],
+  "blockers": [
+    {"description": "Review CR-01: marketplace add failures never show the `fetched <url>` cause under the override; README sentence from 636b6467 overclaims", "type": "human_action", "workaround": "User picks: (1) add an SNM-10 cause child row on add failures under the override only (recommended), or (2) narrow the README sentence and record the gap in 02-CONTEXT"}
+  ],
+  "async_jobs": [],
+  "human_actions_pending": [
+    {"action": "Rule on review CR-01 (option 1 or 2)", "context": "02-REVIEW.md CR-01; asked in chat, AskUserQuestion was dismissed", "blocking": true},
+    {"action": "Rule on UPD-02: path-source marketplace update always reports up-to-date with autoupdate off (update.ts:387 reads the pre key from the already-rewritten file)", "context": "Needed before Phase 6", "blocking": false},
+    {"action": "WINDOWS entry 93: README.es.md drifted from README.md before this milestone; blocks /gsd-ship while open", "context": "Fix before milestone close", "blocking": false}
+  ],
+  "decisions": [
+    {"decision": "Fetch-time rewrite (git insteadOf model): identity, cache keys, recorded origins stay github.com; only wire URL + auth host follow the variable", "rationale": "User choice D-01", "phase": "2"},
+    {"decision": "WR-01 exception to D-08: a failure that already left rollback partials or MCP notices ends in that target's failed row (cause names the variable) instead of a thrown command error", "rationale": "Never lose rollback records; orchestrator ruling, not yet confirmed by the user", "phase": "2"},
+    {"decision": "Update preflight may build GitHub auth up front (update is network-reaching); bootstrap's marketplace row cannot carry a cause (SNM-10), bootstrap is out of suite scope", "rationale": "Orchestrator rulings during review-fix", "phase": "2"}
+  ],
+  "uncommitted_files": [
+    " M .planning/phases/02-github-clone-base-override/02-REVIEW.md",
+    "?? .planning/phases/02-github-clone-base-override/02-REVIEW-FIX.iter2.md",
+    "?? .planning/phases/02-github-clone-base-override/02-REVIEW-FIX.md",
+    "?? .planning/phases/02-github-clone-base-override/02-REVIEW.iter2.md"
+  ],
+  "next_action": "Ask the user for the CR-01 ruling (1 = cause child row on add, 2 = narrow README), then dispatch gsd-code-fixer iteration 2 with that ruling",
+  "context_notes": "Running /gsd-autonomous --interactive. Executors run sequentially in this worktree with isolation forced to none (dispatch-isolation --force-isolation none per plan) and the root-pin guard at the scratchpad root-pin.sh; executor context bundle is executor-context-tdd.md in the scratchpad (rebuild if the scratchpad is gone). Phase 1 is complete and verified."
+}
