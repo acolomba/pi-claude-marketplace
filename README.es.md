@@ -191,6 +191,42 @@ En el ámbito del proyecto, confirma (`commit`) `claude-plugins.json`. Así, tus
 
 Los archivos de ámbito de usuario se encuentran en tu directorio de inicio. Son personales y nunca se comparten.
 
+## Espejo de GitHub
+
+La mayoría de los usuarios nunca necesita esta sección. `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL` es una configuración avanzada. Envía los orígenes de GitHub a otro host git `https`, como un espejo, un servidor aislado de la red o un servidor local de pruebas. Un origen de GitHub es una abreviatura `owner/repo` o una URL `https://github.com/...`.
+
+Define la variable en el shell que inicia Pi:
+
+```text
+export PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL=https://git.example.com/mirror
+```
+
+Después, agrega un mercado de GitHub en Pi como de costumbre:
+
+```text
+/claude:plugin marketplace add upstash/context7
+```
+
+Este comando clona `https://git.example.com/mirror/upstash/context7.git`. La ruta después del host se conserva en la URL, y una barra final en el valor no cambia nada.
+
+El valor debe ser una URL `https:` sin nombre de usuario, contraseña, consulta ni fragmento. Si el valor incumple una de estas reglas, el comando falla con un error que nombra la variable. Un valor vacío cuenta como no definido.
+
+La configuración tiene estos límites:
+
+- Mientras la variable está definida, los orígenes de GitHub nunca usan la autenticación Device Flow.
+
+- Las credenciales vienen solo de `git credential`. Guarda una credencial bajo el host del valor, con su puerto si lo tiene. Por ejemplo, para `https://git.example.com/mirror`:
+
+  ```text
+  printf 'protocol=https\nhost=git.example.com\nusername=<user>\npassword=<token>\n\n' | git credential approve
+  ```
+
+- `list`, `info`, `claude-plugins.json` y la salida de los comandos siguen mostrando URLs `https://github.com/...`.
+
+- Un valor modificado se aplica en la siguiente descarga. No hace falta volver a agregar el mercado.
+
+Claude Code no tiene esta configuración, así que este comportamiento es una diferencia con respecto a Claude Code.
+
 ## Referencia de comandos
 
 Esta extensión replica el comando `/plugin` de Claude Code. Usa `/claude:plugin` en Pi para operaciones de mercado y complementos. Después de instalar, desinstalar, actualizar o reinstalar complementos, ejecuta `/reload`. Así, Pi detecta los recursos modificados.

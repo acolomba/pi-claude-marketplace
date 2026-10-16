@@ -193,6 +193,42 @@ In the project scope, commit `claude-plugins.json`. Then your collaborators inst
 
 User-scope files live in your home directory. They are personal and never shared.
 
+## GitHub mirror
+
+Most users never need this section. `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL` is an advanced setting. It sends GitHub sources to another `https` git host, such as a mirror, an air-gapped server, or a local test server. A GitHub source is an `owner/repo` shorthand or an `https://github.com/...` URL.
+
+Set the variable in the shell that starts Pi:
+
+```text
+export PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL=https://git.example.com/mirror
+```
+
+Then add a GitHub marketplace in Pi as usual:
+
+```text
+/claude:plugin marketplace add upstash/context7
+```
+
+This command clones `https://git.example.com/mirror/upstash/context7.git`. The path after the host stays in the URL, and a trailing slash in the value makes no difference.
+
+The value must be an `https:` URL with no user name, password, query, or fragment. If the value breaks one of these rules, the command fails with an error that names the variable. An empty value counts as unset.
+
+The setting has these limits:
+
+- While the variable is set, GitHub sources never use Device Flow authentication.
+
+- Credentials come only from `git credential`. Store a credential under the host of the value, with its port if it has one. For example, for `https://git.example.com/mirror`:
+
+  ```text
+  printf 'protocol=https\nhost=git.example.com\nusername=<user>\npassword=<token>\n\n' | git credential approve
+  ```
+
+- `list`, `info`, `claude-plugins.json`, and command output keep showing `https://github.com/...` URLs.
+
+- A changed value applies on the next fetch. You do not have to add the marketplace again.
+
+Claude Code has no such setting, so this behavior is a difference from Claude Code.
+
 ## Command reference
 
 This extension mirrors Claude Code's `/plugin` command. Use `/claude:plugin` in Pi for marketplace and plugin operations. After you install, uninstall, update, or reinstall plugins, run `/reload`. Then Pi discovers the changed resources.
