@@ -51,6 +51,7 @@ import {
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import {
   CleanupContextError,
+  InvalidGitHubBaseUrlError,
   InvalidMarketplaceManifestError,
   MarketplaceNotFoundError,
   PluginUpdateConcurrencyError,
@@ -1528,6 +1529,44 @@ test("GHB-02: the GitHub marketplace sync under the override binds the override 
         state.fetchCalls.map(({ auth }) => auth),
         [{ kind: "stored-credential", credentialOps, host: "mirror.example:8443" }],
       );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("GHB-03: a GitHub marketplace sync on an invalid base fails the update command", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-sync-invalid-base-");
+    try {
+      // arrange
+      setGitHubBaseUrl(t, "http://mirror.example");
+      await seedGithubMarketplaceForSync(cwd);
+      const { gitOps, state } = createGitOps();
+      const { ctx, verifyBoundary } = createNotificationBoundary(0);
+
+      // act & assert
+      await assert.rejects(
+        () =>
+          updatePlugins({
+            ctx,
+            run: runWithNothingLoaded(),
+            scope: "project",
+            cwd,
+            target: { kind: "marketplace", marketplace: "official" },
+            gitOps,
+            credentialOps: makeCredentialOps(),
+          }),
+        (error: unknown) => {
+          assert.deepStrictEqual(
+            error,
+            new InvalidGitHubBaseUrlError("PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL", "scheme"),
+          );
+          return true;
+        },
+      );
+      assert.deepStrictEqual(state.fetchCalls, []);
+      verifyBoundary();
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -8872,6 +8911,85 @@ test("updateSinglePlugin keeps a recorded provider SHA offline without an auth c
       constraint: undefined,
       declaresWorkflows: false,
     });
+  });
+});
+
+test("GHB-03: a GitHub-source plugin update on an invalid base fails the update command", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-plugin-invalid-base-");
+    try {
+      // arrange
+      await seedGitUpdateMarketplace({
+        cwd,
+        cloneUrl: "https://github.com/org/repo",
+        entrySource: { source: "github", repo: "org/repo" },
+        recordedSha: SHA_OLD,
+        versionTag: "9.9.9",
+      });
+      setGitHubBaseUrl(t, "http://mirror.example");
+      const { gitOps } = createGitOps({ fixtureSourceDir: path.join(cwd, "repo-fixture") });
+      const { seam, captured } = capturingUpdateSeam(gitOps);
+      const { ctx, verifyBoundary } = createNotificationBoundary(0);
+
+      // act & assert
+      await assert.rejects(
+        () =>
+          updatePlugins({
+            ctx,
+            run: runWithNothingLoaded(),
+            scope: "project",
+            cwd,
+            target: { kind: "plugin", plugin: "gp", marketplace: "mp" },
+            cloneCacheSeam: seam,
+            credentialOps: makeCredentialOps(),
+            deviceFlowHttp: makeDeviceFlowHttp(),
+          }),
+        (error: unknown) => {
+          assert.deepStrictEqual(
+            error,
+            new InvalidGitHubBaseUrlError("PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL", "scheme"),
+          );
+          return true;
+        },
+      );
+      assert.deepStrictEqual(captured, { pinAuth: undefined, cloneAuth: undefined });
+      verifyBoundary();
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("GHB-03: the cascade's single-plugin update rethrows an invalid base", async (t) => {
+  await withHermeticHome(async () => {
+    // arrange
+    const cwd = await createCaseDir("update-cascade-invalid-base-");
+    const previousCwd = process.cwd();
+    t.after(async () => {
+      process.chdir(previousCwd);
+      await rm(cwd, { recursive: true, force: true });
+    });
+    await seedGitUpdateMarketplace({
+      cwd,
+      cloneUrl: "https://github.com/org/repo",
+      entrySource: { source: "github", repo: "org/repo" },
+      recordedSha: SHA_OLD,
+      versionTag: "9.9.9",
+    });
+    setGitHubBaseUrl(t, "http://mirror.example");
+    process.chdir(cwd);
+
+    // act & assert
+    await assert.rejects(
+      () => createUpdateOperations().beginPluginUpdateRun()("gp", "mp", "project"),
+      (error: unknown) => {
+        assert.deepStrictEqual(
+          error,
+          new InvalidGitHubBaseUrlError("PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL", "scheme"),
+        );
+        return true;
+      },
+    );
   });
 });
 

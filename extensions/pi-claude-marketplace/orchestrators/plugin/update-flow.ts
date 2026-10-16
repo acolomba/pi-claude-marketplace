@@ -4,7 +4,8 @@
 // NFR-2 + NFR-3.
 //
 // Two exported entrypoints (D-09 corollary):
-//  1. updateSinglePlugin: PluginUpdateFn -- cascade-safe; NEVER throws
+//  1. updateSinglePlugin: PluginUpdateFn -- cascade-safe; throws only an
+//     invalid GitHub base override (GHB-03)
 //  2. updatePlugins(opts) -- direct entrypoint; PUP-1 three forms
 //
 // Both share the per-plugin 3-phase swap implementation (D-03 HAND-ROLLED,
@@ -69,6 +70,7 @@ import {
   MarketplaceNotFoundError,
   PluginUpdateConcurrencyError,
   PluginUpdatePhase3Error,
+  rethrowInvalidGitHubBaseUrl,
 } from "../../shared/errors.ts";
 import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
 import { notifyMcpConfigNotices } from "../../shared/notification-dispatch.ts";
@@ -329,6 +331,8 @@ async function updatePluginsWith(
       // eslint-disable-next-line no-await-in-loop -- syncs each marketplace once; a sync failure aborts the batch
       await syncCloneOnce(t.scope, t.marketplace, t.locations);
     } catch (err) {
+      // GHB-03: an invalid GitHub base override fails the whole command.
+      rethrowInvalidGitHubBaseUrl(err);
       // Pre-3-phase error (D-14 step failure or marketplace-missing): surface
       // via a single notify with a synthetic PluginFailedMessage carrying
       // the typed cause (Option B). Abort the whole
@@ -367,6 +371,8 @@ async function updatePluginsWith(
         ),
       );
     } catch (err) {
+      // GHB-03: an invalid GitHub base override fails the whole command.
+      rethrowInvalidGitHubBaseUrl(err);
       // PUP-9 direct path: phase-2-or-earlier throws (including PI-14
       // PathContainmentError, ST-9 stale-version, prep-phase errors) surface
       // via a single notify with a synthetic PluginFailedMessage
@@ -590,16 +596,18 @@ function abortUpdateBatch(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// updateSinglePlugin -- PluginUpdateFn impl (cascade-safe; NEVER throws)
+// updateSinglePlugin -- PluginUpdateFn impl (cascade-safe)
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
  * D-09 corollary: the `PluginUpdateFn` impl (D-05). The marketplace
  * autoupdate cascade wires this in.
  *
- * Cascade-safe contract: this function NEVER throws. All errors (including
- * PathContainmentError, ST-9 stale-version, prep failures, phase-3a aggregate
- * failures) are captured into `partition='failed'` outcomes. PUP-9.
+ * Cascade-safe contract: errors (including PathContainmentError, ST-9
+ * stale-version, prep failures, phase-3a aggregate failures) are captured into
+ * `partition='failed'` outcomes. PUP-9. The one error it rethrows is an invalid
+ * GitHub base override, which fails the marketplace command that runs the
+ * cascade (GHB-03).
  */
 async function updateSinglePluginWith(
   bindings: UpdateBindings,
@@ -647,9 +655,12 @@ async function updateSinglePluginWith(
       cleanupClones: garbageCollectPluginClones,
     });
   } catch (err) {
-    // Cascade-safe: capture throws into a partition='failed' outcome so the
-    // marketplace cascade can continue aggregating outcomes across plugins
-    // without aborting the whole batch. `notes` is consumed outside the
+    // GHB-03: an invalid GitHub base override fails the marketplace command
+    // that runs the cascade.
+    rethrowInvalidGitHubBaseUrl(err);
+    // Cascade-safe: capture every other throw into a partition='failed' outcome
+    // so the marketplace cascade can continue aggregating outcomes across
+    // plugins without aborting the whole batch. `notes` is consumed outside the
     // notify path so the MSG-CC-1 trailer is composed inline here.
     //
     // Pre-narrow to a closed-set `Reason` so the cascade consumer reads the

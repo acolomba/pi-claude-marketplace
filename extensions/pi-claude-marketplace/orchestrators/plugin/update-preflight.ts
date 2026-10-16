@@ -9,7 +9,11 @@ import { parsePluginSource } from "../../domain/source.ts";
 import { shaVersion } from "../../domain/version.ts";
 import { isRecordedButDisabled, loadState } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
-import { errorMessage, PluginShapeError } from "../../shared/errors.ts";
+import {
+  errorMessage,
+  PluginShapeError,
+  rethrowInvalidGitHubBaseUrl,
+} from "../../shared/errors.ts";
 import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
 import { ownValue } from "../../shared/own-key.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
@@ -389,6 +393,9 @@ async function resolveUpdateCandidate(
 
     return { candidate: resolved, pathResolvedSha };
   } catch (error: unknown) {
+    // GHB-03: an invalid GitHub base override fails the whole command; it never
+    // becomes a skipped row.
+    rethrowInvalidGitHubBaseUrl(error);
     const networkReason = classifyGitTransportFailure(error);
     if (networkReason !== undefined) {
       return {
@@ -418,8 +425,9 @@ async function resolveUpdateCandidate(
       };
     }
 
-    // Anything else is genuinely unexpected -- not a classified git-transport
-    // failure and not the resolver's typed `no-longer-installable` shape.
+    // Anything else is genuinely unexpected -- not an invalid GitHub base
+    // override (rethrown above, GHB-03), not a classified git-transport
+    // failure, and not the resolver's typed `no-longer-installable` shape.
     // "no longer installable" stays the user-facing verdict (the candidate
     // could not be resolved either way), but it is not necessarily the real
     // cause, so log the actual error for diagnosis.

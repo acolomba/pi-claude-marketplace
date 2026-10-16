@@ -17,6 +17,7 @@ import {
   loadState,
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { InvalidGitHubBaseUrlError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type { GitBackedSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
@@ -1141,6 +1142,33 @@ test("classifies a clone transport failure without exposing a raw throw", async 
     declaresMcp: false,
     declaresWorkflows: false,
   });
+});
+
+test("GHB-03: an invalid base rethrows from candidate resolution instead of skipping as no longer installable", async (t) => {
+  // arrange
+  const seed = await seedUpdate({
+    installed: pluginRecord("sha-000000000000"),
+    source: { source: "url", url: "https://example.com/private" },
+  });
+  t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+  const invalidBase = new InvalidGitHubBaseUrlError(
+    "PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL",
+    "scheme",
+  );
+  const cloneCacheSeam: UpdateCloneCacheSeam = {
+    resolvePluginPin: () => Promise.reject(new Error("unexpected pin resolution")),
+    materializePluginClone: () => Promise.reject(new Error("unexpected immutable clone")),
+    materializeOrRefreshPluginMirror: () => Promise.reject(invalidBase),
+  };
+
+  // act & assert
+  await assert.rejects(
+    () => prepare(seed, { cloneCacheSeam }),
+    (error: unknown) => {
+      assert.strictEqual(error, invalidBase);
+      return true;
+    },
+  );
 });
 
 test("swallows disabled clone cleanup failure after persisting the new pin", async (t) => {
