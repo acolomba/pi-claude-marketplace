@@ -2,20 +2,20 @@
 gsd_state_version: "1.0"
 milestone: marketplace-features
 milestone_name: Marketplace Behavioral Tests
-current_phase: 03
-current_phase_name: Marketplace Add
-status: verifying
-stopped_at: Completed 03-03-PLAN.md
-last_updated: "2026-10-16T13:03:20.991Z"
+current_phase: "03.1"
+current_phase_name: Local Declaration Leak Fix
+status: planning
+stopped_at: Phase 3 complete, ready to plan Phase 03.1
+last_updated: "2026-10-16T14:03:10.633Z"
 last_activity: 2026-10-16
-last_activity_desc: Phase 03 execution started
-state_head: c584048df9997aee54dc63a7eee10b3fefdb2c53
+last_activity_desc: Phase 3 complete, transitioned to Phase 03.1
+state_head: 3a6eb82d25ded3007aa89be665a7bb7c868037a4
 progress:
   total_phases: 11
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 13
   completed_plans: 13
-  percent: 18
+  percent: 27
 ---
 
 # Project State
@@ -31,12 +31,12 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: 03 (Marketplace Add) — EXECUTING
-Plan: 3 of 3
-Status: Phase complete — ready for verification
-Last activity: 2026-10-16 — Phase 03 execution started
+Phase: 03.1 — Local Declaration Leak Fix
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-10-16 — Phase 3 complete, transitioned to Phase 03.1
 
-Progress: [██░░░░░░░░] 18%
+Progress: [███░░░░░░░] 27%
 
 ### mcp-4 closeout
 
@@ -182,7 +182,7 @@ hit the same wall; convert it rather than re-disclosing it.
 ## Session Continuity
 
 **Last session:** 2026-10-16T13:03:20.681Z
-**Stopped at:** Completed 03-03-PLAN.md
+**Stopped at:** Phase 3 complete, ready to plan Phase 03.1
 **Resume file:** None
 
 **Main merge (2026-10-11, quick task 261011-bsm):** `origin/main` at

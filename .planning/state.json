@@ -16,7 +16,7 @@
     {
       "number": "3",
       "name": "Marketplace Add",
-      "status": "in_progress"
+      "status": "complete"
     },
     {
       "number": "3.1",
@@ -61,8 +61,8 @@
   ],
   "next": {
     "command": "/gsd-progress --next",
-    "label": "Advance to the next step (verify)",
-    "reason": "Phase 3 of 11 · 18% · ready to verify"
+    "label": "Advance to the next step (plan phase 03.1)",
+    "reason": "Phase 4 of 11 — needs a plan"
   },
-  "updated_at": "2026-10-16T13:03:16.995Z"
+  "updated_at": "2026-10-16T14:03:10.708Z"
 }

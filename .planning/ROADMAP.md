@@ -56,7 +56,7 @@ path), **url** (https git URL on the loopback stand-in), and **gh**
 
 - [x] **Phase 1: Suite Foundation** — The payload driver, exact-token comparison, the shared kind-neutral steps and local fixtures, the tag mechanism, and the unused-step gate that every other suite phase builds on (completed 2026-10-15)
 - [x] **Phase 2: GitHub Clone-Base Override** — `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL` sends every GitHub clone, fetch, origin match, and auth lookup to one configured base; unset, nothing changes (completed 2026-10-16)
-- [ ] **Phase 3: Marketplace Add** — `marketplace add` scenarios, with dir, file, `@url`, and `@github` rows for every multi-kind add behavior
+- [x] **Phase 3: Marketplace Add** — `marketplace add` scenarios, with dir, file, `@url`, and `@github` rows for every multi-kind add behavior (completed 2026-10-16)
 - [ ] **Phase 3.1: Local Declaration Leak Fix** (INSERTED) — A marketplace added with `--local` stays out of `claude-plugins.json` across a reload, written test-first
 - [ ] **Phase 4: Marketplace Remove and List** — `remove`/`rm` with the plugin cascade, and `list`/`ls` across both scopes
 - [ ] **Phase 5: Marketplace Info** — `info` source details for every kind, scope fan-out, not-added forms, and a broken manifest
@@ -168,7 +168,7 @@ Plans:
 2. Without `--scope`, `add` uses the user scope; the same marketplace can be added to both scopes independently; and a path that does not exist fails as `source missing`, named by the source as typed.
 3. `add --local` writes the declaration to `claude-plugins.local.json` and `remove --local` clears it, and `add ~/...` keeps the `~` form and resolves it against HOME.
 
-**Plans:** 3/3 plans executed
+**Plans:** 3/3 plans complete
 
 Plans:
 **Wave 1**
@@ -300,7 +300,7 @@ Plans:
 | --- | --- | --- | --- |
 | 1. Suite Foundation | 5/5 | Complete    | 2026-10-15 |
 | 2. GitHub Clone-Base Override | 5/5 | Complete    | 2026-10-16 |
-| 3. Marketplace Add | 3/3 | In Progress | - |
+| 3. Marketplace Add | 3/3 | Complete    | 2026-10-16 |
 | 3.1. Local Declaration Leak Fix | 0/TBD | Not started | - |
 | 4. Marketplace Remove and List | 0/TBD | Not started | - |
 | 5. Marketplace Info | 0/TBD | Not started | - |
