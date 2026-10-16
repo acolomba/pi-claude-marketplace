@@ -56,16 +56,32 @@ function noStandIn(kind: SourceKind): Error {
 
 /**
  * Publishes the marketplace `name` under `marketplacesRoot` as a `kind`
- * source offering `plugins`. A file source is the manifest inside
- * `.claude-plugin/` (D-04).
+ * source offering `plugins`, in a directory of its own name. A file source is
+ * the manifest inside `.claude-plugin/` (D-04).
  */
-export async function publishMarketplace(
+export function publishMarketplace(
   marketplacesRoot: string,
   name: string,
   kind: SourceKind,
   plugins: readonly OfferedPlugin[],
 ): Promise<PublishedMarketplace> {
-  const root = path.join(marketplacesRoot, name);
+  return publishMarketplaceIn(marketplacesRoot, name, name, kind, plugins);
+}
+
+/**
+ * Publishes a marketplace whose manifest declares `name` in the directory
+ * `directory` under `marketplacesRoot`, as a `kind` source offering
+ * `plugins`. For a git kind, `directory` is the repository its stand-in
+ * serves (D-01, D-04).
+ */
+export async function publishMarketplaceIn(
+  marketplacesRoot: string,
+  directory: string,
+  name: string,
+  kind: SourceKind,
+  plugins: readonly OfferedPlugin[],
+): Promise<PublishedMarketplace> {
+  const root = path.join(marketplacesRoot, directory);
   switch (kind) {
     case "dir":
       await writeMarketplace(root, name, plugins);

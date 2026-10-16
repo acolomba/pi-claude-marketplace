@@ -79,6 +79,34 @@ Feature: Marketplace add
       | source kind |
       | github      |
 
+  Scenario Outline: Adding a marketplace whose name the scope already holds fails as a duplicate name
+    Given the marketplace "tools" is published as a <source kind> source
+    Given the marketplace "tools" is added to the project scope
+    Given another marketplace named "tools" to add is published as a <source kind> source in "tools-copy"
+    When the user runs "/claude:plugin marketplace add <second source> --scope project"
+    Then the result has these fields:
+      | kind         | cascade                             |
+      | severity     | error                               |
+      | needs reload | false                               |
+      | summary      | A marketplace operation has failed. |
+    Then the result lists these marketplaces:
+      | name  | scope   | status | reasons        |
+      | tools | project | failed | duplicate name |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name  | source   |
+      | tools | <source> |
+
+    Examples:
+      | source kind | source                    | second source                  |
+      | dir         | {home}/marketplaces/tools | {home}/marketplaces/tools      |
+      | dir         | {home}/marketplaces/tools | {home}/marketplaces/tools-copy |
+
+    @url
+    Examples:
+      | source kind | source                            | second source                          |
+      | url         | https://{git host}/acme/tools.git | https://{git host}/acme/tools.git      |
+      | url         | https://{git host}/acme/tools.git | https://{git host}/acme/tools-copy.git |
+
   Scenario Outline: Adding a path that holds no marketplace manifest fails as source missing, named as typed
     Given the directory "empty" to add holds no marketplace manifest
     When the user runs "/claude:plugin marketplace add <source> --scope project"

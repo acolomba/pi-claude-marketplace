@@ -1,6 +1,7 @@
 /**
  * @fileoverview Steps that only `marketplace add` uses: sources that are
- * broken or missing before the user adds them.
+ * broken or missing before the user adds them, and a second marketplace that
+ * declares a name already published.
  *
  * Each step text names add, so no other verb module defines the same text
  * (D-08 of the suite foundation).
@@ -12,9 +13,9 @@ import path from "node:path";
 
 import { Given } from "@cucumber/cucumber";
 
-import { invalidateManifest } from "../../lib/published-marketplace.ts";
+import { invalidateManifest, publishMarketplaceIn } from "../../lib/published-marketplace.ts";
 
-import type { ManifestProblem } from "../../lib/published-marketplace.ts";
+import type { ManifestProblem, SourceKind } from "../../lib/published-marketplace.ts";
 import type { ScenarioWorld } from "../../support/world.ts";
 
 async function breakManifest(
@@ -44,6 +45,16 @@ Given(
   "the manifest of the marketplace {string} to add breaks the manifest schema",
   async function (this: ScenarioWorld, name: string) {
     await breakManifest(this, name, "schema-invalid");
+  },
+);
+
+Given(
+  "another marketplace named {string} to add is published as a {source kind} source in {string}",
+  async function (this: ScenarioWorld, name: string, kind: SourceKind, directory: string) {
+    const root = path.join(this.marketplacesRoot, directory);
+    this.onRelease(() => rm(root, { recursive: true, force: true }));
+    // Not recorded: the world keys marketplaces by name, so it would replace the first (D-01).
+    await publishMarketplaceIn(this.marketplacesRoot, directory, name, kind, []);
   },
 );
 
