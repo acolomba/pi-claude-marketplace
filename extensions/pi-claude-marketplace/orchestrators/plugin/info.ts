@@ -69,7 +69,11 @@ import {
 } from "../../persistence/state-io.ts";
 import { companionRequirements } from "../../shared/concerns/soft-dep.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
-import { errorMessage, isErrnoException } from "../../shared/errors.ts";
+import {
+  errorMessage,
+  isErrnoException,
+  rethrowInvalidGitHubBaseUrl,
+} from "../../shared/errors.ts";
 import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
 import { notify } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
@@ -155,8 +159,9 @@ export interface GetPluginInfoOptions {
    * FTCH-03 / D-81-04: fetch the git-source clone/mirror THEN resolve and list
    * components in one step. Network on cache miss (pinned) or on the mirror
    * refresh (unpinned) (D-81-05, MIRR-02); a fetch failure degrades to the
-   * existing `components: not resolved` arm with an existing closed-set reason
-   * and NEVER fails info. Omitted / false keeps info network-free (bare info
+   * existing `components: not resolved` arm with an existing closed-set reason.
+   * The one exception is an invalid GitHub base override, which fails the
+   * command (GHB-03). Omitted / false keeps info network-free (bare info
    * behaves exactly as before).
    */
   readonly fetch?: boolean;
@@ -2069,8 +2074,9 @@ type GitProbe = (source: GitBackedSource) => Promise<GitPluginRootResult>;
  * per-sha immutable cache (network on cache miss); an unpinned source refreshes
  * the single mutable URL-keyed mirror even when warm (MIRR-02 refresh-on-warm --
  * the mirror refresh IS the consented fetch, so it hits the network on every
- * run). A materialize throw PROPAGATES so the row builder's existing
- * try/catch degrades to `components: not resolved` (D-81-04). Mirrors
+ * run). A materialize throw PROPAGATES to the row builder's try/catch. A
+ * transport failure degrades there to `components: not resolved` (D-81-04);
+ * an invalid GitHub base override is rethrown and fails info (GHB-03). Mirrors
  * `install-clone-probe.ts::probeInstallClone`; the pinned/unpinned fork lives inside the
  * callback so info still names no git surface (it reaches the seam only by name).
  */
@@ -2200,6 +2206,9 @@ async function buildInstalledGitRow(opts: {
       }
     }
   } catch (err) {
+    // GHB-03: an invalid GitHub base override fails the command. Bare info
+    // never reads the variable, so this only fires for `info --fetch`.
+    rethrowInvalidGitHubBaseUrl(err);
     // D-78-04: a warm-tree resolve/read failure OR a fetch failure never
     // un-installs the plugin; the recorded status holds either way. Bare info
     // degrades silently (the fs-only probe carries no fetch consent), but
@@ -2496,8 +2505,10 @@ async function buildGitNotInstalledRow(opts: {
   try {
     presence = await probe(gitSource);
   } catch (err) {
-    // D-81-04: a fetch materialize throw NEVER fails info -- degrade to the
-    // existing `components: not resolved` arm with an existing closed-set reason
+    // GHB-03: an invalid GitHub base override fails the command.
+    rethrowInvalidGitHubBaseUrl(err);
+    // D-81-04: any other fetch materialize throw degrades to the existing
+    // `components: not resolved` arm with an existing closed-set reason
     // (network unreachable / authentication required, else the probe-error
     // ladder). The `(remote)` token is the not-installed git surface.
     return {
@@ -2661,7 +2672,8 @@ async function buildNotInstalledRow(opts: {
   // FTCH-03: `info --fetch` materializes the clone/mirror first (network on
   // cache miss when pinned, on the mirror refresh when unpinned -- D-81-05,
   // MIRR-02), then resolves the now-warm tree; a fetch throw degrades in-place
-  // (D-81-04). Branch BEFORE the path `resolveStrict` below (whose git arm maps
+  // (D-81-04), except an invalid GitHub base override, which fails info
+  // (GHB-03). Branch BEFORE the path `resolveStrict` below (whose git arm maps
   // the absent clone to `unavailable{not installed}`).
   if (isGitSource(parsedSource)) {
     return buildGitNotInstalledRow({

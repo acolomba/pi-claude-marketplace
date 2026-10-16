@@ -59,6 +59,7 @@ import { saveConfig } from "../../../extensions/pi-claude-marketplace/persistenc
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { softDepStatus } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import { InvalidGitHubBaseUrlError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import {
   buildInstalledPluginRecord,
   materializeMarketplaceTree,
@@ -74,7 +75,8 @@ import {
   builtinMcpCommand,
   builtinMcpTool,
 } from "../../platform/pi-inventory-seed.ts";
-import { runWithSoftDeps } from "../../shared/notification-run-seeds.ts";
+import { setGitHubBaseUrl } from "../../shared/github-base-url-environment.ts";
+import { runWithNothingLoaded, runWithSoftDeps } from "../../shared/notification-run-seeds.ts";
 
 import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type * as InfoOrchestrator from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts";
@@ -5942,6 +5944,150 @@ test("D-78-04 / D-81-04: info --fetch on an INSTALLED git plugin with a missing 
     assert.doesNotMatch(msg, /\(remote\)/, msg);
     assert.doesNotMatch(msg, /\(unavailable\)/, msg);
     assert.doesNotMatch(msg, /\(partially/, msg);
+  });
+});
+
+test("GHB-03: info --fetch on a not-installed GitHub plugin fails the command on an invalid base", async (t) => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          { name: "gplug", source: { source: "github", repo: "owner/gh-mp" }, version: "1.0.0" },
+        ],
+      },
+    });
+    setGitHubBaseUrl(t, "http://mirror.example");
+    const { gitOps, state: gitState } = createGitOps({});
+    const { credOps: credentialOps } = createCredentialOps();
+    const ctx = mock<ExtensionContext>({ exactParams: true, name: "invalid base context" });
+
+    // act & assert
+    await assert.rejects(
+      () =>
+        getPluginInfo({
+          ctx,
+          run: runWithNothingLoaded(),
+          marketplace: "mp",
+          plugin: "gplug",
+          scope: "user",
+          cwd,
+          fetch: true,
+          cloneCacheSeam: fetchSeamWith(gitOps),
+          credentialOps,
+        }),
+      (error: unknown) => {
+        assert.deepStrictEqual(
+          error,
+          new InvalidGitHubBaseUrlError("PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL", "scheme"),
+        );
+        return true;
+      },
+    );
+    assert.deepStrictEqual(gitState.cloneCalls, []);
+    assert.deepStrictEqual(gitState.fetchCalls, []);
+    verify(ctx);
+  });
+});
+
+test("GHB-03: info --fetch on an installed GitHub plugin fails the command on an invalid base", async (t) => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          { name: "gplug", source: "https://github.com/owner/gh-mp#main", version: "1.0.0" },
+        ],
+      },
+      installed: { gplug: { version: "1.0.0" } },
+    });
+    setGitHubBaseUrl(t, "http://mirror.example");
+    const { gitOps, state: gitState } = createGitOps({});
+    const { credOps: credentialOps } = createCredentialOps();
+    const ctx = mock<ExtensionContext>({ exactParams: true, name: "invalid base context" });
+
+    // act & assert
+    await assert.rejects(
+      () =>
+        getPluginInfo({
+          ctx,
+          run: runWithNothingLoaded(),
+          marketplace: "mp",
+          plugin: "gplug",
+          scope: "user",
+          cwd,
+          fetch: true,
+          cloneCacheSeam: fetchSeamWith(gitOps),
+          credentialOps,
+        }),
+      (error: unknown) => {
+        assert.deepStrictEqual(
+          error,
+          new InvalidGitHubBaseUrlError("PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL", "scheme"),
+        );
+        return true;
+      },
+    );
+    assert.deepStrictEqual(gitState.cloneCalls, []);
+    assert.deepStrictEqual(gitState.fetchCalls, []);
+    verify(ctx);
+  });
+});
+
+test("GHB-04 / NFR-5: bare info on a GitHub plugin ignores an invalid base", async (t) => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          { name: "gplug", source: { source: "github", repo: "owner/gh-mp" }, version: "1.0.0" },
+        ],
+      },
+    });
+    setGitHubBaseUrl(t, "http://mirror.example");
+    const { gitOps, state: gitState } = createGitOps({});
+    const { credOps: credentialOps } = createCredentialOps();
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({
+      ctx,
+      run,
+      marketplace: "mp",
+      plugin: "gplug",
+      scope: "user",
+      cwd,
+      cloneCacheSeam: fetchSeamWith(gitOps),
+      credentialOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ◌ gplug v1.0.0 (remote)",
+          "    components: not resolved",
+        ].join("\n"),
+      },
+    ]);
+    assert.deepStrictEqual(gitState.cloneCalls, []);
+    assert.deepStrictEqual(gitState.fetchCalls, []);
   });
 });
 
