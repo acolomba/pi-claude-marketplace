@@ -23,12 +23,7 @@ async function breakManifest(
   name: string,
   problem: ManifestProblem,
 ): Promise<void> {
-  const published = world.publishedMarketplace(name);
-  if (published === undefined) {
-    assert.fail(`the marketplace ${name} is not published in this scenario`);
-  }
-
-  await invalidateManifest(name, published, problem);
+  await invalidateManifest(name, world.requirePublished(name), problem);
 }
 
 // Two literal texts rather than one with a parameter: a misspelled problem in

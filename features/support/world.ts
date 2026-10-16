@@ -126,6 +126,16 @@ export class ScenarioWorld extends World {
     return this.published.get(name);
   }
 
+  /** Returns how this scenario published the marketplace `name`, failing when it did not. */
+  requirePublished(name: string): PublishedMarketplace {
+    const published = this.published.get(name);
+    if (published === undefined) {
+      assert.fail(`the marketplace ${name} is not published in this scenario`);
+    }
+
+    return published;
+  }
+
   /** Returns the skills of the last new session, which a `When` step must have started. */
   sessionSkills(): readonly OfferedSkill[] {
     if (this.skills === undefined) {
