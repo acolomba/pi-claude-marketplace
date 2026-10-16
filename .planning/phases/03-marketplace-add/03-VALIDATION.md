@@ -3,9 +3,9 @@ phase: "3"
 slug: "marketplace-add"
 # status lifecycle: draft (seeded by plan-phase) → validated (set by validate-phase §6)
 # audit-milestone §5.5 distinguishes NOT-VALIDATED (draft) from PARTIAL (validated + nyquist_compliant: false) (#2117)
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: validated
+nyquist_compliant: true
+wave_0_complete: true
 created: "2026-10-16"
 ---
 
@@ -40,7 +40,12 @@ created: "2026-10-16"
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| (filled from the PLAN.md files) | | | | | | | | | ⬜ pending |
+| 03-01-01 | 01 | 1 | ADD-07 | T-03-01..05 | Fixtures stay under the sandbox HOME | behavioral (Outline, 4 local + 2 `@url` rows) | `npx cucumber-js --parallel 1 --name 'Adding a marketplace with a malformed or schema-invalid manifest fails as invalid manifest'` | ✅ | ✅ green |
+| 03-01-02 | 01 | 1 | ADD-06 | T-03-01..05 | Fixtures stay under the sandbox HOME | behavioral (Outline, 4 local rows) | `npx cucumber-js --parallel 1 --name 'Adding a path that holds no marketplace manifest fails as source missing, named as typed'` | ✅ | ✅ green |
+| 03-02-01 | 02 | 2 | ADD-04 | T-03-06..09 | N/A | behavioral (Outline, 2 local + 2 `@url` rows) | `npx cucumber-js --parallel 1 --name 'Adding a marketplace whose name the scope already holds fails as a duplicate name'` | ✅ | ✅ green |
+| 03-02-02 | 02 | 2 | ADD-05, ADD-02 | T-03-06..09 | N/A | behavioral (Outline over all kinds; one scenario) | `npx cucumber-js --parallel 1 --name 'Adding a marketplace the user scope holds to the project scope records it in both scopes'`; `npx cucumber-js --parallel 1 --name 'Adding a marketplace without a scope records it in the user scope'` | ✅ | ✅ green |
+| 03-03-01 | 03 | 3 | ADD-13 | T-03-10..12 | Neither `--local` scenario reloads (D-08 stays out of scope) | behavioral (two scenarios) | `npx cucumber-js --parallel 1 --name 'Adding a marketplace with --local declares it only in the local configuration'`; `npx cucumber-js --parallel 1 --name 'Removing a marketplace with --local clears only its local declaration'` | ✅ | ✅ green |
+| 03-03-02 | 03 | 3 | ADD-01, ADD-03, ADD-14 | T-03-10..12 | No change under `extensions/` | behavioral (seeds) + phase gate | `npm run test:cucumber` (41 scenarios); `npm run check` | ✅ | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -64,11 +69,19 @@ All other phase behaviors have automated verification.
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 10s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags
+- [x] Feedback latency < 10s
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** approved 2026-10-16
+
+## Validation Audit 2026-10-16
+
+| Metric | Count |
+|---|---|
+| Gaps found | 0 |
+| Resolved | 0 |
+| Escalated | 0 |
