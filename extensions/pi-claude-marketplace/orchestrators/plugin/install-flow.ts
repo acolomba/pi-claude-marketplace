@@ -50,12 +50,14 @@ import {
 } from "./install.messaging.ts";
 import {
   collectInstallReachableMarketplaces,
+  localOnlyMarketplaceRefusal,
   overwriteDisabledMemberEntries,
   resolveInstallMarketplaceSource,
   selectDeclaringConfigWriteTarget,
   surfaceDiscoveryWarnings,
   writeAdoptingConfigEntries,
   type LedgerDegradationSignals,
+  type MarketplaceDeclaredLocallyError,
 } from "./shared.ts";
 import { garbageCollectWorkflowsStaging } from "./workflows-staging-gc.ts";
 
@@ -1425,6 +1427,19 @@ function handleCascadeThrow(args: {
 }
 
 /**
+ * FIX-03 / D-MF-02: only a standalone install is refused. A reload or an
+ * import reads its declarations from the configuration and is never refused.
+ */
+function standaloneLocalOnlyRefusal(
+  opts: Pick<InstallPluginOptions, "notifications" | "marketplace">,
+  selection: Parameters<typeof localOnlyMarketplaceRefusal>[0],
+): MarketplaceDeclaredLocallyError | undefined {
+  return opts.notifications?.mode === "orchestrated"
+    ? undefined
+    : localOnlyMarketplaceRefusal(selection, opts.marketplace);
+}
+
+/**
  * Outcome of the `withLockedStateTransaction` closure in
  * `installPluginWithTransaction`, mirroring the `SetEnabledOutcome` pattern
  * `enable-disable.ts` uses for its own locked-transaction closure: one typed
@@ -1443,6 +1458,9 @@ function handleCascadeThrow(args: {
  *   CMP-3 user fallback also missed), so the failure subject is the
  *   MARKETPLACE, not the plugin -- distinct from M2 (plugin absent from a
  *   PRESENT manifest), which stays `{not in manifest}` on the plugin row.
+ * - `"marketplace-declared-locally"` -- FIX-03 / D-MF-02: the standalone write
+ *   would declare the plugin in `claude-plugins.json` under a marketplace only
+ *   `claude-plugins.local.json` declares. Nothing ran and nothing is saved.
  * - `"promoted"` -- D-04-07: a recorded dependency the user has now named was
  *   promoted instead of cascaded. State was saved and any hooks hydrated
  *   inside the lock; the row, then any MCP config notice, is the whole report.
@@ -1461,6 +1479,7 @@ function handleCascadeThrow(args: {
 type InstallTransactionOutcome =
   | { kind: "invalid-config" }
   | { kind: "marketplace-absent" }
+  | { kind: "marketplace-declared-locally"; refusal: MarketplaceDeclaredLocallyError }
   | { kind: "promoted"; promotion: PromotionOutcome }
   | {
       kind: "disable-cascade-failed";
@@ -1634,6 +1653,14 @@ async function installPluginWithTransaction(
         // local file's entries into the base file (SPLIT-02).
         const { targetConfigPath, targetIsLocal, current, sibling } = selection;
         configBasename = path.basename(targetConfigPath);
+
+        // FIX-03: refuse before the promotion and the cascade, so a refusal
+        // writes no state, no config, and no artifact (NFR-3). This one check
+        // covers a fresh root, the D-04-07 promotion, and `browse`.
+        const refusal = standaloneLocalOnlyRefusal(opts, selection);
+        if (refusal !== undefined) {
+          return { kind: "marketplace-declared-locally", refusal };
+        }
 
         // D-04-07: a recorded dependency the user has now named is promoted
         // here, BEFORE the cascade -- the cascade's ledger would refuse it as
@@ -2074,6 +2101,18 @@ async function installPluginWithTransaction(
       });
       return { status: "failed", error: new Error(cause), cause };
     }
+
+    case "marketplace-declared-locally":
+      return failedRowOutcome({
+        ctx,
+        run,
+        marketplace,
+        scope,
+        plugin,
+        error: outcome.refusal,
+        reasons: ["marketplace declared locally"],
+        orchestrated,
+      });
 
     // D-04-07: the promotion arm. State was saved and any hooks hydrated inside
     // the lock, and the cascade never ran, so there are no post-commit warnings

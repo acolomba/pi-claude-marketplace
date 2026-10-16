@@ -15,6 +15,8 @@ import {
   emitMarketplaceNotAdded,
   emitMarketplaceNotAddedSignal,
   enableRowDependencies,
+  localOnlyMarketplaceRefusal,
+  MarketplaceDeclaredLocallyError,
   MarketplaceNotAddedSignal,
   missIsNotInstalled,
   maybeWritePluginConfigBack,
@@ -1014,6 +1016,121 @@ describe("selectDeclaringConfigWriteTarget", () => {
       assert.deepStrictEqual(target, { kind: "unreadable", filePath: locations.configJsonPath });
     });
   });
+});
+
+describe("MarketplaceDeclaredLocallyError", () => {
+  test("names the marketplace and suggests --local in its message", () => {
+    // arrange
+    const marketplace = "mp";
+
+    // act
+    const error = new MarketplaceDeclaredLocallyError(marketplace);
+
+    // assert
+    assert.ok(error instanceof Error);
+    assert.deepStrictEqual(
+      { name: error.name, marketplace: error.marketplace, message: error.message },
+      {
+        name: "MarketplaceDeclaredLocallyError",
+        marketplace: "mp",
+        message:
+          "The marketplace mp is declared only in claude-plugins.local.json. Run the command again with --local.",
+      },
+    );
+  });
+});
+
+describe("localOnlyMarketplaceRefusal", () => {
+  test("refuses a base-file target when only the local file declares the marketplace", () => {
+    // arrange
+    const selection = {
+      targetIsLocal: false,
+      current: { schemaVersion: 1 },
+      sibling: { schemaVersion: 1, marketplaces: { mp: { source: "./mp-src" } } },
+    } satisfies Parameters<typeof localOnlyMarketplaceRefusal>[0];
+
+    // act
+    const refusal = localOnlyMarketplaceRefusal(selection, "mp");
+
+    // assert
+    assert.ok(refusal instanceof MarketplaceDeclaredLocallyError);
+    assert.deepStrictEqual(
+      { marketplace: refusal.marketplace, message: refusal.message },
+      {
+        marketplace: "mp",
+        message:
+          "The marketplace mp is declared only in claude-plugins.local.json. Run the command again with --local.",
+      },
+    );
+  });
+
+  for (const { layout, marketplace, selection } of [
+    {
+      layout: "a local-file target",
+      marketplace: "mp",
+      selection: {
+        targetIsLocal: true,
+        current: { schemaVersion: 1, marketplaces: { mp: { source: "./mp-src" } } },
+        sibling: { schemaVersion: 1 },
+      },
+    },
+    {
+      layout: "a marketplace both files declare",
+      marketplace: "mp",
+      selection: {
+        targetIsLocal: false,
+        current: { schemaVersion: 1, marketplaces: { mp: { source: "./mp-src" } } },
+        sibling: { schemaVersion: 1, marketplaces: { mp: { source: "./mp-src" } } },
+      },
+    },
+    {
+      layout: "a marketplace only the base file declares",
+      marketplace: "mp",
+      selection: {
+        targetIsLocal: false,
+        current: { schemaVersion: 1, marketplaces: { mp: { source: "./mp-src" } } },
+        sibling: { schemaVersion: 1 },
+      },
+    },
+    {
+      layout: "a marketplace neither file declares",
+      marketplace: "mp",
+      selection: {
+        targetIsLocal: false,
+        current: { schemaVersion: 1 },
+        sibling: { schemaVersion: 1, marketplaces: { other: { source: "./other-src" } } },
+      },
+    },
+    {
+      layout: "an unreadable local file",
+      marketplace: "mp",
+      selection: { targetIsLocal: false, current: { schemaVersion: 1 }, sibling: undefined },
+    },
+    {
+      layout: "a prototype-named marketplace neither file owns",
+      marketplace: "constructor",
+      selection: {
+        targetIsLocal: false,
+        current: { schemaVersion: 1 },
+        sibling: { schemaVersion: 1, marketplaces: {} },
+      },
+    },
+  ] satisfies readonly {
+    layout: string;
+    marketplace: string;
+    selection: Parameters<typeof localOnlyMarketplaceRefusal>[0];
+  }[]) {
+    test(`does not refuse ${layout}`, () => {
+      // arrange
+      const expectedRefusal = undefined;
+
+      // act
+      const refusal = localOnlyMarketplaceRefusal(selection, marketplace);
+
+      // assert
+      assert.strictEqual(refusal, expectedRefusal);
+    });
+  }
 });
 
 describe("writeAdoptingConfigEntries", () => {

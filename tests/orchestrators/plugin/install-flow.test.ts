@@ -43,6 +43,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts";
 import { runInstallLedger } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts";
 import { createInstallOperation } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
+import { MarketplaceDeclaredLocallyError } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   clonePluginRecord,
@@ -8600,6 +8601,203 @@ test("CFG-03 / D-103-16: an UNREADABLE local config aborts a flagless install ra
       assert.equal(after.marketplaces["mp"]?.plugins["hello"], undefined);
       assert.equal(await readFile(statePath, "utf8"), stateBytesPre);
       assert.equal((await stat(statePath)).mtimeMs, stateMtimePre);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+/** FIX-03: declare the seeded `mp` in the local file only, as `marketplace add --local` does. */
+async function declareMarketplaceLocally(configLocalJsonPath: string): Promise<string> {
+  const localBytes =
+    '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "mp": {\n      "source": "./mp-src"\n    }\n  }\n}\n';
+  await mkdir(path.dirname(configLocalJsonPath), { recursive: true });
+  await writeFile(configLocalJsonPath, localBytes, "utf8");
+  return localBytes;
+}
+
+test("FIX-03: a flagless install under a marketplace only the local file declares is refused and writes nothing", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-fix03-refused-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        skills: [{ sourceName: "tool" }],
+      });
+      const localBytes = await declareMarketplaceLocally(locations.configLocalJsonPath);
+      const statePath = path.join(locations.extensionRoot, "state.json");
+      const stateBytes = await readFile(statePath, "utf8");
+      const stateMtime = (await stat(statePath)).mtimeMs;
+      const treeBefore = await retryTree(locations.scopeRoot);
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        status: "failed",
+        error: new MarketplaceDeclaredLocallyError("mp"),
+        cause:
+          "The marketplace mp is declared only in claude-plugins.local.json. Run the command again with --local.",
+      });
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n" +
+            "● mp [project]\n" +
+            "  ⊘ hello (failed) {marketplace declared locally}\n" +
+            "    cause: The marketplace mp is declared only in claude-plugins.local.json. Run the command again with --local.",
+          severity: "error",
+        },
+      ]);
+      await assert.rejects(readFile(locations.configJsonPath, "utf8"), { code: "ENOENT" });
+      assert.strictEqual(await readFile(locations.configLocalJsonPath, "utf8"), localBytes);
+      assert.strictEqual(await readFile(statePath, "utf8"), stateBytes);
+      assert.strictEqual((await stat(statePath)).mtimeMs, stateMtime);
+      assert.deepStrictEqual(await retryTree(locations.scopeRoot), treeBefore);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("FIX-03: installing a recorded dependency by name under a local-only marketplace is refused before the promotion", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-fix03-promotion-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const { before, ctx, run, notifications } = await seedDependencyInstalled(cwd, installPlugin);
+      await rm(locations.configJsonPath);
+      await declareMarketplaceLocally(locations.configLocalJsonPath);
+
+      // act
+      await installPlugin({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "some-other-plugin",
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n" +
+            "● mp [project]\n" +
+            "  ⊘ some-other-plugin (failed) {marketplace declared locally}\n" +
+            "    cause: The marketplace mp is declared only in claude-plugins.local.json. Run the command again with --local.",
+          severity: "error",
+        },
+      ]);
+      assert.deepStrictEqual(await loadState(locations.extensionRoot), before);
+      await assert.rejects(readFile(locations.configJsonPath, "utf8"), { code: "ENOENT" });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("FIX-03: install --local under a marketplace only the local file declares installs and declares the plugin locally", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-fix03-local-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        skills: [{ sourceName: "tool" }],
+      });
+      await declareMarketplaceLocally(locations.configLocalJsonPath);
+      const { ctx, run } = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        local: true,
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        status: "installed",
+        version: "0.0.1",
+        resourcesChanged: true,
+        declaresAgents: false,
+        declaresMcp: false,
+        declaresWorkflows: false,
+      });
+      assert.deepStrictEqual(JSON.parse(await readFile(locations.configLocalJsonPath, "utf8")), {
+        schemaVersion: 1,
+        marketplaces: { mp: { source: "./mp-src" } },
+        plugins: { "hello@mp": {} },
+      });
+      await assert.rejects(readFile(locations.configJsonPath, "utf8"), { code: "ENOENT" });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("FIX-03: an orchestrated install under a local-only marketplace is not refused", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-fix03-orchestrated-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        skills: [{ sourceName: "tool" }],
+      });
+      await declareMarketplaceLocally(locations.configLocalJsonPath);
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        notifications: { mode: "orchestrated" },
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        status: "installed",
+        version: "0.0.1",
+        resourcesChanged: true,
+        declaresAgents: false,
+        declaresMcp: false,
+        declaresWorkflows: false,
+      });
+      assert.deepStrictEqual(notifications, []);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

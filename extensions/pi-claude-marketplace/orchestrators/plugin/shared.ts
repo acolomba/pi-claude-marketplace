@@ -782,6 +782,57 @@ function configOrEmpty(result: ConfigLoadResult): ScopeConfig {
 }
 
 /**
+ * FIX-03 / D-MF-02: the refusal of a command that would write a plugin
+ * declaration into `claude-plugins.json` while only `claude-plugins.local.json`
+ * declares the plugin's marketplace.
+ *
+ * The message IS the failed row's cause line. It is built from fixed text and a
+ * marketplace name that passed `assertSafeName`, so it carries no path. One
+ * exported class lets `instanceof` agree across the plugin verbs, as with
+ * `MarketplaceNotAddedSignal`.
+ */
+export class MarketplaceDeclaredLocallyError extends Error {
+  readonly marketplace: string;
+  constructor(marketplace: string) {
+    super(
+      `The marketplace ${marketplace} is declared only in claude-plugins.local.json. Run the command again with --local.`,
+    );
+    this.name = "MarketplaceDeclaredLocallyError";
+    this.marketplace = marketplace;
+  }
+}
+
+/**
+ * FIX-03 / D-MF-02: a shared declaration may not name a marketplace that only
+ * the local file declares, because a teammate who reads the shared file cannot
+ * resolve it. Returns the refusal when the write targets the base file, the
+ * base file does not declare `marketplace`, and the local file does.
+ *
+ * It reads only the target scope's own two files. A marketplace neither file
+ * declares (the CMP-3 adoption path) and one both files declare (a shared
+ * declaration with a personal override) are never refused. An unreadable
+ * sibling cannot prove the marketplace is local-only, so it never refuses; a
+ * flagless selection already reports `unreadable` in that case.
+ */
+export function localOnlyMarketplaceRefusal(
+  selection: Pick<
+    Extract<DeclaringConfigWriteTarget, { kind: "selected" }>,
+    "targetIsLocal" | "current" | "sibling"
+  >,
+  marketplace: string,
+): MarketplaceDeclaredLocallyError | undefined {
+  if (
+    selection.targetIsLocal ||
+    ownValue(selection.current.marketplaces, marketplace) !== undefined ||
+    ownValue(selection.sibling?.marketplaces, marketplace) === undefined
+  ) {
+    return undefined;
+  }
+
+  return new MarketplaceDeclaredLocallyError(marketplace);
+}
+
+/**
  * UAT-05 seam over `synthesizeUndeclaredMarketplaceSource`: runs the
  * merged-view membership gate against BOTH physical files of the scope. Both
  * parses come from `selectDeclaringConfigWriteTarget` (read fresh inside the
