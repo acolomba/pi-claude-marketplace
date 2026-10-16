@@ -13,6 +13,7 @@ import {
   type SamePlannedSourceResult,
   type UrlSource,
 } from "../../extensions/pi-claude-marketplace/domain/source.ts";
+import { setGitHubBaseUrl } from "../shared/github-base-url-environment.ts";
 
 interface ParseCase {
   readonly name: string;
@@ -1522,6 +1523,24 @@ describe("sourceLogical", () => {
       assert.strictEqual(sourceLabel, expectedLogical);
     });
   }
+
+  test("GHB-04: keeps github.com terms with the override set", (t) => {
+    // arrange
+    setGitHubBaseUrl(t, "https://mirror.example/git");
+    const source = {
+      kind: "github",
+      raw: "acme/tools#main",
+      owner: "acme",
+      repo: "tools",
+      ref: "main",
+    } as const satisfies ParsedSource;
+
+    // act
+    const sourceLabel = sourceLogical(source);
+
+    // assert
+    assert.strictEqual(sourceLabel, "https://github.com/acme/tools#main");
+  });
 });
 
 describe("ensureGitSuffix", () => {

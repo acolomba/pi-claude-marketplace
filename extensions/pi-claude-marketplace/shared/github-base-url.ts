@@ -22,7 +22,12 @@ const GITHUB_BASE_URL_VARIABLE = "PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL";
  */
 export const GITHUB_HOST = "github.com";
 
-const GITHUB_ORIGIN = `https://${GITHUB_HOST}`;
+/**
+ * The canonical origin of every GitHub source. `canonicalCloneUrl` builds
+ * clone identities from it and `gitHubWireUrl` matches it, so the identity and
+ * the rewrite prefix cannot drift apart.
+ */
+export const GITHUB_ORIGIN = `https://${GITHUB_HOST}`;
 
 /**
  * The base with every trailing slash removed, and its WHATWG `host` (with a

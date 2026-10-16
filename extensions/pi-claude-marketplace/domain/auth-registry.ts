@@ -51,8 +51,11 @@ export interface GitAuthProvider {
  */
 export const GITHUB_PROVIDER: GitAuthProvider = {
   id: "github",
+  // eslint-disable-next-line local/no-github-literal -- GHB-02: the Device Flow provider claims the real github.com host, never the override
   hostMatch: (host) => host === "github.com",
+  // eslint-disable-next-line local/no-github-literal -- GHB-02: GitHub's Device Flow runs only against github.com; it never runs under the override
   deviceCodeUrl: "https://github.com/login/device/code",
+  // eslint-disable-next-line local/no-github-literal -- GHB-02: GitHub's Device Flow runs only against github.com; it never runs under the override
   tokenUrl: "https://github.com/login/oauth/access_token",
   clientId: "Ov23liNcyK08uGdU0mMl",
   scope: "repo",

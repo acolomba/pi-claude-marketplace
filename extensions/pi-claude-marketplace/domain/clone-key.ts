@@ -15,6 +15,8 @@
 
 import { createHash } from "node:crypto";
 
+import { GITHUB_ORIGIN } from "../shared/github-base-url.ts";
+
 import { ensureGitSuffix, parsePluginSource, stripSlashAndFragment } from "./source.ts";
 
 import type { GitHubSource, GitSubdirSource, UrlSource } from "./source.ts";
@@ -79,9 +81,7 @@ export function pluginMirrorKey(canonicalUrl: string): string {
  * directory and cold-miss every warm clone.
  */
 export function canonicalCloneUrl(source: UrlSource | GitSubdirSource | GitHubSource): string {
-  return source.kind === "github"
-    ? `https://github.com/${source.owner}/${source.repo}`
-    : source.url;
+  return source.kind === "github" ? `${GITHUB_ORIGIN}/${source.owner}/${source.repo}` : source.url;
 }
 
 /**

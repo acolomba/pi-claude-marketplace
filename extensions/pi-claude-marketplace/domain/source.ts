@@ -611,6 +611,7 @@ function gitHubUrlPath(raw: string): string | undefined {
     host = host.slice("www.".length);
   }
 
+  // eslint-disable-next-line local/no-github-literal -- GHB-02: the parser recognizes github.com spellings; the override changes only where bytes go
   return host === "github.com" ? rest.slice(slashIdx + 1) : undefined;
 }
 
@@ -627,6 +628,7 @@ function parseGitHubUrl(raw: string, rest: string): GitHubSource | UnknownSource
     return {
       kind: "unknown",
       raw,
+      // eslint-disable-next-line local/no-github-literal -- GHB-02: a reason names the github.com form the user types
       reason: `${raw} is a browser URL; use https://github.com/${ownerRepo}#${ref} instead`,
     };
   }
@@ -641,6 +643,7 @@ function parseGitHubUrl(raw: string, rest: string): GitHubSource | UnknownSource
     return {
       kind: "unknown",
       raw,
+      // eslint-disable-next-line local/no-github-literal -- GHB-02: a reason names the github.com form the user types
       reason: `${raw} must be https://github.com/<owner>/<repo>[.git][#<ref>]`,
     };
   }
@@ -759,6 +762,7 @@ export function sourceLogical(source: ParsedSource): string {
 
     case "github": {
       const refSuffix = source.ref === undefined ? "" : `#${source.ref}`;
+      // eslint-disable-next-line local/no-github-literal -- GHB-04: list and info show GitHub sources in github.com terms
       return `https://github.com/${source.owner}/${source.repo}${refSuffix}`;
     }
 

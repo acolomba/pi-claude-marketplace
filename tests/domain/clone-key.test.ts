@@ -8,6 +8,7 @@ import {
   pluginCloneKey,
   pluginMirrorKey,
 } from "../../extensions/pi-claude-marketplace/domain/clone-key.ts";
+import { setGitHubBaseUrl } from "../shared/github-base-url-environment.ts";
 
 import type {
   GitHubSource,
@@ -169,6 +170,23 @@ describe("canonicalCloneUrl", () => {
 
     // assert
     assert.strictEqual(cloneUrl, "https://example.com/mono");
+  });
+
+  test("GHB-02 / D-01: keeps the github.com identity with the override set", (t) => {
+    // arrange
+    setGitHubBaseUrl(t, "https://mirror.example/git");
+    const source = {
+      kind: "github",
+      raw: "acme/tools",
+      owner: "acme",
+      repo: "tools",
+    } as const satisfies GitHubSource;
+
+    // act
+    const cloneUrl = canonicalCloneUrl(source);
+
+    // assert
+    assert.strictEqual(cloneUrl, "https://github.com/acme/tools");
   });
 });
 
@@ -332,6 +350,23 @@ describe("networkCloneUrl", () => {
       "https://gitlab.example.com/team/mp",
     ]);
   });
+
+  test("GHB-02 / D-01: returns the github.com URL with the override set", (t) => {
+    // arrange
+    setGitHubBaseUrl(t, "https://mirror.example/git");
+    const source = {
+      kind: "github",
+      raw: "acme/tools",
+      owner: "acme",
+      repo: "tools",
+    } as const satisfies GitHubSource;
+
+    // act
+    const cloneUrl = networkCloneUrl(source);
+
+    // assert
+    assert.strictEqual(cloneUrl, "https://github.com/acme/tools.git");
+  });
 });
 
 describe("originMatchesSource", () => {
@@ -414,6 +449,23 @@ describe("originMatchesSource", () => {
       source: GITHUB_O_R,
     },
   ];
+
+  test("GHB-02 / D-01: recognizes the github.com origin with the override set", (t) => {
+    // arrange
+    setGitHubBaseUrl(t, "https://mirror.example/git");
+    const source = {
+      kind: "github",
+      raw: "acme/tools",
+      owner: "acme",
+      repo: "tools",
+    } as const satisfies GitHubSource;
+
+    // act
+    const matches = originMatchesSource("https://github.com/acme/tools.git", source);
+
+    // assert
+    assert.strictEqual(matches, true);
+  });
 
   for (const { kind, originUrl, source } of FOREIGN_ORIGINS) {
     test(`Q-03: refuses an origin that is ${kind}`, () => {

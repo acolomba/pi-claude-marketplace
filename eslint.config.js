@@ -105,6 +105,44 @@ const NETWORK_FREE_SYNTAX_SELECTORS = [
   },
 ];
 
+const GITHUB_LITERAL = /github\.com/i;
+
+/**
+ * GHB-02 / D-MF-01: a github.com URL belongs in shared/github-base-url.ts.
+ * That module is the one place the clone-base override reads, so a github.com
+ * literal anywhere else in the extension would send bytes or credentials
+ * around the override. The rule reports string literals and template text.
+ * Comments are not AST nodes, so a comment never matches.
+ */
+const LOCAL_PLUGIN = {
+  rules: {
+    "no-github-literal": {
+      meta: {
+        type: "problem",
+        schema: [],
+        messages: {
+          found:
+            "GHB-02: a github.com literal belongs in shared/github-base-url.ts. Disable this line with a reason only at a parser host comparison, user-facing reason text, the github.com display string, or a Device Flow endpoint.",
+        },
+      },
+      create(context) {
+        return {
+          Literal(node) {
+            if (typeof node.value === "string" && GITHUB_LITERAL.test(node.value)) {
+              context.report({ node, messageId: "found" });
+            }
+          },
+          TemplateElement(node) {
+            if (GITHUB_LITERAL.test(node.value.raw)) {
+              context.report({ node, messageId: "found" });
+            }
+          },
+        };
+      },
+    },
+  },
+};
+
 const APPEND_ENTRY_SYNTAX_SELECTORS = [
   {
     selector:
@@ -510,6 +548,28 @@ export default tseslint.config(
         ...APPEND_ENTRY_SYNTAX_SELECTORS,
         ...NETWORK_FREE_SYNTAX_SELECTORS,
       ],
+    },
+  },
+  {
+    // GHB-02: a github.com literal outside the seam fails lint at its line.
+    // A disable covers one line, so a new literal fails even in a file that
+    // already carries disables. The rule has its own name because a
+    // no-restricted-syntax disable would also mute the NFR-5 and JOUT-01
+    // selectors on that line. A run over the real tree is the proof; no
+    // planted violation is committed.
+    files: ["extensions/pi-claude-marketplace/**/*.ts"],
+    plugins: { local: LOCAL_PLUGIN },
+    rules: {
+      "local/no-github-literal": "error",
+    },
+  },
+  {
+    // GHB-02: the seam holds the github.com origin. The rule is turned off
+    // here rather than ignored above, so the plugin stays registered for this
+    // file and a directive that names the rule still resolves.
+    files: ["extensions/pi-claude-marketplace/shared/github-base-url.ts"],
+    rules: {
+      "local/no-github-literal": "off",
     },
   },
   {
