@@ -450,6 +450,28 @@ test("MIG-01: a local-only marketplace merges over the state projection and adds
   verifyBoundary();
 });
 
+test("FIX-02: the pending view leaves out what the local file declares, as the load's migration does", async (t) => {
+  // arrange
+  const { cwd, project } = await createHermeticScopes(t, "premigration-local-declared");
+  await writeUnder(
+    project.stateJsonPath,
+    stateBytes("mp", "acme/tools", path.join(cwd, "clone"), [
+      { name: "p1", skills: ["mp-p1-tool"] },
+    ]),
+  );
+  await writeUnder(project.configLocalJsonPath, configBytes("mp", "acme/tools", []));
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+
+  // act
+  await pendingReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project" });
+
+  // assert
+  assert.deepStrictEqual(notifications, [
+    { message: "● mp [project]\n  ○ p1 (will uninstall)\n\nReconcile pending: 1 success" },
+  ]);
+  verifyBoundary();
+});
+
 /**
  * FSTAT-06 / D-66-04: stage a project scope whose marketplace `mp-github` is
  * RECORDED with a clone on disk, and whose plugin `cr` is DECLARED and enabled

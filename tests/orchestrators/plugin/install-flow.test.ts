@@ -2469,7 +2469,7 @@ test("D-103-16 / DFEN-06 / CFG-02: the reload after a locally-declared install p
         skills: [{ sourceName: "tool" }],
       });
 
-      const { loadConfig, saveConfig } =
+      const { saveConfig } =
         await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
       const { loadMergedScopeConfig } =
         await import("../../../extensions/pi-claude-marketplace/persistence/config-merge.ts");
@@ -2522,16 +2522,10 @@ test("D-103-16 / DFEN-06 / CFG-02: the reload after a locally-declared install p
       const { merged } = await loadMergedScopeConfig(locations);
       assert.deepEqual(planReconcile(merged, after, "project"), emptyReconcilePlan("project"));
 
-      // The base file is not asserted absent here: a reload materializes a base
-      // config from recorded state when none exists, and its plugin entry is
-      // FIELDLESS. The local entry keeps replacing it wholesale (CFG-02), which
-      // is why the merged view above does not move -- pinned rather than
-      // glossed, so a future change that writes a FIELD there fails a test
-      // instead of silently reversing the user.
-      const baseCfg = await loadConfig(locations.configJsonPath);
-      const basePlugins = baseCfg.status === "valid" ? baseCfg.config.plugins : undefined;
-      const baseEntry = basePlugins?.["hello@mp"];
-      assert.ok(baseEntry === undefined || Object.keys(baseEntry).length === 0);
+      // The install declares the marketplace in the local file too (CR-02), so
+      // the local file declares every record and the reload writes no base
+      // config (FIX-02, UAT-01).
+      await assert.rejects(readFile(locations.configJsonPath, "utf8"), { code: "ENOENT" });
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

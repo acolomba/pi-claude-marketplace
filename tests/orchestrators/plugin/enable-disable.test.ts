@@ -4911,7 +4911,7 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable of a LOCALLY-declared pl
       hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     });
     const afterFirstReload = await observe();
-    const baseAfterReload = await readConfig(configPath);
+    const baseExistsAfterReload = await fileExists(configPath);
     await writeFile(
       manifestPath,
       JSON.stringify({
@@ -4975,10 +4975,9 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable of a LOCALLY-declared pl
     assert.equal(baseExistsAfterEnable, false);
     assert.deepStrictEqual(firstReload.notifications, []);
     assert.deepStrictEqual(afterFirstReload, afterEnable);
-    assert.deepStrictEqual(
-      (baseAfterReload as { plugins?: Record<string, unknown> }).plugins?.["foo@mp"],
-      {},
-    );
+    // FIX-02: the local file declares every record, so the reload writes no
+    // base config.
+    assert.equal(baseExistsAfterReload, false);
     assert.deepStrictEqual(afterUpdate, {
       enabled: true,
       merged: { declaredEnabled: true, source: "local" },

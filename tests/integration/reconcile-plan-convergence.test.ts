@@ -13,7 +13,11 @@ import { mergeScopeConfigs } from "../../extensions/pi-claude-marketplace/persis
 import { buildConfigFromState } from "../../extensions/pi-claude-marketplace/persistence/migrate-config.ts";
 
 import type { ScopeSatisfactionVerdict } from "../../extensions/pi-claude-marketplace/orchestrators/reconcile/dependency-verdict.ts";
-import type { ExtensionState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import type { ScopeConfig } from "../../extensions/pi-claude-marketplace/persistence/config-io.ts";
+import type {
+  ExtensionState,
+  PluginInstallRecord,
+} from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
 function populatedMixedState(): ExtensionState {
   return {
@@ -405,4 +409,80 @@ test("D-09-14: an unsatisfied declaration re-plans the same bucket entry", () =>
       declarers: ["app@mp"],
     },
   ]);
+});
+
+function recordedPlugin(
+  marketplace: string,
+  name: string,
+  provenance: "explicit" | "dependency",
+): PluginInstallRecord {
+  return {
+    version: "1.0.0",
+    resolvedSource: `/marketplaces/${marketplace}/${name}`,
+    compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] },
+    enabled: true,
+    provenance,
+    installedAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  };
+}
+
+/**
+ * FIX-02: `mp-local` is declared only in the local file and records the
+ * explicit plugin `lp` and the dependency `dep`; `mp-shared` records the
+ * explicit plugins `sp` and `lsp`, and the local file declares `lsp`.
+ */
+function localDeclarationState(): ExtensionState {
+  return {
+    schemaVersion: 2,
+    marketplaces: {
+      "mp-local": {
+        name: "mp-local",
+        scope: "project",
+        source: pathSource("./mp-local"),
+        addedFromCwd: "/workspace",
+        manifestPath: "/marketplaces/mp-local/.claude-plugin/marketplace.json",
+        marketplaceRoot: "/marketplaces/mp-local",
+        plugins: {
+          lp: recordedPlugin("mp-local", "lp", "explicit"),
+          dep: recordedPlugin("mp-local", "dep", "dependency"),
+        },
+      },
+      "mp-shared": {
+        name: "mp-shared",
+        scope: "project",
+        source: pathSource("./mp-shared"),
+        addedFromCwd: "/workspace",
+        manifestPath: "/marketplaces/mp-shared/.claude-plugin/marketplace.json",
+        marketplaceRoot: "/marketplaces/mp-shared",
+        plugins: {
+          sp: recordedPlugin("mp-shared", "sp", "explicit"),
+          lsp: recordedPlugin("mp-shared", "lsp", "explicit"),
+        },
+      },
+    },
+  };
+}
+
+test("FIX-02: the migration leaves out local declarations and the merged view converges to the empty plan", () => {
+  // arrange
+  const state = localDeclarationState();
+  const local = {
+    schemaVersion: 1,
+    marketplaces: { "mp-local": { source: "./mp-local" } },
+    plugins: { "lp@mp-local": {}, "lsp@mp-shared": {} },
+  } satisfies ScopeConfig;
+
+  // act
+  const projection = buildConfigFromState(state, local);
+  const plan = planReconcile(mergeScopeConfigs(projection, local), state, "project");
+
+  // assert
+  assert.deepStrictEqual(projection, {
+    schemaVersion: 1,
+    marketplaces: { "mp-shared": { source: "./mp-shared" } },
+    plugins: { "sp@mp-shared": {} },
+  });
+  assert.deepStrictEqual(plan, emptyReconcilePlan("project"));
 });
