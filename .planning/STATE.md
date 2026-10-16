@@ -5,17 +5,17 @@ milestone_name: Marketplace Behavioral Tests
 current_phase: 3
 current_phase_name: Marketplace Add
 status: planning
-stopped_at: Phase 2 complete, ready to plan Phase 3
-last_updated: "2026-10-16T10:58:03.828Z"
+stopped_at: Phase 3 context gathered
+last_updated: "2026-10-16T11:41:50.805Z"
 last_activity: 2026-10-16
 last_activity_desc: Phase 2 complete, transitioned to Phase 3
-state_head: dda3917963e8ee12035dab91edd825ff67c14b7b
+state_head: 16d1865216bc970e4b1d6338f2aae25bb35d11f9
 progress:
-  total_phases: 10
+  total_phases: 11
   completed_phases: 2
   total_plans: 10
   completed_plans: 10
-  percent: 20
+  percent: 18
 ---
 
 # Project State
@@ -36,7 +36,7 @@ Plan: Not started
 Status: Ready to plan
 Last activity: 2026-10-16 — Phase 2 complete, transitioned to Phase 3
 
-Progress: [██░░░░░░░░] 20%
+Progress: [██░░░░░░░░] 18%
 
 ### mcp-4 closeout
 
@@ -181,9 +181,9 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-16T04:00:00Z
-**Stopped at:** Phase 2 complete (verified, npm run check green at e542527d), ready to plan Phase 3
-**Resume file:** None
+**Last session:** 2026-10-16T11:40:39.079Z
+**Stopped at:** Phase 3 context gathered
+**Resume file:** .planning/phases/03-marketplace-add/03-CONTEXT.md
 
 **Main merge (2026-10-11, quick task 261011-bsm):** `origin/main` at
 `94160614` (#248, and #250, the mcp-4 milestone released as 0.20.0) is merged
@@ -570,3 +570,4 @@ in the phase deferred items. The milestone remains open for audit and archival.
 
 - Phase 8 added: Address tech debt: ledger dispositions and advisory
 - Phase 9 added: Address tech debt: redact LLM tool error text
+- Phase 3.1 inserted after Phase 3: Local Declaration Leak Fix: a --local marketplace leaks into claude-plugins.json on the first-run migration (FIX-02), found in Phase 3 discussion

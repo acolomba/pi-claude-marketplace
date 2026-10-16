@@ -40,6 +40,7 @@ Research detail per requirement is in `.planning/research/FEATURES.md`
 ### Defect fix
 
 - [ ] **FIX-01**: `marketplace update` of a marketplace added from a `marketplace.json` outside `.claude-plugin/` re-reads the manifest the user added instead of failing as `source missing`, and `info` shows the right path (C-10)
+- [ ] **FIX-02**: A marketplace added with `--local` is never written into the scope's `claude-plugins.json`: after `add --local` and a reload, only `claude-plugins.local.json` declares it, and after `remove --local` and a reload it stays removed (the first-run migration leak found in Phase 3 discussion)
 
 ### marketplace add
 
@@ -172,6 +173,7 @@ Research detail per requirement is in `.planning/research/FEATURES.md`
 | GHB-04 | Phase 2 | Complete |
 | GHB-05 | Phase 2 | Complete |
 | FIX-01 | Phase 6 | Pending |
+| FIX-02 | Phase 3.1 | Pending |
 | ADD-01 | Phase 3 | Pending |
 | ADD-02 | Phase 3 | Pending |
 | ADD-03 | Phase 3 | Pending |
@@ -245,10 +247,10 @@ Research detail per requirement is in `.planning/research/FEATURES.md`
 | SRC-03 | Phase 10 | Pending |
 
 **Coverage:**
-- v1 requirements: 85 total
-- Mapped to phases: 85
+- v1 requirements: 86 total
+- Mapped to phases: 86
 - Unmapped: 0
 
 ---
 *Requirements defined: 2026-10-15*
-*Last updated: 2026-10-15 after roadmap revision for parallel waves (10 phases)*
+*Last updated: 2026-10-16 after inserting Phase 3.1 (FIX-02)*

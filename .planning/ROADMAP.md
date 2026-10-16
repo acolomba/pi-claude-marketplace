@@ -57,6 +57,7 @@ path), **url** (https git URL on the loopback stand-in), and **gh**
 - [x] **Phase 1: Suite Foundation** — The payload driver, exact-token comparison, the shared kind-neutral steps and local fixtures, the tag mechanism, and the unused-step gate that every other suite phase builds on (completed 2026-10-15)
 - [x] **Phase 2: GitHub Clone-Base Override** — `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL` sends every GitHub clone, fetch, origin match, and auth lookup to one configured base; unset, nothing changes (completed 2026-10-16)
 - [ ] **Phase 3: Marketplace Add** — `marketplace add` scenarios, with dir, file, `@url`, and `@github` rows for every multi-kind add behavior
+- [ ] **Phase 3.1: Local Declaration Leak Fix** (INSERTED) — A marketplace added with `--local` stays out of `claude-plugins.json` across a reload, written test-first
 - [ ] **Phase 4: Marketplace Remove and List** — `remove`/`rm` with the plugin cascade, and `list`/`ls` across both scopes
 - [ ] **Phase 5: Marketplace Info** — `info` source details for every kind, scope fan-out, not-added forms, and a broken manifest
 - [ ] **Phase 6: Marketplace Update and C-10 Fix** — Single and bare `update`, with and without autoupdate, path-source failures, and the C-10 fix written test-first
@@ -72,6 +73,9 @@ W0  Phase 1 (Suite Foundation)        Phase 2 (GitHub override; needs nothing)
 W1  Phase 3  Phase 4  Phase 5  Phase 6  Phase 7  Phase 8  Phase 9   (each needs Phase 1 only)
 W2  Phase 10 (needs Phases 1-9)
 ```
+
+Phase 3.1 was inserted after Phase 3 and needs it: its scenarios extend
+Phase 3's `--local` files.
 
 Phase 2 touches nothing under `features/` and can run from day one; only
 Phase 10 waits for it. The seven W1 phases share no file, so they can run as
@@ -163,6 +167,19 @@ Plans:
 1. Adding a marketplace records it in the chosen scope under its manifest name, with dir, file, `@url`, and `@github` rows. An added marketplace appears in `marketplace list` and is still there in a new session, a name the scope already holds fails as `duplicate name`, and a malformed or schema-invalid manifest fails as `invalid manifest`, each with dir and `@url` rows. The local rows pass.
 2. Without `--scope`, `add` uses the user scope; the same marketplace can be added to both scopes independently; and a path that does not exist fails as `source missing`, named by the source as typed.
 3. `add --local` writes the declaration to `claude-plugins.local.json` and `remove --local` clears it, and `add ~/...` keeps the `~` form and resolves it against HOME.
+
+**Plans:** TBD
+
+### Phase 3.1: Local Declaration Leak Fix (INSERTED)
+
+**Goal:** A marketplace added with `--local` never reaches the scope's `claude-plugins.json`, even when the next load runs the first-run config migration, so `remove --local` stays removed after a reload.
+**Depends on:** Phase 3
+**Requirements:** FIX-02
+**Success Criteria** (what must be TRUE):
+
+1. In a scope with no `claude-plugins.json`, a marketplace added with `--local` is still not declared in `claude-plugins.json` after a new session, and `claude-plugins.local.json` still declares it. The scenario failed on the code before the fix.
+2. After `remove --local` and a new session, the marketplace stays removed: `marketplace list` omits it, and no config file declares it.
+3. A scope whose records hold marketplaces added without `--local` still gets `claude-plugins.json` written from those records on its first load (MIG-01 unchanged for them).
 
 **Plans:** TBD
 
@@ -274,6 +291,7 @@ Plans:
 | 1. Suite Foundation | 5/5 | Complete    | 2026-10-15 |
 | 2. GitHub Clone-Base Override | 5/5 | Complete    | 2026-10-16 |
 | 3. Marketplace Add | 0/TBD | Not started | - |
+| 3.1. Local Declaration Leak Fix | 0/TBD | Not started | - |
 | 4. Marketplace Remove and List | 0/TBD | Not started | - |
 | 5. Marketplace Info | 0/TBD | Not started | - |
 | 6. Marketplace Update and C-10 Fix | 0/TBD | Not started | - |
