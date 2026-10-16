@@ -2,19 +2,19 @@
 gsd_state_version: "1.0"
 milestone: marketplace-features
 milestone_name: Marketplace Behavioral Tests
-current_phase: "3.1"
+current_phase: "03.1"
 current_phase_name: Local Declaration Leak Fix
 status: executing
-stopped_at: Phase 3 complete, ready to plan Phase 03.1
-last_updated: "2026-10-16T16:00:23.508Z"
+stopped_at: Completed 03.1-01-PLAN.md
+last_updated: "2026-10-16T16:22:18.432Z"
 last_activity: 2026-10-16
-last_activity_desc: Phase 3 complete, transitioned to Phase 03.1
-state_head: a8b1e1d0739b0bc09ed3546743e0753d67f2853a
+last_activity_desc: Completed 03.1-01 (FIX-02 first-run migration leak fix)
+state_head: 0a5c2bbf557e0750dfe57fced2f0da465303a6ea
 progress:
   total_phases: 13
   completed_phases: 3
   total_plans: 18
-  completed_plans: 13
+  completed_plans: 14
   percent: 23
 ---
 
@@ -31,10 +31,10 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: 3.1 (Local Declaration Leak Fix) — READY TO EXECUTE
-Plan: Not started
+Phase: 03.1 (Local Declaration Leak Fix) — EXECUTING
+Plan: 2 of 5
 Status: Ready to execute
-Last activity: 2026-10-16 — Phase 3 complete, transitioned to Phase 03.1
+Last activity: 2026-10-16 — Completed 03.1-01 (FIX-02 first-run migration leak fix)
 
 Progress: [██░░░░░░░░] 23%
 
@@ -181,8 +181,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-16T13:03:20.681Z
-**Stopped at:** Phase 3 complete, ready to plan Phase 03.1
+**Last session:** 2026-10-16T16:22:17.596Z
+**Stopped at:** Completed 03.1-01-PLAN.md
 **Resume file:** None
 
 **Main merge (2026-10-11, quick task 261011-bsm):** `origin/main` at
@@ -310,6 +310,7 @@ archived milestone artifacts.
 | Phase 03 P01 | 7 min | 2 tasks | 5 files |
 | Phase 03 P02 | 5 min | 2 tasks | 3 files |
 | Phase 03 P03 | 7 min | 2 tasks | 3 files |
+| Phase 03.1 P01 | 21min | 3 tasks | 12 files |
 
 ## Decisions
 
@@ -401,6 +402,8 @@ archived milestone artifacts.
 - [Phase 03]: [marketplace-features] publishMarketplace delegates to publishMarketplaceIn (directory = name), so the kind switch stays single; the second-publish step records nothing on the world (D-01)
 - [Phase 03]: [marketplace-features] remove --local is shown by a second local entry that stays (Option 1), so no remove.steps.ts and no zero-declaration step exist
 - [Phase 03]: [marketplace-features] Review WARNING recorded: the published-marketplace lookup is duplicated in add.steps.ts and publishing.steps.ts; move it to features/lib when publishing.steps.ts next changes
+- [Phase 03.1]: The first-run migration leaves out what claude-plugins.local.json declares and declines with local-invalid on an unreadable local file (FIX-02, D-01, D-02)
+- [Phase 03.1]: A reload after a local install writes no base file, because the install adopts the marketplace into the local file (CR-02); D-04's plugin-key rule is proven by unit and convergence cases
 
 ### mcp-4 decisions
 

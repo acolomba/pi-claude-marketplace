@@ -21,7 +21,7 @@
     {
       "number": "3.1",
       "name": "Local Declaration Leak Fix",
-      "status": "pending"
+      "status": "in_progress"
     },
     {
       "number": "3.2",
@@ -74,5 +74,5 @@
     "label": "Advance to the next step",
     "reason": "Phase 4 of 13 · 23% · executing"
   },
-  "updated_at": "2026-10-16T16:00:23.588Z"
+  "updated_at": "2026-10-16T16:22:17.048Z"
 }

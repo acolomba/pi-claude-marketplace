@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 1
+open_count: 2
 waived_count: 51
 fixed_count: 41
-total_count: 93
-last_updated: 2026-10-16T01:44:57.366Z
+total_count: 94
+last_updated: 2026-10-16T16:20:58.926Z
 ---
 
 # Broken Windows Ledger
@@ -108,6 +108,7 @@ last_updated: 2026-10-16T01:44:57.366Z
 | 91 | 04 | deviation | extensions/pi-claude-marketplace/shared/notification-dispatch.ts |  | [json-output] composeContextBlocks kept in dispatch: renderMpHeader and composePluginLines have no other production reader; ~110 test sites import them | waived | [json-output] Accepted design: composeContextBlocks stays in shared/notification-dispatch.ts as the one production reader of renderMpHeader and composePluginLines; removing it fails the fallow dead-code gate, 15 test files hold 138 references to the two exports, and the catalog gate pins the output bytes either way. Reversible: a later change can still move the composer. | 2026-10-03T15:02:22.034Z | 2026-10-10T20:21:09.615Z |
 | 92 | 07 | skipped-test | tests/integration/skill-path-resolution.test.ts | 124 | [json-output] Existing optional pi-subagents resolver integration case skips because its module is unavailable; no new test skip was introduced. Evidence: TEST-07-06-01 in phase deferred-items.md. | fixed |  | 2026-10-10T04:04:37.773Z | 2026-10-10T20:21:09.962Z |
 | 93 | 2 | deviation | README.es.md |  | [marketplace-features] README.es.md drifted from README.md before this phase: it lacks the GitLab marketplace paragraph and its note under Mercado, and its --local paragraph says something different | open |  | 2026-10-16T01:44:57.366Z |  |
+| 94 | 03.1 | deviation | tests/orchestrators/plugin/install-flow.test.ts |  | [marketplace-features] FIX-02 D-04 truth 'reload after a local plugin install writes a base file with the shared marketplace and no plugin key' is unreachable: install adopts the marketplace into claude-plugins.local.json (CR-02), so the reload writes no base file; the DFEN-06 case pins ENOENT and rule 2 is proven by unit and convergence cases instead | open |  | 2026-10-16T16:20:58.926Z |  |
 
 ````json
 [
@@ -1261,6 +1262,19 @@ last_updated: 2026-10-16T01:44:57.366Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-10-16T01:44:57.366Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 94,
+    "kind": "deviation",
+    "phase": "03.1",
+    "file": "tests/orchestrators/plugin/install-flow.test.ts",
+    "line": null,
+    "description": "[marketplace-features] FIX-02 D-04 truth 'reload after a local plugin install writes a base file with the shared marketplace and no plugin key' is unreachable: install adopts the marketplace into claude-plugins.local.json (CR-02), so the reload writes no base file; the DFEN-06 case pins ENOENT and rule 2 is proven by unit and convergence cases instead",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-10-16T16:20:58.926Z",
     "resolved_at": null,
     "milestone": null
   }
