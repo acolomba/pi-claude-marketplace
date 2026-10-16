@@ -498,6 +498,32 @@ export const PLUGIN_INSTALL_FIXTURES: FixtureMap = {
       } satisfies NotificationMessage,
     },
 
+    // FIX-03: a shared declaration under a marketplace only the local file declares.
+    "failure-marketplace-declared-locally": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "failed",
+                severity: "error",
+                needsReload: false,
+                name: "helper",
+                reasons: ["marketplace declared locally"],
+                cause: new Error(
+                  "The marketplace official is declared only in claude-plugins.local.json. Run the command again with --local.",
+                ),
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     // RESV-01 / RESV-06: the dependency cascade's success block. One row per
     // closure member beside the requesting plugin's own row, in the canonical
     // name-then-scope order. A dependency renders by its full `<plugin>@<mp>`

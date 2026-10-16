@@ -18,8 +18,8 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..
 const CATALOG_PATH = path.join(REPO_ROOT, "docs/output-catalog.md");
 const EXPECTED_MODULE_COUNT = 21;
 const EXPECTED_SECTION_COUNT = 21;
-const EXPECTED_STATE_COUNT = 271;
-const EXPECTED_UTF8_BYTES = 42_173;
+const EXPECTED_STATE_COUNT = 272;
+const EXPECTED_UTF8_BYTES = 42_396;
 
 const FIXTURE_SECTION_ORDER = [
   "/claude:plugin list",
@@ -268,7 +268,7 @@ test("catalog contract rejects equal-key ordering drift", () => {
   }, /Catalog tuple ordering drifted despite equal keys/u);
 });
 
-test("catalog contract matches all 21 fixture modules to 271 exact documented states", async () => {
+test("catalog contract matches all 21 fixture modules to 272 exact documented states", async () => {
   // arrange
   assert.equal(FIXTURE_MAPS.length, EXPECTED_MODULE_COUNT);
   const fixtures = mergeFixtureMaps(FIXTURE_MAPS);

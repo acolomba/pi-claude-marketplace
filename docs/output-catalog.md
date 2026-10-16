@@ -829,6 +829,22 @@ A marketplace operation has failed.
 ⊘ mp [project] (failed) {marketplace not added to project scope}
 ```
 
+### Failure -- marketplace declared only in the local file (FIX-03 / D-MF-02)
+
+A standalone install without `--local` writes the plugin's declaration into `claude-plugins.json`. If only `claude-plugins.local.json` declares the plugin's marketplace, a teammate who reads the shared file cannot resolve that declaration. Thus the command is refused before anything is written. The `cause:` line carries the remedy.
+
+`enable`, `disable`, `update <plugin>@<marketplace>`, and `reinstall <plugin>@<marketplace>` render the same row. A reload, an import, and the `update` and `reinstall` forms that name no plugin are never refused. Severity `error`; no reload-hint (nothing landed).
+
+<!-- catalog-state: failure-marketplace-declared-locally -->
+
+```text
+A plugin operation has failed.
+
+● official [user]
+  ⊘ helper (failed) {marketplace declared locally}
+    cause: The marketplace official is declared only in claude-plugins.local.json. Run the command again with --local.
+```
+
 ### Failure -- a name a DISABLED plugin still owns (ENBL-18)
 
 The pre-flight cross-plugin guard refuses an install when a generated skill, command, or agent name belongs to a different plugin in the same scope. A DISABLED plugin is such an owner. Disable keeps the installation record and its component inventory (ENBL-18), thus the names stay reserved even though the disable deleted every artifact from disk.
