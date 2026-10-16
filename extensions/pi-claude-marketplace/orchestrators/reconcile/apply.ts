@@ -46,7 +46,8 @@
 //     another process is mid-write reaches this boundary; the add, install
 //     and toggle loops need it as defense-in-depth even though their three
 //     entrypoints are documented to handle every throw internally and always
-//     answer with a typed outcome -- see the note above each loop.
+//     answer with a typed outcome, except an InvalidGitHubBaseUrlError, which
+//     ends the pass (GHB-03) -- see the note above each loop.
 //   - AMIG-01 MCP MOVE per scope, after the read pass and before the apply
 //     pass, also when the config is invalid and never after a read pass that
 //     threw (`mcp-migration.ts`). It takes its own scope lock; a throw out of
@@ -381,10 +382,13 @@ function foldRemoveOutcome(
  * RECON-03 note: `addMarketplace` resolves its locations and parses its
  * source with two total functions and then enters one try whose catch routes
  * every classified AND unclassified error through `handleAddFailure`, which in
- * orchestrated mode always returns a typed outcome; the post-guard cache and
+ * orchestrated mode returns a typed outcome; the post-guard cache and
  * mirror-seeding steps swallow their own failures. The orchestrated overload
  * carries that contract in its return type, so this loop reads the outcome
- * without a guard of its own.
+ * without a guard of its own. The exception is an `InvalidGitHubBaseUrlError`,
+ * which `handleAddFailure` rethrows: it ends the reconcile pass, and the
+ * resources_discover handler reports it as reconcile-aborted, so the throw
+ * never leaves the Pi event (NFR-2, GHB-03).
  */
 async function applyMarketplaceAdds(
   opts: ApplyReconcileOptions,
@@ -573,7 +577,10 @@ function redactedDependencyCascadeError(error: DependencyCascadeError): Dependen
  * orchestrated mode, and the only awaited statement after that catch collects
  * post-commit warnings behind its own swallowing guards. The orchestrated
  * overload carries that contract in its return type, so this loop reads the
- * outcome without a guard of its own.
+ * outcome without a guard of its own. The exception is an
+ * `InvalidGitHubBaseUrlError`, which the catch rethrows: it ends the reconcile
+ * pass, and the resources_discover handler reports it as reconcile-aborted,
+ * so the throw never leaves the Pi event (NFR-2, GHB-03).
  */
 async function applyPluginInstalls(
   opts: ApplyReconcileOptions,
@@ -914,7 +921,11 @@ function installedRowDegradation(
  * cross-scope resolution and its transaction each sit inside a try whose
  * catch returns a typed failed outcome in orchestrated mode, and what follows
  * is a pure mapping. The orchestrated overload carries that contract in its
- * return type, so this loop reads the outcome without a guard of its own.
+ * return type, so this loop reads the outcome without a guard of its own. The
+ * exception is an enable that fails on an `InvalidGitHubBaseUrlError`, which
+ * the mapping rethrows: it ends the reconcile pass, and the resources_discover
+ * handler reports it as reconcile-aborted, so the throw never leaves the Pi
+ * event (NFR-2, GHB-03).
  */
 async function applyPluginToggles(
   opts: ApplyReconcileOptions,

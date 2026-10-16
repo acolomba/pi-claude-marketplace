@@ -58,6 +58,7 @@ import {
 } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { asAbsolutePluginRoot } from "../../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import { makeEnableDisableHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/enable-disable.ts";
+import { InvalidGitHubBaseUrlError } from "../../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
 import { runWithNothingLoaded } from "../../../shared/notification-run-seeds.ts";
 import { createMachineNotificationBoundary } from "../../notification-boundary.ts";
@@ -651,6 +652,31 @@ for (const { args, enable, expectedMessage, failure, label, reported } of [
     verifyBoundary();
   });
 }
+
+test("rethrows an invalid base escaping the workflow instead of rendering a row (GHB-03)", async (t) => {
+  // arrange
+  const workspace = await createHermeticWorkspace(t, "failure-invalid-base");
+  await seedBothScopes(workspace, false);
+  const { ctx, verifyBoundary } = createNotificationBoundary(0);
+  const enableDisableHandler = makeHandlerUnderTest(true);
+  const invalid = new InvalidGitHubBaseUrlError("PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL", "scheme");
+
+  // act & assert
+  await assert.rejects(
+    () =>
+      enableDisableHandler(
+        "alpha@mp --scope project",
+        withUnreadableCwd(ctx, invalid),
+        runWithNothingLoaded(),
+      ),
+    (error: unknown) => {
+      assert.strictEqual(error, invalid);
+      return true;
+    },
+  );
+  assert.deepStrictEqual(await readFootprint(workspace), NOTHING_RECORDED);
+  verifyBoundary();
+});
 
 test("EDEP-01: an enable cascade's member row reaches the rendered output through the real edge handler", async (t) => {
   // arrange

@@ -65,7 +65,11 @@ import { findDependents } from "../../domain/dependency-orphans.ts";
 import { asAbsolutePluginRoot } from "../../domain/plugin-root.ts";
 import { isRecordedButDisabled, toDisabledRecord } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
-import { errorMessage, StateLockHeldError } from "../../shared/errors.ts";
+import {
+  errorMessage,
+  rethrowInvalidGitHubBaseUrl,
+  StateLockHeldError,
+} from "../../shared/errors.ts";
 import { createRemovalOps } from "../../shared/fs-utils.ts";
 import { notifyMcpConfigNotices } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
@@ -2151,7 +2155,9 @@ async function runFreshEnableCascadeWithRoot(args: {
 /**
  * D-54-01 entrypoint. Never re-throws -- every failure surfaces through a
  * single `notify()` call per IL-2 (standalone) OR a typed outcome per
- * RECON-03 (orchestrated).
+ * RECON-03 (orchestrated). GHB-03: the one exception is an enable that fails
+ * on an `InvalidGitHubBaseUrlError`, which it rethrows in both modes so the
+ * whole command fails.
  *
  * Y3 (PR #51): overload pair so the orchestrated-mode return is narrowed to
  * `Promise<EnableDisablePluginOutcome>` (no `| undefined`) at the call site.
@@ -2202,7 +2208,8 @@ async function runSetEnabledOutcome(
 
   // C1: `resolveCrossScopePluginTarget` calls `loadState`, which throws on a
   // corrupt/unparseable state.json in either scope. The throw must NOT escape
-  // setPluginEnabled (the doc above promises "never re-throws") -- route it
+  // setPluginEnabled (the doc above promises "never re-throws", except for an
+  // invalid GitHub base override, GHB-03) -- route it
   // through the same classifyTransactionThrow taxonomy the lower try/catch
   // uses. Mirrors the read-only `listPlugins` containment in pending.ts.
   let resolution;
@@ -2746,6 +2753,7 @@ function outcomeToTypedResult(args: {
     }
 
     case "enable-failed": {
+      rethrowInvalidGitHubBaseUrl(outcome.cause);
       // I4: orchestrated callers cannot consume the structured
       // `rollbackPartial[]` rows (they aggregate into the reconcile cascade
       // which already composes its own per-plugin rows), but the
@@ -2965,6 +2973,7 @@ function enableFailedRow(
   plugin: string,
   outcome: Extract<SetEnabledOutcome, { kind: "enable-failed" }>,
 ): PluginFailedMessage {
+  rethrowInvalidGitHubBaseUrl(outcome.cause);
   const partials = outcome.rollbackPartials ?? [];
   const staleGate = partials.length > 0 ? undefined : staleGateDropped(outcome.cause);
   const baseReasons =

@@ -41,12 +41,16 @@ import { loadMergedScopeConfig } from "../../../extensions/pi-claude-marketplace
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { loadState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
-import { MarketplaceNotFoundError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import {
+  InvalidGitHubBaseUrlError,
+  MarketplaceNotFoundError,
+} from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { notify } from "../../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
 import { openNotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import { withLockedStateTransaction } from "../../../extensions/pi-claude-marketplace/transaction/with-state-guard.ts";
 import { createJsonCapture } from "../../edge/json-capture.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+import { setGitHubBaseUrl } from "../../shared/github-base-url-environment.ts";
 import { runWithNothingLoaded, runWithSoftDeps } from "../../shared/notification-run-seeds.ts";
 
 import type { HooksRouting } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
@@ -113,6 +117,8 @@ function makeCtx(cwd: string): { ctx: NotificationContext; notifications: Notify
   };
   return { ctx, notifications };
 }
+
+const GITHUB_SOURCE_SHA = "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678";
 
 function runWithMcpAdapterLoaded(): NotificationRun {
   return runWithSoftDeps({
@@ -214,6 +220,8 @@ async function writeUserState(
     // (the same derivation the list and info fixtures use). Non-empty +
     // `disabled: true` is the disabled PARTIAL shape.
     unsupported?: readonly string[];
+    // The plugin's manifest source. Defaults to `./plugins/<pluginName>`.
+    pluginSource?: { readonly source: "github"; readonly repo: string; readonly sha: string };
   },
 ): Promise<{
   statePath: string;
@@ -282,7 +290,7 @@ async function writeUserState(
       plugins: [
         {
           name: opts.pluginName,
-          source: `./plugins/${opts.pluginName}`,
+          source: opts.pluginSource ?? `./plugins/${opts.pluginName}`,
           version: opts.version ?? "1.2.3",
         },
       ],
@@ -2470,6 +2478,83 @@ test("ENBL-03: missing cached clone aborts with (failed) {source missing}", asyn
       /\(failed\) \{source missing\}/,
       `cached-clone-missing must classify as {source missing}: ${notifications[0]!.message}`,
     );
+  });
+});
+
+test("GHB-03: enabling a GitHub-source plugin on an invalid base fails the command", async (t) => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    setGitHubBaseUrl(t, "http://mirror.example");
+    const { statePath } = await writeUserState(home, {
+      marketplaceName: "mp",
+      pluginName: "foo",
+      disabled: true,
+      pluginSource: { source: "github", repo: "org/repo", sha: GITHUB_SOURCE_SHA },
+    });
+    const stateBefore = await readFile(statePath, "utf8");
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act & assert
+    await assert.rejects(
+      () =>
+        setPluginEnabled({
+          ctx,
+          run: runWithNothingLoaded(),
+          cwd,
+          marketplace: "mp",
+          plugin: "foo",
+          enable: true,
+          scope: "user",
+        }),
+      (error: unknown) => {
+        assert.deepStrictEqual(
+          error,
+          new InvalidGitHubBaseUrlError("PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL", "scheme"),
+        );
+        return true;
+      },
+    );
+    assert.deepStrictEqual(notifications, []);
+    assert.strictEqual(await readFile(statePath, "utf8"), stateBefore);
+  });
+});
+
+test("GHB-03: an orchestrated enable rethrows an invalid base", async (t) => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    setGitHubBaseUrl(t, "http://mirror.example");
+    const { statePath } = await writeUserState(home, {
+      marketplaceName: "mp",
+      pluginName: "foo",
+      disabled: true,
+      pluginSource: { source: "github", repo: "org/repo", sha: GITHUB_SOURCE_SHA },
+    });
+    const stateBefore = await readFile(statePath, "utf8");
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act & assert
+    await assert.rejects(
+      () =>
+        setPluginEnabled({
+          ctx,
+          run: runWithNothingLoaded(),
+          cwd,
+          marketplace: "mp",
+          plugin: "foo",
+          enable: true,
+          scope: "user",
+          notifications: { mode: "orchestrated" },
+        }),
+      (error: unknown) => {
+        assert.deepStrictEqual(
+          error,
+          new InvalidGitHubBaseUrlError("PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL", "scheme"),
+        );
+        return true;
+      },
+    );
+    assert.deepStrictEqual(notifications, []);
+    assert.strictEqual(await readFile(statePath, "utf8"), stateBefore);
   });
 });
 
