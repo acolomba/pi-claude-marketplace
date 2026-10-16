@@ -65,3 +65,21 @@ Feature: Plugin install
     Then the result lists these plugins:
       | marketplace name | marketplace scope | id            | name | status | reasons           | scope   | cause chain                                                   | cause truncated | leaks | rollback partial |
       | fixtures         | project           | demo@fixtures | demo | failed | already installed | project | Plugin "demo" is already installed in marketplace "fixtures". | false           |       |                  |
+
+  Scenario: Installing a plugin into the shared configuration from a marketplace added with --local fails as marketplace declared locally
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins:
+      | name | version |
+      | pp   | 1.0.0   |
+    Given the user has run "/claude:plugin marketplace add {home}/marketplaces/tools --scope project --local"
+    When the user runs "/claude:plugin install pp@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade                        |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id       | name | status | reasons                      | scope   | cause chain                                                                                              | cause truncated | leaks | rollback partial |
+      | tools            | project           | pp@tools | pp   | failed | marketplace declared locally | project | The marketplace tools is declared only in claude-plugins.local.json. Run the command again with --local. | false           |       |                  |
+    Then the "claude-plugins.json" file of the project scope declares no plugins
+    Then the "claude-plugins.local.json" file of the project scope declares no plugins

@@ -6,11 +6,13 @@
  *
  * A missing file fails every step that reads one; it never reads as zero
  * declarations. A file whose `marketplaces` map is empty declares that no
- * marketplace is wanted. `declares no marketplaces` passes on an empty or an
- * absent `marketplaces` map, because the configuration schema reads an absent
- * map as no declarations (CFG-01). `does not exist` is the step that asserts
- * a file is absent: after a load, a missing `claude-plugins.json` means the
- * first-run migration declined to write it (FIX-02, MIG-01).
+ * marketplace is wanted. `declares no marketplaces` and `declares no plugins`
+ * pass on an empty or an absent map, because the configuration schema reads an
+ * absent map as no declarations (CFG-01). `declares no plugins` is how a
+ * scenario shows that a refused command wrote no plugin declaration to either
+ * file (FIX-03). `does not exist` is the step that asserts a file is absent:
+ * after a load, a missing `claude-plugins.json` means the first-run migration
+ * declined to write it (FIX-02, MIG-01).
  */
 
 import assert from "node:assert/strict";
@@ -49,6 +51,20 @@ async function readConfigObject(file: string): Promise<{ config: object; content
   return { config, content };
 }
 
+// The names one declaration map of the file holds; an absent map holds none.
+async function declaredNames(
+  file: string,
+  member: "marketplaces" | "plugins",
+): Promise<{ names: readonly string[]; content: string }> {
+  const { config, content } = await readConfigObject(file);
+  const declarations: unknown = Object.hasOwn(config, member) ? Reflect.get(config, member) : {};
+  if (!isPlainObject(declarations)) {
+    assert.fail(`${file} has a ${member} member that is not an object: ${content}`);
+  }
+
+  return { names: Object.keys(declarations), content };
+}
+
 Then(
   "the {string} file of the {word} scope declares these marketplaces:",
   async function (this: ScenarioWorld, fileName: string, scope: string, table: DataTable) {
@@ -82,12 +98,16 @@ Then(
   "the {string} file of the {word} scope declares no marketplaces",
   async function (this: ScenarioWorld, fileName: string, scope: string) {
     const file = configFilePath(this, fileName, scope);
-    const { config, content } = await readConfigObject(file);
-    const marketplaces = "marketplaces" in config ? config.marketplaces : {};
-    if (!isPlainObject(marketplaces)) {
-      assert.fail(`${file} has a marketplaces member that is not an object: ${content}`);
-    }
+    const { names, content } = await declaredNames(file, "marketplaces");
+    assert.deepStrictEqual(names, [], `${file} declares marketplaces: ${content}`);
+  },
+);
 
-    assert.deepStrictEqual(Object.keys(marketplaces), [], `${file} declares marketplaces`);
+Then(
+  "the {string} file of the {word} scope declares no plugins",
+  async function (this: ScenarioWorld, fileName: string, scope: string) {
+    const file = configFilePath(this, fileName, scope);
+    const { names, content } = await declaredNames(file, "plugins");
+    assert.deepStrictEqual(names, [], `${file} declares plugins: ${content}`);
   },
 );
