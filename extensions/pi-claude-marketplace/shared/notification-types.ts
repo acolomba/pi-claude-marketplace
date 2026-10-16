@@ -237,7 +237,15 @@ export type Reason =
   // A typed kind, not a note, as `unsupported hooks` is: the aggregate token
   // rides the row, and each server with its blocking feature rides the info
   // breakdown.
-  | "unsupported mcp";
+  | "unsupported mcp"
+  // FIX-03 / D-MF-02: the command would write a plugin declaration into
+  // `claude-plugins.json` while only `claude-plugins.local.json` declares the
+  // plugin's marketplace, so a teammate who reads the shared file could not
+  // resolve it. The refusal rides a `failed` row, and the remedy, running the
+  // command again with `--local`, rides the cause line. `dangling reference`
+  // cannot carry it: there the merged configuration lacks the marketplace, and
+  // here it declares it, in the per-machine file only.
+  | "marketplace declared locally";
 
 /** Reasons that describe a content row rather than marketplace absence. */
 export type ContentReason = Exclude<

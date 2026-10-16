@@ -166,7 +166,8 @@
                           "stale workflow command",
                           "requires pi-dynamic-workflows",
                           "components now supported",
-                          "unsupported mcp"
+                          "unsupported mcp",
+                          "marketplace declared locally"
                         ]
                       }
                     },
@@ -302,7 +303,8 @@
                     "stale workflow command",
                     "requires pi-dynamic-workflows",
                     "components now supported",
-                    "unsupported mcp"
+                    "unsupported mcp",
+                    "marketplace declared locally"
                   ]
                 }
               }
@@ -488,7 +490,8 @@
                           "stale workflow command",
                           "requires pi-dynamic-workflows",
                           "components now supported",
-                          "unsupported mcp"
+                          "unsupported mcp",
+                          "marketplace declared locally"
                         ]
                       }
                     },
@@ -624,7 +627,8 @@
                     "stale workflow command",
                     "requires pi-dynamic-workflows",
                     "components now supported",
-                    "unsupported mcp"
+                    "unsupported mcp",
+                    "marketplace declared locally"
                   ]
                 }
               }
@@ -875,7 +879,8 @@
                       "stale workflow command",
                       "requires pi-dynamic-workflows",
                       "components now supported",
-                      "unsupported mcp"
+                      "unsupported mcp",
+                      "marketplace declared locally"
                     ]
                   }
                 },
@@ -1054,7 +1059,8 @@
                       "stale workflow command",
                       "requires pi-dynamic-workflows",
                       "components now supported",
-                      "unsupported mcp"
+                      "unsupported mcp",
+                      "marketplace declared locally"
                     ]
                   }
                 },
@@ -1316,7 +1322,8 @@
                             "stale workflow command",
                             "requires pi-dynamic-workflows",
                             "components now supported",
-                            "unsupported mcp"
+                            "unsupported mcp",
+                            "marketplace declared locally"
                           ]
                         }
                       },
@@ -1501,7 +1508,8 @@
                             "stale workflow command",
                             "requires pi-dynamic-workflows",
                             "components now supported",
-                            "unsupported mcp"
+                            "unsupported mcp",
+                            "marketplace declared locally"
                           ]
                         }
                       },
@@ -1630,7 +1638,8 @@
               "stale workflow command",
               "requires pi-dynamic-workflows",
               "components now supported",
-              "unsupported mcp"
+              "unsupported mcp",
+              "marketplace declared locally"
             ]
           }
         }

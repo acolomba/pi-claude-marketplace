@@ -291,6 +291,8 @@ const EXPECTED_REASONS = [
   "components now supported",
   // ANAME-07: a server needs a Claude Code MCP feature pi-mcp-adapter lacks.
   "unsupported mcp",
+  // FIX-03: a shared declaration would name a marketplace only the local file declares.
+  "marketplace declared locally",
 ] as const;
 
 const EXPECTED_STATUS_TOKENS = [

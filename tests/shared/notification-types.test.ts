@@ -146,6 +146,7 @@ const EXPECTED_REASONS = [
   "requires pi-dynamic-workflows",
   "components now supported",
   "unsupported mcp",
+  "marketplace declared locally",
 ] as const;
 
 const EXPECTED_STATUS_TOKENS = [

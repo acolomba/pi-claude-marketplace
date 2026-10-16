@@ -152,7 +152,11 @@ export type FailureReason =
   // reusing `source mismatch`.
   | "dangling reference"
   | "concurrently uninstalled"
-  | "concurrently updated";
+  | "concurrently updated"
+  // FIX-03: the operation was refused before anything was written. Install,
+  // enable, disable, update, and reinstall all refuse with it, so it lives in
+  // the shared failure group rather than as a command-private reason.
+  | "marketplace declared locally";
 
 /**
  * D-102-06: author-declared install-time state -- a fact the plugin's OWN

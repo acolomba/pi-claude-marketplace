@@ -146,6 +146,7 @@ const REASONS = {
   "requires pi-dynamic-workflows": true,
   "components now supported": true,
   "unsupported mcp": true,
+  "marketplace declared locally": true,
 } as const satisfies Record<Reason, true>;
 
 const SEVERITIES = {
