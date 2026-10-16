@@ -94,6 +94,25 @@ Feature: Marketplace add
       | source kind | source     |
       | github      | acme/tools |
 
+  Scenario: Adding a marketplace with --local declares it only in the local configuration
+    Given the marketplace "extras" is published as a dir source
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "extras" is added to the project scope
+    When the user runs "/claude:plugin marketplace add {home}/marketplaces/tools --scope project --local"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these marketplaces:
+      | name  | scope   | status |
+      | tools | project | added  |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name   | source                     |
+      | extras | {home}/marketplaces/extras |
+    Then the "claude-plugins.local.json" file of the project scope declares these marketplaces:
+      | name  | source                    |
+      | tools | {home}/marketplaces/tools |
+
   Scenario Outline: An added marketplace is still listed in a new session
     Given the marketplace "tools" is published as a <source kind> source
     Given the marketplace "tools" is added to the project scope
