@@ -358,7 +358,9 @@ for (const { condition, bytes, reason } of stateLoadFailureRows) {
 
 // LAYER-06: a layer that declares a plugin whose marketplace only the other
 // layer declares reports that layer's basename with the cause, and the scope
-// plans nothing. Skipping the check would plan `p1` as `(will install)`.
+// plans nothing. Skipping the check would plan `p1` as `(will install)`. The
+// file heads its block without a status, so its one failed row is the one
+// error the tally counts.
 const layerGapRows = [
   {
     reported: "claude-plugins.local.json",
@@ -385,7 +387,7 @@ const layerGapRows = [
 }[];
 
 for (const { reported, files, cause } of layerGapRows) {
-  test(`LAYER-06: ${reported} declaring a plugin whose marketplace only the other layer declares reports the cause and plans nothing`, async (t) => {
+  test(`LAYER-06: ${reported} declaring a plugin whose marketplace only the other layer declares reports one failure with the cause and plans nothing`, async (t) => {
     // arrange
     const { cwd, project } = await createHermeticScopes(t, "layer-gap");
     await writeUnder(
@@ -405,11 +407,11 @@ for (const { reported, files, cause } of layerGapRows) {
     assert.deepStrictEqual(notifications, [
       {
         message:
-          "Some operations have failed.\n\n" +
-          `⊘ ${reported} [project] (failed) {invalid manifest}\n` +
+          "A plugin operation has failed.\n\n" +
+          `● ${reported} [project]\n` +
           `  ⊘ ${reported} (failed) {invalid manifest}\n` +
           `    cause: ${cause}\n\n` +
-          "Reconcile pending: 2 failures",
+          "Reconcile pending: 1 failure",
         severity: "error",
       },
     ]);
@@ -533,11 +535,11 @@ test("LAYER-06 / MIG-01: before the first-run migration, a local layer missing t
   assert.deepStrictEqual(notifications, [
     {
       message:
-        "Some operations have failed.\n\n" +
-        "⊘ claude-plugins.local.json [project] (failed) {invalid manifest}\n" +
+        "A plugin operation has failed.\n\n" +
+        "● claude-plugins.local.json [project]\n" +
         "  ⊘ claude-plugins.local.json (failed) {invalid manifest}\n" +
         "    cause: The local layer (claude-plugins.local.json) declares p1@mp, but only the shared layer declares its marketplace. Run /claude:plugin marketplace add <source> --local --scope project with the source the shared layer declares, or remove the plugin from the local layer.\n\n" +
-        "Reconcile pending: 2 failures",
+        "Reconcile pending: 1 failure",
       severity: "error",
     },
   ]);

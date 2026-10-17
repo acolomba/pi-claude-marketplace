@@ -158,7 +158,8 @@ export const PLUGIN_PENDING_FIXTURES: FixtureMap = {
     },
 
     // LAYER-06: the same layer error in the pending diff; pending plans
-    // nothing for the scope.
+    // nothing for the scope. The file heads its block with no status, so the
+    // one failed row is the one error the tally counts.
     "pending-layer-marketplace-undeclared": {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",
@@ -169,9 +170,6 @@ export const PLUGIN_PENDING_FIXTURES: FixtureMap = {
           {
             name: "claude-plugins.local.json",
             scope: "project",
-            status: "failed",
-            severity: "error",
-            reasons: ["invalid manifest"],
             plugins: [
               {
                 status: "failed",

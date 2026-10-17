@@ -3390,18 +3390,18 @@ A marketplace operation has failed.
 
 ### A layer declares a plugin without its marketplace (LAYER-06)
 
-The same layer error as the reload's (see `reload-layer-marketplace-undeclared` under `reconcile-applied-cascade`). The pending diff plans nothing for the scope and reports the layer row with its cause child, so `pending` shows the error the next reload stops on.
+The layer error the next reload stops on (see `reload-layer-marketplace-undeclared` under `reconcile-applied-cascade`), so `pending` shows it before the reload. The pending diff plans nothing for the scope. The layer file heads its block with no status, and one failed row under it carries the `{invalid manifest}` reason and the cause, so the tally counts the one error once. Before the first-run migration writes `claude-plugins.json` from state (MIG-01), the check reads the shared layer that the migration would write, as the reload does.
 
 <!-- catalog-state: pending-layer-marketplace-undeclared -->
 
 ```text
-Some operations have failed.
+A plugin operation has failed.
 
-⊘ claude-plugins.local.json [project] (failed) {invalid manifest}
+● claude-plugins.local.json [project]
   ⊘ claude-plugins.local.json (failed) {invalid manifest}
     cause: The local layer (claude-plugins.local.json) declares helper@official, but only the shared layer declares its marketplace. Run /claude:plugin marketplace add <source> --local --scope project with the source the shared layer declares, or remove the plugin from the local layer.
 
-Reconcile pending: 2 failures
+Reconcile pending: 1 failure
 ```
 
 ______________________________________________________________________

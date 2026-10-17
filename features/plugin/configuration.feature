@@ -48,16 +48,16 @@ Feature: Plugin configuration
       | fixtures    | demo   |         |
     When the user runs "/claude:plugin pending --scope project"
     Then the result has these fields:
-      | kind           | cascade                      |
-      | severity       | error                        |
-      | needs reload   | false                        |
-      | summary        | Some operations have failed. |
-      | tally label    | Reconcile pending            |
-      | tally failures | 2                            |
-      | tally warnings | 0                            |
+      | kind           | cascade                        |
+      | severity       | error                          |
+      | needs reload   | false                          |
+      | summary        | A plugin operation has failed. |
+      | tally label    | Reconcile pending              |
+      | tally failures | 1                              |
+      | tally warnings | 0                              |
     Then the result lists these plugins:
-      | marketplace name          | marketplace scope | marketplace status | marketplace reasons | id                                                  | name                      | status | reasons          | scope   | cause chain                                                                                                                                                                                                                                                                       | cause truncated | leaks | rollback partial |
-      | claude-plugins.local.json | project           | failed             | invalid manifest    | claude-plugins.local.json@claude-plugins.local.json | claude-plugins.local.json | failed | invalid manifest | project | The local layer (claude-plugins.local.json) declares demo@fixtures, but only the shared layer declares its marketplace. Run /claude:plugin marketplace add <source> --local --scope project with the source the shared layer declares, or remove the plugin from the local layer. | false           |       |                  |
+      | marketplace name          | marketplace scope | id                                                  | name                      | status | reasons          | scope   | cause chain                                                                                                                                                                                                                                                                       | cause truncated | leaks | rollback partial |
+      | claude-plugins.local.json | project           | claude-plugins.local.json@claude-plugins.local.json | claude-plugins.local.json | failed | invalid manifest | project | The local layer (claude-plugins.local.json) declares demo@fixtures, but only the shared layer declares its marketplace. Run /claude:plugin marketplace add <source> --local --scope project with the source the shared layer declares, or remove the plugin from the local layer. | false           |       |                  |
 
   Scenario: A new session does not install a plugin whose local layer lacks its marketplace
     Given the marketplace "fixtures" is added to the project scope
@@ -78,13 +78,13 @@ Feature: Plugin configuration
       | fixtures    | demo   |         |
     When the user runs "/claude:plugin pending --scope project"
     Then the result has these fields:
-      | kind           | cascade                      |
-      | severity       | error                        |
-      | needs reload   | false                        |
-      | summary        | Some operations have failed. |
-      | tally label    | Reconcile pending            |
-      | tally failures | 2                            |
-      | tally warnings | 0                            |
+      | kind           | cascade                        |
+      | severity       | error                          |
+      | needs reload   | false                          |
+      | summary        | A plugin operation has failed. |
+      | tally label    | Reconcile pending              |
+      | tally failures | 1                              |
+      | tally warnings | 0                              |
     Then the result lists these plugins:
-      | marketplace name    | marketplace scope | marketplace status | marketplace reasons | id                                      | name                | status | reasons          | scope   | cause chain                                                                                                                                                                                                                                                         | cause truncated | leaks | rollback partial |
-      | claude-plugins.json | project           | failed             | invalid manifest    | claude-plugins.json@claude-plugins.json | claude-plugins.json | failed | invalid manifest | project | The shared layer (claude-plugins.json) declares demo@fixtures, but only the local layer declares its marketplace. Run /claude:plugin marketplace add <source> --scope project with the source the local layer declares, or remove the plugin from the shared layer. | false           |       |                  |
+      | marketplace name    | marketplace scope | id                                      | name                | status | reasons          | scope   | cause chain                                                                                                                                                                                                                                                         | cause truncated | leaks | rollback partial |
+      | claude-plugins.json | project           | claude-plugins.json@claude-plugins.json | claude-plugins.json | failed | invalid manifest | project | The shared layer (claude-plugins.json) declares demo@fixtures, but only the local layer declares its marketplace. Run /claude:plugin marketplace add <source> --scope project with the source the local layer declares, or remove the plugin from the shared layer. | false           |       |                  |

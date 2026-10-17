@@ -120,8 +120,8 @@ async function treeBytes(root: string): Promise<readonly (readonly [string, stri
   );
 }
 
-/** The cascade of a scope whose one layer file is invalid for the given cause. */
-function layerError(basename: string, scope: Scope, cause: string, label: string): object {
+/** The reload cascade of a scope whose one layer file is invalid for the given cause. */
+function layerError(basename: string, scope: Scope, cause: string): object {
   return {
     message:
       "Some operations have failed.\n" +
@@ -130,7 +130,22 @@ function layerError(basename: string, scope: Scope, cause: string, label: string
       `  ⊘ ${basename} (failed) {invalid manifest}\n` +
       `    cause: ${cause}\n` +
       "\n" +
-      `${label}: 2 failures`,
+      "Reconcile: 2 failures",
+    severity: "error",
+  };
+}
+
+/** The pending diff of the same scope: one failed row under the file's block. */
+function pendingLayerError(basename: string, scope: Scope, cause: string): object {
+  return {
+    message:
+      "A plugin operation has failed.\n" +
+      "\n" +
+      `● ${basename} [${scope}]\n` +
+      `  ⊘ ${basename} (failed) {invalid manifest}\n` +
+      `    cause: ${cause}\n` +
+      "\n" +
+      "Reconcile pending: 1 failure",
     severity: "error",
   };
 }
@@ -160,10 +175,10 @@ test("a local layer that declares a plugin whose marketplace only the shared lay
 
   // assert
   assert.deepStrictEqual(applied, [
-    layerError("claude-plugins.local.json", "project", LOCAL_GAP_CAUSE, "Reconcile"),
+    layerError("claude-plugins.local.json", "project", LOCAL_GAP_CAUSE),
   ]);
   assert.deepStrictEqual(pending.notifications, [
-    layerError("claude-plugins.local.json", "project", LOCAL_GAP_CAUSE, "Reconcile pending"),
+    pendingLayerError("claude-plugins.local.json", "project", LOCAL_GAP_CAUSE),
   ]);
   pending.verifyBoundary();
   assert.deepStrictEqual(await treeBytes(scope.locations.scopeRoot), before);
@@ -187,9 +202,7 @@ test("a shared layer that declares a plugin whose marketplace only the local lay
   const applied = await reload(scope);
 
   // assert
-  assert.deepStrictEqual(applied, [
-    layerError("claude-plugins.json", "project", SHARED_GAP_CAUSE, "Reconcile"),
-  ]);
+  assert.deepStrictEqual(applied, [layerError("claude-plugins.json", "project", SHARED_GAP_CAUSE)]);
   assert.deepStrictEqual(await treeBytes(scope.locations.scopeRoot), before);
   assert.deepStrictEqual(await recordedPlugins(scope.locations), ["other"]);
 });
@@ -208,7 +221,7 @@ test("a local layer of the user scope that declares a plugin without its marketp
 
   // assert
   assert.deepStrictEqual(applied, [
-    layerError("claude-plugins.local.json", "user", USER_LOCAL_GAP_CAUSE, "Reconcile"),
+    layerError("claude-plugins.local.json", "user", USER_LOCAL_GAP_CAUSE),
   ]);
   assert.deepStrictEqual(await treeBytes(scope.locations.scopeRoot), before);
 });
@@ -235,7 +248,7 @@ test("the local layer an earlier --local install wrote keeps its bytes and its p
 
   // assert
   assert.deepStrictEqual(applied, [
-    layerError("claude-plugins.local.json", "project", LOCAL_GAP_CAUSE, "Reconcile"),
+    layerError("claude-plugins.local.json", "project", LOCAL_GAP_CAUSE),
   ]);
   assert.equal(await readFile(scope.locations.configLocalJsonPath, "utf8"), legacy);
   assert.equal(await readFile(scope.locations.stateJsonPath, "utf8"), stateBytes);
@@ -267,11 +280,11 @@ test("before the first-run migration, pending reports the layer error the reload
 
   // assert
   assert.deepStrictEqual(pending.notifications, [
-    layerError("claude-plugins.local.json", "project", LOCAL_GAP_CAUSE, "Reconcile pending"),
+    pendingLayerError("claude-plugins.local.json", "project", LOCAL_GAP_CAUSE),
   ]);
   pending.verifyBoundary();
   assert.deepStrictEqual(applied, [
-    layerError("claude-plugins.local.json", "project", LOCAL_GAP_CAUSE, "Reconcile"),
+    layerError("claude-plugins.local.json", "project", LOCAL_GAP_CAUSE),
   ]);
   assert.deepStrictEqual(await recordedPlugins(scope.locations), ["demo"]);
 });

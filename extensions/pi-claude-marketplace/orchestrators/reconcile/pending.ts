@@ -88,35 +88,46 @@ export interface PendingReconcileOptions {
  * CFG-03: surface an invalid config arm as a structured `(failed)
  * {invalid manifest}` marketplace row. The marketplace `name` carries the
  * file's BASENAME (never the absolute path -- information-disclosure
- * mitigation T-53-02-02). A `cause` adds one failed child of the same name
- * that carries it, the shape the load's cascade renders for the same error.
+ * mitigation T-53-02-02).
  */
-function buildInvalidConfigBlock(
-  scope: Scope,
-  filePath: string,
-  cause?: string,
-): MarketplaceRows<PendingMsg> {
-  const name = path.basename(filePath);
+function buildInvalidConfigBlock(scope: Scope, filePath: string): MarketplaceRows<PendingMsg> {
   return {
-    name,
+    name: path.basename(filePath),
     scope,
     status: "failed",
     reasons: ["invalid manifest"],
     // D-03: an invalid-config pending block -> error.
     severity: "error",
-    plugins:
-      cause === undefined
-        ? []
-        : [
-            {
-              status: "failed",
-              name,
-              reasons: ["invalid manifest"],
-              cause: new Error(cause),
-              severity: "error",
-              needsReload: false,
-            },
-          ],
+    plugins: [],
+  };
+}
+
+/**
+ * LAYER-06: a layer file's block with one failed row that carries the cause,
+ * because only a plugin row can carry one. The block itself has no status, so
+ * it groups the row and the tally counts the one error once. The row is named
+ * by the file's BASENAME (T-53-02-02).
+ */
+function buildLayerGapBlock(
+  scope: Scope,
+  filePath: string,
+  cause: string,
+): MarketplaceRows<PendingMsg> {
+  const name = path.basename(filePath);
+  return {
+    name,
+    scope,
+    plugins: [
+      {
+        status: "failed",
+        name,
+        reasons: ["invalid manifest"],
+        cause: new Error(cause),
+        // D-03: the layer error -> error.
+        severity: "error",
+        needsReload: false,
+      },
+    ],
   };
 }
 
@@ -151,7 +162,7 @@ function layerMarketplaceGapBlocks(
   const shared =
     outcome.base.status === "valid" ? outcome.base.config : buildConfigFromState(state, local);
   return findLayerMarketplaceGaps(shared, local).map((gap) =>
-    buildInvalidConfigBlock(
+    buildLayerGapBlock(
       scope,
       gap.layer === "shared" ? loc.configJsonPath : loc.configLocalJsonPath,
       composeLayerMarketplaceCause(gap, scope),
