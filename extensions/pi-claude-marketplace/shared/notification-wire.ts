@@ -152,6 +152,8 @@ const REASONS = {
   "plugin declared in shared config": true,
   "already installed in shared layer": true,
   "already installed in local layer": true,
+  "still installed in shared layer": true,
+  "still installed in local layer": true,
 } as const satisfies Record<Reason, true>;
 
 const SEVERITIES = {

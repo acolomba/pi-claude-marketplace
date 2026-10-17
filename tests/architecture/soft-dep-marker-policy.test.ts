@@ -186,6 +186,7 @@ const MARKER_POLICY_TABLE = [
     markers: {
       uninstalled: { markers: false, contentReasons: true },
       failed: { markers: false, contentReasons: true },
+      skipped: { markers: false, contentReasons: true },
     },
   },
   {

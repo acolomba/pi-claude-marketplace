@@ -96,6 +96,7 @@ import {
   resolveCrossScopePluginTarget,
 } from "./shared.ts";
 import {
+  composeKeptInstalledRow,
   composePrunedRow,
   composeRemovalBlocks,
   composeUninstalledRow,
@@ -114,12 +115,6 @@ import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { McpConfigNotice } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { UnstageOutcome } from "../marketplace/shared.ts";
-
-/** The config-layer paths the cross-layer sweep writes through. */
-type UninstallLocations = Pick<
-  ScopedLocations,
-  "configJsonPath" | "configLocalJsonPath" | "scopeRoot"
->;
 
 /**
  * RECON-03: controls how `uninstallPlugin` surfaces
@@ -226,7 +221,7 @@ export interface UninstallTransaction {
   readonly commitPluginRemoval: typeof commitPluginRemoval;
   readonly loadTargetConfig: typeof loadConfig;
   readonly runPostCommitCleanup: typeof runPostUninstallCleanup;
-  readonly sweepConfigLayers: typeof sweepPluginFromConfigLayers;
+  readonly deleteLayerDeclaration: typeof deletePluginFromLayer;
   readonly withLockedStateTransaction: typeof withLockedStateTransaction;
 }
 
@@ -369,13 +364,16 @@ async function readUninstallLayers(
  * the closure before the declarer read, the cascade, any config write, and the
  * save. A reconcile-driven uninstall read no other layer and is never refused
  * (WR-09).
+ *
+ * LAYER-05: when both layers declare the plugin, the answer is the other
+ * layer, whose declaration keeps the plugin installed.
  */
-function refuseOtherLayerDeclaration(
+function checkOtherLayerDeclaration(
   layers: Extract<UninstallLayers, { kind: "readable" }>,
   args: { readonly local: boolean; readonly marketplace: string; readonly plugin: string },
-): void {
+): "shared" | "local" | undefined {
   if (layers.other === undefined) {
-    return;
+    return undefined;
   }
 
   const verdict = pluginLayerVerdict({
@@ -388,6 +386,36 @@ function refuseOtherLayerDeclaration(
   if (verdict.kind === "other-only") {
     throw new UninstallRefusedError(verdict.reason, verdict.refusal.message);
   }
+
+  if (verdict.kind !== "both") {
+    return undefined;
+  }
+
+  return args.local ? "shared" : "local";
+}
+
+/**
+ * LAYER-05: a standalone uninstall deletes the plugin key from its target
+ * layer only. WR-09: a reconcile-driven uninstall, which reads no other layer,
+ * writes no layer, because reconcile derives the desired state from the
+ * layers.
+ */
+async function deleteTargetDeclaration(
+  transaction: UninstallTransaction,
+  layerPaths: UninstallLayerPaths,
+  locations: Pick<ScopedLocations, "scopeRoot">,
+  target: { readonly plugin: string; readonly marketplace: string },
+): Promise<void> {
+  if (layerPaths.other === undefined) {
+    return;
+  }
+
+  await transaction.deleteLayerDeclaration(
+    layerPaths.target,
+    locations.scopeRoot,
+    target.plugin,
+    target.marketplace,
+  );
 }
 
 /**
@@ -402,7 +430,7 @@ export const REAL_UNINSTALL_TRANSACTION: UninstallTransaction = {
   commitPluginRemoval,
   loadTargetConfig: loadConfig,
   runPostCommitCleanup: runPostUninstallCleanup,
-  sweepConfigLayers: sweepPluginFromConfigLayers,
+  deleteLayerDeclaration: deletePluginFromLayer,
   withLockedStateTransaction,
 };
 
@@ -891,32 +919,6 @@ function dropCachedHooks(
 }
 
 /**
- * WB-01 / WR-09: delete the plugin entry from the user-authored config.
- *
- * Cross-layer sweep: the `plugin@marketplace` key may live in either
- * `claude-plugins.json` or `claude-plugins.local.json` -- a prior `--local`
- * install can have left it in the sibling layer. Both files are inside the
- * NFR-10 sanctioned write set, and deleting from only the target layer would
- * leave the sibling declaration as a perpetual dangling reference. Each layer
- * loads fresh and is swept independently (WR-02 no-op guard per file: an
- * absent or invalid layer, or one not declaring the key, is skipped and never
- * rewritten, preserving RECON-05 byte and mtime stability).
- */
-async function sweepPluginFromConfigLayers(
-  locations: UninstallLocations,
-  plugin: string,
-  marketplace: string,
-): Promise<void> {
-  await deletePluginFromLayer(locations.configJsonPath, locations.scopeRoot, plugin, marketplace);
-  await deletePluginFromLayer(
-    locations.configLocalJsonPath,
-    locations.scopeRoot,
-    plugin,
-    marketplace,
-  );
-}
-
-/**
  * IN-05: the post-commit cleanup's inputs as one bag rather than six
  * positionals. TypeScript accepts a function of FEWER parameters where more are
  * expected, so a positional signature would let a five-parameter double
@@ -1081,6 +1083,37 @@ function emitAlreadyGone(args: {
 }
 
 /**
+ * LAYER-05: the one row of a standalone uninstall that dropped only its target
+ * layer's declaration. Only the standalone path reaches it, and the standalone
+ * entrypoint discards the outcome (WR-01), so it returns the existing
+ * `converged` shape.
+ */
+function emitKeptInstalled(args: {
+  readonly ctx: NotificationContext;
+  readonly run: NotificationRun;
+  readonly marketplace: string;
+  readonly scope: Scope;
+  readonly plugin: string;
+  readonly version: string | undefined;
+  readonly otherLayer: "shared" | "local";
+}): UninstallPluginOutcome {
+  const row = composeKeptInstalledRow({
+    plugin: args.plugin,
+    version: args.version,
+    otherLayer: args.otherLayer,
+  });
+  notifyWithContext(
+    args.ctx,
+    args.run,
+    UNINSTALL_CONTEXT,
+    [{ name: args.marketplace, scope: args.scope, plugins: [row] }],
+    undefined,
+    "single",
+  );
+  return { status: "converged", name: args.plugin };
+}
+
+/**
  * RECON-03: returns `UninstallPluginOutcome` in orchestrated mode and
  * `undefined` in standalone mode (after firing the standalone notify()).
  *
@@ -1210,6 +1243,9 @@ async function runUninstallOutcome(
   // split, so the failing arms see what was already dropped.
   let retiredWorkflowCommand = false;
   const routeEffect = { removeAfterSave: false };
+  // LAYER-05: the other layer that still declares the plugin, when the
+  // uninstall only dropped the target layer's declaration.
+  const kept: { otherLayer: "shared" | "local" | undefined } = { otherLayer: undefined };
   // D-05-10: the sweep's members, carried out of the closure for the
   // post-commit cleanup and the report.
   const prunedMembers: PrunedMember[] = [];
@@ -1264,7 +1300,14 @@ async function runUninstallOutcome(
       }
 
       removedVersion = installed.version;
-      refuseOtherLayerDeclaration(layers, { local, marketplace, plugin });
+      // LAYER-05 / D-MF-03: each layer may declare the plugin, and it stays
+      // installed while either does. Dropping the target layer's declaration
+      // is the whole uninstall: no cascade, no prune, and no save.
+      kept.otherLayer = checkOtherLayerDeclaration(layers, { local, marketplace, plugin });
+      if (kept.otherLayer !== undefined) {
+        await deleteTargetDeclaration(transaction, layerPaths, locations, { plugin, marketplace });
+        return;
+      }
 
       // D-06-06 / D-05-07: the declarer read runs AFTER the two converge arms
       // (a target that is not installed is `{not installed}`, never a refusal
@@ -1311,9 +1354,7 @@ async function runUninstallOutcome(
 
       transaction.commitPluginRemoval(mp, { plugin });
 
-      if (!orchestrated) {
-        await transaction.sweepConfigLayers(locations, plugin, marketplace);
-      }
+      await deleteTargetDeclaration(transaction, layerPaths, locations, { plugin, marketplace });
 
       // D-05-03 / D-05-10: the sweep runs on THIS arm only -- the named plugin
       // is off disk and out of the snapshot -- and before the one save, so the
@@ -1380,6 +1421,18 @@ async function runUninstallOutcome(
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- `alreadyGone` is mutated inside the withLockedStateTransaction closure above; TS flow analysis cannot prove the closure executed, so it sees the variable as still `false`. The check is required at runtime.
   if (alreadyGone) {
     return emitAlreadyGone({ ctx, run, marketplace, scope, plugin, orchestrated });
+  }
+
+  if (kept.otherLayer !== undefined) {
+    return emitKeptInstalled({
+      ctx,
+      run,
+      marketplace,
+      scope,
+      plugin,
+      version: removedVersion,
+      otherLayer: kept.otherLayer,
+    });
   }
 
   if (routeEffect.removeAfterSave) {

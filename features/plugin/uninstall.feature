@@ -94,3 +94,45 @@ Feature: Plugin uninstall
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
+
+  Scenario: Uninstalling with --local a plugin both layers declare keeps it installed and drops only the local declaration
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has run "/claude:plugin install demo@fixtures --scope project --local"
+    When the user runs "/claude:plugin uninstall demo@fixtures --scope project --local"
+    Then the result has these fields:
+      | kind         | cascade                             |
+      | severity     | warning                             |
+      | needs reload | false                               |
+      | summary      | A plugin operation needs attention. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status  | reasons                         | scope   | version | cause chain                                            | cause truncated | leaks | rollback partial |
+      | fixtures         | project           | demo@fixtures | demo | skipped | still installed in shared layer | project | 1.0.0   | Run the command again without --local to uninstall it. | false           |       |                  |
+    Then the "claude-plugins.local.json" file of the project scope declares no plugins
+    Then the "claude-plugins.json" file of the project scope declares these plugins:
+      | id            |
+      | demo@fixtures |
+    When the user starts a new pi session
+    Then the session offers these skills:
+      | command           | description            |
+      | /skill:demo-skill | A skill of demo 1.0.0. |
+
+  Scenario: Uninstalling without --local a plugin both layers declare keeps it installed and drops only the shared declaration
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has run "/claude:plugin install demo@fixtures --scope project --local"
+    When the user runs "/claude:plugin uninstall demo@fixtures --scope project"
+    Then the result has these fields:
+      | kind         | cascade                             |
+      | severity     | warning                             |
+      | needs reload | false                               |
+      | summary      | A plugin operation needs attention. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status  | reasons                        | scope   | version | cause chain                                         | cause truncated | leaks | rollback partial |
+      | fixtures         | project           | demo@fixtures | demo | skipped | still installed in local layer | project | 1.0.0   | Run the command again with --local to uninstall it. | false           |       |                  |
+    Then the "claude-plugins.json" file of the project scope declares no plugins
+    Then the "claude-plugins.local.json" file of the project scope declares these plugins:
+      | id            |
+      | demo@fixtures |
+    When the user starts a new pi session
+    Then the session offers these skills:
+      | command           | description            |
+      | /skill:demo-skill | A skill of demo 1.0.0. |

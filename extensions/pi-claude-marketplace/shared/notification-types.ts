@@ -265,7 +265,13 @@ export type Reason =
   // declares and the scope already installed. The install adds the declaration
   // to the target layer and installs nothing; the token names the other layer.
   | "already installed in shared layer"
-  | "already installed in local layer";
+  | "already installed in local layer"
+  // LAYER-05 / D-MF-03: an uninstall from one layer of a plugin the other layer
+  // still declares. The uninstall drops the target layer's declaration and
+  // uninstalls nothing; the token names the other layer, and the remedy rides
+  // the cause line.
+  | "still installed in shared layer"
+  | "still installed in local layer";
 
 /** Reasons that describe a content row rather than marketplace absence. */
 export type ContentReason = Exclude<
@@ -565,7 +571,8 @@ export interface PluginSkippedMessage extends MessageBase {
 }
 
 /**
- * The one `skipped` row that carries a cause trailer: update's.
+ * A `skipped` row that carries a cause trailer: update's. Uninstall's
+ * `PluginUninstallSkippedMessage` is the other one.
  *
  * UPDT-02 / D-10-11: the held-update remedy names the constraining plugins
  * and marks which of them are currently disabled, and D-10-13's ceiling
@@ -584,6 +591,16 @@ export interface PluginSkippedMessage extends MessageBase {
  * rows at the dispatcher type today.
  */
 export interface PluginUpdateSkippedMessage extends PluginSkippedMessage {
+  readonly cause?: Error;
+}
+
+/**
+ * LAYER-05: uninstall's `skipped` row, for a plugin the other layer still
+ * declares. The cause line carries the remedy: run the command again with or
+ * without `--local`. It is a sibling of `PluginUpdateSkippedMessage` for the
+ * same reason that variant exists: the base row has no cause slot.
+ */
+export interface PluginUninstallSkippedMessage extends PluginSkippedMessage {
   readonly cause?: Error;
 }
 
@@ -641,6 +658,7 @@ export type PluginNotificationMessage =
   | PluginFailedMessage
   | PluginSkippedMessage
   | PluginUpdateSkippedMessage
+  | PluginUninstallSkippedMessage
   | PluginManualRecoveryMessage
   | PluginWillInstallMessage
   | PluginWillUninstallMessage

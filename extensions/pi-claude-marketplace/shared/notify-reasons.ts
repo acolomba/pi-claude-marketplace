@@ -410,4 +410,11 @@ type CommandPrivateReason =
   // user can attribute new commands to a reload they did not initiate. Owned by
   // that one projection rather than shared across topic groups, so it is named
   // here for the proof. Like its neighbour above, it IS a `ContentReason`.
-  | "components now supported";
+  | "components now supported"
+  // LAYER-05 / D-MF-03: uninstall's no-op marker, owned by
+  // `orchestrators/plugin/uninstall.messaging.ts`. The other layer still
+  // declares the plugin, so the uninstall dropped only the target layer's
+  // declaration. It rides a `skipped` row at warning, because the plugin the
+  // user asked to uninstall stays installed.
+  | "still installed in shared layer"
+  | "still installed in local layer";

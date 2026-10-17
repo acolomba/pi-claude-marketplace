@@ -2497,59 +2497,6 @@ test("WB-01: standalone uninstall deletes the plugin entry from claude-plugins.j
   });
 });
 
-test("cross-layer: standalone uninstall deletes the plugin key from BOTH the base and local files", async () => {
-  await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-wb01-local-"));
-    try {
-      const locations = locationsFor("project", cwd);
-      await seedFullPlugin(locations, "mp", "hello", cwd);
-
-      const { saveConfig } =
-        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
-      // Both layers declare the key -- the cross-layer sweep must clear both so
-      // no dangling declaration survives in either physical file.
-      await saveConfig(
-        locations.configJsonPath,
-        { schemaVersion: 1, plugins: { "hello@mp": {} } },
-        locations.scopeRoot,
-      );
-      await saveConfig(
-        locations.configLocalJsonPath,
-        { schemaVersion: 1, plugins: { "hello@mp": {} } },
-        locations.scopeRoot,
-      );
-
-      const { ctx, run } = makeCtx();
-      await uninstallWithFreshOwner({
-        ctx,
-        run,
-        scope: "project",
-        cwd,
-        marketplace: "mp",
-        plugin: "hello",
-        local: true,
-      });
-
-      const { loadConfig } =
-        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
-      // Both files no longer declare the key.
-      const baseCfg = await loadConfig(locations.configJsonPath);
-      assert.equal(baseCfg.status, "valid");
-      if (baseCfg.status === "valid") {
-        assert.equal(baseCfg.config.plugins?.["hello@mp"], undefined);
-      }
-
-      const localCfg = await loadConfig(locations.configLocalJsonPath);
-      assert.equal(localCfg.status, "valid");
-      if (localCfg.status === "valid") {
-        assert.equal(localCfg.config.plugins?.["hello@mp"], undefined);
-      }
-    } finally {
-      await rm(cwd, { recursive: true, force: true });
-    }
-  });
-});
-
 test("WR-09 / T-56-03-01: orchestrated-mode uninstall SKIPS write-back; config untouched", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-wb01-orch-"));
@@ -2933,6 +2880,146 @@ test("LAYER-04: a plugin that is not installed reports not installed whatever th
         },
       ]);
       assert.deepStrictEqual(await readScopeFiles(locations), filesBefore);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// LAYER-05 / D-MF-03: the plugin stays installed while either layer declares it
+// ──────────────────────────────────────────────────────────────────────────
+
+const LAYER_DECLARING_MP_AND_HELLO =
+  '{"schemaVersion":1,"marketplaces":{"mp":{"source":"./src"}},"plugins":{"hello@mp":{}}}\n';
+const LAYER_DECLARING_MP_ONLY =
+  '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "mp": {\n      "source": "./src"\n    }\n  },\n  "plugins": {}\n}\n';
+
+for (const { title, local, flags, otherLayer, cause, dropFrom } of [
+  {
+    title: "a --local uninstall of a plugin both layers declare drops only the local declaration",
+    local: true,
+    flags: {},
+    otherLayer: "shared",
+    cause: "Run the command again without --local to uninstall it.",
+    dropFrom: "local",
+  },
+  {
+    title: "a flagless uninstall of a plugin both layers declare drops only the shared declaration",
+    local: false,
+    flags: {},
+    otherLayer: "local",
+    cause: "Run the command again with --local to uninstall it.",
+    dropFrom: "shared",
+  },
+  {
+    title: "--prune and --keep-data change nothing when the other layer still declares the plugin",
+    local: true,
+    flags: { prune: true, keepData: true },
+    otherLayer: "shared",
+    cause: "Run the command again without --local to uninstall it.",
+    dropFrom: "local",
+  },
+] as const) {
+  test(`LAYER-05: ${title} and keeps it installed`, async () => {
+    await withHermeticHome(async () => {
+      const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-layer-both-"));
+      try {
+        // arrange
+        const locations = locationsFor("project", cwd);
+        await seedFullPlugin(locations, "mp", "hello", cwd);
+        await writeLayerFiles(locations, {
+          shared: LAYER_DECLARING_MP_AND_HELLO,
+          local: LAYER_DECLARING_MP_AND_HELLO,
+        });
+        const filesBefore = await readScopeFiles(locations);
+        const cascade = mock<typeof cascadeUnstagePlugin>({ exactParams: true, name: "cascade" });
+        const { ctx, run, notifications } = makeCtx();
+
+        // act
+        const outcome = await uninstallWithFreshOwner({
+          ctx,
+          run,
+          scope: "project",
+          cwd,
+          marketplace: "mp",
+          plugin: "hello",
+          local,
+          cascade,
+          ...flags,
+        });
+
+        // assert: the target layer loses the key, the other layer and the
+        // state document keep their bytes, and no cascade ran.
+        assert.strictEqual(outcome, undefined);
+        assert.deepStrictEqual(notifications, [
+          {
+            message:
+              "A plugin operation needs attention.\n\n● mp [project]\n" +
+              `  ⊘ hello v0.0.1 (skipped) {still installed in ${otherLayer} layer}\n` +
+              `    cause: ${cause}`,
+            severity: "warning",
+          },
+        ]);
+        assert.deepStrictEqual(await readScopeFiles(locations), {
+          ...filesBefore,
+          [dropFrom]: LAYER_DECLARING_MP_ONLY,
+        });
+        verify(cascade);
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
+
+test("WR-02: an uninstall deletes the key from its target layer and never writes the other layer", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-layer-target-only-"));
+    try {
+      // arrange: the local layer declares the marketplace but not the plugin.
+      const locations = locationsFor("project", cwd);
+      await seedFullPlugin(locations, "mp", "hello", cwd);
+      await writeLayerFiles(locations, {
+        shared: LAYER_DECLARING_MP_AND_HELLO,
+        local: SHARED_LAYER_WITH_MARKETPLACE,
+      });
+      const localMtime = (await stat(locations.configLocalJsonPath)).mtimeMs;
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await uninstallWithFreshOwner({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      // assert
+      assert.deepStrictEqual(
+        {
+          notifications,
+          shared: await readFile(locations.configJsonPath, "utf8"),
+          local: await readFile(locations.configLocalJsonPath, "utf8"),
+          localMtime: (await stat(locations.configLocalJsonPath)).mtimeMs,
+        },
+        {
+          notifications: [
+            {
+              message:
+                "A plugin operation needs attention.\n\n● mp [project]\n" +
+                "  ○ hello v0.0.1 (uninstalled) {stale workflow command}\n\n" +
+                "/reload to pick up changes",
+              severity: "warning",
+            },
+          ],
+          shared: LAYER_DECLARING_MP_ONLY,
+          local: SHARED_LAYER_WITH_MARKETPLACE,
+          localMtime,
+        },
+      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

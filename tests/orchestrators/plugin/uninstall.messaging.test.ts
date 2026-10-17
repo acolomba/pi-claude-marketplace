@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  composeKeptInstalledRow,
   composePrunedRow,
   composeRemovalBlocks,
   composeUninstalledRow,
@@ -11,13 +12,14 @@ import { composePluginLines } from "../../../extensions/pi-claude-marketplace/sh
 import { resolveRows } from "../../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 import { type PluginFailedMessage } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 import { type PluginUninstalledMessage } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
+import { type PluginUninstallSkippedMessage } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type { ResolvedRow } from "../../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 
 test("exports the complete uninstall command context", () => {
   // arrange
-  const expectedRenderKeys = ["uninstalled", "failed"];
+  const expectedRenderKeys = ["uninstalled", "failed", "skipped"];
 
   // act
   const contextKeys = Object.keys(UNINSTALL_CONTEXT);
@@ -101,6 +103,7 @@ test("UNINSTALL_CONTEXT declares complete row policies", () => {
   assert.deepStrictEqual(policies, {
     uninstalled: { markers: false, contentReasons: true },
     failed: { markers: false, contentReasons: true },
+    skipped: { markers: false, contentReasons: true },
   });
 });
 
@@ -357,6 +360,53 @@ test("LOAD-03: composeUninstalledRow omits the version slot when the removed rec
 
   // assert
   assert.equal(Object.hasOwn(row, "version"), false);
+});
+
+for (const { otherLayer, reason, hint } of [
+  {
+    otherLayer: "shared",
+    reason: "still installed in shared layer",
+    hint: "Run the command again without --local to uninstall it.",
+  },
+  {
+    otherLayer: "local",
+    reason: "still installed in local layer",
+    hint: "Run the command again with --local to uninstall it.",
+  },
+] as const) {
+  test(`LAYER-05: composeKeptInstalledRow for a plugin the ${otherLayer} layer still declares is a warning skipped row with the hint`, () => {
+    // arrange
+    const expectedRow: PluginUninstallSkippedMessage = {
+      status: "skipped",
+      name: "demo",
+      version: "1.0.0",
+      reasons: [reason],
+      cause: new Error(hint),
+      severity: "warning",
+      needsReload: false,
+    };
+
+    // act
+    const row = composeKeptInstalledRow({ plugin: "demo", version: "1.0.0", otherLayer });
+
+    // assert
+    assert.deepStrictEqual(row, expectedRow);
+  });
+}
+
+test("LAYER-05: composeKeptInstalledRow omits the version slot when the record carried none", () => {
+  // act
+  const row = composeKeptInstalledRow({ plugin: "demo", otherLayer: "shared" });
+
+  // assert
+  assert.deepStrictEqual(row, {
+    status: "skipped",
+    name: "demo",
+    reasons: ["still installed in shared layer"],
+    cause: new Error("Run the command again without --local to uninstall it."),
+    severity: "warning",
+    needsReload: false,
+  });
 });
 
 test("D-05-12: composeRemovalBlocks with no members is the primary's single block", () => {

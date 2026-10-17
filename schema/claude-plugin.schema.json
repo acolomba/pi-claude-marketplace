@@ -172,7 +172,9 @@
                           "plugin declared locally",
                           "plugin declared in shared config",
                           "already installed in shared layer",
-                          "already installed in local layer"
+                          "already installed in local layer",
+                          "still installed in shared layer",
+                          "still installed in local layer"
                         ]
                       }
                     },
@@ -314,7 +316,9 @@
                     "plugin declared locally",
                     "plugin declared in shared config",
                     "already installed in shared layer",
-                    "already installed in local layer"
+                    "already installed in local layer",
+                    "still installed in shared layer",
+                    "still installed in local layer"
                   ]
                 }
               }
@@ -506,7 +510,9 @@
                           "plugin declared locally",
                           "plugin declared in shared config",
                           "already installed in shared layer",
-                          "already installed in local layer"
+                          "already installed in local layer",
+                          "still installed in shared layer",
+                          "still installed in local layer"
                         ]
                       }
                     },
@@ -648,7 +654,9 @@
                     "plugin declared locally",
                     "plugin declared in shared config",
                     "already installed in shared layer",
-                    "already installed in local layer"
+                    "already installed in local layer",
+                    "still installed in shared layer",
+                    "still installed in local layer"
                   ]
                 }
               }
@@ -905,7 +913,9 @@
                       "plugin declared locally",
                       "plugin declared in shared config",
                       "already installed in shared layer",
-                      "already installed in local layer"
+                      "already installed in local layer",
+                      "still installed in shared layer",
+                      "still installed in local layer"
                     ]
                   }
                 },
@@ -1090,7 +1100,9 @@
                       "plugin declared locally",
                       "plugin declared in shared config",
                       "already installed in shared layer",
-                      "already installed in local layer"
+                      "already installed in local layer",
+                      "still installed in shared layer",
+                      "still installed in local layer"
                     ]
                   }
                 },
@@ -1358,7 +1370,9 @@
                             "plugin declared locally",
                             "plugin declared in shared config",
                             "already installed in shared layer",
-                            "already installed in local layer"
+                            "already installed in local layer",
+                            "still installed in shared layer",
+                            "still installed in local layer"
                           ]
                         }
                       },
@@ -1549,7 +1563,9 @@
                             "plugin declared locally",
                             "plugin declared in shared config",
                             "already installed in shared layer",
-                            "already installed in local layer"
+                            "already installed in local layer",
+                            "still installed in shared layer",
+                            "still installed in local layer"
                           ]
                         }
                       },
@@ -1684,7 +1700,9 @@
               "plugin declared locally",
               "plugin declared in shared config",
               "already installed in shared layer",
-              "already installed in local layer"
+              "already installed in local layer",
+              "still installed in shared layer",
+              "still installed in local layer"
             ]
           }
         }

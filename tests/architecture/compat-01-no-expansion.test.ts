@@ -302,6 +302,9 @@ const EXPECTED_REASONS = [
   // LAYER-05: an install adds a declaration of a plugin the other layer installed.
   "already installed in shared layer",
   "already installed in local layer",
+  // LAYER-05: an uninstall keeps a plugin the other layer still declares.
+  "still installed in shared layer",
+  "still installed in local layer",
 ] as const;
 
 const EXPECTED_STATUS_TOKENS = [
