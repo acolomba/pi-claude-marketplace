@@ -44,6 +44,9 @@ import { ownValue, setOwn } from "../../shared/own-key.ts";
 import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import { crossScopeFlag, marketplaceInOtherScope } from "../marketplace/shared.ts";
 
+import { readRecordDeclarations } from "./dependency-index.ts";
+
+import type { MarketplaceStateRecord } from "./dependency-index.ts";
 import type { PluginEntry } from "../../domain/components/plugin.ts";
 import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
 import type {
@@ -836,34 +839,92 @@ function unreadableLayerError(filePath: string): LayerFileUnreadableError {
 
 /**
  * LAYER-04 / D-MF-03: a nameless update or reinstall with `--local` covers
- * only the plugins the local layer declares, as the nameless autoupdate does.
- * Keeps, in order, the targets whose `<plugin>@<marketplace>` key their
- * scope's `claude-plugins.local.json` declares. Each scope's local layer is
- * read once, and membership is an own-key read.
+ * the plugins the local layer declares and the dependencies those plugins
+ * need. Keeps, in order, the targets whose `<plugin>@<marketplace>` key is
+ * covered in their scope. Each scope's layers and state are read once.
  *
- * CFG-03: an unreadable local layer throws `LayerFileUnreadableError` naming
- * it, instead of reading as a layer that declares nothing.
+ * CFG-03: an unreadable layer throws `LayerFileUnreadableError` naming it,
+ * the local layer first, instead of reading as a layer that declares nothing.
  */
 export async function keepLocalLayerTargets<
   T extends { readonly plugin: string; readonly marketplace: string; readonly scope: Scope },
 >(targets: readonly T[], cwd: string): Promise<readonly T[]> {
   const scopes = [...new Set(targets.map((target) => target.scope))];
-  const declared = new Set(
-    (await Promise.all(scopes.map((scope) => localLayerKeys(scope, cwd)))).flat(),
+  const covered = new Set(
+    (await Promise.all(scopes.map((scope) => localLayerCoverage(scope, cwd)))).flat(),
   );
   return targets.filter((target) =>
-    declared.has(`${target.scope}:${target.plugin}@${target.marketplace}`),
+    covered.has(`${target.scope}:${target.plugin}@${target.marketplace}`),
   );
 }
 
-/** The scope-qualified plugin keys one scope's local layer declares. */
-async function localLayerKeys(scope: Scope, cwd: string): Promise<readonly string[]> {
-  const loaded = await loadConfig(locationsFor(scope, cwd).configLocalJsonPath);
-  if (loaded.status === "invalid") {
-    throw unreadableLayerError(loaded.filePath);
+/**
+ * The scope-qualified keys a `--local` form covers in one scope: every key the
+ * local layer declares, then each dependency those plugins need, walked
+ * through installed plugins that no layer declares. A plugin the shared layer
+ * declares ends the walk, so a dependency that only shared-layer plugins need
+ * is not covered. This is the walk the LAYER-08 uninstall rule makes, read in
+ * the other direction.
+ *
+ * D-05-06: declarations are read offline, as the uninstall reads them. A
+ * plugin whose declarations cannot be read adds no dependency. Update and
+ * reinstall remove nothing, so the D-05-07 fail-closed rule does not apply,
+ * and that plugin's own row still runs.
+ */
+async function localLayerCoverage(scope: Scope, cwd: string): Promise<readonly string[]> {
+  const locations = locationsFor(scope, cwd);
+  const layers = await selectDeclaringConfigWriteTarget({ locations, local: true });
+  if (layers.kind === "unreadable") {
+    throw unreadableLayerError(layers.filePath);
   }
 
-  return Object.keys(configOrEmpty(loaded).plugins ?? {}).map((key) => `${scope}:${key}`);
+  const state = await loadState(locations.extensionRoot);
+  const records = recordsByKey(state);
+  const covered = new Set(Object.keys(layers.current.plugins ?? {}));
+  const pending = [...covered];
+  for (let key = pending.pop(); key !== undefined; key = pending.pop()) {
+    const record = records.get(key);
+    if (record === undefined) {
+      continue;
+    }
+
+    // eslint-disable-next-line no-await-in-loop -- each read names the plugins the walk visits next
+    const read = await readRecordDeclarations(
+      { state, locations },
+      record.marketplace,
+      record.plugin,
+    );
+    for (const dependency of read.ok ? read.declared : []) {
+      const dependencyKey = `${dependency.name}@${dependency.marketplace}`;
+      if (
+        !covered.has(dependencyKey) &&
+        ownValue(layers.sibling.plugins, dependencyKey) === undefined
+      ) {
+        covered.add(dependencyKey);
+        pending.push(dependencyKey);
+      }
+    }
+  }
+
+  return [...covered].map((key) => `${scope}:${key}`);
+}
+
+/** An installed plugin: its marketplace record and its name. */
+interface InstalledPluginRef {
+  readonly marketplace: MarketplaceStateRecord;
+  readonly plugin: string;
+}
+
+/** Each installed plugin by its `<plugin>@<marketplace>` key. */
+function recordsByKey(state: ExtensionState): ReadonlyMap<string, InstalledPluginRef> {
+  const records = new Map<string, InstalledPluginRef>();
+  for (const marketplace of Object.values(state.marketplaces)) {
+    for (const plugin of Object.keys(marketplace.plugins)) {
+      records.set(`${plugin}@${marketplace.name}`, { marketplace, plugin });
+    }
+  }
+
+  return records;
 }
 
 /**

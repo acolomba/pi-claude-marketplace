@@ -164,6 +164,50 @@ async function withTempScopes<T>(run: (scopes: TempScopes) => Promise<T>): Promi
   return withHermeticEnvironment("plugin-shared-", ({ cwd, root }) => run({ cwd, root }));
 }
 
+/**
+ * Records the marketplace `tools` in the project scope with the given plugins,
+ * and writes its manifest under `root` listing each entry with its dependencies.
+ */
+async function saveToolsScope(args: {
+  readonly cwd: string;
+  readonly root: string;
+  readonly records: Readonly<Record<string, PluginRecord["provenance"]>>;
+  readonly entries: Readonly<Record<string, readonly string[]>>;
+}): Promise<void> {
+  const marketplaceRoot = path.join(args.root, "tools");
+  const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
+  await mkdir(path.dirname(manifestPath), { recursive: true });
+  await writeFile(
+    manifestPath,
+    JSON.stringify({
+      name: "tools",
+      plugins: Object.entries(args.entries).map(([name, dependencies]) => ({
+        name,
+        source: `./plugins/${name}`,
+        dependencies,
+      })),
+    }),
+  );
+  const locations = locationsFor("project", args.cwd);
+  await mkdir(locations.extensionRoot, { recursive: true });
+  const plugins = Object.fromEntries(
+    Object.entries(args.records).map(([name, provenance]) => [
+      name,
+      { ...makePluginRecord({}), provenance },
+    ]),
+  );
+  await saveState(locations.extensionRoot, {
+    schemaVersion: 1,
+    marketplaces: {
+      tools: {
+        ...makeMarketplaceRecord("tools", "project", plugins),
+        manifestPath,
+        marketplaceRoot,
+      },
+    },
+  });
+}
+
 async function saveScopedState(
   cwd: string,
   scope: Scope,
@@ -1590,6 +1634,133 @@ describe("keepLocalLayerTargets", () => {
 
       // assert
       assert.deepStrictEqual(kept, []);
+    });
+  });
+
+  test("LAYER-04: keeps the dependencies the local layer's plugins need, through plugins no layer declares", async () => {
+    // arrange
+    await withTempScopes(async ({ cwd, root }) => {
+      const locations = locationsFor("project", cwd);
+      await writeConfig(locations.configLocalJsonPath, {
+        schemaVersion: 1,
+        plugins: { "app@tools": {} },
+      });
+      await writeConfig(locations.configJsonPath, {
+        schemaVersion: 1,
+        plugins: { "svc@tools": {} },
+      });
+      await saveToolsScope({
+        cwd,
+        root,
+        records: {
+          app: "explicit",
+          lib: "dependency",
+          base: "dependency",
+          svc: "explicit",
+          core: "dependency",
+        },
+        entries: { app: ["lib", "base"], lib: ["base"], base: [], svc: ["core", "lib"], core: [] },
+      });
+      const targets = [
+        { plugin: "svc", marketplace: "tools", scope: "project" },
+        { plugin: "core", marketplace: "tools", scope: "project" },
+        { plugin: "base", marketplace: "tools", scope: "project" },
+        { plugin: "lib", marketplace: "tools", scope: "project" },
+        { plugin: "app", marketplace: "tools", scope: "project" },
+      ] as const;
+
+      // act
+      const kept = await keepLocalLayerTargets(targets, cwd);
+
+      // assert
+      assert.deepStrictEqual(kept, [
+        { plugin: "base", marketplace: "tools", scope: "project" },
+        { plugin: "lib", marketplace: "tools", scope: "project" },
+        { plugin: "app", marketplace: "tools", scope: "project" },
+      ]);
+    });
+  });
+
+  test("LAYER-04: keeps no dependency past a plugin the shared layer declares", async () => {
+    // arrange
+    await withTempScopes(async ({ cwd, root }) => {
+      const locations = locationsFor("project", cwd);
+      await writeConfig(locations.configLocalJsonPath, {
+        schemaVersion: 1,
+        plugins: { "app@tools": {} },
+      });
+      await writeConfig(locations.configJsonPath, {
+        schemaVersion: 1,
+        plugins: { "kit@tools": {} },
+      });
+      await saveToolsScope({
+        cwd,
+        root,
+        records: { app: "explicit", kit: "explicit", gear: "dependency" },
+        entries: { app: ["kit"], kit: ["gear"], gear: [] },
+      });
+      const targets = [
+        { plugin: "app", marketplace: "tools", scope: "project" },
+        { plugin: "gear", marketplace: "tools", scope: "project" },
+        { plugin: "kit", marketplace: "tools", scope: "project" },
+      ] as const;
+
+      // act
+      const kept = await keepLocalLayerTargets(targets, cwd);
+
+      // assert
+      assert.deepStrictEqual(kept, [{ plugin: "app", marketplace: "tools", scope: "project" }]);
+    });
+  });
+
+  test("LAYER-04: a plugin whose dependencies cannot be read adds no dependency", async () => {
+    // arrange
+    await withTempScopes(async ({ cwd, root }) => {
+      await writeConfig(locationsFor("project", cwd).configLocalJsonPath, {
+        schemaVersion: 1,
+        plugins: { "app@tools": {} },
+      });
+      await saveToolsScope({
+        cwd,
+        root,
+        records: { app: "explicit", lib: "dependency" },
+        entries: { lib: [] },
+      });
+      const targets = [
+        { plugin: "app", marketplace: "tools", scope: "project" },
+        { plugin: "lib", marketplace: "tools", scope: "project" },
+      ] as const;
+
+      // act
+      const kept = await keepLocalLayerTargets(targets, cwd);
+
+      // assert
+      assert.deepStrictEqual(kept, [{ plugin: "app", marketplace: "tools", scope: "project" }]);
+    });
+  });
+
+  test("CFG-03: an unreadable shared layer is an invalid manifest naming claude-plugins.json", async () => {
+    // arrange
+    await withTempScopes(async ({ cwd }) => {
+      const locations = locationsFor("project", cwd);
+      await mkdir(path.dirname(locations.configJsonPath), { recursive: true });
+      await writeFile(locations.configJsonPath, "{");
+
+      // act & assert
+      await assert.rejects(
+        keepLocalLayerTargets([{ plugin: "alpha", marketplace: "mp", scope: "project" }], cwd),
+        (error: unknown) => {
+          assert.ok(error instanceof LayerFileUnreadableError);
+          assert.deepStrictEqual(
+            { basename: error.basename, message: error.message },
+            {
+              basename: "claude-plugins.json",
+              message: 'Config file "claude-plugins.json" failed schema validation.',
+            },
+          );
+          return true;
+        },
+      );
     });
   });
 });

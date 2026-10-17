@@ -117,6 +117,38 @@ Feature: Plugin update
       | /skill:demo-skill | A skill of demo 1.0.0. |
       | /skill:pp-skill   | A skill of pp 1.1.0.   |
 
+  Scenario: Updating every plugin with --local also updates the dependencies the local plugins need
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib          |
+      | lib  | 1.0.0   |              |
+      | svc  | 1.0.0   | core         |
+      | core | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install app@tools --scope project --local"
+    Given the user has run "/claude:plugin install svc@tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.1.0   | lib          |
+      | lib  | 1.1.0   |              |
+      | svc  | 1.1.0   | core         |
+      | core | 1.1.0   |              |
+    When the user runs "/claude:plugin update --scope project --local"
+    Then the result has these fields:
+      | kind                | cascade       |
+      | severity            | info          |
+      | needs reload        | true          |
+      | tally label         | Plugin update |
+      | tally failures      | 0             |
+      | tally warnings      | 0             |
+      | tally success count | 2             |
+      | tally success verb  | updated       |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name | status  | reasons | scope   | from  | to    |
+      | tools            | project           | lib@tools | lib  | updated |         | project | 1.0.0 | 1.1.0 |
+      | tools            | project           | app@tools | app  | updated |         | project | 1.0.0 | 1.1.0 |
+
   Scenario: Updating every plugin updates the plugins of both layers and declares none of their dependencies
     Given the marketplace "fixtures" offers these plugins:
       | name | version |

@@ -50,6 +50,31 @@ Feature: Plugin reinstall
       | marketplace name | marketplace scope | id          | name | status      | reasons | scope   | version |
       | fixtures         | project           | pp@fixtures | pp   | reinstalled |         | project | 1.0.0   |
 
+  Scenario: Reinstalling every plugin with --local also reinstalls the dependencies the local plugins need
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib          |
+      | lib  | 1.0.0   |              |
+      | svc  | 1.0.0   | core         |
+      | core | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install app@tools --scope project --local"
+    Given the user has run "/claude:plugin install svc@tools --scope project"
+    When the user runs "/claude:plugin reinstall --scope project --local"
+    Then the result has these fields:
+      | kind                | cascade          |
+      | severity            | info             |
+      | needs reload        | true             |
+      | tally label         | Plugin reinstall |
+      | tally failures      | 0                |
+      | tally warnings      | 0                |
+      | tally success count | 2                |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name | status      | reasons | scope   | version |
+      | tools            | project           | app@tools | app  | reinstalled |         | project | 1.0.0   |
+      | tools            | project           | lib@tools | lib  | reinstalled |         | project | 1.0.0   |
+
   Scenario: Reinstalling a dependency declares nothing in the configuration
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins with dependencies:
