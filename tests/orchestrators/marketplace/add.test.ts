@@ -3162,6 +3162,53 @@ for (const { declaredLayer, targetLayer, firstLocal, secondLocal } of [
   });
 }
 
+test("LAYER-01 / WR-06: a relative path typed in another directory adds that directory, not the recorded marketplace", async (t) => {
+  // arrange: the user scope records `./named-marketplace` as typed in `first`.
+  const { root } = await createHermeticEnvironment(t, "mp-add-relative-");
+  const first = path.join(root, "first");
+  const second = path.join(root, "second");
+  await writeNamedPathMarketplace(first, "tools");
+  await mkdir(second, { recursive: true });
+  const startupCwd = process.cwd();
+  t.after(() => {
+    process.chdir(startupCwd);
+  });
+  process.chdir(first);
+  const firstAdd = makeCtx();
+  await addMarketplace({
+    ctx: firstAdd.ctx,
+    run: firstAdd.run,
+    scope: "user",
+    cwd: first,
+    rawSource: "./named-marketplace",
+  });
+  const userLocations = locationsFor("user", first);
+  const stateBefore = await readFile(userLocations.stateJsonPath, "utf8");
+  process.chdir(second);
+  const { ctx, run, notifications } = makeCtx();
+
+  // act
+  await addMarketplace({
+    ctx,
+    run,
+    scope: "user",
+    cwd: second,
+    rawSource: "./named-marketplace",
+    local: true,
+  });
+
+  // assert
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "A marketplace operation has failed.\n\n⊘ ./named-marketplace [user] (failed) {source missing}",
+      severity: "error",
+    },
+  ]);
+  assert.strictEqual(await pathExists(userLocations.configLocalJsonPath), false);
+  assert.strictEqual(await readFile(userLocations.stateJsonPath, "utf8"), stateBefore);
+});
+
 test("LAYER-01: declares a github marketplace in the local layer with only the clone of the first add", async () => {
   await withTmpScope(async ({ cwd, locations }) => {
     // arrange

@@ -381,13 +381,41 @@ function addSubjectName(rawErr: unknown, rawSource: string): string {
 }
 
 /**
+ * WR-06: a typed path source names the recorded marketplace only when it
+ * resolves, as the add resolves it (`~` expanded, relative to the command's
+ * directory), to the record's root or manifest, resolved from the directory
+ * the record was added from. The same spelling typed in another directory
+ * names another directory, which the add must read. Other kinds match on
+ * `samePlannedSource` alone.
+ */
+function resolvesToRecord(
+  record: ExtensionState["marketplaces"][string],
+  rawSource: string,
+  cwd: string,
+): boolean {
+  const typed = parsePluginSource(rawSource);
+  if (typed.kind !== "path") {
+    return true;
+  }
+
+  const onDisk = path.resolve(cwd, expandTildePath(typed.logical));
+  return [record.marketplaceRoot, record.manifestPath].some(
+    (recorded) => path.resolve(record.addedFromCwd, recorded) === onDisk,
+  );
+}
+
+/**
  * LAYER-01 / D-MF-03: the same marketplace may be declared in both config
  * layers of a scope. When exactly one record of the scope has the typed
  * source, a standalone add declares that marketplace in the target layer and
  * reuses the record and its clone: no clone, no git call, no state write. The
  * match is `samePlannedSource`, the reconcile planner's own identity rule, so
- * the declared source never reads as a source mismatch on reload. A target
- * layer that already declares the name refuses as a duplicate.
+ * the declared source never reads as a source mismatch on reload, and for a
+ * path source also `resolvesToRecord` (WR-06). A path spelled another way
+ * (`~/tools` for `/home/me/tools`) is therefore not a match even when it names
+ * the same directory: declaring it would make the planner report a source
+ * mismatch on every reload. A target layer that already declares the name
+ * refuses as a duplicate.
  *
  * Returns the declared name, or `undefined` when no single record matches or
  * the add is orchestrated (reconcile and import never write a config back,
@@ -400,6 +428,7 @@ async function redeclareRecordedSource(args: {
   targetConfigPath: string;
   locations: ScopedLocations;
   rawSource: string;
+  cwd: string;
   orchestrated: boolean;
 }): Promise<string | undefined> {
   const { current, locations, rawSource } = args;
@@ -408,7 +437,9 @@ async function redeclareRecordedSource(args: {
   }
 
   const [match, ...others] = Object.entries(args.marketplaces).filter(
-    ([, record]) => samePlannedSource(record.source, rawSource) === "same",
+    ([, record]) =>
+      samePlannedSource(record.source, rawSource) === "same" &&
+      resolvesToRecord(record, rawSource, args.cwd),
   );
   if (match === undefined || others.length > 0) {
     return undefined;
@@ -573,6 +604,7 @@ async function runAddInGuard(args: {
       targetConfigPath,
       locations,
       rawSource: opts.rawSource,
+      cwd: opts.cwd,
       orchestrated,
     });
     if (redeclaredName !== undefined) {
