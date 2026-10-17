@@ -45,14 +45,10 @@
 // absent arm yields an empty starting shape that `saveConfig` writes back to
 // the local file, creating it fresh).
 //
-// D-103-13: absent the flag the target follows the DECLARATION -- the local
-// file when the plugin key is declared there, the base file otherwise. The flag
-// names the file the user wants written; it cannot name the file a declaration
-// already lives in. A local entry's explicit `enabled` wins over the base
-// entry's (LAYER-09), so a flagless flip written to the base file under a local
-// declaration that sets `enabled` moves no merged value: the verb reports
-// success and the next reconcile pass plans the opposite of the command.
-// Selection therefore happens INSIDE the lock (it reads a config file) -- see
+// LAYER-04 / D-MF-03: the flag alone picks the layer -- the shared layer
+// without `--local`, the local layer with it. A standalone call whose plugin
+// only the other layer declares is refused and changes nothing
+// (`refuseOtherLayerDeclaration`). Both layers are read INSIDE the lock -- see
 // `selectDeclaringConfigWriteTarget`.
 //
 // T-53-02-02 / T-54-02-02 information disclosure mitigation: the CFG-03
@@ -104,6 +100,7 @@ import {
   enableRowDependencies,
   localOnlyMarketplaceRefusal,
   overwriteDisabledMemberEntries,
+  pluginLayerVerdict,
   resolveCrossScopePluginTarget,
   retiresWorkflowCommand,
   type selectDeclaringConfigWriteTarget,
@@ -1181,7 +1178,7 @@ function buildEnableCascadeConfigPhase(
       const reEnabledMemberKeys = run.rows
         .filter((row) => row.status === "installed")
         .map((row) => row.name);
-      await writeReEnabledMemberConfigEntries(transaction, locations, state, reEnabledMemberKeys);
+      await writeReEnabledMemberConfigEntries(locations, reEnabledMemberKeys);
     },
   };
 }
@@ -1362,27 +1359,19 @@ function assertFailedPhasesHasError(
  * dependency), so both writes land; leaving `B`'s entry at `enabled: false`
  * after `enable A` re-enables `B` through its record hands the reload the
  * row asks for a `disable B` to plan (`plan.ts::classifyDeclaredPlugin`
- * reads the config truth). `overwriteDisabledMemberEntries` selects each
- * member's file by DECLARATION ALONE, not by the flag the caller typed for
- * the root, so a base-file entry is found even under `--local`. Called only
+ * reads the config truth). `overwriteDisabledMemberEntries` overwrites the
+ * entry in every layer that holds it, whatever flag the caller typed for the
+ * root, so a shared-layer entry is found even under `--local`. Called only
  * once BOTH the members' ledger AND the root's own branch have succeeded,
  * alongside the root's own `writeEnabledFlagBack` -- a config write is not
  * undone by `runPhases`, so patching it any earlier would leave the file
  * changed under a state.json the root's own failure then leaves unsaved.
  */
 async function writeReEnabledMemberConfigEntries(
-  transaction: EnableDisableTransaction,
   locations: ScopedLocations,
-  state: ExtensionState,
   reEnabledKeys: readonly string[],
 ): Promise<void> {
-  await overwriteDisabledMemberEntries({
-    locations,
-    state,
-    keys: reEnabledKeys,
-    select: transaction.selectConfigWriteTarget,
-    write: transaction.writeConfigEntries,
-  });
+  await overwriteDisabledMemberEntries({ locations, keys: reEnabledKeys });
 }
 
 /** The EDEP-01 cascade step's outcome, for the transaction closure to act on. */
@@ -1572,6 +1561,34 @@ async function readEnabledDependents(args: {
   );
   if (dependents.length > 0) {
     throw new EnableRefusedError("dependents remain", composeDisableRefusalCause(key, dependents));
+  }
+}
+
+/**
+ * LAYER-04 / D-MF-03: refuse a standalone enable or disable whose plugin only
+ * the other layer declares, before anything is resolved, materialized, or
+ * saved. It refuses an idempotent call too, because the user named a layer
+ * that does not declare the plugin. A plugin no layer declares is a dependency
+ * and is acted on (D-14). An orchestrated call reads its input from the
+ * configuration and is never refused (WR-09).
+ */
+function refuseOtherLayerDeclaration(
+  selection: SelectedConfigWriteTarget,
+  write: EnabledFlagWriteTarget,
+): void {
+  if (write.orchestrated) {
+    return;
+  }
+
+  const verdict = pluginLayerVerdict({
+    target: selection.current,
+    other: selection.sibling,
+    targetIsLocal: selection.targetIsLocal,
+    marketplace: write.marketplace,
+    plugin: write.plugin,
+  });
+  if (verdict.kind === "other-only") {
+    throw new EnableRefusedError(verdict.reason, verdict.refusal.message);
   }
 }
 
@@ -1884,7 +1901,7 @@ type InstalledPluginRecord = ExtensionState["marketplaces"][string]["plugins"][s
 /**
  * The plugin identity a config write-back needs, resolved once before the lock
  * so the write helpers stay pure module functions rather than closures over the
- * orchestrator body. The FILES are not part of it: D-103-13 chooses those
+ * orchestrator body. The FILES are not part of it: LAYER-04 chooses those
  * inside the lock, and both parses travel together in the selection.
  */
 interface EnabledFlagWriteTarget {
@@ -1895,7 +1912,7 @@ interface EnabledFlagWriteTarget {
   readonly scopeRoot: string;
 }
 
-/** D-103-13: the selection arm that actually names a write target. */
+/** LAYER-04: the selection arm that actually names a write target. */
 type SelectedConfigWriteTarget = Extract<DeclaringConfigWriteTarget, { kind: "selected" }>;
 
 /**
@@ -1908,12 +1925,10 @@ type SelectedConfigWriteTarget = Extract<DeclaringConfigWriteTarget, { kind: "se
  * declaration the planner converts into a marketplace removal plus a
  * perpetual failed row.
  *
- * UAT-05: the membership gate considers BOTH physical files (base union
- * local) so a `--local` flip never re-declares a base-declared marketplace
- * (CFG-02 wholesale shadowing). Both parses arrive from the caller's
- * in-lock selection, so no arm here re-reads a file another arm already read.
- * An UNREADABLE sibling skips the adoption write instead of counting as a file
- * that declares nothing.
+ * UAT-05: the membership gate considers BOTH layers (shared union local), so
+ * a `--local` flip never re-declares a marketplace the shared layer declares.
+ * Both parses arrive from the caller's in-lock selection, so no arm here
+ * re-reads a file another arm already read.
  *
  * S4 (PR #51, CONTEXT.md S4): the shared helper's `adoptedSource === undefined`
  * arms collapse -- benign (already declared) and dangerous (no string
@@ -2300,11 +2315,10 @@ async function runSetEnabledOutcome(
   }
 
   const { scope, locations } = resolution;
-  // T-53-02-02: the CFG-03 abort row carries the TARGETED file's basename, and
-  // the row is rendered after the lock closes. The target is now chosen inside
-  // the lock, so the basename escapes the closure through this `let`. It starts
-  // at the base file -- the value the no-flag, no-declaration arm yields -- so
-  // the pre-assignment value is never wrong and the type stays definite.
+  // T-53-02-02: the CFG-03 abort row carries the basename of the layer that
+  // could not be read, and the row is rendered after the lock closes, so the
+  // basename escapes the closure through this `let`. It starts at the shared
+  // layer, the target the no-flag call selects, so the type stays definite.
   let configBasename = path.basename(locations.configJsonPath);
   // EDEP-01: the enable cascade's classified member rows, threaded out of the
   // locked closure below for the standalone renderer. Stays empty for
@@ -2327,42 +2341,37 @@ async function runSetEnabledOutcome(
 
   try {
     // A single per-scope lock owns the whole critical section. The closure
-    // sequences the D-103-13 write-target selection, ENBL-02 idempotency, the
+    // sequences the LAYER-04 write-target selection, ENBL-02 idempotency, the
     // enable/disable branch dispatch, the I3 shrunken-record save, and the
     // UAT-05 config write-back; keeping that order visible here is what makes
     // the save-vs-throw discipline auditable.
     outcome = await transaction.withLockedStateTransaction(
       locations,
       async (tx): Promise<SetEnabledOutcome> => {
-        // D-103-13: ONE selection, made before anything reads a config path, so
+        // LAYER-04: ONE selection, made before anything reads a config path, so
         // the ordinary write-back and the config-truth promotion below cannot
-        // drift onto different files. It runs inside the lock because it READS
-        // the local config -- the WB-01 discipline that sibling reads happen
-        // fresh under the lock the write also holds. UAT-05: the sibling path is
-        // the scope's OTHER file, for the merged-view membership test only.
+        // drift onto different files. It reads both layers inside the lock --
+        // the WB-01 discipline that sibling reads happen fresh under the lock
+        // the write also holds.
         const selection = await transaction.selectConfigWriteTarget({
           locations,
           local: opts.local,
-          key: `${plugin}@${marketplace}`,
         });
 
         const state = tx.state;
-        // CFG-03: the arm covers the TARGETED file being unreadable and, on the
-        // flagless path, the local file being unreadable while the base file is
-        // fine -- the local file is what DECIDES the destination there, so an
-        // unreadable one leaves the destination unknown. The row names the file
-        // that could not be read; writing to the base file under a local entry
-        // that sets `enabled` would report a flip that moves no merged value.
+        // CFG-03: either layer being unreadable stops the command, because the
+        // other layer may declare the plugin. The row names the file that could
+        // not be read.
         if (selection.kind === "unreadable") {
           configBasename = path.basename(selection.filePath);
           return { kind: "invalid-config" };
         }
 
-        // Both physical files were parsed ONCE by the selector, and the whole
-        // selection travels to the write arms below: the target config steers
-        // every one of them, the sibling serves the UAT-05 membership gate, and
-        // no two decisions in this closure rest on different bytes of the same
-        // file.
+        // Both layers were parsed ONCE by the selector, and the whole selection
+        // travels to the checks and write arms below: the target config steers
+        // every write, the sibling serves the layer verdict and the UAT-05
+        // membership gate, and no two decisions in this closure rest on
+        // different bytes of the same file.
         configBasename = path.basename(selection.targetConfigPath);
 
         const mp = ownValue(state.marketplaces, marketplace);
@@ -2371,6 +2380,7 @@ async function runSetEnabledOutcome(
           return { kind: "not-recorded" };
         }
 
+        refuseOtherLayerDeclaration(selection, write);
         refuseLocalOnlyMarketplace({ selection, write, installed });
 
         // EDEP-01 / EDEP-03: resolve (never materialize yet) the enable

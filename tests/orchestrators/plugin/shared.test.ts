@@ -188,6 +188,26 @@ async function writeConfig(filePath: string, config: ScopeConfig): Promise<void>
   await writeFile(filePath, JSON.stringify(config));
 }
 
+/** Write `content` to `filePath`, or leave the file absent when there is none. */
+async function writeOptionalFile(filePath: string, content: string | undefined): Promise<void> {
+  if (content !== undefined) {
+    await writeFile(filePath, content);
+  }
+}
+
+/** The file's bytes, or `undefined` when it does not exist. */
+async function readOptionalFile(filePath: string): Promise<string | undefined> {
+  try {
+    return await readFile(filePath, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return undefined;
+    }
+
+    throw error;
+  }
+}
+
 function assertLocationsEquivalent(
   locations: ScopedLocations,
   expectedLocations: ScopedLocations,
@@ -846,51 +866,7 @@ describe("collectInstallReachableMarketplaces", () => {
 });
 
 describe("selectDeclaringConfigWriteTarget", () => {
-  test("reports an unreadable local determinant when no locality was requested", async () => {
-    // arrange
-    await withTempScopes(async ({ cwd }) => {
-      const locations = locationsFor("project", cwd);
-      await mkdir(path.dirname(locations.configLocalJsonPath), { recursive: true });
-      await writeFile(locations.configLocalJsonPath, "{");
-
-      // act
-      const target = await selectDeclaringConfigWriteTarget({
-        locations,
-        local: undefined,
-        key: "alpha@mp",
-      });
-
-      // assert
-      assert.deepStrictEqual(target, {
-        kind: "unreadable",
-        filePath: locations.configLocalJsonPath,
-      });
-    });
-  });
-
-  test("reports an unreadable explicitly selected local file", async () => {
-    // arrange
-    await withTempScopes(async ({ cwd }) => {
-      const locations = locationsFor("project", cwd);
-      await mkdir(path.dirname(locations.configLocalJsonPath), { recursive: true });
-      await writeFile(locations.configLocalJsonPath, "{");
-
-      // act
-      const target = await selectDeclaringConfigWriteTarget({
-        locations,
-        local: true,
-        key: "alpha@mp",
-      });
-
-      // assert
-      assert.deepStrictEqual(target, {
-        kind: "unreadable",
-        filePath: locations.configLocalJsonPath,
-      });
-    });
-  });
-
-  test("selects the local file that already declares the plugin key", async () => {
+  test("targets the shared layer without --local even when only the local layer declares the plugin", async () => {
     // arrange
     await withTempScopes(async ({ cwd }) => {
       const locations = locationsFor("project", cwd);
@@ -901,66 +877,32 @@ describe("selectDeclaringConfigWriteTarget", () => {
       await writeConfig(locations.configLocalJsonPath, localConfig);
 
       // act
-      const target = await selectDeclaringConfigWriteTarget({
-        locations,
-        local: undefined,
-        key: "alpha@mp",
-      });
-
-      // assert
-      assert.deepStrictEqual(target, {
-        kind: "selected",
-        targetConfigPath: locations.configLocalJsonPath,
-        targetIsLocal: true,
-        current: localConfig,
-        sibling: { schemaVersion: 1 },
-      });
-    });
-  });
-
-  test("selects the base file when a readable local file lacks the plugin key", async () => {
-    // arrange
-    await withTempScopes(async ({ cwd }) => {
-      const locations = locationsFor("project", cwd);
-      const baseConfig: ScopeConfig = {
-        schemaVersion: 1,
-        marketplaces: { mp: { source: "./mp" } },
-      };
-      const localConfig: ScopeConfig = { schemaVersion: 1, plugins: {} };
-      await writeConfig(locations.configJsonPath, baseConfig);
-      await writeConfig(locations.configLocalJsonPath, localConfig);
-
-      // act
-      const target = await selectDeclaringConfigWriteTarget({
-        locations,
-        local: undefined,
-        key: "alpha@mp",
-      });
+      const target = await selectDeclaringConfigWriteTarget({ locations, local: undefined });
 
       // assert
       assert.deepStrictEqual(target, {
         kind: "selected",
         targetConfigPath: locations.configJsonPath,
         targetIsLocal: false,
-        current: baseConfig,
+        current: { schemaVersion: 1 },
         sibling: localConfig,
       });
     });
   });
 
-  test("treats an absent local target as empty and preserves unreadable sibling uncertainty", async () => {
+  test("targets the local layer with --local even when only the shared layer declares the plugin", async () => {
     // arrange
     await withTempScopes(async ({ cwd }) => {
       const locations = locationsFor("project", cwd);
-      await mkdir(path.dirname(locations.configJsonPath), { recursive: true });
-      await writeFile(locations.configJsonPath, "{");
+      const sharedConfig: ScopeConfig = {
+        schemaVersion: 1,
+        marketplaces: { mp: { source: "./mp" } },
+        plugins: { "alpha@mp": {} },
+      };
+      await writeConfig(locations.configJsonPath, sharedConfig);
 
       // act
-      const target = await selectDeclaringConfigWriteTarget({
-        locations,
-        local: true,
-        key: "alpha@mp",
-      });
+      const target = await selectDeclaringConfigWriteTarget({ locations, local: true });
 
       // assert
       assert.deepStrictEqual(target, {
@@ -968,27 +910,74 @@ describe("selectDeclaringConfigWriteTarget", () => {
         targetConfigPath: locations.configLocalJsonPath,
         targetIsLocal: true,
         current: { schemaVersion: 1 },
-        sibling: undefined,
+        sibling: sharedConfig,
       });
     });
   });
 
-  test("reports an unreadable explicitly selected base file", async () => {
+  test("reads absent layers as layers that declare nothing", async () => {
+    // arrange
+    await withTempScopes(async ({ cwd }) => {
+      const locations = locationsFor("project", cwd);
+
+      // act
+      const target = await selectDeclaringConfigWriteTarget({ locations, local: false });
+
+      // assert
+      assert.deepStrictEqual(target, {
+        kind: "selected",
+        targetConfigPath: locations.configJsonPath,
+        targetIsLocal: false,
+        current: { schemaVersion: 1 },
+        sibling: { schemaVersion: 1 },
+      });
+    });
+  });
+
+  for (const { invalid, file, local, layer } of [
+    { invalid: "local", file: "configLocalJsonPath", local: undefined, layer: "the other layer" },
+    { invalid: "local", file: "configLocalJsonPath", local: true, layer: "the target layer" },
+    { invalid: "shared", file: "configJsonPath", local: false, layer: "the target layer" },
+    { invalid: "shared", file: "configJsonPath", local: true, layer: "the other layer" },
+  ] satisfies readonly {
+    invalid: string;
+    file: "configJsonPath" | "configLocalJsonPath";
+    local: boolean | undefined;
+    layer: string;
+  }[]) {
+    test(`CFG-03: reports an invalid ${invalid} layer that is ${layer} (local ${local})`, async () => {
+      // arrange
+      await withTempScopes(async ({ cwd }) => {
+        const locations = locationsFor("project", cwd);
+        const invalidPath = locations[file];
+        await mkdir(path.dirname(invalidPath), { recursive: true });
+        await writeFile(invalidPath, "{");
+
+        // act
+        const target = await selectDeclaringConfigWriteTarget({ locations, local });
+
+        // assert
+        assert.deepStrictEqual(target, { kind: "unreadable", filePath: invalidPath });
+      });
+    });
+  }
+
+  test("CFG-03: names the target layer first when both layers are invalid", async () => {
     // arrange
     await withTempScopes(async ({ cwd }) => {
       const locations = locationsFor("project", cwd);
       await mkdir(path.dirname(locations.configJsonPath), { recursive: true });
       await writeFile(locations.configJsonPath, "{");
+      await writeFile(locations.configLocalJsonPath, "{");
 
       // act
-      const target = await selectDeclaringConfigWriteTarget({
-        locations,
-        local: false,
-        key: "alpha@mp",
-      });
+      const target = await selectDeclaringConfigWriteTarget({ locations, local: true });
 
       // assert
-      assert.deepStrictEqual(target, { kind: "unreadable", filePath: locations.configJsonPath });
+      assert.deepStrictEqual(target, {
+        kind: "unreadable",
+        filePath: locations.configLocalJsonPath,
+      });
     });
   });
 });
@@ -1053,11 +1042,6 @@ describe("localOnlyMarketplaceRefusal", () => {
         current: { schemaVersion: 1 },
         sibling: { schemaVersion: 1, marketplaces: { other: { source: "./other-src" } } },
       },
-    },
-    {
-      layout: "an unreadable local file",
-      marketplace: "mp",
-      selection: { targetIsLocal: false, current: { schemaVersion: 1 }, sibling: undefined },
     },
     {
       layout: "a prototype-named marketplace neither file owns",
@@ -1318,33 +1302,6 @@ describe("writeAdoptingConfigEntries", () => {
     });
   });
 
-  test("writes only the plugin declaration when the sibling config is unreadable", async () => {
-    // arrange
-    await withTempScopes(async ({ cwd }) => {
-      const locations = locationsFor("project", cwd);
-      const current: ScopeConfig = { schemaVersion: 1 };
-      const state = makeState({ mp: { scope: "project", plugins: {} } });
-
-      // act
-      await writeAdoptingConfigEntries({
-        current,
-        sibling: undefined,
-        state,
-        marketplace: "mp",
-        plugin: "alpha",
-        targetConfigPath: locations.configJsonPath,
-        scopeRoot: locations.scopeRoot,
-        pluginPatch: {},
-      });
-
-      // assert
-      assert.equal(
-        await readFile(locations.configJsonPath, "utf8"),
-        '{\n  "schemaVersion": 1,\n  "marketplaces": {},\n  "plugins": {\n    "alpha@mp": {}\n  }\n}\n',
-      );
-    });
-  });
-
   test("writes only the plugin declaration when legacy state has no string source", async () => {
     // arrange
     await withTempScopes(async ({ cwd }) => {
@@ -1395,14 +1352,6 @@ describe("writeAdoptingConfigEntries", () => {
         '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "tools": {\n      "source": "./declared"\n    },\n    "mp": {\n      "source": "./mp-source"\n    }\n  },\n  "plugins": {\n    "alpha@mp": {}\n  }\n}\n',
     },
     {
-      behavior: "declares no added marketplace when the sibling config is unreadable",
-      current: { schemaVersion: 1 },
-      sibling: undefined,
-      addedMarketplaces: ["tools"],
-      config:
-        '{\n  "schemaVersion": 1,\n  "marketplaces": {},\n  "plugins": {\n    "alpha@mp": {}\n  }\n}\n',
-    },
-    {
       behavior: "declares the root's marketplace once when it is also an added one",
       current: { schemaVersion: 1 },
       sibling: { schemaVersion: 1 },
@@ -1413,7 +1362,7 @@ describe("writeAdoptingConfigEntries", () => {
   ] satisfies readonly {
     behavior: string;
     current: ScopeConfig;
-    sibling: ScopeConfig | undefined;
+    sibling: ScopeConfig;
     addedMarketplaces: readonly string[];
     config: string;
   }[]) {
@@ -1448,50 +1397,91 @@ describe("writeAdoptingConfigEntries", () => {
 });
 
 describe("overwriteDisabledMemberEntries", () => {
-  test("overwrites an existing enabled: false entry for a discovered key", async () => {
-    // arrange
-    await withTempScopes(async ({ cwd }) => {
-      const locations = locationsFor("project", cwd);
-      await writeConfig(locations.configJsonPath, {
-        schemaVersion: 1,
-        plugins: { "b@mp": { enabled: false } },
-      });
-      const state = makeState({ mp: { scope: "project", plugins: {} } });
+  const disabledB = '{"schemaVersion":1,"plugins":{"b@mp":{"enabled":false}}}';
+  const enabledB =
+    '{\n  "schemaVersion": 1,\n  "plugins": {\n    "b@mp": {\n      "enabled": true\n    }\n  }\n}\n';
 
-      // act
-      await overwriteDisabledMemberEntries({
-        locations,
-        state,
-        keys: ["b@mp"],
-        select: selectDeclaringConfigWriteTarget,
-        write: writeAdoptingConfigEntries,
-      });
+  for (const { layout, shared, local, expectedShared, expectedLocal } of [
+    {
+      layout: "the shared layer",
+      shared: disabledB,
+      local: undefined,
+      expectedShared: enabledB,
+      expectedLocal: undefined,
+    },
+    {
+      layout: "the local layer",
+      shared: undefined,
+      local: disabledB,
+      expectedShared: undefined,
+      expectedLocal: enabledB,
+    },
+    {
+      layout: "both layers",
+      shared: disabledB,
+      local: disabledB,
+      expectedShared: enabledB,
+      expectedLocal: enabledB,
+    },
+    {
+      layout: "the shared layer beside an invalid local layer",
+      shared: disabledB,
+      local: "{",
+      expectedShared: enabledB,
+      expectedLocal: "{",
+    },
+  ] satisfies readonly {
+    layout: string;
+    shared: string | undefined;
+    local: string | undefined;
+    expectedShared: string | undefined;
+    expectedLocal: string | undefined;
+  }[]) {
+    test(`CR-06: overwrites a member disabled in ${layout} where it is disabled`, async () => {
+      // arrange
+      await withTempScopes(async ({ cwd }) => {
+        const locations = locationsFor("project", cwd);
+        await mkdir(locations.scopeRoot, { recursive: true });
+        await writeOptionalFile(locations.configJsonPath, shared);
+        await writeOptionalFile(locations.configLocalJsonPath, local);
 
-      // assert
-      const cfg = JSON.parse(await readFile(locations.configJsonPath, "utf8")) as {
-        plugins?: Record<string, unknown>;
-      };
-      assert.deepStrictEqual(cfg.plugins?.["b@mp"], { enabled: true });
+        // act
+        await overwriteDisabledMemberEntries({
+          locations,
+          keys: ["b@mp"],
+        });
+
+        // assert
+        assert.deepStrictEqual(
+          {
+            shared: await readOptionalFile(locations.configJsonPath),
+            local: await readOptionalFile(locations.configLocalJsonPath),
+          },
+          { shared: expectedShared, local: expectedLocal },
+        );
+      });
     });
-  });
+  }
 
-  test("leaves a key the config does not mention untouched -- no file is created", async () => {
+  test("D-04-02: creates no file for a member no layer declares", async () => {
     // arrange
     await withTempScopes(async ({ cwd }) => {
       const locations = locationsFor("project", cwd);
-      const state = makeState({ mp: { scope: "project", plugins: {} } });
 
       // act
       await overwriteDisabledMemberEntries({
         locations,
-        state,
         keys: ["b@mp"],
-        select: selectDeclaringConfigWriteTarget,
-        write: writeAdoptingConfigEntries,
       });
 
       // assert
-      await assert.rejects(readFile(locations.configJsonPath, "utf8"), { code: "ENOENT" });
+      assert.deepStrictEqual(
+        {
+          shared: await readOptionalFile(locations.configJsonPath),
+          local: await readOptionalFile(locations.configLocalJsonPath),
+        },
+        { shared: undefined, local: undefined },
+      );
     });
   });
 
@@ -1499,44 +1489,18 @@ describe("overwriteDisabledMemberEntries", () => {
     // arrange
     await withTempScopes(async ({ cwd }) => {
       const locations = locationsFor("project", cwd);
-      const seeded: ScopeConfig = { schemaVersion: 1, plugins: { "b@mp": { enabled: true } } };
-      await writeConfig(locations.configJsonPath, seeded);
-      const state = makeState({ mp: { scope: "project", plugins: {} } });
+      const seeded = '{"schemaVersion":1,"plugins":{"b@mp":{"enabled":true}}}';
+      await mkdir(locations.scopeRoot, { recursive: true });
+      await writeFile(locations.configLocalJsonPath, seeded);
 
       // act
       await overwriteDisabledMemberEntries({
         locations,
-        state,
         keys: ["b@mp"],
-        select: selectDeclaringConfigWriteTarget,
-        write: writeAdoptingConfigEntries,
       });
 
       // assert
-      assert.deepStrictEqual(
-        JSON.parse(await readFile(locations.configJsonPath, "utf8")) as unknown,
-        seeded,
-      );
-    });
-  });
-
-  test("skips a key whose declaring file is unreadable", async () => {
-    // arrange
-    await withTempScopes(async ({ cwd }) => {
-      const locations = locationsFor("project", cwd);
-      await mkdir(path.dirname(locations.configLocalJsonPath), { recursive: true });
-      await writeFile(locations.configLocalJsonPath, "{");
-      const state = makeState({ mp: { scope: "project", plugins: {} } });
-
-      // act & assert: does not throw, and the base file is never created
-      await overwriteDisabledMemberEntries({
-        locations,
-        state,
-        keys: ["b@mp"],
-        select: selectDeclaringConfigWriteTarget,
-        write: writeAdoptingConfigEntries,
-      });
-      await assert.rejects(readFile(locations.configJsonPath, "utf8"), { code: "ENOENT" });
+      assert.strictEqual(await readFile(locations.configLocalJsonPath, "utf8"), seeded);
     });
   });
 
@@ -1544,27 +1508,23 @@ describe("overwriteDisabledMemberEntries", () => {
     // arrange
     await withTempScopes(async ({ cwd }) => {
       const locations = locationsFor("project", cwd);
-      await writeConfig(locations.configJsonPath, {
-        schemaVersion: 1,
-        plugins: { "b@mp": { enabled: false }, "c@mp": { enabled: false } },
-      });
-      const state = makeState({ mp: { scope: "project", plugins: {} } });
+      await mkdir(locations.scopeRoot, { recursive: true });
+      await writeFile(
+        locations.configJsonPath,
+        '{"schemaVersion":1,"plugins":{"b@mp":{"enabled":false},"c@mp":{"enabled":false}}}',
+      );
 
       // act
       await overwriteDisabledMemberEntries({
         locations,
-        state,
         keys: ["b@mp", "c@mp"],
-        select: selectDeclaringConfigWriteTarget,
-        write: writeAdoptingConfigEntries,
       });
 
       // assert
-      const cfg = JSON.parse(await readFile(locations.configJsonPath, "utf8")) as {
-        plugins?: Record<string, unknown>;
-      };
-      assert.deepStrictEqual(cfg.plugins?.["b@mp"], { enabled: true });
-      assert.deepStrictEqual(cfg.plugins?.["c@mp"], { enabled: true });
+      assert.strictEqual(
+        await readFile(locations.configJsonPath, "utf8"),
+        '{\n  "schemaVersion": 1,\n  "plugins": {\n    "b@mp": {\n      "enabled": true\n    },\n    "c@mp": {\n      "enabled": true\n    }\n  }\n}\n',
+      );
     });
   });
 });

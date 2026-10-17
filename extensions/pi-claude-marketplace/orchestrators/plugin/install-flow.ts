@@ -193,13 +193,10 @@ export interface InstallPluginOptions {
    * --local path; loadConfig's `absent` arm yields an empty starting
    * shape that saveConfig writes back to the local path.
    *
-   * D-103-16: the flag is not the sole determinant of the write target. It
-   * answers which file the caller WANTS written, and it still wins outright.
-   * When it is absent the target follows the file the plugin's declaration
-   * already lives in, and only a key declared in neither file lands in the base
-   * file -- the rule `selectDeclaringConfigWriteTarget` states, shared with
-   * `enable` and `disable` so the three verbs that author an enablement
-   * declaration cannot disagree about where one lives.
+   * LAYER-04 / D-MF-03: the flag alone picks the layer, whatever layer
+   * already declares the plugin -- the rule `selectDeclaringConfigWriteTarget`
+   * states, shared with `enable` and `disable` so the three verbs that author
+   * an enablement declaration pick their layer the same way.
    *
    * Two callers set it. The edge handler passes the user's `--local` flag.
    * The reconcile apply loop derives it from
@@ -1301,7 +1298,7 @@ interface PromotionArgs {
   readonly orchestrated: boolean;
   readonly config: {
     readonly current: ScopeConfig;
-    readonly sibling: ScopeConfig | undefined;
+    readonly sibling: ScopeConfig;
     readonly targetConfigPath: string;
   };
   readonly capture: InstallFailureCapture;
@@ -1429,25 +1426,21 @@ async function declarePromotedPlugin(
  * for the install cascade's own re-enable arm (EDEP-03). A re-enabled member
  * whose key the target-scope config ALREADY declares with `enabled: false`
  * -- exactly what `disable <dep>` writes -- is patched to `true`.
- * `overwriteDisabledMemberEntries` selects each member's file by DECLARATION
- * ALONE, not by the flag the caller typed for the root, so a base-file entry
- * is found even under `--local`. A member the config does not mention at all
- * stays untouched (D-04-02: the config names only what the user asked for by
- * name). Called only when the install's own root write-back also runs
+ * `overwriteDisabledMemberEntries` overwrites the entry in every layer that
+ * holds it, whatever flag the caller typed for the root, so a shared-layer
+ * entry is found even under `--local`. A member the config does not mention at
+ * all stays untouched (D-04-02: the config names only what the user asked for
+ * by name). Called only when the install's own root write-back also runs
  * (never orchestrated), and at the SAME point in the lock -- a config write
  * is not undone by `runPhases`.
  */
 async function writeReEnabledCascadeMemberConfigEntries(
   locations: ScopedLocations,
-  state: ExtensionState,
   members: readonly CascadeMemberOutcome[],
 ): Promise<void> {
   await overwriteDisabledMemberEntries({
     locations,
-    state,
     keys: members.filter((member) => member.reEnabledFromRecord).map((member) => member.key),
-    select: selectDeclaringConfigWriteTarget,
-    write: writeAdoptingConfigEntries,
   });
 }
 
@@ -1840,21 +1833,17 @@ async function installPluginWithTransaction(
   // orchestrator NEVER falls back to the base file on ENOENT: the base file is
   // NEVER touched on the --local path, and loadConfig's `absent` arm yields an
   // empty starting shape that saveConfig writes back to the local path. UAT-05:
-  // the sibling path is the scope's OTHER physical file, read fresh inside the
-  // lock for the merged-view membership test ONLY -- never written, never
-  // serialized back.
+  // the sibling is the scope's OTHER layer, read fresh inside the lock for the
+  // DFEN-05 read and the membership test -- never written, never serialized
+  // back.
   //
-  // D-103-16: the selection now happens INSIDE the lock, because absent the
-  // flag it READS the local config to find where the declaration lives. A
-  // typed `--local` still targets the local file unconditionally; with no flag
-  // the target follows the DECLARATION, and only a key declared in neither file
-  // falls through to the base file (the shape of every fresh install).
+  // LAYER-04: the flag alone picks the target layer; both layers are read
+  // INSIDE the lock.
   //
-  // T-53-02-02: the CFG-03 abort row carries the TARGETED file's basename, and
-  // that row renders after the lock closes, so the basename escapes the closure
-  // through this `let`. It starts at the base file -- the value the no-flag,
-  // no-declaration arm yields -- so the pre-assignment value is never wrong and
-  // the type stays definite.
+  // T-53-02-02: the CFG-03 abort row carries the basename of the layer that
+  // could not be read, and that row renders after the lock closes, so the
+  // basename escapes the closure through this `let`. It starts at the shared
+  // layer, the target the no-flag call selects, so the type stays definite.
   let configBasename = path.basename(locations.configJsonPath);
   const orchestrated = opts.notifications?.mode === "orchestrated";
   // The requested plugin's key: the cascade's root, the write-target selection
@@ -1877,22 +1866,19 @@ async function installPluginWithTransaction(
     outcome = await adds.lockOwner.withLockedStateTransaction(
       locations,
       async (tx): Promise<InstallTransactionOutcome> => {
-        // D-103-16: ONE selection, made before anything reads a config path, so
+        // LAYER-04: ONE selection, made before anything reads a config path, so
         // the CFG-03 load, the DFEN-05 precedence read and BOTH write arms below
-        // address the same physical file. It runs inside the lock because it
-        // READS the local config -- the WB-01 discipline that sibling reads
-        // happen fresh under the lock the write also holds.
+        // address the same physical file. It reads both layers inside the lock
+        // -- the WB-01 discipline that sibling reads happen fresh under the lock
+        // the write also holds.
         //
-        // `targetIsLocal` comes back from the selector rather than being
-        // re-derived here: `resolveInstallDeclaredEnabled` reads the local
-        // layer's `enabled` before the shared one's, so it needs to know which of
-        // `current` and the sibling is the local file. The selector computed the
-        // locality; asking it is exact where any second derivation is a chance
-        // to disagree.
+        // The target is the layer the flag names. `targetIsLocal` still labels
+        // which of `current` and the sibling is the local layer, because
+        // `resolveInstallDeclaredEnabled` reads the local layer's `enabled`
+        // before the shared one's.
         const selection = await selectDeclaringConfigWriteTarget({
           locations,
           local: opts.local,
-          key: rootKey,
         });
 
         const state = tx.state;
@@ -1900,11 +1886,9 @@ async function installPluginWithTransaction(
         // basename-only message prevents an absolute-path information leak.
         // NO tx.save() -- state.json bytes and mtime are untouched.
         //
-        // The arm covers the TARGETED file being unreadable and, on the flagless
-        // path, the local file being unreadable while the base file is fine: the
-        // local file is what DECIDES the destination there, so an unreadable one
-        // leaves the destination unknown. Naming that file in a row the user can
-        // act on beats guessing the destination.
+        // Either layer being unreadable stops the install, because the other
+        // layer may declare the plugin or its marketplace. The row names the
+        // file the user has to repair.
         if (selection.kind === "unreadable") {
           configBasename = path.basename(selection.filePath);
           return { kind: "invalid-config" };
@@ -2162,7 +2146,7 @@ async function installPluginWithTransaction(
               .map((added) => added.marketplace)
               .filter((name) => name !== marketplace),
           });
-          await writeReEnabledCascadeMemberConfigEntries(locations, state, installed.members);
+          await writeReEnabledCascadeMemberConfigEntries(locations, installed.members);
         } else {
           await writeOrchestratedDeclarations({
             current,

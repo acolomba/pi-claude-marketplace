@@ -1887,12 +1887,11 @@ test("OUT-04 / WARN-01 / FSTAT-07: the install-disabled row names the degradatio
 // assertion on the flag alone would miss a write that added or removed some
 // other key in the same entry, which is the same trust problem one field over.
 //
-// `seedLocal` puts the declaration in `claude-plugins.local.json`. CFG-02 makes
-// that entry the effective one whatever the write target is, so the gate has to
-// read both files; D-103-16 then aims the write at the file the declaration
-// lives in, so the local-declared rows write the LOCAL file.
-// `expectSiblingEntryAfter` / `expectSiblingKeyAbsent` pin what the untargeted
-// file holds afterwards.
+// `seedLocal` puts the declaration in `claude-plugins.local.json`. LAYER-09
+// reads `enabled` field by field, local first, whatever the write target is, so
+// the gate has to read both layers. Every install here is flagless, so it
+// writes the shared layer (LAYER-04). `expectSiblingEntryAfter` pins what the
+// shared layer holds afterwards in the local-seeded rows.
 // ───────────────────────────────────────────────────────────────────────────
 
 interface DfenPrecedenceCase {
@@ -1908,13 +1907,6 @@ interface DfenPrecedenceCase {
   readonly expectEntryAfter: Record<string, unknown>;
   /** The whole entry the OTHER physical file holds after the install, when asserted. */
   readonly expectSiblingEntryAfter?: Record<string, unknown>;
-  /**
-   * D-103-16: the OTHER physical file holds NO entry for the key. Distinct from
-   * `expectSiblingEntryAfter: {}` -- which asserts the file exists and carries a
-   * fieldless entry -- because a file the install never targets may not exist at
-   * all, and `loadConfig` answers `absent` rather than `valid` for it.
-   */
-  readonly expectSiblingKeyAbsent?: boolean;
   /**
    * Seed this entry into the file `seedLocal` does NOT name, so the fixture
    * declares the key in BOTH physical files -- the shape that separates a
@@ -2015,7 +2007,7 @@ const DFEN_PRECEDENCE_CASES: readonly DfenPrecedenceCase[] = [
     // plugin disabled against that opinion, and stamp an `enabled: false` the
     // user never typed.
     label:
-      "CFG-02 / D-103-16: an `enabled: true` in the local file wins, and the stamp follows it there",
+      "CFG-02 / D-19: an `enabled: true` in the local layer wins, and a flagless install declares the plugin in the shared layer",
     tmpPrefix: "install-dfen05-local-true-wins-",
     seedLocal: true,
     seededEntry: { enabled: true },
@@ -2023,21 +2015,18 @@ const DFEN_PRECEDENCE_CASES: readonly DfenPrecedenceCase[] = [
     expectRecordEnabled: true,
     expectArtifacts: true,
     expectEntryAfter: { enabled: true },
-    // D-103-16: the write-back addresses the file the declaration LIVES in, so
-    // it goes to the local file and the base file gains nothing -- it is never
-    // created here at all. CR-02's adopted marketplace declaration rides that
-    // same target in one atomic save rather than being split across the two
-    // files; the adoption arm only fires when the marketplace is declared in
-    // neither file, so there is no base-file declaration for it to contradict.
-    expectSiblingKeyAbsent: true,
+    // LAYER-04 / D-19: a flagless install writes the shared layer, so it
+    // declares the plugin there with an empty patch and leaves the local
+    // entry as seeded.
+    expectSiblingEntryAfter: {},
   },
   {
-    // Both files declare the key: base bare `{}`, local `enabled: true`. The
-    // key is in the local file, so the target is local; the local `enabled`
-    // wins in the field-by-field read (LAYER-09), the verdict never fires, and
-    // the plugin installs ENABLED with both entries left exactly as seeded.
+    // Both layers declare the key: shared bare `{}`, local `enabled: true`. The
+    // flagless install targets the shared layer; the local `enabled` wins in
+    // the field-by-field read (LAYER-09), the verdict never fires, and the
+    // plugin installs ENABLED with both entries left exactly as seeded.
     label:
-      "CFG-02 / D-103-16: with the key in BOTH files the LOCAL entry decides, and neither file moves",
+      "CFG-02 / LAYER-09: with the key in both layers the local `enabled` decides, and neither layer moves",
     tmpPrefix: "install-dfen05-both-files-",
     seedLocal: true,
     seededEntry: { enabled: true },
@@ -2129,15 +2118,6 @@ for (const precedence of DFEN_PRECEDENCE_CASES) {
               precedence.expectSiblingEntryAfter,
             );
           }
-        }
-
-        // The untargeted file may legitimately not exist -- asserting
-        // `status === "valid"` on it would fail against correct behavior.
-        if (precedence.expectSiblingKeyAbsent === true) {
-          const siblingCfg = await loadConfig(siblingPath);
-          const siblingPlugins =
-            siblingCfg.status === "valid" ? siblingCfg.config.plugins : undefined;
-          assert.equal(siblingPlugins?.["hello@mp"], undefined);
         }
 
         if (precedence.expectReconcileConverges === true) {
@@ -2358,22 +2338,18 @@ test("DFEN-08: a declared-true entry and a silent entry render identical install
 });
 
 // ───────────────────────────────────────────────────────────────────────────
-// D-103-16 / DFEN-06 / CFG-02 -- the install stamp follows the DECLARATION.
+// DFEN-06 / CFG-02 -- the install stamp lands in the layer the flag names.
 //
 // A user hand-writes `"hello@mp": {}` into `claude-plugins.local.json` and runs
-// the install with no flag. The merged view says `enabled` is absent, so a
+// the install with `--local`. The merged view says `enabled` is absent, so a
 // plugin declaring `defaultEnabled: false` lands disabled. The `enabled: false`
-// stamp goes to the file the declaration lives in, the local file, and the
-// merged entry reads it from there.
+// stamp goes to the local layer, and the merged entry reads it from there.
 //
-// `enable` and `disable` aim their writes through the same helper; treat the
-// three as one rule, not as three coincidences. The rule is that a verb
-// AUTHORING an enablement declaration writes where the declaration lives --
-// said as a rule rather than as a claim about coverage, because
-// `maybeWritePluginConfigBack` still aims by the flag.
+// `enable` and `disable` aim their writes through the same selector, so the
+// three verbs pick their layer by the flag alike (LAYER-04).
 // ───────────────────────────────────────────────────────────────────────────
 
-test("D-103-16 / DFEN-06 / CFG-02: a locally-declared install stamps the LOCAL file and moves the merged view", async () => {
+test("DFEN-06 / CFG-02: an install with --local of a plugin the local layer declares stamps the local layer and moves the merged view", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-dfen06-local-stamp-"));
     try {
@@ -2410,6 +2386,7 @@ test("D-103-16 / DFEN-06 / CFG-02: a locally-declared install stamps the LOCAL f
         marketplace: "mp",
         plugin: "hello",
         applyDefaultEnabled: true,
+        local: true,
       });
       assert.deepEqual(
         notifications.filter((n) => n.severity === "error"),
@@ -2419,7 +2396,7 @@ test("D-103-16 / DFEN-06 / CFG-02: a locally-declared install stamps the LOCAL f
       const after = await loadState(locations.extensionRoot);
       assert.equal(after.marketplaces["mp"]?.plugins["hello"]?.enabled, false);
 
-      // The stamp landed in the declaring file, as a whole entry.
+      // The stamp landed in the local layer, as a whole entry.
       const localCfg = await loadConfig(locations.configLocalJsonPath);
       assert.equal(localCfg.status, "valid");
       if (localCfg.status === "valid") {
@@ -2446,7 +2423,7 @@ test("D-103-16 / DFEN-06 / CFG-02: a locally-declared install stamps the LOCAL f
   });
 });
 
-test("D-103-16 / DFEN-06 / CFG-02: the reload after a locally-declared install plans nothing", async () => {
+test("DFEN-06 / CFG-02: the reload after an install with --local of a plugin the local layer declares plans nothing", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-dfen06-local-reload-"));
     try {
@@ -2487,6 +2464,7 @@ test("D-103-16 / DFEN-06 / CFG-02: the reload after a locally-declared install p
         marketplace: "mp",
         plugin: "hello",
         applyDefaultEnabled: true,
+        local: true,
       });
       const localBytes = await readFile(locations.configLocalJsonPath, "utf8");
 
@@ -8983,19 +8961,11 @@ test("WR-09 / T-56-03-01: orchestrated-mode install SKIPS write-back (neither fi
 });
 
 // ───────────────────────────────────────────────────────────────────────────
-// WB-01 / UAT-05 / D-103-16 -- the three arms the declaration-following write
-// target must NOT have moved. Together they bound its blast radius to the one
-// case it fixes: a stamp landing in a file CFG-02 shadows.
+// WB-01 / LAYER-04 -- the flag alone picks the layer the install stamps.
 // ───────────────────────────────────────────────────────────────────────────
 
-test("WB-01 / UAT-05 / D-103-16: a plugin declared in NEITHER file stamps the base file, local not created", async () => {
-  // The majority path -- the shape every fresh `/claude:plugin install` has --
-  // and the reason this change is narrow: the membership probe finds no local
-  // entry, so the selection falls through to today's answer, the base file.
-  //
-  // Contrast with the locally-declared stamp regression above: the fixture is
-  // identical apart from the seeded local declaration, and only that
-  // declaration moves the target. Do not reconcile the two toward each other.
+test("WB-01 / LAYER-04: a flagless install of a plugin no layer declares stamps the shared layer, local not created", async () => {
+  // The majority path -- the shape every fresh `/claude:plugin install` has.
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-wb01-undeclared-"));
     try {
@@ -9035,15 +9005,10 @@ test("WB-01 / UAT-05 / D-103-16: a plugin declared in NEITHER file stamps the ba
   });
 });
 
-test("WB-01 / UAT-05 / D-103-16: a typed --local still targets the local file over a BASE declaration", async () => {
-  // The flag is the user naming the file they want written, and a per-machine
-  // override that shadows a shared base declaration is the local file's whole
-  // purpose. The declaration-following rule answers the question the user did
-  // NOT answer; it never overrules the one they did.
-  //
-  // Contrast with the control above: there the flag is absent AND no
-  // declaration exists, so both roads lead to the base file. Here they
-  // disagree, and the flag wins.
+test("WB-01 / D-19: an install with --local of a plugin only the shared layer declares, not yet installed, declares it in the local layer", async () => {
+  // The flag names the layer the install writes. The plugin is not installed,
+  // so the install materializes it and declares it in the local layer, leaving
+  // the shared declaration as it was.
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-wb01-flag-wins-"));
     try {
@@ -9098,7 +9063,7 @@ for (const arm of [
   { configSource: "local" as const, tmpPrefix: "install-wb01-orch-local-" },
   { configSource: "base" as const, tmpPrefix: "install-wb01-orch-base-" },
 ]) {
-  test(`WB-01 / UAT-05 / D-103-16: the orchestrated stamp targets the ${arm.configSource} file, unchanged`, async () => {
+  test(`WB-01 / UAT-05: the orchestrated stamp targets the ${arm.configSource} file, unchanged`, async () => {
     // The reconcile apply path passes `local: op.configSource === "local"`, and
     // the argument that this arm cannot move is airtight: a "local" source sets
     // the flag, and a "base" source implies the key is ABSENT from the local
@@ -9246,7 +9211,7 @@ test("CFG-03 / T-56-03-04: invalid config aborts install; basename-only cause; s
   });
 });
 
-test("CFG-03 / D-103-16: an UNREADABLE local config aborts a flagless install rather than aiming the stamp at the shadowed base file", async () => {
+test("CFG-03: an invalid local layer aborts a flagless install and changes nothing", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-cfg03-local-"));
     try {
@@ -9260,14 +9225,10 @@ test("CFG-03 / D-103-16: an UNREADABLE local config aborts a flagless install ra
         skills: [{ sourceName: "tool" }],
       });
 
-      // The local file is what DECIDES the destination on a flagless call, and
-      // this one cannot be read (a truncated mid-save write; an EACCES or a
-      // schema violation arrive through the same `invalid` arm). Whether it
-      // declares `hello@mp` is unknowable, and the two answers select different
-      // files -- so there is no destination to write to. Reading `invalid` as
-      // "not declared locally" stamped the base file, which a local entry
-      // replaces wholesale under CFG-02: the install reported success while the
-      // merged view the reconcile planner reads never moved.
+      // The local layer cannot be read (a truncated mid-save write; an EACCES
+      // or a schema violation arrive through the same `invalid` arm), so what
+      // it declares is unknowable. It may declare the plugin's `enabled` or its
+      // marketplace, so the install stops instead of reading it as empty.
       await mkdir(path.dirname(locations.configLocalJsonPath), { recursive: true });
       await writeFile(
         locations.configLocalJsonPath,
@@ -9517,9 +9478,9 @@ test("FIX-03: an orchestrated install under a local-only marketplace is not refu
   });
 });
 
-test("UAT-05 / CR-02: an UNREADABLE sibling config skips the marketplace adoption write instead of counting as a file that declares nothing", async () => {
+test("CFG-03: an invalid shared layer aborts an install with --local and changes nothing", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "install-uat05-unreadable-"));
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-cfg03-shared-"));
     try {
       const locations = locationsFor("project", cwd);
       await seedPathMarketplaceWithPlugin({
@@ -9530,25 +9491,28 @@ test("UAT-05 / CR-02: an UNREADABLE sibling config skips the marketplace adoptio
         skills: [{ sourceName: "tool" }],
       });
 
-      // The declaration lives in the local file, so that file is the target and
-      // the BASE file is the sibling the UAT-05 membership gate consults. The
-      // base file declares the marketplace with `autoupdate: false` -- and is
-      // schema-invalid on an unrelated entry, so the gate cannot read it.
-      const { loadConfig, saveConfig } =
+      // The shared layer declares the marketplace and is schema-invalid on an
+      // unrelated entry, so what it declares is unknowable. An install into the
+      // local layer stops instead of reading it as a layer that declares
+      // nothing.
+      const { saveConfig } =
         await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
       await saveConfig(
         locations.configLocalJsonPath,
         { schemaVersion: 1, plugins: { "hello@mp": {} } },
         locations.scopeRoot,
       );
+      const localBytes = await readFile(locations.configLocalJsonPath, "utf8");
       const baseBytes = JSON.stringify({
         schemaVersion: 1,
         marketplaces: { mp: { source: "./mp-src", autoupdate: false } },
         plugins: { "other@mp": { enabled: "no" } },
       });
       await writeFile(locations.configJsonPath, baseBytes, "utf8");
+      const statePath = path.join(locations.extensionRoot, "state.json");
+      const stateBytes = await readFile(statePath, "utf8");
 
-      const { ctx, run } = makeCtx();
+      const { ctx, run, notifications } = makeCtx();
       await installPlugin({
         ctx,
         run,
@@ -9556,30 +9520,29 @@ test("UAT-05 / CR-02: an UNREADABLE sibling config skips the marketplace adoptio
         cwd,
         marketplace: "mp",
         plugin: "hello",
+        local: true,
       });
 
-      const localCfg = await loadConfig(locations.configLocalJsonPath);
-      assert.equal(localCfg.status, "valid");
-      if (localCfg.status !== "valid") {
-        return;
-      }
-
-      // The plugin entry still lands in its declaring file -- the install is
-      // correctly targeted and is not what is in doubt.
-      assert.deepEqual(localCfg.config.plugins?.["hello@mp"], {});
-      // The load-bearing assertion. Read as an empty config, the unreadable
-      // sibling would make the gate conclude the marketplace is undeclared, and
-      // the synthesized bare `{source}` entry would declare it a second time in
-      // a file the user never named: once the base file is repaired, a
-      // `marketplace remove` from it would keep the marketplace (LAYER-02 /
-      // D-MF-03).
-      assert.equal(
-        localCfg.config.marketplaces?.["mp"],
-        undefined,
-        "an unreadable sibling must not be read as a file that declares nothing",
+      assert.deepStrictEqual(notifications, [
+        {
+          message: [
+            "A plugin operation has failed.",
+            "",
+            "● mp [project]",
+            "  ⊘ hello (failed) {invalid manifest}",
+            '    cause: Config file "claude-plugins.json" failed schema validation.',
+          ].join("\n"),
+          severity: "error",
+        },
+      ]);
+      assert.deepStrictEqual(
+        {
+          shared: await readFile(locations.configJsonPath, "utf8"),
+          local: await readFile(locations.configLocalJsonPath, "utf8"),
+          state: await readFile(statePath, "utf8"),
+        },
+        { shared: baseBytes, local: localBytes, state: stateBytes },
       );
-      // The unreadable file was never written to either.
-      assert.equal(await readFile(locations.configJsonPath, "utf8"), baseBytes);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

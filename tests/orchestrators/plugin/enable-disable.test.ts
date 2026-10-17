@@ -710,7 +710,7 @@ test("ENBL-01: enable --local writes enabled:true to claude-plugins.local.json (
   });
 });
 
-test("D-103-13 / CFG-02 / ENBL-01: flagless enable of a locally-declared plugin writes the LOCAL file and moves the merged view", async () => {
+test("ENBL-01: enable with --local of a plugin the local layer declares writes the local layer and moves the merged view", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
     const scopeRoot = path.join(home, ".pi", "agent");
@@ -743,25 +743,22 @@ test("D-103-13 / CFG-02 / ENBL-01: flagless enable of a locally-declared plugin 
       plugin: "foo",
       enable: true,
       scope: "user",
-      // NO --local: the user named no file, so the declaration names it.
+      local: true,
     });
 
-    // The flip landed in the DECLARING file, as the whole entry -- an added or
+    // The flip landed in the local layer, as the whole entry -- an added or
     // removed key fails here rather than passing on a loose field probe.
     const localCfg = (await readConfig(configLocalPath)) as {
       plugins?: Record<string, unknown>;
     };
     // assert
     assert.deepEqual(localCfg.plugins?.["foo@mp"], { enabled: true });
-    // The shadowed file was not touched. It did not exist and still does not.
+    // The shared layer was not touched. It did not exist and still does not.
     assert.equal(await fileExists(configPath), false, "base file must stay absent");
 
-    // The load-bearing assertion. Before this fix the flip landed in the BASE
-    // file: that file visibly gained `enabled: true`, the merged view still
-    // read `enabled: false` from the local entry, whose explicit value wins,
-    // and the next reload planned a disable and put the record back -- so the
-    // user's explicit command survived until the next reload and no further.
-    // A physical-file check alone cannot tell that write from a correct one.
+    // A flip written to the shared layer would leave the merged view reading
+    // `enabled: false` from the local entry, whose explicit value wins, so a
+    // physical-file check alone cannot tell that write from a correct one.
     assert.deepEqual(await readMergedUserPluginEntry(cwd, "foo@mp"), {
       source: "local",
       declaredEnabled: true,
@@ -776,7 +773,7 @@ test("D-103-13 / CFG-02 / ENBL-01: flagless enable of a locally-declared plugin 
   });
 });
 
-test("WB-01 / D-103-13: flagless enable of a BASE-declared plugin still writes the base file, local absent", async () => {
+test("WB-01: a flagless enable of a plugin the shared layer declares writes the shared layer, local absent", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
     const scopeRoot = path.join(home, ".pi", "agent");
@@ -787,10 +784,9 @@ test("WB-01 / D-103-13: flagless enable of a BASE-declared plugin still writes t
       pluginName: "foo",
       version: "1.2.3",
     });
-    // The mirror of the locally-declared case above: the SAME flagless call,
-    // the SAME disabled record, the declaration in the other file. The
-    // declaration-following rule must leave this arm exactly where it was, and
-    // an inverted selector would pass the local-declared case and fail here.
+    // The mirror of the local-layer case above: the flag names the shared
+    // layer, which declares the plugin. An inverted selector would pass the
+    // local-layer case and fail here.
     await writeFile(
       configPath,
       JSON.stringify({
@@ -824,7 +820,7 @@ test("WB-01 / D-103-13: flagless enable of a BASE-declared plugin still writes t
   });
 });
 
-test("UAT-05 / D-103-13: a typed --local still targets the local file even when the declaration is in base", async () => {
+test("LAYER-04: enable with --local of a plugin both layers declare writes only the local layer", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
     const scopeRoot = path.join(home, ".pi", "agent");
@@ -841,6 +837,7 @@ test("UAT-05 / D-103-13: a typed --local still targets the local file even when 
       plugins: { "foo@mp": { enabled: false } },
     });
     await writeFile(configPath, baseBytes, "utf8");
+    await declareFooIn(configLocalPath, path.join(home, "mp-src"), {});
 
     const { ctx } = makeCtx(cwd);
     // act
@@ -855,12 +852,9 @@ test("UAT-05 / D-103-13: a typed --local still targets the local file even when 
       local: true,
     });
 
-    // A typed --local flag names the file the user wants written, and a
-    // per-machine override that shadows a shared base declaration is the
-    // whole purpose of the local file. The declaration-following rule
-    // answers the question the user did NOT answer; it does not overrule the
-    // one they did. Contrast the case directly above, which is the same
-    // fixture with the flag dropped.
+    // A per-machine override over a shared declaration is the purpose of the
+    // local layer, so `--local` writes the local layer and leaves the shared
+    // declaration as it was.
     const localCfg = (await readConfig(configLocalPath)) as { plugins?: Record<string, unknown> };
     // assert
     assert.deepEqual(localCfg.plugins?.["foo@mp"], { enabled: true });
@@ -874,7 +868,7 @@ test("UAT-05 / D-103-13: a typed --local still targets the local file even when 
   });
 });
 
-test("CFG-03 / D-103-13: an UNREADABLE local config aborts a flagless enable rather than aiming the write at the shadowed base file", async () => {
+test("CFG-03: an invalid local layer aborts a flagless enable and changes nothing", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
     const scopeRoot = path.join(home, ".pi", "agent");
@@ -892,14 +886,11 @@ test("CFG-03 / D-103-13: an UNREADABLE local config aborts a flagless enable rat
       plugins: { "foo@mp": { enabled: false } },
     });
     await writeFile(configPath, baseBytes, "utf8");
-    // The local file is the one that DECIDES the destination on a flagless
-    // call, and this one cannot be read (a truncated mid-save write; an EACCES
-    // or a schema violation arrive through the same `invalid` arm). Whether it
-    // declares `foo@mp` is now unknowable -- and the two answers select
-    // different files. Reading `invalid` as "not declared locally" put the flip
-    // in the base file, whose `enabled` the local entry's explicit value wins
-    // over (LAYER-09): the verb reported success, the merged view never moved,
-    // and the next reload planned the opposite of the command.
+    // The local layer cannot be read (a truncated mid-save write; an EACCES or
+    // a schema violation arrive through the same `invalid` arm), so whether it
+    // declares `foo@mp` is unknowable. A flagless enable must refuse a plugin
+    // only that layer declares, so it stops instead of reading the layer as
+    // empty.
     await writeFile(configLocalPath, '{"plugins": {"foo@mp": {"enabled": fal', "utf8");
     const statePre = await readFile(statePath, "utf8");
     const mtimePre = (await stat(statePath)).mtimeMs;
@@ -936,6 +927,332 @@ test("CFG-03 / D-103-13: an UNREADABLE local config aborts a flagless enable rat
     assert.equal(await readFile(configPath, "utf8"), baseBytes);
     assert.equal(await readFile(statePath, "utf8"), statePre);
     assert.equal((await stat(statePath)).mtimeMs, mtimePre);
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// LAYER-04: a named enable or disable acts on the layer its flag names
+// ──────────────────────────────────────────────────────────────────────────
+
+/** Declare `foo@mp` and its marketplace in one layer file of the user scope. */
+async function declareFooIn(file: string, mpRoot: string, entry: object): Promise<void> {
+  await writeFile(
+    file,
+    JSON.stringify({
+      schemaVersion: 1,
+      marketplaces: { mp: { source: mpRoot } },
+      plugins: { "foo@mp": entry },
+    }),
+    "utf8",
+  );
+}
+
+/** The bytes of a file, or `undefined` when it does not exist. */
+async function bytesOrAbsent(file: string): Promise<string | undefined> {
+  return (await fileExists(file)) ? readFile(file, "utf8") : undefined;
+}
+
+/** The bytes of both layer files and of state.json, to prove a refusal changed nothing. */
+async function scopeBytes(paths: {
+  readonly configPath: string;
+  readonly configLocalPath: string;
+  readonly statePath: string;
+}): Promise<Record<"shared" | "local" | "state", string | undefined>> {
+  return {
+    shared: await bytesOrAbsent(paths.configPath),
+    local: await bytesOrAbsent(paths.configLocalPath),
+    state: await bytesOrAbsent(paths.statePath),
+  };
+}
+
+const DECLARED_LOCALLY_ROW = [
+  "  ⊘ foo (failed) {plugin declared locally}",
+  "    cause: The plugin foo@mp is declared only in the local layer (claude-plugins.local.json). Run the command again with --local.",
+];
+
+const DECLARED_IN_SHARED_ROW = [
+  "  ⊘ foo (failed) {plugin declared in shared config}",
+  "    cause: The plugin foo@mp is declared only in the shared layer (claude-plugins.json). Run the command again without --local.",
+];
+
+for (const { verb, enable, local, layer, row, seed } of [
+  {
+    verb: "enable",
+    enable: true,
+    local: false,
+    layer: "the local layer",
+    row: DECLARED_LOCALLY_ROW,
+    seed: async (home: string) => {
+      const paths = await seedRealDisabledMarketplace(home, {
+        marketplaceName: "mp",
+        pluginName: "foo",
+        version: "1.2.3",
+      });
+      await declareFooIn(paths.configLocalPath, paths.mpRoot, { enabled: false });
+      return paths;
+    },
+  },
+  {
+    verb: "enable",
+    enable: true,
+    local: true,
+    layer: "the shared layer",
+    row: DECLARED_IN_SHARED_ROW,
+    seed: async (home: string) => {
+      const paths = await seedRealDisabledMarketplace(home, {
+        marketplaceName: "mp",
+        pluginName: "foo",
+        version: "1.2.3",
+      });
+      await declareFooIn(paths.configPath, paths.mpRoot, { enabled: false });
+      return paths;
+    },
+  },
+  {
+    verb: "disable",
+    enable: false,
+    local: false,
+    layer: "the local layer",
+    row: DECLARED_LOCALLY_ROW,
+    seed: async (home: string) => {
+      const paths = await writeUserState(home, {
+        marketplaceName: "mp",
+        pluginName: "foo",
+        disabled: false,
+      });
+      await declareFooIn(paths.configLocalPath, paths.mpRoot, {});
+      return paths;
+    },
+  },
+  {
+    verb: "disable",
+    enable: false,
+    local: true,
+    layer: "the shared layer",
+    row: DECLARED_IN_SHARED_ROW,
+    seed: async (home: string) => {
+      const paths = await writeUserState(home, {
+        marketplaceName: "mp",
+        pluginName: "foo",
+        disabled: false,
+      });
+      await declareFooIn(paths.configPath, paths.mpRoot, {});
+      return paths;
+    },
+  },
+]) {
+  test(`LAYER-04: ${verb} with local ${local} of a plugin only ${layer} declares is refused and changes nothing`, async () => {
+    await withHermeticHome(async ({ cwd, home }) => {
+      // arrange
+      const paths = await seed(home);
+      const bytesBefore = await scopeBytes(paths);
+      const { transaction, calls } = countingTransaction();
+      const setPluginEnabledForOwner = createSetPluginEnabled(
+        transaction,
+        createHooksRouting(createHooksRuntime(), { readHooksJson }),
+      );
+      const { ctx, notifications } = makeCtx(cwd);
+
+      // act
+      await setPluginEnabledForOwner({
+        ctx,
+        run: runWithNothingLoaded(),
+        cwd,
+        marketplace: "mp",
+        plugin: "foo",
+        enable,
+        scope: "user",
+        local,
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message: ["A plugin operation has failed.", "", "● mp [user]", ...row].join("\n"),
+          severity: "error",
+        },
+      ]);
+      assert.deepStrictEqual(calls, { cascadeUnstage: 0, save: 0 });
+      assert.deepStrictEqual(await scopeBytes(paths), bytesBefore);
+    });
+  });
+}
+
+test("LAYER-04: an idempotent enable of a plugin only the local layer declares is refused", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const paths = await writeUserState(home, {
+      marketplaceName: "mp",
+      pluginName: "foo",
+      disabled: false,
+    });
+    await declareFooIn(paths.configLocalPath, paths.mpRoot, {});
+    const bytesBefore = await scopeBytes(paths);
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "A plugin operation has failed.",
+          "",
+          "● mp [user]",
+          ...DECLARED_LOCALLY_ROW,
+        ].join("\n"),
+        severity: "error",
+      },
+    ]);
+    assert.deepStrictEqual(await scopeBytes(paths), bytesBefore);
+  });
+});
+
+test("WR-09: an orchestrated enable of a plugin only the local layer declares is not refused", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const paths = await seedRealDisabledMarketplace(home, {
+      marketplaceName: "mp",
+      pluginName: "foo",
+      version: "1.2.3",
+    });
+    await declareFooIn(paths.configLocalPath, paths.mpRoot, { enabled: true });
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    const outcome = await setPluginEnabled({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo",
+      enable: true,
+      scope: "user",
+      notifications: { mode: "orchestrated" },
+    });
+
+    // assert
+    assert.deepStrictEqual(outcome, { status: "enabled", name: "foo", version: "1.2.3" });
+    assert.deepStrictEqual(notifications, []);
+  });
+});
+
+test("LAYER-04: enable with --local of a plugin no layer declares writes the local layer", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { configPath, configLocalPath, mpRoot } = await seedRealDisabledMarketplace(home, {
+      marketplaceName: "mp",
+      pluginName: "foo",
+      version: "1.2.3",
+    });
+    const { ctx } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo",
+      enable: true,
+      scope: "user",
+      local: true,
+    });
+
+    // assert
+    assert.deepStrictEqual(await readConfig(configLocalPath), {
+      schemaVersion: 1,
+      marketplaces: { mp: { source: mpRoot } },
+      plugins: { "foo@mp": { enabled: true } },
+    });
+    assert.equal(await fileExists(configPath), false);
+  });
+});
+
+test("LAYER-04: a plugin that is not installed reports not installed whatever layer declares it", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const paths = await writeUserState(home, {
+      marketplaceName: "mp",
+      pluginName: "other-plugin",
+      disabled: false,
+    });
+    await declareFooIn(paths.configLocalPath, paths.mpRoot, {});
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "A plugin operation has failed.",
+          "",
+          "● mp [user]",
+          "  ⊘ foo (skipped) {not installed}",
+        ].join("\n"),
+        severity: "error",
+      },
+    ]);
+  });
+});
+
+test("CFG-03: an invalid shared layer aborts an enable with --local and changes nothing", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const paths = await seedRealDisabledMarketplace(home, {
+      marketplaceName: "mp",
+      pluginName: "foo",
+      version: "1.2.3",
+    });
+    await writeFile(paths.configPath, "{", "utf8");
+    const bytesBefore = await scopeBytes(paths);
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo",
+      enable: true,
+      scope: "user",
+      local: true,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "A plugin operation has failed.",
+          "",
+          "● mp [user]",
+          "  ⊘ foo (failed) {invalid manifest}",
+          '    cause: Config file "claude-plugins.json" failed schema validation.',
+        ].join("\n"),
+        severity: "error",
+      },
+    ]);
+    assert.deepStrictEqual(await scopeBytes(paths), bytesBefore);
   });
 });
 
@@ -3102,7 +3419,7 @@ test("WR-03: enable on state-enabled plugin with config enabled:false lands the 
   });
 });
 
-test("WR-03 / D-103-13: the config-truth promotion writes into the LOCAL declaring file and moves the merged view", async () => {
+test("WR-03: the config-truth promotion with --local writes the local layer and moves the merged view", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
     const { statePath, configPath, configLocalPath } = await writeUserState(home, {
@@ -3110,13 +3427,11 @@ test("WR-03 / D-103-13: the config-truth promotion writes into the LOCAL declari
       pluginName: "foo",
       disabled: false,
     });
-    // The same drift the case directly above pins, with the declaration in the
-    // local file instead of the base one: the state side already says enabled,
-    // while the DECLARING config carries the opposite explicit value. This is
-    // the SECOND of the orchestrator's two write sites, and it is the one that
-    // would keep the defect alive had only the ordinary write-back been
-    // re-aimed -- an arm that exists precisely to stop a config/state
-    // divergence from letting the next reconcile invert the user's command.
+    // The same drift the case directly above pins, in the local layer: the
+    // state side already says enabled, while the local layer carries the
+    // opposite explicit value. This is the second of the orchestrator's two
+    // write sites, the arm that stops a config/state divergence from letting
+    // the next reconcile invert the user's command.
     await writeFile(
       configLocalPath,
       JSON.stringify({
@@ -3138,6 +3453,7 @@ test("WR-03 / D-103-13: the config-truth promotion writes into the LOCAL declari
       plugin: "foo",
       enable: true,
       scope: "user",
+      local: true,
     });
 
     const localCfg = (await readConfig(configLocalPath)) as { plugins?: Record<string, unknown> };
@@ -5140,7 +5456,7 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable of a BASE-declared plugi
   });
 });
 
-test("DFEN-07 / D-103-10 / D-103-11: an explicit enable of a LOCALLY-declared plugin survives reload, update and reinstall", async () => {
+test("DFEN-07 / D-103-10 / D-103-11: an explicit enable with --local of a plugin the local layer declares survives reload, update and reinstall", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
     const { configLocalPath, configPath, manifestPath, mpRoot } = await seedRealDisabledMarketplace(
@@ -5187,6 +5503,7 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable of a LOCALLY-declared pl
       run: runWithNothingLoaded(),
       plugin: "foo",
       scope: "user",
+      local: true,
     });
     const afterEnable = await observe();
     const declaringConfig = await readConfig(configLocalPath);
@@ -6275,7 +6592,7 @@ test("EDEP-01: an idempotent root still enables a disabled dependency and report
 test("CR-01: a re-enabled member's config entry is overwritten even when the root is idempotent", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
-    const { configPath } = await seedEdepGraph(home, [
+    const { configPath, mpRoot } = await seedEdepGraph(home, [
       { name: "a", version: "1.0.0", dependencies: [{ name: "b" }], enabled: true },
       { name: "b", version: "1.0.0", enabled: false },
     ]);
@@ -6284,6 +6601,7 @@ test("CR-01: a re-enabled member's config entry is overwritten even when the roo
       configPath,
       JSON.stringify({
         schemaVersion: 1,
+        marketplaces: { official: { source: mpRoot } },
         plugins: { "a@official": { enabled: true }, "b@official": { enabled: false } },
       }),
       "utf8",

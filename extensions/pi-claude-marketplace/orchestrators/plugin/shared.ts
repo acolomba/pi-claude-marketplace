@@ -580,18 +580,10 @@ function synthesizeUndeclaredMarketplaceSource(
 }
 
 /**
- * WB-01 / UAT-05: pair the targeted physical config file with its sibling (the
- * scope's OTHER file) for a given locality. Target-path selection happens ONCE
- * at the orchestrator boundary so the write path never falls back to the
- * base file on ENOENT; the sibling path exists ONLY for the UAT-05
- * merged-view membership test (read fresh inside the lock, never written).
- *
- * NOT exported: `selectDeclaringConfigWriteTarget` is the orchestrator-facing
- * selector, and this one answers a strictly narrower question -- which files a
- * locality names, with no say in what that locality should be. A caller who
- * reached for it would be aiming the write with the flag alone, which is the
- * defect D-103-13 removed from three call sites. The compiler keeps the module's
- * public surface down to the one selector that answers the whole question.
+ * WB-01: the physical file pair a locality names. The flag alone picks the
+ * target, so the write path never falls back to the base file on ENOENT:
+ * `loadConfig`'s `absent` arm yields an empty shape that `saveConfig` writes
+ * back to the target, creating it fresh.
  */
 function selectConfigWriteTarget(
   locations: ScopedLocations,
@@ -611,17 +603,9 @@ function selectConfigWriteTarget(
 }
 
 /**
- * D-103-13 write-target selection outcome. Discriminated rather than a bare
- * record because ONE of the two answers is "there is no answer": when the file
- * that DETERMINES the destination cannot be read, no destination may be
- * guessed, and a caller must be unable to ignore that (NFR-7 precedent).
- *
- * The `selected` arm carries both physical files' parses, so the caller reads
- * each file ONCE per operation. `sibling` is `undefined` when the sibling could
- * not be read -- and `undefined` is NOT "declares nothing": a consumer that
- * would conclude ABSENCE from it must refuse to act instead. That distinction
- * is the whole point of the field's nullability; collapsing it back into an
- * empty config is what let an unreadable file be read as an empty one.
+ * The layer a named command writes, with both layers' parses. Discriminated,
+ * because a scope whose layer cannot be read has no answer, and a caller must
+ * be unable to ignore that (NFR-7 precedent).
  */
 export type DeclaringConfigWriteTarget =
   | { readonly kind: "unreadable"; readonly filePath: string }
@@ -629,139 +613,64 @@ export type DeclaringConfigWriteTarget =
       readonly kind: "selected";
       readonly targetConfigPath: string;
       readonly targetIsLocal: boolean;
-      /** The TARGET file's parse; an absent file yields the empty shape. */
+      /** The target layer's parse; an absent file yields the empty shape. */
       readonly current: ScopeConfig;
-      /** The OTHER file's parse, or `undefined` when it could not be read. */
-      readonly sibling: ScopeConfig | undefined;
+      /** The other layer's parse; an absent file yields the empty shape. */
+      readonly sibling: ScopeConfig;
     };
 
-/** A readable file's config (`absent` counts as readable), else `undefined`. */
-function readableConfig(result: ConfigLoadResult): ScopeConfig | undefined {
-  if (result.status === "invalid") {
-    return undefined;
-  }
-
-  return result.status === "valid" ? result.config : { schemaVersion: 1 };
-}
-
 /**
- * D-103-13: select the physical config file a verb that AUTHORS an enablement
- * declaration must write to, and hand back both files' parses.
+ * LAYER-04 / D-MF-03: select the layer a named install, enable, or disable
+ * writes, and hand back both layers' parses. `--local` targets the local layer
+ * and no flag targets the shared layer, whatever layer already declares the
+ * plugin. The caller reads the other layer from `sibling` to refuse a plugin
+ * only that layer declares.
  *
- * The rule: an explicit `--local` targets the local file; absent the flag,
- * target the file the plugin's declaration already lives in; absent both a flag
- * and a declaration, target the base file.
+ * CFG-03: an invalid target layer returns `unreadable` naming it, and then an
+ * invalid other layer returns `unreadable` naming that file. The other layer
+ * may declare the plugin or its marketplace, so an unreadable one stops the
+ * command instead of reading as a layer that declares nothing. `loadConfig`
+ * never throws: an EACCES, a truncated mid-save file, and a schema violation
+ * all arrive as `invalid`. `absent` is a real answer and reads as empty. This
+ * never throws and never creates a file.
  *
- * `--local` says which file to WRITE. It does not say which file a declaration
- * already lives IN, and those are different questions -- a caller who typed no
- * flag has answered neither, and answering the second one with the first is
- * what makes the write a no-op. LAYER-09: an `enabled` that a
- * `claude-plugins.local.json` entry sets wins over the base entry's, so a write
- * into the base file under such a local declaration changes no merged value.
- * The verb reports success, the merged view the reconcile planner reads is
- * unmoved, and the next pass plans the opposite of the command the user just
- * ran.
+ * `targetIsLocal` reports which parse is the local one, so callers that read
+ * across both layers (`install-declared-enabled.ts` reads the local `enabled`
+ * first, then the shared one) do not compare paths.
  *
- * The local file is inspected for KEY MEMBERSHIP only -- the key's PRESENCE
- * decides the file, never its `enabled` value, so a write under a bare local
- * `{}` lands in the local file, where the field it sets wins in the merged
- * view.
- *
- * CFG-03: an UNREADABLE local file returns the `unreadable` arm instead of a
- * target. `loadConfig` never throws, so an EACCES, a truncated mid-save file
- * and a schema violation all arrive as `invalid` -- and none of them answer the
- * membership question. Reading `invalid` as "not declared locally" would aim
- * the write at the base file on exactly the configuration where a local entry
- * may override it, which is the no-op write this selector exists to prevent.
- * This does NOT mirror the D-18 merge fallback: that fallback coerces an invalid
- * file's CONTRIBUTION while preserving the invalid SIGNAL for the caller
- * (`config-merge.ts::loadMergedScopeConfig`), and it computes a read rather
- * than choosing a write target. `absent` is a real answer ("not declared
- * there") and still yields the base target; this never throws and never
- * creates a file.
- *
- * `targetIsLocal` reports the selection's locality so callers reading across
- * both files (`install-declared-enabled.ts` reads the local `enabled` first,
- * then the shared one) do not re-derive it by comparing paths.
- *
- * WB-01 / UAT-05: both reads are decision-input only and neither is serialized
- * back. Callers hold the scope's state lock, which excludes other extension
- * processes; it does NOT exclude a user editing these files, which are
- * hand-authored by design, so a concurrent edit between this read and the write
- * is possible. The write itself is atomic, so the worst case is a target chosen
- * from a config one edit old, not a torn file.
+ * WB-01: both reads happen inside the caller's lock, and neither parse is
+ * serialized back. The lock excludes other extension processes; it does not
+ * exclude a user editing these hand-authored files, so the worst case is a
+ * decision made from a config one edit old. The write itself is atomic.
  */
 export async function selectDeclaringConfigWriteTarget(opts: {
   readonly locations: ScopedLocations;
   readonly local: boolean | undefined;
-  readonly key: string;
 }): Promise<DeclaringConfigWriteTarget> {
-  const [baseCfg, localCfg] = await Promise.all([
-    loadConfig(opts.locations.configJsonPath),
-    loadConfig(opts.locations.configLocalJsonPath),
-  ]);
-
-  if (localFileLeavesTargetUnknowable(opts.local, localCfg)) {
-    return { kind: "unreadable", filePath: localCfg.filePath };
-  }
-
-  const targetIsLocal = resolveTargetIsLocal(opts.local, localCfg, opts.key);
-  // Delegate the file pairing to the flag-only selector so `--local`'s pairing
-  // -- and its ENOENT fresh-create contract -- keeps exactly one definition,
-  // then key the two parses off those PATHS rather than off `targetIsLocal` a
-  // second time, so a parse can never be paired with the other file's path.
   const { targetConfigPath, siblingConfigPath } = selectConfigWriteTarget(
     opts.locations,
-    targetIsLocal,
+    opts.local,
   );
-  const parseFor = (p: string): ConfigLoadResult =>
-    p === opts.locations.configLocalJsonPath ? localCfg : baseCfg;
-  const targetCfg = parseFor(targetConfigPath);
+  const [targetCfg, siblingCfg] = await Promise.all([
+    loadConfig(targetConfigPath),
+    loadConfig(siblingConfigPath),
+  ]);
   if (targetCfg.status === "invalid") {
     return { kind: "unreadable", filePath: targetCfg.filePath };
+  }
+
+  if (siblingCfg.status === "invalid") {
+    return { kind: "unreadable", filePath: siblingCfg.filePath };
   }
 
   return {
     kind: "selected",
     targetConfigPath,
-    targetIsLocal,
+    targetIsLocal: opts.local === true,
     current: configOrEmpty(targetCfg),
-    sibling: readableConfig(parseFor(siblingConfigPath)),
+    sibling: configOrEmpty(siblingCfg),
   };
 }
-
-/**
- * A typed flag names the destination outright, so no file has to be read to
- * find it and an unreadable local file cannot make the answer unknowable.
- * Absent the flag the local file IS the determinant, and an unreadable one
- * leaves the destination unknown -- abort rather than guess.
- */
-function localFileLeavesTargetUnknowable(
-  local: boolean | undefined,
-  localCfg: ConfigLoadResult,
-): localCfg is InvalidConfigLoad {
-  return local !== true && localCfg.status === "invalid";
-}
-
-/**
- * CFG-02 / D-01: the local file answers the key when the caller typed
- * `--local`, or when it declares the key itself -- its mere presence decides
- * the target, because a field written into the local entry wins over the base
- * entry's in the merged view (LAYER-09).
- */
-function resolveTargetIsLocal(
-  local: boolean | undefined,
-  localCfg: ConfigLoadResult,
-  key: string,
-): boolean {
-  if (local === true) {
-    return true;
-  }
-
-  return localCfg.status === "valid" && ownValue(localCfg.config.plugins, key) !== undefined;
-}
-
-type InvalidConfigLoad = Extract<ConfigLoadResult, { status: "invalid" }>;
 
 /** A readable layer's parse; an absent layer reads as one that declares nothing. */
 export function configOrEmpty(result: ConfigLoadResult): ScopeConfig {
@@ -776,10 +685,8 @@ export function configOrEmpty(result: ConfigLoadResult): ScopeConfig {
  *
  * It reads only the target scope's own two files. A marketplace neither file
  * declares (one a project install adds from the user scope, CMP-3) and one
- * both files declare (a shared
- * declaration with a personal override) are never refused. An unreadable
- * sibling cannot prove the marketplace is local-only, so it never refuses; a
- * flagless selection already reports `unreadable` in that case.
+ * both files declare (a shared declaration with a personal override) are never
+ * refused.
  */
 export function localOnlyMarketplaceRefusal(
   selection: Pick<
@@ -791,7 +698,7 @@ export function localOnlyMarketplaceRefusal(
   if (
     selection.targetIsLocal ||
     ownValue(selection.current.marketplaces, marketplace) !== undefined ||
-    ownValue(selection.sibling?.marketplaces, marketplace) === undefined
+    ownValue(selection.sibling.marketplaces, marketplace) === undefined
   ) {
     return undefined;
   }
@@ -859,41 +766,6 @@ export function pluginLayerVerdict(args: {
 }
 
 /**
- * UAT-05 seam over `synthesizeUndeclaredMarketplaceSource`: runs the
- * merged-view membership gate against BOTH physical files of the scope. Both
- * parses come from `selectDeclaringConfigWriteTarget` (read fresh inside the
- * caller's lock -- WB-01 discipline); neither is serialized back.
- *
- * An UNREADABLE sibling (`sibling === undefined`) SKIPS the marketplace
- * declaration. It
- * is not read as "declares nothing": the file may well declare the marketplace,
- * and synthesizing a bare `{source}` entry into the other file would then be a
- * second declaration in a file the user never named, which keeps the
- * marketplace after a later `marketplace remove` from the repaired file
- * (LAYER-02 / D-MF-03). Skipping the declaration is the conservative half: the
- * plugin entry itself is still targeted correctly, and a marketplace
- * that really is undeclared stays visible as the reconcile planner's
- * `<marketplace not declared>` row rather than being papered over from a file
- * nobody could read.
- */
-function synthesizeAdoptedMarketplaceSource(opts: {
-  readonly current: ScopeConfig;
-  readonly sibling: ScopeConfig | undefined;
-  readonly state: ExtensionState;
-  readonly marketplace: string;
-}): string | undefined {
-  if (opts.sibling === undefined) {
-    return undefined;
-  }
-
-  return synthesizeUndeclaredMarketplaceSource(
-    [opts.current, opts.sibling],
-    opts.state,
-    opts.marketplace,
-  );
-}
-
-/**
  * CMP-3 / UAT-05: write a plugin declaration and, when the scope's MERGED
  * config view does not already declare the owning marketplace, declare the
  * marketplace in the SAME batched patch. A bare plugin key would otherwise be a
@@ -904,8 +776,7 @@ function synthesizeAdoptedMarketplaceSource(opts: {
  * `--local` write never re-declares a base-declared marketplace: the scope
  * already declares it, and a second declaration in a file the user never named
  * would survive a later `marketplace remove` from the base file (LAYER-02 /
- * D-MF-03). An UNREADABLE sibling skips the marketplace declaration rather
- * than counting as a file that declares nothing.
+ * D-MF-03).
  *
  * S4 (#51): an `undefined` synthesized source collapses two arms -- benign
  * (already declared, no synthesis needed) and dangerous (no string `source.raw`
@@ -926,7 +797,7 @@ function synthesizeAdoptedMarketplaceSource(opts: {
  */
 export async function writeAdoptingConfigEntries(opts: {
   readonly current: ScopeConfig;
-  readonly sibling: ScopeConfig | undefined;
+  readonly sibling: ScopeConfig;
   readonly state: ExtensionState;
   readonly marketplace: string;
   readonly plugin: string;
@@ -936,12 +807,11 @@ export async function writeAdoptingConfigEntries(opts: {
   readonly addedMarketplaces?: readonly string[];
 }): Promise<void> {
   const adopted = [opts.marketplace, ...(opts.addedMarketplaces ?? [])].flatMap((marketplace) => {
-    const source = synthesizeAdoptedMarketplaceSource({
-      current: opts.current,
-      sibling: opts.sibling,
-      state: opts.state,
+    const source = synthesizeUndeclaredMarketplaceSource(
+      [opts.current, opts.sibling],
+      opts.state,
       marketplace,
-    });
+    );
     return source === undefined ? [] : [[marketplace, { source }] as const];
   });
 
@@ -952,50 +822,53 @@ export async function writeAdoptingConfigEntries(opts: {
 }
 
 /**
- * CR-06: overwrite an EXISTING `enabled: false` config entry for a cascade
- * member re-enabled through its state record -- the divergence `disable
- * <dep>` creates and D-04-07 already corrects for the root. The entry to
- * overwrite is the one that EXISTS, so each member's file is selected by
- * DECLARATION ALONE (`local: undefined`), never by the flag the caller typed
- * for the root: with `--local` the root's own write targets the local file,
- * but a member's `enabled: false` entry written by a flagless `disable`
- * lives in the base file, and selecting by the root's flag would miss it.
- * A member the config does not mention at all stays untouched (D-04-02: the
- * config names only what the user asked for by name).
+ * CR-06: overwrite an existing `enabled: false` entry of a cascade member
+ * re-enabled through its state record, the divergence `disable <dep>` creates
+ * and D-04-07 already corrects for the root. Members are not named by the
+ * user, so no layer rule applies to them: each layer of the scope that holds
+ * `enabled: false` for the member gets `enabled: true`, through the atomic
+ * config writer. A layer that is absent, invalid, or holds no such entry is
+ * not rewritten (WR-02). A member the config does not mention at all stays
+ * untouched (D-04-02: the config names only what the user asked for by name).
  *
  * Shared by the enable cascade's EDEP-01 arm and the install cascade's
  * EDEP-03 re-enable arm.
  */
 export async function overwriteDisabledMemberEntries(args: {
   readonly locations: ScopedLocations;
-  readonly state: ExtensionState;
   readonly keys: readonly string[];
-  readonly select: typeof selectDeclaringConfigWriteTarget;
-  readonly write: typeof writeAdoptingConfigEntries;
 }): Promise<void> {
-  for (const key of args.keys) {
-    // eslint-disable-next-line no-await-in-loop -- per-key read-modify-write of its config file
-    const selection = await args.select({ locations: args.locations, local: undefined, key });
-    if (
-      selection.kind !== "selected" ||
-      ownValue(selection.current.plugins, key)?.enabled !== false
-    ) {
-      continue;
+  const layers = [args.locations.configJsonPath, args.locations.configLocalJsonPath];
+  for (const configPath of layers) {
+    for (const key of args.keys) {
+      // eslint-disable-next-line no-await-in-loop -- per-key read-modify-write of one layer file
+      await overwriteDisabledEntry(configPath, args.locations.scopeRoot, key);
     }
-
-    const at = key.indexOf("@");
-    // eslint-disable-next-line no-await-in-loop -- per-key read-modify-write of its config file
-    await args.write({
-      current: selection.current,
-      sibling: selection.sibling,
-      state: args.state,
-      marketplace: key.slice(at + 1),
-      plugin: key.slice(0, at),
-      targetConfigPath: selection.targetConfigPath,
-      scopeRoot: args.locations.scopeRoot,
-      pluginPatch: { enabled: true },
-    });
   }
+}
+
+/** CR-06: one layer's `enabled: false` entry for `key` becomes `enabled: true`. */
+async function overwriteDisabledEntry(
+  configPath: string,
+  scopeRoot: string,
+  key: string,
+): Promise<void> {
+  const loaded = await loadConfig(configPath);
+  if (loaded.status !== "valid" || ownValue(loaded.config.plugins, key)?.enabled !== false) {
+    return;
+  }
+
+  const at = key.indexOf("@");
+  await writePluginConfigEntry(
+    loaded.config,
+    configPath,
+    scopeRoot,
+    key.slice(0, at),
+    key.slice(at + 1),
+    {
+      enabled: true,
+    },
+  );
 }
 
 /** CMP-5: unqualified single-plugin lifecycle operations prefer project only when both scopes match. */
