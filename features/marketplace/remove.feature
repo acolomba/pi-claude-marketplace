@@ -270,3 +270,111 @@ Feature: Marketplace remove
       | name     | scope   | details autoupdate | details last updated at |
       | tools    | project | false              | {scenario time}         |
       | upstream | project | false              | {scenario time}         |
+
+  Scenario Outline: Removing a marketplace from the user scope keeps the plugins the project installed from it
+    Given the marketplace "tools" is published as a <source kind> source
+    Given the marketplace "tools" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "tools" is added to the user scope
+    Given the user has run "/claude:plugin install demo@tools --scope project"
+    Given the user has run "/claude:plugin marketplace remove tools --scope user"
+    When the user runs "/claude:plugin list --scope project"
+    Then the result has these fields:
+      | kind                | cascade     |
+      | severity            | info        |
+      | needs reload        | false       |
+      | tally label         | Plugin list |
+      | tally failures      | 0           |
+      | tally warnings      | 0           |
+      | tally success count | 1           |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id         | name | status    | reasons | scope   | version |
+      | tools            | project           | demo@tools | demo | installed |         | project | 1.0.0   |
+
+    Examples:
+      | source kind |
+      | dir         |
+      | file        |
+
+    @url
+    Examples:
+      | source kind |
+      | url         |
+
+    @github
+    Examples:
+      | source kind |
+      | github      |
+
+  Scenario Outline: Removing a marketplace from the user scope keeps the info of a plugin the project installed from it
+    Given the marketplace "tools" is published as a <source kind> source
+    Given the marketplace "tools" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "tools" is added to the user scope
+    Given the user has run "/claude:plugin install demo@tools --scope project"
+    Given the user has run "/claude:plugin marketplace remove tools --scope user"
+    When the user runs "/claude:plugin info demo@tools --scope project"
+    Then the result has these fields:
+      | kind                           | plugin-info |
+      | severity                       | info        |
+      | needs reload                   | false       |
+      | marketplace name               | tools       |
+      | marketplace scope              | project     |
+      | marketplace details autoupdate | false       |
+      | plugin status                  | installed   |
+      | plugin name                    | demo        |
+      | plugin id                      | demo@tools  |
+      | plugin reasons                 |             |
+      | plugin scope                   | project     |
+      | plugin version                 | 1.0.0       |
+      | plugin components resolved     | true        |
+      | plugin components skills       | demo-skill  |
+
+    Examples:
+      | source kind |
+      | dir         |
+      | file        |
+
+    @url
+    Examples:
+      | source kind |
+      | url         |
+
+    @github
+    Examples:
+      | source kind |
+      | github      |
+
+  Scenario Outline: Removing a marketplace from the user scope keeps the marketplace updatable in the project scope
+    Given the marketplace "tools" is published as a <source kind> source
+    Given the marketplace "tools" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "tools" is added to the user scope
+    Given the user has run "/claude:plugin install demo@tools --scope project"
+    Given the user has run "/claude:plugin marketplace remove tools --scope user"
+    When the user runs "/claude:plugin marketplace update tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these marketplaces:
+      | name  | scope   | status  | reasons    |
+      | tools | project | skipped | up-to-date |
+
+    Examples:
+      | source kind |
+      | dir         |
+      | file        |
+
+    @url
+    Examples:
+      | source kind |
+      | url         |
+
+    @github
+    Examples:
+      | source kind |
+      | github      |
