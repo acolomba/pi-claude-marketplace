@@ -312,7 +312,7 @@ Plans:
 
 1. Reason tokens, cause lines, and message text that name one of a scope's two files say "shared layer" or "local layer" (for example the `marketplace declared locally` and `marketplace declared in shared config` families), with the catalog, JSON guide, schema, and pins updated together (TERM-01).
 2. README, README.es, the docs, and the CHANGELOG use the terms consistently, and the CHANGELOG records any renamed reason token (TERM-01).
-3. Code identifiers and comments that mean the shared layer say `shared`, not `base` (for example in `persistence/config-merge.ts`), with no behavior change (TERM-01).
+3. Code identifiers and comments that mean the shared layer say `shared`, not `base` (for example in `persistence/config-merge.ts`), with no behavior change (TERM-01). Carried from the Phase 3.3 review (IN-02): the flag-only layer selector and the uninstall seam that now loads both layers are renamed to match what they do (`selectDeclaringConfigWriteTarget` / `DeclaringConfigWriteTarget`, for example to `selectLayerTarget`, and `UninstallTransaction.loadTargetConfig`, for example to `loadLayerConfig`).
 
 **Plans:** TBD
 
