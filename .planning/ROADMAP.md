@@ -59,7 +59,8 @@ path), **url** (https git URL on the loopback stand-in), and **gh**
 - [x] **Phase 3: Marketplace Add** — `marketplace add` scenarios, with dir, file, `@url`, and `@github` rows for every multi-kind add behavior (completed 2026-10-16)
 - [x] **Phase 3.1: Local Declaration Leak Fix** (INSERTED) — A marketplace added with `--local` stays out of `claude-plugins.json` across a reload, written test-first (completed 2026-10-16)
 - [x] **Phase 3.2: Marketplace Layer Partition** (INSERTED) — The same marketplace may live in both layers, and named marketplace mutations change only their own layer (completed 2026-10-17)
-- [ ] **Phase 3.3: Plugin Layer Partition** (INSERTED) — Named plugin mutations change only their own layer, a plugin lives in one layer, and shared plugins never depend on local-only marketplaces
+- [ ] **Phase 3.3: Plugin Layer Partition** (INSERTED) — Named plugin mutations act on their own layer, a plugin may be declared in both layers and is installed once, and a plugin's marketplace is declared in the same layer
+- [ ] **Phase 3.4: Scope and Layer Terminology** (INSERTED) — Messages, reason tokens, docs, and code use the scope and layer terms consistently
 - [ ] **Phase 4: Marketplace Remove and List** — `remove`/`rm` with the plugin cascade, and `list`/`ls` across both scopes
 - [ ] **Phase 5: Marketplace Info** — `info` source details for every kind, scope fan-out, not-added forms, and a broken manifest
 - [ ] **Phase 6: Marketplace Update and C-10 Fix** — Single and bare `update`, with and without autoupdate, path-source failures, and the C-10 fix written test-first
@@ -258,14 +259,29 @@ Plans:
 
 ### Phase 3.3: Plugin Layer Partition (INSERTED)
 
-**Goal:** Every plugin mutation named on the command line is partitioned between the shared and local layers, a plugin is installed from one layer only, and a shared plugin never depends on a local-only marketplace.
+**Goal:** Every plugin mutation named on the command line acts on its target layer; the same plugin may be declared in both layers of a scope and is installed once; a plugin's marketplace is always declared in the plugin's own layer; and the two layers merge field by field.
 **Depends on:** Phase 3.2
-**Requirements:** LAYER-04, LAYER-05, LAYER-06
+**Requirements:** LAYER-04, LAYER-05, LAYER-06, LAYER-08, LAYER-09
 **Success Criteria** (what must be TRUE):
 
-1. `plugin install`, `uninstall`, `enable`, `disable`, `update`, and `reinstall` naming a plugin act only on the target layer (shared by default, local with `--local`) and fail when that layer does not declare the plugin (install excepted, which declares it); a command naming no plugin operates on every layer (LAYER-04).
-2. A plugin cannot be declared in both layers: installing it into one layer while the other layer declares it fails, because Pi loads one copy (LAYER-05).
-3. On load, a shared plugin whose marketplace only the local layer declares is ignored: it is not installed and does not fail the load (LAYER-06).
+1. `plugin uninstall`, `enable`, `disable`, `update`, and `reinstall` naming a plugin act on the target layer (shared by default, local with `--local`) and fail with `plugin declared locally` or `plugin declared in shared config` when only the other layer declares the plugin; a command naming no plugin covers both layers (LAYER-04).
+2. Installing a plugin into a layer while the other layer declares it adds the declaration, installs nothing, and reports `{already installed in [shared|local] layer}`; uninstalling it from a layer while the other layer declares it drops only that declaration, uninstalls nothing, and reports `{still installed in [shared|local] layer}` with the hint to repeat [with|without] `--local` (LAYER-05).
+3. A plugin declared in a layer whose marketplace that layer does not declare is a configuration error for that layer on load (as CFG-03); `install --local` under a marketplace only the shared layer declares also declares the marketplace in the local layer; a flagless install under a local-only marketplace stays refused (LAYER-06, FIX-03).
+4. A named uninstall of an installed plugin that no layer declares (a dependency) is refused listing the plugins in the target layer that need it, uninstalls nothing when only plugins of the other layer need it, and uninstalls it only when nothing needs it (LAYER-08).
+5. Plugin entries merge field by field across the two layers, local winning on conflicts such as `enabled` (LAYER-09).
+
+**Plans:** TBD
+
+### Phase 3.4: Scope and Layer Terminology (INSERTED)
+
+**Goal:** Every user-visible string, document, and code identifier uses the scope and layer terms defined in PROJECT.md, so "scope" always means user or project and "layer" always means the shared or local declaration file.
+**Depends on:** Phase 3.3
+**Requirements:** TERM-01
+**Success Criteria** (what must be TRUE):
+
+1. Reason tokens, cause lines, and message text that name one of a scope's two files say "shared layer" or "local layer" (for example the `marketplace declared locally` and `marketplace declared in shared config` families), with the catalog, JSON guide, schema, and pins updated together (TERM-01).
+2. README, README.es, the docs, and the CHANGELOG use the terms consistently, and the CHANGELOG records any renamed reason token (TERM-01).
+3. Code identifiers and comments that mean the shared layer say `shared`, not `base` (for example in `persistence/config-merge.ts`), with no behavior change (TERM-01).
 
 **Plans:** TBD
 
