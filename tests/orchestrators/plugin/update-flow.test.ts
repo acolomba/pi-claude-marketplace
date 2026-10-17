@@ -5115,104 +5115,9 @@ test("TR-04 retry: partial-success-state-converges-to-new-version", async () => 
   });
 });
 
-// ──────────────────────────────────────────────────────────────────────────
-// WB-01/WB-02 deep-equal short-circuit + --local
-// ──────────────────────────────────────────────────────────────────────────
-
-test("WB-01 / A7: CHANGED update with ABSENT entry writes the implicit declaration", async () => {
+test("RECON-05: an up-to-date named update leaves the shared layer unchanged", async () => {
   await withHermeticHome(async () => {
-    const cwd = await createCaseDir("update-wb01-write-");
-    try {
-      const locations = locationsFor("project", cwd);
-      await seedPathMarketplace({
-        cwd,
-        marketplaceRoot: path.join(cwd, "mp-src"),
-        marketplaceName: "mp",
-        manifestPlugins: { hello: { version: "1.0.1", hasSkill: true } },
-        installedVersions: { hello: "1.0.0" },
-      });
-
-      // Pre-existing config has NO entry for hello@mp -> write-back fires
-      // to add the implicit declaration.
-      const { ctx, run } = makeCtx();
-      await updatePlugins({
-        ctx,
-        run,
-        scope: "project",
-        cwd,
-        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
-      });
-
-      const { loadConfig } =
-        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
-      const cfg = await loadConfig(locations.configJsonPath);
-      assert.equal(cfg.status, "valid");
-      if (cfg.status === "valid") {
-        assert.deepEqual(cfg.config.plugins?.["hello@mp"], {});
-      }
-    } finally {
-      await rm(cwd, { recursive: true, force: true });
-    }
-  });
-});
-
-test("WB-01 / A7: changed update with a DIFFERENT existing entry writes back (preserves D-09 unknown keys)", async () => {
-  await withHermeticHome(async () => {
-    const cwd = await createCaseDir("update-wb01-diff-");
-    try {
-      const locations = locationsFor("project", cwd);
-      await seedPathMarketplace({
-        cwd,
-        marketplaceRoot: path.join(cwd, "mp-src"),
-        marketplaceName: "mp",
-        manifestPlugins: { hello: { version: "1.0.1", hasSkill: true } },
-        installedVersions: { hello: "1.0.0" },
-      });
-
-      // Seed the config with an existing entry that carries a forward-compat
-      // key. The patched shape `{...existing, ...{}} === existing`, so the
-      // deep-equal short-circuit fires and the file stays byte-stable.
-      const { saveConfig, loadConfig } =
-        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
-      await saveConfig(
-        locations.configJsonPath,
-        {
-          schemaVersion: 1,
-          plugins: { "hello@mp": { enabled: false, futureKey: "x" } as never },
-        },
-        locations.scopeRoot,
-      );
-      const bytesBefore = await readFile(locations.configJsonPath);
-
-      const { ctx, run } = makeCtx();
-      await updatePlugins({
-        ctx,
-        run,
-        scope: "project",
-        cwd,
-        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
-      });
-
-      const bytesAfter = await readFile(locations.configJsonPath);
-      assert.deepEqual(bytesAfter, bytesBefore, "RECON-05: no-op patch -> byte-stable config");
-
-      // Unknown forward-compat key preserved.
-      const after = await loadConfig(locations.configJsonPath);
-      assert.equal(after.status, "valid");
-      if (after.status === "valid") {
-        const entry = after.config.plugins?.["hello@mp"] as Record<string, unknown> | undefined;
-        assert.equal(entry?.enabled, false);
-        assert.equal(entry?.futureKey, "x");
-      }
-    } finally {
-      await rm(cwd, { recursive: true, force: true });
-    }
-  });
-});
-
-test("WB-01: up-to-date update does NOT write the config (RECON-05 fixed-point preserved)", async () => {
-  await withHermeticHome(async () => {
-    const cwd = await createCaseDir("update-wb01-uptodate-");
+    const cwd = await createCaseDir("update-uptodate-layer-");
     try {
       const locations = locationsFor("project", cwd);
       await seedPathMarketplace({
@@ -5223,7 +5128,6 @@ test("WB-01: up-to-date update does NOT write the config (RECON-05 fixed-point p
         installedVersions: { hello: "1.0.0" },
       });
 
-      // Seed config with the entry so we can assert it's untouched.
       const { saveConfig } =
         await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
       await saveConfig(
@@ -5242,8 +5146,6 @@ test("WB-01: up-to-date update does NOT write the config (RECON-05 fixed-point p
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
       });
 
-      // Up-to-date short-circuits BEFORE the 3-phase swap; finalizeUpdateRecord
-      // never runs, so no write-back fires.
       const bytesAfter = await readFile(locations.configJsonPath);
       assert.deepEqual(bytesAfter, bytesBefore);
     } finally {
@@ -5372,6 +5274,95 @@ async function recordedHelloVersion(
   return (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.hello?.version;
 }
 
+interface LayerFile {
+  readonly bytes: string;
+  readonly mtimeMs: number;
+}
+
+async function readLayerFile(filePath: string): Promise<LayerFile | undefined> {
+  return (await pathExists(filePath))
+    ? { bytes: await readFile(filePath, "utf8"), mtimeMs: (await stat(filePath)).mtimeMs }
+    : undefined;
+}
+
+/** The bytes and mtime of each layer file; an absent file reads as undefined. */
+async function layerFiles(locations: ReturnType<typeof locationsFor>): Promise<{
+  readonly shared: LayerFile | undefined;
+  readonly local: LayerFile | undefined;
+}> {
+  return {
+    shared: await readLayerFile(locations.configJsonPath),
+    local: await readLayerFile(locations.configLocalJsonPath),
+  };
+}
+
+test("LAYER-04: a changed named update of a plugin the shared layer declares leaves both layer files unchanged", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-declared-layers-");
+    try {
+      // arrange
+      const locations = await seedLayeredUpdate(cwd, {
+        shared: JSON.stringify({ schemaVersion: 1, plugins: { "hello@mp": { futureKey: "x" } } }),
+        local: JSON.stringify({ schemaVersion: 1, plugins: { "other@mp": {} } }),
+      });
+      const layersBefore = await layerFiles(locations);
+      const { ctx, run } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      // assert
+      assert.equal(await recordedHelloVersion(locations), "1.0.1");
+      assert.deepEqual(await layerFiles(locations), layersBefore);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-14: a named update of a dependency updates it and writes no layer file", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-dependency-");
+    try {
+      // arrange
+      const locations = await seedLayeredUpdate(cwd, {});
+      const seededState = await loadState(locations.extensionRoot);
+      const seededRecord = seededState.marketplaces.mp?.plugins.hello;
+      assert.ok(seededRecord !== undefined);
+      seededRecord.provenance = "dependency";
+      await saveState(locations.extensionRoot, seededState);
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      // assert
+      assert.deepEqual(notifications, [
+        {
+          message:
+            "● mp [project]\n  ● hello v1.0.0 → v1.0.1 (updated)\n\n/reload to pick up changes",
+        },
+      ]);
+      assert.equal(await recordedHelloVersion(locations), "1.0.1");
+      assert.deepEqual(await layerFiles(locations), { shared: undefined, local: undefined });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 /**
  * Seed `hello` and `other` 1.0.0 installed in the project scope with 1.0.1
  * offered, and write `localBytes` into the local layer.
@@ -5401,6 +5392,27 @@ async function recordedVersions(
   const plugins = (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins;
   return { hello: plugins?.hello?.version, other: plugins?.other?.version };
 }
+
+test("LAYER-04: a bare update writes no layer file for any record", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-bare-no-layer-");
+    try {
+      // arrange
+      const locations = await seedTwoPluginUpdate(cwd, HELLO_DECLARED);
+      const layersBefore = await layerFiles(locations);
+      const { ctx, run } = makeCtx();
+
+      // act
+      await updatePlugins({ ctx, run, scope: "project", cwd, target: { kind: "all" } });
+
+      // assert
+      assert.deepEqual(await recordedVersions(locations), { hello: "1.0.1", other: "1.0.1" });
+      assert.deepEqual(await layerFiles(locations), layersBefore);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
 
 for (const { form, target } of [
   { form: "bare", target: { kind: "all" } },
@@ -5598,12 +5610,13 @@ test("D-14: a named update of a plugin no layer declares, under a marketplace on
   });
 });
 
-test("FIX-03: a named update with --local under a marketplace only the local file declares updates and declares the plugin locally", async () => {
+test("LAYER-04: a named update with --local under a marketplace only the local layer declares updates the plugin and writes no layer file", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-local-mp-flag-");
     try {
       // arrange
       const locations = await seedLayeredUpdate(cwd, { local: localOnlyMarketplaceBytes(cwd) });
+      const layersBefore = await layerFiles(locations);
       const { ctx, run } = makeCtx();
 
       // act
@@ -5618,12 +5631,7 @@ test("FIX-03: a named update with --local under a marketplace only the local fil
 
       // assert
       assert.equal(await recordedHelloVersion(locations), "1.0.1");
-      assert.deepEqual(JSON.parse(await readFile(locations.configLocalJsonPath, "utf8")), {
-        schemaVersion: 1,
-        marketplaces: { mp: { source: path.join(cwd, "mp-src") } },
-        plugins: { "hello@mp": {} },
-      });
-      assert.equal(await pathExists(locations.configJsonPath), false);
+      assert.deepEqual(await layerFiles(locations), layersBefore);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

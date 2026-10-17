@@ -15,15 +15,13 @@
 //   * the handler's own `nonFlagPositionals.length > 1` guard rejects TWO and
 //     THREE references. ZERO is ACCEPTED -- it IS the all form -- so nothing
 //     sits below the accepted arity and there is no rejection to prove there;
-//   * the scope-target flag is ACCEPTED, and is invisible in the notification.
-//     The emission is byte-identical with and without it; the only observable
-//     difference is that the update's write-back creates the declaration in
-//     `claude-plugins.local.json` instead of `claude-plugins.json`. A suite
-//     reading only notifications would have called the flag inert;
+//   * the scope-target flag is ACCEPTED. It picks the layer a named update acts
+//     on (LAYER-04): a plugin only the local layer declares updates with the
+//     flag and is refused without it;
 //   * the scope flag and the scope-target flag are ACCEPTED TOGETHER.
 //     `extractLocalFlag` consumes `--scope <value>` as a downstream-owned pair
 //     and filters only the scope-target token, so both selectors reach the
-//     workflow -- the scope narrows the target set and the flag moves the layer;
+//     workflow -- the scope narrows the target set and the flag picks the layer;
 //   * a quoted long flag survives the FIRST scan (which splits on whitespace and
 //     sees a token opening with a quote character) and is claimed by the SECOND
 //     (which runs after the tokenizer strips quotes). That is one route into the
@@ -40,8 +38,8 @@
 //     what "absent, not present-and-false" means here;
 //   * `--partial` -> `partial: true`, observed as whether a plugin whose new
 //     source declares an unsupported component kind updates at all (D-65-05);
-//   * the scope-target flag -> `local: true`, observed as which of the scope's
-//     two physical config files the write-back created (WB-01);
+//   * the scope-target flag -> `local: true`, observed as whether a plugin only
+//     the local layer declares updates or is refused (LAYER-04);
 //   * `--scope` -> the scope member, observed as which scope roots were
 //     enumerated. The OMITTED case is not a default: it enumerates BOTH scopes,
 //     which is a third outcome distinct from either explicit value, so absence
@@ -52,7 +50,8 @@
 // exact argument list against it. Delegation is observed instead as the
 // footprint the workflow left in the hermetic tree -- both scopes' install
 // records, both scopes' base and override config layers, and the generated
-// agent files -- compared as ONE whole value. The delegating cases deliberately
+// agent files -- compared as ONE whole value. No update writes a layer file
+// (LAYER-04), so a layer in the footprint is one the case seeded. The delegating cases deliberately
 // do NOT assert the notification body: that value belongs to
 // tests/orchestrators/plugin/update-flow.test.ts, and re-deriving it here would
 // restate a fact another pair owns.
@@ -62,8 +61,7 @@
 // whole notification list against a hand-authored value, asserts that the
 // seeded fixture is byte-unchanged, and calls `verifyBoundary()`. That
 // footprint assertion is a live gate rather than a vacuous negative: a
-// delegating run over the same fixture bumps five records and writes two config
-// layers.
+// delegating run over the same fixture bumps five records.
 //
 // Measured boundary counts, taken through a counting context before a case was
 // written, because the two paths disagree and neither is a property of the
@@ -546,27 +544,12 @@ const NOTHING_UPDATED: Footprint = {
   networkCalls: 0,
 };
 
-const ALL_PROJECT_DECLARED: ScopeConfig = {
-  schemaVersion: 1,
-  plugins: { "one@alpha": {}, "two@alpha": {}, "three@beta": {} },
-};
-
-const ALPHA_PROJECT_DECLARED: ScopeConfig = {
-  schemaVersion: 1,
-  plugins: { "one@alpha": {}, "two@alpha": {} },
-};
-
 const ONE_DECLARED: ScopeConfig = { schemaVersion: 1, plugins: { "one@alpha": {} } };
-
-const ALPHA_USER_DECLARED: ScopeConfig = {
-  schemaVersion: 1,
-  plugins: { "one@alpha": {}, "two@alpha": {} },
-};
 
 /** Every project-scope plugin refreshed from the project sources. */
 const PROJECT_ALL_UPDATED: ScopeFootprint = {
   records: [ONE_FROM_PROJECT_SOURCE, TWO_FROM_PROJECT_SOURCE, THREE_FROM_PROJECT_SOURCE],
-  base: ALL_PROJECT_DECLARED,
+  base: undefined,
   local: undefined,
   agents: [{ file: ONE_AGENT_FILE }],
 };
@@ -574,7 +557,7 @@ const PROJECT_ALL_UPDATED: ScopeFootprint = {
 /** Every user-scope plugin refreshed from the user sources. */
 const USER_ALL_UPDATED: ScopeFootprint = {
   records: [ONE_FROM_USER_SOURCE, TWO_FROM_USER_SOURCE],
-  base: ALPHA_USER_DECLARED,
+  base: undefined,
   local: undefined,
   agents: [{ file: ONE_AGENT_FILE }],
 };
@@ -582,7 +565,7 @@ const USER_ALL_UPDATED: ScopeFootprint = {
 /** Only the `alpha` marketplace's project-scope plugins were considered. */
 const PROJECT_ALPHA_UPDATED: ScopeFootprint = {
   records: [ONE_FROM_PROJECT_SOURCE, TWO_FROM_PROJECT_SOURCE, THREE_STALE],
-  base: ALPHA_PROJECT_DECLARED,
+  base: undefined,
   local: undefined,
   agents: [{ file: ONE_AGENT_FILE }],
 };
@@ -590,7 +573,7 @@ const PROJECT_ALPHA_UPDATED: ScopeFootprint = {
 /** Only the single named plugin was considered. */
 const PROJECT_ONE_UPDATED: ScopeFootprint = {
   records: [ONE_FROM_PROJECT_SOURCE, TWO_STALE, THREE_STALE],
-  base: ONE_DECLARED,
+  base: undefined,
   local: undefined,
   agents: [{ file: ONE_AGENT_FILE }],
 };
@@ -780,7 +763,7 @@ function degradedUpdated(agents: readonly GeneratedAgentProjection[]): Footprint
   return {
     project: {
       records: [DEGRADED_UPDATED],
-      base: { schemaVersion: 1, plugins: { "degraded@alpha": {} } },
+      base: undefined,
       local: undefined,
       agents,
     },
@@ -840,13 +823,21 @@ for (const { args, expectedFootprint, label, summary } of [
 }
 
 // ---------------------------------------------------------------------------
-// The scope-target flag. Its ONLY observable effect is which physical config
-// file the write-back created: the notification is byte-identical with and
-// without it. The flag-OMITTED companion is the plugin-reference case above,
-// which lands the same declaration in the base layer, so this family has a
-// demonstrated disagreement beside it rather than three rows that agree.
-// Position independence is proven by a plant, not by these rows agreeing.
+// The scope-target flag. It picks the layer a named update acts on (LAYER-04).
+// The project's local layer declares `one@alpha`, so the plugin updates with
+// the flag wherever it appears and is refused without it: the flag-omitted row
+// disagrees with the three placement rows. Position independence is proven by a
+// plant, not by these rows agreeing.
 // ---------------------------------------------------------------------------
+
+/** Declare `one@alpha` in the local layer of the scope rooted at `scopeRoot`. */
+async function declareOneLocally(scopeRoot: string): Promise<void> {
+  await writeFile(
+    path.join(scopeRoot, "claude-plugins.local.json"),
+    JSON.stringify(ONE_DECLARED),
+    "utf8",
+  );
+}
 
 for (const { args, expectedAgents, label, position } of [
   {
@@ -873,10 +864,11 @@ for (const { args, expectedAgents, label, position } of [
   label: string;
   position: string;
 }[]) {
-  test(`writes the declaration to the override layer when the scope-target flag is supplied ${position} (WB-01)`, async (t) => {
+  test(`updates a plugin only the local layer declares when the scope-target flag is supplied ${position} (LAYER-04)`, async (t) => {
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
+    await declareOneLocally(workspace.projectRoot);
     const { ctx, verifyBoundary } = createNotificationBoundary(1, {
       value: workspace.cwd,
       reads: 1,
@@ -901,10 +893,34 @@ for (const { args, expectedAgents, label, position } of [
   });
 }
 
-test("honors a scope flag and the scope-target flag supplied together, narrowing the scope and moving the layer (WB-01)", async (t) => {
+test("refuses a plugin only the local layer declares when the scope-target flag is omitted (LAYER-04)", async (t) => {
+  // arrange
+  const workspace = await createHermeticWorkspace(t, "target-omitted");
+  await seedBothScopes(workspace);
+  await declareOneLocally(workspace.projectRoot);
+  const { ctx, verifyBoundary } = createNotificationBoundary(1, {
+    value: workspace.cwd,
+    reads: 1,
+  });
+  const updateHandler = createUpdateHandler();
+
+  // act
+  await updateHandler("one@alpha", ctx, runWithNothingLoaded());
+
+  // assert
+  assert.deepStrictEqual(await readFootprint(workspace), {
+    project: { ...PROJECT_UNTOUCHED, local: ONE_DECLARED },
+    user: USER_UNTOUCHED,
+    networkCalls: 0,
+  } satisfies Footprint);
+  verifyBoundary();
+});
+
+test("honors a scope flag and the scope-target flag supplied together, narrowing the scope and picking the layer (LAYER-04)", async (t) => {
   // arrange
   const workspace = await createHermeticWorkspace(t, "both-selectors");
   await seedBothScopes(workspace);
+  await declareOneLocally(workspace.userRoot);
   const { ctx, verifyBoundary } = createNotificationBoundary(1, {
     value: workspace.cwd,
     reads: 1,
@@ -931,7 +947,7 @@ test("honors a scope flag and the scope-target flag supplied together, narrowing
 // ---------------------------------------------------------------------------
 // Rejections. Nothing is considered, the workflow is never reached, and the
 // seeded fixture survives byte-unchanged -- a live gate, because a delegating
-// run over the same fixture moves five records and writes two config layers.
+// run over the same fixture moves five records.
 //
 // There is no case one BELOW the accepted arity: zero positionals is the all
 // form, which this handler accepts.

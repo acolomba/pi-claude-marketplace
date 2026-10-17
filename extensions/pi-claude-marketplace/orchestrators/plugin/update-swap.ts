@@ -107,7 +107,6 @@ import {
 import { createRemovalOps, type RemovalOps } from "../../shared/fs-utils.ts";
 import { RECOVERY_PLUGIN_REINSTALL_PREFIX } from "../../shared/markers.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
-import { notifyWithContext } from "../../shared/notify-context.ts";
 import { ownValue } from "../../shared/own-key.ts";
 import {
   withStateGuard,
@@ -117,12 +116,10 @@ import {
 import { discoverGeneratedNames } from "./discover-names.ts";
 import {
   assertNoCrossPluginConflicts,
-  maybeWritePluginConfigBack,
   removePluginRecord,
   retiresWorkflowCommand,
   splitStagingWarnings,
 } from "./shared.ts";
-import { UPDATE_CONTEXT } from "./update.messaging.ts";
 
 import type { PreparedAgentsStaging } from "../../bridges/agents/index.ts";
 import type { PreparedCommandsStaging } from "../../bridges/commands/index.ts";
@@ -846,6 +843,9 @@ async function refreshHooksCacheAfterUpdate(
  *
  * `sRecord.updatedAt` is set on BOTH branches: even a failed finalize
  * is a truthful "we touched this record" stamp.
+ *
+ * LAYER-04 / D-MF-03: finalize changes the installation record only. An update
+ * never writes a layer file, so a dependency it updates stays undeclared.
  */
 async function finalizeUpdateRecord(
   args: ThreePhaseArgs,
@@ -854,15 +854,14 @@ async function finalizeUpdateRecord(
   phase3aFailures: readonly Phase3Failure[],
   hookEntries: readonly HookSummaryEntry[] | undefined,
   workflows: WorkflowsCommitReport,
-): Promise<{ readonly invalidConfigFile: string | undefined }> {
+): Promise<void> {
   const { plugin, marketplace, locations } = args;
   const { installable } = preflight;
   const allSucceeded = phase3aFailures.length === 0;
-  let invalidConfigFile: string | undefined;
 
   await withStateGuard(
     locations,
-    async (s) => {
+    (s) => {
       const sMp = ownValue(s.marketplaces, marketplace);
       if (sMp === undefined) {
         throw new PluginUpdateConcurrencyError("marketplace-removed", plugin, marketplace, {
@@ -899,37 +898,15 @@ async function finalizeUpdateRecord(
       }
 
       sRecord.updatedAt = new Date().toISOString();
-
-      // WB-01 / A7: deep-equal short-circuited config write-back on the
-      // all-success arm. SKIPPED in cascade mode (the marketplace autoupdate
-      // cascade owns its own writes; mirrors WR-09 orchestrated-mode
-      // semantics). The deep-equal gate compares the prospective
-      // `{...existing, ...patch}` shape against the existing entry; the
-      // current plugin entry shape carries no version field, so the patch is
-      // `{}` and a CHANGED update with a byte-stable existing entry produces a
-      // no-op, preserving RECON-05 mtime stability.
-      if (!args.cascade && allSucceeded) {
-        const writeResult = await maybeWritePluginConfigBack({
-          locations,
-          marketplace,
-          plugin,
-          local: args.local === true,
-        });
-        if (writeResult.invalidConfig) {
-          invalidConfigFile = writeResult.filePath;
-        }
-      }
     },
     args.stateTransaction,
   );
 
   // Route visibility follows the state guard's durable auto-save. A failed
-  // state/config write therefore leaves the lifecycle runtime untouched.
+  // state write therefore leaves the lifecycle runtime untouched.
   if (allSucceeded) {
     await refreshHooksCacheAfterUpdate(args, installable);
   }
-
-  return { invalidConfigFile };
 }
 
 /**
@@ -1280,49 +1257,11 @@ function composePhase3FailureOutcome(
   };
 }
 
-/**
- * S5: when a config file cannot be read, the write-back is skipped but the
- * update still succeeds. Direct-path callers report the skip as a separate
- * `(failed)` row at error severity. The row is emitted here, BEFORE the
- * cascade renders the `(updated)` row, so the user knows the on-disk
- * artifacts were updated but the config entry was not written. The cascade
- * path never calls the write-back (gated by `!args.cascade`), so it is
- * structurally unaffected. The row names `filePath`, the file the write-back
- * could not read, by its basename only.
- */
-function notifyInvalidConfigWriteBack(args: DirectThreePhaseArgs, filePath: string): void {
-  const targetBasename = path.basename(filePath);
-  notifyWithContext(
-    args.ctx,
-    args.run,
-    UPDATE_CONTEXT,
-    [
-      {
-        name: args.marketplace,
-        scope: args.scope,
-        plugins: [
-          {
-            status: "failed",
-            name: args.plugin,
-            reasons: ["invalid manifest"] as const,
-            cause: new Error(`Config file "${targetBasename}" failed schema validation.`),
-            // D-03/D-06: invalid-config abort -> error, no reload.
-            severity: "error" as const,
-            needsReload: false,
-          },
-        ],
-      },
-    ],
-    undefined,
-    args.cardinality,
-  );
-}
-
 // The three-phase update body sequences preflight, the D-UPD disabled-record
 // fast path, prepare-handles, the intent-mark window, phase-3a per-bridge
-// commits, finalize, the phase-3b aggregate error path, and the S5
-// invalid-config write-back warning. The per-phase save-vs-throw discipline
-// stays visible here; the phase bodies themselves are extracted above.
+// commits, finalize, and the phase-3b aggregate error path. The per-phase
+// save-vs-throw discipline stays visible here; the phase bodies themselves are
+// extracted above.
 export async function swapPluginUpdate(
   args: ThreePhaseArgs,
   preflight: PreparedPluginUpdate,
@@ -1408,9 +1347,8 @@ export async function swapPluginUpdate(
   // `msg` field carries the explicit `state finalize failed:` text so
   // operator diagnostics see the truthful cause. A dedicated
   // `phase: "finalize"` Phase3Failure member is deferred.
-  let invalidConfigFile: string | undefined;
   try {
-    const finalizeResult = await finalizeUpdateRecord(
+    await finalizeUpdateRecord(
       args,
       preflight,
       handles,
@@ -1418,7 +1356,6 @@ export async function swapPluginUpdate(
       hookEntries,
       workflowsCommit,
     );
-    invalidConfigFile = finalizeResult.invalidConfigFile;
   } catch (finalizeErr) {
     phase3aFailures.push({
       phase: "mcp",
@@ -1486,9 +1423,6 @@ export async function swapPluginUpdate(
   );
   const updateWarnings = collectUpdateWarnings(handles, args.cascade);
   await dropPluginCompletionCache(args);
-  if (isDirectUpdate(args) && invalidConfigFile !== undefined) {
-    notifyInvalidConfigWriteBack(args, invalidConfigFile);
-  }
 
   return {
     partition: "updated",

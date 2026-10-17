@@ -235,7 +235,7 @@ function buildDirectThreePhaseArgs(
     // The cascade entrypoint never sets it, so cascade re-installs keep the
     // `requireInstallable` block.
     partial: opts.partial ?? false,
-    // WB-01: `--local` selects the direct-path write-back target.
+    // LAYER-04: `--local` selects the layer a named update acts on.
     ...(opts.local === true && { local: true }),
     // PURL-06: the test-only clone-cache seam for the git-source candidate
     // probe. Undefined in production, which selects the real imports.

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -18,12 +18,17 @@ import {
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 // The flow suite supplies the real bridge, filesystem, rollback, and
 // state-ledger fixtures while this mirrored owner pair proves they execute
 // through the extracted swap module.
 import { seedPathMarketplace, withHermeticHome } from "./update-flow.test.ts";
 
+import type {
+  DirectThreePhaseArgs,
+  ThreePhaseArgsBase,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts";
 import type { TestContext } from "node:test";
 
 /**
@@ -698,7 +703,12 @@ async function prepareMcpUpdate(cwd: string, adapterText: string) {
   return { locations, pluginRoot: path.join(marketplaceRoot, "plugins", "hello"), args };
 }
 
-async function preflightOf(args: Awaited<ReturnType<typeof prepareMcpUpdate>>["args"]) {
+async function preflightOf(
+  args: Pick<
+    ThreePhaseArgsBase,
+    "plugin" | "marketplace" | "scope" | "locations" | "cleanupClones"
+  >,
+) {
   const preflight = await preparePluginUpdate({
     plugin: args.plugin,
     marketplace: args.marketplace,
@@ -939,6 +949,108 @@ test("AMIG-02: a legacy removal that fails records an mcp phase failure and keep
           },
         },
       });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+/**
+ * Seed `hello` 1.0.0 with 2.0.0 offered and build the direct swap arguments,
+ * whose context records every message the swap emits.
+ */
+async function prepareDirectUpdate(cwd: string) {
+  await seedPathMarketplace({
+    cwd,
+    marketplaceRoot: path.join(cwd, "mp-src"),
+    marketplaceName: "mp",
+    manifestPlugins: { hello: { version: "2.0.0", hasSkill: true } },
+    installedVersions: { hello: "1.0.0" },
+  });
+  const locations = locationsFor("project", cwd);
+  const messages: string[] = [];
+  const args = {
+    plugin: "hello",
+    marketplace: "mp",
+    scope: "project",
+    cwd,
+    locations,
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    completionCache: createCompletionCache(),
+    env: {},
+    cascade: false,
+    ctx: {
+      mode: "tui",
+      ui: {
+        notify: (message: string): void => {
+          messages.push(message);
+        },
+      },
+    },
+    run: runWithNothingLoaded(),
+    cardinality: "single",
+    notifyPhaseFailure: (error: Error): void => {
+      messages.push(error.message);
+    },
+    cleanupClones: () => Promise.resolve(),
+  } satisfies DirectThreePhaseArgs;
+  return { locations, args, messages };
+}
+
+const DIRECT_UPDATED_OUTCOME = {
+  partition: "updated",
+  name: "hello",
+  fromVersion: "1.0.0",
+  toVersion: "2.0.0",
+  stagedAgentNames: [],
+  stagedMcpServerNames: [],
+  declaresAgents: false,
+  declaresMcp: false,
+  constraint: undefined,
+  declaresWorkflows: false,
+} as const;
+
+test("LAYER-04: a direct swap writes no layer file", async () => {
+  await withHermeticHome(async () => {
+    // arrange
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-swap-no-layer-"));
+    try {
+      const { locations, args, messages } = await prepareDirectUpdate(cwd);
+      const preflight = await preflightOf(args);
+
+      // act
+      const outcome = await swapPluginUpdate(args, preflight);
+
+      // assert
+      assert.deepStrictEqual(outcome, DIRECT_UPDATED_OUTCOME);
+      assert.deepStrictEqual(messages, []);
+      await assert.rejects(readFile(locations.configJsonPath), { code: "ENOENT" });
+      await assert.rejects(readFile(locations.configLocalJsonPath), { code: "ENOENT" });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("LAYER-04: a direct swap with an unreadable local layer updates, renders nothing, and leaves the layer unchanged", async () => {
+  await withHermeticHome(async () => {
+    // arrange
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-swap-invalid-layer-"));
+    try {
+      const { locations, args, messages } = await prepareDirectUpdate(cwd);
+      await writeFile(locations.configLocalJsonPath, "{ not json");
+      const mtimeBefore = (await stat(locations.configLocalJsonPath)).mtimeMs;
+      const preflight = await preflightOf(args);
+
+      // act
+      const outcome = await swapPluginUpdate(args, preflight);
+
+      // assert
+      assert.deepStrictEqual(outcome, DIRECT_UPDATED_OUTCOME);
+      assert.deepStrictEqual(messages, []);
+      assert.strictEqual(await readFile(locations.configLocalJsonPath, "utf8"), "{ not json");
+      assert.strictEqual((await stat(locations.configLocalJsonPath)).mtimeMs, mtimeBefore);
+      await assert.rejects(readFile(locations.configJsonPath), { code: "ENOENT" });
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
