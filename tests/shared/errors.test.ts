@@ -25,6 +25,7 @@ import {
   InstallMarketplaceAddError,
   InvalidMarketplaceManifestError,
   isErrnoException,
+  LayerFileUnreadableError,
   ManualRecoveryError,
   manualRecoveryLeaks,
   MarketplaceDeclaredInSharedConfigError,
@@ -885,6 +886,27 @@ describe("MarketplaceDeclaredInSharedConfigError", () => {
         marketplace: "mp",
         message:
           "The marketplace mp is declared only in claude-plugins.json. Run the command again without --local.",
+      },
+    );
+  });
+});
+
+describe("LayerFileUnreadableError", () => {
+  test("names the layer file by its basename and is an invalid manifest", () => {
+    // arrange
+    const basename = "claude-plugins.local.json";
+
+    // act
+    const error = new LayerFileUnreadableError(basename);
+
+    // assert
+    assert.ok(error instanceof InvalidMarketplaceManifestError);
+    assert.deepStrictEqual(
+      { name: error.name, basename: error.basename, message: error.message },
+      {
+        name: "LayerFileUnreadableError",
+        basename: "claude-plugins.local.json",
+        message: 'Config file "claude-plugins.local.json" failed schema validation.',
       },
     );
   });

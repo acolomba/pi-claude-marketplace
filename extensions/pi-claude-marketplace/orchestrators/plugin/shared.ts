@@ -29,8 +29,8 @@ import { hookDebugLog } from "../../shared/debug-log.ts";
 import {
   CrossPluginConflictError,
   errorMessage,
-  InvalidMarketplaceManifestError,
   isErrnoException,
+  LayerFileUnreadableError,
   MarketplaceDeclaredLocallyError,
   MarketplaceNotFoundError,
   MarketplaceSourceUndeclarableError,
@@ -801,8 +801,9 @@ export function pluginLayerVerdict(args: {
  * and no flag targets the shared layer. A plugin that no layer declares, such
  * as a dependency, is not refused.
  *
- * CFG-03: an unreadable layer file returns `InvalidMarketplaceManifestError`
- * naming only its basename, because the plugin may be declared there.
+ * CFG-03: an unreadable layer file returns `LayerFileUnreadableError`, an
+ * invalid manifest naming only its basename, because the plugin may be
+ * declared there.
  *
  * NFR-5: it reads only the scope's two layer files, so a caller can run it
  * before any credential, clone, or tag listing.
@@ -829,10 +830,8 @@ export async function namedPluginLayerRefusal(opts: {
 }
 
 /** CFG-03: an unreadable layer file, named by its basename only. */
-function unreadableLayerError(filePath: string): InvalidMarketplaceManifestError {
-  return new InvalidMarketplaceManifestError(
-    `Config file "${path.basename(filePath)}" failed schema validation.`,
-  );
+function unreadableLayerError(filePath: string): LayerFileUnreadableError {
+  return new LayerFileUnreadableError(path.basename(filePath));
 }
 
 /**
@@ -842,8 +841,8 @@ function unreadableLayerError(filePath: string): InvalidMarketplaceManifestError
  * scope's `claude-plugins.local.json` declares. Each scope's local layer is
  * read once, and membership is an own-key read.
  *
- * CFG-03: an unreadable local layer throws `InvalidMarketplaceManifestError`
- * naming it, instead of reading as a layer that declares nothing.
+ * CFG-03: an unreadable local layer throws `LayerFileUnreadableError` naming
+ * it, instead of reading as a layer that declares nothing.
  */
 export async function keepLocalLayerTargets<
   T extends { readonly plugin: string; readonly marketplace: string; readonly scope: Scope },

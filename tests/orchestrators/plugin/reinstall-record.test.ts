@@ -7,6 +7,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-record.ts";
 import {
   InvalidMarketplaceManifestError,
+  LayerFileUnreadableError,
   ManualRecoveryError,
   PluginDeclaredInSharedConfigError,
   PluginDeclaredLocallyError,
@@ -537,7 +538,7 @@ for (const { refusal, reason, note } of [
     note: `${SHARED_CAUSE}\n\ncause: ${SHARED_CAUSE}`,
   },
   {
-    refusal: new InvalidMarketplaceManifestError(INVALID_CAUSE),
+    refusal: new LayerFileUnreadableError("claude-plugins.local.json"),
     reason: "invalid manifest",
     note: `${INVALID_CAUSE}\n\ncause: ${INVALID_CAUSE}`,
   },
@@ -565,3 +566,30 @@ for (const { refusal, reason, note } of [
     assert.strictEqual(outcome.cause, refusal);
   });
 }
+
+test("a manifest parse failure carries no cause and no layer reason", () => {
+  // arrange
+  const error = new InvalidMarketplaceManifestError(
+    'marketplace.json is not valid JSON: SyntaxError: "{ broken" is not valid JSON',
+  );
+
+  // act
+  const outcome = recordReinstallOutcome({
+    partition: "failed",
+    name: "hello",
+    marketplace: "mp",
+    scope: "project",
+    error,
+  });
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    partition: "failed",
+    name: "hello",
+    marketplace: "mp",
+    scope: "project",
+    notes: [
+      'marketplace.json is not valid JSON: SyntaxError: "{ broken" is not valid JSON\n\ncause: marketplace.json is not valid JSON: SyntaxError: "{ broken" is not valid JSON',
+    ],
+  });
+});

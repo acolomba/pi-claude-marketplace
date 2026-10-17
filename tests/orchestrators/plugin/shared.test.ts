@@ -43,7 +43,7 @@ import { locationsFor } from "../../../extensions/pi-claude-marketplace/persiste
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import {
   CrossPluginConflictError,
-  InvalidMarketplaceManifestError,
+  LayerFileUnreadableError,
   MarketplaceDeclaredLocallyError,
   MarketplaceNotFoundError,
   MarketplaceSourceUndeclarableError,
@@ -1463,8 +1463,11 @@ describe("namedPluginLayerRefusal", () => {
         });
 
         // assert
-        assert.ok(refusal instanceof InvalidMarketplaceManifestError);
-        assert.equal(refusal.message, `Config file "${basename}" failed schema validation.`);
+        assert.ok(refusal instanceof LayerFileUnreadableError);
+        assert.deepStrictEqual(
+          { basename: refusal.basename, message: refusal.message },
+          { basename, message: `Config file "${basename}" failed schema validation.` },
+        );
       });
     });
   }
@@ -1555,10 +1558,13 @@ describe("keepLocalLayerTargets", () => {
       await assert.rejects(
         keepLocalLayerTargets([{ plugin: "alpha", marketplace: "mp", scope: "project" }], cwd),
         (error: unknown) => {
-          assert.ok(error instanceof InvalidMarketplaceManifestError);
-          assert.equal(
-            error.message,
-            'Config file "claude-plugins.local.json" failed schema validation.',
+          assert.ok(error instanceof LayerFileUnreadableError);
+          assert.deepStrictEqual(
+            { basename: error.basename, message: error.message },
+            {
+              basename: "claude-plugins.local.json",
+              message: 'Config file "claude-plugins.local.json" failed schema validation.',
+            },
           );
           return true;
         },

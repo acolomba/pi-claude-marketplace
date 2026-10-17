@@ -85,7 +85,7 @@ import {
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import {
   InvalidGitHubBaseUrlError,
-  InvalidMarketplaceManifestError,
+  LayerFileUnreadableError,
   PluginDeclaredInSharedConfigError,
   PluginDeclaredLocallyError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
@@ -3525,7 +3525,7 @@ test("CFG-03: a named flagless reinstall whose local layer cannot be read is ref
           scope: "project",
           notes: [`${INVALID_LOCAL_LAYER_CAUSE}\n\ncause: ${INVALID_LOCAL_LAYER_CAUSE}`],
           reasons: ["invalid manifest"],
-          cause: new InvalidMarketplaceManifestError(INVALID_LOCAL_LAYER_CAUSE),
+          cause: new LayerFileUnreadableError("claude-plugins.local.json"),
         },
       ]);
       assert.deepEqual(notifications, [

@@ -71,3 +71,18 @@ Feature: Plugin reinstall
       | demo@fixtures |
       | app@tools     |
     Then the "claude-plugins.local.json" file of the project scope does not exist
+
+  Scenario: Reinstalling every plugin of a marketplace whose manifest became invalid shows no manifest text as a cause
+    Given the manifest of the marketplace "fixtures" has become invalid
+    When the user runs "/claude:plugin reinstall @fixtures --scope project"
+    Then the result has these fields:
+      | kind           | cascade                        |
+      | severity       | error                          |
+      | needs reload   | false                          |
+      | summary        | A plugin operation has failed. |
+      | tally label    | Plugin reinstall               |
+      | tally failures | 1                              |
+      | tally warnings | 0                              |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status | reasons    | scope   | leaks | rollback partial |
+      | fixtures         | project           | demo@fixtures | demo | failed | unreadable | project |       |                  |

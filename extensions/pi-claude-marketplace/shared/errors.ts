@@ -627,6 +627,26 @@ export class InvalidMarketplaceManifestError extends Error {
 }
 
 /**
+ * CFG-03 / LAYER-04: a layer file that a named plugin command must read could
+ * not be read: an EACCES, a truncated mid-save file, or a schema violation. It
+ * is an invalid manifest, so every narrowing that maps one to
+ * `{invalid manifest}` keeps doing so. Its own class lets a caller tell this
+ * refusal from a marketplace manifest that failed to parse, whose message
+ * carries parser text from a cloned repository.
+ *
+ * The message IS the failed row's cause line. It names the file by its
+ * basename only, so it carries no path.
+ */
+export class LayerFileUnreadableError extends InvalidMarketplaceManifestError {
+  readonly basename: string;
+  constructor(basename: string) {
+    super(`Config file "${basename}" failed schema validation.`);
+    this.name = "LayerFileUnreadableError";
+    this.basename = basename;
+  }
+}
+
+/**
  * ATTR-07 (D-48-C A3): typed unsupported-source refusal for `marketplace add`.
  *
  * Thrown by `orchestrators/marketplace/add.ts` when the parsed source kind is

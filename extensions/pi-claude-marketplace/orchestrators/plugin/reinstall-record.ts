@@ -1,7 +1,7 @@
 import {
   composeErrorWithCauseChain,
   findManualRecoveryError,
-  InvalidMarketplaceManifestError,
+  LayerFileUnreadableError,
   ManualRecoveryError,
   PluginDeclaredInSharedConfigError,
   PluginDeclaredLocallyError,
@@ -125,15 +125,20 @@ export function reinstallReasonsFromError(error: unknown): readonly ContentReaso
   return undefined;
 }
 
-/** LAYER-04 / CFG-03: the refusals of a named reinstall's layer check. */
+/**
+ * LAYER-04 / CFG-03: the refusals of a named reinstall's layer check. A
+ * marketplace manifest that failed to parse is not one of them: its message
+ * carries parser text from a cloned repository, which never reaches a cause
+ * line.
+ */
 type LayerRefusal =
-  PluginDeclaredLocallyError | PluginDeclaredInSharedConfigError | InvalidMarketplaceManifestError;
+  PluginDeclaredLocallyError | PluginDeclaredInSharedConfigError | LayerFileUnreadableError;
 
 function isLayerRefusal(error: unknown): error is LayerRefusal {
   return (
     error instanceof PluginDeclaredLocallyError ||
     error instanceof PluginDeclaredInSharedConfigError ||
-    error instanceof InvalidMarketplaceManifestError
+    error instanceof LayerFileUnreadableError
   );
 }
 
