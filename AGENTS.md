@@ -1,4 +1,6 @@
-<!-- markdownlint-disable MD025 MD060 -- the gsd-path block has its own title and a compact table -->
+<!-- markdownlint-disable MD025 -- the gsd-path block has its own title -->
+
+<!-- markdownlint-disable MD060 -- the gsd-path block has a compact table -->
 
 <!-- gsd-path:begin -->
 # AGENTS.md — Operating Rules for the GSD Path Pipeline
@@ -214,6 +216,8 @@ overwrites divergent generated copies and warns when a divergent copy is
 newer than its canonical source (the wrong-direction-edit signature); treat
 that warning as a lost edit and re-apply it to the canonical path.
 <!-- gsd-path:end -->
+
+<!-- markdownlint-enable MD060 -->
 
 # pi-claude-marketplace
 
