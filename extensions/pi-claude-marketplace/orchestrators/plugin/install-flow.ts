@@ -44,6 +44,7 @@ import {
   DEFAULT_MARKETPLACE_ADD,
   installedPluginOutcome,
   ledgerDegradationSignals,
+  resolveTargetScopeMarketplace,
   runInstallLedger,
 } from "./install-outcome.ts";
 import {
@@ -82,10 +83,15 @@ import type {
   InstallLedgerResult,
   InstallLedgerSummary,
   InstallPluginNotifications,
+  TargetScopeAddOptions,
 } from "./install-outcome.ts";
 import type { InstallMsg } from "./install.messaging.ts";
 import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
-import type { ClosureLookupResult, ClosureSubject } from "../../domain/dependency-closure.ts";
+import type {
+  ClosureLookup,
+  ClosureLookupResult,
+  ClosureSubject,
+} from "../../domain/dependency-closure.ts";
 import type { PluginConfigEntry, ScopeConfig } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState, PluginInstallRecord } from "../../persistence/state-io.ts";
@@ -632,24 +638,22 @@ function collectInstalledKeys(state: ExtensionState): ReadonlySet<string> {
   return keys;
 }
 
+/** The record one install transaction reads a marketplace from, or `undefined`. */
+type TargetRecordFor = (
+  marketplace: string,
+) => Promise<ExtensionState["marketplaces"][string] | undefined>;
+
 /** Reads the selected root marketplace's validated policy from its cached manifest. */
-async function loadInstallRootAllowlist(args: {
-  readonly scope: Scope;
-  readonly cwd: string;
-  readonly marketplace: string;
-  readonly state: ExtensionState;
-}): Promise<ReadonlySet<string>> {
-  const source = await resolveInstallMarketplaceSource({
-    targetScope: args.scope,
-    cwd: args.cwd,
-    marketplace: args.marketplace,
-    targetState: args.state,
-  });
-  if (source === undefined) {
+async function loadInstallRootAllowlist(
+  recordFor: TargetRecordFor,
+  marketplace: string,
+): Promise<ReadonlySet<string>> {
+  const record = await recordFor(marketplace);
+  if (record === undefined) {
     return new Set<string>();
   }
 
-  const manifest = await loadMarketplaceManifest(source.sourceRecord.manifestPath);
+  const manifest = await loadMarketplaceManifest(record.manifestPath);
   return new Set(manifest.allowCrossMarketplaceDependenciesOn ?? []);
 }
 
@@ -727,41 +731,75 @@ async function authorizeMissingDependency(args: {
  * the fallback. `dependency-declaration-read.ts` owns that order and the
  * filesystem contract it rests on; this function locates the entry for it.
  *
- * NFR-5: fs-and-cache only. `resolveInstallMarketplaceSource` answers the
- * CMP-2..4 source-scope question from state, `loadMarketplaceManifest` is the
- * memoized PI-2 read of bytes already on disk, and the declaration read reaches
- * no materializing path at all.
+ * LAYER-07 / D-MF-04: `record` is the target scope's record, the one the
+ * member then installs from. `loadMarketplaceManifest` is the memoized PI-2
+ * read of bytes already on disk, and the declaration read reaches no
+ * materializing path at all.
  *
  * D-03-05: the read is handed the TARGET scope's locations, because that is the
  * scope every cascade member installs into and therefore the clone cache a
  * git-source member's manifest would live in.
  */
 async function lookupCascadeDependencies(
-  state: ExtensionState,
-  core: { readonly scope: Scope; readonly cwd: string; readonly locations: ScopedLocations },
+  record: ExtensionState["marketplaces"][string],
+  locations: ScopedLocations,
   subject: ClosureSubject,
 ): Promise<ClosureLookupResult> {
-  const source = await resolveInstallMarketplaceSource({
-    targetScope: core.scope,
-    cwd: core.cwd,
-    marketplace: subject.marketplace,
-    targetState: state,
-  });
-  if (source === undefined) {
-    return { kind: "absent" };
-  }
-
-  const manifest = await loadMarketplaceManifest(source.sourceRecord.manifestPath);
+  const manifest = await loadMarketplaceManifest(record.manifestPath);
   const declared = lookupDeclaredPlugin(manifest, subject.name);
   if (declared.kind === "absent") {
     return { kind: "absent" };
   }
 
   return readDependencyDeclaration({
-    marketplaceRoot: source.sourceRecord.marketplaceRoot,
+    marketplaceRoot: record.marketplaceRoot,
     entry: declared.entry,
-    locations: core.locations,
+    locations,
   });
+}
+
+/**
+ * LAYER-07 / D-MF-04: the catalog reads of one install transaction. Each
+ * marketplace the walk, the pin probe, or the allowlist reads resolves through
+ * `resolveTargetScopeMarketplace`, so a marketplace only the user scope records
+ * is added to the target scope before its first read. The walk then reads the
+ * clone each member installs from, never the user scope's older clone.
+ *
+ * NFR-5 (amended by D-MF-04): such an add clones a git source. The walk's
+ * trust guards run before its lookup, so only a marketplace the install may
+ * use is added. RESV-06: a dependency whose marketplace add fails is named as
+ * the failing member, as it was when its own ledger ran the add.
+ */
+function installCatalog(args: {
+  readonly state: ExtensionState;
+  readonly locations: ScopedLocations;
+  readonly addOptions: TargetScopeAddOptions;
+  readonly sink: CascadeFailureSink;
+}): { readonly recordFor: TargetRecordFor; readonly lookup: ClosureLookup } {
+  const { state, locations, addOptions, sink } = args;
+  const recordFor: TargetRecordFor = (marketplace) =>
+    resolveTargetScopeMarketplace(state, locations, addOptions, marketplace);
+  return {
+    recordFor,
+    lookup: async (subject) => {
+      let record: ExtensionState["marketplaces"][string] | undefined;
+      try {
+        record = await recordFor(subject.marketplace);
+      } catch (err: unknown) {
+        sink.subject = {
+          kind: "member",
+          key: subject.key,
+          error: err as Error,
+          rollbackPartials: [],
+        };
+        throw err;
+      }
+
+      return record === undefined
+        ? { kind: "absent" }
+        : lookupCascadeDependencies(record, locations, subject);
+    },
+  };
 }
 
 /**
@@ -1829,32 +1867,32 @@ async function installPluginWithTransaction(
         // D-03-05: every member installs into the requesting plugin's OWN
         // `locations` and `scope`; there is no per-member scope argument and no
         // way for a dependency to land in the other scope.
+        const catalog = installCatalog({
+          state,
+          locations,
+          addOptions: buildInstallLedgerOptions(opts, env, {
+            scope,
+            cwd,
+            marketplace,
+            plugin,
+            marketplaceAdd: adds.marketplaceAdd,
+            addedMarketplaces: adds.addedMarketplaces,
+          }),
+          sink: cascadeFailure,
+        });
         const cascade = await runInstallCascade({
           state,
           locations,
           rootKey,
-          rootAllowedMarketplaces: await loadInstallRootAllowlist({
-            scope,
-            cwd,
-            marketplace,
-            state,
-          }),
-          lookup: (subject) => lookupCascadeDependencies(state, { scope, cwd, locations }, subject),
+          rootAllowedMarketplaces: await loadInstallRootAllowlist(catalog.recordFor, marketplace),
+          lookup: catalog.lookup,
           // RESV-03 / CMP-3: the pin probe reads a member's source out of the
           // marketplace record, and it must reach that record the same way the
           // walk's own catalog read does. Reading the target snapshot directly
           // would answer "no source" for a marketplace the CMP-3 fallback
           // resolves, turning a resolvable constrained dependency into a
           // `no-matching-tag` it never earned.
-          marketplaceRecordFor: async (marketplace) =>
-            (
-              await resolveInstallMarketplaceSource({
-                targetScope: scope,
-                cwd,
-                marketplace,
-                targetState: state,
-              })
-            )?.sourceRecord,
+          marketplaceRecordFor: catalog.recordFor,
           // RESV-03: a member whose constraint selected a release tag carries the
           // commit that tag resolves to AND the semver that tag names, and this
           // builder is where both enter that member's install. An unconstrained
@@ -2615,32 +2653,32 @@ async function installMissingDependencyWithTransaction(
           throw cascadeFailureCause(cascadeFailure.subject, rootKey);
         }
 
+        const catalog = installCatalog({
+          state,
+          locations,
+          addOptions: buildInstallLedgerOptions(opts, env, {
+            scope,
+            cwd,
+            marketplace,
+            plugin,
+            marketplaceAdd: adds.marketplaceAdd,
+            addedMarketplaces: adds.addedMarketplaces,
+          }),
+          sink: cascadeFailure,
+        });
         const cascade = await runInstallCascade({
           state,
           locations,
           rootKey,
-          rootAllowedMarketplaces: await loadInstallRootAllowlist({
-            scope,
-            cwd,
-            marketplace,
-            state,
-          }),
+          rootAllowedMarketplaces: await loadInstallRootAllowlist(catalog.recordFor, marketplace),
           // D-09-05: the declarers' folded ranges pin the root exactly as a
           // constrained member is pinned.
           rootRanges: opts.ranges,
           // D-09-04: a disabled recorded dependency is a wall on this path,
           // never a read-through member.
           treatDisabledAsWall: true,
-          lookup: (subject) => lookupCascadeDependencies(state, { scope, cwd, locations }, subject),
-          marketplaceRecordFor: async (marketplaceName) =>
-            (
-              await resolveInstallMarketplaceSource({
-                targetScope: scope,
-                cwd,
-                marketplace: marketplaceName,
-                targetState: state,
-              })
-            )?.sourceRecord,
+          lookup: catalog.lookup,
+          marketplaceRecordFor: catalog.recordFor,
           ledgerOptionsFor: (member) =>
             buildInstallLedgerOptions(opts, env, {
               scope,

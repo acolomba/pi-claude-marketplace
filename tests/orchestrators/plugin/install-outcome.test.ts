@@ -452,7 +452,7 @@ test("unwinds when the marketplace disappears before state commit", async (t) =>
         // The workflows phase's previous-names lookup adds one read ahead of
         // the state commit's, so the marketplace must survive one read
         // longer than it did with five phases.
-        return marketplaceReads >= 5 ? undefined : marketplace;
+        return marketplaceReads >= 4 ? undefined : marketplace;
       }
 
       return Reflect.get(target, property, receiver) as unknown;
@@ -482,7 +482,7 @@ test("unwinds when the marketplace disappears before state commit", async (t) =>
     message: 'Marketplace "marketplace" disappeared from state during install of "empty".',
     name: "Error",
   });
-  assert.equal(marketplaceReads, 5);
+  assert.equal(marketplaceReads, 4);
   assert.deepStrictEqual(capture, { rollbackPartials: [], version: "0.0.1" });
 });
 

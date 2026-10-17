@@ -471,6 +471,23 @@ export const DEFAULT_MARKETPLACE_ADD = Object.freeze({
   settle: settleAddedMarketplace,
 });
 
+/** One marketplace record of a scope's state. */
+type MarketplaceRecord = ExtensionState["marketplaces"][string];
+
+/** The ledger options the target-scope add reads. */
+export type TargetScopeAddOptions = Pick<
+  InstallLedgerOptions,
+  | "ctx"
+  | "run"
+  | "scope"
+  | "cwd"
+  | "removalOps"
+  | "credentialOps"
+  | "deviceFlowHttp"
+  | "marketplaceAdd"
+  | "addedMarketplaces"
+>;
+
 /**
  * LAYER-07 / D-MF-04 / CMP-3: the target scope records no `marketplace`, and
  * the user scope does. The install adds the marketplace to the target scope
@@ -487,10 +504,11 @@ export const DEFAULT_MARKETPLACE_ADD = Object.freeze({
 async function addTargetScopeMarketplace(
   state: ExtensionState,
   locations: ScopedLocations,
-  opts: InstallLedgerOptions,
-  sourceRecord: ExtensionState["marketplaces"][string],
+  opts: TargetScopeAddOptions,
+  marketplace: string,
+  sourceRecord: MarketplaceRecord,
   record: typeof addMarketplaceToState,
-): Promise<ExtensionState["marketplaces"][string]> {
+): Promise<MarketplaceRecord> {
   const rawSource = (sourceRecord.source as ParsedSource).raw;
   const added = await record({
     state,
@@ -504,14 +522,57 @@ async function addTargetScopeMarketplace(
     deviceFlowHttp: opts.deviceFlowHttp,
   });
   opts.addedMarketplaces?.push({ marketplace: added.name, cloneDir: added.cloneDir });
-  const targetRecord = ownValue(state.marketplaces, opts.marketplace);
-  if (added.name !== opts.marketplace || targetRecord === undefined) {
+  const targetRecord = ownValue(state.marketplaces, marketplace);
+  if (added.name !== marketplace || targetRecord === undefined) {
     throw new InvalidMarketplaceManifestError(
-      `Marketplace source "${rawSource}" declares the marketplace "${added.name}", not "${opts.marketplace}".`,
+      `Marketplace source "${rawSource}" declares the marketplace "${added.name}", not "${marketplace}".`,
     );
   }
 
   return targetRecord;
+}
+
+/**
+ * LAYER-07 / D-MF-04: the record an install reads `marketplace` from. It is
+ * the target scope's own record. When only the user scope records the
+ * marketplace (CMP-3), the install first adds it to the target scope, so the
+ * catalog the install reads and the tree it installs from are one clone.
+ * `undefined` means neither scope records it.
+ *
+ * The install's dependency walk calls this before it reads a marketplace, and
+ * the ledger calls it again for each member, so every read of one install
+ * sees the same record.
+ */
+export async function resolveTargetScopeMarketplace(
+  state: ExtensionState,
+  locations: ScopedLocations,
+  opts: TargetScopeAddOptions,
+  marketplace: string,
+): Promise<ExtensionState["marketplaces"][string] | undefined> {
+  const marketplaceAdd = opts.marketplaceAdd ?? DEFAULT_MARKETPLACE_ADD;
+  const own = ownValue(state.marketplaces, marketplace);
+  if (own !== undefined) {
+    return own;
+  }
+
+  // CMP-2..4 / PI-16: project-target installs can fall back to a user-scope
+  // marketplace; user-target installs cannot read project-only marketplaces.
+  const source = await resolveInstallMarketplaceSource({
+    targetScope: opts.scope,
+    cwd: opts.cwd,
+    marketplace,
+    targetState: state,
+  });
+  return source === undefined
+    ? undefined
+    : addTargetScopeMarketplace(
+        state,
+        locations,
+        opts,
+        marketplace,
+        source.sourceRecord,
+        marketplaceAdd.record,
+      );
 }
 
 /**
@@ -538,37 +599,17 @@ async function preflightInstallResolve(
       readonly resolvedSha: string | undefined;
     }
 > {
-  const { scope, cwd, marketplace, plugin } = opts;
-  const marketplaceAdd = opts.marketplaceAdd ?? DEFAULT_MARKETPLACE_ADD;
+  const { marketplace, plugin } = opts;
 
-  // CMP-2..4 / PI-16: resolve the source marketplace separately from the
-  // target scope being mutated. Project-target installs can fall back to a
-  // user-scope marketplace; user-target installs cannot read project-only
-  // marketplaces.
-  const source = await resolveInstallMarketplaceSource({
-    targetScope: scope,
-    cwd,
-    marketplace,
-    targetState: state,
-  });
-  if (source === undefined) {
+  // LAYER-07 / D-MF-04: the target scope's own record, or, when CMP-3 falls
+  // back to the user marketplace, the record the add gives the target scope.
+  // Every read below uses the target record.
+  const targetMp = await resolveTargetScopeMarketplace(state, locations, opts, marketplace);
+  if (targetMp === undefined) {
     // M1: the CMP-3 fallback also missed. No state mutation, no plugin-row
     // `{not in manifest}` throw.
     return { kind: "marketplace-absent" };
   }
-
-  // LAYER-07 / D-MF-04: the target scope's own record, or, when CMP-3 fell
-  // back to the user marketplace, the record the add gives the target scope.
-  // Every read below uses the target record.
-  const targetMp =
-    ownValue(state.marketplaces, marketplace) ??
-    (await addTargetScopeMarketplace(
-      state,
-      locations,
-      opts,
-      source.sourceRecord,
-      marketplaceAdd.record,
-    ));
 
   // PI-15 early-sanity check: an existing record in the target scope throws
   // BEFORE the ledger runs, avoiding any disk write. Layer (b) re-checks

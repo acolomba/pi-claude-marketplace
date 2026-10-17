@@ -414,6 +414,36 @@ test("MA-13: a project install refuses a foreign tree where the marketplace clon
   boundary.verifyBoundary();
 });
 
+test("LAYER-07 / D-MF-04: a project install reads the dependencies of the plugin from the clone it installs from", async (t) => {
+  // arrange: the user clone predates the dependency the upstream now declares.
+  const env = await scopes(t, "project-adds-user-mp-newer-");
+  const before = await checkout(path.join(env.root, "before"), "mp", REPO_URL, [{ name: "app" }]);
+  const after = await checkout(path.join(env.root, "after"), "mp", REPO_URL, [
+    { name: "app", dependencies: ["lib"] },
+    { name: "lib" },
+  ]);
+  const boundary = createNotificationBoundary(2);
+  await addToUser(env, boundary, REPO_URL, gitDouble(REPO_URL, before));
+
+  // act
+  await installIntoProject(env, boundary, "app", "mp", gitDouble(REPO_URL, after));
+
+  // assert
+  const projectState = await loadState(env.project.extensionRoot);
+  assert.deepStrictEqual(boundary.notifications, [
+    { message: "● mp [user] (added)" },
+    {
+      message:
+        "● mp [project]\n  ● app v1.0.0 (installed)\n  ● lib@mp v1.0.0 (installed)\n\n/reload to pick up changes",
+    },
+  ]);
+  assert.deepStrictEqual(Object.keys(projectState.marketplaces.mp?.plugins ?? {}).sort(), [
+    "app",
+    "lib",
+  ]);
+  boundary.verifyBoundary();
+});
+
 test("LAYER-07: a project install adds the user-scope git marketplace of its dependency to the project", async (t) => {
   // arrange
   const env = await scopes(t, "project-adds-user-mp-dependency-");
@@ -462,8 +492,8 @@ test("LAYER-07: a project install adds the user-scope git marketplace of its dep
     [
       toolsClone,
       [
-        ["tools", ["lib"]],
         ["upstream", ["app"]],
+        ["tools", ["lib"]],
       ],
       true,
     ],

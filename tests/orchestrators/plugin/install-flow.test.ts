@@ -5865,6 +5865,46 @@ test("WR-07 / LAYER-07: an install that returns a failure without saving removes
   });
 });
 
+test("RESV-06 / LAYER-07: a dependency whose marketplace add fails is named as the failing member", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-add-dep-throw-"));
+    try {
+      // arrange
+      const projectLocations = locationsFor("project", cwd);
+      await seedProjectRootWithUserDependency(cwd);
+      const stateBefore = await readFile(projectLocations.stateJsonPath);
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        marketplaceAdd: {
+          record: () => Promise.reject(new Error("clone refused")),
+          settle: () => Promise.reject(new Error("a failed install settles nothing")),
+        },
+      });
+
+      // assert
+      assert.equal(outcome.status, "failed");
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "Some plugin operations have failed.\n\n● mp [project]\n  ⊘ hello (failed) {dependency failed}\n  ⊘ some-other-plugin@deps-mp (failed)\n    cause: clone refused",
+          severity: "error",
+        },
+      ]);
+      assert.deepStrictEqual(await readFile(projectLocations.stateJsonPath), stateBefore);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("WR-07 / LAYER-07: a clone a failure arm cannot remove goes to the debug log", async (t) => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-add-arm-leak-"));
@@ -15346,13 +15386,15 @@ test("XMKT-01 missing install reports a source removed after authorization", asy
   await withHermeticHome(async ({ installMissingDependency, transactionControl }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-missing-source-race-"));
     try {
-      // arrange
+      // arrange: the walk adds `beta` to the project, then both the added
+      // record and the user record are gone before the member's ledger runs.
       const project = locationsFor("project", cwd);
       const user = locationsFor("user", cwd);
+      const sourceRoot = path.join(cwd, "beta-user-src");
       await seedPathMarketplaceWithPlugin({
         cwd,
         scope: "user",
-        marketplaceRoot: path.join(cwd, "beta-user-src"),
+        marketplaceRoot: sourceRoot,
         marketplaceName: "beta",
         pluginName: "b",
       });
@@ -15364,6 +15406,7 @@ test("XMKT-01 missing install reports a source removed after authorization", asy
         preInstall: true,
         allowedDependencyMarketplaces: ["beta"],
       });
+      let projectSnapshot: ExtensionState | undefined;
       let removed = false;
       transactionControl.runPhases = async <C>(phases: readonly Phase<C>[], ctx: C) => {
         if (!removed) {
@@ -15371,6 +15414,7 @@ test("XMKT-01 missing install reports a source removed after authorization", asy
           const state = await loadState(user.extensionRoot);
           delete state.marketplaces["beta"];
           await saveState(user.extensionRoot, state);
+          delete projectSnapshot?.marketplaces["beta"];
         }
 
         return runPhases(phases, ctx);
@@ -15388,6 +15432,15 @@ test("XMKT-01 missing install reports a source removed after authorization", asy
         plugin: "b",
         ranges: [],
         requiredBy: "a@alpha",
+        marketplaceAdd: stubMarketplaceAdd({
+          name: "beta",
+          sourceRoot,
+          cloneDir: path.join(project.extensionRoot, "sources", "beta"),
+          settled: [],
+          afterRecord: (state) => {
+            projectSnapshot = state;
+          },
+        }),
       });
 
       // assert
