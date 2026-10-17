@@ -233,6 +233,37 @@ Feature: Marketplace add
       | url         | https://{git host}/acme/tools.git | https://{git host}/acme/tools.git      |
       | url         | https://{git host}/acme/tools.git | https://{git host}/acme/tools-copy.git |
 
+  Scenario: Adding with --local a marketplace that the local configuration declares fails as a duplicate name
+    Given the marketplace "tools" is published as a dir source
+    Given the user has run "/claude:plugin marketplace add {home}/marketplaces/tools --scope project --local"
+    When the user runs "/claude:plugin marketplace add {home}/marketplaces/tools --scope project --local"
+    Then the result has these fields:
+      | kind         | cascade                             |
+      | severity     | error                               |
+      | needs reload | false                               |
+      | summary      | A marketplace operation has failed. |
+    Then the result lists these marketplaces:
+      | name  | scope   | status | reasons        |
+      | tools | project | failed | duplicate name |
+    Then the "claude-plugins.local.json" file of the project scope declares these marketplaces:
+      | name  | source                    |
+      | tools | {home}/marketplaces/tools |
+    Then the "claude-plugins.json" file of the project scope does not exist
+
+  Scenario: Adding with --local another spelling of a marketplace that the shared configuration declares fails as a duplicate name
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" is added to the project scope
+    When the user runs "/claude:plugin marketplace add ~/marketplaces/tools --scope project --local"
+    Then the result has these fields:
+      | kind         | cascade                             |
+      | severity     | error                               |
+      | needs reload | false                               |
+      | summary      | A marketplace operation has failed. |
+    Then the result lists these marketplaces:
+      | name  | scope   | status | reasons        |
+      | tools | project | failed | duplicate name |
+    Then the "claude-plugins.local.json" file of the project scope does not exist
+
   Scenario Outline: Adding a path that holds no marketplace manifest fails as source missing, named as typed
     Given the directory "<directory>" to add <directory state>
     When the user runs "/claude:plugin marketplace add <source> --scope project"

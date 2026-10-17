@@ -486,3 +486,36 @@ test("FIX-02: the migration leaves out local declarations and the merged view co
   });
   assert.deepStrictEqual(plan, emptyReconcilePlan("project"));
 });
+
+test("LAYER-01: a marketplace both layers declare with its recorded source converges to the empty plan", () => {
+  // arrange
+  const state: ExtensionState = {
+    schemaVersion: 2,
+    marketplaces: {
+      tools: {
+        name: "tools",
+        scope: "project",
+        source: pathSource("./tools"),
+        addedFromCwd: "/workspace",
+        manifestPath: "/marketplaces/tools/.claude-plugin/marketplace.json",
+        marketplaceRoot: "/marketplaces/tools",
+        plugins: { formatter: recordedPlugin("tools", "formatter", "explicit") },
+      },
+    },
+  };
+  const base = {
+    schemaVersion: 1,
+    marketplaces: { tools: { source: "./tools", autoupdate: true } },
+    plugins: { "formatter@tools": {} },
+  } satisfies ScopeConfig;
+  const local = {
+    schemaVersion: 1,
+    marketplaces: { tools: { source: "./tools" } },
+  } satisfies ScopeConfig;
+
+  // act
+  const plan = planReconcile(mergeScopeConfigs(base, local), state, "project");
+
+  // assert
+  assert.deepStrictEqual(plan, emptyReconcilePlan("project"));
+});
