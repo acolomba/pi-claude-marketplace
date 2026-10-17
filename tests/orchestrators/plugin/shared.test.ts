@@ -34,6 +34,7 @@ import {
   selectDeclaringConfigWriteTarget,
   splitStagingWarnings,
   surfaceDiscoveryWarnings,
+  undeclarableMarketplaceRefusal,
   writeAdoptingConfigEntries,
   type CrossPluginGeneratedNames,
   type CrossScopePluginResolution,
@@ -45,6 +46,7 @@ import {
   InvalidMarketplaceManifestError,
   MarketplaceDeclaredLocallyError,
   MarketplaceNotFoundError,
+  MarketplaceSourceUndeclarableError,
   PluginDeclaredInSharedConfigError,
   PluginDeclaredLocallyError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
@@ -126,6 +128,17 @@ function makeState(
         makeMarketplaceRecord(name, marketplace.scope ?? "user", marketplace.plugins),
       ]),
     ),
+  };
+}
+
+/** A scope that records `mp` with a source of a kind this version does not know, and no `raw`. */
+function unknownSourceState(): ExtensionState {
+  const record = makeMarketplaceRecord("mp", "project", {});
+  return {
+    schemaVersion: 1,
+    marketplaces: {
+      mp: { ...record, source: { kind: "unknown", reason: "a future source kind" } },
+    },
   };
 }
 
@@ -986,6 +999,86 @@ describe("selectDeclaringConfigWriteTarget", () => {
   });
 });
 
+describe("undeclarableMarketplaceRefusal", () => {
+  for (const { targetIsLocal, layerFile } of [
+    { targetIsLocal: true, layerFile: "claude-plugins.local.json" },
+    { targetIsLocal: false, layerFile: "claude-plugins.json" },
+  ]) {
+    test(`refuses a ${layerFile} target when no layer declares the marketplace and its record holds no string source`, () => {
+      // arrange
+      const selection = {
+        targetIsLocal,
+        current: { schemaVersion: 1 },
+        sibling: { schemaVersion: 1, marketplaces: { other: { source: "./other-src" } } },
+      } satisfies Parameters<typeof undeclarableMarketplaceRefusal>[0];
+
+      // act
+      const refusal = undeclarableMarketplaceRefusal(selection, unknownSourceState(), "mp");
+
+      // assert
+      assert.ok(refusal instanceof MarketplaceSourceUndeclarableError);
+      assert.deepStrictEqual(
+        { marketplace: refusal.marketplace, layerFile: refusal.layerFile },
+        { marketplace: "mp", layerFile },
+      );
+    });
+  }
+
+  for (const { layout, state, selection } of [
+    {
+      layout: "a marketplace the target layer declares",
+      state: unknownSourceState(),
+      selection: {
+        targetIsLocal: false,
+        current: { schemaVersion: 1, marketplaces: { mp: { source: "./mp-src" } } },
+        sibling: { schemaVersion: 1 },
+      },
+    },
+    {
+      layout: "a marketplace only the other layer declares",
+      state: unknownSourceState(),
+      selection: {
+        targetIsLocal: true,
+        current: { schemaVersion: 1 },
+        sibling: { schemaVersion: 1, marketplaces: { mp: { source: "./mp-src" } } },
+      },
+    },
+    {
+      layout: "a marketplace whose record holds a string source",
+      state: makeState({ mp: { scope: "project", plugins: {} } }),
+      selection: {
+        targetIsLocal: false,
+        current: { schemaVersion: 1 },
+        sibling: { schemaVersion: 1 },
+      },
+    },
+    {
+      layout: "a marketplace the scope does not record yet",
+      state: makeState({}),
+      selection: {
+        targetIsLocal: false,
+        current: { schemaVersion: 1 },
+        sibling: { schemaVersion: 1 },
+      },
+    },
+  ] satisfies readonly {
+    layout: string;
+    state: ExtensionState;
+    selection: Parameters<typeof undeclarableMarketplaceRefusal>[0];
+  }[]) {
+    test(`does not refuse ${layout}`, () => {
+      // arrange
+      const expectedRefusal = undefined;
+
+      // act
+      const refusal = undeclarableMarketplaceRefusal(selection, state, "mp");
+
+      // assert
+      assert.strictEqual(refusal, expectedRefusal);
+    });
+  }
+});
+
 describe("localOnlyMarketplaceRefusal", () => {
   test("refuses a base-file target when only the local file declares the marketplace", () => {
     // arrange
@@ -1623,35 +1716,65 @@ describe("writeAdoptingConfigEntries", () => {
     });
   });
 
-  test("writes only the plugin declaration when legacy state has no string source", async () => {
+  test("LAYER-06: declares the marketplace with the other layer's source when the record holds no string source", async () => {
     // arrange
     await withTempScopes(async ({ cwd }) => {
       const locations = locationsFor("project", cwd);
       const current: ScopeConfig = { schemaVersion: 1 };
-      const sibling: ScopeConfig = { schemaVersion: 1 };
-      const marketplace = makeMarketplaceRecord("mp", "project", {});
-      const state: ExtensionState = {
+      const sibling: ScopeConfig = {
         schemaVersion: 1,
-        marketplaces: { mp: { ...marketplace, source: { raw: 23 } } },
+        marketplaces: { mp: { source: "./sibling" } },
       };
 
       // act
       await writeAdoptingConfigEntries({
         current,
         sibling,
-        state,
+        state: unknownSourceState(),
         marketplace: "mp",
         plugin: "alpha",
-        targetConfigPath: locations.configJsonPath,
+        targetConfigPath: locations.configLocalJsonPath,
         scopeRoot: locations.scopeRoot,
         pluginPatch: {},
       });
 
       // assert
       assert.equal(
-        await readFile(locations.configJsonPath, "utf8"),
-        '{\n  "schemaVersion": 1,\n  "marketplaces": {},\n  "plugins": {\n    "alpha@mp": {}\n  }\n}\n',
+        await readFile(locations.configLocalJsonPath, "utf8"),
+        '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "mp": {\n      "source": "./sibling"\n    }\n  },\n  "plugins": {\n    "alpha@mp": {}\n  }\n}\n',
       );
+    });
+  });
+
+  test("LAYER-06: refuses a plugin declaration whose marketplace no source can declare and writes nothing", async () => {
+    // arrange
+    await withTempScopes(async ({ cwd }) => {
+      const locations = locationsFor("project", cwd);
+      const current: ScopeConfig = { schemaVersion: 1 };
+      const sibling: ScopeConfig = { schemaVersion: 1 };
+
+      // act & assert
+      await assert.rejects(
+        writeAdoptingConfigEntries({
+          current,
+          sibling,
+          state: unknownSourceState(),
+          marketplace: "mp",
+          plugin: "alpha",
+          targetConfigPath: locations.configJsonPath,
+          scopeRoot: locations.scopeRoot,
+          pluginPatch: {},
+        }),
+        (error: unknown) => {
+          assert.ok(error instanceof MarketplaceSourceUndeclarableError);
+          assert.deepStrictEqual(
+            { marketplace: error.marketplace, layerFile: error.layerFile },
+            { marketplace: "mp", layerFile: "claude-plugins.json" },
+          );
+          return true;
+        },
+      );
+      await assert.rejects(readFile(locations.configJsonPath, "utf8"), { code: "ENOENT" });
     });
   });
 

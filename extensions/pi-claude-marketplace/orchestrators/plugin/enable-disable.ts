@@ -103,6 +103,7 @@ import {
   pluginLayerVerdict,
   resolveCrossScopePluginTarget,
   retiresWorkflowCommand,
+  undeclarableMarketplaceRefusal,
   type selectDeclaringConfigWriteTarget,
   type CrossScopePluginResolution,
   type DeclaringConfigWriteTarget,
@@ -534,9 +535,10 @@ async function runEnableBranch(
  * record's declarations could not be established, or the declared graph
  * closes on itself. On the disable branch (EDEP-02, `readEnabledDependents`),
  * an installed and ENABLED plugin in the same scope still declares the
- * target. On either branch (FIX-03, `refuseLocalOnlyMarketplace`), a
+ * target. On either branch (`refuseMarketplaceDeclarationWrite`), a
  * standalone call would write its flag into `claude-plugins.json` under a
- * marketplace only `claude-plugins.local.json` declares. Mirrors
+ * marketplace only `claude-plugins.local.json` declares (FIX-03), or into a
+ * layer that cannot declare the marketplace (LAYER-06). Mirrors
  * `uninstall.ts::UninstallRefusedError` exactly: the reason is a closed-set
  * token and `message` IS the rendered cause line, so it
  * carries only `name@marketplace` keys, field paths or already-redacted
@@ -1629,19 +1631,24 @@ function refuseLocalOverride(
 }
 
 /**
- * FIX-03 / D-MF-02: refuse a standalone enable or disable that would write its
- * flag into `claude-plugins.json` while only `claude-plugins.local.json`
- * declares the marketplace, because a teammate who reads the shared file
- * cannot resolve it. It runs before anything is resolved, materialized, or
- * saved. An orchestrated call reads its input from the configuration and is
- * never refused. D-06 scopes the refusal to a call that would write: an
- * idempotent call that writes no flag (`idempotentWritesFlag`) is not refused
- * and keeps its `(skipped)` row.
+ * Refuse a standalone enable or disable whose flag write cannot declare the
+ * plugin's marketplace correctly. It runs before anything is resolved,
+ * materialized, or saved. An orchestrated call reads its input from the
+ * configuration and is never refused. D-06 scopes the refusal to a call that
+ * would write: an idempotent call that writes no flag (`idempotentWritesFlag`)
+ * is not refused and keeps its `(skipped)` row.
+ *
+ * - FIX-03 / D-MF-02: the flag would land in `claude-plugins.json` while only
+ *   `claude-plugins.local.json` declares the marketplace, so a teammate who
+ *   reads the shared file cannot resolve it.
+ * - LAYER-06 / D-MF-03: the target layer lacks the marketplace and no source
+ *   is known to declare it there with.
  */
-function refuseLocalOnlyMarketplace(args: {
+function refuseMarketplaceDeclarationWrite(args: {
   readonly selection: SelectedConfigWriteTarget;
   readonly write: EnabledFlagWriteTarget;
   readonly installed: InstalledPluginRecord;
+  readonly state: ExtensionState;
 }): void {
   const { selection, write, installed } = args;
   const idempotent = isRecordedButDisabled(installed) === !write.enable;
@@ -1652,6 +1659,11 @@ function refuseLocalOnlyMarketplace(args: {
   const refusal = localOnlyMarketplaceRefusal(selection, write.marketplace);
   if (refusal !== undefined) {
     throw new EnableRefusedError("marketplace declared locally", refusal.message);
+  }
+
+  const undeclarable = undeclarableMarketplaceRefusal(selection, args.state, write.marketplace);
+  if (undeclarable !== undefined) {
+    throw new EnableRefusedError("unsupported source", undeclarable.message);
   }
 }
 
@@ -1964,10 +1976,9 @@ type SelectedConfigWriteTarget = Extract<DeclaringConfigWriteTarget, { kind: "se
  * the caller's in-lock selection, so no arm here re-reads a file another arm
  * already read.
  *
- * S4 (PR #51, CONTEXT.md S4): the shared helper's `adoptedSource === undefined`
- * arms collapse -- benign (already declared) and dangerous (no string
- * `source.raw`). The dangerous arm seals a dangling plugin declaration; an
- * acknowledged trade-off pending a return-type widen.
+ * A marketplace that no known source can declare is refused before this
+ * write (`refuseMarketplaceDeclarationWrite`), so the plugin key never lands
+ * without its marketplace.
  */
 async function writeEnabledFlagBack(
   transaction: EnableDisableTransaction,
@@ -2415,7 +2426,7 @@ async function runSetEnabledOutcome(
         }
 
         refuseOtherLayerDeclaration(selection, write);
-        refuseLocalOnlyMarketplace({ selection, write, installed });
+        refuseMarketplaceDeclarationWrite({ selection, write, installed, state });
 
         // EDEP-01 / EDEP-03: resolve (never materialize yet) the enable
         // cascade BEFORE the root's own idempotency is decided (D-08-03), so

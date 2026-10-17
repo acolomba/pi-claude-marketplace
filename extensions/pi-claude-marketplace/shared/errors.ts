@@ -399,6 +399,31 @@ export class MarketplaceDeclaredLocallyError extends Error {
 }
 
 /**
+ * LAYER-06 / D-MF-03: the refusal of a command that would declare a plugin in
+ * a layer that lacks the plugin's marketplace, when no source is known to
+ * declare that marketplace with. The scope's record holds no string source (a
+ * forward-compatible source kind, NFR-12) and the other layer does not declare
+ * the marketplace either. Writing the plugin key alone would leave the layer
+ * declaring a plugin without its marketplace.
+ *
+ * The message IS the failed row's cause line. It is built from fixed text, a
+ * marketplace name that passed `assertSafeName`, and a layer file basename, so
+ * it carries no path.
+ */
+export class MarketplaceSourceUndeclarableError extends Error {
+  readonly marketplace: string;
+  readonly layerFile: string;
+  constructor(marketplace: string, layerFile: string) {
+    super(
+      `The scope records the marketplace ${marketplace} with no source that ${layerFile} can declare. Declare the marketplace in ${layerFile}, then run the command again.`,
+    );
+    this.name = "MarketplaceSourceUndeclarableError";
+    this.marketplace = marketplace;
+    this.layerFile = layerFile;
+  }
+}
+
+/**
  * LAYER-02 / D-MF-03: the refusal of a `--local` command that names a
  * marketplace only `claude-plugins.json` declares. A named command changes
  * only its target layer, so it cannot act on a declaration in the other one.

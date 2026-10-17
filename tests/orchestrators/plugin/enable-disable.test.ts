@@ -1535,6 +1535,78 @@ for (const { verb, enable, seed } of [
   });
 }
 
+/** LAYER-06: record `mp` with a source of a kind this version does not know, and no `raw`. */
+async function forgetRecordedSource(statePath: string): Promise<void> {
+  const state = JSON.parse(await readFile(statePath, "utf8")) as {
+    marketplaces: { mp: { source: unknown } };
+  };
+  state.marketplaces.mp.source = { kind: "unknown", reason: "a future source kind" };
+  await writeFile(statePath, JSON.stringify(state), "utf8");
+}
+
+for (const { verb, enable, seed } of [
+  {
+    verb: "enable",
+    enable: true,
+    seed: (home: string) =>
+      seedRealDisabledMarketplace(home, {
+        marketplaceName: "mp",
+        pluginName: "foo",
+        version: "1.2.3",
+      }),
+  },
+  {
+    verb: "disable",
+    enable: false,
+    seed: (home: string) =>
+      writeUserState(home, { marketplaceName: "mp", pluginName: "foo", disabled: false }),
+  },
+]) {
+  test(`LAYER-06: ${verb} is refused and writes nothing when no source can declare the marketplace in the target layer`, async () => {
+    await withHermeticHome(async ({ cwd, home }) => {
+      // arrange
+      const { statePath, configPath, configLocalPath } = await seed(home);
+      await forgetRecordedSource(statePath);
+      const stateBytes = await readFile(statePath, "utf8");
+      const { transaction, calls } = countingTransaction();
+      const setPluginEnabledForOwner = createSetPluginEnabled(
+        transaction,
+        createHooksRouting(createHooksRuntime(), { readHooksJson }),
+      );
+      const { ctx, notifications } = makeCtx(cwd);
+
+      // act
+      await setPluginEnabledForOwner({
+        ctx,
+        run: runWithNothingLoaded(),
+        cwd,
+        marketplace: "mp",
+        plugin: "foo",
+        enable,
+        scope: "user",
+      });
+
+      // assert
+      assert.deepEqual(notifications, [
+        {
+          message: [
+            "A plugin operation has failed.",
+            "",
+            "● mp [user]",
+            "  ⊘ foo (failed) {unsupported source}",
+            "    cause: The scope records the marketplace mp with no source that claude-plugins.json can declare. Declare the marketplace in claude-plugins.json, then run the command again.",
+          ].join("\n"),
+          severity: "error",
+        },
+      ]);
+      assert.deepEqual(calls, { cascadeUnstage: 0, save: 0 });
+      assert.equal(await readFile(statePath, "utf8"), stateBytes);
+      assert.equal(await fileExists(configPath), false);
+      assert.equal(await fileExists(configLocalPath), false);
+    });
+  });
+}
+
 test("FIX-03: enable --local under a marketplace only the local file declares writes the local entry", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange

@@ -847,6 +847,22 @@ A plugin operation has failed.
     cause: The marketplace official is declared only in claude-plugins.local.json. Run the command again with --local.
 ```
 
+### Failure -- no source can declare the marketplace in the target layer (LAYER-06)
+
+A layer that declares a plugin also declares the plugin's marketplace, so an install writes the marketplace into the target layer when that layer lacks it. The source comes from the scope's record of the marketplace. When the record holds no source this version can write, such as a source kind from a newer version, the other layer's declaration supplies it. When neither is available, the install is refused before anything is written, because the target layer would declare the plugin without its marketplace. The `cause:` line names the layer file to declare the marketplace in.
+
+`enable` and `disable` render the same row when they would write. A reload and an import are never refused. Severity `error`; no reload-hint (nothing landed).
+
+<!-- catalog-state: failure-marketplace-source-undeclarable -->
+
+```text
+A plugin operation has failed.
+
+● official [user]
+  ⊘ helper (failed) {unsupported source}
+    cause: The scope records the marketplace official with no source that claude-plugins.json can declare. Declare the marketplace in claude-plugins.json, then run the command again.
+```
+
 ### Declared only -- the other layer already installed the plugin (LAYER-05)
 
 Both layers of a scope may declare the same plugin, and the scope installs it once. An install into one layer of a plugin that the other layer declares and the scope has installed adds the declaration to the target layer and installs nothing. When the target layer does not declare the plugin's marketplace, the install declares it there too (LAYER-06). An install with `--local` renders `{already installed in shared layer}`; a flagless install renders the mirror token `{already installed in local layer}`. A plugin that the other layer declares but the scope has not installed is installed as usual. An install with a version pin keeps the `{already installed}` failure. Severity `info`, because the plugin is now declared where the user asked; no reload-hint (nothing was installed).

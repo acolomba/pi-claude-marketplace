@@ -31,6 +31,7 @@ import {
   MarketplaceDeclaredLocallyError,
   MarketplaceDuplicateNameError,
   MarketplaceNotFoundError,
+  MarketplaceSourceUndeclarableError,
   MarketplaceUpdateError,
   PluginDeclaredInSharedConfigError,
   PluginDeclaredLocallyError,
@@ -884,6 +885,34 @@ describe("MarketplaceDeclaredInSharedConfigError", () => {
         marketplace: "mp",
         message:
           "The marketplace mp is declared only in claude-plugins.json. Run the command again without --local.",
+      },
+    );
+  });
+});
+
+describe("MarketplaceSourceUndeclarableError", () => {
+  test("names the marketplace and the layer file and asks for a declaration in its message", () => {
+    // arrange
+    const marketplace = "mp";
+
+    // act
+    const error = new MarketplaceSourceUndeclarableError(marketplace, "claude-plugins.local.json");
+
+    // assert
+    assert.ok(error instanceof Error);
+    assert.deepStrictEqual(
+      {
+        name: error.name,
+        marketplace: error.marketplace,
+        layerFile: error.layerFile,
+        message: error.message,
+      },
+      {
+        name: "MarketplaceSourceUndeclarableError",
+        marketplace: "mp",
+        layerFile: "claude-plugins.local.json",
+        message:
+          "The scope records the marketplace mp with no source that claude-plugins.local.json can declare. Declare the marketplace in claude-plugins.local.json, then run the command again.",
       },
     );
   });

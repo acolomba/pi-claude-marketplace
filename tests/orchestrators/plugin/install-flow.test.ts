@@ -56,6 +56,7 @@ import {
   InvalidGitHubBaseUrlError,
   InvalidMarketplaceManifestError,
   MarketplaceDeclaredLocallyError,
+  MarketplaceSourceUndeclarableError,
   PluginShapeError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import {
@@ -9757,6 +9758,64 @@ test("FIX-03: install --local under a marketplace only the local file declares i
         plugins: { "hello@mp": {} },
       });
       await assert.rejects(readFile(locations.configJsonPath, "utf8"), { code: "ENOENT" });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("LAYER-06: an install whose marketplace no source can declare in the target layer is refused and writes nothing", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-undeclarable-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        skills: [{ sourceName: "tool" }],
+      });
+      const statePath = path.join(locations.extensionRoot, "state.json");
+      const seeded = JSON.parse(await readFile(statePath, "utf8")) as {
+        marketplaces: { mp: { source: unknown } };
+      };
+      seeded.marketplaces.mp.source = { kind: "unknown", reason: "a future source kind" };
+      await writeFile(statePath, JSON.stringify(seeded), "utf8");
+      const stateBytes = await readFile(statePath, "utf8");
+      const treeBefore = await retryTree(locations.scopeRoot);
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        status: "failed",
+        error: new MarketplaceSourceUndeclarableError("mp", "claude-plugins.json"),
+        cause:
+          "The scope records the marketplace mp with no source that claude-plugins.json can declare. Declare the marketplace in claude-plugins.json, then run the command again.",
+      });
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n" +
+            "● mp [project]\n" +
+            "  ⊘ hello (failed) {unsupported source}\n" +
+            "    cause: The scope records the marketplace mp with no source that claude-plugins.json can declare. Declare the marketplace in claude-plugins.json, then run the command again.",
+          severity: "error",
+        },
+      ]);
+      assert.strictEqual(await readFile(statePath, "utf8"), stateBytes);
+      assert.deepStrictEqual(await retryTree(locations.scopeRoot), treeBefore);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

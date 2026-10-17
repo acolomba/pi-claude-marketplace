@@ -20,6 +20,7 @@ import {
   errorMessage,
   rethrowInvalidGitHubBaseUrl,
   type MarketplaceDeclaredLocallyError,
+  type MarketplaceSourceUndeclarableError,
 } from "../../shared/errors.ts";
 import { cleanupStaging, createRemovalOps } from "../../shared/fs-utils.ts";
 import { notify, notifyMcpConfigNotices } from "../../shared/notification-dispatch.ts";
@@ -67,6 +68,7 @@ import {
   resolveInstallMarketplaceSource,
   selectDeclaringConfigWriteTarget,
   surfaceDiscoveryWarnings,
+  undeclarableMarketplaceRefusal,
   writeAdoptingConfigEntries,
   type DeclaringConfigWriteTarget,
   type LedgerDegradationSignals,
@@ -1701,16 +1703,28 @@ function handleCascadeThrow(args: {
 }
 
 /**
- * FIX-03 / D-MF-02: only a standalone install is refused. A reload or an
- * import reads its declarations from the configuration and is never refused.
+ * FIX-03 / D-MF-02 and LAYER-06 / D-MF-03: only a standalone install is
+ * refused, because only it writes a declaration. A reload or an import reads
+ * its declarations from the configuration and is never refused.
  */
-function standaloneLocalOnlyRefusal(
+function standaloneMarketplaceRefusal(
   opts: Pick<InstallPluginOptions, "notifications" | "marketplace">,
   selection: Parameters<typeof localOnlyMarketplaceRefusal>[0],
-): MarketplaceDeclaredLocallyError | undefined {
-  return opts.notifications?.mode === "orchestrated"
+  state: ExtensionState,
+): Extract<InstallTransactionOutcome, { kind: "refused" }> | undefined {
+  if (opts.notifications?.mode === "orchestrated") {
+    return undefined;
+  }
+
+  const locally = localOnlyMarketplaceRefusal(selection, opts.marketplace);
+  if (locally !== undefined) {
+    return { kind: "refused", refusal: locally, reason: "marketplace declared locally" };
+  }
+
+  const undeclarable = undeclarableMarketplaceRefusal(selection, state, opts.marketplace);
+  return undeclarable === undefined
     ? undefined
-    : localOnlyMarketplaceRefusal(selection, opts.marketplace);
+    : { kind: "refused", refusal: undeclarable, reason: "unsupported source" };
 }
 
 /**
@@ -1835,9 +1849,12 @@ function declaredRowOutcome(args: {
  *   CMP-3 user fallback also missed), so the failure subject is the
  *   MARKETPLACE, not the plugin -- distinct from M2 (plugin absent from a
  *   PRESENT manifest), which stays `{not in manifest}` on the plugin row.
- * - `"marketplace-declared-locally"` -- FIX-03 / D-MF-02: the standalone write
- *   would declare the plugin in `claude-plugins.json` under a marketplace only
- *   `claude-plugins.local.json` declares. Nothing ran and nothing is saved.
+ * - `"refused"` -- the standalone write could not declare the plugin's
+ *   marketplace correctly: FIX-03 / D-MF-02, the plugin would land in
+ *   `claude-plugins.json` under a marketplace only `claude-plugins.local.json`
+ *   declares; or LAYER-06 / D-MF-03, the target layer lacks the marketplace
+ *   and no source is known to declare it there with. Nothing ran and nothing
+ *   is saved.
  * - `"declared"` -- LAYER-05: the plugin was already installed by name and
  *   only the other layer declared it, so the target layer gained the
  *   declaration and nothing else ran or was saved.
@@ -1859,7 +1876,11 @@ function declaredRowOutcome(args: {
 type InstallTransactionOutcome =
   | { kind: "invalid-config" }
   | { kind: "marketplace-absent" }
-  | { kind: "marketplace-declared-locally"; refusal: MarketplaceDeclaredLocallyError }
+  | {
+      kind: "refused";
+      refusal: MarketplaceDeclaredLocallyError | MarketplaceSourceUndeclarableError;
+      reason: "marketplace declared locally" | "unsupported source";
+    }
   | {
       kind: "declared";
       record: PluginInstallRecord;
@@ -2021,12 +2042,13 @@ async function installPluginWithTransaction(
         const { targetConfigPath, targetIsLocal, current, sibling } = selection;
         configBasename = path.basename(targetConfigPath);
 
-        // FIX-03: refuse before the promotion and the cascade, so a refusal
-        // writes no state, no config, and no artifact (NFR-3). This one check
-        // covers a fresh root, the D-04-07 promotion, and `browse`.
-        const refusal = standaloneLocalOnlyRefusal(opts, selection);
+        // FIX-03 / LAYER-06: refuse before the promotion and the cascade, so a
+        // refusal writes no state, no config, and no artifact (NFR-3). This one
+        // check covers a fresh root, the D-04-07 promotion, the LAYER-05
+        // declaration, and `browse`.
+        const refusal = standaloneMarketplaceRefusal(opts, selection, state);
         if (refusal !== undefined) {
-          return { kind: "marketplace-declared-locally", refusal };
+          return refusal;
         }
 
         const declared = await declareInstalledPlugin({
@@ -2255,13 +2277,6 @@ async function installPluginWithTransaction(
             // the plugins the user asked for by name, and each dependency's
             // record carries `provenance: "dependency"`, which D-04-05's
             // reconcile exemption reads on the next reload.
-            //
-            // S4 (#51): the helper's undefined synthesized source collapses two
-            // arms -- benign (already declared) and dangerous (no string
-            // `source.raw` to synthesize from). This site therefore still writes a
-            // dangling declaration in the dangerous arm; acknowledged trade-off
-            // pending a widen of the helper's return that would route it to a
-            // (failed) row.
             pluginPatch: { ...(landedDisabled && { enabled: false }) },
             // LAYER-07 / D-MF-04: the config does declare every marketplace the
             // install added to the scope, a dependency's included, so the
@@ -2451,7 +2466,7 @@ async function installPluginWithTransaction(
       return { status: "failed", error: new Error(cause), cause };
     }
 
-    case "marketplace-declared-locally":
+    case "refused":
       return failedRowOutcome({
         ctx,
         run,
@@ -2459,7 +2474,7 @@ async function installPluginWithTransaction(
         scope,
         plugin,
         error: outcome.refusal,
-        reasons: ["marketplace declared locally"],
+        reasons: [outcome.reason],
         orchestrated,
       });
 

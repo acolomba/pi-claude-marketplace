@@ -6,7 +6,9 @@
 // keeps every case offline. A named verb acts on one layer and reads both, so
 // a layer it cannot read stops it before anything changes (LAYER-04, CFG-03).
 // Update and reinstall write no layer file, so a dependency that the load-time
-// backfill reinstalls or a bare update moves stays undeclared (LAYER-08).
+// backfill reinstalls or a bare update moves stays undeclared (LAYER-08). A
+// layer that gets a plugin declaration also gets its marketplace's, from the
+// other layer's source when the scope's record holds none (LAYER-06).
 
 import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -391,5 +393,80 @@ test("LAYER-08: a bare update moves a dependency to its new version and writes n
       ["app", "1.1.0", "explicit"],
     ],
   );
+  boundary.verifyBoundary();
+});
+
+/** LAYER-06: the scope records `mp` with a source of a kind this version does not know, and no `raw`. */
+async function forgetRecordedSource(scope: LayerScope): Promise<void> {
+  const state = JSON.parse(await readFile(scope.locations.stateJsonPath, "utf8")) as {
+    marketplaces: { mp: { source: unknown } };
+  };
+  state.marketplaces.mp.source = { kind: "unknown", reason: "a future source kind" };
+  await writeFile(scope.locations.stateJsonPath, JSON.stringify(state));
+}
+
+test("LAYER-06: install --local of a plugin the shared layer installed declares the marketplace with the shared layer's source when the record holds none", async (t) => {
+  // arrange
+  const scope = await installedScope(t, "plugin-layer-shared-source-", "alpha", false);
+  await forgetRecordedSource(scope);
+  const boundary = createNotificationBoundary(1);
+
+  // act
+  await operations().install({
+    ...request(scope, boundary, true),
+    marketplace: "mp",
+    plugin: "alpha",
+  });
+
+  // assert
+  assert.deepStrictEqual(boundary.notifications, [
+    { message: "● mp [project]\n  ⊘ alpha v1.0.0 (skipped) {already installed in shared layer}" },
+  ]);
+  assert.deepStrictEqual(await declarations(scope), [
+    {
+      schemaVersion: 1,
+      marketplaces: { mp: { source: scope.source } },
+      plugins: { "alpha@mp": {} },
+    },
+    {
+      schemaVersion: 1,
+      marketplaces: { mp: { source: scope.source } },
+      plugins: { "alpha@mp": {} },
+    },
+  ]);
+  boundary.verifyBoundary();
+});
+
+test("LAYER-06: install --local is refused and changes nothing when no layer declares the marketplace and the record holds no source", async (t) => {
+  // arrange
+  const scope = await installedScope(t, "plugin-layer-no-source-", "alpha", false);
+  await forgetRecordedSource(scope);
+  await writeFile(
+    scope.locations.configJsonPath,
+    JSON.stringify({ schemaVersion: 1, plugins: { "alpha@mp": {} } }),
+  );
+  const before = await scopeFiles(scope);
+  const boundary = createNotificationBoundary(1);
+
+  // act
+  await operations().install({
+    ...request(scope, boundary, true),
+    marketplace: "mp",
+    plugin: "alpha",
+  });
+
+  // assert
+  assert.deepStrictEqual(boundary.notifications, [
+    {
+      message:
+        "A plugin operation has failed.\n" +
+        "\n" +
+        "● mp [project]\n" +
+        "  ⊘ alpha (failed) {unsupported source}\n" +
+        "    cause: The scope records the marketplace mp with no source that claude-plugins.local.json can declare. Declare the marketplace in claude-plugins.local.json, then run the command again.",
+      severity: "error",
+    },
+  ]);
+  assert.deepStrictEqual(await scopeFiles(scope), before);
   boundary.verifyBoundary();
 });

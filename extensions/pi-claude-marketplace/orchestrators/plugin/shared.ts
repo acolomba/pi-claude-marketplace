@@ -33,6 +33,7 @@ import {
   isErrnoException,
   MarketplaceDeclaredLocallyError,
   MarketplaceNotFoundError,
+  MarketplaceSourceUndeclarableError,
   PluginDeclaredInSharedConfigError,
   PluginDeclaredLocallyError,
 } from "../../shared/errors.ts";
@@ -522,8 +523,18 @@ export async function collectInstallReachableMarketplaces(opts: {
 }
 
 /**
- * CR-02: synthesize the marketplace `source` for a plugin
- * write-back into a config that does NOT yet declare the marketplace.
+ * How a layer would declare a marketplace beside a plugin key: `declared` when
+ * a passed layer already declares it, `source` with the string to declare it
+ * with, or `unknown` when no source is known.
+ */
+type MarketplaceDeclaration =
+  | { readonly kind: "declared" }
+  | { readonly kind: "source"; readonly source: string }
+  | { readonly kind: "unknown" };
+
+/**
+ * CR-02: the marketplace `source` for a plugin write-back into a config that
+ * does NOT yet declare the marketplace.
  *
  * When a project-scope install resolves the marketplace via the CMP-3
  * user-scope fallback, the install adds the marketplace to PROJECT state
@@ -546,37 +557,26 @@ export async function collectInstallReachableMarketplaces(opts: {
  *   declares a dependency plugin (D-04-02), so a scope that declares the
  *   marketplace in either layer already wants it.
  *
- * Returns `undefined` when ANY passed layer already declares the marketplace
- * (nothing to synthesize -- entry-stable) OR when
- * no string `source.raw` exists on the state record (hand-edited/legacy
- * state; writing a source-less entry would trip `saveConfig`'s
- * required-`source` invariant throw).
- *
- * S4 (#51): the `undefined` return is OVERLOADED across two semantically
- * distinct arms -- the BENIGN already-declared arm AND the DANGEROUS
- * no-string-raw arm. `writeAdoptingConfigEntries` leaves an `undefined` source
- * out of its marketplace patch and writes the plugin key REGARDLESS, so the
- * dangerous arm silently writes a
- * dangling plugin declaration the reconcile planner converts into a
- * destructive `<marketplace not declared>` + recorded-clone removal plan
- * (the exact invariant-5 violation the function doc warns about). The
- * dangerous arm is rare in practice (hand-edited legacy state) and the
- * write-back fall-through is deliberate for now -- a future PR should
- * widen the return to a discriminated result so callers can route the
- * `unsynthesizable` arm to a (failed) row instead of sealing the fate.
+ * A state record without a string `source.raw` (a forward-compatible source
+ * kind, NFR-12) falls back to the source `fallback` declares, the other layer
+ * for the plugin's own marketplace. The merged view reads that same string, so
+ * the planner sees the same source. With neither, the answer is `unknown`.
  */
-function synthesizeUndeclaredMarketplaceSource(
+function undeclaredMarketplaceSource(
   scopeConfigs: readonly ScopeConfig[],
   state: ExtensionState,
   marketplace: string,
-): string | undefined {
+  fallback?: ScopeConfig,
+): MarketplaceDeclaration {
   if (scopeConfigs.some((c) => ownValue(c.marketplaces, marketplace) !== undefined)) {
-    return undefined;
+    return { kind: "declared" };
   }
 
   const record = ownValue(state.marketplaces, marketplace);
   const raw = (record?.source as { raw?: unknown } | undefined)?.raw;
-  return typeof raw === "string" ? raw : undefined;
+  const source =
+    typeof raw === "string" ? raw : ownValue(fallback?.marketplaces, marketplace)?.source;
+  return source === undefined ? { kind: "unknown" } : { kind: "source", source };
 }
 
 /**
@@ -704,6 +704,36 @@ export function localOnlyMarketplaceRefusal(
   }
 
   return new MarketplaceDeclaredLocallyError(marketplace);
+}
+
+/**
+ * LAYER-06 / D-MF-03: a command that declares a plugin in a layer also
+ * declares the plugin's marketplace there. Returns the refusal when the target
+ * layer does not declare the marketplace and no source is known to declare it
+ * with: the scope's record holds no string source and the other layer does not
+ * declare it. A marketplace the scope does not record yet is never refused,
+ * because the install that adds it records its source.
+ */
+export function undeclarableMarketplaceRefusal(
+  selection: Pick<
+    Extract<DeclaringConfigWriteTarget, { kind: "selected" }>,
+    "targetIsLocal" | "current" | "sibling"
+  >,
+  state: ExtensionState,
+  marketplace: string,
+): MarketplaceSourceUndeclarableError | undefined {
+  if (
+    ownValue(state.marketplaces, marketplace) === undefined ||
+    undeclaredMarketplaceSource([selection.current], state, marketplace, selection.sibling).kind !==
+      "unknown"
+  ) {
+    return undefined;
+  }
+
+  return new MarketplaceSourceUndeclarableError(
+    marketplace,
+    selection.targetIsLocal ? "claude-plugins.local.json" : "claude-plugins.json",
+  );
 }
 
 /**
@@ -844,13 +874,13 @@ async function localLayerKeys(scope: Scope, cwd: string): Promise<readonly strin
  * marketplace (D-MF-03), so `install --local` under a marketplace only the
  * shared layer declares leaves a self-consistent local layer, and a later
  * `marketplace remove` from the shared layer keeps the plugin. The source is
- * the state record's `source.raw`, the value `samePlannedSource` matches.
+ * the state record's `source.raw`, the value `samePlannedSource` matches, or
+ * the other layer's declared source when the record holds no string one.
  *
- * S4 (#51): an `undefined` synthesized source collapses two arms -- benign
- * (already declared, no synthesis needed) and dangerous (no string `source.raw`
- * on the state record, so synthesis is impossible). The write proceeds with the
- * plugin key alone in BOTH arms, so the dangerous arm writes a dangling
- * declaration. Acknowledged trade-off pending a widen of the helper's return.
+ * When no source is known, the write throws `MarketplaceSourceUndeclarableError`
+ * before it writes anything, because the plugin key alone would leave the layer
+ * declaring a plugin without its marketplace. The commands refuse that case
+ * earlier through `undeclarableMarketplaceRefusal`, before they change state.
  *
  * `pluginPatch` is the caller's own field set: `enable`/`disable` writes an
  * explicit `enabled`, while `install` writes `enabled: false` only when the
@@ -874,16 +904,31 @@ export async function writeAdoptingConfigEntries(opts: {
   readonly pluginPatch: Partial<PluginConfigEntry>;
   readonly addedMarketplaces?: readonly string[];
 }): Promise<void> {
-  const gates: readonly (readonly [string, readonly ScopeConfig[]])[] = [
-    [opts.marketplace, [opts.current]],
-    ...(opts.addedMarketplaces ?? []).map(
-      (added) => [added, [opts.current, opts.sibling]] as const,
-    ),
-  ];
-  const adopted = gates.flatMap(([marketplace, layers]) => {
-    const source = synthesizeUndeclaredMarketplaceSource(layers, opts.state, marketplace);
-    return source === undefined ? [] : [[marketplace, { source }] as const];
+  const own = undeclaredMarketplaceSource(
+    [opts.current],
+    opts.state,
+    opts.marketplace,
+    opts.sibling,
+  );
+  if (own.kind === "unknown") {
+    throw new MarketplaceSourceUndeclarableError(
+      opts.marketplace,
+      path.basename(opts.targetConfigPath),
+    );
+  }
+
+  const added = (opts.addedMarketplaces ?? []).flatMap((marketplace) => {
+    const declaration = undeclaredMarketplaceSource(
+      [opts.current, opts.sibling],
+      opts.state,
+      marketplace,
+    );
+    return declaration.kind === "source"
+      ? [[marketplace, { source: declaration.source }] as const]
+      : [];
   });
+  const adopted =
+    own.kind === "source" ? [[opts.marketplace, { source: own.source }] as const, ...added] : added;
 
   await writeBatchedConfigEntries(opts.current, opts.targetConfigPath, opts.scopeRoot, {
     marketplaces: Object.fromEntries(adopted),

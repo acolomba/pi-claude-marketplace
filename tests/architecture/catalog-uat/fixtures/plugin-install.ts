@@ -524,6 +524,33 @@ export const PLUGIN_INSTALL_FIXTURES: FixtureMap = {
       },
     },
 
+    // LAYER-06: the target layer lacks the marketplace, and neither the
+    // scope's record nor the other layer gives a source to declare it with.
+    "failure-marketplace-source-undeclarable": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "failed",
+                severity: "error",
+                needsReload: false,
+                name: "helper",
+                reasons: ["unsupported source"],
+                cause: new Error(
+                  "The scope records the marketplace official with no source that claude-plugins.json can declare. Declare the marketplace in claude-plugins.json, then run the command again.",
+                ),
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     // LAYER-05: the shared layer declares and installed the plugin, so an
     // install with --local only adds the local declaration. Nothing is
     // installed, so the row is info with no reload-hint.
