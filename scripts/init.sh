@@ -46,6 +46,3 @@ rm -f .claude/CLAUDE.md
 # CLAUDE.md import shim. The Fallow task map in AGENTS.md is kept by hand and
 # no longer refreshes on fallow upgrades.
 npx fallow agent install --harness claude --harness codex --without hooks --without guide --approve
-
-# normalize AGENTS.md
-pre-commit run --files AGENTS.md || true

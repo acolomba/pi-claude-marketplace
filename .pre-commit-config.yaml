@@ -1,4 +1,4 @@
-exclude: ^(\.agents/(?!skills/)|\.claude/(?!skills/)|\.codex/|\.gsd-path/|\.pi/|tests/domain/fixtures/hash-stability/)
+exclude: ^(\.agents/(?!skills/)|\.claude/(?!skills/)|\.codex/|\.gsd-path/|\.pi/|AGENTS\.md$|WORKFLOW\.md$|tests/domain/fixtures/hash-stability/)
 
 default_install_hook_types:
   - pre-commit
