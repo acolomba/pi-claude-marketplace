@@ -8854,12 +8854,12 @@ test("UAT-05 / CR-02: an UNREADABLE sibling config skips the marketplace adoptio
       // The plugin entry still lands in its declaring file -- the install is
       // correctly targeted and is not what is in doubt.
       assert.deepEqual(localCfg.config.plugins?.["hello@mp"], {});
-      // The load-bearing assertion. Coercing the unreadable sibling to an empty
-      // config made the gate conclude the marketplace was undeclared, and the
-      // synthesized bare `{source}` entry replaces the base entry wholesale
-      // under CFG-02 -- so once the base file is repaired the user's
-      // `autoupdate: false` is gone and the marketplace starts auto-updating,
-      // a network-touching setting flipped with no command and no prompt.
+      // The load-bearing assertion. Read as an empty config, the unreadable
+      // sibling would make the gate conclude the marketplace is undeclared, and
+      // the synthesized bare `{source}` entry would declare it a second time in
+      // a file the user never named: once the base file is repaired, a
+      // `marketplace remove` from it would keep the marketplace (LAYER-02 /
+      // D-MF-03).
       assert.equal(
         localCfg.config.marketplaces?.["mp"],
         undefined,
@@ -8891,9 +8891,8 @@ test("UAT-05: --local install with marketplace declared in BASE writes ONLY the 
 
       // BASE declares the marketplace with autoupdate: true (the live UAT
       // repro: claude-plugins.json declares the marketplace; the --local
-      // install must NOT re-declare it in claude-plugins.local.json -- the
-      // bare {source} entry would shadow base wholesale per CFG-02 and flip
-      // merged autoupdate to false).
+      // install must NOT re-declare it in claude-plugins.local.json, a file
+      // the user never named for the marketplace).
       const { saveConfig } =
         await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
       await saveConfig(
@@ -8929,7 +8928,7 @@ test("UAT-05: --local install with marketplace declared in BASE writes ONLY the 
       assert.equal(
         localCfg.config.marketplaces?.["mp"],
         undefined,
-        "local file must NOT re-declare a base-declared marketplace (CFG-02 shadowing)",
+        "local file must NOT re-declare a base-declared marketplace",
       );
 
       // The merged view's autoupdate (from base) survives the install.
@@ -8945,7 +8944,7 @@ test("UAT-05: --local install with marketplace declared in BASE writes ONLY the 
       assert.equal(
         merged.marketplaces["mp"]?.entry.autoupdate,
         true,
-        "merged autoupdate flipped -- the local declaration shadowed base",
+        "the merged autoupdate no longer reads the base value",
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });

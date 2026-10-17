@@ -3590,8 +3590,8 @@ test("UAT-05: --local enable flip with marketplace declared in BASE writes ONLY 
     // BASE declares the marketplace with autoupdate: true; LOCAL carries an
     // explicit enabled:false for the plugin so the WR-03 promotion arm fires
     // a config write against the --local target. The flip must NOT
-    // re-declare the marketplace in local -- the bare {source} entry would
-    // shadow base wholesale per CFG-02 and flip merged autoupdate to false.
+    // re-declare the marketplace in local, a file the user never named for
+    // the marketplace (LAYER-02 / D-MF-03).
     await writeFile(
       configPath,
       JSON.stringify({
@@ -3629,7 +3629,7 @@ test("UAT-05: --local enable flip with marketplace declared in BASE writes ONLY 
     // The flip landed in local...
     // assert
     assert.equal(localCfg.plugins?.["foo@mp"]?.enabled, true);
-    // ...WITHOUT a marketplace re-declaration (CFG-02 shadowing guard).
+    // ...WITHOUT a marketplace re-declaration.
     assert.equal(
       localCfg.marketplaces?.["mp"],
       undefined,

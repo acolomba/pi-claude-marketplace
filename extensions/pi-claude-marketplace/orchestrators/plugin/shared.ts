@@ -552,11 +552,11 @@ export function cloneMarketplaceRecordForTargetScope(
  *
  * UAT-05: the membership gate runs against EVERY physical config of the
  * scope (base AND local -- i.e. the CFG-02 merged view), not just the
- * targeted file. Gating on the target alone made a `--local` install
- * re-declare a base-declared marketplace into `claude-plugins.local.json`
- * as a bare `{source}` entry; the CFG-02 wholesale entry-level override
- * then shadowed the base entry and silently flipped merged `autoupdate`.
- * Callers pass BOTH files' configs, read fresh inside the lock (WB-01
+ * targeted file. The configuration is the desired state, and a scope that
+ * declares the marketplace in either file already wants it. A second
+ * declaration would put the marketplace in a file the user never named, so a
+ * later `marketplace remove` from the other file would keep it (LAYER-02 /
+ * D-MF-03). Callers pass BOTH files' configs, read fresh inside the lock (WB-01
  * discipline); the merged view is used for the membership test ONLY --
  * never serialized back.
  *
@@ -840,11 +840,10 @@ export function localOnlyMarketplaceRefusal(
  *
  * An UNREADABLE sibling (`sibling === undefined`) SKIPS the adoption write. It
  * is not read as "declares nothing": the file may well declare the marketplace,
- * and synthesizing a bare `{source}` entry into the other file would shadow
- * that declaration wholesale under CFG-02 -- silently dropping the user's
- * `autoupdate: false` once the file is repaired, a network-touching setting
- * flipped with no command and no prompt. Refusing to adopt is the conservative
- * half: the plugin entry itself is still targeted correctly, and a marketplace
+ * and synthesizing a bare `{source}` entry into the other file would then be a
+ * second declaration in a file the user never named, which keeps the
+ * marketplace after a later `marketplace remove` from the repaired file
+ * (LAYER-02 / D-MF-03). Refusing to adopt is the conservative half: the plugin entry itself is still targeted correctly, and a marketplace
  * that really is undeclared stays visible as the reconcile planner's
  * `<marketplace not declared>` row rather than being papered over from a file
  * nobody could read.
@@ -874,10 +873,11 @@ function synthesizeAdoptedMarketplaceSource(opts: {
  * perpetual failed row.
  *
  * The membership gate considers BOTH physical files (base union local), so a
- * `--local` write never re-declares a base-declared marketplace -- the bare
- * `{source}` entry would shadow the base entry wholesale (CFG-02) and silently
- * flip merged `autoupdate`. An UNREADABLE sibling skips the adoption write
- * rather than counting as a file that declares nothing.
+ * `--local` write never re-declares a base-declared marketplace: the scope
+ * already declares it, and a second declaration in a file the user never named
+ * would survive a later `marketplace remove` from the base file (LAYER-02 /
+ * D-MF-03). An UNREADABLE sibling skips the adoption write rather than
+ * counting as a file that declares nothing.
  *
  * S4 (PR #51): `adoptedSource === undefined` collapses two arms -- benign
  * (already declared, no synthesis needed) and dangerous (no string `source.raw`

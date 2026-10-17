@@ -1900,11 +1900,12 @@ async function installPluginWithTransaction(
         // UAT-05: the membership gate must consider BOTH physical files
         // (base ∪ local), not just the target. A `--local` install against a
         // base-declared marketplace must NOT re-declare it in the local file:
-        // the bare `{source}` entry would shadow the base entry wholesale
-        // (CFG-02) and silently flip merged `autoupdate`. Both files are read
-        // fresh INSIDE the lock and used for the membership test only, and an
-        // UNREADABLE sibling skips the adoption write rather than counting as a
-        // file that declares nothing.
+        // the scope already declares it, and a second declaration in a file
+        // the user never named would keep the marketplace after a later
+        // `marketplace remove` from the base file (LAYER-02 / D-MF-03). Both
+        // files are read fresh INSIDE the lock and used for the membership test
+        // only, and an UNREADABLE sibling skips the adoption write rather than
+        // counting as a file that declares nothing.
         if (opts.notifications?.mode !== "orchestrated") {
           await writeAdoptingConfigEntries({
             current,
