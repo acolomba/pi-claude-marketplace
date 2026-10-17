@@ -21,6 +21,7 @@ import {
   MarketplaceNotAddedSignal,
   missIsNotInstalled,
   maybeWritePluginConfigBack,
+  namedPluginLayerRefusal,
   overwriteDisabledMemberEntries,
   pluginLayerVerdict,
   removePluginRecord,
@@ -42,6 +43,7 @@ import { locationsFor } from "../../../extensions/pi-claude-marketplace/persiste
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import {
   CrossPluginConflictError,
+  InvalidMarketplaceManifestError,
   MarketplaceDeclaredLocallyError,
   MarketplaceNotFoundError,
   PluginDeclaredInSharedConfigError,
@@ -1210,6 +1212,170 @@ describe("pluginLayerVerdict", () => {
     // assert
     assert.deepStrictEqual(verdict, { kind: "neither" });
   });
+});
+
+describe("namedPluginLayerRefusal", () => {
+  for (const { layout, local, shared, localFile } of [
+    {
+      layout: "the target layer declares the plugin",
+      local: false,
+      shared: '{"schemaVersion":1,"plugins":{"demo@mp":{}}}',
+      localFile: undefined,
+    },
+    {
+      layout: "both layers declare the plugin",
+      local: true,
+      shared: '{"schemaVersion":1,"plugins":{"demo@mp":{}}}',
+      localFile: '{"schemaVersion":1,"plugins":{"demo@mp":{"enabled":false}}}',
+    },
+    {
+      layout: "no layer declares the plugin",
+      local: true,
+      shared: undefined,
+      localFile: undefined,
+    },
+  ] satisfies readonly {
+    layout: string;
+    local: boolean;
+    shared: string | undefined;
+    localFile: string | undefined;
+  }[]) {
+    test(`LAYER-04: does not refuse when ${layout} (local ${local})`, async () => {
+      // arrange
+      await withTempScopes(async ({ cwd }) => {
+        const locations = locationsFor("project", cwd);
+        await mkdir(path.dirname(locations.configJsonPath), { recursive: true });
+        await writeOptionalFile(locations.configJsonPath, shared);
+        await writeOptionalFile(locations.configLocalJsonPath, localFile);
+
+        // act
+        const refusal = await namedPluginLayerRefusal({
+          locations,
+          local,
+          marketplace: "mp",
+          plugin: "demo",
+        });
+
+        // assert
+        assert.equal(refusal, undefined);
+      });
+    });
+  }
+
+  test("LAYER-04: refuses as plugin declared locally a shared-layer target only the local layer declares", async () => {
+    // arrange
+    await withTempScopes(async ({ cwd }) => {
+      const locations = locationsFor("project", cwd);
+      await writeConfig(locations.configLocalJsonPath, {
+        schemaVersion: 1,
+        plugins: { "demo@mp": {} },
+      });
+
+      // act
+      const refusal = await namedPluginLayerRefusal({
+        locations,
+        local: false,
+        marketplace: "mp",
+        plugin: "demo",
+      });
+
+      // assert
+      assert.ok(refusal instanceof PluginDeclaredLocallyError);
+      assert.deepStrictEqual(
+        { plugin: refusal.plugin, marketplace: refusal.marketplace, message: refusal.message },
+        {
+          plugin: "demo",
+          marketplace: "mp",
+          message:
+            "The plugin demo@mp is declared only in the local layer (claude-plugins.local.json). Run the command again with --local.",
+        },
+      );
+    });
+  });
+
+  test("LAYER-04: refuses as plugin declared in shared config a local-layer target only the shared layer declares", async () => {
+    // arrange
+    await withTempScopes(async ({ cwd }) => {
+      const locations = locationsFor("project", cwd);
+      await writeConfig(locations.configJsonPath, {
+        schemaVersion: 1,
+        plugins: { "demo@mp": {} },
+      });
+
+      // act
+      const refusal = await namedPluginLayerRefusal({
+        locations,
+        local: true,
+        marketplace: "mp",
+        plugin: "demo",
+      });
+
+      // assert
+      assert.ok(refusal instanceof PluginDeclaredInSharedConfigError);
+      assert.deepStrictEqual(
+        { plugin: refusal.plugin, marketplace: refusal.marketplace, message: refusal.message },
+        {
+          plugin: "demo",
+          marketplace: "mp",
+          message:
+            "The plugin demo@mp is declared only in the shared layer (claude-plugins.json). Run the command again without --local.",
+        },
+      );
+    });
+  });
+
+  for (const { file, basename, local, layer } of [
+    {
+      file: "configJsonPath",
+      basename: "claude-plugins.json",
+      local: false,
+      layer: "the target layer",
+    },
+    {
+      file: "configLocalJsonPath",
+      basename: "claude-plugins.local.json",
+      local: false,
+      layer: "the other layer",
+    },
+    {
+      file: "configLocalJsonPath",
+      basename: "claude-plugins.local.json",
+      local: true,
+      layer: "the target layer",
+    },
+    {
+      file: "configJsonPath",
+      basename: "claude-plugins.json",
+      local: true,
+      layer: "the other layer",
+    },
+  ] satisfies readonly {
+    file: "configJsonPath" | "configLocalJsonPath";
+    basename: string;
+    local: boolean;
+    layer: string;
+  }[]) {
+    test(`CFG-03: an unreadable ${basename} that is ${layer} (local ${local}) is an invalid manifest naming it`, async () => {
+      // arrange
+      await withTempScopes(async ({ cwd }) => {
+        const locations = locationsFor("project", cwd);
+        await mkdir(path.dirname(locations[file]), { recursive: true });
+        await writeFile(locations[file], "{");
+
+        // act
+        const refusal = await namedPluginLayerRefusal({
+          locations,
+          local,
+          marketplace: "mp",
+          plugin: "demo",
+        });
+
+        // assert
+        assert.ok(refusal instanceof InvalidMarketplaceManifestError);
+        assert.equal(refusal.message, `Config file "${basename}" failed schema validation.`);
+      });
+    });
+  }
 });
 
 describe("writeAdoptingConfigEntries", () => {

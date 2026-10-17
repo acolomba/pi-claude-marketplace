@@ -29,6 +29,7 @@ import { hookDebugLog } from "../../shared/debug-log.ts";
 import {
   CrossPluginConflictError,
   errorMessage,
+  InvalidMarketplaceManifestError,
   isErrnoException,
   MarketplaceDeclaredLocallyError,
   MarketplaceNotFoundError,
@@ -762,6 +763,41 @@ export function pluginLayerVerdict(args: {
         reason: "plugin declared locally",
         refusal: new PluginDeclaredLocallyError(args.plugin, args.marketplace),
       };
+}
+
+/**
+ * LAYER-04 / D-MF-03: the refusal a named update or reinstall meets when the
+ * plugin is declared only in the other layer. `--local` targets the local layer
+ * and no flag targets the shared layer. A plugin that no layer declares, such
+ * as a dependency, is not refused.
+ *
+ * CFG-03: an unreadable layer file returns `InvalidMarketplaceManifestError`
+ * naming only its basename, because the plugin may be declared there.
+ *
+ * NFR-5: it reads only the scope's two layer files, so a caller can run it
+ * before any credential, clone, or tag listing.
+ */
+export async function namedPluginLayerRefusal(opts: {
+  readonly locations: ScopedLocations;
+  readonly local: boolean;
+  readonly marketplace: string;
+  readonly plugin: string;
+}): Promise<Error | undefined> {
+  const selection = await selectDeclaringConfigWriteTarget(opts);
+  if (selection.kind === "unreadable") {
+    return new InvalidMarketplaceManifestError(
+      `Config file "${path.basename(selection.filePath)}" failed schema validation.`,
+    );
+  }
+
+  const verdict = pluginLayerVerdict({
+    target: selection.current,
+    other: selection.sibling,
+    targetIsLocal: selection.targetIsLocal,
+    marketplace: opts.marketplace,
+    plugin: opts.plugin,
+  });
+  return verdict.kind === "other-only" ? verdict.refusal : undefined;
 }
 
 /**

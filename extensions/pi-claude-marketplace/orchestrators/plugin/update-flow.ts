@@ -67,8 +67,9 @@ import {
   cleanupFailuresFromError,
   composeErrorWithCauseChain,
   InvalidMarketplaceManifestError,
-  MarketplaceDeclaredLocallyError,
   MarketplaceNotFoundError,
+  PluginDeclaredInSharedConfigError,
+  PluginDeclaredLocallyError,
   PluginUpdateConcurrencyError,
   PluginUpdatePhase3Error,
   rethrowInvalidGitHubBaseUrl,
@@ -87,10 +88,10 @@ import { garbageCollectPluginClones } from "./clone-gc.ts";
 import {
   emitMarketplaceNotAddedSignal,
   MarketplaceNotAddedSignal,
+  namedPluginLayerRefusal,
   resolveInstalledMarketplaceTarget,
   resolveInstalledPluginTarget,
   surfaceDiscoveryWarnings,
-  writeBackRefusal,
 } from "./shared.ts";
 import { composeUpdateCascade } from "./update-cascade.ts";
 import { isUpdatePreflightOutcome, preparePluginUpdate } from "./update-preflight.ts";
@@ -830,8 +831,12 @@ function narrowDirectFailReason(err: Error): ContentReason {
     return "invalid manifest";
   }
 
-  if (primary instanceof MarketplaceDeclaredLocallyError) {
-    return "marketplace declared locally";
+  if (primary instanceof PluginDeclaredLocallyError) {
+    return "plugin declared locally";
+  }
+
+  if (primary instanceof PluginDeclaredInSharedConfigError) {
+    return "plugin declared in shared config";
   }
 
   const transportReason = classifyGitTransportFailure(primary);
@@ -1105,7 +1110,7 @@ export interface PluginUpdateOperations {
  * exactly that gap.
  */
 async function runPluginUpdate(args: ThreePhaseArgs): Promise<UpdateRunOutcome> {
-  await refuseLocalOnlyMarketplaceUpdate(args);
+  await refuseOtherLayerUpdate(args);
   const preflight = await preparePluginUpdate({
     ...args,
     ...(!args.cascade && { notification: { ctx: args.ctx, run: args.run } }),
@@ -1118,26 +1123,23 @@ async function runPluginUpdate(args: ThreePhaseArgs): Promise<UpdateRunOutcome> 
 }
 
 /**
- * FIX-03 / D-MF-02: refuse a named flagless update whose write-back would
- * declare the plugin in `claude-plugins.json` under a marketplace only
- * `claude-plugins.local.json` declares. The `single` cardinality is the
+ * LAYER-04 / D-MF-03: a named update acts on its target layer, so it is
+ * refused when only the other layer declares the plugin, and when a layer
+ * file cannot be read (CFG-03). The `single` cardinality is the
  * `<plugin>@<marketplace>` invocation form (OUT-04); the `@<marketplace>` and
- * bare forms and the autoupdate cascade name no plugin and cover every layer
- * (D-MF-03).
+ * bare forms and the autoupdate cascade name no plugin.
  *
- * The check reads only the two config files, and it runs before the
+ * NFR-5: the check reads only the two layer files, and it runs before the
  * preflight. So a refused update builds no credentials, lists no tags, and
- * clones nothing. The cost of this order: an up-to-date plugin is refused
- * too, although its update would write nothing. Knowing that a
- * git-source plugin is up to date needs the network, which a refusal must not
- * touch.
+ * clones nothing. An up-to-date plugin is refused too, because knowing that a
+ * git-source plugin is up to date needs the network.
  */
-async function refuseLocalOnlyMarketplaceUpdate(args: ThreePhaseArgs): Promise<void> {
+async function refuseOtherLayerUpdate(args: ThreePhaseArgs): Promise<void> {
   if (args.cascade || args.cardinality !== "single") {
     return;
   }
 
-  const refusal = await writeBackRefusal({
+  const refusal = await namedPluginLayerRefusal({
     locations: args.locations,
     local: args.local === true,
     marketplace: args.marketplace,

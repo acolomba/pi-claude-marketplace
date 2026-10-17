@@ -5733,6 +5733,7 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable with --local of a plugin
       run: runWithNothingLoaded(),
       scope: "user",
       target: { kind: "plugin", marketplace: "mp", plugin: "foo" },
+      local: true,
     });
     const afterUpdate = await observe();
     const baseExistsAfterUpdate = await fileExists(configPath);
@@ -5787,8 +5788,8 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable with --local of a plugin
       skills: ["foo-s1"],
       version: "2.0.0",
     });
-    // D-MF-03: the local file declares the plugin, so neither the flagless
-    // update nor the flagless reinstall writes a base config.
+    // D-MF-03: the local file declares the plugin, so neither the update with
+    // --local nor the flagless reinstall writes a base config.
     assert.equal(baseExistsAfterUpdate, false);
     assert.deepStrictEqual(afterReinstall, afterUpdate);
     assert.equal(baseExistsAfterReinstall, false);
