@@ -1571,7 +1571,7 @@ async function readEnabledDependents(args: {
  * the other layer declares, before anything is resolved, materialized, or
  * saved. It refuses an idempotent call too, because the user named a layer
  * that does not declare the plugin. A plugin no layer declares is a dependency
- * and is acted on (D-14). An orchestrated call reads its input from the
+ * and is acted on (LAYER-08). An orchestrated call reads its input from the
  * configuration and is never refused (WR-09).
  *
  * When both layers declare the plugin and the command targets the shared

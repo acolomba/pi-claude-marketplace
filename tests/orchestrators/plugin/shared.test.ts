@@ -1474,7 +1474,7 @@ describe("namedPluginLayerRefusal", () => {
 });
 
 describe("keepLocalLayerTargets", () => {
-  test("D-15: keeps, in order, the targets whose key the scope's local layer declares", async () => {
+  test("LAYER-04: keeps, in order, the targets whose key the scope's local layer declares", async () => {
     // arrange
     await withTempScopes(async ({ cwd }) => {
       const locations = locationsFor("project", cwd);
@@ -1499,7 +1499,7 @@ describe("keepLocalLayerTargets", () => {
     });
   });
 
-  test("D-15: keeps no target when the local layer is absent", async () => {
+  test("LAYER-04: keeps no target when the local layer is absent", async () => {
     // arrange
     await withTempScopes(async ({ cwd }) => {
       await writeConfig(locationsFor("project", cwd).configJsonPath, {
@@ -1518,7 +1518,7 @@ describe("keepLocalLayerTargets", () => {
     });
   });
 
-  test("D-15: reads each scope's own local layer", async () => {
+  test("LAYER-04: reads each scope's own local layer", async () => {
     // arrange
     await withTempScopes(async ({ cwd }) => {
       await writeConfig(locationsFor("project", cwd).configLocalJsonPath, {
@@ -1572,7 +1572,7 @@ describe("keepLocalLayerTargets", () => {
     });
   });
 
-  test("D-15: a plugins entry named __proto__ declares nothing it holds", async () => {
+  test("LAYER-04: a plugins entry named __proto__ declares nothing it holds", async () => {
     // arrange
     await withTempScopes(async ({ cwd }) => {
       const locations = locationsFor("project", cwd);

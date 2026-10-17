@@ -3093,7 +3093,7 @@ for (const { form, target } of [
   { form: "bare", target: { kind: "all" } },
   { form: "@marketplace", target: { kind: "marketplace", marketplace: "mp" } },
 ] as const) {
-  test(`D-15: the ${form} reinstall with --local reinstalls only the plugins the local layer declares`, async () => {
+  test(`LAYER-04: the ${form} reinstall with --local reinstalls only the plugins the local layer declares`, async () => {
     await withHermeticHome(async () => {
       const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-nameless-local-"));
       try {
@@ -3128,7 +3128,7 @@ for (const { form, target } of [
     });
   });
 
-  test(`D-15: the ${form} reinstall without --local reinstalls every installed plugin of the scope`, async () => {
+  test(`LAYER-04: the ${form} reinstall without --local reinstalls every installed plugin of the scope`, async () => {
     await withHermeticHome(async () => {
       const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-nameless-flagless-"));
       try {
@@ -3238,7 +3238,7 @@ test("FIX-03: a bare reinstall under a marketplace only the local file declares 
   });
 });
 
-test("D-14: a named reinstall of a plugin no layer declares, under a marketplace only the local layer declares, reinstalls it", async () => {
+test("LAYER-08: a named reinstall of a plugin no layer declares, under a marketplace only the local layer declares, reinstalls it", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-local-mp-named-"));
     try {

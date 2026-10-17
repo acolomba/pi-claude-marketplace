@@ -541,7 +541,7 @@ for (const { args, placement } of [
 // ---------------------------------------------------------------------------
 // The scope-target flag. It is ACCEPTED here, and it discriminates: the same
 // reference without it reinstalls both plugins of the marketplace above, and
-// with it only the one the local layer declares (D-15). Both placements are
+// with it only the one the local layer declares (LAYER-04). Both placements are
 // driven because the shared scanner promises position independence (WR-02).
 // ---------------------------------------------------------------------------
 
@@ -557,7 +557,7 @@ for (const { args, placement } of [
   { args: "--local @mp", placement: "before the positional" },
   { args: "@mp --local", placement: "after the positional" },
 ]) {
-  test(`reinstalls only the plugins the local layer declares when the scope-target flag appears ${placement} (D-15)`, async (t) => {
+  test(`reinstalls only the plugins the local layer declares when the scope-target flag appears ${placement} (LAYER-04)`, async (t) => {
     // arrange
     const workspace = await createHermeticWorkspace(t, "scope-target-position");
     await seedBothScopes(workspace);

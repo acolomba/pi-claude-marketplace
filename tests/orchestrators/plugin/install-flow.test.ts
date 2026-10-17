@@ -2008,7 +2008,7 @@ const DFEN_PRECEDENCE_CASES: readonly DfenPrecedenceCase[] = [
     // plugin disabled against that opinion, and stamp an `enabled: false` the
     // user never typed.
     label:
-      "CFG-02 / D-19: an `enabled: true` in the local layer wins, and a flagless install declares the plugin in the shared layer",
+      "CFG-02 / LAYER-05: an `enabled: true` in the local layer wins, and a flagless install declares the plugin in the shared layer",
     tmpPrefix: "install-dfen05-local-true-wins-",
     seedLocal: true,
     seededEntry: { enabled: true },
@@ -2016,7 +2016,7 @@ const DFEN_PRECEDENCE_CASES: readonly DfenPrecedenceCase[] = [
     expectRecordEnabled: true,
     expectArtifacts: true,
     expectEntryAfter: { enabled: true },
-    // LAYER-04 / D-19: a flagless install writes the shared layer, so it
+    // LAYER-04 / LAYER-05: a flagless install writes the shared layer, so it
     // declares the plugin there with an empty patch and leaves the local
     // entry as seeded.
     expectSiblingEntryAfter: {},
@@ -9005,7 +9005,7 @@ test("WB-01 / LAYER-04: a flagless install of a plugin no layer declares stamps 
   });
 });
 
-test("WB-01 / D-19: an install with --local of a plugin only the shared layer declares, not yet installed, declares it in the local layer", async () => {
+test("WB-01 / LAYER-05: an install with --local of a plugin only the shared layer declares, not yet installed, declares it in the local layer", async () => {
   // The flag names the layer the install writes. The plugin is not installed,
   // so the install materializes it and declares it in the local layer, leaving
   // the shared declaration as it was.

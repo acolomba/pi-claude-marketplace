@@ -5326,7 +5326,7 @@ test("LAYER-04: a changed named update of a plugin the shared layer declares lea
   });
 });
 
-test("D-14: a named update of a dependency updates it and writes no layer file", async () => {
+test("LAYER-08: a named update of a dependency updates it and writes no layer file", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-dependency-");
     try {
@@ -5418,7 +5418,7 @@ for (const { form, target } of [
   { form: "bare", target: { kind: "all" } },
   { form: "@marketplace", target: { kind: "marketplace", marketplace: "mp" } },
 ] as const) {
-  test(`D-15: the ${form} update with --local updates only the plugins the local layer declares`, async () => {
+  test(`LAYER-04: the ${form} update with --local updates only the plugins the local layer declares`, async () => {
     await withHermeticHome(async () => {
       const cwd = await createCaseDir("update-nameless-local-");
       try {
@@ -5443,7 +5443,7 @@ for (const { form, target } of [
     });
   });
 
-  test(`D-15: the ${form} update without --local updates every installed plugin of the scope`, async () => {
+  test(`LAYER-04: the ${form} update without --local updates every installed plugin of the scope`, async () => {
     await withHermeticHome(async () => {
       const cwd = await createCaseDir("update-nameless-flagless-");
       try {
@@ -5578,7 +5578,7 @@ function localOnlyMarketplaceBytes(cwd: string): string {
   });
 }
 
-test("D-14: a named update of a plugin no layer declares, under a marketplace only the local layer declares, updates it", async () => {
+test("LAYER-08: a named update of a plugin no layer declares, under a marketplace only the local layer declares, updates it", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-local-mp-named-");
     try {
