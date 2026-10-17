@@ -47,13 +47,13 @@ Research detail per requirement is in `.planning/research/FEATURES.md`
 
 A scope has two layers: shared (`claude-plugins.json`) and local (`claude-plugins.local.json`). Mutations that name a marketplace or plugin are partitioned by layer: shared by default, local with `--local`.
 
-- [ ] **LAYER-01**: The same marketplace may be declared in both layers of a scope; adding it to one layer while the other declares it succeeds
-- [ ] **LAYER-02**: `marketplace remove`, `autoupdate`, and `noautoupdate` naming a marketplace change only the target layer and fail when that layer does not declare it
-- [ ] **LAYER-03**: Removing a marketplace from a layer uninstalls only the plugins that layer declares from it
+- [x] **LAYER-01**: The same marketplace may be declared in both layers of a scope; adding it to one layer while the other declares it succeeds
+- [x] **LAYER-02**: `marketplace remove`, `autoupdate`, and `noautoupdate` naming a marketplace change only the target layer and fail when that layer does not declare it
+- [x] **LAYER-03**: Removing a marketplace from a layer uninstalls only the plugins that layer declares from it
 - [ ] **LAYER-04**: Plugin verbs naming a plugin (install, uninstall, enable, disable, update, reinstall) act only on the target layer and fail when it does not declare the plugin (install declares it); a verb naming no plugin covers every layer
 - [ ] **LAYER-05**: A plugin is declared in at most one layer of a scope; installing it into one layer while the other declares it fails
 - [ ] **LAYER-06**: On load, a shared plugin whose marketplace only the local layer declares is ignored, not installed and not an error
-- [ ] **LAYER-07**: A project-scope install that uses a user-scope marketplace declares it in the project config and gives the project its own record and clone; a user-scope remove leaves the project scope working (D-MF-04)
+- [x] **LAYER-07**: A project-scope install that uses a user-scope marketplace declares it in the project config and gives the project its own record and clone; a user-scope remove leaves the project scope working (D-MF-04)
 
 ### marketplace add
 
@@ -188,13 +188,13 @@ A scope has two layers: shared (`claude-plugins.json`) and local (`claude-plugin
 | FIX-01 | Phase 6 | Pending |
 | FIX-02 | Phase 3.1 | Complete |
 | FIX-03 | Phase 3.1 | Complete |
-| LAYER-01 | Phase 3.2 | Pending |
-| LAYER-02 | Phase 3.2 | Pending |
-| LAYER-03 | Phase 3.2 | Pending |
+| LAYER-01 | Phase 3.2 | Complete |
+| LAYER-02 | Phase 3.2 | Complete |
+| LAYER-03 | Phase 3.2 | Complete |
 | LAYER-04 | Phase 3.3 | Pending |
 | LAYER-05 | Phase 3.3 | Pending |
 | LAYER-06 | Phase 3.3 | Pending |
-| LAYER-07 | Phase 3.2 | Pending |
+| LAYER-07 | Phase 3.2 | Complete |
 | ADD-01 | Phase 3 | Complete |
 | ADD-02 | Phase 3 | Complete |
 | ADD-03 | Phase 3 | Complete |

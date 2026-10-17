@@ -26,7 +26,7 @@
     {
       "number": "3.2",
       "name": "Marketplace Layer Partition",
-      "status": "in_progress"
+      "status": "complete"
     },
     {
       "number": "3.3",
@@ -71,8 +71,8 @@
   ],
   "next": {
     "command": "/gsd-progress --next",
-    "label": "Advance to the next step (verify)",
-    "reason": "Phase 5 of 13 · 31% · ready to verify"
+    "label": "Advance to the next step (plan phase 03.3)",
+    "reason": "Phase 6 of 13 — needs a plan"
   },
-  "updated_at": "2026-10-17T04:40:13.285Z"
+  "updated_at": "2026-10-17T11:38:52.224Z"
 }
