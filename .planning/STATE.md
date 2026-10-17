@@ -4,17 +4,17 @@ milestone: marketplace-features
 milestone_name: Marketplace Behavioral Tests
 current_phase: "03.3"
 current_phase_name: Plugin Layer Partition
-status: executing
-stopped_at: Completed 03.3-09-PLAN.md
-last_updated: "2026-10-17T19:43:05.400Z"
+status: verifying
+stopped_at: Completed 03.3-10-PLAN.md
+last_updated: "2026-10-17T20:00:35.745Z"
 last_activity: 2026-10-17
 last_activity_desc: Phase 03.3 execution started
-state_head: 8e25ac487f0d8644e983d9d41a3feac769f57553
+state_head: 2cba6e831c484505bb4a2622fc6145ef38c7fbd2
 progress:
   total_phases: 14
   completed_phases: 5
   total_plans: 37
-  completed_plans: 36
+  completed_plans: 37
   percent: 36
 ---
 
@@ -33,7 +33,7 @@ component as a working Pi artifact.
 
 Phase: 03.3 (Plugin Layer Partition) — EXECUTING
 Plan: 10 of 10
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-10-17 — Phase 03.3 execution started
 
 Progress: [████░░░░░░] 36%
@@ -181,8 +181,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-17T19:43:03.555Z
-**Stopped at:** Completed 03.3-09-PLAN.md
+**Last session:** 2026-10-17T20:00:33.956Z
+**Stopped at:** Completed 03.3-10-PLAN.md
 **Resume file:** None
 
 **Main merge (2026-10-11, quick task 261011-bsm):** `origin/main` at
@@ -324,6 +324,7 @@ archived milestone artifacts.
 | Phase 03.3 P04 | 36min | 2 tasks | 18 files |
 | Phase 03.3 P05 | 28min | 2 tasks | 19 files |
 | Phase 03.3 P06 | 37min | 3 tasks | 13 files |
+| Phase 03.3 P10 | 16min | 2 tasks | 9 files |
 
 ## Decisions
 
@@ -441,6 +442,7 @@ archived milestone artifacts.
 - [Phase 03.3]: Named update and reinstall refuse a plugin only the other layer declares through namedPluginLayerRefusal; update checks before the preflight (NFR-5), reinstall inside the lock before resolve and replace
 - [Phase 03.3]: An unreadable layer on a named update or reinstall is InvalidMarketplaceManifestError with the basename-only message, mapped to {invalid manifest}
 - [Phase 03.3]: Nameless update and reinstall with --local keep only the targets their scope's local layer declares (keepLocalLayerTargets: own keys, one read per scope)
+- [Phase 03.3]: [marketplace-features] Plugin layer docs: the READMEs define the two files as the scope's shared and local layers, and the CHANGELOG states the D-11 load error remedy (marketplace add <source> --local) with no automatic repair
 
 ### mcp-4 decisions
 
