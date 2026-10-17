@@ -118,6 +118,53 @@ export function mergeScopeConfigs(base: ScopeConfig, local: ScopeConfig): Merged
 }
 
 /**
+ * LAYER-06 / D-MF-03: the plugin keys one layer declares while only the other
+ * layer declares their marketplace.
+ */
+export interface LayerMarketplaceGap {
+  readonly layer: "shared" | "local";
+  readonly keys: readonly string[];
+}
+
+// The keys `own` declares whose marketplace `own` does not declare while
+// `other` does. A key is split on its last `@`; a key with no plugin or no
+// marketplace part is left to the planner's malformed-key diagnostic.
+function gapKeys(own: ScopeConfig, other: ScopeConfig): string[] {
+  const ownMarketplaces = own.marketplaces ?? {};
+  const otherMarketplaces = other.marketplaces ?? {};
+  return Object.keys(own.plugins ?? {})
+    .filter((key) => {
+      const at = key.lastIndexOf("@");
+      const marketplace = key.slice(at + 1);
+      return (
+        at > 0 &&
+        marketplace !== "" &&
+        !Object.hasOwn(ownMarketplaces, marketplace) &&
+        Object.hasOwn(otherMarketplaces, marketplace)
+      );
+    })
+    .sort((a, b) => a.localeCompare(b));
+}
+
+/**
+ * LAYER-06 / D-MF-03: a layer must declare the marketplace of every plugin it
+ * declares. Returns, shared layer first, each layer that declares a plugin
+ * whose marketplace only the other layer declares, with those keys sorted. A
+ * marketplace that no layer declares is not reported here: the planner reports
+ * it on its own row as a dangling reference (D-16 above).
+ */
+export function findLayerMarketplaceGaps(
+  shared: ScopeConfig,
+  local: ScopeConfig,
+): readonly LayerMarketplaceGap[] {
+  const gaps: LayerMarketplaceGap[] = [
+    { layer: "shared", keys: gapKeys(shared, local) },
+    { layer: "local", keys: gapKeys(local, shared) },
+  ];
+  return gaps.filter((gap) => gap.keys.length > 0);
+}
+
+/**
  * D-18: per-scope loader returning both the merged view and
  * the per-file `ConfigLoadResult`s.
  *

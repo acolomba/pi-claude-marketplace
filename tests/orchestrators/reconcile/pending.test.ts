@@ -356,6 +356,67 @@ for (const { condition, bytes, reason } of stateLoadFailureRows) {
   });
 }
 
+// LAYER-06: a layer that declares a plugin whose marketplace only the other
+// layer declares reports that layer's basename with the cause, and the scope
+// plans nothing. Skipping the check would plan `p1` as `(will install)`.
+const layerGapRows = [
+  {
+    reported: "claude-plugins.local.json",
+    files: {
+      "claude-plugins.json": configBytes("mp", "acme/tools", []),
+      "claude-plugins.local.json": JSON.stringify({ schemaVersion: 1, plugins: { "p1@mp": {} } }),
+    },
+    cause:
+      "The local layer (claude-plugins.local.json) declares p1@mp, but only the shared layer declares its marketplace. Run /claude:plugin marketplace add <source> --local with the source the shared layer declares, or remove the plugin from the local layer.",
+  },
+  {
+    reported: "claude-plugins.json",
+    files: {
+      "claude-plugins.json": JSON.stringify({ schemaVersion: 1, plugins: { "p1@mp": {} } }),
+      "claude-plugins.local.json": configBytes("mp", "acme/tools", []),
+    },
+    cause:
+      "The shared layer (claude-plugins.json) declares p1@mp, but only the local layer declares its marketplace. Run /claude:plugin marketplace add <source> with the source the local layer declares, or remove the plugin from the shared layer.",
+  },
+] satisfies readonly {
+  readonly reported: string;
+  readonly files: Readonly<Record<string, string>>;
+  readonly cause: string;
+}[];
+
+for (const { reported, files, cause } of layerGapRows) {
+  test(`LAYER-06: ${reported} declaring a plugin whose marketplace only the other layer declares reports the cause and plans nothing`, async (t) => {
+    // arrange
+    const { cwd, project } = await createHermeticScopes(t, "layer-gap");
+    await writeUnder(
+      project.stateJsonPath,
+      stateBytes("mp", "acme/tools", path.join(cwd, "clone"), []),
+    );
+    for (const [name, bytes] of Object.entries(files)) {
+      await writeUnder(path.join(project.scopeRoot, name), bytes);
+    }
+
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+
+    // act
+    await pendingReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project" });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "Some operations have failed.\n\n" +
+          `⊘ ${reported} [project] (failed) {invalid manifest}\n` +
+          `  ⊘ ${reported} (failed) {invalid manifest}\n` +
+          `    cause: ${cause}\n\n` +
+          "Reconcile pending: 2 failures",
+        severity: "error",
+      },
+    ]);
+    verifyBoundary();
+  });
+}
+
 test("MSG-GR-3: a failed configuration block sorts among the plan blocks by name rather than trailing them", async (t) => {
   // arrange
   const { cwd, project, user } = await createHermeticScopes(t, "mixed-order");

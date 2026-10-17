@@ -73,7 +73,7 @@
 
 import path from "node:path";
 
-import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
+import { findLayerMarketplaceGaps, loadMergedScopeConfig } from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { migrateFirstRunConfig } from "../../persistence/migrate-config.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
@@ -112,7 +112,7 @@ import { buildScopeSatisfactionVerdict } from "./dependency-verdict.ts";
 import { migrateLegacyMcpEntries } from "./mcp-migration.ts";
 import { buildReconcileAppliedCascade } from "./notify.ts";
 import { planReconcile } from "./plan.ts";
-import { RECONCILE_APPLIED_CONTEXT } from "./reconcile.messaging.ts";
+import { composeLayerMarketplaceCause, RECONCILE_APPLIED_CONTEXT } from "./reconcile.messaging.ts";
 
 import type { PerEntryOutcome } from "./apply-outcomes.ts";
 import type {
@@ -122,6 +122,9 @@ import type {
   ReconcilePlan,
   ScopeReadResult,
 } from "./types.ts";
+import type { ConfigLoadResult, ScopeConfig } from "../../persistence/config-io.ts";
+import type { ScopeLoadOutcome } from "../../persistence/config-merge.ts";
+import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { loadState } from "../../persistence/state-io.ts";
 import type { McpConfigNotice, McpMigrationRow } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -134,6 +137,35 @@ import type { UninstallPluginOperation } from "../plugin/uninstall.ts";
 /** Reads the one state snapshot selected by the reconcile read pass. */
 export interface ReconcileStateReader {
   readonly loadState: typeof loadState;
+}
+
+// An absent or invalid layer declares nothing.
+function declaredConfig(result: ConfigLoadResult): ScopeConfig {
+  return result.status === "valid" ? result.config : {};
+}
+
+/**
+ * LAYER-06 / D-MF-03: one CFG-03 invalid block per layer that declares a
+ * plugin whose marketplace only the other layer declares. Like an invalid
+ * layer file, it stops the scope's reload; the plugins the scope installed keep
+ * loading from state, and no file is repaired.
+ */
+function layerMarketplaceGapOutcomes(
+  outcome: ScopeLoadOutcome,
+  loc: ScopedLocations,
+  scope: Scope,
+): PerEntryOutcome[] {
+  const gaps = findLayerMarketplaceGaps(
+    declaredConfig(outcome.base),
+    declaredConfig(outcome.local),
+  );
+  return gaps.map((gap) => ({
+    kind: "invalid-block",
+    scope,
+    basename: path.basename(gap.layer === "shared" ? loc.configJsonPath : loc.configLocalJsonPath),
+    reason: "invalid manifest",
+    cause: new Error(composeLayerMarketplaceCause(gap)),
+  }));
 }
 
 /**
@@ -230,6 +262,9 @@ async function readPassForScope(
         });
       }
 
+      // LAYER-06 / D-MF-03: an invalid layer reads as declaring nothing, so it
+      // never also reports a missing marketplace.
+      invalidOutcomes.push(...layerMarketplaceGapOutcomes(outcome, loc, scope));
       if (invalidOutcomes.length > 0) {
         return { plan: undefined, invalidOutcomes, stateExisted: stateExists };
       }

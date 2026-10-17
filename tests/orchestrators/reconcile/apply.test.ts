@@ -540,6 +540,41 @@ async function seedState(locations: ScopedLocations, state: ExtensionState): Pro
   await saveState(locations.extensionRoot, state);
 }
 
+/**
+ * A project scope that records the path marketplace `mp` offering `hello`,
+ * with the two layer files written as given.
+ */
+async function seedLayerScope(
+  t: TestContext,
+  label: string,
+  layers: {
+    readonly shared: (marketplaceRoot: string) => string;
+    readonly local: (marketplaceRoot: string) => string;
+  },
+): Promise<{ readonly cwd: string; readonly project: ScopedLocations }> {
+  const { cwd, project } = await createHermeticScopes(t, label);
+  const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+    hello: { skill: "clean" },
+  });
+  await writeUnder(project.configJsonPath, layers.shared(marketplaceRoot));
+  await writeUnder(project.configLocalJsonPath, layers.local(marketplaceRoot));
+  await seedState(project, {
+    schemaVersion: 3,
+    lastReconciledExtensionVersion: EXTENSION_VERSION,
+    marketplaces: {
+      mp: marketplaceRecord({
+        cwd,
+        scope: "project",
+        marketplace: "mp",
+        rawSource: marketplaceRoot,
+        manifestPath,
+        marketplaceRoot,
+      }),
+    },
+  });
+  return { cwd, project };
+}
+
 /** The bytes of one `claude-plugins.json` / `claude-plugins.local.json` file. */
 function configBytes(declaration: {
   readonly marketplaces?: Readonly<Record<string, { readonly source: string }>>;
@@ -885,6 +920,120 @@ describe("applyReconcile", () => {
         severity: "error",
       },
     ]);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("LAYER-06: a local layer that declares a plugin whose marketplace only the shared layer declares stops the reload and writes nothing", async (t) => {
+    // arrange
+    const { cwd, project } = await seedLayerScope(t, "layer-gap-local", {
+      shared: (root) => configBytes({ marketplaces: { mp: { source: root } } }),
+      local: () => configBytes({ plugins: { "hello@mp": {} } }),
+    });
+    const sharedBytes = await readFile(project.configJsonPath, "utf8");
+    const localBytes = await readFile(project.configLocalJsonPath, "utf8");
+    const stateBytes = await readFile(project.stateJsonPath, "utf8");
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "Some operations have failed.\n" +
+          "\n" +
+          "⊘ claude-plugins.local.json [project] (failed) {invalid manifest}\n" +
+          "  ⊘ claude-plugins.local.json (failed) {invalid manifest}\n" +
+          "    cause: The local layer (claude-plugins.local.json) declares hello@mp, but only the shared layer declares its marketplace. Run /claude:plugin marketplace add <source> --local with the source the shared layer declares, or remove the plugin from the local layer.\n" +
+          "\n" +
+          "Reconcile: 2 failures",
+        severity: "error",
+      },
+    ]);
+    assert.equal(await readFile(project.configJsonPath, "utf8"), sharedBytes);
+    assert.equal(await readFile(project.configLocalJsonPath, "utf8"), localBytes);
+    assert.equal(await readFile(project.stateJsonPath, "utf8"), stateBytes);
+    assert.deepStrictEqual(await retryTree(project.scopeRoot), [
+      "claude-plugins.json",
+      "claude-plugins.local.json",
+      "pi-claude-marketplace/",
+      "pi-claude-marketplace/state.json",
+    ]);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("LAYER-06: each layer that declares a plugin whose marketplace only the other layer declares reports its own row", async (t) => {
+    // arrange
+    const { cwd, project } = await seedLayerScope(t, "layer-gap-both", {
+      shared: (root) =>
+        configBytes({ marketplaces: { mp: { source: root } }, plugins: { "lib@other": {} } }),
+      local: (root) =>
+        configBytes({ marketplaces: { other: { source: root } }, plugins: { "hello@mp": {} } }),
+    });
+    const stateBytes = await readFile(project.stateJsonPath, "utf8");
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "Some operations have failed.\n" +
+          "\n" +
+          "⊘ claude-plugins.json [project] (failed) {invalid manifest}\n" +
+          "  ⊘ claude-plugins.json (failed) {invalid manifest}\n" +
+          "    cause: The shared layer (claude-plugins.json) declares lib@other, but only the local layer declares its marketplace. Run /claude:plugin marketplace add <source> with the source the local layer declares, or remove the plugin from the shared layer.\n" +
+          "\n" +
+          "⊘ claude-plugins.local.json [project] (failed) {invalid manifest}\n" +
+          "  ⊘ claude-plugins.local.json (failed) {invalid manifest}\n" +
+          "    cause: The local layer (claude-plugins.local.json) declares hello@mp, but only the shared layer declares its marketplace. Run /claude:plugin marketplace add <source> --local with the source the shared layer declares, or remove the plugin from the local layer.\n" +
+          "\n" +
+          "Reconcile: 4 failures",
+        severity: "error",
+      },
+    ]);
+    assert.equal(await readFile(project.stateJsonPath, "utf8"), stateBytes);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("LAYER-06: a plugin whose marketplace no layer declares keeps its dangling reference row while the scope still installs", async (t) => {
+    // arrange
+    const { cwd, project } = await seedLayerScope(t, "layer-gap-dangling", {
+      shared: (root) =>
+        configBytes({ marketplaces: { mp: { source: root } }, plugins: { "hello@mp": {} } }),
+      local: () => configBytes({ plugins: { "ghost@nowhere": {} } }),
+    });
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "Some operations have failed.\n" +
+          "\n" +
+          "● mp [project]\n" +
+          "  ● hello (installed)\n" +
+          "\n" +
+          "⊘ nowhere [project] (failed) {dangling reference}\n" +
+          "  ⊘ ghost (failed) {dangling reference}\n" +
+          "\n" +
+          "Reconcile: 2 failures, 1 success",
+        severity: "error",
+      },
+    ]);
+    assert.equal((await recordFor(project, "mp", "hello"))?.enabled, true);
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
   });
@@ -2911,7 +3060,14 @@ describe("applyReconcile", () => {
     });
     const baseDeclaration = configBytes({ marketplaces: { mp: { source: marketplaceRoot } } });
     await writeUnder(project.configJsonPath, baseDeclaration);
-    await writeUnder(project.configLocalJsonPath, configBytes({ plugins: { "quiet@mp": {} } }));
+    // LAYER-06: the local layer declares the marketplace of its plugin too.
+    await writeUnder(
+      project.configLocalJsonPath,
+      configBytes({
+        marketplaces: { mp: { source: marketplaceRoot } },
+        plugins: { "quiet@mp": {} },
+      }),
+    );
     await seedState(project, {
       schemaVersion: 3,
       lastReconciledExtensionVersion: EXTENSION_VERSION,
@@ -2946,6 +3102,7 @@ describe("applyReconcile", () => {
     assert.equal(await readFile(project.configJsonPath, "utf8"), baseDeclaration);
     assert.deepStrictEqual(JSON.parse(await readFile(project.configLocalJsonPath, "utf8")), {
       schemaVersion: 1,
+      marketplaces: { mp: { source: marketplaceRoot } },
       plugins: { "quiet@mp": { enabled: false } },
     });
     assert.equal((await recordFor(project, "mp", "quiet"))?.enabled, false);

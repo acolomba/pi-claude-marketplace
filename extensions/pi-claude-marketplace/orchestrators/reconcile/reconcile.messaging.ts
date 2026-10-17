@@ -1,3 +1,4 @@
+import { renderDependentKeys } from "../../domain/dependencies.ts";
 import {
   type ContentReason,
   type PluginDisabledMessage,
@@ -11,6 +12,7 @@ import {
   type PluginWillUninstallMessage,
 } from "../../shared/notification-types.ts";
 
+import type { LayerMarketplaceGap } from "../../persistence/config-merge.ts";
 import type { CommandContext } from "../../shared/notify-context.ts";
 
 // ---------------------------------------------------------------------------
@@ -110,3 +112,32 @@ export const RECONCILE_APPLIED_CONTEXT = {
     failed: { markers: false, contentReasons: true },
   },
 } as const satisfies CommandContext<ReconcileAppliedStatus>;
+
+// ---------------------------------------------------------------------------
+// Load-time layer check: the cause of a layer missing a marketplace.
+// ---------------------------------------------------------------------------
+
+const LAYER_FILES = {
+  shared: "claude-plugins.json",
+  local: "claude-plugins.local.json",
+} as const;
+
+/**
+ * LAYER-06 / D-MF-03: the cause line of a layer that declares plugins whose
+ * marketplace only the other layer declares. It names the layer and its file,
+ * the plugins, and the repair: declare the marketplace in that layer too, or
+ * remove the plugins from it. The keys come from a user file, so they render
+ * through `renderDependentKeys`, which counts them when one could forge the
+ * sentence. No source and no path is interpolated (T-53-02-02).
+ */
+export function composeLayerMarketplaceCause(gap: LayerMarketplaceGap): string {
+  const other = gap.layer === "local" ? "shared" : "local";
+  const one = gap.keys.length === 1;
+  const flag = gap.layer === "local" ? " --local" : "";
+  return (
+    `The ${gap.layer} layer (${LAYER_FILES[gap.layer]}) declares ${renderDependentKeys(gap.keys)}, ` +
+    `but only the ${other} layer declares ${one ? "its marketplace" : "their marketplaces"}. ` +
+    `Run /claude:plugin marketplace add <source>${flag} with the source the ${other} layer declares, ` +
+    `or remove ${one ? "the plugin" : "the plugins"} from the ${gap.layer} layer.`
+  );
+}
