@@ -11,6 +11,7 @@ import { stat } from "node:fs/promises";
 import path from "node:path";
 
 import {
+  writeDependencyAllowance,
   writeInvalidManifest,
   writeMalformedManifest,
   writeMarketplace,
@@ -143,6 +144,25 @@ export async function invalidateManifest(
     case "dir":
     case "file":
       await MANIFEST_WRITERS[problem](published.root, name);
+      return;
+    case "url":
+    case "github":
+      throw noStandIn(published.kind);
+  }
+}
+
+/**
+ * Lets the plugins of the marketplace `published` records depend on plugins of
+ * the marketplace `target`.
+ */
+export async function allowDependenciesOn(
+  published: PublishedMarketplace,
+  target: string,
+): Promise<void> {
+  switch (published.kind) {
+    case "dir":
+    case "file":
+      await writeDependencyAllowance(published.root, target);
       return;
     case "url":
     case "github":

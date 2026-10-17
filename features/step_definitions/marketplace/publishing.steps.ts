@@ -5,7 +5,8 @@
  * A scenario publishes a marketplace once, naming its source kind, and that
  * step offers no plugins. Stating the plugins it offers, with or without the
  * dependencies each declares, republishes it as the same kind, so a scenario
- * states the kind before the plugins.
+ * states the kind before the plugins, and the plugins before the marketplaces
+ * they may depend on.
  */
 
 import assert from "node:assert/strict";
@@ -19,6 +20,7 @@ import {
 } from "../../lib/path-marketplace.ts";
 import { runCommand } from "../../lib/pi-commands.ts";
 import {
+  allowDependenciesOn,
   invalidateManifest,
   publishMarketplace,
   requireFreeRoot,
@@ -65,6 +67,13 @@ Given(
   "the marketplace {string} offers these plugins with dependencies:",
   async function (this: ScenarioWorld, name: string, table: DataTable) {
     await offer(this, name, readOfferedPluginsWithDependencies(table));
+  },
+);
+
+Given(
+  "the marketplace {string} allows dependencies on the marketplace {string}",
+  async function (this: ScenarioWorld, name: string, target: string) {
+    await allowDependenciesOn(this.requirePublished(name), target);
   },
 );
 

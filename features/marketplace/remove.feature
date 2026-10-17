@@ -210,3 +210,63 @@ Feature: Marketplace remove
     Then the "claude-plugins.json" file of the project scope declares these plugins:
       | id          |
       | alpha@tools |
+
+  Scenario: Removing a marketplace keeps a dependency that a plugin installed from a user-scope marketplace still needs
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name  | version | dependencies |
+      | alpha | 1.0.0   | lib          |
+      | lib   | 1.0.0   |              |
+    Given the marketplace "upstream" is published as a dir source
+    Given the marketplace "upstream" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib@tools    |
+    Given the marketplace "upstream" allows dependencies on the marketplace "tools"
+    Given the marketplace "upstream" is added to the user scope
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install alpha@tools --scope project"
+    Given the user has run "/claude:plugin install app@upstream --scope project"
+    When the user runs "/claude:plugin marketplace remove tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id          | name  | status      | reasons | scope   |
+      | tools            | project           | removed            | alpha@tools | alpha | uninstalled |         | project |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name     | source                       |
+      | upstream | {home}/marketplaces/upstream |
+    Then the "claude-plugins.json" file of the project scope declares these plugins:
+      | id           |
+      | app@upstream |
+
+  Scenario: A marketplace whose removal kept a dependency is still listed
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name  | version | dependencies |
+      | alpha | 1.0.0   | lib          |
+      | lib   | 1.0.0   |              |
+    Given the marketplace "upstream" is published as a dir source
+    Given the marketplace "upstream" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib@tools    |
+    Given the marketplace "upstream" allows dependencies on the marketplace "tools"
+    Given the marketplace "upstream" is added to the user scope
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install alpha@tools --scope project"
+    Given the user has run "/claude:plugin install app@upstream --scope project"
+    Given the user has run "/claude:plugin marketplace remove tools --scope project"
+    When the user runs "/claude:plugin marketplace list --scope project"
+    Then the result has these fields:
+      | kind                | cascade          |
+      | severity            | info             |
+      | needs reload        | false            |
+      | tally label         | Marketplace list |
+      | tally failures      | 0                |
+      | tally warnings      | 0                |
+      | tally success count | 2                |
+    Then the result lists these marketplaces:
+      | name     | scope   | details autoupdate | details last updated at |
+      | tools    | project | false              | {scenario time}         |
+      | upstream | project | false              | {scenario time}         |

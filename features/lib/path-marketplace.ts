@@ -10,7 +10,7 @@
  * what the plugin declares.
  */
 
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import type { DataTable } from "@cucumber/cucumber";
@@ -101,6 +101,21 @@ export async function writeMarketplace(
   await Promise.all(plugins.map((plugin) => writePlugin(root, plugin)));
   await mkdir(path.join(root, ".claude-plugin"), { recursive: true });
   await writeFile(manifestPath(root), manifestText(name, plugins));
+}
+
+/**
+ * Adds `target` to the `allowCrossMarketplaceDependenciesOn` list of the
+ * manifest under `root`, so its plugins may depend on plugins of `target`.
+ */
+export async function writeDependencyAllowance(root: string, target: string): Promise<void> {
+  const manifest = JSON.parse(await readFile(manifestPath(root), "utf8")) as {
+    allowCrossMarketplaceDependenciesOn?: string[];
+  };
+  manifest.allowCrossMarketplaceDependenciesOn = [
+    ...(manifest.allowCrossMarketplaceDependenciesOn ?? []),
+    target,
+  ];
+  await writeFile(manifestPath(root), JSON.stringify(manifest));
 }
 
 /**
