@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 2
+open_count: 3
 waived_count: 51
 fixed_count: 42
-total_count: 95
-last_updated: 2026-10-16T17:48:34.896Z
+total_count: 96
+last_updated: 2026-10-17T04:13:17.267Z
 ---
 
 # Broken Windows Ledger
@@ -110,6 +110,7 @@ last_updated: 2026-10-16T17:48:34.896Z
 | 93 | 2 | deviation | README.es.md |  | [marketplace-features] README.es.md drifted from README.md before this phase: it lacks the GitLab marketplace paragraph and its note under Mercado, and its --local paragraph says something different | open |  | 2026-10-16T01:44:57.366Z |  |
 | 94 | 03.1 | deviation | tests/orchestrators/plugin/install-flow.test.ts |  | [marketplace-features] FIX-02 D-04 truth 'reload after a local plugin install writes a base file with the shared marketplace and no plugin key' is unreachable: install adopts the marketplace into claude-plugins.local.json (CR-02), so the reload writes no base file; the DFEN-06 case pins ENOENT and rule 2 is proven by unit and convergence cases instead | open |  | 2026-10-16T16:20:58.926Z |  |
 | 95 | 03.1 | deviation | extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts |  | [marketplace-features] notifyInvalidConfigWriteBack JSDoc says the S5 warning follows the success row; measured, the S5 row is emitted first (update-flow S5 local-file case) | fixed |  | 2026-10-16T17:04:18.661Z | 2026-10-16T17:48:34.896Z |
+| 96 | 03.2 | todo | extensions/pi-claude-marketplace/shared/notification-json.ts | 410 | [marketplace-features] A cascade row for a cross-marketplace dependency renders id lib@tools@upstream on the JSON wire (wireRow appends the block name to a row name that already carries @marketplace); found by the cross-scope install scenario, which pins the current value | open |  | 2026-10-17T04:13:17.267Z |  |
 
 ````json
 [
@@ -1290,6 +1291,19 @@ last_updated: 2026-10-16T17:48:34.896Z
     "reason": "",
     "recorded_at": "2026-10-16T17:04:18.661Z",
     "resolved_at": "2026-10-16T17:48:34.896Z",
+    "milestone": null
+  },
+  {
+    "id": 96,
+    "kind": "todo",
+    "phase": "03.2",
+    "file": "extensions/pi-claude-marketplace/shared/notification-json.ts",
+    "line": 410,
+    "description": "[marketplace-features] A cascade row for a cross-marketplace dependency renders id lib@tools@upstream on the JSON wire (wireRow appends the block name to a row name that already carries @marketplace); found by the cross-scope install scenario, which pins the current value",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-10-17T04:13:17.267Z",
+    "resolved_at": null,
     "milestone": null
   }
 ]

@@ -5,16 +5,16 @@ milestone_name: Marketplace Behavioral Tests
 current_phase: "03.2"
 current_phase_name: Marketplace Layer Partition
 status: executing
-stopped_at: Completed 03.2-07-PLAN.md
-last_updated: "2026-10-17T03:50:22.536Z"
+stopped_at: Completed 03.2-08-PLAN.md
+last_updated: "2026-10-17T04:15:51.316Z"
 last_activity: 2026-10-16
 last_activity_desc: Phase 03.2 execution started
-state_head: 7f1a37f47f2308dc0d449053296972daa5d62ea1
+state_head: 374b2f7790b769ec415e82bc4a7c94479ba71ab1
 progress:
   total_phases: 13
   completed_phases: 4
   total_plans: 27
-  completed_plans: 25
+  completed_plans: 26
   percent: 31
 ---
 
@@ -32,7 +32,7 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 03.2 (Marketplace Layer Partition) — EXECUTING
-Plan: 8 of 9
+Plan: 9 of 9
 Status: Ready to execute
 Last activity: 2026-10-16 — Phase 03.2 execution started
 
@@ -181,8 +181,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-17T03:50:21.407Z
-**Stopped at:** Completed 03.2-07-PLAN.md
+**Last session:** 2026-10-17T04:15:38.517Z
+**Stopped at:** Completed 03.2-08-PLAN.md
 **Resume file:** None
 
 **Main merge (2026-10-11, quick task 261011-bsm):** `origin/main` at
@@ -424,6 +424,7 @@ archived milestone artifacts.
 - [Phase 03.2]: The full marketplace remove unstages only explicit records; every dependency record under it goes through the retention order (D-04-dep)
 - [Phase 03.2]: Remove retention reads dependency candidates from the marketplace record; the scope index answers only who holds what
 - [Phase 03.2]: An unreadable declaration index refuses a remove with {unreadable} before any change, in both modes (D-09 Q4)
+- [Phase 03.2]: [marketplace-features] A standalone project install declares every marketplace its transaction added (dependencies included) in the root's target config file, under the UAT-05 gate; no dependency plugin key (D-04-02); reload/import write nothing (WR-09)
 
 ### mcp-4 decisions
 
