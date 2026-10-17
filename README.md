@@ -132,7 +132,7 @@ Plugin MCP servers get the names that Claude Code gives them. The model sees eac
 
 You can install marketplaces and plugins in the user scope or the project scope. The default is user scope.
 
-The project scope inherits the user scope. So you can install a plugin from a user-scope marketplace into the project scope.
+The project scope inherits the user scope. So you can install a plugin from a user-scope marketplace into the project scope. The install adds that marketplace to the project scope, as `marketplace add --scope project` would, and declares it in the project's `claude-plugins.json` (or `claude-plugins.local.json` with `--local`). For a git marketplace, the project gets its own clone. The project then keeps the marketplace when you remove it from the user scope.
 
 You can also install the same plugin in both the user and project scopes. Then the user-scope plugin takes precedence.
 
@@ -174,11 +174,12 @@ Each scope can also have a `claude-plugins.local.json` file alongside the base f
 | `user`    | `~/.pi/agent/claude-plugins.local.json` |
 | `project` | `<cwd>/.pi/claude-plugins.local.json`   |
 
-The local file overrides individual entries from the base file. An entry in `claude-plugins.local.json` replaces the same-keyed entry in `claude-plugins.json` completely.
+The local file overrides entries from the base file. You can declare a marketplace in both files. Its local entry overrides only the fields that it sets, and it takes the other fields from the base file. For example, a local entry without `autoupdate` uses the `autoupdate` value of the base file. Plugin entries are different: the local file's entry for a plugin replaces the base file's entry as a whole.
 
-For commands that write configuration, `--local` selects `claude-plugins.local.json`. Reads always combine both configuration files. Marketplace `update` still refreshes cached sources and installed-plugin state.
+A command that writes configuration changes only `claude-plugins.json`, or only `claude-plugins.local.json` with `--local`. `marketplace remove`, `marketplace autoupdate`, and `marketplace noautoupdate` fail when that file does not declare the marketplace. A remove from one file uninstalls only the plugins that file declares, and the marketplace stays while the other file declares it. Reads always combine both configuration files. Marketplace `update` still refreshes cached sources and installed-plugin state.
 
 ```text
+/claude:plugin marketplace add upstash/context7 --local
 /claude:plugin install context7-plugin@context7-marketplace --local
 /claude:plugin marketplace autoupdate context7-marketplace --local
 ```

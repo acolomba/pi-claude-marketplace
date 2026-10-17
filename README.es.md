@@ -130,7 +130,7 @@ Los servidores MCP de los complementos reciben los nombres que les da Claude Cod
 
 Puedes instalar mercados y complementos en el ámbito de usuario o en el ámbito del proyecto. El valor predeterminado es el ámbito de usuario.
 
-El ámbito del proyecto hereda el ámbito de usuario. Así, puedes instalar un complemento desde un mercado de ámbito de usuario en el ámbito del proyecto.
+El ámbito del proyecto hereda el ámbito de usuario. Así, puedes instalar un complemento desde un mercado de ámbito de usuario en el ámbito del proyecto. La instalación agrega ese mercado al ámbito del proyecto, como lo haría `marketplace add --scope project`, y lo declara en el `claude-plugins.json` del proyecto (o en `claude-plugins.local.json` con `--local`). Para un mercado git, el proyecto obtiene su propio clon. El proyecto conserva entonces el mercado cuando lo eliminas del ámbito de usuario.
 
 También puedes instalar el mismo complemento en ambos ámbitos, el de usuario y el de proyecto. En ese caso, el complemento del ámbito de usuario tiene prioridad.
 
@@ -172,11 +172,12 @@ Cada ámbito también puede tener un archivo `claude-plugins.local.json` junto a
 | `user`    | `~/.pi/agent/claude-plugins.local.json` |
 | `project` | `<cwd>/.pi/claude-plugins.local.json`   |
 
-El archivo local anula las entradas individuales del archivo base. Una entrada en `claude-plugins.local.json` reemplaza por completo la entrada con la misma clave en `claude-plugins.json`.
+El archivo local anula entradas del archivo base. Puedes declarar un mercado en ambos archivos. Su entrada local anula solo los campos que define, y toma los demás campos del archivo base. Por ejemplo, una entrada local sin `autoupdate` usa el valor de `autoupdate` del archivo base. Las entradas de complementos son distintas: la entrada local de un complemento reemplaza por completo la entrada del archivo base.
 
-Pasa `--local` a cualquier comando de modificación para dirigirse únicamente al archivo local.
+Un comando que escribe la configuración modifica solo `claude-plugins.json`, o solo `claude-plugins.local.json` con `--local`. `marketplace remove`, `marketplace autoupdate` y `marketplace noautoupdate` fallan cuando ese archivo no declara el mercado. Una eliminación desde un archivo desinstala solo los complementos que declara ese archivo, y el mercado se mantiene mientras el otro archivo lo declare. Las lecturas siempre combinan ambos archivos de configuración. `update` de un mercado sigue actualizando las fuentes en caché y el estado de los complementos instalados.
 
 ```text
+/claude:plugin marketplace add upstash/context7 --local
 /claude:plugin install context7-plugin@context7-marketplace --local
 /claude:plugin marketplace autoupdate context7-marketplace --local
 ```

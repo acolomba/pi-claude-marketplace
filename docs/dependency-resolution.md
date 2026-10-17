@@ -127,7 +127,7 @@ A dependency installs into the same scope as the plugin that asked for it. `/cla
 
 The configuration file names only the plugins you asked for by name. This extension does not ADD a dependency to `claude-plugins.json` or `claude-plugins.local.json`; an entry the configuration already holds for it is overwritten as described above. Its install record says that it arrived through another plugin. A reload keeps the dependency because its record says so, not because the configuration names it.
 
-The same rule protects the dependency's marketplace. A dependency can come from a marketplace you added at user scope while the plugin that needs it installs at project scope. The project configuration then never names that marketplace, and this extension does not add it there. A reload keeps that marketplace record while a dependency is recorded under it. Any other plugin under it that the configuration does not name is still removed, as under any other marketplace.
+The dependency's marketplace follows a different rule. A dependency can come from a marketplace you added at user scope while the plugin that needs it installs at project scope. The install then adds that marketplace to the project scope, as `marketplace add --scope project` would. The project gets its own record of the marketplace and, for a git source, its own clone. A standalone install also declares the marketplace in the configuration file it writes, unless a project configuration file already declares it. An install that a reload runs adds the marketplace but writes no configuration. A reload keeps that marketplace record while a dependency is recorded under it. Any other plugin under it that the configuration does not name is still removed, as under any other marketplace.
 
 ## Installing a dependency by name
 
@@ -171,7 +171,7 @@ To remove a dependent as well, uninstall it too. If the plugin arrived as a depe
 
 A reload applies the same rule. If you remove a plugin from the configuration file while another installed plugin still declares it, the reload removes it. The reload row is the plain one: the reload reports the dependents on their own rows instead, with the full remedy, on the pass after the removal.
 
-The check reads the declarations of every other installed plugin in the scope, offline, from each plugin's own manifest or its marketplace entry (D-05-06). If any one of them cannot be read, the uninstall is refused (D-05-07). This is a deliberate choice. This extension never removes a plugin on incomplete information. A declaration cannot be read in four cases: the plugin's marketplace no longer lists it, the marketplace manifest itself is unreadable, its `dependencies` value cannot be used, or the plugin's own manifest file exists but cannot be read. A plugin with no manifest file of its own (for example a git plugin whose clone is not on disk) is answered by its marketplace entry, and an entry with no `dependencies` value means the plugin declares nothing. A manifest file that exists but cannot be read never counts as one that declares nothing, because a damaged file may hide a dependency the plugin really declares. The refused row reads `{unreadable}`, and the `cause:` line names which plugin could not be read and why. The simplest repair is to uninstall the plugin that cannot be read: the check never reads the plugin being removed, so that command is not refused, and the check passes for everything else afterwards. If that plugin should stay, repair its manifest file, or update the marketplace so the manifest lists it again. If the whole marketplace is stale, remove it instead.
+The check reads the declarations of every other installed plugin in the scope, offline, from each plugin's own manifest or its marketplace entry (D-05-06). If any one of them cannot be read, the uninstall is refused (D-05-07). This is a deliberate choice. This extension never removes a plugin on incomplete information. A declaration cannot be read in four cases: the plugin's marketplace no longer lists it, the marketplace manifest itself is unreadable, its `dependencies` value cannot be used, or the plugin's own manifest file exists but cannot be read. A plugin with no manifest file of its own (for example a git plugin whose clone is not on disk) is answered by its marketplace entry, and an entry with no `dependencies` value means the plugin declares nothing. A manifest file that exists but cannot be read never counts as one that declares nothing, because a damaged file may hide a dependency the plugin really declares. The refused row reads `{unreadable}`, and the `cause:` line names which plugin could not be read and why. The simplest repair is to uninstall the plugin that cannot be read: the check never reads the plugin being removed, so that command is not refused, and the check passes for everything else afterwards. If that plugin should stay, repair its manifest file, or update the marketplace so the manifest lists it again. If the whole marketplace is stale, remove it instead. A marketplace remove reads the same declarations when the marketplace holds a dependency (see [Removing a marketplace](#removing-a-marketplace)), so first update a marketplace whose manifest broke, or fix the manifest of a path marketplace.
 
 ```text
 /claude:plugin uninstall <unreadable-plugin>@<marketplace>
@@ -179,7 +179,7 @@ The check reads the declarations of every other installed plugin in the scope, o
 /claude:plugin marketplace remove <name>
 ```
 
-This rule has one consequence to know about. Two plugins in one scope that are both missing from their marketplace manifests refuse each other's uninstall: each one is the other's unreadable declarer, so neither can be uninstalled first. `marketplace remove` is the exit, because it does not run this check.
+This rule has one consequence to know about. Two plugins in one scope that are both missing from their marketplace manifests refuse each other's uninstall: each one is the other's unreadable declarer, so neither can be uninstalled first. `marketplace remove` is the exit when their marketplace holds no dependency, because it then reads no declarations. When it holds one, repair or update the marketplace manifest first.
 
 ## Pruning dependencies nothing needs
 
@@ -214,6 +214,19 @@ Run `prune --dry-run` to see the current candidates. The preview writes nothing 
 ```
 
 If no dependency qualifies, both commands report `Nothing to prune in user scope: no orphaned dependency installs were found.` for the default scope. The result is informational. Neither command needs a plugin name, while `uninstall <plugin> --prune` first removes the named plugin. When that uninstall finds no dependency to prune, it prints only the named plugin's plain uninstall row. A reload never prunes; run either explicit command to remove orphans.
+
+## Removing a marketplace
+
+`marketplace remove` uninstalls the plugins of the marketplace, and it treats their dependencies with the same care as `uninstall`. A dependency goes only when no plugin that stays declares it. This includes a plugin of another marketplace and a plugin that the other configuration file keeps. A dependency that stays keeps its marketplace recorded and listed, even when no configuration file declares that marketplace any more. A dependency that the remove takes shows a plain `(uninstalled)` row.
+
+A remove from one configuration file takes only the plugins that file declares, and only the dependencies that those plugins alone needed. The marketplace stays recorded while the other file still declares it.
+
+To decide what stays, the remove reads what every installed plugin in the scope declares, but only when the marketplace holds a plugin installed as a dependency. If one of those declarations cannot be read, the remove is refused before anything changes. The row reads `{unreadable}`, and the `cause:` line names the first plugin that could not be read and why. To repair it, update that plugin's marketplace, or fix the manifest of a path marketplace. Then run the remove again.
+
+```text
+/claude:plugin marketplace update <name>
+/claude:plugin marketplace remove <name>
+```
 
 ## The load-time check
 
