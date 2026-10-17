@@ -244,7 +244,7 @@ Feature: Marketplace remove
       | /skill:alpha-skill | A skill of alpha 1.0.0. |
       | /skill:lib-skill   | A skill of lib 1.0.0.   |
 
-  Scenario: Removing a marketplace keeps a dependency that a plugin installed from a user-scope marketplace still needs
+  Scenario: Removing a marketplace keeps a dependency that a plugin of another marketplace still needs
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins with dependencies:
       | name  | version | dependencies |
