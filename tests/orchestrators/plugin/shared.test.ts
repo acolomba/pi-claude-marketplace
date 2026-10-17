@@ -9,7 +9,6 @@ import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/sou
 import {
   applyPartialCascadeFold,
   assertNoCrossPluginConflicts,
-  cloneMarketplaceRecordForTargetScope,
   collectInstallReachableMarketplaces,
   absentTargetReasons,
   emitMarketplaceNotAdded,
@@ -840,34 +839,6 @@ describe("collectInstallReachableMarketplaces", () => {
       // assert
       assert.deepStrictEqual([...reachable], ["user-only"]);
     });
-  });
-});
-
-describe("cloneMarketplaceRecordForTargetScope", () => {
-  test("clones metadata into the target scope with no plugin installs", () => {
-    // arrange
-    const sourceRecord = makeMarketplaceRecord("mp", "user", {
-      alpha: makePluginRecord({ skills: ["alpha-skill"] }),
-    });
-
-    // act
-    const clonedRecord = cloneMarketplaceRecordForTargetScope(sourceRecord, "project");
-
-    // assert
-    assert.deepStrictEqual(clonedRecord, {
-      name: "mp",
-      scope: "project",
-      source: { kind: "path", raw: "./mp-source", logical: "./mp-source" },
-      addedFromCwd: "/workspace",
-      manifestPath: "/workspace/mp/.claude-plugin/marketplace.json",
-      marketplaceRoot: "/workspace/mp",
-      plugins: {},
-    });
-    assert.deepStrictEqual(sourceRecord.plugins, {
-      alpha: makePluginRecord({ skills: ["alpha-skill"] }),
-    });
-    assert.notEqual(clonedRecord, sourceRecord);
-    assert.notEqual(clonedRecord.plugins, sourceRecord.plugins);
   });
 });
 

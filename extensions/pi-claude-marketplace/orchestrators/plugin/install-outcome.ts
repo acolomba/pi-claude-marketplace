@@ -55,16 +55,21 @@
 // channel which surfaces per-marketplace in the cascade's rendering. The
 // standalone/orchestrated asymmetry is INTENTIONAL.
 //
-// NFR-5 / PI-2 architectural guard: this owner MUST NOT import platform-git
-// or the default git ops, and MUST NOT carry a gitOps field; BLOCK F in
-// `eslint.config.js` lints this file's code for that surface, so a comment
-// may still name it.
+// NFR-5 / PI-2 architectural guard: the install reaches git through
+// `clone-cache.ts` for a git-source plugin, and through the `marketplace add`
+// body for a marketplace its target scope does not record yet (D-MF-04). This
+// owner itself MUST NOT import platform-git or the default git ops, and MUST
+// NOT carry a gitOps field: the add functions default their own git
+// operations. BLOCK F in `eslint.config.js` lints this file's code for that
+// surface, so a comment may still name it.
 //
 // D-v1.0-01-11 import boundaries: orchestrators/plugin/ may import from bridges/,
 // domain/, transaction/, persistence/, shared/, AND from
-// orchestrators/marketplace/shared.ts (named exports only -- no add.ts /
-// remove.ts / update.ts cycle). User-visible output flows through
-// shared/notification-dispatch.ts; this file holds no rendering imports.
+// orchestrators/marketplace/shared.ts. This module is the lock-free ledger
+// body, not a plugin ledger, so it also imports the `marketplace add`
+// functions, as `bootstrap.ts` imports the add; the plugin ledgers do not.
+// User-visible output flows through shared/notification-dispatch.ts; this file
+// holds no rendering imports.
 
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -104,9 +109,13 @@ import {
   requireInstallable,
   resolveStrict,
 } from "../../domain/plugin-resolver.ts";
-import { parsePluginSource, type PathSource } from "../../domain/source.ts";
+import { parsePluginSource, type ParsedSource, type PathSource } from "../../domain/source.ts";
 import { shaVersion } from "../../domain/version.ts";
-import { ConcurrentInstallError, PluginShapeError } from "../../shared/errors.ts";
+import {
+  ConcurrentInstallError,
+  InvalidMarketplaceManifestError,
+  PluginShapeError,
+} from "../../shared/errors.ts";
 import { type RemovalOps } from "../../shared/fs-utils.ts";
 import { type DegradeKind } from "../../shared/notify-reasons.ts";
 import { ownValue, setOwn } from "../../shared/own-key.ts";
@@ -123,6 +132,11 @@ import {
   type CredentialOps,
   type DeviceFlowHttp,
 } from "../auth-host.ts";
+import {
+  addMarketplaceToState,
+  parseAddableSource,
+  settleAddedMarketplace,
+} from "../marketplace/add.ts";
 import { WorkflowsUnstageFailureError } from "../marketplace/shared.ts";
 
 import { materializeMarketplaceTagClone } from "./clone-cache.ts";
@@ -130,7 +144,6 @@ import { discoverGeneratedNames } from "./discover-names.ts";
 import { probeInstallClone, type InstallCloneCacheSeam } from "./install-clone-probe.ts";
 import {
   assertNoCrossPluginConflicts,
-  cloneMarketplaceRecordForTargetScope,
   removePluginRecord,
   resolveInstallMarketplaceSource,
   resolvePluginVersion,
@@ -214,6 +227,26 @@ export interface InstallLedgerOptions {
   readonly credentialOps?: CredentialOps;
   readonly deviceFlowHttp?: DeviceFlowHttp;
   readonly authMemo?: Map<string, AuthAttemptResult>;
+  /**
+   * LAYER-07 / D-MF-04: adds a marketplace the target scope does not record
+   * yet, through the `marketplace add` code. Mirrors `cloneProbe`: a real
+   * default (`addMarketplaceToState` and `settleAddedMarketplace`), not
+   * test-only surface.
+   */
+  readonly marketplaceAdd?: {
+    readonly record: typeof addMarketplaceToState;
+    readonly settle: typeof settleAddedMarketplace;
+  };
+  /**
+   * WR-07: the transaction's list of the marketplaces its adds recorded, each
+   * with the clone directory a github or url add created. The lock owner owns
+   * the list: it removes the clones when its transaction does not save, and
+   * settles each marketplace after a save. The enable path passes none.
+   */
+  readonly addedMarketplaces?: {
+    readonly marketplace: string;
+    readonly cloneDir: string | undefined;
+  }[];
 }
 
 /** Transaction operation required by the guard-free ledger. */
@@ -432,12 +465,61 @@ async function deriveInstallVersion(args: {
   return resolvePluginVersion(args.entry, args.installable);
 }
 
+/** The real `marketplaceAdd` seam: the `marketplace add` body and settle. */
+const DEFAULT_MARKETPLACE_ADD = Object.freeze({
+  record: addMarketplaceToState,
+  settle: settleAddedMarketplace,
+});
+
+/**
+ * LAYER-07 / D-MF-04 / CMP-3: the target scope records no `marketplace`, and
+ * the user scope does. The install adds the marketplace to the target scope
+ * from the user record's raw source, through the code `marketplace add
+ * --scope project` runs, inside the caller's lock: the target scope gets its
+ * own record and, for a github or url source, its own clone (NFR-5 as amended
+ * by D-MF-04). A relative raw source resolves from the process directory, as
+ * the add resolves it.
+ *
+ * The added marketplace joins `addedMarketplaces` before the name check, so
+ * the lock owner removes its clone when the install does not save (WR-07). A
+ * source that now declares another name fails the install before any phase.
+ */
+async function addTargetScopeMarketplace(
+  state: ExtensionState,
+  locations: ScopedLocations,
+  opts: InstallLedgerOptions,
+  sourceRecord: ExtensionState["marketplaces"][string],
+  record: typeof addMarketplaceToState,
+): Promise<ExtensionState["marketplaces"][string]> {
+  const rawSource = (sourceRecord.source as ParsedSource).raw;
+  const added = await record({
+    state,
+    locations,
+    source: parseAddableSource(rawSource),
+    cwd: opts.cwd,
+    ctx: opts.ctx,
+    run: opts.run,
+    removalOps: opts.removalOps,
+    credentialOps: opts.credentialOps,
+    deviceFlowHttp: opts.deviceFlowHttp,
+  });
+  opts.addedMarketplaces?.push({ marketplace: added.name, cloneDir: added.cloneDir });
+  const targetRecord = ownValue(state.marketplaces, opts.marketplace);
+  if (added.name !== opts.marketplace || targetRecord === undefined) {
+    throw new InvalidMarketplaceManifestError(
+      `Marketplace source "${rawSource}" declares the marketplace "${added.name}", not "${opts.marketplace}".`,
+    );
+  }
+
+  return targetRecord;
+}
+
 /**
  * The PI-15 / PI-3 / PI-2 / PI-4 preflight: resolve the source marketplace,
  * gate on the early-sanity record check, read the cached manifest, validate
  * the chosen entry, and run `resolveStrict` behind the correct
- * installability gate. Mutates `state.marketplaces[marketplace]` when the
- * CMP-3 fallback adopts a user-scope record into the target scope.
+ * installability gate. Adds `state.marketplaces[marketplace]` when the CMP-3
+ * fallback finds only a user-scope record (LAYER-07).
  *
  * Returns the `marketplace-absent` discriminant rather than throwing when
  * the precondition misses, so the caller can surface the MARKETPLACE
@@ -457,6 +539,7 @@ async function preflightInstallResolve(
     }
 > {
   const { scope, cwd, marketplace, plugin } = opts;
+  const marketplaceAdd = opts.marketplaceAdd ?? DEFAULT_MARKETPLACE_ADD;
 
   // CMP-2..4 / PI-16: resolve the source marketplace separately from the
   // target scope being mutated. Project-target installs can fall back to a
@@ -474,13 +557,18 @@ async function preflightInstallResolve(
     return { kind: "marketplace-absent" };
   }
 
-  // Target container: same scope record when present, or a cloned
-  // project-scope container when CMP-3 fell back to user marketplace.
-  let targetMp = ownValue(state.marketplaces, marketplace);
-  if (targetMp === undefined) {
-    targetMp = cloneMarketplaceRecordForTargetScope(source.sourceRecord, scope);
-    setOwn(state.marketplaces, marketplace, targetMp);
-  }
+  // LAYER-07 / D-MF-04: the target scope's own record, or, when CMP-3 fell
+  // back to the user marketplace, the record the add gives the target scope.
+  // Every read below uses the target record.
+  const targetMp =
+    ownValue(state.marketplaces, marketplace) ??
+    (await addTargetScopeMarketplace(
+      state,
+      locations,
+      opts,
+      source.sourceRecord,
+      marketplaceAdd.record,
+    ));
 
   // PI-15 early-sanity check: an existing record in the target scope throws
   // BEFORE the ledger runs, avoiding any disk write. Layer (b) re-checks
@@ -497,8 +585,7 @@ async function preflightInstallResolve(
 
   // PI-2 cached-manifest read -- NO network, no gitOps. PI-3: the entry must
   // exist in the manifest plugins[] array.
-  const sourceMp = source.sourceRecord;
-  const manifest = await loadCachedMarketplaceManifest(sourceMp.manifestPath);
+  const manifest = await loadCachedMarketplaceManifest(targetMp.manifestPath);
   // The loader validated every entry against PLUGIN_ENTRY_SCHEMA as part of
   // MARKETPLACE_SCHEMA, so the chosen entry needs no second check.
   const entry = manifest.plugins.find((p) => p.name === plugin);
@@ -518,7 +605,7 @@ async function preflightInstallResolve(
   // array-shape componentPaths (D-07 / COMP-01) and either returns an
   // installable variant or surfaces disqualification notes.
   const resolved = await resolveStrict(entry, {
-    marketplaceRoot: sourceMp.marketplaceRoot,
+    marketplaceRoot: targetMp.marketplaceRoot,
     marketplaceName: marketplace,
     resolveGitPluginRoot: async (gitSource) => {
       const clone = await (opts.cloneProbe ?? probeInstallClone)({
@@ -553,9 +640,9 @@ async function preflightInstallResolve(
       resolvePathPluginRoot: async (pathSource: PathSource, pin: string) => {
         const result = await (opts.pathPinProbe ?? materializeMarketplaceTagClone)({
           locations,
-          marketplaceRoot: sourceMp.marketplaceRoot,
-          marketplaceSource: sourceMp.source,
-          marketplaceName: sourceMp.name,
+          marketplaceRoot: targetMp.marketplaceRoot,
+          marketplaceSource: targetMp.source,
+          marketplaceName: targetMp.name,
           pathSource,
           tagOid: pin,
         });

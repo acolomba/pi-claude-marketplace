@@ -442,7 +442,7 @@ class ConfigInvalidError extends InvalidMarketplaceManifestError {
  * add` cannot record, before any lock or disk access. The refusal is an
  * `UnsupportedSourceError`, classified as `unsupported source` (D-48-C A3).
  */
-function parseAddableSource(rawSource: string): GitHubSource | UrlSource | PathSource {
+export function parseAddableSource(rawSource: string): GitHubSource | UrlSource | PathSource {
   const source = parsePluginSource(rawSource);
 
   // S5a: the parser produced an unknown kind with a reason, surfaced verbatim
@@ -471,6 +471,11 @@ function parseAddableSource(rawSource: string): GitHubSource | UrlSource | PathS
  * cleanup. It returns the recorded name and, for a github or url source, the
  * final clone directory.
  *
+ * LAYER-07 / D-MF-04: a project-scope install that needs a marketplace only
+ * the user scope records runs this body inside its own lock, so the project
+ * gets the record and the clone an explicit `marketplace add --scope project`
+ * gives it.
+ *
  * Locking contract: the caller holds the scope's state lock and owns the
  * config write-back and the save. `proper-lockfile` (`retries: 0`) is not
  * re-entrant, so this body takes no lock of its own. When the caller's
@@ -478,7 +483,7 @@ function parseAddableSource(rawSource: string): GitHubSource | UrlSource | PathS
  * (WR-07), as `runAddInGuard` does for itself. A failure inside this body
  * cleans its own staging (MA-9).
  */
-async function addMarketplaceToState(args: {
+export async function addMarketplaceToState(args: {
   readonly state: ExtensionState;
   readonly locations: ScopedLocations;
   readonly source: GitHubSource | UrlSource | PathSource;
@@ -633,7 +638,7 @@ async function runAddInGuard(args: {
  * swallows its own failure, so neither can roll back the committed add
  * (NFR-3).
  */
-async function settleAddedMarketplace(args: {
+export async function settleAddedMarketplace(args: {
   readonly locations: ScopedLocations;
   readonly name: string;
   readonly completionCache: CompletionCache;

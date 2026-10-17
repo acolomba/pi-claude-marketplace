@@ -519,36 +519,19 @@ export async function collectInstallReachableMarketplaces(opts: {
 }
 
 /**
- * Materialize the target-scope marketplace container needed by the current
- * state shape when CMP-3 falls back to a user-scope marketplace. The copied
- * record preserves source/manifest paths but starts with no target-scope
- * plugin installs; the install itself appends the first plugin record.
- */
-export function cloneMarketplaceRecordForTargetScope(
-  sourceRecord: ExtensionState["marketplaces"][string],
-  targetScope: Scope,
-): ExtensionState["marketplaces"][string] {
-  return {
-    ...sourceRecord,
-    scope: targetScope,
-    plugins: {},
-  };
-}
-
-/**
  * CR-02: synthesize the marketplace `source` for a plugin
  * write-back into a config that does NOT yet declare the marketplace.
  *
  * When a project-scope install resolves the marketplace via the CMP-3
- * user-scope fallback, the clone-adoption path records the marketplace in
- * PROJECT state -- but only `marketplace add` writes marketplace config
- * entries, and it ran at USER scope. Writing the plugin key alone would
- * leave a dangling declaration: the reconcile planner turns it into a
+ * user-scope fallback, the install adds the marketplace to PROJECT state
+ * through the `marketplace add` body (LAYER-07 / D-MF-04), which writes no
+ * config entry: the install owns the write-back. Writing the plugin key alone
+ * would leave a dangling declaration: the reconcile planner turns it into a
  * perpetual `<marketplace not declared>` failed row AND plans the
  * recorded-but-undeclared clone for removal (a destructive, non-converging
  * plan -- invariant 5 violation). The caller must therefore declare the
  * marketplace in the SAME batched patch, synthesizing `source` from the
- * adopted record's verbatim `source.raw` (the `samePlannedSource`
+ * added record's verbatim `source.raw` (the `samePlannedSource`
  * contract).
  *
  * UAT-05: the membership gate runs against EVERY physical config of the
