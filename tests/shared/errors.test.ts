@@ -22,6 +22,7 @@ import {
   formatCauseChain,
   hasFetchedUrlCause,
   InvalidGitHubBaseUrlError,
+  InstallMarketplaceAddError,
   InvalidMarketplaceManifestError,
   isErrnoException,
   ManualRecoveryError,
@@ -881,6 +882,28 @@ describe("MarketplaceDeclaredInSharedConfigError", () => {
         marketplace: "mp",
         message:
           "The marketplace mp is declared only in claude-plugins.json. Run the command again without --local.",
+      },
+    );
+  });
+});
+
+describe("InstallMarketplaceAddError", () => {
+  test("carries the add's reason and the message it was given, with no cause", () => {
+    // arrange
+    const reason = "stale clone";
+
+    // act
+    const error = new InstallMarketplaceAddError(reason, "stale source clone at mp");
+
+    // assert
+    assert.ok(error instanceof Error);
+    assert.deepStrictEqual(
+      { name: error.name, reason: error.reason, message: error.message, cause: error.cause },
+      {
+        name: "InstallMarketplaceAddError",
+        reason: "stale clone",
+        message: "stale source clone at mp",
+        cause: undefined,
       },
     );
   });

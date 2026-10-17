@@ -113,12 +113,15 @@ import { parsePluginSource, type ParsedSource, type PathSource } from "../../dom
 import { shaVersion } from "../../domain/version.ts";
 import {
   ConcurrentInstallError,
+  errorMessage,
+  InstallMarketplaceAddError,
   InvalidMarketplaceManifestError,
   PluginShapeError,
 } from "../../shared/errors.ts";
 import { type RemovalOps } from "../../shared/fs-utils.ts";
 import { type DegradeKind } from "../../shared/notify-reasons.ts";
 import { ownValue, setOwn } from "../../shared/own-key.ts";
+import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import {
   runPhases,
   type Phase,
@@ -134,6 +137,7 @@ import {
 } from "../auth-host.ts";
 import {
   addMarketplaceToState,
+  classifyAddError,
   parseAddableSource,
   settleAddedMarketplace,
 } from "../marketplace/add.ts";
@@ -490,6 +494,30 @@ export type TargetScopeAddOptions = Pick<
 >;
 
 /**
+ * WR-04: runs the add body and, when it fails the way `marketplace add`
+ * classifies, rethrows the failure with that reason and a path-free message,
+ * so the install row reads as the explicit add's row does. An authentication
+ * challenge keeps its own error: the install row already maps it to
+ * `{authentication required}` with no cause line (D-79-03). An unclassified
+ * error, such as an invalid GitHub base override (GHB-03), propagates as is.
+ */
+async function recordAsInstallFailure(
+  record: typeof addMarketplaceToState,
+  args: Parameters<typeof addMarketplaceToState>[0],
+): Promise<Awaited<ReturnType<typeof addMarketplaceToState>>> {
+  try {
+    return await record(args);
+  } catch (err: unknown) {
+    const reason = classifyAddError(err);
+    if (reason === undefined || reason === "authentication required") {
+      throw err;
+    }
+
+    throw new InstallMarketplaceAddError(reason, redactAbsolutePaths(errorMessage(err)));
+  }
+}
+
+/**
  * LAYER-07 / D-MF-04 / CMP-3: the target scope records no `marketplace`, and
  * the user scope does. The install adds the marketplace to the target scope
  * from the user record's raw source, through the code `marketplace add
@@ -511,7 +539,7 @@ async function addTargetScopeMarketplace(
   record: typeof addMarketplaceToState,
 ): Promise<MarketplaceRecord> {
   const rawSource = (sourceRecord.source as ParsedSource).raw;
-  const added = await record({
+  const added = await recordAsInstallFailure(record, {
     state,
     locations,
     source: parseAddableSource(rawSource),

@@ -1,5 +1,7 @@
 import { redactCredentials } from "./redact-credentials.ts";
 
+import type { ContentReason } from "./notification-types.ts";
+
 /** Refuses a new device flow when print mode cannot show its authorization prompt. */
 export class DeviceFlowUnavailableError extends Error {
   constructor() {
@@ -412,6 +414,26 @@ export class MarketplaceDeclaredInSharedConfigError extends Error {
     );
     this.name = "MarketplaceDeclaredInSharedConfigError";
     this.marketplace = marketplace;
+  }
+}
+
+/**
+ * WR-04 / LAYER-07: the `marketplace add` that a project install runs for a
+ * marketplace only the user scope records failed. `reason` is the token
+ * `marketplace add` reports for the same failure, so the install row carries
+ * it too.
+ *
+ * The install row prints the message as its cause line, so the caller passes
+ * text whose absolute paths are already reduced to their last segment (NFR-9).
+ * The add's own error is not kept as `cause`: the cause-chain trailer would
+ * print its unreduced message.
+ */
+export class InstallMarketplaceAddError extends Error {
+  readonly reason: ContentReason;
+  constructor(reason: ContentReason, message: string) {
+    super(message);
+    this.name = "InstallMarketplaceAddError";
+    this.reason = reason;
   }
 }
 

@@ -10,7 +10,10 @@ import {
   formatOrchestratedCause,
   PROMOTED_ROW_REASONS,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts";
-import { PluginShapeError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import {
+  InstallMarketplaceAddError,
+  PluginShapeError,
+} from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { composePluginLines } from "../../../extensions/pi-claude-marketplace/shared/notification-grammar.ts";
 import { resolveRows } from "../../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 import { PathContainmentError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
@@ -681,6 +684,28 @@ describe("classifyEntityShapeError", () => {
 
     // assert
     assert.strictEqual(entityErrorRow, undefined);
+  });
+
+  test("classifies a failed marketplace add on the requested subject with the add's reason", () => {
+    // arrange
+    const failure = new InstallMarketplaceAddError("stale clone", "stale source clone at mp");
+
+    // act
+    const entityErrorRow = classifyEntityShapeError(failure, {
+      plugin: "helper",
+      marketplace: "official",
+      scope: "project",
+    });
+
+    // assert
+    assert.deepStrictEqual(entityErrorRow, {
+      kind: "entity-error",
+      name: "helper",
+      marketplace: "official",
+      scope: "project",
+      status: "failed",
+      reasons: ["stale clone"],
+    });
   });
 
   test("classifies an already-installed plugin on the requested subject", () => {

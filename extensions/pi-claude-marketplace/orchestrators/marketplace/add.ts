@@ -285,7 +285,7 @@ function joinLeaks(a: string | undefined, b: string | undefined): string | undef
  * `StateLockHeldError`, an unforeseen catastrophic failure) re-throws at the
  * entrypoint rather than being silently mislabeled. No substring matching.
  */
-function classifyAddError(rawErr: unknown): ContentReason | undefined {
+export function classifyAddError(rawErr: unknown): ContentReason | undefined {
   const err = unwrapAddError(rawErr);
   if (err instanceof MarketplaceDuplicateNameError) {
     return "duplicate name";

@@ -24,8 +24,10 @@ import {
   McpServerKeyCollisionError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 import {
+  InstallMarketplaceAddError,
   InvalidMarketplaceManifestError,
   PluginShapeError,
+  StaleSourceCloneError,
   UnsupportedSourceError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { createRemovalOps } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
@@ -1063,6 +1065,53 @@ test("CMP-3 / LAYER-07: an add that throws propagates its error and writes no pr
   assert.deepStrictEqual(seeded.state, { marketplaces: {}, schemaVersion: 2 });
   assert.deepStrictEqual(addedMarketplaces, []);
   assert.equal(transaction.runPhases.mock.callCount(), 0);
+});
+
+test("CMP-3 / WR-04: an add failure the add classifies carries its reason and a path-free cause", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-cmp3-stale-");
+  const seeded = await seedPlugin(environment.cwd, { marketplaceScope: "user" });
+  const locations = locationsFor("project", environment.cwd);
+  const cloneDir = path.join(locations.extensionRoot, "sources", "marketplace");
+
+  // act
+  const operation = runInstallLedger(seeded.state, locations, {
+    ...projectInstallOptions(environment.cwd),
+    marketplaceAdd: marketplaceAddSeam(() =>
+      Promise.reject(new StaleSourceCloneError(cloneDir, "marketplace")),
+    ),
+  });
+
+  // assert
+  await assert.rejects(operation, (error: unknown) => {
+    assert.ok(error instanceof InstallMarketplaceAddError);
+    assert.deepStrictEqual(
+      { reason: error.reason, message: error.message },
+      { reason: "stale clone", message: "stale source clone at marketplace" },
+    );
+    return true;
+  });
+  assert.deepStrictEqual(seeded.state, { marketplaces: {}, schemaVersion: 2 });
+});
+
+test("CMP-3 / D-79-03: an add that meets an authentication challenge keeps its own error", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-cmp3-auth-");
+  const seeded = await seedPlugin(environment.cwd, { marketplaceScope: "user" });
+  const locations = locationsFor("project", environment.cwd);
+  const challenge = Object.assign(new Error("HTTP Error: 401"), {
+    code: "HttpError",
+    data: { statusCode: 401 },
+  });
+
+  // act
+  const operation = runInstallLedger(seeded.state, locations, {
+    ...projectInstallOptions(environment.cwd),
+    marketplaceAdd: marketplaceAddSeam(() => Promise.reject(challenge)),
+  });
+
+  // assert
+  await assert.rejects(operation, (error: unknown) => error === challenge);
 });
 
 test("CMP-3 / LAYER-07: a user record whose source the add refuses fails as an unsupported source", async (t) => {

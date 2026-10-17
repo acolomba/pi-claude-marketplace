@@ -400,7 +400,8 @@ test("MA-13: a project install refuses a foreign tree where the marketplace clon
   assert.deepStrictEqual(boundary.notifications, [
     { message: "● mp [user] (added)" },
     {
-      message: `A plugin operation has failed.\n\n● mp [project]\n  ⊘ p (failed)\n    cause: stale source clone at ${foreign}`,
+      message:
+        "A plugin operation has failed.\n\n● mp [project]\n  ⊘ p (failed) {stale clone}\n    cause: stale source clone at mp",
       severity: "error",
     },
   ]);

@@ -1,4 +1,9 @@
-import { causeChainTrailer, errorMessage, PluginShapeError } from "../../shared/errors.ts";
+import {
+  causeChainTrailer,
+  errorMessage,
+  InstallMarketplaceAddError,
+  PluginShapeError,
+} from "../../shared/errors.ts";
 import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
 import {
   type ContentReason,
@@ -352,6 +357,19 @@ export function classifyEntityShapeError(
   err: unknown,
   ctx: { plugin: string; marketplace: string; scope: Scope },
 ): EntityErrorRow | undefined {
+  // WR-04 / LAYER-07: the add a project install ran failed; the row carries
+  // the reason `marketplace add` reports for the same failure.
+  if (err instanceof InstallMarketplaceAddError) {
+    return {
+      kind: "entity-error",
+      name: ctx.plugin,
+      marketplace: ctx.marketplace,
+      scope: ctx.scope,
+      status: "failed",
+      reasons: [err.reason],
+    };
+  }
+
   // Dispatch on `instanceof PluginShapeError` + `.shape.kind` rather than
   // substring-matching `.message`. The throw sites carry their structural
   // classification verbatim, so the catch site does not need to reparse text.
