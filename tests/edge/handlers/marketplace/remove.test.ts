@@ -31,7 +31,8 @@
 // `claude-plugins.json` declares the marketplace and whose
 // `claude-plugins.local.json` fails schema validation, where supplying the flag
 // aborts the removal and omitting it removes the marketplace from the valid
-// shared layer.
+// shared layer, keeping its record because the unreadable local layer may
+// still declare it (LAYER-03).
 //
 // Every case also installs a fail-fast replacement of `https.request`, the door
 // the git transport opens. NO CASE ASSERTS A CALL COUNT AGAINST IT. The git
@@ -293,7 +294,7 @@ test("rejects surplus input and preserves all recorded marketplaces", async (t) 
 for (const { args, expectedFootprint, expectedNotification, placement } of [
   {
     args: "alpha",
-    expectedFootprint: { project: [], user: [] },
+    expectedFootprint: { project: ["alpha"], user: [] },
     expectedNotification: { message: PROJECT_ALPHA_REMOVED },
     placement: "omitted",
   },

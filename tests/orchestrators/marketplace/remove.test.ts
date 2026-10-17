@@ -161,6 +161,10 @@ function emptyDropped(): CascadeDropped {
   return { agents: [], commands: [], hooks: [], mcpServers: [], skills: [], workflows: [] };
 }
 
+const unreachableCascade: typeof cascadeUnstagePlugin = () => {
+  assert.fail("this remove must not unstage any plugin");
+};
+
 function marketplaceState(args: {
   readonly cwd: string;
   readonly name: string;
@@ -866,7 +870,7 @@ test("retains the source clone when a forward-compatible recorded kind is unavai
   notification.verifyInteractions();
 });
 
-test("sweeps marketplace and plugin declarations from both config layers", async (testContext) => {
+test("LAYER-03: drops only the shared layer's declarations while the local layer still declares the marketplace", async (testContext) => {
   // arrange
   const { cwd, locations } = await projectCase(testContext);
   await seedMarketplace(locations, {
@@ -899,6 +903,7 @@ test("sweeps marketplace and plugin declarations from both config layers", async
     },
     locations.scopeRoot,
   );
+  const localBytes = await readFile(locations.configLocalJsonPath, "utf8");
   const notification = notificationBoundary(1);
 
   // act
@@ -923,14 +928,16 @@ test("sweeps marketplace and plugin declarations from both config layers", async
     await readFile(locations.configJsonPath, "utf8"),
     '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "keep": {\n      "source": "./keep"\n    }\n  },\n  "plugins": {\n    "keep@keep": {\n      "enabled": true\n    }\n  }\n}\n',
   );
-  assert.strictEqual(
-    await readFile(locations.configLocalJsonPath, "utf8"),
-    '{\n  "schemaVersion": 1,\n  "marketplaces": {},\n  "plugins": {}\n}\n',
+  assert.strictEqual(await readFile(locations.configLocalJsonPath, "utf8"), localBytes);
+  assert.deepStrictEqual(
+    await loadState(locations.extensionRoot),
+    marketplaceState({
+      cwd,
+      name: "remove-me",
+      scope: "project",
+      source: pathSource("./remove-me"),
+    }),
   );
-  assert.deepStrictEqual(await loadState(locations.extensionRoot), {
-    schemaVersion: 3,
-    marketplaces: {},
-  });
   notification.verifyInteractions();
 });
 
@@ -979,21 +986,30 @@ test("leaves a valid unrelated sibling config layer byte-identical", async (test
   notification.verifyInteractions();
 });
 
-test("leaves an invalid sibling config layer byte-identical", async (testContext) => {
+test("LAYER-03: keeps the record, the clone, and every plugin while the other config layer is unreadable", async (testContext) => {
   // arrange
   const { cwd, locations } = await projectCase(testContext);
+  const source = { kind: "github", raw: "owner/repo", owner: "owner", repo: "repo" };
   await seedMarketplace(locations, {
     cwd,
     name: "remove-me",
-    source: pathSource("./remove-me"),
+    source,
+    plugins: { tool: pluginRecord() },
   });
   await saveConfig(
     locations.configJsonPath,
-    { schemaVersion: 1, marketplaces: { "remove-me": { source: "./remove-me" } } },
+    {
+      schemaVersion: 1,
+      marketplaces: { "remove-me": { source: "owner/repo" } },
+      plugins: { "tool@remove-me": { enabled: true } },
+    },
     locations.scopeRoot,
   );
   const invalidLocalBytes = "{ invalid local config";
   await writeFile(locations.configLocalJsonPath, invalidLocalBytes);
+  const cloneDir = await locations.sourceCloneDir("remove-me");
+  await mkdir(cloneDir, { recursive: true });
+  await writeFile(path.join(cloneDir, "sentinel"), "clone");
   const notification = notificationBoundary(1);
 
   // act
@@ -1004,15 +1020,27 @@ test("leaves an invalid sibling config layer byte-identical", async (testContext
     name: "remove-me",
     scope: "project",
     cwd,
+    cascade: unreachableCascade,
   });
 
   // assert
   assert.deepStrictEqual(notification.calls, [{ message: "● remove-me [project] (removed)" }]);
+  assert.strictEqual(
+    await readFile(locations.configJsonPath, "utf8"),
+    '{\n  "schemaVersion": 1,\n  "marketplaces": {},\n  "plugins": {}\n}\n',
+  );
   assert.strictEqual(await readFile(locations.configLocalJsonPath, "utf8"), invalidLocalBytes);
-  assert.deepStrictEqual(await loadState(locations.extensionRoot), {
-    schemaVersion: 3,
-    marketplaces: {},
-  });
+  assert.strictEqual(await readFile(path.join(cloneDir, "sentinel"), "utf8"), "clone");
+  assert.deepStrictEqual(
+    await loadState(locations.extensionRoot),
+    marketplaceState({
+      cwd,
+      name: "remove-me",
+      scope: "project",
+      source,
+      plugins: { tool: pluginRecord() },
+    }),
+  );
   notification.verifyInteractions();
 });
 
@@ -2009,13 +2037,10 @@ test("rethrows a state save failure unchanged when no cascade rewrote an MCP con
 // LAYER-02 / D-MF-03: a named remove changes only its target layer, and the
 // layer gate decides before anything changes.
 
-const unreachableCascade: typeof cascadeUnstagePlugin = () => {
-  assert.fail("a stopped remove must not unstage any plugin");
-};
-
 interface LayerFiles {
   readonly shared?: string;
   readonly local?: string;
+  readonly source?: unknown;
 }
 
 interface LayerCase {
@@ -2029,15 +2054,16 @@ async function readIfPresent(filePath: string): Promise<string | undefined> {
 }
 
 /**
- * A project scope recording `tools` with an installed `tool`, with the two
- * config files written as the given raw text (an omitted file is absent).
+ * A project scope recording `tools` (a path source unless `source` says
+ * otherwise) with an installed `tool`, with the two config files written as the
+ * given raw text (an omitted file is absent).
  */
 async function layerCase(testContext: TestContext, files: LayerFiles): Promise<LayerCase> {
   const { cwd, locations } = await projectCase(testContext);
   await seedMarketplace(locations, {
     cwd,
     name: "tools",
-    source: pathSource("./tools"),
+    source: files.source ?? pathSource("./tools"),
     plugins: { tool: pluginRecord({ skills: ["tool-skill"] }) },
   });
   if (files.shared !== undefined) {
@@ -2146,5 +2172,168 @@ test("WR-09: an orchestrated remove applies no layer rule and writes no config",
   const [, sharedBytes, localBytes] = await bytesOnDisk();
   assert.deepStrictEqual([sharedBytes, localBytes], [undefined, TOOLS_DECLARED]);
   assert.deepStrictEqual(notification.calls, []);
+  notification.verifyInteractions();
+});
+
+// LAYER-03: a remove from one layer while the other layer declares the
+// marketplace drops only that layer's declarations and plugins; the remove of
+// the last declaration, or of a marketplace no layer declares, is the full one.
+
+const TOOLS_DECLARED_ONLY = '{"schemaVersion":1,"marketplaces":{"tools":{"source":"./tools"}}}\n';
+
+const NO_DECLARATIONS = '{\n  "schemaVersion": 1,\n  "marketplaces": {},\n  "plugins": {}\n}\n';
+
+const TOOL_UNINSTALLED =
+  "● tools [project] (removed)\n  ○ tool (uninstalled)\n\n/reload to pick up changes";
+
+const unstagingCascade: typeof cascadeUnstagePlugin = () =>
+  Promise.resolve({ ok: true, dropped: emptyDropped() });
+
+async function removeTools(
+  cwd: string,
+  notification: NotificationBoundary,
+  cascade: typeof cascadeUnstagePlugin,
+): Promise<RemoveMarketplaceOutcome | undefined> {
+  return await removeMarketplace({
+    completionCache: createCompletionCache(),
+    ctx: notification.ctx,
+    run: notification.run,
+    name: "tools",
+    scope: "project",
+    cwd,
+    cascade,
+  });
+}
+
+function toolsState(
+  cwd: string,
+  source: unknown,
+  plugins: Record<string, PluginRecord>,
+): ExtensionState {
+  return marketplaceState({ cwd, name: "tools", scope: "project", source, plugins });
+}
+
+test("LAYER-03: a layer remove keeps a github marketplace's clone and data directory and deletes the unstaged plugin's data", async (testContext) => {
+  // arrange
+  const source = { kind: "github", raw: "owner/repo", owner: "owner", repo: "repo" };
+  const { cwd, locations } = await layerCase(testContext, {
+    shared: TOOLS_DECLARED,
+    local: TOOLS_DECLARED_ONLY,
+    source,
+  });
+  const cloneDir = await locations.sourceCloneDir("tools");
+  const marketplaceData = await locations.marketplaceDataDir("tools");
+  const pluginData = await locations.pluginDataDir("tools", "tool");
+  await mkdir(cloneDir, { recursive: true });
+  await mkdir(pluginData, { recursive: true });
+  await writeFile(path.join(cloneDir, "sentinel"), "clone");
+  await writeFile(path.join(marketplaceData, "sentinel"), "marketplace data");
+  const notification = notificationBoundary(1);
+
+  // act
+  await removeTools(cwd, notification, unstagingCascade);
+
+  // assert
+  assert.deepStrictEqual(notification.calls, [{ message: TOOL_UNINSTALLED }]);
+  assert.deepStrictEqual(
+    [
+      await pathExists(path.join(cloneDir, "sentinel")),
+      await pathExists(path.join(marketplaceData, "sentinel")),
+      await pathExists(pluginData),
+    ],
+    [true, true, false],
+  );
+  assert.strictEqual(await readFile(locations.configJsonPath, "utf8"), NO_DECLARATIONS);
+  assert.strictEqual(await readFile(locations.configLocalJsonPath, "utf8"), TOOLS_DECLARED_ONLY);
+  assert.deepStrictEqual(await loadState(locations.extensionRoot), toolsState(cwd, source, {}));
+  notification.verifyInteractions();
+});
+
+test("LAYER-03: a plugin key both layers declare stays installed and only the target layer drops it", async (testContext) => {
+  // arrange
+  const { cwd, locations } = await layerCase(testContext, {
+    shared: TOOLS_DECLARED,
+    local: TOOLS_DECLARED,
+  });
+  const notification = notificationBoundary(1);
+
+  // act
+  await removeTools(cwd, notification, unreachableCascade);
+
+  // assert
+  assert.deepStrictEqual(notification.calls, [{ message: "● tools [project] (removed)" }]);
+  assert.strictEqual(await readFile(locations.configJsonPath, "utf8"), NO_DECLARATIONS);
+  assert.strictEqual(await readFile(locations.configLocalJsonPath, "utf8"), TOOLS_DECLARED);
+  assert.deepStrictEqual(
+    await loadState(locations.extensionRoot),
+    toolsState(cwd, pathSource("./tools"), { tool: pluginRecord({ skills: ["tool-skill"] }) }),
+  );
+  notification.verifyInteractions();
+});
+
+test("LAYER-03: a recorded marketplace no layer declares is fully removed and both layers' plugin keys are swept", async (testContext) => {
+  // arrange
+  const { cwd, locations } = await layerCase(testContext, {
+    shared:
+      '{"schemaVersion":1,"marketplaces":{"base":{"source":"./base"}},"plugins":{"tool@tools":{"enabled":true}}}\n',
+    local: '{"schemaVersion":1,"plugins":{"other@tools":{"enabled":false}}}\n',
+  });
+  const marketplaceData = await locations.marketplaceDataDir("tools");
+  await mkdir(marketplaceData, { recursive: true });
+  const notification = notificationBoundary(1);
+
+  // act
+  await removeTools(cwd, notification, unstagingCascade);
+
+  // assert
+  assert.deepStrictEqual(notification.calls, [{ message: TOOL_UNINSTALLED }]);
+  assert.strictEqual(
+    await readFile(locations.configJsonPath, "utf8"),
+    '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "base": {\n      "source": "./base"\n    }\n  },\n  "plugins": {}\n}\n',
+  );
+  assert.strictEqual(
+    await readFile(locations.configLocalJsonPath, "utf8"),
+    '{\n  "schemaVersion": 1,\n  "plugins": {},\n  "marketplaces": {}\n}\n',
+  );
+  assert.strictEqual(await pathExists(marketplaceData), false);
+  assert.deepStrictEqual(await loadState(locations.extensionRoot), {
+    schemaVersion: 3,
+    marketplaces: {},
+  });
+  notification.verifyInteractions();
+});
+
+test("MR-7: a layer remove whose plugin fails to unstage writes no config and keeps the plugin", async (testContext) => {
+  // arrange
+  const { cwd, locations, bytesOnDisk } = await layerCase(testContext, {
+    shared: TOOLS_DECLARED,
+    local: TOOLS_DECLARED_ONLY,
+  });
+  const [, sharedBytes, localBytes] = await bytesOnDisk();
+  const notification = notificationBoundary(1);
+
+  // act
+  await removeTools(cwd, notification, () =>
+    Promise.resolve({
+      ok: false,
+      dropped: emptyDropped(),
+      cause: Object.assign(new Error("tool denied"), { code: "EACCES" }),
+    }),
+  );
+
+  // assert
+  assert.deepStrictEqual(notification.calls, [
+    {
+      message:
+        "Some operations have failed.\n\n⊘ tools [project] (failed)\n  ⊘ tool (failed) {permission denied}\n    cause: tool denied",
+      severity: "error",
+    },
+  ]);
+  const [, sharedAfter, localAfter] = await bytesOnDisk();
+  assert.deepStrictEqual([sharedAfter, localAfter], [sharedBytes, localBytes]);
+  assert.deepStrictEqual(
+    await loadState(locations.extensionRoot),
+    toolsState(cwd, pathSource("./tools"), { tool: pluginRecord({ skills: ["tool-skill"] }) }),
+  );
   notification.verifyInteractions();
 });

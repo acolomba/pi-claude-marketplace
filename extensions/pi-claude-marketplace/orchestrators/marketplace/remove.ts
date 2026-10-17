@@ -30,23 +30,28 @@
 //        LAYER-02 (standalone only): load the other layer and stop through
 //        `LayerGateStop`, again without `tx.save()`, when the target layer
 //        does not declare the marketplace while the other one declares it or
-//        cannot be read.
-//        for each plugin in record.plugins:
+//        cannot be read. LAYER-03: while the other layer declares the
+//        marketplace or cannot be read, the remove is a layer remove over the
+//        plugins only the target layer declares; otherwise it is the full
+//        remove over every plugin. Reconcile always takes the full remove.
+//        for each plugin the remove takes away:
 //          outcome = cascade(plugin, marketplace, locations, installedPlugin)
 //                    // cascade is opts.cascade ?? cascadeUnstagePlugin (DI seam
 //                    // for test determinism; zero runtime cost in production).
 //          if (outcome.ok): delete record.plugins[plugin]; track successfullyUnstaged
 //          else:            failedPlugins.push({name, cause})  // D-02 / D-03 fail-fast per plugin
-//        if (failedPlugins.length === 0): delete tx.state.marketplaces[name]
-//        WB-01: `deleteMarketplaceConfigEntryWithCascade(...)` mirrors the
-//        state-side cascade in the user-authored config (entry-level patch
-//        through saveConfig).
+//        if (failedPlugins.length === 0):
+//          layer remove: drop the target layer's entry and `*@<name>` keys
+//          full remove: delete tx.state.marketplaces[name]; WB-01 sweeps both
+//          layers with `deleteMarketplaceConfigEntryWithCascade(...)`
+//          (entry-level patch through saveConfig).
 //        await tx.save()  // WR-04: explicit save on the mutating arms.
 //      })
 //   3. POST-STATE cleanup (after guard returns):
 //        - invalidate marketplace names and the target plugin-index cache
 //        - per-plugin data dirs (always)
-//        - marketplace data dir + clone dir (github/url sources; ONLY when failedPlugins.length === 0; MR-7)
+//        - marketplace data dir + clone dir (github/url sources; ONLY when the
+//          state record was deleted, so never after a failed plugin; MR-7)
 //        - cleanup failures are SWALLOWED silently per D-18-01.
 //   4. Compose user-visible output via one `notify(opts.ctx, opts.run, ...)` call.
 //
@@ -93,7 +98,7 @@ import {
   type MarketplaceLayerVerdict,
 } from "./shared.ts";
 
-import type { ScopeConfig } from "../../persistence/config-io.ts";
+import type { ConfigLoadResult, ScopeConfig } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
@@ -379,8 +384,9 @@ function emitPartialFailure(args: {
 }
 
 /**
- * D-02: hand-rolled per-plugin cascade loop. Mutates `record.plugins`,
- * `successfullyUnstaged`, `failedPlugins` and `mcpConfigNotices` in place.
+ * D-02: hand-rolled per-plugin cascade loop over `entries`, the plugin records
+ * the remove takes away. Mutates `record.plugins`, `successfullyUnstaged`,
+ * `failedPlugins` and `mcpConfigNotices` in place.
  * AFILE-04: every cascade's MCP config notices are kept, from a failed
  * cascade too, because its MCP slot may have rewritten the file before a
  * later slot failed. Extracted from `removeMarketplace` to keep its
@@ -388,6 +394,7 @@ function emitPartialFailure(args: {
  */
 async function cascadePluginsInPlace(args: {
   readonly record: { plugins: Record<string, ExtensionPluginRow> };
+  readonly entries: readonly (readonly [string, ExtensionPluginRow])[];
   readonly marketplace: string;
   readonly locations: ScopedLocations;
   readonly cascade: typeof cascadeUnstagePlugin;
@@ -396,7 +403,7 @@ async function cascadePluginsInPlace(args: {
   readonly mcpConfigNotices: McpConfigNotice[];
 }): Promise<void> {
   const { record, marketplace, locations, cascade, successfullyUnstaged, failedPlugins } = args;
-  for (const [pluginName, plugin] of Object.entries(record.plugins)) {
+  for (const [pluginName, plugin] of args.entries) {
     // eslint-disable-next-line no-await-in-loop -- each unstage rewrites the shared agents index and mcp.json
     const outcome = await cascade(pluginName, marketplace, locations, plugin);
     args.mcpConfigNotices.push(...(outcome.mcpConfigNotices ?? []));
@@ -532,37 +539,123 @@ class LayerGateStop extends Error {
 }
 
 /**
+ * What a remove takes away. A layer remove (`layerOnly`) drops only the target
+ * layer's declarations and keeps the state record; a full remove deletes the
+ * record. `entries` are the plugin records to unstage.
+ */
+interface RemovePlan {
+  readonly layerOnly: boolean;
+  readonly entries: readonly (readonly [string, ExtensionPluginRow])[];
+}
+
+function fullRemovePlan(record: ExtensionMarketplaceRow): RemovePlan {
+  return { layerOnly: false, entries: Object.entries(record.plugins) };
+}
+
+/**
  * LAYER-02 / D-MF-03: a named remove changes only its target layer. It loads
  * the other layer and stops the remove, before anything is mutated, when the
  * target layer does not declare the marketplace while the other layer does or
  * cannot be read. Reconcile-driven removals never call it (WR-09).
+ *
+ * LAYER-03: while the other layer declares the marketplace, or cannot be read,
+ * the remove is a layer remove. Otherwise, including a recorded marketplace no
+ * layer declares, it is the full remove.
  */
-async function gateStandaloneLayers(args: {
+async function planStandaloneRemove(args: {
   readonly target: ScopeConfig;
   readonly locations: ScopedLocations;
   readonly targetIsLocal: boolean;
+  readonly record: ExtensionMarketplaceRow;
   readonly marketplace: string;
-}): Promise<void> {
+}): Promise<RemovePlan> {
   const { locations, targetIsLocal } = args;
+  const other = await loadConfig(
+    targetIsLocal ? locations.configJsonPath : locations.configLocalJsonPath,
+  );
   const verdict = marketplaceLayerVerdict({
     target: args.target,
-    other: await loadConfig(
-      targetIsLocal ? locations.configJsonPath : locations.configLocalJsonPath,
-    ),
+    other,
     targetIsLocal,
     marketplace: args.marketplace,
   });
   if (verdict.kind === "refused" || verdict.kind === "other-unreadable") {
     throw new LayerGateStop(verdict);
   }
+
+  if (verdict.kind === "undeclared" || verdict.other === "silent") {
+    return fullRemovePlan(args.record);
+  }
+
+  return {
+    layerOnly: true,
+    entries: layerRemovalEntries(args.record, args.target, other, args.marketplace),
+  };
 }
 
 /**
- * Body of the per-scope state lock. Returns the detected `source.kind` for
- * the post-guard cleanup branching (github clone retention). A CFG-03 throw
- * propagates to the caller's catch arm; a missing record is a no-op (saves
- * state as-is). Extracted to keep `removeMarketplace`'s cognitive complexity
- * within the project's lint budget.
+ * LAYER-03: the recorded plugins whose `<plugin>@<marketplace>` key the target
+ * layer declares and the other layer does not. A key both layers declare stays
+ * installed. An unreadable other layer may declare any key, so it keeps every
+ * plugin installed.
+ */
+function layerRemovalEntries(
+  record: ExtensionMarketplaceRow,
+  target: ScopeConfig,
+  other: ConfigLoadResult,
+  marketplace: string,
+): readonly (readonly [string, ExtensionPluginRow])[] {
+  if (other.status !== "valid") {
+    return [];
+  }
+
+  return Object.entries(record.plugins).filter(([plugin]) => {
+    const key = `${plugin}@${marketplace}`;
+    return (
+      ownValue(target.plugins, key) !== undefined &&
+      ownValue(other.config.plugins, key) === undefined
+    );
+  });
+}
+
+/**
+ * Commits a remove whose every plugin unstaged. A layer remove drops the
+ * marketplace entry and its `*@<marketplace>` keys from the target layer only
+ * and keeps the state record; the full remove deletes the record. Answers
+ * whether the record was deleted.
+ */
+async function commitRemove(args: {
+  readonly tx: { readonly state: { marketplaces: Record<string, unknown> } };
+  readonly plan: RemovePlan;
+  readonly marketplace: string;
+  readonly locations: ScopedLocations;
+  readonly targetConfigPath: string;
+  readonly orchestrated: boolean;
+}): Promise<boolean> {
+  const { tx, marketplace, locations, orchestrated } = args;
+  if (args.plan.layerOnly) {
+    await cascadeRemoveFromLayer(args.targetConfigPath, locations.scopeRoot, marketplace);
+    return false;
+  }
+
+  await commitFullRemove({ tx, marketplace, locations, orchestrated });
+  return true;
+}
+
+/**
+ * What the lock body leaves for the post-guard cleanup: the recorded
+ * `source.kind` (github clone retention) and whether the state record is gone.
+ */
+interface RemoveLockResult {
+  readonly sourceKind: RecordedSourceKind | undefined;
+  readonly recordDeleted: boolean;
+}
+
+/**
+ * Body of the per-scope state lock. A CFG-03 throw propagates to the caller's
+ * catch arm; a missing record is a no-op (saves state as-is). Extracted to
+ * keep `removeMarketplace`'s cognitive complexity within the project's lint
+ * budget.
  */
 async function runRemoveLockBody(args: {
   readonly tx: {
@@ -578,7 +671,7 @@ async function runRemoveLockBody(args: {
   readonly failedPlugins: FailedPluginCascade[];
   readonly mcpConfigNotices: McpConfigNotice[];
   readonly cfgInvalidSentinel: Error;
-}): Promise<RecordedSourceKind | undefined> {
+}): Promise<RemoveLockResult> {
   const {
     tx,
     opts,
@@ -605,17 +698,18 @@ async function runRemoveLockBody(args: {
     // save the (unchanged) state and let the post-guard arm emit the
     // header-only `(removed)` row.
     await tx.save();
-    return undefined;
+    return { sourceKind: undefined, recordDeleted: true };
   }
 
-  if (!orchestrated) {
-    await gateStandaloneLayers({
-      target: cfg.status === "valid" ? cfg.config : { schemaVersion: 1 },
-      locations,
-      targetIsLocal: opts.local === true,
-      marketplace: opts.name,
-    });
-  }
+  const plan = orchestrated
+    ? fullRemovePlan(record)
+    : await planStandaloneRemove({
+        target: cfg.status === "valid" ? cfg.config : { schemaVersion: 1 },
+        locations,
+        targetIsLocal: opts.local === true,
+        record,
+        marketplace: opts.name,
+      });
 
   const src = record.source as { kind?: unknown };
   const sourceKind: RecordedSourceKind | undefined =
@@ -626,6 +720,7 @@ async function runRemoveLockBody(args: {
   // D-02: per-plugin cascade loop (MR-3 continuation across failures).
   await cascadePluginsInPlace({
     record,
+    entries: plan.entries,
     marketplace: opts.name,
     locations,
     cascade,
@@ -634,17 +729,20 @@ async function runRemoveLockBody(args: {
     mcpConfigNotices,
   });
 
-  if (failedPlugins.length === 0) {
-    await commitFullRemove({
+  // MR-7: a failed plugin keeps the record and writes no config.
+  const recordDeleted =
+    failedPlugins.length === 0 &&
+    (await commitRemove({
       tx,
+      plan,
       marketplace: opts.name,
       locations,
+      targetConfigPath,
       orchestrated,
-    });
-  }
+    }));
 
   await tx.save();
-  return sourceKind;
+  return { sourceKind, recordDeleted };
 }
 
 /**
@@ -758,6 +856,22 @@ function surfaceLayerGateStop(
 }
 
 /**
+ * MR-7 / MURL-04: the marketplace data dir and, for github and url sources, the
+ * `sources/<name>/` clone of a marketplace whose state record is gone.
+ */
+async function removeMarketplaceFootprint(
+  locations: ScopedLocations,
+  name: string,
+  sourceKind: RecordedSourceKind | undefined,
+): Promise<void> {
+  await removePath(locations.marketplaceDataDir(name));
+
+  if (sourceKind === "github" || sourceKind === "url") {
+    await removePath(locations.sourceCloneDir(name));
+  }
+}
+
+/**
  * POST-STATE cleanup (MR-5 / MR-6 / MR-7), run OUTSIDE the guard once
  * state.json has already saved. Every arm is hygienic, never a contract: per
  * D-18-01 individual failures are swallowed by `removePath` and the `rm()`
@@ -769,7 +883,10 @@ function surfaceLayerGateStop(
  * is gone.
  *
  * MR-7: the marketplace data dir and clone dirs are retained when ANY plugin
- * failed, so they are only reclaimed on the all-unstaged arm. MURL-04 / NFR-3:
+ * failed, so they are only reclaimed on the all-unstaged arm, and only when
+ * the state record is gone: a layer remove keeps the record, the data dir,
+ * and the clone while the other layer declares the marketplace (LAYER-03).
+ * MURL-04 / NFR-3:
  * both github and url sources have a `sources/<name>/` clone, and a url clone
  * left behind would permanently trip MA-6 `{stale clone}` on re-add; path
  * sources never have one.
@@ -790,6 +907,7 @@ async function runPostRemoveCleanup(args: {
   readonly completionCache: CompletionCache;
   readonly successfullyUnstaged: readonly string[];
   readonly allPluginsUnstaged: boolean;
+  readonly recordDeleted: boolean;
   readonly sourceKindAtRecord: RecordedSourceKind | undefined;
 }): Promise<void> {
   const { completionCache, locations, name, scope } = args;
@@ -811,10 +929,8 @@ async function runPostRemoveCleanup(args: {
     return;
   }
 
-  await removePath(locations.marketplaceDataDir(name));
-
-  if (args.sourceKindAtRecord === "github" || args.sourceKindAtRecord === "url") {
-    await removePath(locations.sourceCloneDir(name));
+  if (args.recordDeleted) {
+    await removeMarketplaceFootprint(locations, name, args.sourceKindAtRecord);
   }
 
   try {
@@ -906,7 +1022,7 @@ async function runRemoveOutcome(
   const failedPlugins: FailedPluginCascade[] = [];
   const successfullyUnstaged: string[] = []; // plugins whose cascade returned ok:true
   const mcpConfigNotices: McpConfigNotice[] = [];
-  let sourceKindAtRecord: RecordedSourceKind | undefined;
+  let removal: RemoveLockResult = { sourceKind: undefined, recordDeleted: false };
 
   // CFG-03 sentinel: a synthetic throw signaling the lock body aborted on an
   // invalid config. The catch arm BELOW maps it to the structured failed row.
@@ -918,7 +1034,7 @@ async function runRemoveOutcome(
     await withLockedStateTransaction(
       locations,
       async (tx) => {
-        const sk = await runRemoveLockBody({
+        removal = await runRemoveLockBody({
           tx,
           opts,
           locations,
@@ -930,9 +1046,6 @@ async function runRemoveOutcome(
           mcpConfigNotices,
           cfgInvalidSentinel,
         });
-        if (sk !== undefined) {
-          sourceKindAtRecord = sk;
-        }
       },
       opts.stateTransaction,
     );
@@ -960,7 +1073,8 @@ async function runRemoveOutcome(
     completionCache: opts.completionCache,
     successfullyUnstaged,
     allPluginsUnstaged: failedPlugins.length === 0,
-    sourceKindAtRecord,
+    recordDeleted: removal.recordDeleted,
+    sourceKindAtRecord: removal.sourceKind,
   });
 
   // One MarketplaceNotificationMessage per outcome, emitted via one

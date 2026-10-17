@@ -6,7 +6,9 @@
  *
  * A missing file fails every step that reads one; it never reads as zero
  * declarations. A file whose `marketplaces` map is empty declares that no
- * marketplace is wanted. `declares no marketplaces` and `declares no plugins`
+ * marketplace is wanted. `declares these plugins` lists each plugin declaration
+ * under its `<plugin>@<marketplace>` key, in an `id` column, beside the fields of
+ * its entry. `declares no marketplaces` and `declares no plugins`
  * pass on an empty or an absent map, because the configuration schema reads an
  * absent map as no declarations (CFG-01). `declares no plugins` is how a
  * scenario shows that a refused command wrote no plugin declaration to either
@@ -65,24 +67,52 @@ async function declaredNames(
   return { names: Object.keys(declarations), content };
 }
 
+// Compares the declarations of one map of the file with the table: one record
+// per declaration, its key in `keyColumn` beside the fields of its entry. A
+// missing map or a non-object entry fails.
+async function compareDeclarations(
+  world: ScenarioWorld,
+  file: string,
+  table: DataTable,
+  member: "marketplaces" | "plugins",
+  keyColumn: "name" | "id",
+): Promise<void> {
+  const { config, content } = await readConfigObject(file);
+  const declarations: unknown = Object.hasOwn(config, member)
+    ? Reflect.get(config, member)
+    : undefined;
+  if (!isPlainObject(declarations)) {
+    assert.fail(`${file} has no ${member} object: ${content}`);
+  }
+
+  const records = Object.entries(declarations).map(([key, entry]) => {
+    if (!isPlainObject(entry)) {
+      assert.fail(`the ${member} entry ${key} in ${file} is not an object: ${content}`);
+    }
+
+    return fieldRecord([[keyColumn, key], ...flatten(entry, world.tokens)]);
+  });
+  const [stated = []] = table.raw();
+  assert.deepStrictEqual(recordTable(stated, records), table.raw());
+}
+
 Then(
   "the {string} file of the {word} scope declares these marketplaces:",
   async function (this: ScenarioWorld, fileName: string, scope: string, table: DataTable) {
-    const file = configFilePath(this, fileName, scope);
-    const { config, content } = await readConfigObject(file);
-    if (!("marketplaces" in config) || !isPlainObject(config.marketplaces)) {
-      assert.fail(`${file} has no marketplaces object: ${content}`);
-    }
+    await compareDeclarations(
+      this,
+      configFilePath(this, fileName, scope),
+      table,
+      "marketplaces",
+      "name",
+    );
+  },
+);
 
-    const records = Object.entries(config.marketplaces).map(([name, entry]) => {
-      if (!isPlainObject(entry)) {
-        assert.fail(`the marketplace ${name} in ${file} is not an object: ${content}`);
-      }
-
-      return fieldRecord([["name", name], ...flatten(entry, this.tokens)]);
-    });
-    const [stated = []] = table.raw();
-    assert.deepStrictEqual(recordTable(stated, records), table.raw());
+Then(
+  "the {string} file of the {word} scope declares these plugins:",
+  async function (this: ScenarioWorld, fileName: string, scope: string, table: DataTable) {
+    await compareDeclarations(this, configFilePath(this, fileName, scope), table, "plugins", "id");
   },
 );
 

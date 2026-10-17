@@ -1,8 +1,8 @@
 Feature: Marketplace remove
 
-  Removing a marketplace drops it from a scope, with its declaration and the
-  plugins installed from it. The scenarios run the real extension in a headless
-  Pi, read its JSON results, and use local marketplaces in place of published ones.
+  Removing a marketplace drops its declaration from one configuration file of a
+  scope and uninstalls the plugins that file declares from it. The scenarios run the
+  real extension in a headless Pi and use local marketplaces in place of published ones.
 
   Scenario: Removing a marketplace with --local clears only its local declaration
     Given the marketplace "base" is published as a dir source
@@ -74,3 +74,66 @@ Feature: Marketplace remove
       | name  | source                    |
       | tools | {home}/marketplaces/tools |
     Then the "claude-plugins.local.json" file of the project scope does not exist
+
+  Scenario: Removing a marketplace from the shared configuration keeps its declaration in the local configuration
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin marketplace add {home}/marketplaces/tools --scope project --local"
+    When the user runs "/claude:plugin marketplace remove tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these marketplaces:
+      | name  | scope   | status  |
+      | tools | project | removed |
+    Then the "claude-plugins.json" file of the project scope declares no marketplaces
+    Then the "claude-plugins.local.json" file of the project scope declares these marketplaces:
+      | name  | source                    |
+      | tools | {home}/marketplaces/tools |
+
+  Scenario: A marketplace removed from one configuration is still listed in a new session
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin marketplace add {home}/marketplaces/tools --scope project --local"
+    Given the user has run "/claude:plugin marketplace remove tools --scope project"
+    Given the user has started a new pi session
+    When the user runs "/claude:plugin marketplace list"
+    Then the result has these fields:
+      | kind                | cascade          |
+      | severity            | info             |
+      | needs reload        | false            |
+      | tally label         | Marketplace list |
+      | tally failures      | 0                |
+      | tally warnings      | 0                |
+      | tally success count | 1                |
+    Then the result lists these marketplaces:
+      | name  | scope   | details autoupdate | details last updated at |
+      | tools | project | false              | {scenario time}         |
+
+  Scenario: Removing a marketplace from the shared configuration uninstalls only the plugins that configuration declares
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins:
+      | name  | version |
+      | alpha | 1.0.0   |
+      | beta  | 1.0.0   |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin marketplace add {home}/marketplaces/tools --scope project --local"
+    Given the user has run "/claude:plugin install alpha@tools --scope project"
+    Given the user has run "/claude:plugin install beta@tools --scope project --local"
+    When the user runs "/claude:plugin marketplace remove tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id          | name  | status      | reasons | scope   |
+      | tools            | project           | removed            | alpha@tools | alpha | uninstalled |         | project |
+    Then the "claude-plugins.json" file of the project scope declares no marketplaces
+    Then the "claude-plugins.json" file of the project scope declares no plugins
+    Then the "claude-plugins.local.json" file of the project scope declares these marketplaces:
+      | name  | source                    |
+      | tools | {home}/marketplaces/tools |
+    Then the "claude-plugins.local.json" file of the project scope declares these plugins:
+      | id         |
+      | beta@tools |
