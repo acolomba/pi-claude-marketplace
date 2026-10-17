@@ -539,26 +539,26 @@ export async function addMarketplaceToState(args: {
     return { name: await addPathInGuard({ state, locations, source, cwd }) };
   }
 
-  const cloneArgs = {
-    ctx: args.ctx,
-    run: args.run,
-    state,
-    locations,
-    gitOps,
-    credentialOps,
-    removalOps,
-    ...(deviceFlowHttp !== undefined && { deviceFlowHttp }),
-    ...(authMemo !== undefined && { authMemo }),
-    cwd,
-  };
   // MURL-01 / D-76-06: source.url is the stored canonical identity; the wire
   // url derives from the source via `networkCloneUrl` (D-2-01, D-2-03). Every
   // host carries an auth bundle; the provider lookup decides its Device Flow
   // half (PROV-03).
-  const name =
-    source.kind === "github"
-      ? await addGithubInGuard({ ...cloneArgs, source })
-      : await addUrlInGuard({ ...cloneArgs, source });
+  const auth = cloneAuthFor(source, {
+    credentialOps,
+    ctx: args.ctx,
+    run: args.run,
+    ...(deviceFlowHttp !== undefined && { deviceFlowHttp }),
+    ...(authMemo !== undefined && { authMemo }),
+  });
+  const name = await addGitClonedInGuard({
+    state,
+    locations,
+    source,
+    gitOps,
+    removalOps,
+    auth,
+    cwd,
+  });
   return { name, cloneDir: await locations.sourceCloneDir(name) };
 }
 
@@ -1138,96 +1138,45 @@ async function addGitClonedInGuard(args: {
   }
 }
 
-async function addGithubInGuard(args: {
-  ctx: NotificationContext;
-  run: NotificationRun;
-  state: ExtensionState;
-  locations: ScopedLocations;
-  source: GitHubSource;
-  removalOps: RemovalOps;
-  gitOps: GitOps;
-  credentialOps: CredentialOps;
-  deviceFlowHttp?: DeviceFlowHttp;
-  authMemo?: Map<string, AuthAttemptResult>;
-  cwd: string;
-}): Promise<string> {
-  const { ctx, state, locations, source, gitOps, credentialOps, deviceFlowHttp, cwd, removalOps } =
-    args;
-
-  // AUTH-01 / D-79-05: buildAuthForHost binds the GitHub provider's Device
-  // Flow as the onAuthRequired closure for this clone.
-  // platform/git.ts::buildAuthCallbacks first consults
-  // credentialOps.fill(host); only on a miss does it invoke the closure.
-  // AUTH-09: the closure passes ONLY user_code + verification_uri, through
-  // initiateDeviceFlow's onDeviceCode callback -- the access token is acquired
-  // LATER in the poll loop and is never passed back to a notify or Error.
-  // GHB-02: buildGitHubAuth binds github.com, or the override host with a
-  // stored credential when PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL is set.
-  const auth = buildGitHubAuth({
-    credentialOps,
-    ctx,
-    run: args.run,
-    ...(deviceFlowHttp !== undefined && { deviceFlowHttp }),
-    ...(args.authMemo !== undefined && { authMemo: args.authMemo }),
-  });
-
-  return addGitClonedInGuard({
-    state,
-    locations,
-    source,
-    gitOps,
-    removalOps,
-    auth,
-    cwd,
-  });
+/** The credential half of a git add's auth bundle, shared by both source kinds. */
+interface CloneAuthArgs {
+  readonly credentialOps: CredentialOps;
+  readonly ctx: NotificationContext;
+  readonly run: NotificationRun;
+  readonly deviceFlowHttp?: DeviceFlowHttp;
+  readonly authMemo?: Map<string, AuthAttemptResult>;
 }
 
 /**
- * MURL-01 / D-76-06: url-source add. `source.url` is stored as the canonical
- * identity form (parse-time `.git`-stripped) and NOT reconstructed against
- * github.com; the url actually cloned is derived from `source.raw` via
- * `networkCloneUrl` (D-2-01, D-2-03), preserving whatever `.git` decision the
- * user's own input made. GAUTH-03: the host is extracted from the url and
- * `buildAuthForHost` binds a bundle to it, so a private source on any host
- * authenticates from the user's git credential helper; the provider registry
- * decides only whether a Device Flow runs on a helper miss (PROV-03). The
- * bundle's host binding is enforced by the compare in
- * `buildAuthCallbacks.onAuth` (D-1-03, T-79-04).
+ * The auth bundle a github or url add clones with.
+ *
+ * github: AUTH-01 / D-79-05: buildAuthForHost binds the GitHub provider's
+ * Device Flow as the onAuthRequired closure for this clone.
+ * platform/git.ts::buildAuthCallbacks first consults credentialOps.fill(host);
+ * only on a miss does it invoke the closure. AUTH-09: the closure passes ONLY
+ * user_code + verification_uri, through initiateDeviceFlow's onDeviceCode
+ * callback -- the access token is acquired LATER in the poll loop and is never
+ * passed back to a notify or Error. GHB-02: buildGitHubAuth binds github.com,
+ * or the override host with a stored credential when
+ * PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL is set.
+ *
+ * url: MURL-01 / D-76-06: `source.url` is stored as the canonical identity
+ * form (parse-time `.git`-stripped) and NOT reconstructed against github.com;
+ * the url actually cloned is derived from `source.raw` via `networkCloneUrl`
+ * (D-2-01, D-2-03), preserving whatever `.git` decision the user's own input
+ * made. GAUTH-03: the host is extracted from the url and `buildAuthForHost`
+ * binds a bundle to it, so a private source on any host authenticates from the
+ * user's git credential helper; the provider registry decides only whether a
+ * Device Flow runs on a helper miss (PROV-03). The bundle's host binding is
+ * enforced by the compare in `buildAuthCallbacks.onAuth` (D-1-03, T-79-04).
+ *
+ * FTCH-06 / D-79-02: `authMemo` caps the Device Flow at once per host across
+ * the command.
  */
-async function addUrlInGuard(args: {
-  ctx: NotificationContext;
-  run: NotificationRun;
-  state: ExtensionState;
-  locations: ScopedLocations;
-  source: UrlSource;
-  removalOps: RemovalOps;
-  gitOps: GitOps;
-  credentialOps: CredentialOps;
-  deviceFlowHttp?: DeviceFlowHttp;
-  authMemo?: Map<string, AuthAttemptResult>;
-  cwd: string;
-}): Promise<string> {
-  const { ctx, state, locations, source, gitOps, credentialOps, deviceFlowHttp, cwd, removalOps } =
-    args;
-  const host = hostFromCloneUrl(source.url, "url");
-  const auth = buildAuthForHost({
-    host,
-    credentialOps,
-    ctx,
-    run: args.run,
-    ...(deviceFlowHttp !== undefined && { deviceFlowHttp }),
-    ...(args.authMemo !== undefined && { authMemo: args.authMemo }),
-  });
-
-  return addGitClonedInGuard({
-    state,
-    locations,
-    source,
-    gitOps,
-    removalOps,
-    auth,
-    cwd,
-  });
+function cloneAuthFor(source: GitHubSource | UrlSource, authArgs: CloneAuthArgs): GitAuthBundle {
+  return source.kind === "github"
+    ? buildGitHubAuth(authArgs)
+    : buildAuthForHost({ ...authArgs, host: hostFromCloneUrl(source.url, "url") });
 }
 
 async function addPathInGuard(args: {
