@@ -119,7 +119,7 @@ const mergeCases = [
     expectedConfig: {
       marketplaces: {
         zebra: { entry: { source: "base/zebra" }, source: "base" },
-        shared: { entry: { source: "local/shared" }, source: "local" },
+        shared: { entry: { source: "local/shared", autoupdate: true }, source: "local" },
         alpha: { entry: { source: "base/alpha" }, source: "base" },
         omega: { entry: { source: "local/omega" }, source: "local" },
       },
@@ -147,6 +147,116 @@ const mergeCases = [
           source: "base",
         },
       },
+    },
+  },
+  {
+    name: "gives a local marketplace entry without autoupdate the shared autoupdate",
+    baseConfig: {
+      marketplaces: {
+        tools: { source: "./tools", autoupdate: true },
+      },
+    },
+    localConfig: {
+      marketplaces: {
+        tools: { source: "./tools" },
+      },
+    },
+    expectedConfig: {
+      marketplaces: {
+        tools: { entry: { source: "./tools", autoupdate: true }, source: "local" },
+      },
+      plugins: {},
+    },
+  },
+  {
+    name: "lets the local autoupdate of a marketplace win over the shared one",
+    baseConfig: {
+      marketplaces: {
+        tools: { source: "./tools", autoupdate: true },
+      },
+    },
+    localConfig: {
+      marketplaces: {
+        tools: { source: "./tools", autoupdate: false },
+      },
+    },
+    expectedConfig: {
+      marketplaces: {
+        tools: { entry: { source: "./tools", autoupdate: false }, source: "local" },
+      },
+      plugins: {},
+    },
+  },
+  {
+    name: "lets a local marketplace source spelled another way win over the shared one",
+    baseConfig: {
+      marketplaces: {
+        tools: { source: "~/marketplaces/tools", autoupdate: true },
+      },
+    },
+    localConfig: {
+      marketplaces: {
+        tools: { source: "/home/user/marketplaces/tools" },
+      },
+    },
+    expectedConfig: {
+      marketplaces: {
+        tools: {
+          entry: { source: "/home/user/marketplaces/tools", autoupdate: true },
+          source: "local",
+        },
+      },
+      plugins: {},
+    },
+  },
+  {
+    name: "keeps the unknown fields of both marketplace entries with the local value winning",
+    baseConfig: JSON.parse(
+      '{"marketplaces":{"tools":{"source":"./tools","channel":"stable","mirror":"base"}}}',
+    ) as ScopeConfig,
+    localConfig: JSON.parse(
+      '{"marketplaces":{"tools":{"source":"./tools","mirror":"local","pinned":true}}}',
+    ) as ScopeConfig,
+    expectedConfig: JSON.parse(
+      '{"marketplaces":{"tools":{"entry":{"source":"./tools","channel":"stable","mirror":"local","pinned":true},"source":"local"}},"plugins":{}}',
+    ) as MergedConfig,
+  },
+  {
+    name: "replaces a shared plugin entry whole with the local plugin entry",
+    baseConfig: {
+      plugins: {
+        "formatter@tools": { enabled: false },
+      },
+    },
+    localConfig: {
+      plugins: {
+        "formatter@tools": {},
+      },
+    },
+    expectedConfig: {
+      marketplaces: {},
+      plugins: {
+        "formatter@tools": { entry: {}, source: "local" },
+      },
+    },
+  },
+  {
+    name: "merges prototype-named marketplaces both files declare into own entries",
+    baseConfig: JSON.parse(
+      '{"marketplaces":{"__proto__":{"source":"base/proto","autoupdate":true},"constructor":{"source":"base/constructor","autoupdate":false}}}',
+    ) as ScopeConfig,
+    localConfig: JSON.parse(
+      '{"marketplaces":{"__proto__":{"source":"local/proto"},"constructor":{"source":"base/constructor","autoupdate":true}}}',
+    ) as ScopeConfig,
+    expectedConfig: {
+      marketplaces: Object.fromEntries([
+        ["__proto__", { entry: { source: "local/proto", autoupdate: true }, source: "local" }],
+        [
+          "constructor",
+          { entry: { source: "base/constructor", autoupdate: true }, source: "local" },
+        ],
+      ]),
+      plugins: {},
     },
   },
 ] satisfies readonly MergeCase[];
@@ -280,7 +390,7 @@ const loadCases = [
       merged: {
         marketplaces: {
           zebra: { entry: { source: "base/zebra" }, source: "base" },
-          shared: { entry: { source: "local/shared" }, source: "local" },
+          shared: { entry: { source: "local/shared", autoupdate: true }, source: "local" },
           alpha: { entry: { source: "local/alpha" }, source: "local" },
         },
         plugins: {
@@ -428,46 +538,6 @@ async function createConfigMergeLocations(t: TestContext): Promise<ScopedLocatio
 }
 
 describe("mergeScopeConfigs", () => {
-  test("replaces complete base entries with local entries", () => {
-    // arrange
-    const baseConfig = {
-      marketplaces: {
-        tools: { source: "base/tools", autoupdate: true },
-      },
-      plugins: {
-        "formatter@tools": { enabled: true },
-      },
-    } satisfies ScopeConfig;
-    const localConfig = {
-      marketplaces: {
-        tools: { source: "local/tools" },
-      },
-      plugins: {
-        "formatter@tools": {},
-      },
-    } satisfies ScopeConfig;
-    const expectedConfig = {
-      marketplaces: {
-        tools: {
-          entry: { source: "local/tools" },
-          source: "local",
-        },
-      },
-      plugins: {
-        "formatter@tools": {
-          entry: {},
-          source: "local",
-        },
-      },
-    } satisfies MergedConfig;
-
-    // act
-    const mergedConfig = mergeScopeConfigs(baseConfig, localConfig);
-
-    // assert
-    assert.deepStrictEqual(mergedConfig, expectedConfig);
-  });
-
   test("keeps JSON-derived prototype-named base entries as own merged values", () => {
     // arrange
     const baseConfig = JSON.parse(
