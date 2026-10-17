@@ -239,6 +239,8 @@ Plugin list: 2 successes
 
 `official [project]` does not exist; the project-scoped `alpha` is folded under the user-scope marketplace header. Its row carries the explicit `[project]` bracket because `plugin.scope !== marketplace.scope` (Phase 16 D-16-17). The user-scoped `alpha` row omits the bracket because `plugin.scope === marketplace.scope` -- the orphan-fold rule applies symmetrically.
 
+The fold applies only when the project record and the user record share the marketplace root, which happens for a path marketplace. A project install from a user-scope git marketplace gives the project its own record and its own clone, so its plugins list under the project's own `official [project]` header.
+
 ### Soft-dep markers on installed rows when companion extensions are unloaded
 
 <!-- catalog-state: soft-dep-on-installed -->
@@ -819,7 +821,7 @@ A marketplace operation has failed.
 ⊘ mp [user] (failed) {marketplace not added to user scope}
 ```
 
-**Project target, container at user.** Reachable from every verb EXCEPT `install`: the CMP-3 fallback lets a project-target install source a user-scope marketplace and adopt it into project scope, so `install` never renders this row. `info`, `update`, `reinstall`, `uninstall`, `enable`, `disable`, `marketplace info`, `marketplace update` and `marketplace remove` carry no such fallback and miss.
+**Project target, container at user.** Reachable from every verb EXCEPT `install`: the CMP-3 fallback adds the user-scope marketplace to the project scope, as `marketplace add --scope project` does, so `install` never renders this row. `info`, `update`, `reinstall`, `uninstall`, `enable`, `disable`, `marketplace info`, `marketplace update` and `marketplace remove` carry no such fallback and miss.
 
 <!-- catalog-state: missing-marketplace-not-added-cross-scope-project -->
 
@@ -3589,6 +3591,8 @@ Single-marketplace command that cascades plugin unstaging.
 
 Clean (no-failure) removal carries one `PluginUninstalledMessage` row (`○` glyph, `(uninstalled)` token) per successfully unstaged plugin (D-22-02). The name-only row has no `v<version>` token because the `successfullyUnstaged` accumulator is a `string[]` of plugin names. The reload-hint fires because at least one plugin row carries the `uninstalled` state-change token (SNM-33 / D-22-01). An empty `marketplace remove` (no plugins were staged) renders the header alone with no trailer (G-MIL-02).
 
+A named remove changes only its target file: `claude-plugins.json`, or `claude-plugins.local.json` with `--local` (LAYER-02). When the other file still declares the marketplace, the remove renders this same `(removed)` row with one `(uninstalled)` child for each plugin that only the target file declares. The marketplace then stays recorded and listed, because the other file still declares it (LAYER-03). A remove that keeps a dependency another plugin still needs also renders this row, and the marketplace stays recorded and listed while it holds that dependency (D-09 Q6). A dependency that the remove takes renders as a plain `(uninstalled)` row, the same as any other plugin.
+
 ### Partial removal (some plugins unstaged, others failed)
 
 <!-- catalog-state: partial -->
@@ -3658,6 +3662,20 @@ Some operations have failed.
 ⊘ tools [project] (failed)
   ⊘ tools (failed) {marketplace declared in shared config}
     cause: The marketplace tools is declared only in claude-plugins.json. Run the command again without --local.
+```
+
+### Failure -- a dependency declaration cannot be read (LAYER-03 / D-05-07)
+
+When the marketplace holds a plugin that was installed as a dependency, the remove reads what every installed plugin of the scope declares, so that it never removes a dependency another plugin still needs. If one of those declarations cannot be read, the whole remove is refused before anything changes: a needed dependency must never be removed on incomplete information. The remove reads no declarations when the marketplace holds no dependency. The `cause:` line names the first plugin, in state order, whose declaration could not be read, and why. To repair it, update that plugin's marketplace (`marketplace update`), or fix the manifest of a path marketplace, then run the remove again. Severity `error`; no reload-hint.
+
+<!-- catalog-state: remove-dependency-declarations-unreadable -->
+
+```text
+Some operations have failed.
+
+⊘ tools [project] (failed)
+  ⊘ tools (failed) {unreadable}
+    cause: cannot read the dependencies of lib@tools: marketplace.json schema invalid: /plugins: must be array
 ```
 
 ______________________________________________________________________
@@ -4224,6 +4242,10 @@ Marketplace autoupdate: 2 successes
 ```
 
 Changed and already-correct rows both count as successful plural outcomes.
+
+### Config files
+
+A named flip changes only its target file: `claude-plugins.json`, or `claude-plugins.local.json` with `--local` (LAYER-02). When only the other file declares the marketplace, the flip is refused before anything changes, with the `{marketplace declared locally}` or `{marketplace declared in shared config}` rows documented under [`## /claude:plugin marketplace remove <name>`](#claudeplugin-marketplace-remove-name). A flip row reports the outcome in the target file, so `{already autoupdate}` means that file already has the value. `marketplace list` and `marketplace info` show the value that the two files merge to, where a local entry's `autoupdate` wins over the shared one (D-07). A flip without a name changes every file that declares each marketplace, or only `claude-plugins.local.json` with `--local`.
 
 ### Failure -- missing marketplace (explicit `--scope`)
 

@@ -136,5 +136,35 @@ export const MARKETPLACE_REMOVE_FIXTURES: FixtureMap = {
         ],
       },
     },
+
+    // LAYER-03: the remove of a marketplace holding a dependency cannot read a declaration.
+    "remove-dependency-declarations-unreadable": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        label: "Marketplace remove",
+        cardinality: "single",
+        marketplaces: [
+          {
+            name: "tools",
+            scope: "project",
+            status: "failed",
+            severity: "error",
+            plugins: [
+              {
+                status: "failed",
+                severity: "error",
+                needsReload: false,
+                name: "tools",
+                reasons: ["unreadable"],
+                cause: new Error(
+                  "cannot read the dependencies of lib@tools: marketplace.json schema invalid: /plugins: must be array",
+                ),
+              },
+            ],
+          },
+        ],
+      },
+    },
   },
 };
