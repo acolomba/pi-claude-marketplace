@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 4
+open_count: 3
 waived_count: 51
-fixed_count: 43
+fixed_count: 44
 total_count: 98
-last_updated: 2026-10-17T06:00:17.471Z
+last_updated: 2026-10-17T06:03:01.499Z
 ---
 
 # Broken Windows Ledger
@@ -111,7 +111,7 @@ last_updated: 2026-10-17T06:00:17.471Z
 | 94 | 03.1 | deviation | tests/orchestrators/plugin/install-flow.test.ts |  | [marketplace-features] FIX-02 D-04 truth 'reload after a local plugin install writes a base file with the shared marketplace and no plugin key' is unreachable: install adopts the marketplace into claude-plugins.local.json (CR-02), so the reload writes no base file; the DFEN-06 case pins ENOENT and rule 2 is proven by unit and convergence cases instead | open |  | 2026-10-16T16:20:58.926Z |  |
 | 95 | 03.1 | deviation | extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts |  | [marketplace-features] notifyInvalidConfigWriteBack JSDoc says the S5 warning follows the success row; measured, the S5 row is emitted first (update-flow S5 local-file case) | fixed |  | 2026-10-16T17:04:18.661Z | 2026-10-16T17:48:34.896Z |
 | 96 | 03.2 | todo | extensions/pi-claude-marketplace/shared/notification-json.ts | 410 | [marketplace-features] A cascade row for a cross-marketplace dependency renders id lib@tools@upstream on the JSON wire (wireRow appends the block name to a row name that already carries @marketplace); found by the cross-scope install scenario, which pins the current value | fixed |  | 2026-10-17T04:13:17.267Z | 2026-10-17T06:00:11.386Z |
-| 97 | 03.2 | todo | README.md | 305 | [marketplace-features] The command reference line 'Remove a marketplace and all plugins installed from it.' (and its README.es.md twin) predates the layer partition: a remove from one config file uninstalls only that file's plugins, and a dependency another plugin needs stays | open |  | 2026-10-17T04:38:40.511Z |  |
+| 97 | 03.2 | todo | README.md | 305 | [marketplace-features] The command reference line 'Remove a marketplace and all plugins installed from it.' (and its README.es.md twin) predates the layer partition: a remove from one config file uninstalls only that file's plugins, and a dependency another plugin needs stays | fixed |  | 2026-10-17T04:38:40.511Z | 2026-10-17T06:03:01.499Z |
 | 98 | 03.2 | todo | extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts |  | [marketplace-features] A marketplace-level refusal row (marketplaceFailureRows: remove, autoupdate, add under the GitHub base override) carries a synthetic failed child named after the marketplace, so its JSON wire id reads <mp>@<mp> (tools@tools), as if a plugin named tools existed; the scenarios pin that value. Fixing it needs a wire decision (mark the child as a marketplace subject, or give it no plugin id), so the review fix left it open | open |  | 2026-10-17T06:00:17.471Z |  |
 
 ````json
@@ -1315,10 +1315,10 @@ last_updated: 2026-10-17T06:00:17.471Z
     "file": "README.md",
     "line": 305,
     "description": "[marketplace-features] The command reference line 'Remove a marketplace and all plugins installed from it.' (and its README.es.md twin) predates the layer partition: a remove from one config file uninstalls only that file's plugins, and a dependency another plugin needs stays",
-    "status": "open",
+    "status": "fixed",
     "reason": "",
     "recorded_at": "2026-10-17T04:38:40.511Z",
-    "resolved_at": null,
+    "resolved_at": "2026-10-17T06:03:01.499Z",
     "milestone": null
   },
   {
