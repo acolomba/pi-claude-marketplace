@@ -23,9 +23,9 @@ Feature: Plugin cross-scope install
       | severity     | info    |
       | needs reload | true    |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id                 | name      | status    | reasons | scope   | version |
-      | upstream         | project           | app@upstream       | app       | installed |         | project | 1.0.0   |
-      | upstream         | project           | lib@tools@upstream | lib@tools | installed |         | project | 1.0.0   |
+      | marketplace name | marketplace scope | id           | name      | status    | reasons | scope   | version |
+      | upstream         | project           | app@upstream | app       | installed |         | project | 1.0.0   |
+      | upstream         | project           | lib@tools    | lib@tools | installed |         | project | 1.0.0   |
     Then the "claude-plugins.json" file of the project scope declares these marketplaces:
       | name     | source                       |
       | upstream | {home}/marketplaces/upstream |

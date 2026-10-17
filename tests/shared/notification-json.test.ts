@@ -1080,6 +1080,36 @@ test("joins an scp-style marketplace name into the id verbatim", () => {
   );
 });
 
+test("keeps a cascade row named by its plugin key as the id instead of appending the block name", () => {
+  // arrange
+  const presentation = presentationOf([
+    {
+      name: "upstream",
+      scope: "user",
+      plugins: [{ status: "available", name: "lib@tools", reasons: [] }],
+    },
+  ]);
+
+  // act
+  const payload = toWirePayload(presentation, {
+    kind: "command",
+    commandId: "plugin",
+    invocationId: "test-run",
+  });
+
+  // assert
+  assert.deepStrictEqual(
+    payload,
+    expectedInfoPayload([
+      {
+        name: "upstream",
+        scope: "user",
+        plugins: [{ status: "available", name: "lib@tools", id: "lib@tools", reasons: [] }],
+      },
+    ]),
+  );
+});
+
 test("keeps content reasons before markers, one multi-word token per element", () => {
   // arrange
   const presentation = presentationOf([

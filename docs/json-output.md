@@ -573,22 +573,22 @@ An unexpected command failure or a final outcome when ordinary delivery failed. 
 
 <!-- fields: plugin-row -->
 
-| Field path        | Type                                | Presence | Meaning                                                                      |
-| ----------------- | ----------------------------------- | -------- | ---------------------------------------------------------------------------- |
-| `status`          | PluginStatus                        | required | Plugin state or operation result.                                            |
-| `name`            | string                              | required | Plugin name.                                                                 |
-| `id`              | string                              | required | Qualified address, `<name>@<marketplace>`.                                   |
-| `reasons`         | Reason[]                            | required | Resolved reasons, including soft-dependency markers. Empty means no reasons. |
-| `version`         | string                              | optional | Plugin version.                                                              |
-| `from`            | string                              | optional | Version before an update.                                                    |
-| `to`              | string                              | optional | Version after an update.                                                     |
-| `scope`           | Scope                               | optional | Plugin installation scope.                                                   |
-| `description`     | string                              | optional | Plugin description.                                                          |
-| `partial`         | boolean                             | optional | Whether only part of the plugin is supported.                                |
-| `hint`            | RowHint                             | optional | Follow-up action hint.                                                       |
-| `cause`           | [Cause](#cause)                     | optional | Serialized row failure.                                                      |
-| `leaks`           | string[]                            | optional | Paths left behind by failed cleanup, after redaction.                        |
-| `rollbackPartial` | [Rollback phase](#rollback-phase)[] | optional | Rollback phases that did not finish.                                         |
+| Field path        | Type                                | Presence | Meaning                                                                                                               |
+| ----------------- | ----------------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------- |
+| `status`          | PluginStatus                        | required | Plugin state or operation result.                                                                                     |
+| `name`            | string                              | required | Plugin name.                                                                                                          |
+| `id`              | string                              | required | Qualified address, `<name>@<marketplace>`. A dependency row named by its `<plugin>@<marketplace>` key keeps that key. |
+| `reasons`         | Reason[]                            | required | Resolved reasons, including soft-dependency markers. Empty means no reasons.                                          |
+| `version`         | string                              | optional | Plugin version.                                                                                                       |
+| `from`            | string                              | optional | Version before an update.                                                                                             |
+| `to`              | string                              | optional | Version after an update.                                                                                              |
+| `scope`           | Scope                               | optional | Plugin installation scope.                                                                                            |
+| `description`     | string                              | optional | Plugin description.                                                                                                   |
+| `partial`         | boolean                             | optional | Whether only part of the plugin is supported.                                                                         |
+| `hint`            | RowHint                             | optional | Follow-up action hint.                                                                                                |
+| `cause`           | [Cause](#cause)                     | optional | Serialized row failure.                                                                                               |
+| `leaks`           | string[]                            | optional | Paths left behind by failed cleanup, after redaction.                                                                 |
+| `rollbackPartial` | [Rollback phase](#rollback-phase)[] | optional | Rollback phases that did not finish.                                                                                  |
 
 <!-- /fields -->
 

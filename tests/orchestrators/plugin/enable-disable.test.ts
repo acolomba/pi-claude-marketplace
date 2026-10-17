@@ -5568,7 +5568,7 @@ for (const mode of ["json", "rpc"]) {
               plugins: [
                 {
                   name: "formatter@tools",
-                  id: "formatter@tools@official",
+                  id: "formatter@tools",
                   scope: "user",
                   status: "installed",
                   version: "2.1.0",

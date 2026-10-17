@@ -400,14 +400,16 @@ function wireBlock(mp: ResolvedMarketplace) {
 
 /**
  * WIRE-04 / WIRE-06: one row. `id` is the row name, `@`, and the block name,
- * verbatim. `reasons` is always present. `missingPolicy` is resolve-internal
- * and has no wire field.
+ * verbatim, unless the row name already carries an `@`: a cascade member row
+ * is named by its `<plugin>@<marketplace>` key (RESV-06), which names a
+ * dependency's own marketplace and is therefore already the id. `reasons` is
+ * always present. `missingPolicy` is resolve-internal and has no wire field.
  */
 function wireRow(row: ResolvedRow, mp: ResolvedMarketplace) {
   return {
     status: row.status,
     name: row.name,
-    id: `${row.name}@${mp.name}`,
+    id: row.name.includes("@") ? row.name : `${row.name}@${mp.name}`,
     reasons: [...row.reasons],
     ...wireScope(row, mp.scope),
     ...wireVersion(row),
