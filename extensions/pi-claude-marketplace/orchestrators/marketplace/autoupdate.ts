@@ -82,9 +82,17 @@ import { ownValue, setOwn } from "../../shared/own-key.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 
 import { AUTOUPDATE_CONTEXT, NOAUTOUPDATE_CONTEXT } from "./autoupdate.messaging.ts";
-import { classifyAutoupdateFlip, crossScopeFlag, marketplaceFailureRows } from "./shared.ts";
+import {
+  classifyAutoupdateFlip,
+  crossScopeFlag,
+  marketplaceFailureRows,
+  marketplaceLayerVerdict,
+} from "./shared.ts";
 
+import type { MarketplaceLayerVerdict } from "./shared.ts";
 import type { MarketplaceConfigEntry, ScopeConfig } from "../../persistence/config-io.ts";
+import type { ScopedLocations } from "../../persistence/locations.ts";
+import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -129,10 +137,6 @@ export interface AutoupdateOptions {
   readonly notifications?: AutoupdateNotifications;
 }
 
-function shouldCollectNotFound(opts: AutoupdateOptions, err: unknown): boolean {
-  return opts.name !== undefined && err instanceof MarketplaceNotFoundError;
-}
-
 interface AutoupdateFlipRow {
   readonly name: string;
   readonly scope: Scope;
@@ -146,19 +150,42 @@ interface AutoupdateFlipRow {
   readonly writeBackSkipped?: boolean;
 }
 
-function missingEverywhere(
-  opts: AutoupdateOptions,
-  result: {
-    readonly rows: readonly AutoupdateFlipRow[];
-    readonly errors: readonly unknown[];
-    readonly scopes: readonly Scope[];
-  },
-): opts is AutoupdateOptions & { readonly name: string } {
-  return (
-    opts.name !== undefined &&
-    result.rows.length === 0 &&
-    result.errors.length === result.scopes.length
-  );
+/** One config file of a scope, as a flip reads and writes it. */
+interface FlipLayer {
+  readonly filePath: string;
+  readonly local: boolean;
+  readonly config: ScopeConfig;
+}
+
+/**
+ * What one scope's flip decides: the names it changes, the names already set,
+ * and, per layer file, the names whose entry it writes.
+ */
+interface FlipPlan {
+  readonly changed: readonly string[];
+  readonly unchanged: readonly string[];
+  readonly writes: ReadonlyMap<FlipLayer, readonly string[]>;
+}
+
+type RefusedVerdict = Extract<MarketplaceLayerVerdict, { kind: "refused" }>;
+
+/**
+ * Leaves the state lock when the layer gate refuses a named flip, carrying the
+ * verdict to the caller, which reports it only when no scope flipped.
+ */
+class FlipRefused extends Error {
+  readonly verdict: RefusedVerdict;
+  constructor(verdict: RefusedVerdict) {
+    super("flip-refused");
+    this.name = "FlipRefused";
+    this.verdict = verdict;
+  }
+}
+
+/** A named flip that the layer gate refused in one scope. */
+interface ScopeRefusal {
+  readonly scope: Scope;
+  readonly verdict: RefusedVerdict;
 }
 
 /**
@@ -201,25 +228,17 @@ function flipContextFor(enable: boolean): typeof AUTOUPDATE_CONTEXT | typeof NOA
 }
 
 /**
- * Routes a non-collected per-scope autoupdate-flip failure (S1) to notify.
- *
- * Missing-marketplace errors are collected by the sole caller and routed
- * through the aggregate `{marketplace not added}` path -- `classifyAutoupdateFlip`
- * raises `MarketplaceNotFoundError` only for a NAMED flip, and every named
- * not-found is taken by `shouldCollectNotFound`. Every error reaching this
- * helper -- notably `StateLockHeldError`, whose message carries an actionable
- * retry hint -- keeps the synthetic failed-plugin child whose `cause` drives the
- * renderer's depth-5 cause-chain trailer (the MarketplaceNotificationMessage
- * header carries no `cause` per SNM-10).
+ * Renders a per-scope flip failure: a layer refusal, or any error other than a
+ * missing marketplace, which the caller reports as `{marketplace not added}`.
+ * The synthetic failed child carries the cause, so a held lock keeps its retry
+ * hint (the marketplace header carries no `cause`, SNM-10).
  */
-function notifyAutoupdateScopeFailure(
+function notifyFlipFailure(
   opts: AutoupdateOptions,
   scope: Scope,
-  err: Error,
+  failure: { readonly reason: ContentReason; readonly cause: Error },
   cardinality: "single" | "plural",
 ): void {
-  const failureName = opts.name ?? "(unknown)";
-
   // OUT-07 / D-12: the flip command is selected by the boolean `opts.enable`
   // flag (mirrors enable/disable); the failed child row dispatches through the
   // command context.
@@ -227,10 +246,144 @@ function notifyAutoupdateScopeFailure(
     opts.ctx,
     opts.run,
     flipContextFor(opts.enable),
-    marketplaceFailureRows(failureName, scope, autoupdateFailedReason(err), err),
+    marketplaceFailureRows(opts.name ?? "(unknown)", scope, failure.reason, failure.cause),
     undefined,
     cardinality,
   );
+}
+
+function invalidConfigError(basename: string): InvalidMarketplaceManifestError {
+  return new InvalidMarketplaceManifestError(`Config file "${basename}" failed schema validation.`);
+}
+
+/**
+ * CFG-03 (T-56-02-05): loads a layer the flip may write, aborting before any
+ * change when it is invalid; the error names the file by its basename only.
+ */
+async function loadFlipLayer(filePath: string, local: boolean): Promise<FlipLayer> {
+  const cfg = await loadConfig(filePath);
+  if (cfg.status === "invalid") {
+    throw invalidConfigError(path.basename(filePath));
+  }
+
+  return { filePath, local, config: cfg.status === "valid" ? cfg.config : { schemaVersion: 1 } };
+}
+
+/**
+ * Whether a layer's own `autoupdate` value already matches the request. An
+ * absent value in the shared layer reads as off (MAU-4). An absent value in
+ * the local layer is no value at all, so a flip always writes it, which is how
+ * a per-machine override comes to exist.
+ */
+function layerAlreadySet(layer: FlipLayer, name: string, enable: boolean): boolean {
+  const own = ownValue(layer.config.marketplaces, name)?.autoupdate;
+  if (own === undefined) {
+    return !layer.local && !enable;
+  }
+
+  return own === enable;
+}
+
+/**
+ * Plans a flip over `names`: a name is changed when any of its layers lacks
+ * the requested value, and each such layer gets the name in its write batch.
+ */
+function planFlip(
+  names: readonly string[],
+  layersOf: (name: string) => readonly FlipLayer[],
+  enable: boolean,
+): FlipPlan {
+  const changed: string[] = [];
+  const unchanged: string[] = [];
+  const writes = new Map<FlipLayer, string[]>();
+  for (const name of names) {
+    const stale = layersOf(name).filter((layer) => !layerAlreadySet(layer, name, enable));
+    if (stale.length === 0) {
+      unchanged.push(name);
+      continue;
+    }
+
+    changed.push(name);
+    for (const layer of stale) {
+      writes.set(layer, [...(writes.get(layer) ?? []), name]);
+    }
+  }
+
+  return { changed, unchanged, writes };
+}
+
+/**
+ * One batched write per layer file (NFR-3). The patch carries `autoupdate`
+ * only, so only an entry the layer already declares is changed.
+ */
+async function writeFlipPlan(plan: FlipPlan, scopeRoot: string, enable: boolean): Promise<void> {
+  for (const [layer, names] of plan.writes) {
+    // eslint-disable-next-line no-await-in-loop -- at most two layer files, written one after the other
+    await writeBatchedConfigEntries(layer.config, layer.filePath, scopeRoot, {
+      marketplaces: Object.fromEntries(names.map((name) => [name, { autoupdate: enable }])),
+    });
+  }
+}
+
+/**
+ * LAYER-02 / D-MF-03: a named flip changes only its target layer. The gate
+ * stops it, before any write, when the target layer does not declare the
+ * marketplace: a refusal when the other layer declares it, not added when
+ * neither does, and the CFG-03 failure naming the other file when that file
+ * cannot be read.
+ */
+async function requireTargetDeclares(
+  target: FlipLayer,
+  otherPath: string,
+  name: string,
+): Promise<void> {
+  const verdict = marketplaceLayerVerdict({
+    target: target.config,
+    other: await loadConfig(otherPath),
+    targetIsLocal: target.local,
+    marketplace: name,
+  });
+  if (verdict.kind === "refused") {
+    throw new FlipRefused(verdict);
+  }
+
+  if (verdict.kind === "undeclared") {
+    throw new MarketplaceNotFoundError(name, []);
+  }
+
+  if (verdict.kind === "other-unreadable") {
+    throw invalidConfigError(verdict.otherBasename);
+  }
+}
+
+/**
+ * Plans a named flip inside the scope lock. Reconcile-driven flips apply no
+ * layer rule (WR-09).
+ */
+async function planNamedFlip(
+  opts: AutoupdateOptions,
+  locations: ScopedLocations,
+  state: ExtensionState,
+  name: string,
+): Promise<FlipPlan> {
+  const local = opts.local === true;
+  const target = await loadFlipLayer(
+    local ? locations.configLocalJsonPath : locations.configJsonPath,
+    local,
+  );
+  if (ownValue(state.marketplaces, name) === undefined) {
+    throw new MarketplaceNotFoundError(name, []);
+  }
+
+  if (opts.notifications?.mode !== "orchestrated") {
+    await requireTargetDeclares(
+      target,
+      local ? locations.configJsonPath : locations.configLocalJsonPath,
+      name,
+    );
+  }
+
+  return planFlip([name], () => [target], opts.enable);
 }
 
 /**
@@ -383,78 +536,94 @@ async function writeAutoupdateBack(
  * T-56-02-05: CFG-03 invalid-config surfaces with a basename-only error
  * message via the synthetic `Error` -- no absolute path leak.
  */
-async function flipOneScope(
-  opts: AutoupdateOptions,
-  scope: Scope,
-): Promise<{
-  changed: readonly string[];
-  unchanged: readonly string[];
-  skipped: readonly string[];
-}> {
+async function flipOneScope(opts: AutoupdateOptions, scope: Scope): Promise<ScopeFlipResult> {
   const locations = locationsFor(scope, opts.cwd);
+  return await withLockedStateTransaction(locations, async (tx) => {
+    if (opts.name === undefined) {
+      return await flipEveryMarketplace(opts, locations, tx.state);
+    }
+
+    const plan = await planNamedFlip(opts, locations, tx.state, opts.name);
+    if (opts.notifications?.mode !== "orchestrated") {
+      await writeFlipPlan(plan, locations.scopeRoot, opts.enable);
+    }
+
+    // WR-05: no tx.save(); the config write is the flip (SPLIT-01).
+    return { changed: plan.changed, unchanged: plan.unchanged, skipped: [] };
+  });
+}
+
+interface ScopeFlipResult {
+  readonly changed: readonly string[];
+  readonly unchanged: readonly string[];
+  readonly skipped: readonly string[];
+}
+
+async function flipEveryMarketplace(
+  opts: AutoupdateOptions,
+  locations: ScopedLocations,
+  state: ExtensionState,
+): Promise<ScopeFlipResult> {
   const orchestrated = opts.notifications?.mode === "orchestrated";
   const targetConfigPath =
     opts.local === true ? locations.configLocalJsonPath : locations.configJsonPath;
   const configBasename = path.basename(targetConfigPath);
+  // CFG-03 (T-56-02-05): abort BEFORE any state mutation; basename-only.
+  const cfg = await loadConfig(targetConfigPath);
+  if (cfg.status === "invalid") {
+    throw new InvalidMarketplaceManifestError(
+      `Config file "${configBasename}" failed schema validation.`,
+    );
+  }
 
-  return await withLockedStateTransaction(locations, async (tx) => {
-    // CFG-03 (T-56-02-05): abort BEFORE any state mutation; basename-only.
-    const cfg = await loadConfig(targetConfigPath);
-    if (cfg.status === "invalid") {
-      throw new InvalidMarketplaceManifestError(
-        `Config file "${configBasename}" failed schema validation.`,
-      );
-    }
+  // SPLIT-01: idempotency is measured against the CONFIG-side
+  // truth, not state. The D-13 scrub strips legacy `autoupdate` from state
+  // once the config file exists, so a state-side idempotency check would
+  // re-classify every same-value flip as a "fresh flip" (mtime drift).
+  const current: ScopeConfig = cfg.status === "valid" ? cfg.config : { schemaVersion: 1 };
+  const stateResult = classifyAutoupdateFlip(state, undefined, opts.enable);
+  const finalResult = reclassifyByConfigTruth(current, stateResult, opts.enable);
 
-    // SPLIT-01: idempotency is measured against the CONFIG-side
-    // truth, not state. The D-13 scrub strips legacy `autoupdate` from state
-    // once the config file exists, so a state-side idempotency check would
-    // re-classify every same-value flip as a "fresh flip" (mtime drift).
-    const current: ScopeConfig = cfg.status === "valid" ? cfg.config : { schemaVersion: 1 };
-    const stateResult = classifyAutoupdateFlip(tx.state, opts.name, opts.enable);
-    const finalResult = reclassifyByConfigTruth(current, stateResult, opts.enable);
+  if (finalResult.changed.length === 0) {
+    // mtime-drift guard: no fresh flip -> SKIP the config write-back.
+    // The targeted config file's mtime is byte-stable.
+    return { ...finalResult, skipped: [] as readonly string[] };
+  }
 
-    if (finalResult.changed.length === 0) {
-      // mtime-drift guard: no fresh flip -> SKIP the config write-back.
-      // The targeted config file's mtime is byte-stable.
-      return { ...finalResult, skipped: [] as readonly string[] };
-    }
-
-    // WR-09 / T-56-02-01: orchestrated-mode SKIPS write-back.
-    // I2 / PR #51: even in orchestrated mode we still need to detect
-    // unsynthesizable-source skips so the cascade caller can demote them
-    // honestly. Run the dry classifier (no disk write) to identify which
-    // entries would have been silently dropped.
-    let skipped: readonly string[];
-    if (orchestrated) {
-      const drySkipped: string[] = [];
-      for (const name of finalResult.changed) {
-        const patch = buildAutoupdatePatch(current, tx.state, name, opts.enable);
-        const hasConfigSource = ownValue(current.marketplaces, name)?.source !== undefined;
-        if (!hasConfigSource && patch.source === undefined) {
-          drySkipped.push(name);
-        }
+  // WR-09 / T-56-02-01: orchestrated-mode SKIPS write-back.
+  // I2 / PR #51: even in orchestrated mode we still need to detect
+  // unsynthesizable-source skips so the cascade caller can demote them
+  // honestly. Run the dry classifier (no disk write) to identify which
+  // entries would have been silently dropped.
+  let skipped: readonly string[];
+  if (orchestrated) {
+    const drySkipped: string[] = [];
+    for (const name of finalResult.changed) {
+      const patch = buildAutoupdatePatch(current, state, name, opts.enable);
+      const hasConfigSource = ownValue(current.marketplaces, name)?.source !== undefined;
+      if (!hasConfigSource && patch.source === undefined) {
+        drySkipped.push(name);
       }
-
-      skipped = drySkipped;
-    } else {
-      const writeResult = await writeAutoupdateBack(
-        current,
-        tx.state,
-        targetConfigPath,
-        locations.scopeRoot,
-        finalResult.changed,
-        opts.enable,
-      );
-      skipped = writeResult.skipped;
     }
 
-    // WR-05: NO tx.save() -- classifyAutoupdateFlip no
-    // longer mutates state, so a flip never rewrites state.json. The config
-    // write-back above IS the flip (SPLIT-01: config owns autoupdate truth;
-    // the D-13 scrub strips the legacy state field on the next load).
-    return { ...finalResult, skipped };
-  });
+    skipped = drySkipped;
+  } else {
+    const writeResult = await writeAutoupdateBack(
+      current,
+      state,
+      targetConfigPath,
+      locations.scopeRoot,
+      finalResult.changed,
+      opts.enable,
+    );
+    skipped = writeResult.skipped;
+  }
+
+  // WR-05: NO tx.save() -- classifyAutoupdateFlip no
+  // longer mutates state, so a flip never rewrites state.json. The config
+  // write-back above IS the flip (SPLIT-01: config owns autoupdate truth;
+  // the D-13 scrub strips the legacy state field on the next load).
+  return { ...finalResult, skipped };
 }
 
 /**
@@ -480,68 +649,144 @@ function collectFlipRows(
   }
 }
 
-export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise<void> {
-  const cardinality = opts.name === undefined ? "plural" : "single";
+/**
+ * Flips each scope in SC-6 order. A missing marketplace and a layer refusal
+ * are collected, because the other scope may still flip; any other failure is
+ * reported at once and ends the flip (`undefined`).
+ */
+async function flipScopes(
+  opts: AutoupdateOptions,
+  cardinality: "single" | "plural",
+): Promise<
+  | { readonly rows: readonly AutoupdateFlipRow[]; readonly refusals: readonly ScopeRefusal[] }
+  | undefined
+> {
   const scopes: readonly Scope[] = opts.scope === undefined ? ["project", "user"] : [opts.scope];
-
-  // The autoupdate / noautoupdate commands share this orchestrator, selected by
-  // the boolean `opts.enable` flag (mirrors enable/disable). Resolve the command
-  // context once so every emission below routes through the same selection.
-  const flipContext = flipContextFor(opts.enable);
-
   const rows: AutoupdateFlipRow[] = [];
-  const errors: { scope: Scope }[] = [];
-
+  const refusals: ScopeRefusal[] = [];
   for (const scope of scopes) {
     try {
       // eslint-disable-next-line no-await-in-loop -- at most two scopes, each flip under its own scope lock
       collectFlipRows(rows, scope, await flipOneScope(opts, scope));
     } catch (err) {
-      // For a single-name flip `classifyAutoupdateFlip` throws
-      // MarketplaceNotFoundError when the name is absent from THIS scope.
-      // Under the SC-6 bare form that is expected when the name lives only in
-      // the OTHER scope, so it is collected and surfaced only if BOTH scopes
-      // failed AND no flip happened anywhere.
-      if (!shouldCollectNotFound(opts, err)) {
+      if (err instanceof FlipRefused) {
+        refusals.push({ scope, verdict: err.verdict });
+      } else if (!(err instanceof MarketplaceNotFoundError)) {
         // `withLockedStateTransaction` normalizes every rejection through
-        // `toError` before `flipOneScope` rejects, so this caught value is an
-        // Error on every reachable path.
-        notifyAutoupdateScopeFailure(opts, scope, err as Error, cardinality);
-        return;
+        // `toError`, so this caught value is an Error on every reachable path.
+        const cause = err as Error;
+        notifyFlipFailure(
+          opts,
+          scope,
+          { reason: autoupdateFailedReason(cause), cause },
+          cardinality,
+        );
+        return undefined;
       }
-
-      errors.push({ scope });
     }
   }
 
-  // If a single-name flip was requested but the name was missing
-  // from EVERY iterated scope (no row accumulated and every scope
-  // errored), surface as a single failure marketplace row.
-  if (missingEverywhere(opts, { rows, errors, scopes })) {
-    const first = errors[0];
-    if (first !== undefined) {
-      // ATTR-05 / D-48-C Shape 1: a single-name flip that missed in EVERY
-      // iterated scope is a missing-marketplace precondition. Route it to the
-      // standalone MarketplaceNotAddedMessage `(failed) {marketplace not added}`
-      // variant. Scope bracket: an explicit `opts.scope` carries it; the bare form
-      // carries `first.scope` (the scope where the first not-found was
-      // observed), per the RESEARCH recommendation.
-      const failureName = opts.name;
-      const missScope = opts.scope ?? first.scope;
-      notify(opts.ctx, opts.run, {
-        kind: "marketplace-not-added",
-        name: failureName,
-        scope: missScope,
-        ...(await crossScopeFlag({
-          cwd: opts.cwd,
-          marketplace: failureName,
-          scope: missScope,
-        })),
-      });
-    }
+  return { rows, refusals };
+}
 
+/**
+ * A named flip that changed no scope reports the first scope's refusal, or,
+ * when no scope's layers declare the marketplace,
+ * `(failed) {marketplace not added}` (ATTR-05). With no `--scope`, every scope
+ * missed, so the bracket names the first one in SC-6 order: project.
+ */
+async function notifyNamedMiss(
+  opts: AutoupdateOptions,
+  name: string,
+  refusals: readonly ScopeRefusal[],
+): Promise<void> {
+  const [refusal] = refusals;
+  if (refusal !== undefined) {
+    notifyFlipFailure(
+      opts,
+      refusal.scope,
+      { reason: refusal.verdict.reason, cause: refusal.verdict.refusal },
+      "single",
+    );
     return;
   }
+
+  const missScope = opts.scope ?? "project";
+  notify(opts.ctx, opts.run, {
+    kind: "marketplace-not-added",
+    name,
+    scope: missScope,
+    ...(await crossScopeFlag({ cwd: opts.cwd, marketplace: name, scope: missScope })),
+  });
+}
+
+function flipRowMessage(
+  row: AutoupdateFlipRow,
+  enable: boolean,
+): MarketplaceRows<PluginFailedMessage> {
+  if (row.alreadyMatching) {
+    return {
+      name: row.name,
+      scope: row.scope,
+      status: "skipped",
+      reasons: [enable ? "already autoupdate" : "already no autoupdate"],
+      plugins: [],
+      // D-03/D-06: a benign idempotent autoupdate skip -> info, no reload.
+      // Stamped explicitly (defaults coincide) so every producer row carries
+      // an auditable severity/needsReload fact rather than relying on the
+      // implicit SEV-01/RLD-01 default.
+      severity: "info",
+      needsReload: false,
+    };
+  }
+
+  if (row.writeBackSkipped === true) {
+    // I2 / PR #51: the config write-back was skipped because no `source`
+    // could be synthesized for a first-time write, so nothing landed in
+    // claude-plugins.json. Demote to a failed row using the closed-set
+    // `not found` reason rather than rendering a `<autoupdate>` fresh-flip
+    // success.
+    return {
+      name: row.name,
+      scope: row.scope,
+      status: "failed",
+      reasons: ["not found"],
+      // D-03: a failed autoupdate flip -> error.
+      severity: "error",
+      plugins: [],
+    };
+  }
+
+  return {
+    name: row.name,
+    scope: row.scope,
+    status: enable ? "autoupdate enabled" : "autoupdate disabled",
+    plugins: [],
+  };
+}
+
+/**
+ * NotificationMessage construction recipe:
+ * - One MarketplaceNotificationMessage per outcome, emitted via ONE
+ *   notify(opts.ctx, opts.run, ...) call; `plugins: []` is required.
+ * - Discriminator: mp.status drawn from { "autoupdate enabled",
+ *   "autoupdate disabled", "skipped" }; idempotent flips additionally carry
+ *   `reasons: ["already autoupdate" | "already no autoupdate"]`.
+ * - Severity (info / warning) and `/reload to pick up changes` are computed
+ *   by notify(); callers MUST NOT compose.
+ * - Caller order is honored end-to-end -- the SC-6 scopes-loop order is the
+ *   visible iteration order. NO alphabetic sort here.
+ * - Reference: catalog UAT fixtures `enable-fresh`, `disable-fresh`,
+ *   `enable-idempotent`, `disable-idempotent`.
+ */
+function notifyFlipRows(
+  opts: AutoupdateOptions,
+  rows: readonly AutoupdateFlipRow[],
+  cardinality: "single" | "plural",
+): void {
+  // The autoupdate / noautoupdate commands share this orchestrator, selected by
+  // the boolean `opts.enable` flag (mirrors enable/disable).
+  const flipContext = flipContextFor(opts.enable);
 
   // Empty marketplaces[] -> the `(no marketplaces)` sentinel renders verbatim
   // via the central seam. No orchestrator-side composition.
@@ -552,67 +797,33 @@ export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise
     return;
   }
 
-  // NotificationMessage construction recipe:
-  // - One MarketplaceNotificationMessage per outcome, emitted via ONE
-  //   notify(opts.ctx, opts.run, ...) call; `plugins: []` is required.
-  // - Discriminator: mp.status drawn from { "autoupdate enabled",
-  //   "autoupdate disabled", "skipped" }; idempotent flips additionally carry
-  //   `reasons: ["already autoupdate" | "already no autoupdate"]`.
-  // - Severity (info / warning) and `/reload to pick up changes` are computed
-  //   by notify(); callers MUST NOT compose.
-  // - Caller order is honored end-to-end -- the SC-6 scopes-loop order is the
-  //   visible iteration order. NO alphabetic sort here.
-  // - Reference: catalog UAT fixtures `enable-fresh`, `disable-fresh`,
-  //   `enable-idempotent`, `disable-idempotent`.
   // WR-01: type the accumulator at the narrow `MarketplaceRows<PluginFailedMessage>`
   // so each per-arm literal is checked against the flip context's row shape (the
   // failed arm is the only plugin-carrying Msg; every row builds `plugins: []`),
   // and the array widens to `notifyWithContext` with no cast.
-  const marketplaces: MarketplaceRows<PluginFailedMessage>[] = rows.map((row) => {
-    if (row.alreadyMatching) {
-      return {
-        name: row.name,
-        scope: row.scope,
-        status: "skipped",
-        reasons: [opts.enable ? "already autoupdate" : "already no autoupdate"],
-        plugins: [],
-        // D-03/D-06: a benign idempotent autoupdate skip -> info, no reload.
-        // Stamped explicitly (defaults coincide) so every producer row carries
-        // an auditable severity/needsReload fact rather than relying on the
-        // implicit SEV-01/RLD-01 default.
-        severity: "info",
-        needsReload: false,
-      };
-    }
-
-    if (row.writeBackSkipped === true) {
-      // I2 / PR #51: the config write-back was skipped because no `source`
-      // could be synthesized for a first-time write, so nothing landed in
-      // claude-plugins.json. Demote to a failed row using the closed-set
-      // `not found` reason (matches the synthetic-child cascade form used
-      // elsewhere in this orchestrator -- no new tokens) rather than rendering
-      // a `<autoupdate>` fresh-flip success.
-      return {
-        name: row.name,
-        scope: row.scope,
-        status: "failed",
-        reasons: ["not found"],
-        // D-03: a failed autoupdate flip -> error.
-        severity: "error",
-        plugins: [],
-      };
-    }
-
-    return {
-      name: row.name,
-      scope: row.scope,
-      status: opts.enable ? "autoupdate enabled" : "autoupdate disabled",
-      plugins: [],
-    };
-  });
+  const marketplaces: MarketplaceRows<PluginFailedMessage>[] = rows.map((row) =>
+    flipRowMessage(row, opts.enable),
+  );
 
   // OUT-07 / D-12: bulk multi-marketplace flip cascade -> Plural. The
   // autoupdate enabled/disabled/skipped/failed headers render via the central
   // seam; the command is selected by the boolean `opts.enable` flag.
   notifyWithContext(opts.ctx, opts.run, flipContext, marketplaces, undefined, cardinality);
+}
+
+export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise<void> {
+  const cardinality = opts.name === undefined ? "plural" : "single";
+  const outcome = await flipScopes(opts, cardinality);
+  if (outcome === undefined) {
+    return;
+  }
+
+  // LAYER-02: without `--scope`, a named flip reports the scopes it changed,
+  // and a refusal or a missing marketplace only when no scope changed.
+  if (opts.name !== undefined && outcome.rows.length === 0) {
+    await notifyNamedMiss(opts, opts.name, outcome.refusals);
+    return;
+  }
+
+  notifyFlipRows(opts, outcome.rows, cardinality);
 }

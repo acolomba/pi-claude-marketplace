@@ -20,11 +20,12 @@
 // before it can emit anything, so a workflow that ran would carry strong-mock's
 // pending-call proxy into `path.join` and die there. The emission count is only
 // the fallback, for a workflow that reads no working directory. Every rejecting
-// case also reads back an empty config footprint, so "the workflow never ran" is
-// asserted as an absence of recorded state too.
+// case also reads back the seeded config footprint unchanged, so "the workflow
+// never ran" is asserted as an absence of written state too.
 //
-// Both scopes are seeded in every case, rejecting ones included, so a workflow
-// that did run would have marketplaces to flip and files to write.
+// Both scopes are seeded in every case, rejecting ones included: each
+// marketplace is recorded and declared in both config layers, so a workflow
+// that did run would have marketplaces to flip and entries to write.
 //
 // D-05 renders a delegating case's emission from the run the handler receives.
 //
@@ -69,29 +70,28 @@ const USER_BETA_ON = {
   plugins: {},
 };
 
-/** Nothing was written anywhere: the shape a rejected command must leave behind. */
-const NOTHING_RECORDED = {
-  projectBase: undefined,
-  projectLocal: undefined,
-  userBase: undefined,
-  userLocal: undefined,
+/** The declaration a seeded config file carries for the project marketplace. */
+const PROJECT_ALPHA_DECLARED = {
+  schemaVersion: 1,
+  marketplaces: { alpha: { source: "./alpha-src" } },
 };
 
-/** The base config alone carries the project flip; the override layer stays absent. */
-const PROJECT_BASE_ONLY = {
-  projectBase: PROJECT_ALPHA_ON,
-  projectLocal: undefined,
-  userBase: undefined,
-  userLocal: undefined,
+/** The declaration a seeded config file carries for the user marketplace. */
+const USER_BETA_DECLARED = { schemaVersion: 1, marketplaces: { beta: { source: "./beta-src" } } };
+
+/** Every config file as seeded: the footprint a rejected command leaves behind. */
+const SEEDED_FOOTPRINT = {
+  projectBase: PROJECT_ALPHA_DECLARED,
+  projectLocal: PROJECT_ALPHA_DECLARED,
+  userBase: USER_BETA_DECLARED,
+  userLocal: USER_BETA_DECLARED,
 };
 
-/** The override layer alone carries the project flip; the base file stays absent. */
-const PROJECT_OVERRIDE_ONLY = {
-  projectBase: undefined,
-  projectLocal: PROJECT_ALPHA_ON,
-  userBase: undefined,
-  userLocal: undefined,
-};
+/** The base config alone carries the project flip; every other layer keeps its seed. */
+const PROJECT_BASE_ONLY = { ...SEEDED_FOOTPRINT, projectBase: PROJECT_ALPHA_ON };
+
+/** The override layer alone carries the project flip; every other layer keeps its seed. */
+const PROJECT_OVERRIDE_ONLY = { ...SEEDED_FOOTPRINT, projectLocal: PROJECT_ALPHA_ON };
 
 interface HermeticWorkspace {
   /** The project working directory the handler forwards as `ctx.cwd`. */
@@ -137,10 +137,23 @@ async function seedMarketplace(
   });
 }
 
-/** `alpha` in the project scope and `beta` in the user scope, neither declared in a config. */
+async function declareInBothLayers(scopeRoot: string, declaration: object): Promise<void> {
+  await mkdir(scopeRoot, { recursive: true });
+  const content = `${JSON.stringify(declaration)}\n`;
+  await writeFile(path.join(scopeRoot, "claude-plugins.json"), content, "utf8");
+  await writeFile(path.join(scopeRoot, "claude-plugins.local.json"), content, "utf8");
+}
+
+/**
+ * `alpha` in the project scope and `beta` in the user scope, each recorded and
+ * declared in both config layers, so a flip of either layer has an entry to
+ * change (LAYER-02).
+ */
 async function seedBothScopes(workspace: HermeticWorkspace): Promise<void> {
   await seedMarketplace(workspace, "project", workspace.projectRoot, "alpha");
   await seedMarketplace(workspace, "user", workspace.agentDir, "beta");
+  await declareInBothLayers(workspace.projectRoot, PROJECT_ALPHA_DECLARED);
+  await declareInBothLayers(workspace.agentDir, USER_BETA_DECLARED);
 }
 
 async function readConfigFile(filePath: string): Promise<unknown> {
@@ -192,7 +205,7 @@ for (const { enable, expectedMessage, subcommand } of [
 
     // assert
     assert.deepStrictEqual(notifications, [{ message: expectedMessage, severity: "error" }]);
-    assert.deepStrictEqual(await readConfigFootprint(workspace), NOTHING_RECORDED);
+    assert.deepStrictEqual(await readConfigFootprint(workspace), SEEDED_FOOTPRINT);
     verifyBoundary();
   });
 }
@@ -218,7 +231,7 @@ for (const { rejectedToken, shape } of [
         severity: "error",
       },
     ]);
-    assert.deepStrictEqual(await readConfigFootprint(workspace), NOTHING_RECORDED);
+    assert.deepStrictEqual(await readConfigFootprint(workspace), SEEDED_FOOTPRINT);
     verifyBoundary();
   });
 }
@@ -244,10 +257,9 @@ test("flips every marketplace in both scopes when no scope flag narrows the comm
     },
   ]);
   assert.deepStrictEqual(await readConfigFootprint(workspace), {
+    ...SEEDED_FOOTPRINT,
     projectBase: PROJECT_ALPHA_ON,
-    projectLocal: undefined,
     userBase: USER_BETA_ON,
-    userLocal: undefined,
   });
   verifyBoundary();
 });
@@ -289,7 +301,7 @@ test("rejects surplus input without writing either config layer", async (t) => {
       severity: "error",
     },
   ]);
-  assert.deepStrictEqual(await readConfigFootprint(workspace), NOTHING_RECORDED);
+  assert.deepStrictEqual(await readConfigFootprint(workspace), SEEDED_FOOTPRINT);
   verifyBoundary();
 });
 
@@ -318,7 +330,6 @@ for (const { enable, expectedMessage, expectedProjectBase, subcommand } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, `declared-on-${subcommand}`);
     await seedBothScopes(workspace);
-    await mkdir(workspace.projectRoot, { recursive: true });
     await writeFile(
       path.join(workspace.projectRoot, "claude-plugins.json"),
       '{"schemaVersion":1,"marketplaces":{"alpha":{"source":"./alpha-src","autoupdate":true}}}\n',
@@ -336,10 +347,8 @@ for (const { enable, expectedMessage, expectedProjectBase, subcommand } of [
     // assert
     assert.deepStrictEqual(notifications, [{ message: expectedMessage }]);
     assert.deepStrictEqual(await readConfigFootprint(workspace), {
+      ...SEEDED_FOOTPRINT,
       projectBase: expectedProjectBase,
-      projectLocal: undefined,
-      userBase: undefined,
-      userLocal: undefined,
     });
     verifyBoundary();
   });
@@ -354,12 +363,7 @@ for (const { expectedFootprint, expectedMessage, scopeValue } of [
   {
     scopeValue: "user",
     expectedMessage: "● beta [user] <autoupdate>\n\nMarketplace autoupdate: 1 success",
-    expectedFootprint: {
-      projectBase: undefined,
-      projectLocal: undefined,
-      userBase: USER_BETA_ON,
-      userLocal: undefined,
-    },
+    expectedFootprint: { ...SEEDED_FOOTPRINT, userBase: USER_BETA_ON },
   },
 ]) {
   test(`flips the ${scopeValue} scope alone when --scope ${scopeValue} is supplied`, async (t) => {
