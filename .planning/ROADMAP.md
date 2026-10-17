@@ -226,14 +226,14 @@ Plans:
 3. Removing a marketplace from a layer uninstalls only the plugins that layer declares from it; plugins the other layer declares from the same marketplace stay installed (LAYER-03).
 4. A project-scope install from a user-scope marketplace declares the marketplace in the project config and gives the project its own record and clone; removing the marketplace from the user scope leaves the project's plugins, list, info, and `marketplace update` working (LAYER-07, D-MF-04).
 
-**Plans:** 1/9 plans executed
+**Plans:** 2/9 plans executed
 
 Plans:
 **Wave 1**
 - [x] 03.2-01-PLAN.md — Tracer: a marketplace one layer declares can be added to the other layer too, with no clone (LAYER-01); duplicate-name guards, the git-kind proof, convergence
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 03.2-02-PLAN.md — Marketplace entries merge field by field, so a local declaration inherits the shared autoupdate (D-07); plugin entries stay wholesale; UAT-05 comments restated
+- [x] 03.2-02-PLAN.md — Marketplace entries merge field by field, so a local declaration inherits the shared autoupdate (D-07); plugin entries stay wholesale; UAT-05 comments restated
 
 **Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 03.2-03-PLAN.md — Refusal vocabulary: the 3.1 class moves to shared errors, the `marketplace declared in shared config` reason is enrolled everywhere, both refusal rows are cataloged
@@ -380,7 +380,7 @@ Plans:
 | 2. GitHub Clone-Base Override | 5/5 | Complete    | 2026-10-16 |
 | 3. Marketplace Add | 3/3 | Complete    | 2026-10-16 |
 | 3.1. Local Declaration Leak Fix | 5/5 | Complete    | 2026-10-16 |
-| 3.2. Marketplace Layer Partition | 1/9 | In Progress | - |
+| 3.2. Marketplace Layer Partition | 2/9 | In Progress | - |
 | 3.3. Plugin Layer Partition | 0/TBD | Not started | - |
 | 4. Marketplace Remove and List | 0/TBD | Not started | - |
 | 5. Marketplace Info | 0/TBD | Not started | - |
