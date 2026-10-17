@@ -5,7 +5,10 @@ import { describe, test } from "node:test";
 
 import { mock, verify, when } from "strong-mock";
 
-import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
+import {
+  githubSource,
+  pathSource,
+} from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
   applyPartialCascadeFold,
   assertNoCrossPluginConflicts,
@@ -1271,7 +1274,7 @@ describe("writeAdoptingConfigEntries", () => {
     });
   });
 
-  test("does not shadow a marketplace declaration found only in the sibling config", async () => {
+  test("LAYER-06: declares the plugin's marketplace in the target layer even when only the other layer declares it", async () => {
     // arrange
     await withTempScopes(async ({ cwd }) => {
       const locations = locationsFor("project", cwd);
@@ -1297,7 +1300,42 @@ describe("writeAdoptingConfigEntries", () => {
       // assert
       assert.equal(
         await readFile(locations.configLocalJsonPath, "utf8"),
-        '{\n  "schemaVersion": 1,\n  "marketplaces": {},\n  "plugins": {\n    "alpha@mp": {\n      "enabled": true\n    }\n  }\n}\n',
+        '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "mp": {\n      "source": "./mp-source"\n    }\n  },\n  "plugins": {\n    "alpha@mp": {\n      "enabled": true\n    }\n  }\n}\n',
+      );
+    });
+  });
+
+  test("LAYER-06: declares a github marketplace with the raw source its record holds", async () => {
+    // arrange
+    await withTempScopes(async ({ cwd }) => {
+      const locations = locationsFor("project", cwd);
+      const current: ScopeConfig = { schemaVersion: 1 };
+      const sibling: ScopeConfig = {
+        schemaVersion: 1,
+        marketplaces: { mp: { source: "acme/mp" } },
+      };
+      const record = makeMarketplaceRecord("mp", "project", {});
+      const state: ExtensionState = {
+        schemaVersion: 1,
+        marketplaces: { mp: { ...record, source: githubSource("acme/mp") } },
+      };
+
+      // act
+      await writeAdoptingConfigEntries({
+        current,
+        sibling,
+        state,
+        marketplace: "mp",
+        plugin: "alpha",
+        targetConfigPath: locations.configLocalJsonPath,
+        scopeRoot: locations.scopeRoot,
+        pluginPatch: {},
+      });
+
+      // assert
+      assert.equal(
+        await readFile(locations.configLocalJsonPath, "utf8"),
+        '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "mp": {\n      "source": "acme/mp"\n    }\n  },\n  "plugins": {\n    "alpha@mp": {}\n  }\n}\n',
       );
     });
   });

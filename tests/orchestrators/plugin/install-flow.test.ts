@@ -8494,12 +8494,11 @@ test("D-04-07: a --local promotion of a disabled dependency writes the enable pa
     const cwd = await mkdtemp(path.join(tmpdir(), "install-d0407-disabled-local-"));
     try {
       // arrange: `disableSeededDependency` disables orchestrated (RECON-03
-      // skips the config write-back), so the base file's `{ enabled: false }`
-      // for the dependency -- the state a real `disable --local` shadowing
-      // hazard starts from -- is seeded directly here. A bare local key would
-      // replace that entry wholesale (CFG-02) and enable the plugin by
-      // omission; the promotion enables it on purpose and says so in the file
-      // it writes.
+      // skips the config write-back), so the shared layer's `{ enabled: false }`
+      // for the dependency is seeded directly here. A bare local key would
+      // leave the shared `false` in force (LAYER-09); the promotion enables it
+      // on purpose and says so in the layer it writes, which also declares the
+      // plugin's marketplace (LAYER-06).
       const locations = locationsFor("project", cwd);
       const { ctx, run } = await seedDependencyInstalled(cwd, installPlugin);
       await disableSeededDependency(cwd, hooksRouting, { ctx, run });
@@ -8533,7 +8532,7 @@ test("D-04-07: a --local promotion of a disabled dependency writes the enable pa
         {
           base: baseBefore,
           local:
-            '{\n  "schemaVersion": 1,\n  "marketplaces": {},\n  "plugins": {\n    "some-other-plugin@mp": {\n      "enabled": true\n    }\n  }\n}\n',
+            '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "mp": {\n      "source": "./mp-src"\n    }\n  },\n  "plugins": {\n    "some-other-plugin@mp": {\n      "enabled": true\n    }\n  }\n}\n',
           enabled: true,
         },
       );
@@ -9553,7 +9552,7 @@ test("CFG-03: an invalid shared layer aborts an install with --local and changes
 // UAT-05: merged-view membership gate for the adopted-marketplace declaration
 // ──────────────────────────────────────────────────────────────────────────
 
-test("UAT-05: --local install with marketplace declared in BASE writes ONLY the plugin entry to local; merged autoupdate from base survives", async () => {
+test("LAYER-06: an install with --local under a marketplace only the shared layer declares also declares it in the local layer; the shared autoupdate survives the merge", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-uat05-local-"));
     try {
@@ -9565,10 +9564,10 @@ test("UAT-05: --local install with marketplace declared in BASE writes ONLY the 
         pluginName: "hello",
       });
 
-      // BASE declares the marketplace with autoupdate: true (the live UAT
-      // repro: claude-plugins.json declares the marketplace; the --local
-      // install must NOT re-declare it in claude-plugins.local.json, a file
-      // the user never named for the marketplace).
+      // The shared layer declares the marketplace with autoupdate: true. A
+      // layer that declares a plugin also declares its marketplace, so the
+      // --local install declares it in the local layer from the recorded
+      // source, and the merge keeps the shared autoupdate.
       const { saveConfig } =
         await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
       await saveConfig(
@@ -9599,13 +9598,11 @@ test("UAT-05: --local install with marketplace declared in BASE writes ONLY the 
         return;
       }
 
-      // Local gains ONLY the plugin entry -- NO marketplace re-declaration.
-      assert.deepEqual(localCfg.config.plugins?.["hello@mp"], {});
-      assert.equal(
-        localCfg.config.marketplaces?.["mp"],
-        undefined,
-        "local file must NOT re-declare a base-declared marketplace",
-      );
+      assert.deepStrictEqual(localCfg.config, {
+        schemaVersion: 1,
+        marketplaces: { mp: { source: "./mp-src" } },
+        plugins: { "hello@mp": {} },
+      });
 
       // The merged view's autoupdate (from base) survives the install.
       const baseCfg = await loadConfig(locations.configJsonPath);

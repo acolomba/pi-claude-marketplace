@@ -1832,10 +1832,10 @@ async function installPluginWithTransaction(
   // that one decision, so they cannot drift onto different files. The
   // orchestrator NEVER falls back to the base file on ENOENT: the base file is
   // NEVER touched on the --local path, and loadConfig's `absent` arm yields an
-  // empty starting shape that saveConfig writes back to the local path. UAT-05:
-  // the sibling is the scope's OTHER layer, read fresh inside the lock for the
-  // DFEN-05 read and the membership test -- never written, never serialized
-  // back.
+  // empty starting shape that saveConfig writes back to the local path. The
+  // sibling is the scope's OTHER layer, read fresh inside the lock for the
+  // FIX-03 check, the DFEN-05 read, and the dependency-marketplace gate --
+  // never written, never serialized back.
   //
   // LAYER-04: the flag alone picks the target layer; both layers are read
   // INSIDE the lock.
@@ -2098,24 +2098,20 @@ async function installPluginWithTransaction(
         // "enabled" default at consume time. The patch merges over the existing
         // entry, so no key the user already wrote is disturbed.
         //
-        // CR-02 / LAYER-07 / D-MF-04: when the scope's MERGED config view
-        // does not declare the marketplace -- the CMP-3 fallback added it to
-        // THIS scope through the `marketplace add` body, which writes no
-        // config -- declare the marketplace entry in the SAME batched patch
-        // (same lock, one atomic save). Without it the plugin key is a
-        // dangling declaration: the next reconcile plans the added record's
-        // REMOVAL and renders a perpetual `<marketplace not declared>` failed
-        // row (invariant 5 violation).
+        // CR-02 / LAYER-06: when the target layer does not declare the
+        // marketplace -- the CMP-3 fallback added it to THIS scope through the
+        // `marketplace add` body, which writes no config, or only the other
+        // layer declares it -- declare the marketplace entry in the SAME
+        // batched patch (same lock, one atomic save). A layer that declares a
+        // plugin also declares its marketplace (D-MF-03), so a later
+        // `marketplace remove` from the other layer keeps this plugin. Without
+        // it the plugin key is a dangling declaration: the next reconcile plans
+        // the added record's REMOVAL and renders a perpetual
+        // `<marketplace not declared>` failed row (invariant 5 violation).
         //
-        // UAT-05: the membership gate must consider BOTH physical files
-        // (base ∪ local), not just the target. A `--local` install against a
-        // base-declared marketplace must NOT re-declare it in the local file:
-        // the scope already declares it, and a second declaration in a file
-        // the user never named would keep the marketplace after a later
-        // `marketplace remove` from the base file (LAYER-02 / D-MF-03). Both
-        // files are read fresh INSIDE the lock and used for the membership test
-        // only, and an UNREADABLE sibling skips the marketplace declaration
-        // rather than counting as a file that declares nothing.
+        // LAYER-07 / D-MF-04: a marketplace the install added for a dependency
+        // is declared only when neither layer declares it, because no layer
+        // declares a dependency plugin (D-04-02).
         if (opts.notifications?.mode !== "orchestrated") {
           await writeAdoptingConfigEntries({
             current,

@@ -1919,16 +1919,14 @@ type SelectedConfigWriteTarget = Extract<DeclaringConfigWriteTarget, { kind: "se
  * Write the plugin's `enabled` flag back through the SOLE sanctioned
  * saveConfig seam (SPLIT-02).
  *
- * CMP-3: when the scope's MERGED config view does not declare the
- * marketplace (clone-adoption legacy, or a hand-pruned config), declare it in
- * the SAME batched patch -- a bare plugin key would otherwise be a dangling
- * declaration the planner converts into a marketplace removal plus a
- * perpetual failed row.
- *
- * UAT-05: the membership gate considers BOTH layers (shared union local), so
- * a `--local` flip never re-declares a marketplace the shared layer declares.
- * Both parses arrive from the caller's in-lock selection, so no arm here
- * re-reads a file another arm already read.
+ * CMP-3 / LAYER-06: when the target layer does not declare the marketplace
+ * (clone-adoption legacy, a hand-pruned config, or a marketplace only the
+ * other layer declares), declare it in the SAME batched patch. A layer that
+ * declares a plugin also declares its marketplace (D-MF-03); a bare plugin key
+ * would otherwise be a dangling declaration the planner converts into a
+ * marketplace removal plus a perpetual failed row. Both parses arrive from
+ * the caller's in-lock selection, so no arm here re-reads a file another arm
+ * already read.
  *
  * S4 (PR #51, CONTEXT.md S4): the shared helper's `adoptedSource === undefined`
  * arms collapse -- benign (already declared) and dangerous (no string
@@ -2343,7 +2341,7 @@ async function runSetEnabledOutcome(
     // A single per-scope lock owns the whole critical section. The closure
     // sequences the LAYER-04 write-target selection, ENBL-02 idempotency, the
     // enable/disable branch dispatch, the I3 shrunken-record save, and the
-    // UAT-05 config write-back; keeping that order visible here is what makes
+    // config write-back; keeping that order visible here is what makes
     // the save-vs-throw discipline auditable.
     outcome = await transaction.withLockedStateTransaction(
       locations,
@@ -2369,9 +2367,9 @@ async function runSetEnabledOutcome(
 
         // Both layers were parsed ONCE by the selector, and the whole selection
         // travels to the checks and write arms below: the target config steers
-        // every write, the sibling serves the layer verdict and the UAT-05
-        // membership gate, and no two decisions in this closure rest on
-        // different bytes of the same file.
+        // every write, the sibling serves the layer verdict and the FIX-03
+        // check, and no two decisions in this closure rest on different bytes
+        // of the same file.
         configBasename = path.basename(selection.targetConfigPath);
 
         const mp = ownValue(state.marketplaces, marketplace);

@@ -536,18 +536,17 @@ export async function collectInstallReachableMarketplaces(opts: {
  * added record's verbatim `source.raw` (the `samePlannedSource`
  * contract).
  *
- * UAT-05: the membership gate runs against EVERY physical config of the
- * scope (base AND local -- i.e. the CFG-02 merged view), not just the
- * targeted file. The configuration is the desired state, and a scope that
- * declares the marketplace in either file already wants it. A second
- * declaration would put the marketplace in a file the user never named, so a
- * later `marketplace remove` from the other file would keep it (LAYER-02 /
- * D-MF-03). Callers pass BOTH files' configs, read fresh inside the lock (WB-01
- * discipline); the merged view is used for the membership test ONLY --
- * never serialized back.
+ * The caller passes the layers whose declaration counts, read fresh inside the
+ * lock (WB-01 discipline) and never serialized back:
+ * - the target layer alone for the plugin's own marketplace. A layer that
+ *   declares a plugin also declares its marketplace (LAYER-06 / D-MF-03), so a
+ *   later `marketplace remove` from the other layer keeps the plugin;
+ * - both layers for a marketplace the install added for a dependency. No layer
+ *   declares a dependency plugin (D-04-02), so a scope that declares the
+ *   marketplace in either layer already wants it.
  *
- * Returns `undefined` when ANY physical config of the scope already
- * declares the marketplace (nothing to synthesize -- entry-stable) OR when
+ * Returns `undefined` when ANY passed layer already declares the marketplace
+ * (nothing to synthesize -- entry-stable) OR when
  * no string `source.raw` exists on the state record (hand-edited/legacy
  * state; writing a source-less entry would trip `saveConfig`'s
  * required-`source` invariant throw).
@@ -766,17 +765,13 @@ export function pluginLayerVerdict(args: {
 }
 
 /**
- * CMP-3 / UAT-05: write a plugin declaration and, when the scope's MERGED
- * config view does not already declare the owning marketplace, declare the
- * marketplace in the SAME batched patch. A bare plugin key would otherwise be a
- * dangling declaration the planner converts into a marketplace removal plus a
- * perpetual failed row.
- *
- * The membership gate considers BOTH physical files (base union local), so a
- * `--local` write never re-declares a base-declared marketplace: the scope
- * already declares it, and a second declaration in a file the user never named
- * would survive a later `marketplace remove` from the base file (LAYER-02 /
- * D-MF-03).
+ * CMP-3 / LAYER-06: write a plugin declaration and, when the target layer does
+ * not already declare the owning marketplace, declare the marketplace in the
+ * SAME batched patch. A layer that declares a plugin also declares its
+ * marketplace (D-MF-03), so `install --local` under a marketplace only the
+ * shared layer declares leaves a self-consistent local layer, and a later
+ * `marketplace remove` from the shared layer keeps the plugin. The source is
+ * the state record's `source.raw`, the value `samePlannedSource` matches.
  *
  * S4 (#51): an `undefined` synthesized source collapses two arms -- benign
  * (already declared, no synthesis needed) and dangerous (no string `source.raw`
@@ -792,8 +787,8 @@ export function pluginLayerVerdict(args: {
  *
  * LAYER-07 / D-MF-04: `addedMarketplaces` names the further marketplaces the
  * caller's install added to the scope, such as a dependency's. Each one is
- * declared in the same patch under the same membership gate as the owning
- * marketplace, so the desired state names every marketplace the scope now owns.
+ * declared in the same patch unless either layer already declares it, so the
+ * desired state names every marketplace the scope now owns.
  */
 export async function writeAdoptingConfigEntries(opts: {
   readonly current: ScopeConfig;
@@ -806,12 +801,14 @@ export async function writeAdoptingConfigEntries(opts: {
   readonly pluginPatch: Partial<PluginConfigEntry>;
   readonly addedMarketplaces?: readonly string[];
 }): Promise<void> {
-  const adopted = [opts.marketplace, ...(opts.addedMarketplaces ?? [])].flatMap((marketplace) => {
-    const source = synthesizeUndeclaredMarketplaceSource(
-      [opts.current, opts.sibling],
-      opts.state,
-      marketplace,
-    );
+  const gates: readonly (readonly [string, readonly ScopeConfig[]])[] = [
+    [opts.marketplace, [opts.current]],
+    ...(opts.addedMarketplaces ?? []).map(
+      (added) => [added, [opts.current, opts.sibling]] as const,
+    ),
+  ];
+  const adopted = gates.flatMap(([marketplace, layers]) => {
+    const source = synthesizeUndeclaredMarketplaceSource(layers, opts.state, marketplace);
     return source === undefined ? [] : [[marketplace, { source }] as const];
   });
 

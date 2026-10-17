@@ -84,3 +84,28 @@ Feature: Plugin install
     Then the "claude-plugins.json" file of the project scope declares no plugins
     Then the "claude-plugins.local.json" file of the project scope declares no plugins
     Then the project scope has no installed plugins
+
+  Scenario: Installing with --local from a marketplace only the shared layer declares also declares the marketplace in the local layer
+    When the user runs "/claude:plugin install demo@fixtures --scope project --local"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
+    Then the "claude-plugins.local.json" file of the project scope declares these marketplaces:
+      | name     | source                       |
+      | fixtures | {home}/marketplaces/fixtures |
+    Then the "claude-plugins.local.json" file of the project scope declares these plugins:
+      | id            |
+      | demo@fixtures |
+    Then the "claude-plugins.json" file of the project scope declares no plugins
+
+  Scenario: A plugin installed with --local from a marketplace the shared layer declares stays installed after the shared layer removes the marketplace
+    Given the user has run "/claude:plugin install demo@fixtures --scope project --local"
+    Given the user has run "/claude:plugin marketplace remove fixtures --scope project"
+    When the user starts a new pi session
+    Then the session offers these skills:
+      | command           | description            |
+      | /skill:demo-skill | A skill of demo 1.0.0. |

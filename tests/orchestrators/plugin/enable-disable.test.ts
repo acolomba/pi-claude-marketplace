@@ -1178,6 +1178,51 @@ test("LAYER-04: enable with --local of a plugin no layer declares writes the loc
   });
 });
 
+test("LAYER-06: enable with --local of a plugin no layer declares under a marketplace only the shared layer declares writes the marketplace and the flag into the local layer", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { configPath, configLocalPath, mpRoot } = await seedRealDisabledMarketplace(home, {
+      marketplaceName: "mp",
+      pluginName: "foo",
+      version: "1.2.3",
+    });
+    const sharedBytes = JSON.stringify({
+      schemaVersion: 1,
+      marketplaces: { mp: { source: mpRoot, autoupdate: true } },
+    });
+    await writeFile(configPath, sharedBytes, "utf8");
+    const { ctx } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo",
+      enable: true,
+      scope: "user",
+      local: true,
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        shared: await readFile(configPath, "utf8"),
+        local: await readConfig(configLocalPath),
+      },
+      {
+        shared: sharedBytes,
+        local: {
+          schemaVersion: 1,
+          marketplaces: { mp: { source: mpRoot } },
+          plugins: { "foo@mp": { enabled: true } },
+        },
+      },
+    );
+  });
+});
+
 test("LAYER-04: a plugin that is not installed reports not installed whatever layer declares it", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
@@ -3895,19 +3940,19 @@ test("RECON-03 enable-disable standalone-default mode -- omitted notifications o
 // UAT-05: merged-view membership gate for the adopted-marketplace declaration
 // ──────────────────────────────────────────────────────────────────────────
 
-test("UAT-05: --local enable flip with marketplace declared in BASE writes ONLY the plugin entry to local; merged autoupdate from base survives", async () => {
+test("LAYER-06: a --local enable flip under a marketplace only the shared layer declares also declares it in the local layer; the shared autoupdate survives the merge", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
-    const { configPath, configLocalPath } = await writeUserState(home, {
+    const { configPath, configLocalPath, mpRoot } = await writeUserState(home, {
       marketplaceName: "mp",
       pluginName: "foo",
       disabled: false,
     });
-    // BASE declares the marketplace with autoupdate: true; LOCAL carries an
-    // explicit enabled:false for the plugin so the WR-03 promotion arm fires
-    // a config write against the --local target. The flip must NOT
-    // re-declare the marketplace in local, a file the user never named for
-    // the marketplace (LAYER-02 / D-MF-03).
+    // The shared layer declares the marketplace with autoupdate: true; the
+    // local layer carries an explicit enabled:false for the plugin so the
+    // WR-03 promotion arm fires a config write against the --local target. A
+    // layer that declares a plugin also declares its marketplace, so the flip
+    // declares it in the local layer from the recorded source.
     await writeFile(
       configPath,
       JSON.stringify({
@@ -3938,21 +3983,14 @@ test("UAT-05: --local enable flip with marketplace declared in BASE writes ONLY 
       local: true,
     });
 
-    const localCfg = (await readConfig(configLocalPath)) as {
-      marketplaces?: Record<string, { source?: string; autoupdate?: boolean }>;
-      plugins?: Record<string, { enabled?: boolean }>;
-    };
-    // The flip landed in local...
     // assert
-    assert.equal(localCfg.plugins?.["foo@mp"]?.enabled, true);
-    // ...WITHOUT a marketplace re-declaration.
-    assert.equal(
-      localCfg.marketplaces?.["mp"],
-      undefined,
-      "local file must NOT re-declare a base-declared marketplace",
-    );
+    assert.deepStrictEqual(await readConfig(configLocalPath), {
+      schemaVersion: 1,
+      marketplaces: { mp: { source: mpRoot } },
+      plugins: { "foo@mp": { enabled: true } },
+    });
 
-    // The merged view's autoupdate (from base) survives the flip.
+    // The merged view's autoupdate (from the shared layer) survives the flip.
     const { mergeScopeConfigs } =
       await import("../../../extensions/pi-claude-marketplace/persistence/config-merge.ts");
     const { loadConfig } =
