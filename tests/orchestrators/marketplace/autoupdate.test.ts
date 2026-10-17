@@ -1189,6 +1189,32 @@ for (const { label, declaringLayer, local, expectedMessage } of layerRefusalCase
   });
 }
 
+test("SCOPE-01: an unscoped flip both scopes miss names no other scope, even one that records the marketplace", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const userLocations = locationsFor("user", cwd);
+    await saveMarketplaces(userLocations, [marketplaceRecord("mp", "user", cwd)]);
+    const boundary = notificationBoundary({
+      message:
+        "A marketplace operation has failed.\n\n⊘ mp [project] (failed) {marketplace not added}",
+      severity: "error",
+    });
+
+    // act
+    await setMarketplaceAutoupdate({
+      ctx: boundary.ctx,
+      run: boundary.run,
+      name: "mp",
+      enable: true,
+      cwd,
+    });
+
+    // assert
+    verify(boundary.ctx);
+    verify(boundary.ui);
+  });
+});
+
 test("D-09: reports a recorded marketplace neither config layer declares as not added and writes nothing", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
