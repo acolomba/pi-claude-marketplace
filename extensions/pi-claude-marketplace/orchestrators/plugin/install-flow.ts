@@ -206,12 +206,10 @@ export interface InstallPluginOptions {
    * `PlannedPluginInstall.configSource`, the merge provenance the planner
    * records, so BOTH the DFEN-05 precedence read and the DFEN-04 /
    * D-102-04 stamp address the physical file the declaration actually lives
-   * in. Getting that wrong is silent in both directions: reading the base
-   * file for a locally-declared plugin reports `enabled` absent even when
-   * the local entry says `enabled: true`, installing the plugin disabled
-   * against the user's explicit word; and stamping the base file under a
-   * local declaration changes nothing the merged view can see, because a
-   * local entry replaces the base entry for that key wholesale (CFG-02).
+   * in. Getting the read wrong is silent: reading only the base file for a
+   * locally-declared plugin reports `enabled` absent even when the local
+   * entry says `enabled: true`, installing the plugin disabled against the
+   * user's explicit word.
    */
   readonly local?: boolean;
   /**
@@ -1330,9 +1328,9 @@ interface PromotionArgs {
  * A plugin asked for by name is enabled, so a record that was disabled is
  * re-materialized here the way the enable branch re-materializes it, and its
  * declaration carries the `enabled: true` the enable path writes. A bare key
- * would not do: under a `--local` write it replaces a base `{ enabled: false }`
- * entry wholesale (CFG-02), enabling by omission what this arm enables on
- * purpose.
+ * would not do: under a `--local` write it leaves a base `{ enabled: false }`
+ * in force (LAYER-09), so the next reload would disable what this arm enables
+ * on purpose.
  *
  * The match is the exact `plugin` and `marketplace` names the snapshot is
  * keyed by, the same character-for-character comparison the cascade root and
@@ -1850,12 +1848,7 @@ async function installPluginWithTransaction(
   // flag it READS the local config to find where the declaration lives. A
   // typed `--local` still targets the local file unconditionally; with no flag
   // the target follows the DECLARATION, and only a key declared in neither file
-  // falls through to the base file (the shape of every fresh install). CFG-02
-  // replaces a same-keyed base entry WHOLESALE, so a stamp written to the base
-  // file under a local declaration moves no merged value: the install reports
-  // success, the merged view the reconcile planner reads is unchanged, and
-  // every reload from then on plans an enable for a plugin that declared
-  // itself off.
+  // falls through to the base file (the shape of every fresh install).
   //
   // T-53-02-02: the CFG-03 abort row carries the TARGETED file's basename, and
   // that row renders after the lock closes, so the basename escapes the closure
@@ -1891,16 +1884,11 @@ async function installPluginWithTransaction(
         // happen fresh under the lock the write also holds.
         //
         // `targetIsLocal` comes back from the selector rather than being
-        // re-derived here: `resolveInstallDeclaredEnabled` picks the effective ENTRY by
-        // physical-file IDENTITY before it reads that entry's `enabled` field, so
-        // labelling the selected file with the caller's flag instead of with its
-        // own identity swaps which of `current` and the sibling is treated as the
-        // local file. Under a local declaration and no flag that inversion reads
-        // the base file's bare entry as the effective one, reports `enabled`
-        // absent, fires the landed-disabled verdict against the user's explicit
-        // `enabled: true`, and then stamps `enabled: false` over it (a DFEN-05
-        // violation). The selector computed the locality; asking it is exact
-        // where any second derivation is a chance to disagree.
+        // re-derived here: `resolveInstallDeclaredEnabled` reads the local
+        // layer's `enabled` before the shared one's, so it needs to know which of
+        // `current` and the sibling is the local file. The selector computed the
+        // locality; asking it is exact where any second derivation is a chance
+        // to disagree.
         const selection = await selectDeclaringConfigWriteTarget({
           locations,
           local: opts.local,
@@ -1916,7 +1904,7 @@ async function installPluginWithTransaction(
         // path, the local file being unreadable while the base file is fine: the
         // local file is what DECIDES the destination there, so an unreadable one
         // leaves the destination unknown. Naming that file in a row the user can
-        // act on beats writing to the file CFG-02 would then shadow.
+        // act on beats guessing the destination.
         if (selection.kind === "unreadable") {
           configBasename = path.basename(selection.filePath);
           return { kind: "invalid-config" };
@@ -2047,9 +2035,10 @@ async function installPluginWithTransaction(
         // enabled", which is a different question), and the plugin's resolved
         // declaration says false. `defaultEnabled` is a plain boolean on the
         // materializable arms, so there is no `?? true` fallback to re-derive
-        // here. CFG-02: the read spans both files because a local entry replaces
-        // the base entry wholesale whatever the write target is; `current` stays
-        // the TARGET file and steers the write arms below and nothing else.
+        // here. LAYER-09: the read spans both files because the merged view
+        // reads `enabled` field by field, local first, whatever the write target
+        // is; `current` stays the TARGET file and steers the write arms below and
+        // nothing else.
         const declaredEnabled = resolveInstallDeclaredEnabled({
           current,
           sibling,

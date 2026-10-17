@@ -2009,11 +2009,11 @@ const DFEN_PRECEDENCE_CASES: readonly DfenPrecedenceCase[] = [
     expectEntryAfter: { enabled: true },
   },
   {
-    // CFG-02: the declaration lives in the LOCAL file. A local entry replaces
-    // the same-keyed base entry wholesale, so the user HAS stated an opinion
-    // and the manifest never gets to answer -- reading only one file would
-    // report the key absent, install the plugin disabled against that opinion,
-    // and stamp an `enabled: false` the user never typed.
+    // CFG-02: the declaration lives in the LOCAL file and sets `enabled`, so
+    // the user HAS stated an opinion and the manifest never gets to answer --
+    // reading only the base file would report the key absent, install the
+    // plugin disabled against that opinion, and stamp an `enabled: false` the
+    // user never typed.
     label:
       "CFG-02 / D-103-16: an `enabled: true` in the local file wins, and the stamp follows it there",
     tmpPrefix: "install-dfen05-local-true-wins-",
@@ -2032,23 +2032,10 @@ const DFEN_PRECEDENCE_CASES: readonly DfenPrecedenceCase[] = [
     expectSiblingKeyAbsent: true,
   },
   {
-    // The case that fails if the effective-declaration label is derived from
-    // the caller's `--local` flag instead of from the SELECTED file's identity.
-    //
     // Both files declare the key: base bare `{}`, local `enabled: true`. The
-    // key is in the local file, so the target is local, the local entry is the
-    // effective declaration, its `enabled` is true, the verdict never fires and
+    // key is in the local file, so the target is local; the local `enabled`
+    // wins in the field-by-field read (LAYER-09), the verdict never fires, and
     // the plugin installs ENABLED with both entries left exactly as seeded.
-    //
-    // Label the local target with the flag (false, since none was typed) and
-    // the two files swap identities: the BASE bare `{}` is read as the
-    // effective declaration, `enabled` comes back undefined, the verdict fires
-    // against a manifest declaring false, and the install lands DISABLED while
-    // stamping `enabled: false` over the `enabled: true` the user typed. The
-    // entry is selected by physical-file identity BEFORE its `enabled` field is
-    // read, which is why the label decides the answer rather than merely
-    // describing it -- and why it is derived from the path the selector
-    // returned, not from the flag.
     label:
       "CFG-02 / D-103-16: with the key in BOTH files the LOCAL entry decides, and neither file moves",
     tmpPrefix: "install-dfen05-both-files-",
@@ -2374,19 +2361,16 @@ test("DFEN-08: a declared-true entry and a silent entry render identical install
 // D-103-16 / DFEN-06 / CFG-02 -- the install stamp follows the DECLARATION.
 //
 // A user hand-writes `"hello@mp": {}` into `claude-plugins.local.json` and runs
-// the install with no flag. The read half was already correct: the merged view
-// says `enabled` is absent, so a plugin declaring `defaultEnabled: false` lands
-// disabled. Aiming the WRITE by the flag instead put the `enabled: false` stamp
-// in the base file, where CFG-02's wholesale per-key replacement shadows it --
-// the merged entry still reads `enabled` absent, `isDeclaredEnabled` answers
-// true, and every reload from then on plans an enable for a plugin the author
-// declared off. Unattended, permanent, and reported as success each time.
+// the install with no flag. The merged view says `enabled` is absent, so a
+// plugin declaring `defaultEnabled: false` lands disabled. The `enabled: false`
+// stamp goes to the file the declaration lives in, the local file, and the
+// merged entry reads it from there.
 //
-// `enable` and `disable` carried the same defect at their own write site and
-// were fixed with the same helper; treat the three as one rule, not as three
-// coincidences. The rule is that a verb AUTHORING an enablement declaration
-// writes where the declaration lives -- said as a rule rather than as a claim
-// about coverage, because `maybeWritePluginConfigBack` still aims by the flag.
+// `enable` and `disable` aim their writes through the same helper; treat the
+// three as one rule, not as three coincidences. The rule is that a verb
+// AUTHORING an enablement declaration writes where the declaration lives --
+// said as a rule rather than as a claim about coverage, because
+// `maybeWritePluginConfigBack` still aims by the flag.
 // ───────────────────────────────────────────────────────────────────────────
 
 test("D-103-16 / DFEN-06 / CFG-02: a locally-declared install stamps the LOCAL file and moves the merged view", async () => {
@@ -2448,10 +2432,8 @@ test("D-103-16 / DFEN-06 / CFG-02: a locally-declared install stamps the LOCAL f
       const basePlugins = baseCfg.status === "valid" ? baseCfg.config.plugins : undefined;
       assert.equal(basePlugins?.["hello@mp"], undefined);
 
-      // The load-bearing assertion. "The local file gained the key" would also
-      // hold if the stamp went to the base file and something else wrote the
-      // local one; only the MERGED read distinguishes a correct stamp from one
-      // CFG-02 shadows, and the merged view is the planner's only input.
+      // The merged view is the planner's only input, so the stamp must show
+      // there as a local `enabled: false`.
       const { merged } = await loadMergedScopeConfig(locations);
       const mergedEntry = merged.plugins["hello@mp"];
       assert.ok(mergedEntry !== undefined);

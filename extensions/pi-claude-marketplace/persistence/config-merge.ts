@@ -3,19 +3,19 @@
 // CFG-02 / D-01 / D-09 / D-18 -- base+local merge producing `MergedConfig`
 // with per-entry provenance.
 //
-// The reducer is a PURE function: no I/O, no `node:fs` imports. For
-// marketplace entries the override unit is the FIELD (D-MF-03): the same
-// marketplace may be declared in both files, and each field the
-// `claude-plugins.local.json` entry sets wins over the `claude-plugins.json`
-// entry. So a local entry without `autoupdate` follows the shared one, and an
-// explicit local value is a per-machine override. Unknown fields of both
-// entries survive. Plugin entries are replaced whole: a field merge would
-// turn a shared `{ enabled: false }` under a local `{}` into a disabled
-// plugin (DFEN-05).
+// The reducer is a PURE function: no I/O, no `node:fs` imports. A scope has
+// two layers: the shared layer `claude-plugins.json` and the local layer
+// `claude-plugins.local.json`. For marketplace and plugin entries alike the
+// override unit is the FIELD (LAYER-09 / D-MF-03): the same key may be
+// declared in both layers, and each field the local entry sets wins over the
+// shared entry. So a local marketplace entry without `autoupdate` follows the
+// shared one, a local plugin entry without `enabled` keeps the shared
+// `enabled`, and an explicit local value is a per-machine override. Unknown
+// fields of both entries survive.
 //
 // Each `MergedConfigEntry` carries `source: "base" | "local"` so write-back
 // can target the correct physical file without replaying the merge. The
-// provenance is `local` whenever the local file has the key.
+// provenance is `local` whenever the local layer has the key.
 //
 // `loadMergedScopeConfig` returns BOTH the merged view AND the per-file
 // `ConfigLoadResult`s -- the per-file results MUST NOT collapse into the
@@ -74,16 +74,16 @@ export interface ScopeLoadOutcome {
 }
 
 /**
- * CFG-02 / D-MF-03: base+local reducer.
+ * CFG-02 / LAYER-09 / D-MF-03: merges the shared layer (`base`) and the local
+ * layer (`local`) of one scope.
  *
- * For each key in the union of `base.marketplaces` and `local.marketplaces`,
- * if `local` has the key the merged entry is `{ entry: { ...base[key],
- * ...local[key] }, source: "local" }`; otherwise it is `{ entry: base[key],
- * source: "base" }`. Plugins (flat top-level keys per D-01) take the local
- * entry whole when `local` has the key (DFEN-05).
+ * For each key in the union of the two layers' marketplaces, and likewise of
+ * their plugins (flat `plugin@marketplace` keys per D-01), the merged entry is
+ * `{ entry: { ...base[key], ...local[key] }, source: "local" }` when `local`
+ * has the key, and `{ entry: base[key], source: "base" }` otherwise.
  *
- * The outer maps are built through a `Map`, and the shared marketplace entry
- * is read back from it, so a JSON key such as `__proto__` stays an own entry.
+ * The outer maps are built through a `Map`, and the shared entry is read back
+ * from it, so a JSON key such as `__proto__` stays an own entry.
  */
 export function mergeScopeConfigs(base: ScopeConfig, local: ScopeConfig): MergedConfig {
   const baseMps = base.marketplaces ?? {};
@@ -107,7 +107,8 @@ export function mergeScopeConfigs(base: ScopeConfig, local: ScopeConfig): Merged
   }
 
   for (const [key, entry] of Object.entries(localPlugins)) {
-    pluginEntries.set(key, { entry, source: "local" });
+    const shared = pluginEntries.get(key)?.entry;
+    pluginEntries.set(key, { entry: { ...shared, ...entry }, source: "local" });
   }
 
   return {

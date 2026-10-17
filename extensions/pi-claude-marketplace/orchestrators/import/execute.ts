@@ -1214,8 +1214,9 @@ async function writeBatchedConfigForScope(
 /**
  * D-04-07 / D-103-16: the enable path writes `{ enabled: true }` to the file
  * that declares the key, and the disable verb's `{ enabled: false }` may live
- * in the local file, whose entry shadows the base entry wholesale (CFG-02) --
- * a stamp in the base file alone would leave the merged view disabled. So a
+ * in the local file, whose explicit `enabled` wins over the base entry's
+ * (LAYER-09) -- a stamp in the base file alone would leave the merged view
+ * disabled. So a
  * re-enabled entry the local file declares is stamped there, through the
  * single-entry writer (which adds no `marketplaces` key to a file that
  * declares none), and its base patch drops to the bare key so the base

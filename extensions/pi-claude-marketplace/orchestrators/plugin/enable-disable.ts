@@ -48,11 +48,12 @@
 // D-103-13: absent the flag the target follows the DECLARATION -- the local
 // file when the plugin key is declared there, the base file otherwise. The flag
 // names the file the user wants written; it cannot name the file a declaration
-// already lives in. CFG-02 replaces a same-keyed base entry wholesale, so a
-// flagless flip written to the base file under a local declaration moves no
-// merged value: the verb reports success and the next reconcile pass plans the
-// opposite of the command. Selection therefore happens INSIDE the lock (it
-// reads a config file) -- see `selectDeclaringConfigWriteTarget`.
+// already lives in. A local entry's explicit `enabled` wins over the base
+// entry's (LAYER-09), so a flagless flip written to the base file under a local
+// declaration that sets `enabled` moves no merged value: the verb reports
+// success and the next reconcile pass plans the opposite of the command.
+// Selection therefore happens INSIDE the lock (it reads a config file) -- see
+// `selectDeclaringConfigWriteTarget`.
 //
 // T-53-02-02 / T-54-02-02 information disclosure mitigation: the CFG-03
 // abort row carries `path.basename(targetConfigPath)` -- never the absolute
@@ -2350,8 +2351,8 @@ async function runSetEnabledOutcome(
         // flagless path, the local file being unreadable while the base file is
         // fine -- the local file is what DECIDES the destination there, so an
         // unreadable one leaves the destination unknown. The row names the file
-        // that could not be read; writing to the file CFG-02 would then shadow
-        // would report a flip that moves no merged value.
+        // that could not be read; writing to the base file under a local entry
+        // that sets `enabled` would report a flip that moves no merged value.
         if (selection.kind === "unreadable") {
           configBasename = path.basename(selection.filePath);
           return { kind: "invalid-config" };

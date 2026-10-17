@@ -379,8 +379,9 @@ async function enumerateMarketplacePlugins(args: {
     // presence probe reads the WARM clone/mirror cache fs-only (no network).
     //
     // DFEN-04 / D-01: the config key is the flat `<plugin>@<marketplace>` form,
-    // and the merged view resolves base-vs-local by the same identity rule
-    // `install` applies (a local entry replaces the base entry wholesale).
+    // and the merged view reads `enabled` field by field, as the install's
+    // precedence read does (LAYER-09 / DFEN-05): a local entry's explicit
+    // `enabled` wins, and a local entry without one keeps the shared value.
     // eslint-disable-next-line no-await-in-loop -- bounded by the manifest's uninstalled entries, one row each
     const { message: row, bucket } = await availableRowMessage(
       manifestEntry,

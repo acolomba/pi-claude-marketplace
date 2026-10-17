@@ -125,7 +125,7 @@ const mergeCases = [
       },
       plugins: {
         "zebra@zebra": { entry: { enabled: true }, source: "base" },
-        "shared@shared": { entry: {}, source: "local" },
+        "shared@shared": { entry: { enabled: false }, source: "local" },
         "alpha@alpha": { entry: {}, source: "base" },
         "omega@omega": { entry: { enabled: false }, source: "local" },
       },
@@ -222,7 +222,7 @@ const mergeCases = [
     ) as MergedConfig,
   },
   {
-    name: "replaces a shared plugin entry whole with the local plugin entry",
+    name: "gives a local plugin entry without enabled the shared enabled",
     baseConfig: {
       plugins: {
         "formatter@tools": { enabled: false },
@@ -236,8 +236,52 @@ const mergeCases = [
     expectedConfig: {
       marketplaces: {},
       plugins: {
-        "formatter@tools": { entry: {}, source: "local" },
+        "formatter@tools": { entry: { enabled: false }, source: "local" },
       },
+    },
+  },
+  {
+    name: "lets the local enabled of a plugin win over the shared one",
+    baseConfig: {
+      plugins: {
+        "formatter@tools": { enabled: false },
+      },
+    },
+    localConfig: {
+      plugins: {
+        "formatter@tools": { enabled: true },
+      },
+    },
+    expectedConfig: {
+      marketplaces: {},
+      plugins: {
+        "formatter@tools": { entry: { enabled: true }, source: "local" },
+      },
+    },
+  },
+  {
+    name: "keeps the unknown fields of both plugin entries with the local value winning",
+    baseConfig: JSON.parse(
+      '{"plugins":{"formatter@tools":{"enabled":false,"channel":"stable","mirror":"base"}}}',
+    ) as ScopeConfig,
+    localConfig: JSON.parse(
+      '{"plugins":{"formatter@tools":{"mirror":"local","pinned":true}}}',
+    ) as ScopeConfig,
+    expectedConfig: JSON.parse(
+      '{"marketplaces":{},"plugins":{"formatter@tools":{"entry":{"enabled":false,"channel":"stable","mirror":"local","pinned":true},"source":"local"}}}',
+    ) as MergedConfig,
+  },
+  {
+    name: "merges a prototype-named plugin both layers declare into an own entry",
+    baseConfig: JSON.parse(
+      '{"plugins":{"__proto__":{"enabled":false,"channel":"stable"}}}',
+    ) as ScopeConfig,
+    localConfig: JSON.parse('{"plugins":{"__proto__":{"channel":"beta"}}}') as ScopeConfig,
+    expectedConfig: {
+      marketplaces: {},
+      plugins: Object.fromEntries([
+        ["__proto__", { entry: { enabled: false, channel: "beta" }, source: "local" }],
+      ]),
     },
   },
   {
@@ -395,7 +439,7 @@ const loadCases = [
         },
         plugins: {
           "zebra@zebra": { entry: { enabled: true }, source: "base" },
-          "shared@shared": { entry: {}, source: "local" },
+          "shared@shared": { entry: { enabled: false }, source: "local" },
           "alpha@alpha": { entry: { enabled: true }, source: "local" },
         },
       },

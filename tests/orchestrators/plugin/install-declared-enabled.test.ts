@@ -24,11 +24,18 @@ const CASES: readonly DeclaredEnabledCase[] = [
     expected: true,
   },
   {
-    title: "preserves an absent local enabled field over a base opinion",
+    title: "returns the shared false under a local entry without enabled",
     current: { schemaVersion: 1, plugins: { [KEY]: {} } },
     sibling: { schemaVersion: 1, plugins: { [KEY]: { enabled: false } } },
     targetIsLocal: true,
-    expected: undefined,
+    expected: false,
+  },
+  {
+    title: "returns the shared true under a local entry without enabled",
+    current: { schemaVersion: 1, plugins: { [KEY]: { enabled: true } } },
+    sibling: { schemaVersion: 1, plugins: { [KEY]: {} } },
+    targetIsLocal: false,
+    expected: true,
   },
   {
     title: "returns false from the local sibling of a selected base file",

@@ -388,9 +388,9 @@ function rejectUnknown(reason: unknown): Promise<never> {
 
 /**
  * The MERGED view of the user scope, which is the only view that proves a
- * config write happened: CFG-02 replaces a same-keyed base entry wholesale, so
- * an entry written into the shadowed file changes no effective value even
- * though the file on disk visibly gained it.
+ * config write happened: a local entry's explicit `enabled` wins over the base
+ * entry's (LAYER-09), so an `enabled` written into the base file under it
+ * changes no effective value even though the file on disk visibly gained it.
  */
 async function readMergedUserPluginEntry(
   cwd: string,
@@ -758,7 +758,7 @@ test("D-103-13 / CFG-02 / ENBL-01: flagless enable of a locally-declared plugin 
 
     // The load-bearing assertion. Before this fix the flip landed in the BASE
     // file: that file visibly gained `enabled: true`, the merged view still
-    // read `enabled: false` from the local entry that replaces it wholesale,
+    // read `enabled: false` from the local entry, whose explicit value wins,
     // and the next reload planned a disable and put the record back -- so the
     // user's explicit command survived until the next reload and no further.
     // A physical-file check alone cannot tell that write from a correct one.
@@ -866,7 +866,7 @@ test("UAT-05 / D-103-13: a typed --local still targets the local file even when 
     assert.deepEqual(localCfg.plugins?.["foo@mp"], { enabled: true });
     // The base declaration keeps its pre-call value, byte for byte.
     assert.equal(await readFile(configPath, "utf8"), baseBytes);
-    // And the local entry now shadows it wholesale (CFG-02).
+    // And the local `enabled` now wins over it (LAYER-09).
     assert.deepEqual(await readMergedUserPluginEntry(cwd, "foo@mp"), {
       source: "local",
       declaredEnabled: true,
@@ -897,9 +897,9 @@ test("CFG-03 / D-103-13: an UNREADABLE local config aborts a flagless enable rat
     // or a schema violation arrive through the same `invalid` arm). Whether it
     // declares `foo@mp` is now unknowable -- and the two answers select
     // different files. Reading `invalid` as "not declared locally" put the flip
-    // in the base file, which a local entry replaces wholesale under CFG-02:
-    // the verb reported success, the merged view never moved, and the next
-    // reload planned the opposite of the command.
+    // in the base file, whose `enabled` the local entry's explicit value wins
+    // over (LAYER-09): the verb reported success, the merged view never moved,
+    // and the next reload planned the opposite of the command.
     await writeFile(configLocalPath, '{"plugins": {"foo@mp": {"enabled": fal', "utf8");
     const statePre = await readFile(statePath, "utf8");
     const mtimePre = (await stat(statePath)).mtimeMs;

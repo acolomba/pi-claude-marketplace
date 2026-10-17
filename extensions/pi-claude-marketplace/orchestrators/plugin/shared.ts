@@ -655,35 +655,34 @@ function readableConfig(result: ConfigLoadResult): ScopeConfig | undefined {
  * `--local` says which file to WRITE. It does not say which file a declaration
  * already lives IN, and those are different questions -- a caller who typed no
  * flag has answered neither, and answering the second one with the first is
- * what makes the write a no-op. CFG-02: a `claude-plugins.local.json` entry
- * replaces the same-keyed base entry WHOLESALE, so a write into the base file
- * under a local declaration changes no merged value. The verb reports success,
- * the merged view the reconcile planner reads is unmoved, and the next pass
- * plans the opposite of the command the user just ran.
+ * what makes the write a no-op. LAYER-09: an `enabled` that a
+ * `claude-plugins.local.json` entry sets wins over the base entry's, so a write
+ * into the base file under such a local declaration changes no merged value.
+ * The verb reports success, the merged view the reconcile planner reads is
+ * unmoved, and the next pass plans the opposite of the command the user just
+ * ran.
  *
  * The local file is inspected for KEY MEMBERSHIP only -- the key's PRESENCE
- * decides the file, never its `enabled` value. A local entry shadows the base
- * entry's `enabled` too, so a bare `{}` is still the effective declaration;
- * reading the value here would re-open a precedence question the caller has
- * already settled.
+ * decides the file, never its `enabled` value, so a write under a bare local
+ * `{}` lands in the local file, where the field it sets wins in the merged
+ * view.
  *
  * CFG-03: an UNREADABLE local file returns the `unreadable` arm instead of a
  * target. `loadConfig` never throws, so an EACCES, a truncated mid-save file
  * and a schema violation all arrive as `invalid` -- and none of them answer the
  * membership question. Reading `invalid` as "not declared locally" would aim
- * the write at the base file on exactly the configuration where the local file
- * shadows it, which is the no-op write this selector exists to prevent. This
- * does NOT mirror the D-18 merge fallback: that fallback coerces an invalid
+ * the write at the base file on exactly the configuration where a local entry
+ * may override it, which is the no-op write this selector exists to prevent.
+ * This does NOT mirror the D-18 merge fallback: that fallback coerces an invalid
  * file's CONTRIBUTION while preserving the invalid SIGNAL for the caller
  * (`config-merge.ts::loadMergedScopeConfig`), and it computes a read rather
  * than choosing a write target. `absent` is a real answer ("not declared
  * there") and still yields the base target; this never throws and never
  * creates a file.
  *
- * This is the WRITE-side counterpart of the READ-side rule
- * `install-declared-enabled.ts` states -- the local file wins by IDENTITY,
- * not by precedence. `targetIsLocal` reports the selection's locality so
- * callers reading across both files do not re-derive it by comparing paths.
+ * `targetIsLocal` reports the selection's locality so callers reading across
+ * both files (`install-declared-enabled.ts` reads the local `enabled` first,
+ * then the shared one) do not re-derive it by comparing paths.
  *
  * WB-01 / UAT-05: both reads are decision-input only and neither is serialized
  * back. Callers hold the scope's state lock, which excludes other extension
@@ -735,7 +734,7 @@ export async function selectDeclaringConfigWriteTarget(opts: {
  * A typed flag names the destination outright, so no file has to be read to
  * find it and an unreadable local file cannot make the answer unknowable.
  * Absent the flag the local file IS the determinant, and an unreadable one
- * leaves the destination unknown -- abort rather than guess the shadowed file.
+ * leaves the destination unknown -- abort rather than guess.
  */
 function localFileLeavesTargetUnknowable(
   local: boolean | undefined,
@@ -746,8 +745,9 @@ function localFileLeavesTargetUnknowable(
 
 /**
  * CFG-02 / D-01: the local file answers the key when the caller typed
- * `--local`, or when it declares the key itself -- a local entry REPLACES the
- * same-keyed base entry wholesale, so its mere presence decides the target.
+ * `--local`, or when it declares the key itself -- its mere presence decides
+ * the target, because a field written into the local entry wins over the base
+ * entry's in the merged view (LAYER-09).
  */
 function resolveTargetIsLocal(
   local: boolean | undefined,

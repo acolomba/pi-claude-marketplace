@@ -519,3 +519,75 @@ test("LAYER-01: a marketplace both layers declare with its recorded source conve
   // assert
   assert.deepStrictEqual(plan, emptyReconcilePlan("project"));
 });
+
+/**
+ * LAYER-09: `formatter@tools` is declared `{ enabled: false }` in the shared
+ * layer and `{}` in the local layer, so the merged entry keeps the shared
+ * `enabled`.
+ */
+function formatterDeclaredDisabledInSharedLayer(recordEnabled: boolean): {
+  readonly state: ExtensionState;
+  readonly shared: ScopeConfig;
+  readonly local: ScopeConfig;
+} {
+  return {
+    state: {
+      schemaVersion: 2,
+      marketplaces: {
+        tools: {
+          name: "tools",
+          scope: "project",
+          source: pathSource("./tools"),
+          addedFromCwd: "/workspace",
+          manifestPath: "/marketplaces/tools/.claude-plugin/marketplace.json",
+          marketplaceRoot: "/marketplaces/tools",
+          plugins: {
+            formatter: {
+              ...recordedPlugin("tools", "formatter", "explicit"),
+              enabled: recordEnabled,
+            },
+          },
+        },
+      },
+    },
+    shared: {
+      schemaVersion: 1,
+      marketplaces: { tools: { source: "./tools" } },
+      plugins: { "formatter@tools": { enabled: false } },
+    },
+    local: { schemaVersion: 1, plugins: { "formatter@tools": {} } },
+  };
+}
+
+test("LAYER-09: a disabled record under a shared false and a local entry without enabled converges to the empty plan", () => {
+  // arrange
+  const { state, shared, local } = formatterDeclaredDisabledInSharedLayer(false);
+
+  // act
+  const plan = planReconcile(mergeScopeConfigs(shared, local), state, "project");
+
+  // assert
+  assert.deepStrictEqual(plan, emptyReconcilePlan("project"));
+});
+
+test("LAYER-09: an enabled record under a shared false and a local entry without enabled plans a disable", () => {
+  // arrange
+  const { state, shared, local } = formatterDeclaredDisabledInSharedLayer(true);
+
+  // act
+  const plan = planReconcile(mergeScopeConfigs(shared, local), state, "project");
+
+  // assert
+  assert.deepStrictEqual(plan, {
+    scope: "project",
+    marketplacesToAdd: [],
+    marketplacesToRemove: [],
+    pluginsToInstall: [],
+    pluginsToUninstall: [],
+    pluginsToEnable: [],
+    pluginsToDisable: [{ scope: "project", plugin: "formatter", marketplace: "tools" }],
+    pluginsToDependencyDisable: [],
+    pluginsToDependencyInstall: [],
+    sourceMismatches: [],
+  });
+});
