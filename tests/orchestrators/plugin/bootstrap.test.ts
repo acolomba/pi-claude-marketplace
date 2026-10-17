@@ -110,6 +110,7 @@ async function seedAddedMarketplace(
   locations: ScopedLocations,
   cwd: string,
   autoupdate: boolean,
+  configPath = locations.configJsonPath,
 ): Promise<void> {
   await mkdir(locations.extensionRoot, { recursive: true });
   const marketplaceRoot = await locations.sourceCloneDir("claude-plugins-official");
@@ -118,7 +119,7 @@ async function seedAddedMarketplace(
     marketplaces: { "claude-plugins-official": addedMarketplaceRecord(cwd, marketplaceRoot) },
   });
   await writeFile(
-    locations.configJsonPath,
+    configPath,
     `${JSON.stringify(
       {
         schemaVersion: 1,
@@ -151,14 +152,9 @@ function bootstrappedScopeTree(): readonly string[] {
   ];
 }
 
-/** The seeded tree plus the emptied staging directory the swallowed clone leaves. */
+/** The seeded tree, which a bootstrap that clones nothing leaves as it is. */
 function seededScopeTree(): readonly string[] {
-  return [
-    "claude-plugins.json",
-    "pi-claude-marketplace/",
-    "pi-claude-marketplace/sources-staging/",
-    "pi-claude-marketplace/state.json",
-  ];
+  return ["claude-plugins.json", "pi-claude-marketplace/", "pi-claude-marketplace/state.json"];
 }
 
 test("adds the canonical marketplace and enables autoupdate on a clean user scope", async (t) => {
@@ -274,10 +270,9 @@ test("converges on a second bootstrap without changing the recorded state or the
   assert.strictEqual(await readFile(locations.configJsonPath, "utf8"), configAfterFirst);
   assert.deepStrictEqual(treeAfterFirst, bootstrappedScopeTree());
   assert.deepStrictEqual(await retryTree(locations.scopeRoot), treeAfterFirst);
-  // WR-05: a github source derives its marketplace name from inside the cloned
-  // manifest, so addMarketplace must clone before it can raise the duplicate
-  // name; the idempotent re-run therefore clones once more by design.
-  assert.deepStrictEqual(clonedUrls(), [BOOTSTRAP_REMOTE, BOOTSTRAP_REMOTE]);
+  // WR-05: the re-run's source matches the recorded one, so the duplicate name
+  // is raised before any clone.
+  assert.deepStrictEqual(clonedUrls(), [BOOTSTRAP_REMOTE]);
   verifyBoundary();
 });
 
@@ -308,7 +303,7 @@ test("reports an idempotent autoupdate when the marketplace is already bootstrap
   // RECON-05: an idempotent flip skips the write-back, so the config stays byte-stable.
   assert.strictEqual(await readFile(locations.configJsonPath, "utf8"), seededConfig);
   assert.deepStrictEqual(await retryTree(locations.scopeRoot), seededScopeTree());
-  assert.deepStrictEqual(clonedUrls(), [BOOTSTRAP_REMOTE]);
+  assert.deepStrictEqual(clonedUrls(), []);
   verifyBoundary();
 });
 
@@ -347,7 +342,47 @@ test("flips autoupdate on when the marketplace is added but autoupdate is off", 
   // WR-05: the flip is a config write-back only; state.json is never rewritten.
   assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), seededState);
   assert.deepStrictEqual(await retryTree(locations.scopeRoot), seededScopeTree());
-  assert.deepStrictEqual(clonedUrls(), [BOOTSTRAP_REMOTE]);
+  assert.deepStrictEqual(clonedUrls(), []);
+  verifyBoundary();
+});
+
+test("LAYER-01: declares a marketplace only the local layer holds in the shared layer without a clone", async (t) => {
+  // arrange
+  const { cwd, locations } = await createHermeticUserScope(t, "local-only");
+  await seedAddedMarketplace(locations, cwd, false, locations.configLocalJsonPath);
+  const seededState = await readFile(locations.stateJsonPath, "utf8");
+  const seededLocalConfig = await readFile(locations.configLocalJsonPath, "utf8");
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2);
+  const { gitOps, clonedUrls } = createBootstrapGitOps();
+  const completionCache = createCompletionCache();
+
+  // act
+  await bootstrapClaudePlugin({
+    completionCache,
+    ctx,
+    run: runWithNothingLoaded(),
+    cwd,
+    gitOps,
+  });
+
+  // assert
+  assert.deepStrictEqual(notifications, [
+    { message: "● claude-plugins-official [user] (added)" },
+    { message: "● claude-plugins-official [user] <autoupdate>" },
+  ]);
+  assert.deepStrictEqual(JSON.parse(await readFile(locations.configJsonPath, "utf8")), {
+    schemaVersion: 1,
+    marketplaces: {
+      "claude-plugins-official": {
+        source: "anthropics/claude-plugins-official",
+        autoupdate: true,
+      },
+    },
+    plugins: {},
+  });
+  assert.strictEqual(await readFile(locations.configLocalJsonPath, "utf8"), seededLocalConfig);
+  assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), seededState);
+  assert.deepStrictEqual(clonedUrls(), []);
   verifyBoundary();
 });
 

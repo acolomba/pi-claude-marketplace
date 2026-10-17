@@ -9,6 +9,9 @@
 //   if unknown: throw new Error(parsed.reason)  // MA-10
 //
 //   withStateGuard(locations, async (state) => {
+//     if standalone and exactly one record has the typed source:  // LAYER-01
+//       declare it in the target layer; no clone, no state write
+//
 //     if (github) or (url):  // MURL-01: url mirrors the github clone path
 //       gitOps.clone(stagingDir)                            // network -- gated by NFR-5
 //       write <staging>/.git/pi-claude-marketplace.json     // Q-01 ownership marker
@@ -39,14 +42,12 @@
 // Staging via D-09, GitOps injection via D-12, follow-upstream-blindly via
 // D-14.
 //
-// WR-05 trade-off note: the MA-8 duplicate-name check for github sources
-// runs AFTER the clone fills `stagingDir`. We accept the cost of one
-// wasted network clone per duplicate-name attempt because the marketplace
-// name is derived from the manifest's `name` field -- which only exists
-// inside the cloned tree. Resolving without cloning would require a
-// raw.githubusercontent.com manifest probe that bypasses the GitOps
-// surface (and the D-12/D-13 layering rules); the current cost is
-// considered acceptable per design.
+// WR-05: a standalone add matches the typed source against the scope's
+// records before any clone, so a same-source duplicate costs no clone. A
+// different source whose manifest declares a recorded name still clones
+// first: the marketplace name comes from the manifest's `name` field, which
+// exists only inside the cloned tree, and reading it without a clone would
+// need a manifest probe outside the GitOps surface (D-12/D-13).
 
 import { randomUUID } from "node:crypto";
 import { mkdir, rename, stat } from "node:fs/promises";
@@ -56,7 +57,7 @@ import path from "node:path";
 import { networkCloneUrl, originMatchesSource } from "../../domain/clone-key.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { isReservedRecordKey } from "../../domain/name.ts";
-import { parsePluginSource } from "../../domain/source.ts";
+import { parsePluginSource, samePlannedSource } from "../../domain/source.ts";
 import { loadConfig } from "../../persistence/config-io.ts";
 import { writeMarketplaceConfigEntry } from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
@@ -379,6 +380,51 @@ function addSubjectName(rawErr: unknown, rawSource: string): string {
 }
 
 /**
+ * LAYER-01 / D-MF-03: the same marketplace may be declared in both config
+ * layers of a scope. When exactly one record of the scope has the typed
+ * source, a standalone add declares that marketplace in the target layer and
+ * reuses the record and its clone: no clone, no git call, no state write. The
+ * match is `samePlannedSource`, the reconcile planner's own identity rule, so
+ * the declared source never reads as a source mismatch on reload. A target
+ * layer that already declares the name refuses as a duplicate.
+ *
+ * Returns the declared name, or `undefined` when no single record matches or
+ * the add is orchestrated (reconcile and import never write a config back,
+ * WR-09). The caller runs this outside the MA-9 / WR-07 cleanup catch: that
+ * cleanup removes a clone the add created, and this path creates none.
+ */
+async function redeclareRecordedSource(args: {
+  marketplaces: ExtensionState["marketplaces"];
+  current: ScopeConfig;
+  targetConfigPath: string;
+  locations: ScopedLocations;
+  rawSource: string;
+  orchestrated: boolean;
+}): Promise<string | undefined> {
+  const { current, locations, rawSource } = args;
+  if (args.orchestrated) {
+    return undefined;
+  }
+
+  const [match, ...others] = Object.entries(args.marketplaces).filter(
+    ([, record]) => samePlannedSource(record.source, rawSource) === "same",
+  );
+  if (match === undefined || others.length > 0) {
+    return undefined;
+  }
+
+  const [name] = match;
+  if (ownValue(current.marketplaces, name) !== undefined) {
+    throw new MarketplaceDuplicateNameError(name, locations.scope);
+  }
+
+  await writeMarketplaceConfigEntry(current, args.targetConfigPath, locations.scopeRoot, name, {
+    source: rawSource,
+  });
+  return name;
+}
+
+/**
  * WB-01 mitigation: a CFG-03 invalid-config arm aborts the
  * command BEFORE any state mutation or network call. Thrown so the
  * entrypoint catch routes through `classifyAddError` -> `invalid manifest`
@@ -446,6 +492,19 @@ async function runAddInGuard(args: {
       throw new ConfigInvalidError(configBasename);
     }
 
+    const current: ScopeConfig = cfg.status === "valid" ? cfg.config : { schemaVersion: 1 };
+    const redeclaredName = await redeclareRecordedSource({
+      marketplaces: state.marketplaces,
+      current,
+      targetConfigPath,
+      locations,
+      rawSource: opts.rawSource,
+      orchestrated,
+    });
+    if (redeclaredName !== undefined) {
+      return redeclaredName;
+    }
+
     if (source.kind === "github") {
       recordedName = await addGithubInGuard({
         ctx: opts.ctx,
@@ -502,7 +561,6 @@ async function runAddInGuard(args: {
     // rethrown error.
     try {
       if (!orchestrated) {
-        const current: ScopeConfig = cfg.status === "valid" ? cfg.config : { schemaVersion: 1 };
         await writeMarketplaceConfigEntry(
           current,
           targetConfigPath,

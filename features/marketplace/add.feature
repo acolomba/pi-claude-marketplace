@@ -113,6 +113,57 @@ Feature: Marketplace add
       | name  | source                    |
       | tools | {home}/marketplaces/tools |
 
+  Scenario Outline: Adding with --local a marketplace that the shared configuration declares also declares it in the local configuration
+    Given the marketplace "tools" is published as a <source kind> source
+    Given the marketplace "tools" is added to the project scope
+    When the user runs "/claude:plugin marketplace add <source> --scope project --local"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these marketplaces:
+      | name  | scope   | status |
+      | tools | project | added  |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name  | source   |
+      | tools | <source> |
+    Then the "claude-plugins.local.json" file of the project scope declares these marketplaces:
+      | name  | source   |
+      | tools | <source> |
+
+    Examples:
+      | source kind | source                                                    |
+      | dir         | {home}/marketplaces/tools                                 |
+      | file        | {home}/marketplaces/tools/.claude-plugin/marketplace.json |
+
+    @url
+    Examples:
+      | source kind | source                            |
+      | url         | https://{git host}/acme/tools.git |
+
+    @github
+    Examples:
+      | source kind | source     |
+      | github      | acme/tools |
+
+  Scenario: Adding without --local a marketplace that the local configuration declares also declares it in the shared configuration
+    Given the marketplace "tools" is published as a dir source
+    Given the user has run "/claude:plugin marketplace add {home}/marketplaces/tools --scope project --local"
+    When the user runs "/claude:plugin marketplace add {home}/marketplaces/tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these marketplaces:
+      | name  | scope   | status |
+      | tools | project | added  |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name  | source                    |
+      | tools | {home}/marketplaces/tools |
+    Then the "claude-plugins.local.json" file of the project scope declares these marketplaces:
+      | name  | source                    |
+      | tools | {home}/marketplaces/tools |
+
   Scenario: A marketplace added with --local to a scope with no shared configuration stays out of it in a new session
     Given the marketplace "tools" is published as a dir source
     Given the user has run "/claude:plugin marketplace add {home}/marketplaces/tools --scope project --local"

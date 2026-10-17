@@ -89,18 +89,13 @@ export interface BootstrapOptions {
  *   - re-run on half-bootstrapped state (marketplace present, autoupdate
  *     off): emits ONE "Enabled autoupdate: ..." notification.
  *
- * Inherited GitHub-source clone-before-name-check trade-off (WR-05 in
- * `orchestrators/marketplace/add.ts`): for github sources, the
- * `MarketplaceDuplicateNameError` is raised AFTER the clone fills a
- * staging dir, because the marketplace name lives inside the cloned
- * manifest. The bootstrap's idempotent re-run therefore performs one
- * clone-and-cleanup before swallowing the duplicate-name error. NFR-5
- * is unaffected because NFR-5 governs path-source / read-only commands
- * (`install`, `list`, `uninstall`, `marketplace remove`, path-source
- * `marketplace add`); the bootstrap inherits the same surface as the
- * underlying github-source `marketplace add`. Avoiding the clone would
- * require a pre-`loadState` lookup against user-scope state, which is
- * the explicit TOCTOU anti-pattern this orchestrator opts out of.
+ * An idempotent re-run meets the duplicate-name check before any clone:
+ * `addMarketplace` matches the typed source against the user scope's
+ * records inside its own state lock (WR-05 in
+ * `orchestrators/marketplace/add.ts`). When only the user's
+ * `claude-plugins.local.json` declares the marketplace, the add declares
+ * it in `claude-plugins.json` too and emits its `(added)` row, still
+ * without a clone (LAYER-01).
  */
 export async function bootstrapClaudePlugin(opts: BootstrapOptions): Promise<void> {
   try {

@@ -23,7 +23,10 @@ import { NO_STORED_CREDENTIAL_CAUSE } from "../../../extensions/pi-claude-market
 import { addMarketplace as addMarketplaceWithCache } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts";
 import { loadConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
-import { loadState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import {
+  loadState,
+  saveState,
+} from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { buildAuthCallbacks } from "../../../extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts";
 import { listRemotes } from "../../../extensions/pi-claude-marketplace/platform/git.ts";
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
@@ -1024,22 +1027,20 @@ test("MA-8: a matching leftover still yields (failed) {duplicate name}, not {sta
     });
 
     const { ctx: ctx2, run: run2, notifications: n2 } = makeCtx();
-    // The second add's leftover origin MATCHES the source -- recognition
-    // would accept it -- but MA-8's duplicate-name check (step 3) runs BEFORE
-    // recognition (step 4), so a matching leftover never overrides it.
+    // A second source whose manifest declares the same name. The leftover's
+    // origin MATCHES that source -- recognition would accept it -- but MA-8's
+    // duplicate-name check (step 3) runs BEFORE recognition (step 4), so a
+    // matching leftover never overrides it.
     const { gitOps: gitOps2 } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
-      listRemotesResult: {
-        kind: "origin",
-        url: "https://github.com/anthropics/claude-plugins-official.git",
-      },
+      listRemotesResult: { kind: "origin", url: "https://github.com/owner/repo.git" },
     });
     await addMarketplace({
       ctx: ctx2,
       run: run2,
       scope: "project",
       cwd,
-      rawSource: "anthropics/claude-plugins-official",
+      rawSource: "owner/repo",
       gitOps: gitOps2,
     });
 
@@ -1233,7 +1234,7 @@ test("MA-14: orchestrated mode joins both cleanup failures behind one Error.caus
   });
 });
 
-test("MA-8 / ATTR-07: duplicate name in same scope renders (failed) {duplicate name}", async () => {
+test("MA-8 / ATTR-07: a same-source add into the declaring layer renders (failed) {duplicate name} before any clone", async () => {
   await withTmpScope(async ({ cwd }) => {
     // arrange
     const { ctx, run } = makeCtx();
@@ -1252,7 +1253,7 @@ test("MA-8 / ATTR-07: duplicate name in same scope renders (failed) {duplicate n
     });
 
     const { ctx: ctx2, run: run2, notifications: n2 } = makeCtx();
-    const { gitOps: gitOps2 } = createGitOps({
+    const { gitOps: gitOps2, state: gitState2 } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
     // ATTR-07: second add for same name routes through notify, no raw throw.
@@ -1274,6 +1275,7 @@ test("MA-8 / ATTR-07: duplicate name in same scope renders (failed) {duplicate n
       "A marketplace operation has failed.\n\n⊘ valid-marketplace [project] (failed) {duplicate name}",
     );
     assert.equal(note.severity, "error");
+    assert.deepStrictEqual(gitState2.cloneCalls, []);
   });
 });
 
@@ -3094,6 +3096,205 @@ test("WB-01: --local routes the write to claude-plugins.local.json and never tou
     // The base file MUST be untouched.
     const baseCfg = await loadConfig(locations.configJsonPath);
     assert.equal(baseCfg.status, "absent");
+  });
+});
+
+/** The bytes an add writes into a config file that declares only `name`. */
+function declaredMarketplaceBytes(name: string, source: string): string {
+  return `{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "${name}": {\n      "source": "${source}"\n    }\n  }\n}\n`;
+}
+
+for (const { declaredLayer, targetLayer, firstLocal, secondLocal } of [
+  { declaredLayer: "shared", targetLayer: "local", firstLocal: false, secondLocal: true },
+  { declaredLayer: "local", targetLayer: "shared", firstLocal: true, secondLocal: false },
+]) {
+  test(`LAYER-01: declares a path marketplace the ${declaredLayer} layer holds in the ${targetLayer} layer with no clone and no state write`, async () => {
+    await withTmpScope(async ({ cwd, locations }) => {
+      // arrange
+      const marketplaceRoot = await writeNamedPathMarketplace(cwd, "tools");
+      const { gitOps, state: gitState } = createGitOps();
+      const first = makeCtx();
+      await addMarketplace({
+        ctx: first.ctx,
+        run: first.run,
+        scope: "project",
+        cwd,
+        rawSource: marketplaceRoot,
+        gitOps,
+        local: firstLocal,
+      });
+      const stateBefore = await readFile(locations.stateJsonPath, "utf8");
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await addMarketplace({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        rawSource: marketplaceRoot,
+        gitOps,
+        local: secondLocal,
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [{ message: "● tools [project] (added)" }]);
+      assert.strictEqual(
+        await readFile(locations.configJsonPath, "utf8"),
+        declaredMarketplaceBytes("tools", marketplaceRoot),
+      );
+      assert.strictEqual(
+        await readFile(locations.configLocalJsonPath, "utf8"),
+        declaredMarketplaceBytes("tools", marketplaceRoot),
+      );
+      assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
+      assert.deepStrictEqual(gitState.cloneCalls, []);
+    });
+  });
+}
+
+test("LAYER-01: declares a github marketplace in the local layer with only the clone of the first add", async () => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    const { gitOps, state: gitState } = createGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+    });
+    const first = makeCtx();
+    await addMarketplace({
+      ctx: first.ctx,
+      run: first.run,
+      scope: "project",
+      cwd,
+      rawSource: "anthropics/claude-plugins-official",
+      gitOps,
+    });
+    const stateBefore = await readFile(locations.stateJsonPath, "utf8");
+    const { ctx, run, notifications } = makeCtx();
+    const redeclareGitOps: GitOps = {
+      ...gitOps,
+      listRemotes: () => Promise.reject(new Error("the re-declaration inspects no clone")),
+    };
+
+    // act
+    await addMarketplace({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource: "anthropics/claude-plugins-official",
+      gitOps: redeclareGitOps,
+      local: true,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [{ message: "● valid-marketplace [project] (added)" }]);
+    assert.strictEqual(
+      await readFile(locations.configJsonPath, "utf8"),
+      declaredMarketplaceBytes("valid-marketplace", "anthropics/claude-plugins-official"),
+    );
+    assert.strictEqual(
+      await readFile(locations.configLocalJsonPath, "utf8"),
+      declaredMarketplaceBytes("valid-marketplace", "anthropics/claude-plugins-official"),
+    );
+    assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
+    assert.deepStrictEqual(
+      gitState.cloneCalls.map((call) => call.url),
+      ["https://github.com/anthropics/claude-plugins-official.git"],
+    );
+    assert.deepStrictEqual(
+      [
+        gitState.fetchCalls,
+        gitState.forceUpdateRefCalls,
+        gitState.checkoutCalls,
+        gitState.resolveRefCalls,
+      ],
+      [[], [], [], []],
+    );
+  });
+});
+
+test("LAYER-01: declares a marketplace the scope records but no layer declares, keeping its record", async () => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    const marketplaceRoot = await writeNamedPathMarketplace(cwd, "tools");
+    await saveState(locations.extensionRoot, {
+      schemaVersion: 3,
+      marketplaces: {
+        tools: {
+          name: "tools",
+          scope: "project",
+          source: { kind: "path", raw: marketplaceRoot, logical: marketplaceRoot },
+          addedFromCwd: cwd,
+          manifestPath: path.join(marketplaceRoot, ".claude-plugin", "marketplace.json"),
+          marketplaceRoot,
+          plugins: {},
+        },
+      },
+    });
+    const stateBefore = await readFile(locations.stateJsonPath, "utf8");
+    const { ctx, run, notifications } = makeCtx();
+    const { gitOps, state: gitState } = createGitOps();
+
+    // act
+    await addMarketplace({ ctx, run, scope: "project", cwd, rawSource: marketplaceRoot, gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [{ message: "● tools [project] (added)" }]);
+    assert.strictEqual(
+      await readFile(locations.configJsonPath, "utf8"),
+      declaredMarketplaceBytes("tools", marketplaceRoot),
+    );
+    assert.strictEqual(await pathExists(locations.configLocalJsonPath), false);
+    assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
+    assert.deepStrictEqual(gitState.cloneCalls, []);
+  });
+});
+
+test("LAYER-01: a failed re-declaration write keeps the recorded clone and state", async () => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    const { gitOps } = createGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+    });
+    const first = makeCtx();
+    await addMarketplace({
+      ctx: first.ctx,
+      run: first.run,
+      scope: "project",
+      cwd,
+      rawSource: "anthropics/claude-plugins-official",
+      gitOps,
+    });
+    const cloneDir = await locations.sourceCloneDir("valid-marketplace");
+    const cloneEntriesBefore = (await readdir(cloneDir, { recursive: true })).sort();
+    const stateBefore = await readFile(locations.stateJsonPath, "utf8");
+    const { ctx, run } = makeCtx(0);
+    // A read-only scope root refuses the atomic write of the absent local file.
+    await chmod(locations.scopeRoot, 0o500);
+
+    // act & assert
+    try {
+      await assert.rejects(
+        addMarketplace({
+          ctx,
+          run,
+          scope: "project",
+          cwd,
+          rawSource: "anthropics/claude-plugins-official",
+          gitOps,
+          local: true,
+        }),
+        { code: "EACCES" },
+      );
+    } finally {
+      await chmod(locations.scopeRoot, 0o755);
+    }
+
+    assert.deepStrictEqual(
+      (await readdir(cloneDir, { recursive: true })).sort(),
+      cloneEntriesBefore,
+    );
+    assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
   });
 });
 
