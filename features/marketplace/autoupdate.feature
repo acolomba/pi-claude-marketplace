@@ -78,3 +78,115 @@ Feature: Marketplace autoupdate
       | name  | source                    |
       | tools | {home}/marketplaces/tools |
     Then the "claude-plugins.json" file of the project scope does not exist
+
+  Scenario: Enabling autoupdate for every marketplace sets it in each configuration that declares the marketplace
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "extras" is published as a dir source
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin marketplace add {home}/marketplaces/tools --scope project --local"
+    Given the marketplace "extras" is added to the project scope
+    When the user runs "/claude:plugin marketplace autoupdate --scope project"
+    Then the result has these fields:
+      | kind                | cascade                |
+      | severity            | info                   |
+      | needs reload        | false                  |
+      | tally label         | Marketplace autoupdate |
+      | tally failures      | 0                      |
+      | tally warnings      | 0                      |
+      | tally success count | 2                      |
+    Then the result lists these marketplaces:
+      | name   | scope   | status             |
+      | tools  | project | autoupdate enabled |
+      | extras | project | autoupdate enabled |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name   | source                     | autoupdate |
+      | tools  | {home}/marketplaces/tools  | true       |
+      | extras | {home}/marketplaces/extras | true       |
+    Then the "claude-plugins.local.json" file of the project scope declares these marketplaces:
+      | name  | source                    | autoupdate |
+      | tools | {home}/marketplaces/tools | true       |
+
+  Scenario: Disabling autoupdate with --local writes the setting to the local configuration only
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin marketplace add {home}/marketplaces/tools --scope project --local"
+    Given the user has run "/claude:plugin marketplace autoupdate tools --scope project"
+    When the user runs "/claude:plugin marketplace noautoupdate tools --scope project --local"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these marketplaces:
+      | name  | scope   | status              |
+      | tools | project | autoupdate disabled |
+    Then the "claude-plugins.local.json" file of the project scope declares these marketplaces:
+      | name  | source                    | autoupdate |
+      | tools | {home}/marketplaces/tools | false      |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name  | source                    | autoupdate |
+      | tools | {home}/marketplaces/tools | true       |
+
+  Scenario: A local autoupdate setting overrides the shared one in the marketplace list
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin marketplace add {home}/marketplaces/tools --scope project --local"
+    Given the user has run "/claude:plugin marketplace autoupdate tools --scope project"
+    Given the user has run "/claude:plugin marketplace noautoupdate tools --scope project --local"
+    When the user runs "/claude:plugin marketplace list --scope project"
+    Then the result has these fields:
+      | kind                | cascade          |
+      | severity            | info             |
+      | needs reload        | false            |
+      | tally label         | Marketplace list |
+      | tally failures      | 0                |
+      | tally warnings      | 0                |
+      | tally success count | 1                |
+    Then the result lists these marketplaces:
+      | name  | scope   | details autoupdate | details last updated at |
+      | tools | project | false              | {scenario time}         |
+
+  Scenario: Enabling autoupdate in the shared configuration reports already autoupdate while the local configuration keeps it off
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin marketplace add {home}/marketplaces/tools --scope project --local"
+    Given the user has run "/claude:plugin marketplace autoupdate tools --scope project"
+    Given the user has run "/claude:plugin marketplace noautoupdate tools --scope project --local"
+    When the user runs "/claude:plugin marketplace autoupdate tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these marketplaces:
+      | name  | scope   | status  | reasons            |
+      | tools | project | skipped | already autoupdate |
+    Then the "claude-plugins.local.json" file of the project scope declares these marketplaces:
+      | name  | source                    | autoupdate |
+      | tools | {home}/marketplaces/tools | false      |
+
+  Scenario: Disabling autoupdate for every marketplace with --local changes only the local configuration
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "extras" is published as a dir source
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin marketplace add {home}/marketplaces/tools --scope project --local"
+    Given the marketplace "extras" is added to the project scope
+    Given the user has run "/claude:plugin marketplace autoupdate tools --scope project"
+    Given the user has run "/claude:plugin marketplace autoupdate extras --scope project"
+    When the user runs "/claude:plugin marketplace noautoupdate --scope project --local"
+    Then the result has these fields:
+      | kind                | cascade                  |
+      | severity            | info                     |
+      | needs reload        | false                    |
+      | tally label         | Marketplace noautoupdate |
+      | tally failures      | 0                        |
+      | tally warnings      | 0                        |
+      | tally success count | 1                        |
+    Then the result lists these marketplaces:
+      | name  | scope   | status              |
+      | tools | project | autoupdate disabled |
+    Then the "claude-plugins.local.json" file of the project scope declares these marketplaces:
+      | name  | source                    | autoupdate |
+      | tools | {home}/marketplaces/tools | false      |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name   | source                     | autoupdate |
+      | tools  | {home}/marketplaces/tools  | true       |
+      | extras | {home}/marketplaces/extras | true       |

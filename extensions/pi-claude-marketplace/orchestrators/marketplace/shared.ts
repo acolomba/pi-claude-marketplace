@@ -19,10 +19,6 @@
 //     Throws MarketplaceNotFoundError or MarketplaceAmbiguousScopeError
 //     (both exported by shared/errors.ts).
 //
-//   - classifyAutoupdateFlip (MAU-1..4): single helper used by
-//     autoupdate.ts. Idempotent -- already-matching marketplaces land
-//     in `unchanged[]`.
-//
 // Per D-02 ANTI-PATTERN: this file MUST NOT import from `transaction/`
 // (no phase-ledger runner). The cascade is the wrong shape for ledger
 // semantics (MR-3 requires continuation across plugin failures; the
@@ -665,76 +661,6 @@ export async function cascadeUnstagePlugin(
       ...writtenMcpFilesMember(writtenMcpFiles),
     });
   }
-}
-
-/** MAU-1..4: idempotent autoupdate-flip outcome. */
-export interface AutoupdateFlipResult {
-  /** Marketplace names whose flag actually changed in this call. */
-  readonly changed: readonly string[];
-  /** Marketplace names whose flag already matched the requested value. */
-  readonly unchanged: readonly string[];
-}
-
-/**
- * MAU-1..4: idempotent autoupdate-flip classification.
- * - When `name` is undefined, classify every marketplace in this scope's
- *   state (MAU-2 bare form).
- * - When `name` is given but missing, throw MarketplaceNotFoundError
- *   with an empty scope list -- the caller fills the scope detail.
- * - MAU-3: already-matching marketplaces report as "unchanged"; the
- *   caller composes the user-visible "Already enabled/disabled: ..."
- *   line.
- * - MAU-4: missing/undefined `record.autoupdate` is read as `false`
- *   via the `=== true` comparison.
- *
- * WR-05: CLASSIFY ONLY -- the legacy state-side
- * `autoupdate` field is READ (a state record pre-dating the D-13 scrub may
- * still carry it) but NEVER written. SPLIT-01 moved the truth into the
- * per-marketplace config entry; the config write-back is the real flip.
- * Writing the carved-out field back into state.json would re-introduce a
- * schema-stripped legacy field that the D-13 scrub removes again on the
- * next load -- pointless state churn the architecture gate at
- * tests/architecture/no-split-01-cast-reads.test.ts now forbids (the
- * assignment-form sibling pattern). The caller reclassifies this state-side
- * result against the CONFIG truth (`reclassifyByConfigTruth`) before any
- * write.
- */
-export function classifyAutoupdateFlip(
-  state: ExtensionState,
-  name: string | undefined,
-  enable: boolean,
-): AutoupdateFlipResult {
-  const changed: string[] = [];
-  const unchanged: string[] = [];
-
-  // D-04: undefined === false. Read through `Record<string, unknown>` cast
-  // (legacy field; not on MARKETPLACE_RECORD_SCHEMA since SPLIT-01).
-  if (name !== undefined) {
-    const record = ownValue(state.marketplaces, name);
-    if (record === undefined) {
-      throw new MarketplaceNotFoundError(name, []);
-    }
-
-    const legacy = record as { readonly autoupdate?: unknown };
-    if ((legacy.autoupdate === true) === enable) {
-      unchanged.push(name);
-    } else {
-      changed.push(name);
-    }
-
-    return { changed, unchanged };
-  }
-
-  for (const [mp, record] of Object.entries(state.marketplaces)) {
-    const legacy = record as { readonly autoupdate?: unknown };
-    if ((legacy.autoupdate === true) === enable) {
-      unchanged.push(mp);
-    } else {
-      changed.push(mp);
-    }
-  }
-
-  return { changed, unchanged };
 }
 
 /**

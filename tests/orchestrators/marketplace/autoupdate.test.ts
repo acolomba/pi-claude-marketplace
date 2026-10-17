@@ -381,7 +381,10 @@ test("enables all project marketplaces in changed-before-unchanged order with on
     ]);
     await writeConfig(locations, {
       schemaVersion: 1,
-      marketplaces: { already: { source: "./already", autoupdate: true } },
+      marketplaces: {
+        already: { source: "./already", autoupdate: true },
+        "to-flip": { source: "./to-flip" },
+      },
     });
     const stateBytes = await readFile(locations.stateJsonPath, "utf8");
     const boundary = notificationBoundary({
@@ -402,8 +405,8 @@ test("enables all project marketplaces in changed-before-unchanged order with on
       '      "autoupdate": true',
       "    },",
       '    "to-flip": {',
-      '      "autoupdate": true,',
-      '      "source": "./to-flip"',
+      '      "source": "./to-flip",',
+      '      "autoupdate": true',
       "    }",
       "  },",
       '  "plugins": {}',
@@ -664,68 +667,37 @@ for (const { label, invocation, expectedMessage } of orchestratedConfiguredCases
   });
 }
 
-test("standalone unnamed enable reports an unsynthesizable source without writing config", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    // arrange
-    const locations = locationsFor("project", cwd);
-    await saveMarketplaces(locations, [
-      marketplaceRecord("odd", "project", cwd, { kind: "unknown" }),
-    ]);
-    const stateBytes = await readFile(locations.stateJsonPath, "utf8");
-    const boundary = notificationBoundary({
-      message:
-        "A marketplace operation has failed.\n\n⊘ odd [project] (failed) {not found}\n\nMarketplace autoupdate: 1 failure",
-      severity: "error",
-    });
+const undeclaredUnnamedCases = [
+  { label: "a standalone", notifications: undefined },
+  { label: "an orchestrated", notifications: { mode: "orchestrated" as const } },
+] as const;
 
-    // act
-    await setMarketplaceAutoupdate({
-      ctx: boundary.ctx,
-      run: boundary.run,
-      enable: true,
-      scope: "project",
-      cwd,
-    });
+for (const { label, notifications } of undeclaredUnnamedCases) {
+  test(`D-09: ${label} unnamed flip gives no row to a recorded marketplace no layer declares`, async () => {
+    await withHermeticHome(async ({ cwd }) => {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await saveMarketplaces(locations, [marketplaceRecord("mp", "project", cwd)]);
+      const bytesBefore = await scopeBytes(locations);
+      const boundary = notificationBoundary({ message: "(no marketplaces)" });
 
-    // assert
-    assert.equal(await readOptionalBytes(locations.configJsonPath), undefined);
-    assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
-    verify(boundary.ctx);
-    verify(boundary.ui);
+      // act
+      await setMarketplaceAutoupdate({
+        ctx: boundary.ctx,
+        run: boundary.run,
+        enable: true,
+        scope: "project",
+        cwd,
+        ...(notifications !== undefined && { notifications }),
+      });
+
+      // assert
+      assert.deepEqual(await scopeBytes(locations), bytesBefore);
+      verify(boundary.ctx);
+      verify(boundary.ui);
+    });
   });
-});
-
-test("orchestrated unnamed enable reports an unsynthesizable source without writing config", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    // arrange
-    const locations = locationsFor("project", cwd);
-    await saveMarketplaces(locations, [
-      marketplaceRecord("odd", "project", cwd, { kind: "unknown" }),
-    ]);
-    const stateBytes = await readFile(locations.stateJsonPath, "utf8");
-    const boundary = notificationBoundary({
-      message:
-        "A marketplace operation has failed.\n\n⊘ odd [project] (failed) {not found}\n\nMarketplace autoupdate: 1 failure",
-      severity: "error",
-    });
-
-    // act
-    await setMarketplaceAutoupdate({
-      ctx: boundary.ctx,
-      run: boundary.run,
-      enable: true,
-      scope: "project",
-      cwd,
-      notifications: { mode: "orchestrated" },
-    });
-
-    // assert
-    assert.equal(await readOptionalBytes(locations.configJsonPath), undefined);
-    assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
-    verify(boundary.ctx);
-    verify(boundary.ui);
-  });
-});
+}
 
 test("rejects malformed base config with a basename-only failure and unchanged state", async () => {
   await withHermeticHome(async ({ cwd }) => {
@@ -1416,6 +1388,272 @@ test("CFG-03: an unnamed --local flip over an invalid local file fails and write
       scope: "project",
       cwd,
       local: true,
+    });
+
+    // assert
+    assert.deepEqual(await scopeBytes(locations), bytesBefore);
+    verify(boundary.ctx);
+    verify(boundary.ui);
+  });
+});
+
+test("D-06: an unnamed flip sets the value in every layer that declares each marketplace", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    await saveMarketplaces(locations, [
+      marketplaceRecord("extras", "project", cwd, pathSource("./extras")),
+      marketplaceRecord("tools", "project", cwd, pathSource("./tools")),
+    ]);
+    await writeConfig(locations, {
+      schemaVersion: 1,
+      marketplaces: { extras: { source: "./extras" }, tools: { source: "./tools" } },
+    });
+    await writeConfig(
+      locations,
+      { schemaVersion: 1, marketplaces: { tools: { source: "./tools" } } },
+      true,
+    );
+    const stateBytes = await readFile(locations.stateJsonPath, "utf8");
+    const boundary = notificationBoundary({
+      message: [
+        "● extras [project] <autoupdate>",
+        "",
+        "● tools [project] <autoupdate>",
+        "",
+        "Marketplace autoupdate: 2 successes",
+      ].join("\n"),
+    });
+
+    // act
+    await setMarketplaceAutoupdate({
+      ctx: boundary.ctx,
+      run: boundary.run,
+      enable: true,
+      scope: "project",
+      cwd,
+    });
+
+    // assert
+    assert.deepEqual(await scopeBytes(locations), {
+      state: stateBytes,
+      shared: [
+        "{",
+        '  "schemaVersion": 1,',
+        '  "marketplaces": {',
+        '    "extras": {',
+        '      "source": "./extras",',
+        '      "autoupdate": true',
+        "    },",
+        '    "tools": {',
+        '      "source": "./tools",',
+        '      "autoupdate": true',
+        "    }",
+        "  },",
+        '  "plugins": {}',
+        "}",
+        "",
+      ].join("\n"),
+      local: [
+        "{",
+        '  "schemaVersion": 1,',
+        '  "marketplaces": {',
+        '    "tools": {',
+        '      "source": "./tools",',
+        '      "autoupdate": true',
+        "    }",
+        "  },",
+        '  "plugins": {}',
+        "}",
+        "",
+      ].join("\n"),
+    });
+    verify(boundary.ctx);
+    verify(boundary.ui);
+  });
+});
+
+const sharedOnUnnamedCases = [
+  {
+    label: "writes the explicit value into a local entry that has none",
+    localEntry: { source: "./src" },
+    expectedMessage: "● mp [project] <autoupdate>\n\nMarketplace autoupdate: 1 success",
+    expectedLocal:
+      '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "mp": {\n      "source": "./src",\n      "autoupdate": true\n    }\n  },\n  "plugins": {}\n}\n',
+  },
+  {
+    label: "reports already autoupdate when every declaring layer has it on",
+    localEntry: { source: "./src", autoupdate: true },
+    expectedMessage:
+      "● mp [project] <autoupdate> {already autoupdate}\n\nMarketplace autoupdate: 1 success",
+    expectedLocal: undefined,
+  },
+] as const;
+
+for (const { label, localEntry, expectedMessage, expectedLocal } of sharedOnUnnamedCases) {
+  test(`D-07: an unnamed enable over a shared value that is on ${label}`, async () => {
+    await withHermeticHome(async ({ cwd }) => {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await saveMarketplaces(locations, [marketplaceRecord("mp", "project", cwd)]);
+      await writeConfig(locations, {
+        schemaVersion: 1,
+        marketplaces: { mp: { source: "./src", autoupdate: true } },
+      });
+      await writeConfig(locations, { schemaVersion: 1, marketplaces: { mp: localEntry } }, true);
+      const sharedBefore = await configSnapshot(locations.configJsonPath);
+      const localBytes = await readFile(locations.configLocalJsonPath, "utf8");
+      const boundary = notificationBoundary({ message: expectedMessage });
+
+      // act
+      await setMarketplaceAutoupdate({
+        ctx: boundary.ctx,
+        run: boundary.run,
+        enable: true,
+        scope: "project",
+        cwd,
+      });
+
+      // assert
+      assert.deepEqual(await configSnapshot(locations.configJsonPath), sharedBefore);
+      assert.equal(
+        await readFile(locations.configLocalJsonPath, "utf8"),
+        expectedLocal ?? localBytes,
+      );
+      verify(boundary.ctx);
+      verify(boundary.ui);
+    });
+  });
+}
+
+test("D-09: an unnamed --local flip changes only the local file and skips what it does not declare", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    await saveMarketplaces(locations, [
+      marketplaceRecord("extras", "project", cwd, pathSource("./extras")),
+      marketplaceRecord("mp", "project", cwd),
+    ]);
+    await writeConfig(locations, {
+      schemaVersion: 1,
+      marketplaces: { extras: { source: "./extras" }, mp: { source: "./src" } },
+    });
+    await writeConfig(
+      locations,
+      { schemaVersion: 1, marketplaces: { mp: { source: "./src" } } },
+      true,
+    );
+    const sharedBefore = await configSnapshot(locations.configJsonPath);
+    const boundary = notificationBoundary({
+      message: "● mp [project] <no autoupdate>\n\nMarketplace noautoupdate: 1 success",
+    });
+
+    // act
+    await setMarketplaceAutoupdate({
+      ctx: boundary.ctx,
+      run: boundary.run,
+      enable: false,
+      scope: "project",
+      cwd,
+      local: true,
+    });
+
+    // assert
+    assert.deepEqual(await configSnapshot(locations.configJsonPath), sharedBefore);
+    assert.equal(
+      await readFile(locations.configLocalJsonPath, "utf8"),
+      '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "mp": {\n      "source": "./src",\n      "autoupdate": false\n    }\n  },\n  "plugins": {}\n}\n',
+    );
+    verify(boundary.ctx);
+    verify(boundary.ui);
+  });
+});
+
+test("CFG-03: an unnamed flip without --local over an invalid local file fails and writes nothing", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    await recordAndDeclare(locations, cwd, "shared");
+    await writeFile(locations.configLocalJsonPath, "{ malformed", "utf8");
+    const bytesBefore = await scopeBytes(locations);
+    const boundary = notificationBoundary({
+      message: [
+        "Some operations have failed.",
+        "",
+        "⊘ (unknown) [project] (failed)",
+        "  ⊘ (unknown) (failed) {invalid manifest}",
+        '    cause: Config file "claude-plugins.local.json" failed schema validation.',
+        "",
+        "Marketplace autoupdate: 2 failures",
+      ].join("\n"),
+      severity: "error",
+    });
+
+    // act
+    await setMarketplaceAutoupdate({
+      ctx: boundary.ctx,
+      run: boundary.run,
+      enable: true,
+      scope: "project",
+      cwd,
+    });
+
+    // assert
+    assert.deepEqual(await scopeBytes(locations), bytesBefore);
+    verify(boundary.ctx);
+    verify(boundary.ui);
+  });
+});
+
+test("D-09: an unnamed --local flip reads only the local file", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    await recordAndDeclare(locations, cwd, "local");
+    await writeFile(locations.configJsonPath, "{ malformed", "utf8");
+    const sharedBytes = await readFile(locations.configJsonPath, "utf8");
+    const boundary = notificationBoundary({
+      message: "● mp [project] <autoupdate>\n\nMarketplace autoupdate: 1 success",
+    });
+
+    // act
+    await setMarketplaceAutoupdate({
+      ctx: boundary.ctx,
+      run: boundary.run,
+      enable: true,
+      scope: "project",
+      cwd,
+      local: true,
+    });
+
+    // assert
+    assert.equal(await readFile(locations.configJsonPath, "utf8"), sharedBytes);
+    assert.equal(await readFile(locations.configLocalJsonPath, "utf8"), SHARED_FLIP_BYTES);
+    verify(boundary.ctx);
+    verify(boundary.ui);
+  });
+});
+
+test("D-08-07: reports a marketplace named constructor as not added when no record owns the name", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    await recordAndDeclare(locations, cwd, "shared");
+    const bytesBefore = await scopeBytes(locations);
+    const boundary = notificationBoundary({
+      message:
+        "A marketplace operation has failed.\n\n⊘ constructor [project] (failed) {marketplace not added}",
+      severity: "error",
+    });
+
+    // act
+    await setMarketplaceAutoupdate({
+      ctx: boundary.ctx,
+      run: boundary.run,
+      name: "constructor",
+      enable: true,
+      scope: "project",
+      cwd,
     });
 
     // assert

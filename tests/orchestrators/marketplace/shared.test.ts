@@ -10,7 +10,6 @@ import {
   AgentsUnstageFailureError,
   DEFAULT_GIT_OPS,
   cascadeUnstagePlugin,
-  classifyAutoupdateFlip,
   loadVisibleMarketplaces,
   crossScopeFlag,
   foldUnstageNotices,
@@ -43,7 +42,6 @@ import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type { UrlSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import type {
-  AutoupdateFlipResult,
   GitAuthBundle,
   GitOps,
   MarketplaceLayerVerdict,
@@ -95,7 +93,6 @@ interface NotificationExpectation {
 }
 
 void (DEFAULT_GIT_OPS satisfies GitOps);
-void ({ changed: [], unchanged: [] } satisfies AutoupdateFlipResult);
 void ({
   ok: true,
   dropped: { skills: [], commands: [], agents: [], hooks: [], mcpServers: [], workflows: [] },
@@ -198,14 +195,6 @@ function marketplaceRecord(name: string, scope: Scope, cwd: string): Marketplace
     marketplaceRoot: path.join(cwd, name),
     plugins: {},
   };
-}
-
-function legacyAutoupdateRecord(
-  name: string,
-  autoupdate: boolean | undefined,
-): MarketplaceRecord & { readonly autoupdate?: boolean } {
-  const record = marketplaceRecord(name, "project", "/work/project");
-  return autoupdate === undefined ? record : Object.assign(record, { autoupdate });
 }
 
 async function createProjectScope(
@@ -1661,106 +1650,6 @@ test("cascadeUnstagePlugin reports hook partial when malformed MCP JSON fails la
   );
 });
 
-for (const { title, state, name, enable, expected } of [
-  {
-    title: "changes a named legacy-disabled marketplace when enabling",
-    state: {
-      schemaVersion: 2,
-      marketplaces: { alpha: legacyAutoupdateRecord("alpha", false) },
-    },
-    name: "alpha",
-    enable: true,
-    expected: { changed: ["alpha"], unchanged: [] },
-  },
-  {
-    title: "keeps a named legacy-enabled marketplace unchanged when enabling",
-    state: {
-      schemaVersion: 2,
-      marketplaces: { alpha: legacyAutoupdateRecord("alpha", true) },
-    },
-    name: "alpha",
-    enable: true,
-    expected: { changed: [], unchanged: ["alpha"] },
-  },
-  {
-    title: "reads an absent legacy flag as disabled when disabling",
-    state: {
-      schemaVersion: 2,
-      marketplaces: { alpha: legacyAutoupdateRecord("alpha", undefined) },
-    },
-    name: "alpha",
-    enable: false,
-    expected: { changed: [], unchanged: ["alpha"] },
-  },
-  {
-    title: "reads an absent legacy flag as disabled when enabling",
-    state: {
-      schemaVersion: 2,
-      marketplaces: { alpha: legacyAutoupdateRecord("alpha", undefined) },
-    },
-    name: "alpha",
-    enable: true,
-    expected: { changed: ["alpha"], unchanged: [] },
-  },
-] satisfies readonly {
-  readonly title: string;
-  readonly state: ExtensionState;
-  readonly name: string;
-  readonly enable: boolean;
-  readonly expected: AutoupdateFlipResult;
-}[]) {
-  test(`classifyAutoupdateFlip ${title}`, () => {
-    // arrange
-    const expectedResult = expected;
-
-    // act
-    const flipResult = classifyAutoupdateFlip(state, name, enable);
-
-    // assert
-    assert.deepStrictEqual(flipResult, expectedResult);
-  });
-}
-
-test("classifyAutoupdateFlip partitions every marketplace in stored order", () => {
-  // arrange
-  const state: ExtensionState = {
-    schemaVersion: 2,
-    marketplaces: {
-      alpha: legacyAutoupdateRecord("alpha", true),
-      bravo: legacyAutoupdateRecord("bravo", false),
-      charlie: legacyAutoupdateRecord("charlie", true),
-    },
-  };
-  const expected: AutoupdateFlipResult = {
-    changed: ["bravo"],
-    unchanged: ["alpha", "charlie"],
-  };
-
-  // act
-  const flipResult = classifyAutoupdateFlip(state, undefined, true);
-
-  // assert
-  assert.deepStrictEqual(flipResult, expected);
-});
-
-test("classifyAutoupdateFlip throws the complete missing-marketplace error", () => {
-  // arrange
-  const state: ExtensionState = { schemaVersion: 2, marketplaces: {} };
-
-  // act & assert
-  assert.throws(
-    () => classifyAutoupdateFlip(state, "missing", true),
-    (error: unknown) => {
-      assert.ok(error instanceof MarketplaceNotFoundError);
-      assert.equal(error.name, "MarketplaceNotFoundError");
-      assert.equal(error.message, 'Marketplace "missing" not found in any scopes.');
-      assert.equal(error.mpName, "missing");
-      assert.deepStrictEqual(error.scopes, []);
-      return true;
-    },
-  );
-});
-
 test("resolveScopeOrNotifyNotAdded gives project scope precedence when both scopes contain the name", async (t) => {
   // arrange
   const user = await createProjectScope(t, "resolve-both-user");
@@ -2068,22 +1957,6 @@ test("D-08-07: resolveScopeOrNotifyNotAdded finds no marketplace named toString 
   // assert
   assert.equal(resolved, undefined);
   boundary.verifyAll();
-});
-
-test("D-08-07: classifyAutoupdateFlip throws not found for a marketplace named constructor", () => {
-  // arrange
-  const state: ExtensionState = { schemaVersion: 2, marketplaces: {} };
-
-  // act & assert
-  assert.throws(
-    () => classifyAutoupdateFlip(state, "constructor", true),
-    (error: unknown) => {
-      assert.ok(error instanceof MarketplaceNotFoundError);
-      assert.equal(error.mpName, "constructor");
-      assert.deepStrictEqual(error.scopes, []);
-      return true;
-    },
-  );
 });
 
 for (const scope of ["user", "project"] satisfies readonly Scope[]) {

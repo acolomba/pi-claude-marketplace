@@ -12,11 +12,10 @@
 //   - extensions/pi-claude-marketplace/orchestrators/plugin/list-flow.ts
 //   - extensions/pi-claude-marketplace/orchestrators/plugin/info.ts
 //
-// Note on marketplace/shared.ts: that file holds the autoupdate FLIP logic.
-// WR-05 made `classifyAutoupdateFlip` classify-only --
-// the legacy state field is read (two-step cast, not the trailing-cast form
-// below) but never assigned. The ASSIGNMENT-form sibling pattern further
-// down locks that in: no orchestrator may write `.autoupdate =` into a
+// Note on the autoupdate flip (orchestrators/marketplace/autoupdate.ts): a
+// flip reads and writes only config, never the state record's legacy
+// `autoupdate` field (SPLIT-01, WR-05). The ASSIGNMENT-form sibling pattern
+// further down locks that in: no orchestrator may write `.autoupdate =` into a
 // state record (the config write-back is the sole flip surface).
 //
 // Rewire target:

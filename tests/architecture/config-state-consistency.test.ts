@@ -448,8 +448,16 @@ test("WB-01 SC#4 (bare-form autoupdate flip, 2 marketplaces): BOTH config entrie
       schemaVersion: 1,
       marketplaces: { mp1: mpRecord("mp1"), mp2: mpRecord("mp2") },
     } as never);
+    await saveConfig(
+      locations.configJsonPath,
+      {
+        schemaVersion: 1,
+        marketplaces: { mp1: { source: "./mp1-src" }, mp2: { source: "./mp2-src" } },
+      },
+      locations.scopeRoot,
+    );
 
-    // Bare form: NO name -- every marketplace in the scope flips.
+    // Bare form: NO name -- every marketplace the config declares flips.
     await setMarketplaceAutoupdate({
       ctx,
       run: runWithNothingLoaded(),
@@ -464,7 +472,7 @@ test("WB-01 SC#4 (bare-form autoupdate flip, 2 marketplaces): BOTH config entrie
       return;
     }
 
-    // BOTH entries carry the flip + the synthesized verbatim source -- the
+    // BOTH entries carry the flip and keep their source -- the
     // last-write-wins clobber would have dropped mp1.
     assert.strictEqual(cfg.config.marketplaces?.mp1?.autoupdate, true);
     assert.strictEqual(cfg.config.marketplaces?.mp1?.source, "./mp1-src");
