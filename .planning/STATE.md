@@ -4,18 +4,18 @@ milestone: marketplace-features
 milestone_name: Marketplace Behavioral Tests
 current_phase: "03.3"
 current_phase_name: Plugin Layer Partition
-status: planning
-stopped_at: Phase 03.2 complete, ready to plan Phase 03.3
-last_updated: "2026-10-17T11:38:52.153Z"
+status: executing
+stopped_at: Completed 03.3-01-PLAN.md
+last_updated: "2026-10-17T15:42:04.616Z"
 last_activity: 2026-10-17
-last_activity_desc: Phase 03.2 complete, transitioned to Phase 03.3
-state_head: a81865e579e0af877044750da0c86f8372632ca7
+last_activity_desc: Phase 03.3 execution started
+state_head: 073e87e1389bfcff1b780d8107a56a670393e99f
 progress:
-  total_phases: 13
+  total_phases: 14
   completed_phases: 5
-  total_plans: 27
-  completed_plans: 27
-  percent: 38
+  total_plans: 37
+  completed_plans: 28
+  percent: 36
 ---
 
 # Project State
@@ -27,16 +27,16 @@ See: `.planning/PROJECT.md` (updated 2026-10-16 after marketplace-features Phase
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 03.2 — Marketplace Layer Partition
+**Current focus:** Phase 03.3 — Plugin Layer Partition
 
 ## Current Position
 
-Phase: 03.3 — Plugin Layer Partition
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-10-17 — Phase 03.2 complete, transitioned to Phase 03.3
+Phase: 03.3 (Plugin Layer Partition) — EXECUTING
+Plan: 2 of 10
+Status: Ready to execute
+Last activity: 2026-10-17 — Phase 03.3 execution started
 
-Progress: [████░░░░░░] 38%
+Progress: [████░░░░░░] 36%
 
 ### mcp-4 closeout
 
@@ -181,8 +181,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-17T04:40:23.782Z
-**Stopped at:** Phase 03.2 complete, ready to plan Phase 03.3
+**Last session:** 2026-10-17T15:42:02.838Z
+**Stopped at:** Completed 03.3-01-PLAN.md
 **Resume file:** None
 
 **Main merge (2026-10-11, quick task 261011-bsm):** `origin/main` at
@@ -318,6 +318,7 @@ archived milestone artifacts.
 | Phase 03.2 P03 | 15min | 3 tasks | 24 files |
 | Phase 03.2 P04 | 38min | 3 tasks | 11 files |
 | Phase 03.2 P05 | 25min | 3 tasks | 9 files |
+| Phase 03.3 P01 | 16min | 1 tasks | 16 files |
 
 ## Decisions
 
@@ -425,6 +426,7 @@ archived milestone artifacts.
 - [Phase 03.2]: Remove retention reads dependency candidates from the marketplace record; the scope index answers only who holds what
 - [Phase 03.2]: An unreadable declaration index refuses a remove with {unreadable} before any change, in both modes (D-09 Q4)
 - [Phase 03.2]: [marketplace-features] A standalone project install declares every marketplace its transaction added (dependencies included) in the root's target config file, under the UAT-05 gate; no dependency plugin key (D-04-02); reload/import write nothing (WR-09)
+- [Phase 03.3]: pluginLayerVerdict (plugin/shared.ts) is the one layer verdict for named plugin verbs; a standalone uninstall reads both layers, refuses an invalid other layer with the CFG-03 row, and refuses other-only declarations after the record checks (LAYER-04)
 
 ### mcp-4 decisions
 
