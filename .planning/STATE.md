@@ -5,16 +5,16 @@ milestone_name: Marketplace Behavioral Tests
 current_phase: "03.3"
 current_phase_name: Plugin Layer Partition
 status: executing
-stopped_at: Completed 03.3-05-PLAN.md
-last_updated: "2026-10-17T17:39:51.810Z"
+stopped_at: Completed 03.3-06-PLAN.md
+last_updated: "2026-10-17T18:19:05.306Z"
 last_activity: 2026-10-17
 last_activity_desc: Phase 03.3 execution started
-state_head: 5b276250368b7e4bbdac6c4021698f611bc8981d
+state_head: 38c9b51dad733cb7e5fa206bddd59cb29e5c2c37
 progress:
   total_phases: 14
   completed_phases: 5
   total_plans: 37
-  completed_plans: 32
+  completed_plans: 33
   percent: 36
 ---
 
@@ -32,7 +32,7 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 03.3 (Plugin Layer Partition) — EXECUTING
-Plan: 6 of 10
+Plan: 7 of 10
 Status: Ready to execute
 Last activity: 2026-10-17 — Phase 03.3 execution started
 
@@ -181,8 +181,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-17T17:39:49.916Z
-**Stopped at:** Completed 03.3-05-PLAN.md
+**Last session:** 2026-10-17T18:19:03.420Z
+**Stopped at:** Completed 03.3-06-PLAN.md
 **Resume file:** None
 
 **Main merge (2026-10-11, quick task 261011-bsm):** `origin/main` at
@@ -323,6 +323,7 @@ archived milestone artifacts.
 | Phase 03.3 P03 | 31min | 2 tasks | 9 files |
 | Phase 03.3 P04 | 36min | 2 tasks | 18 files |
 | Phase 03.3 P05 | 28min | 2 tasks | 19 files |
+| Phase 03.3 P06 | 37min | 3 tasks | 13 files |
 
 ## Decisions
 
@@ -437,6 +438,9 @@ archived milestone artifacts.
 - [Phase 03.3]: A standalone uninstall deletes the plugin key from its target layer only; when both layers declare the plugin it drops only that declaration and reports a warning skipped row with the --local hint (LAYER-05)
 - [Phase 03.3]: Uninstall of an undeclared dependency: refused with {dependents remain} while a target-layer plugin needs it, skipped at warning while only other-layer plugins do (LAYER-08, D-07, D-14)
 - [Phase 03.3]: A flagless enable or disable that the local layer's opposite enabled overrides is refused with {disabled|enabled in local layer} (LAYER-04, D-13); closed reason set 76
+- [Phase 03.3]: Named update and reinstall refuse a plugin only the other layer declares through namedPluginLayerRefusal; update checks before the preflight (NFR-5), reinstall inside the lock before resolve and replace
+- [Phase 03.3]: An unreadable layer on a named update or reinstall is InvalidMarketplaceManifestError with the basename-only message, mapped to {invalid manifest}
+- [Phase 03.3]: Nameless update and reinstall with --local keep only the targets their scope's local layer declares (keepLocalLayerTargets: own keys, one read per scope)
 
 ### mcp-4 decisions
 

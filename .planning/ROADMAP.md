@@ -270,7 +270,7 @@ Plans:
 4. A named uninstall of an installed plugin that no layer declares (a dependency) is refused listing the plugins in the target layer that need it, uninstalls nothing when only plugins of the other layer need it, and uninstalls it only when nothing needs it (LAYER-08).
 5. Plugin entries merge field by field across the two layers, local winning on conflicts such as `enabled` (LAYER-09).
 
-**Plans:** 5/10 plans executed
+**Plans:** 6/10 plans executed
 
 Plans:
 **Wave 1**
@@ -289,7 +289,7 @@ Plans:
 - [x] 03.3-05-PLAN.md — A named uninstall of a dependency refuses, skips, or uninstalls by who needs it; a flagless enable or disable the local layer overrides is refused (LAYER-08, LAYER-04)
 
 **Wave 6** *(blocked on Wave 5 completion)*
-- [ ] 03.3-06-PLAN.md — Update and reinstall refuse a plugin only the other layer declares; with --local and no name they cover the local layer only (LAYER-04)
+- [x] 03.3-06-PLAN.md — Update and reinstall refuse a plugin only the other layer declares; with --local and no name they cover the local layer only (LAYER-04)
 
 **Wave 7** *(blocked on Wave 6 completion)*
 - [ ] 03.3-07-PLAN.md — Update and reinstall write no declaration; the write-back family is deleted under a fallow dead-code check (LAYER-04, LAYER-06, LAYER-08)
@@ -428,7 +428,7 @@ Plans:
 | 3. Marketplace Add | 3/3 | Complete    | 2026-10-16 |
 | 3.1. Local Declaration Leak Fix | 5/5 | Complete    | 2026-10-16 |
 | 3.2. Marketplace Layer Partition | 9/9 | Complete    | 2026-10-17 |
-| 3.3. Plugin Layer Partition | 5/10 | In Progress | - |
+| 3.3. Plugin Layer Partition | 6/10 | In Progress | - |
 | 4. Marketplace Remove and List | 0/TBD | Not started | - |
 | 5. Marketplace Info | 0/TBD | Not started | - |
 | 6. Marketplace Update and C-10 Fix | 0/TBD | Not started | - |
