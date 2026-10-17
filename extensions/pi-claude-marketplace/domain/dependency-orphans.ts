@@ -130,3 +130,34 @@ export function pruneOrphans(
     }
   }
 }
+
+/**
+ * The `pruneOrphans` order restricted to the dependency records `removed`
+ * reaches through `index`, following each holder's declared keys
+ * transitively. A remove from one config layer takes only the dependencies
+ * its removed plugins pulled in (LAYER-03); a pre-existing orphan no removed
+ * plugin reaches stays for `prune` to report. The order keeps dependents
+ * before dependencies, and none of the inputs is mutated.
+ */
+export function pruneOrphansReachableFrom(
+  records: readonly OrphanCandidate[],
+  index: DeclarationIndex,
+  removed: ReadonlySet<string>,
+): readonly string[] {
+  const reachable = new Set<string>();
+  const pending = [...removed];
+  for (let holder = pending.pop(); holder !== undefined; holder = pending.pop()) {
+    for (const key of index.get(holder) ?? []) {
+      if (!reachable.has(key)) {
+        reachable.add(key);
+        pending.push(key);
+      }
+    }
+  }
+
+  return pruneOrphans(
+    records.filter((record) => reachable.has(record.key)),
+    index,
+    removed,
+  );
+}

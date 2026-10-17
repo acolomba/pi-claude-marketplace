@@ -5,6 +5,7 @@ import {
   findDependents,
   isHeldBy,
   pruneOrphans,
+  pruneOrphansReachableFrom,
 } from "../../extensions/pi-claude-marketplace/domain/dependency-orphans.ts";
 
 import type {
@@ -235,5 +236,63 @@ for (const { title, shape, gone, key, expected } of HELD_CASES) {
 
     // assert
     assert.equal(held, expected);
+  });
+}
+
+const REACHABLE_CASES: readonly OrphanCase[] = [
+  {
+    title: "LAYER-03: a dependency only the removed plugin declares is removed",
+    records: [dependency("lib@tools")],
+    shape: { "alpha@tools": ["lib@tools"] },
+    removed: ["alpha@tools"],
+    expected: ["lib@tools"],
+  },
+  {
+    title: "LAYER-03: a chain the removed plugin pulled in is removed dependents first",
+    records: [dependency("util@tools"), dependency("lib@tools")],
+    shape: { "alpha@tools": ["lib@tools"], "lib@tools": ["util@tools"] },
+    removed: ["alpha@tools"],
+    expected: ["lib@tools", "util@tools"],
+  },
+  {
+    title: "LAYER-03: an orphan dependency the removed plugins do not reach stays",
+    records: [dependency("lib@tools"), dependency("orphan@tools")],
+    shape: { "alpha@tools": ["lib@tools"] },
+    removed: ["alpha@tools"],
+    expected: ["lib@tools"],
+  },
+  {
+    title: "PRUNE-03: a reachable dependency a remaining holder declares stays",
+    records: [dependency("lib@tools")],
+    shape: { "alpha@tools": ["lib@tools"], "app@upstream": ["lib@tools"] },
+    removed: ["alpha@tools"],
+    expected: [],
+  },
+  {
+    title: "PRUNE-02: a reachable explicit record stays",
+    records: [explicit("lib@tools")],
+    shape: { "alpha@tools": ["lib@tools"] },
+    removed: ["alpha@tools"],
+    expected: [],
+  },
+  {
+    title: "LAYER-03: an empty removed set reaches no dependency",
+    records: [dependency("lib@tools"), dependency("orphan@tools")],
+    shape: { "alpha@tools": ["lib@tools"] },
+    removed: [],
+    expected: [],
+  },
+];
+
+for (const { title, records, shape, removed, expected } of REACHABLE_CASES) {
+  test(title, () => {
+    // arrange
+    const index = declarationIndex(shape);
+
+    // act
+    const pruned = pruneOrphansReachableFrom(records, index, new Set(removed));
+
+    // assert
+    assert.deepStrictEqual(pruned, expected);
   });
 }

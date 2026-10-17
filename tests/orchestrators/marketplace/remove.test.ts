@@ -29,6 +29,7 @@ import {
   AgentsUnstageFailureError,
   cascadeUnstagePlugin,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
+import { buildScopeDeclarationIndex } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-index.ts";
 import {
   loadConfig,
   saveConfig,
@@ -2334,6 +2335,332 @@ test("MR-7: a layer remove whose plugin fails to unstage writes no config and ke
   assert.deepStrictEqual(
     await loadState(locations.extensionRoot),
     toolsState(cwd, pathSource("./tools"), { tool: pluginRecord({ skills: ["tool-skill"] }) }),
+  );
+  notification.verifyInteractions();
+});
+
+// D-04-dep / D-09: a remove also takes the dependency records under the
+// marketplace that only its removed plugins needed, and keeps the ones a
+// staying plugin declares. The declaration index is a synthetic stand-in.
+
+type IndexShape = Readonly<Record<string, readonly string[]>>;
+
+function syntheticIndex(shape: IndexShape): typeof buildScopeDeclarationIndex {
+  return () =>
+    Promise.resolve({
+      ok: true,
+      index: new Map(Object.entries(shape).map(([holder, keys]) => [holder, new Set(keys)])),
+      candidates: [],
+    });
+}
+
+const unbuildableIndex: typeof buildScopeDeclarationIndex = () => {
+  assert.fail("this remove must not read any declaration");
+};
+
+function dependencyRecord(): PluginRecord {
+  return { ...pluginRecord(), provenance: "dependency" };
+}
+
+/** A cascade that records each plugin it unstages and fails the `failing` one. */
+function recordingCascade(calls: string[], failing?: string): typeof cascadeUnstagePlugin {
+  return (plugin) => {
+    calls.push(plugin);
+    return Promise.resolve(
+      plugin === failing
+        ? {
+            ok: false,
+            dropped: emptyDropped(),
+            cause: Object.assign(new Error(`${plugin} denied`), { code: "EACCES" }),
+          }
+        : { ok: true, dropped: emptyDropped() },
+    );
+  };
+}
+
+interface DependencySeams {
+  readonly cascade: typeof cascadeUnstagePlugin;
+  readonly declarationIndex: typeof buildScopeDeclarationIndex;
+  readonly orchestrated?: boolean;
+}
+
+async function removeToolsWith(
+  cwd: string,
+  notification: NotificationBoundary,
+  seams: DependencySeams,
+): Promise<RemoveMarketplaceOutcome | undefined> {
+  return await removeMarketplace({
+    completionCache: createCompletionCache(),
+    ctx: notification.ctx,
+    run: notification.run,
+    name: "tools",
+    scope: "project",
+    cwd,
+    cascade: seams.cascade,
+    declarationIndex: seams.declarationIndex,
+    ...(seams.orchestrated === true && { notifications: { mode: "orchestrated" } as const }),
+  });
+}
+
+/** A layer case whose `tools` record holds `plugins` instead of the one `tool`. */
+async function dependencyCase(
+  testContext: TestContext,
+  files: LayerFiles,
+  plugins: Record<string, PluginRecord>,
+): Promise<LayerCase> {
+  const layer = await layerCase(testContext, files);
+  await saveState(
+    layer.locations.extensionRoot,
+    toolsState(layer.cwd, files.source ?? pathSource("./tools"), plugins),
+  );
+  return layer;
+}
+
+const ALPHA_DECLARED =
+  '{"schemaVersion":1,"marketplaces":{"tools":{"source":"./tools"}},"plugins":{"alpha@tools":{"enabled":true}}}\n';
+
+const BETA_DECLARED =
+  '{"schemaVersion":1,"marketplaces":{"tools":{"source":"./tools"}},"plugins":{"beta@tools":{"enabled":true}}}\n';
+
+for (const { title, plugins, shape, unstaged, remaining, expectedMessage } of [
+  {
+    title:
+      "uninstalls the dependency only its removed plugin needed and leaves an orphan it does not reach",
+    plugins: ["alpha", "beta", "lib", "orphan"],
+    shape: {
+      "alpha@tools": ["lib@tools"],
+      "beta@tools": [],
+      "lib@tools": [],
+      "orphan@tools": [],
+    },
+    unstaged: ["alpha", "lib"],
+    remaining: ["beta", "orphan"],
+    expectedMessage:
+      "● tools [project] (removed)\n  ○ alpha (uninstalled)\n  ○ lib (uninstalled)\n\n/reload to pick up changes",
+  },
+  {
+    title: "keeps a dependency that a plugin of the other layer still needs",
+    plugins: ["alpha", "beta", "lib"],
+    shape: { "alpha@tools": ["lib@tools"], "beta@tools": ["lib@tools"], "lib@tools": [] },
+    unstaged: ["alpha"],
+    remaining: ["beta", "lib"],
+    expectedMessage:
+      "● tools [project] (removed)\n  ○ alpha (uninstalled)\n\n/reload to pick up changes",
+  },
+] satisfies readonly {
+  readonly title: string;
+  readonly plugins: readonly string[];
+  readonly shape: IndexShape;
+  readonly unstaged: readonly string[];
+  readonly remaining: readonly string[];
+  readonly expectedMessage: string;
+}[]) {
+  test(`D-04-dep: a layer remove ${title}`, async (testContext) => {
+    // arrange
+    const recordFor = (name: string): PluginRecord =>
+      name === "lib" || name === "orphan" ? dependencyRecord() : pluginRecord();
+    const { cwd, locations } = await dependencyCase(
+      testContext,
+      { shared: ALPHA_DECLARED, local: BETA_DECLARED },
+      Object.fromEntries(plugins.map((name) => [name, recordFor(name)])),
+    );
+    const calls: string[] = [];
+    const notification = notificationBoundary(1);
+
+    // act
+    await removeToolsWith(cwd, notification, {
+      cascade: recordingCascade(calls),
+      declarationIndex: syntheticIndex(shape),
+    });
+
+    // assert
+    assert.deepStrictEqual(calls, unstaged);
+    assert.deepStrictEqual(notification.calls, [{ message: expectedMessage }]);
+    assert.strictEqual(await readFile(locations.configJsonPath, "utf8"), NO_DECLARATIONS);
+    assert.strictEqual(await readFile(locations.configLocalJsonPath, "utf8"), BETA_DECLARED);
+    assert.deepStrictEqual(
+      await loadState(locations.extensionRoot),
+      toolsState(
+        cwd,
+        pathSource("./tools"),
+        Object.fromEntries(remaining.map((name) => [name, recordFor(name)])),
+      ),
+    );
+    notification.verifyInteractions();
+  });
+}
+
+test("D-04-dep: a full remove keeps a dependency another marketplace's plugin needs, with its record, data, and clone", async (testContext) => {
+  // arrange
+  const source = { kind: "github", raw: "owner/repo", owner: "owner", repo: "repo" };
+  const strayKey = '{"schemaVersion":1,"plugins":{"stray@tools":{"enabled":true}}}\n';
+  const { cwd, locations } = await dependencyCase(
+    testContext,
+    { shared: ALPHA_DECLARED, local: strayKey, source },
+    { alpha: pluginRecord(), lib: dependencyRecord(), orphan: dependencyRecord() },
+  );
+  const upstream = marketplaceState({
+    cwd,
+    name: "upstream",
+    scope: "project",
+    source: pathSource("./upstream"),
+    plugins: { app: pluginRecord() },
+  }).marketplaces;
+  const seeded = await loadState(locations.extensionRoot);
+  await saveState(locations.extensionRoot, {
+    ...seeded,
+    marketplaces: { ...seeded.marketplaces, ...upstream },
+  });
+  const cloneDir = await locations.sourceCloneDir("tools");
+  const marketplaceData = await locations.marketplaceDataDir("tools");
+  await mkdir(cloneDir, { recursive: true });
+  await mkdir(marketplaceData, { recursive: true });
+  await writeFile(path.join(cloneDir, "sentinel"), "clone");
+  await writeFile(path.join(marketplaceData, "sentinel"), "marketplace data");
+  const calls: string[] = [];
+  const notification = notificationBoundary(1);
+
+  // act
+  await removeToolsWith(cwd, notification, {
+    cascade: recordingCascade(calls),
+    declarationIndex: syntheticIndex({
+      "alpha@tools": ["lib@tools"],
+      "app@upstream": ["lib@tools"],
+      "lib@tools": [],
+      "orphan@tools": [],
+    }),
+  });
+
+  // assert
+  assert.deepStrictEqual(calls, ["alpha", "orphan"]);
+  assert.deepStrictEqual(notification.calls, [
+    {
+      message:
+        "● tools [project] (removed)\n  ○ alpha (uninstalled)\n  ○ orphan (uninstalled)\n\n/reload to pick up changes",
+    },
+  ]);
+  assert.strictEqual(await readFile(locations.configJsonPath, "utf8"), NO_DECLARATIONS);
+  assert.strictEqual(
+    await readFile(locations.configLocalJsonPath, "utf8"),
+    '{\n  "schemaVersion": 1,\n  "plugins": {},\n  "marketplaces": {}\n}\n',
+  );
+  assert.deepStrictEqual(
+    [
+      await readFile(path.join(cloneDir, "sentinel"), "utf8"),
+      await readFile(path.join(marketplaceData, "sentinel"), "utf8"),
+    ],
+    ["clone", "marketplace data"],
+  );
+  assert.deepStrictEqual(await loadState(locations.extensionRoot), {
+    schemaVersion: 3,
+    marketplaces: {
+      ...toolsState(cwd, source, { lib: dependencyRecord() }).marketplaces,
+      ...upstream,
+    },
+  });
+  notification.verifyInteractions();
+});
+
+const UNREADABLE_CAUSE =
+  "cannot read the dependencies of alpha@tools: not declared by its marketplace";
+
+const unreadableIndex: typeof buildScopeDeclarationIndex = () =>
+  Promise.resolve({ ok: false, declarer: "alpha@tools", cause: new Error(UNREADABLE_CAUSE) });
+
+for (const { mode, orchestrated, expectedCalls } of [
+  { mode: "a standalone", orchestrated: false, expectedCalls: 1 },
+  { mode: "an orchestrated", orchestrated: true, expectedCalls: 0 },
+] as const) {
+  test(`D-05-07: ${mode} remove whose declarations cannot be read is refused as unreadable and changes nothing`, async (testContext) => {
+    // arrange
+    const { cwd, bytesOnDisk } = await dependencyCase(
+      testContext,
+      { shared: ALPHA_DECLARED },
+      { alpha: pluginRecord(), lib: dependencyRecord() },
+    );
+    const expectedBytes = await bytesOnDisk();
+    const notification = notificationBoundary(expectedCalls);
+
+    // act
+    const outcome = await removeToolsWith(cwd, notification, {
+      cascade: unreachableCascade,
+      declarationIndex: unreadableIndex,
+      orchestrated,
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      notification.calls,
+      orchestrated
+        ? []
+        : [
+            {
+              message: `Some operations have failed.\n\n⊘ tools [project] (failed)\n  ⊘ tools (failed) {unreadable}\n    cause: ${UNREADABLE_CAUSE}`,
+              severity: "error",
+            },
+          ],
+    );
+    assert.deepStrictEqual(
+      outcome === undefined ? undefined : { ...outcome, error: undefined },
+      orchestrated
+        ? { status: "failed", reason: "unreadable", error: undefined, cause: UNREADABLE_CAUSE }
+        : undefined,
+    );
+    assert.deepStrictEqual(await bytesOnDisk(), expectedBytes);
+    notification.verifyInteractions();
+  });
+}
+
+test("D-09: a marketplace holding no dependency record is removed without reading any declaration", async (testContext) => {
+  // arrange
+  const { cwd, locations } = await layerCase(testContext, { shared: TOOLS_DECLARED });
+  const notification = notificationBoundary(1);
+
+  // act
+  await removeToolsWith(cwd, notification, {
+    cascade: unstagingCascade,
+    declarationIndex: unbuildableIndex,
+  });
+
+  // assert
+  assert.deepStrictEqual(notification.calls, [{ message: TOOL_UNINSTALLED }]);
+  assert.deepStrictEqual(await loadState(locations.extensionRoot), {
+    schemaVersion: 3,
+    marketplaces: {},
+  });
+  notification.verifyInteractions();
+});
+
+test("PRUNE-03: a dependency stays while the plugin that declares it fails to unstage", async (testContext) => {
+  // arrange
+  const { cwd, locations, bytesOnDisk } = await dependencyCase(
+    testContext,
+    { shared: ALPHA_DECLARED },
+    { alpha: pluginRecord(), lib: dependencyRecord() },
+  );
+  const [, sharedBytes] = await bytesOnDisk();
+  const calls: string[] = [];
+  const notification = notificationBoundary(1);
+
+  // act
+  await removeToolsWith(cwd, notification, {
+    cascade: recordingCascade(calls, "alpha"),
+    declarationIndex: syntheticIndex({ "alpha@tools": ["lib@tools"], "lib@tools": [] }),
+  });
+
+  // assert
+  assert.deepStrictEqual(calls, ["alpha"]);
+  assert.deepStrictEqual(notification.calls, [
+    {
+      message:
+        "Some operations have failed.\n\n⊘ tools [project] (failed)\n  ⊘ alpha (failed) {permission denied}\n    cause: alpha denied",
+      severity: "error",
+    },
+  ]);
+  assert.strictEqual(await readFile(locations.configJsonPath, "utf8"), sharedBytes);
+  assert.deepStrictEqual(
+    await loadState(locations.extensionRoot),
+    toolsState(cwd, pathSource("./tools"), { alpha: pluginRecord(), lib: dependencyRecord() }),
   );
   notification.verifyInteractions();
 });

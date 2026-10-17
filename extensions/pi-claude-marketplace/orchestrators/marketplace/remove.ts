@@ -34,15 +34,21 @@
 //        marketplace or cannot be read, the remove is a layer remove over the
 //        plugins only the target layer declares; otherwise it is the full
 //        remove over every plugin. Reconcile always takes the full remove.
+//        D-05-07: when the record holds a dependency record, read the scope's
+//        declaration index; an unreadable one refuses the remove through
+//        `DeclarationIndexStop`, again without `tx.save()`.
 //        for each plugin the remove takes away:
 //          outcome = cascade(plugin, marketplace, locations, installedPlugin)
 //                    // cascade is opts.cascade ?? cascadeUnstagePlugin (DI seam
 //                    // for test determinism; zero runtime cost in production).
 //          if (outcome.ok): delete record.plugins[plugin]; track successfullyUnstaged
 //          else:            failedPlugins.push({name, cause})  // D-02 / D-03 fail-fast per plugin
+//        then each dependency record under the marketplace that nothing left
+//        declares, re-checked before each unstage (PRUNE-03).
 //        if (failedPlugins.length === 0):
 //          layer remove: drop the target layer's entry and `*@<name>` keys
-//          full remove: delete tx.state.marketplaces[name]; WB-01 sweeps both
+//          full remove: delete tx.state.marketplaces[name] unless a kept
+//          dependency record remains under it; WB-01 sweeps both
 //          layers with `deleteMarketplaceConfigEntryWithCascade(...)`
 //          (entry-level patch through saveConfig).
 //        await tx.save()  // WR-04: explicit save on the mutating arms.
@@ -61,6 +67,11 @@
 import { rm } from "node:fs/promises";
 import path from "node:path";
 
+import {
+  isHeldBy,
+  pruneOrphans,
+  pruneOrphansReachableFrom,
+} from "../../domain/dependency-orphans.ts";
 import { loadConfig } from "../../persistence/config-io.ts";
 import { deleteMarketplaceConfigEntryWithCascade } from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
@@ -85,6 +96,7 @@ import {
   type LockedStateTransactionDeps,
 } from "../../transaction/with-state-guard.ts";
 import { garbageCollectPluginClones } from "../plugin/clone-gc.ts";
+import { buildScopeDeclarationIndex } from "../plugin/dependency-index.ts";
 
 import { REMOVE_CONTEXT, type RemoveRowMsg } from "./remove.messaging.ts";
 import {
@@ -98,6 +110,7 @@ import {
   type MarketplaceLayerVerdict,
 } from "./shared.ts";
 
+import type { DeclarationIndex } from "../../domain/dependency-orphans.ts";
 import type { ConfigLoadResult, ScopeConfig } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
@@ -201,6 +214,12 @@ export interface RemoveMarketplaceOptions {
    * fallback.
    */
   readonly cascade?: typeof cascadeUnstagePlugin;
+  /**
+   * D-12-style injection seam for the scope's declaration index. Defaults to
+   * `buildScopeDeclarationIndex`, the offline reader (NFR-5). Tests inject a
+   * synthetic index, or a stub that fails when no index may be built.
+   */
+  readonly declarationIndex?: typeof buildScopeDeclarationIndex;
   /**
    * RECON-03: notification mode selector. Omitted
    * (undefined) === `{ mode: "standalone" }` -- matches standalone behavior.
@@ -492,10 +511,13 @@ async function commitFullRemove(args: {
   readonly marketplace: string;
   readonly locations: ScopedLocations;
   readonly orchestrated: boolean;
+  readonly deleteRecord: boolean;
 }): Promise<void> {
   const { tx, marketplace, locations, orchestrated } = args;
-  // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- state.marketplaces is a dynamic-key Record<string, ...>.
-  delete tx.state.marketplaces[marketplace];
+  if (args.deleteRecord) {
+    // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- state.marketplaces is a dynamic-key Record<string, ...>.
+    delete tx.state.marketplaces[marketplace];
+  }
 
   // WB-01: cascade write-back lives in ONE place. `cascadeRemoveFromLayer`
   // removes the marketplace entry AND every plugin entry whose key ends in
@@ -548,8 +570,19 @@ interface RemovePlan {
   readonly entries: readonly (readonly [string, ExtensionPluginRow])[];
 }
 
+/**
+ * The full remove unstages every explicit record; the dependency records under
+ * the marketplace follow the retention rule in `cascadeDependencies`.
+ */
 function fullRemovePlan(record: ExtensionMarketplaceRow): RemovePlan {
-  return { layerOnly: false, entries: Object.entries(record.plugins) };
+  return {
+    layerOnly: false,
+    entries: Object.entries(record.plugins).filter(([, plugin]) => !isDependencyRecord(plugin)),
+  };
+}
+
+function isDependencyRecord(plugin: ExtensionPluginRow): boolean {
+  return plugin.provenance === "dependency";
 }
 
 /**
@@ -621,11 +654,15 @@ function layerRemovalEntries(
 /**
  * Commits a remove whose every plugin unstaged. A layer remove drops the
  * marketplace entry and its `*@<marketplace>` keys from the target layer only
- * and keeps the state record; the full remove deletes the record. Answers
- * whether the record was deleted.
+ * and keeps the state record; the full remove deletes the record unless a
+ * kept dependency record remains under it. That record stays with its data
+ * directory and clone while the config no longer declares the marketplace,
+ * which the reconcile planner keeps while it holds a dependency record.
+ * Answers whether the record was deleted.
  */
 async function commitRemove(args: {
   readonly tx: { readonly state: { marketplaces: Record<string, unknown> } };
+  readonly record: ExtensionMarketplaceRow;
   readonly plan: RemovePlan;
   readonly marketplace: string;
   readonly locations: ScopedLocations;
@@ -638,8 +675,89 @@ async function commitRemove(args: {
     return false;
   }
 
-  await commitFullRemove({ tx, marketplace, locations, orchestrated });
-  return true;
+  const deleteRecord = Object.keys(args.record.plugins).length === 0;
+  await commitFullRemove({ tx, marketplace, locations, orchestrated, deleteRecord });
+  return deleteRecord;
+}
+
+/**
+ * Leaves the state lock without `tx.save()` when the scope's declarations
+ * cannot be read, carrying the index's cause line to the row emitter.
+ */
+class DeclarationIndexStop extends Error {
+  readonly unreadable: Error;
+  constructor(unreadable: Error) {
+    super("declaration-index-stop");
+    this.name = "DeclarationIndexStop";
+    this.unreadable = unreadable;
+  }
+}
+
+/**
+ * The scope's declaration index, read offline (NFR-5) only when the record
+ * holds a dependency record: without one, retention has nothing to decide, and
+ * a marketplace whose own manifest broke stays removable. D-05-05: one state
+ * document, so every holder is a record of this scope, including a plugin of a
+ * marketplace a project install brought in from the user scope. D-05-07: an
+ * index that cannot be read refuses the remove before any cascade.
+ */
+async function readRetentionIndex(args: {
+  readonly state: ExtensionState;
+  readonly record: ExtensionMarketplaceRow;
+  readonly locations: ScopedLocations;
+  readonly read: typeof buildScopeDeclarationIndex;
+}): Promise<DeclarationIndex | undefined> {
+  if (!Object.values(args.record.plugins).some(isDependencyRecord)) {
+    return undefined;
+  }
+
+  const result = await args.read({ state: args.state, locations: args.locations });
+  if (!result.ok) {
+    throw new DeclarationIndexStop(result.cause);
+  }
+
+  return result.index;
+}
+
+/**
+ * Unstages the dependency records under the marketplace that nothing left
+ * declares, dependents before dependencies. A layer remove takes only the ones
+ * its removed plugins reach (LAYER-03, D-MF-03); the full remove takes every
+ * one nothing still holds. PRUNE-03: the order assumes every removal succeeds,
+ * so each member is re-checked against the keys that actually left; a member
+ * still held, for example by a plugin that failed to unstage, is kept and gets
+ * no row.
+ */
+async function cascadeDependencies(
+  args: Omit<Parameters<typeof cascadePluginsInPlace>[0], "entries"> & {
+    readonly plan: RemovePlan;
+    readonly index: DeclarationIndex;
+  },
+): Promise<void> {
+  const { plan, index, ...removal } = args;
+  const keyOf = (plugin: string): string => `${plugin}@${removal.marketplace}`;
+  const dependencies = Object.entries(removal.record.plugins).filter(([, plugin]) =>
+    isDependencyRecord(plugin),
+  );
+  const candidates = dependencies.map(([plugin]) => ({
+    key: keyOf(plugin),
+    provenance: "dependency" as const,
+  }));
+  const removed = new Set(plan.entries.map(([plugin]) => keyOf(plugin)));
+  const order = (plan.layerOnly ? pruneOrphansReachableFrom : pruneOrphans)(
+    candidates,
+    index,
+    removed,
+  );
+  // Every key in `order` is a candidate's key, so each yields one entry.
+  const members = order.flatMap((key) => dependencies.filter(([plugin]) => keyOf(plugin) === key));
+  for (const member of members) {
+    const gone = new Set(removal.successfullyUnstaged.map(keyOf));
+    if (!isHeldBy(index, gone, keyOf(member[0]))) {
+      // eslint-disable-next-line no-await-in-loop -- a later member's held check reads what left
+      await cascadePluginsInPlace({ ...removal, entries: [member] });
+    }
+  }
 }
 
 /**
@@ -717,23 +835,34 @@ async function runRemoveLockBody(args: {
       ? src.kind
       : undefined;
 
-  // D-02: per-plugin cascade loop (MR-3 continuation across failures).
-  await cascadePluginsInPlace({
+  const index = await readRetentionIndex({
+    state: tx.state as ExtensionState,
     record,
-    entries: plan.entries,
+    locations,
+    read: opts.declarationIndex ?? buildScopeDeclarationIndex,
+  });
+
+  // D-02: per-plugin cascade loop (MR-3 continuation across failures).
+  const removal = {
+    record,
     marketplace: opts.name,
     locations,
     cascade,
     successfullyUnstaged,
     failedPlugins,
     mcpConfigNotices,
-  });
+  };
+  await cascadePluginsInPlace({ ...removal, entries: plan.entries });
+  if (index !== undefined) {
+    await cascadeDependencies({ ...removal, plan, index });
+  }
 
   // MR-7: a failed plugin keeps the record and writes no config.
   const recordDeleted =
     failedPlugins.length === 0 &&
     (await commitRemove({
       tx,
+      record,
       plan,
       marketplace: opts.name,
       locations,
@@ -839,20 +968,40 @@ function surfaceLayerGateStop(
     });
   }
 
-  notifyWithContext(
-    opts.ctx,
-    opts.run,
-    REMOVE_CONTEXT,
-    marketplaceFailureRows(opts.name, scope, verdict.reason, verdict.refusal),
-    undefined,
-    "single",
-  );
-  return {
-    status: "failed",
+  return surfaceMarketplaceFailure({
+    opts,
+    orchestrated: false,
+    scope,
     reason: verdict.reason,
     error: verdict.refusal,
-    cause: errorMessage(verdict.refusal),
-  };
+  });
+}
+
+/**
+ * A remove stopped at the marketplace itself: the failed header with one
+ * failed child carrying the reason and the cause line, in standalone mode,
+ * and the typed failed outcome in both modes.
+ */
+function surfaceMarketplaceFailure(args: {
+  readonly opts: RemoveMarketplaceOptions;
+  readonly orchestrated: boolean;
+  readonly scope: Scope;
+  readonly reason: ContentReason;
+  readonly error: Error;
+}): RemoveMarketplaceOutcome {
+  const { opts, reason, error } = args;
+  if (!args.orchestrated) {
+    notifyWithContext(
+      opts.ctx,
+      opts.run,
+      REMOVE_CONTEXT,
+      marketplaceFailureRows(opts.name, args.scope, reason, error),
+      undefined,
+      "single",
+    );
+  }
+
+  return { status: "failed", reason, error, cause: errorMessage(error) };
 }
 
 /**
@@ -1052,6 +1201,16 @@ async function runRemoveOutcome(
   } catch (err) {
     if (err instanceof LayerGateStop) {
       return surfaceLayerGateStop(opts, resolved.scope, err.verdict);
+    }
+
+    if (err instanceof DeclarationIndexStop) {
+      return surfaceMarketplaceFailure({
+        opts,
+        orchestrated,
+        scope: resolved.scope,
+        reason: "unreadable",
+        error: err.unreadable,
+      });
     }
 
     if (err !== cfgInvalidSentinel) {
