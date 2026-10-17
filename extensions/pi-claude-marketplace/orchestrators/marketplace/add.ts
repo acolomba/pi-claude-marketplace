@@ -438,42 +438,105 @@ class ConfigInvalidError extends InvalidMarketplaceManifestError {
 }
 
 /**
- * Dispatch the source-kind precondition + the in-guard add. Extracted so the
+ * S5a / S5b (MA-10): parse the raw source and refuse every kind `marketplace
+ * add` cannot record, before any lock or disk access. The refusal is an
+ * `UnsupportedSourceError`, classified as `unsupported source` (D-48-C A3).
+ */
+function parseAddableSource(rawSource: string): GitHubSource | UrlSource | PathSource {
+  const source = parsePluginSource(rawSource);
+
+  // S5a: the parser produced an unknown kind with a reason, surfaced verbatim
+  // on the cause.
+  if (source.kind === "unknown") {
+    throw new UnsupportedSourceError(
+      `Cannot add marketplace from "${rawSource}": ${source.reason}`,
+    );
+  }
+
+  // S5b: valid-but-unsupported kinds. MURL-01 / D-76-05: `url` is admitted;
+  // only `git-subdir` and `npm` (marketplace-level) stay rejected.
+  if (source.kind !== "github" && source.kind !== "path" && source.kind !== "url") {
+    throw new UnsupportedSourceError(
+      `Cannot add marketplace from "${rawSource}": unsupported source kind ${source.kind}`,
+    );
+  }
+
+  return source;
+}
+
+/**
+ * CR-01: the lock-free add body. It records the marketplace `source` names in
+ * `state` and, for a github or url source, clones it into `sources/<name>/`
+ * with the MA-6 / MA-12 / MA-13 leftover handling and the MA-9 staging
+ * cleanup. It returns the recorded name and, for a github or url source, the
+ * final clone directory.
+ *
+ * Locking contract: the caller holds the scope's state lock and owns the
+ * config write-back and the save. `proper-lockfile` (`retries: 0`) is not
+ * re-entrant, so this body takes no lock of its own. When the caller's
+ * transaction does not save, the caller removes the returned `cloneDir`
+ * (WR-07), as `runAddInGuard` does for itself. A failure inside this body
+ * cleans its own staging (MA-9).
+ */
+async function addMarketplaceToState(args: {
+  readonly state: ExtensionState;
+  readonly locations: ScopedLocations;
+  readonly source: GitHubSource | UrlSource | PathSource;
+  readonly cwd: string;
+  readonly ctx: NotificationContext;
+  readonly run: NotificationRun;
+  readonly removalOps: RemovalOps;
+  readonly credentialOps?: CredentialOps | undefined;
+  readonly deviceFlowHttp?: DeviceFlowHttp | undefined;
+  readonly gitOps?: GitOps | undefined;
+}): Promise<{ readonly name: string; readonly cloneDir?: string }> {
+  const { state, locations, source, cwd, removalOps, deviceFlowHttp } = args;
+  const gitOps = args.gitOps ?? DEFAULT_GIT_OPS;
+  const credentialOps = args.credentialOps ?? DEFAULT_CREDENTIAL_OPS;
+  if (source.kind === "path") {
+    return { name: await addPathInGuard({ state, locations, source, cwd }) };
+  }
+
+  const cloneArgs = {
+    ctx: args.ctx,
+    run: args.run,
+    state,
+    locations,
+    gitOps,
+    credentialOps,
+    removalOps,
+    ...(deviceFlowHttp !== undefined && { deviceFlowHttp }),
+    cwd,
+  };
+  // MURL-01 / D-76-06: source.url is the stored canonical identity; the wire
+  // url derives from the source via `networkCloneUrl` (D-2-01, D-2-03). Every
+  // host carries an auth bundle; the provider lookup decides its Device Flow
+  // half (PROV-03).
+  const name =
+    source.kind === "github"
+      ? await addGithubInGuard({ ...cloneArgs, source })
+      : await addUrlInGuard({ ...cloneArgs, source });
+  return { name, cloneDir: await locations.sourceCloneDir(name) };
+}
+
+/**
+ * The source-kind precondition plus the in-guard add. Extracted so the
  * entrypoint try/catch (ATTR-07) wraps BOTH the synchronous source-kind refusal
  * (S5a/S5b -> UnsupportedSourceError) and the guard body uniformly.
  *
- * WB-01 / WR-09: converted from `withStateGuard` to
- * `withLockedStateTransaction` so config write-back happens inside the SAME
- * per-scope lock as the state mutation. The config write-back fires only in
- * standalone mode (orchestrated/reconcile-driven calls derive desired state
- * FROM the merged config; writing back would clobber a per-machine override).
+ * WB-01 / WR-09: config write-back happens inside the SAME per-scope lock as
+ * the state mutation. The config write-back fires only in standalone mode
+ * (orchestrated/reconcile-driven calls derive desired state FROM the merged
+ * config; writing back would clobber a per-machine override).
  */
 async function runAddInGuard(args: {
   opts: AddMarketplaceOptions;
   removalOps: RemovalOps;
   locations: ScopedLocations;
-  source: ReturnType<typeof parsePluginSource>;
-  gitOps: GitOps;
-  credentialOps: CredentialOps;
   orchestrated: boolean;
 }): Promise<string> {
-  const { opts, locations, source, gitOps, credentialOps, orchestrated, removalOps } = args;
-
-  // S5a (MA-10): parser produced an unknown kind with a reason -- surface
-  // verbatim on the cause, classified as `unsupported source` (D-48-C A3).
-  if (source.kind === "unknown") {
-    throw new UnsupportedSourceError(
-      `Cannot add marketplace from "${opts.rawSource}": ${source.reason}`,
-    );
-  }
-
-  // S5b: valid-but-unsupported kinds. MURL-01 / D-76-05: `url` is now
-  // admitted; only `git-subdir` and `npm` (marketplace-level) stay rejected.
-  if (source.kind !== "github" && source.kind !== "path" && source.kind !== "url") {
-    throw new UnsupportedSourceError(
-      `Cannot add marketplace from "${opts.rawSource}": unsupported source kind ${source.kind}`,
-    );
-  }
+  const { opts, locations, orchestrated, removalOps } = args;
+  const source = parseAddableSource(opts.rawSource);
 
   // WB-01: target-path selection happens ONCE before the lock so
   // the orchestrator NEVER falls back to the base file on ENOENT.
@@ -483,7 +546,6 @@ async function runAddInGuard(args: {
 
   return withLockedStateTransaction(locations, async (tx) => {
     const state = tx.state;
-    let recordedName: string;
 
     // CFG-03 (T-56-02-05): abort BEFORE any state mutation. The
     // basename-only error message prevents an absolute-path information leak.
@@ -505,43 +567,18 @@ async function runAddInGuard(args: {
       return redeclaredName;
     }
 
-    if (source.kind === "github") {
-      recordedName = await addGithubInGuard({
-        ctx: opts.ctx,
-        run: opts.run,
-        state,
-        locations,
-        source,
-        gitOps,
-        credentialOps,
-        removalOps,
-        ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
-        cwd: opts.cwd,
-      });
-    } else if (source.kind === "url") {
-      // MURL-01 / D-76-06: source.url is the stored canonical identity; the wire url derives from
-      // the source via `networkCloneUrl` (D-2-01, D-2-03). Every host carries an auth bundle; the
-      // provider lookup decides its Device Flow half (PROV-03).
-      recordedName = await addUrlInGuard({
-        ctx: opts.ctx,
-        run: opts.run,
-        state,
-        locations,
-        source,
-        gitOps,
-        credentialOps,
-        removalOps,
-        ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
-        cwd: opts.cwd,
-      });
-    } else {
-      recordedName = await addPathInGuard({
-        state,
-        locations,
-        source,
-        cwd: opts.cwd,
-      });
-    }
+    const added = await addMarketplaceToState({
+      state,
+      locations,
+      source,
+      cwd: opts.cwd,
+      ctx: opts.ctx,
+      run: opts.run,
+      removalOps,
+      credentialOps: opts.credentialOps,
+      deviceFlowHttp: opts.deviceFlowHttp,
+      gitOps: opts.gitOps,
+    });
 
     // WB-01 / WR-09: write-back the marketplace entry to the user-authored
     // config. SKIPPED in orchestrated mode (reconcile derives desired state
@@ -550,22 +587,22 @@ async function runAddInGuard(args: {
     // planner's `samePlannedSource` comparison stays a no-op on the next
     // load.
     //
-    // WR-07: by this point `addGithubInGuard` has ALREADY
-    // renamed the clone into its final `sources/<name>/` path, and its own
-    // MA-9 cleanup catch is out of scope. If the config write-back or
-    // tx.save() throws (disk full, EACCES on claude-plugins.json), the state
-    // snapshot is discarded (no save) but the clone would be orphaned --
-    // making every retry fail MA-6 `{stale clone}` until the user manually
-    // deletes the directory (NFR-3 violation). Mirror the MA-9 discipline:
-    // remove the committed final clone and append any cleanup leak to the
-    // rethrown error.
+    // WR-07: by this point a github or url add has ALREADY renamed the clone
+    // into its final `sources/<name>/` path, and the body's own MA-9 cleanup
+    // catch is out of scope. If the config write-back or tx.save() throws
+    // (disk full, EACCES on claude-plugins.json), the state snapshot is
+    // discarded (no save) but the clone would be orphaned -- making every
+    // retry fail MA-6 `{stale clone}` until the user manually deletes the
+    // directory (NFR-3 violation). Mirror the MA-9 discipline: remove the
+    // committed final clone and append any cleanup leak to the rethrown
+    // error. A path source has no clone directory.
     try {
       if (!orchestrated) {
         await writeMarketplaceConfigEntry(
           current,
           targetConfigPath,
           locations.scopeRoot,
-          recordedName,
+          added.name,
           { source: opts.rawSource },
         );
       }
@@ -573,15 +610,11 @@ async function runAddInGuard(args: {
       await tx.save();
     } catch (err) {
       let wrapped: unknown = err;
-      // MURL-01 / NFR-3: both github and url sources committed a clone into
-      // sources/<name>/; a write-back failure must remove it so a retry never
-      // trips MA-6 {stale clone}. path sources have no clone dir.
-      if (source.kind === "github" || source.kind === "url") {
-        const finalDir = await locations.sourceCloneDir(recordedName);
+      if (added.cloneDir !== undefined) {
         const leak = await cleanupStaging(
           removalOps,
-          finalDir,
-          `marketplace final clone ${finalDir}`,
+          added.cloneDir,
+          `marketplace final clone ${added.cloneDir}`,
         );
         wrapped = appendLeakToError(wrapped, leak);
       }
@@ -589,8 +622,58 @@ async function runAddInGuard(args: {
       throw wrapped instanceof Error ? wrapped : new Error(errorMessage(wrapped));
     }
 
-    return recordedName;
+    return added.name;
   });
+}
+
+/**
+ * The post-commit settle of one added marketplace: the D-03-INV completion
+ * cache invalidation and the D-SEED-01 mirror seeding. Run it only after the
+ * state save that recorded the marketplace. Each step is best effort and
+ * swallows its own failure, so neither can roll back the committed add
+ * (NFR-3).
+ */
+async function settleAddedMarketplace(args: {
+  readonly locations: ScopedLocations;
+  readonly name: string;
+  readonly completionCache: CompletionCache;
+  readonly gitOps?: GitOps | undefined;
+}): Promise<void> {
+  const { locations, name, completionCache } = args;
+
+  // D-03-INV: the marketplace-names cache for this scope and the plugin index
+  // for the newly recorded marketplace are both stale by construction.
+  try {
+    await completionCache.invalidateMarketplaceNames(
+      locations.marketplaceNamesCacheFile,
+      locations.scope,
+    );
+    await completionCache.dropMarketplaceCache(
+      await locations.pluginCacheFile(name),
+      locations.scope,
+      name,
+    );
+  } catch (err) {
+    // Cache-refresh failures are swallowed: there is no clean notification
+    // shape for "cache failure after a successful state mutation" and
+    // emitting a second notify() would double severity routing. The state
+    // mutation already succeeded; only the completion-cache is stale.
+    hookDebugLog(`completion-cache invalidation after add failed: ${errorMessage(err)}`);
+  }
+
+  // D-SEED-01 / SEED-01..06: seed same-repo git plugin mirrors from the local
+  // marketplace checkout, network-free. Both standalone and reconcile-driven
+  // adds seed; seeding touches no network, so it is load-time safe (NFR-5).
+  try {
+    await seedSameRepoPluginMirrors({
+      locations,
+      marketplaceName: name,
+      gitOps: args.gitOps ?? DEFAULT_GIT_OPS,
+    });
+  } catch (err) {
+    // Seeding is best-effort; the add already committed.
+    hookDebugLog(`plugin-mirror seeding after add failed: ${errorMessage(err)}`);
+  }
 }
 
 /**
@@ -760,15 +843,12 @@ async function runAddOutcome(
   opts: AddMarketplaceOptions,
   orchestrated: boolean,
 ): Promise<AddMarketplaceOutcome> {
-  const gitOps = opts.gitOps ?? DEFAULT_GIT_OPS;
-  const credentialOps = opts.credentialOps ?? DEFAULT_CREDENTIAL_OPS;
   // D-08-12: this verb owns a staging lifecycle, so it is the composition root
   // that constructs the removal operations its in-guard helpers perform their
   // cleanup through. The port is required with no default, so there is nothing
   // to fall back to and no way for a new cleanup site to go uninjected.
   const removalOps = createRemovalOps();
   const locations = locationsFor(opts.scope, opts.cwd);
-  const source = parsePluginSource(opts.rawSource);
 
   // ATTR-07: route every enumerated precondition failure through notify as a
   // structured `⊘ <subject> [<scope>] (failed) {<reason>}` row on the
@@ -779,15 +859,7 @@ async function runAddOutcome(
   // sees the already-cleaned error, so no staging dir leaks.
   let recordedName: string;
   try {
-    recordedName = await runAddInGuard({
-      opts,
-      locations,
-      source,
-      gitOps,
-      credentialOps,
-      removalOps,
-      orchestrated,
-    });
+    recordedName = await runAddInGuard({ opts, locations, removalOps, orchestrated });
   } catch (err) {
     // rethrowPreconditionErrors short-circuits BEFORE the mode branch so the
     // bootstrap composer contract is preserved in BOTH standalone and
@@ -802,41 +874,15 @@ async function runAddOutcome(
     return handleAddFailure(opts, err, orchestrated);
   }
 
-  // D-03-INV: post-state-commit completion-cache invalidation.
-  // The marketplace-names cache for this scope and the plugin index for the
-  // newly recorded marketplace are both stale-by-construction. Cache cleanup
-  // runs after the state commit so a cache hiccup never rolls back the user's
-  // primary success.
-  try {
-    await opts.completionCache.invalidateMarketplaceNames(
-      locations.marketplaceNamesCacheFile,
-      opts.scope,
-    );
-    await opts.completionCache.dropMarketplaceCache(
-      await locations.pluginCacheFile(recordedName),
-      opts.scope,
-      recordedName,
-    );
-  } catch (err) {
-    // Cache-refresh failures are swallowed: there is no clean notification
-    // shape for "cache failure after a successful state mutation" and
-    // emitting a second notify() would double severity routing. The state
-    // mutation already succeeded; only the completion-cache is stale.
-    hookDebugLog(`completion-cache invalidation after add failed: ${errorMessage(err)}`);
-  }
-
-  // D-SEED-01 / SEED-01..06: best-effort post-commit seeding of same-repo git
-  // plugin mirrors from the local marketplace checkout, network-free. Runs in
-  // the same swallowing tier as the cache invalidation above so a seeding
-  // failure can never roll back the already-committed add (NFR-3). Placed BEFORE
-  // the orchestrated return so both standalone and reconcile-driven adds seed;
-  // seeding touches no network, so it is load-time safe (NFR-5).
-  try {
-    await seedSameRepoPluginMirrors({ locations, marketplaceName: recordedName, gitOps });
-  } catch (err) {
-    // Seeding is best-effort; the add already committed.
-    hookDebugLog(`plugin-mirror seeding after add failed: ${errorMessage(err)}`);
-  }
+  // D-03-INV / D-SEED-01: the settle runs after the state commit and before
+  // the orchestrated return, so both standalone and reconcile-driven adds
+  // settle.
+  await settleAddedMarketplace({
+    locations,
+    name: recordedName,
+    completionCache: opts.completionCache,
+    gitOps: opts.gitOps,
+  });
 
   if (!orchestrated) {
     // Emit one MarketplaceNotificationMessage per outcome. Severity and
