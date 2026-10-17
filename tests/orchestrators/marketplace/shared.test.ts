@@ -14,6 +14,7 @@ import {
   loadVisibleMarketplaces,
   crossScopeFlag,
   foldUnstageNotices,
+  marketplaceFailureRows,
   marketplaceInOtherScope,
   narrowCascadeFailure,
   refreshGitHubClone,
@@ -2364,3 +2365,31 @@ for (const { title, cause, expected } of [
     assert.equal(reason, expectedReason);
   });
 }
+
+test("marketplaceFailureRows puts the reason and the cause on one failed child of the failed header", () => {
+  // arrange
+  const cause = new Error("lock is held");
+
+  // act
+  const rows = marketplaceFailureRows("tools", "project", "lock held", cause);
+
+  // assert
+  assert.deepStrictEqual(rows, [
+    {
+      name: "tools",
+      scope: "project",
+      status: "failed",
+      severity: "error",
+      plugins: [
+        {
+          status: "failed",
+          name: "tools",
+          reasons: ["lock held"],
+          cause,
+          severity: "error",
+          needsReload: false,
+        },
+      ],
+    },
+  ]);
+});

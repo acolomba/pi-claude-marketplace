@@ -77,13 +77,12 @@ import {
   notifyWithContext,
   type MarketplaceRows,
   type Plural,
-  type Single,
 } from "../../shared/notify-context.ts";
 import { ownValue, setOwn } from "../../shared/own-key.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 
 import { AUTOUPDATE_CONTEXT, NOAUTOUPDATE_CONTEXT } from "./autoupdate.messaging.ts";
-import { classifyAutoupdateFlip, crossScopeFlag } from "./shared.ts";
+import { classifyAutoupdateFlip, crossScopeFlag, marketplaceFailureRows } from "./shared.ts";
 
 import type { MarketplaceConfigEntry, ScopeConfig } from "../../persistence/config-io.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
@@ -163,10 +162,10 @@ function missingEverywhere(
 }
 
 /**
- * Builds the synthetic failed-plugin child that carries the underlying
- * autoupdate-flip error to the user. The marketplace header alone cannot
- * carry a cause (SNM-10), so the child's `cause` drives the renderer's
- * depth-5 cause-chain trailer. A held state lock narrows to the `lock held`
+ * The reason of the synthetic failed child (`marketplaceFailureRows`) that
+ * carries the underlying autoupdate-flip error to the user; the child's
+ * `cause` drives the renderer's depth-5 cause-chain trailer. A held state lock
+ * narrows to the `lock held`
  * reason (its message carries the retry hint); a CFG-03 invalid-config abort
  * narrows to `invalid manifest`; anything else falls back to the permissive
  * `not found`.
@@ -190,19 +189,6 @@ function autoupdateFailedReason(err: Error): ContentReason {
   }
 
   return "not found";
-}
-
-function autoupdateFailedRow(name: string, err: Error): PluginFailedMessage {
-  const reasons: readonly ContentReason[] = [autoupdateFailedReason(err)];
-  return {
-    status: "failed",
-    name,
-    reasons,
-    cause: err,
-    // D-03/D-06: a synthetic autoupdate-failure child -> error, no reload.
-    severity: "error",
-    needsReload: false,
-  };
 }
 
 /**
@@ -234,25 +220,14 @@ function notifyAutoupdateScopeFailure(
 ): void {
   const failureName = opts.name ?? "(unknown)";
 
-  // OUT-07 / D-12: one marketplace block carrying the synthetic failed child
-  // row -> Single. The flip command is selected by the boolean `opts.enable`
-  // flag (mirrors enable/disable); the `(failed)` header renders via the
-  // central seam, the failed child row dispatches through the command context.
-  const failedRows: Single<MarketplaceRows<PluginFailedMessage>> = [
-    {
-      name: failureName,
-      scope,
-      status: "failed",
-      // D-03: a failed autoupdate flip -> error.
-      severity: "error",
-      plugins: [autoupdateFailedRow(failureName, err)],
-    },
-  ];
+  // OUT-07 / D-12: the flip command is selected by the boolean `opts.enable`
+  // flag (mirrors enable/disable); the failed child row dispatches through the
+  // command context.
   notifyWithContext(
     opts.ctx,
     opts.run,
     flipContextFor(opts.enable),
-    failedRows,
+    marketplaceFailureRows(failureName, scope, autoupdateFailedReason(err), err),
     undefined,
     cardinality,
   );

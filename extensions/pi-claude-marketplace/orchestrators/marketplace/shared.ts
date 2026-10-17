@@ -52,6 +52,7 @@ import {
 import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
 import { notify } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
+import { type MarketplaceRows, type Single } from "../../shared/notify-context.ts";
 import { ownValue } from "../../shared/own-key.ts";
 import { NO_STORED_CREDENTIAL_CAUSE, buildAuthForHost, hostFromCloneUrl } from "../auth-host.ts";
 
@@ -69,7 +70,7 @@ import type { CredentialOps } from "../../platform/git-credential.ts";
 import type { ListRemotesResult } from "../../platform/git.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
-import type { McpConfigNotice } from "../../shared/notification-types.ts";
+import type { McpConfigNotice, PluginFailedMessage } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 
 /**
@@ -1026,4 +1027,36 @@ export async function crossScopeFlag(opts: {
     scope: opts.scope,
   });
   return elsewhere ? { presentInOtherScope: true } : {};
+}
+
+/**
+ * The rows of a marketplace-level failure that has a cause: a `(failed)`
+ * marketplace header with one failed child of the same name. A marketplace
+ * header carries no cause (SNM-10), so the child carries the reason and the
+ * cause line.
+ */
+export function marketplaceFailureRows(
+  name: string,
+  scope: Scope,
+  reason: ContentReason,
+  cause: Error,
+): Single<MarketplaceRows<PluginFailedMessage>> {
+  return [
+    {
+      name,
+      scope,
+      status: "failed",
+      severity: "error",
+      plugins: [
+        {
+          status: "failed",
+          name,
+          reasons: [reason],
+          cause,
+          severity: "error",
+          needsReload: false,
+        },
+      ],
+    },
+  ];
 }
