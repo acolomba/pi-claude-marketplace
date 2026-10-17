@@ -987,64 +987,6 @@ test("leaves a valid unrelated sibling config layer byte-identical", async (test
   notification.verifyInteractions();
 });
 
-test("LAYER-03: keeps the record, the clone, and every plugin while the other config layer is unreadable", async (testContext) => {
-  // arrange
-  const { cwd, locations } = await projectCase(testContext);
-  const source = { kind: "github", raw: "owner/repo", owner: "owner", repo: "repo" };
-  await seedMarketplace(locations, {
-    cwd,
-    name: "remove-me",
-    source,
-    plugins: { tool: pluginRecord() },
-  });
-  await saveConfig(
-    locations.configJsonPath,
-    {
-      schemaVersion: 1,
-      marketplaces: { "remove-me": { source: "owner/repo" } },
-      plugins: { "tool@remove-me": { enabled: true } },
-    },
-    locations.scopeRoot,
-  );
-  const invalidLocalBytes = "{ invalid local config";
-  await writeFile(locations.configLocalJsonPath, invalidLocalBytes);
-  const cloneDir = await locations.sourceCloneDir("remove-me");
-  await mkdir(cloneDir, { recursive: true });
-  await writeFile(path.join(cloneDir, "sentinel"), "clone");
-  const notification = notificationBoundary(1);
-
-  // act
-  await removeMarketplace({
-    completionCache: createCompletionCache(),
-    ctx: notification.ctx,
-    run: notification.run,
-    name: "remove-me",
-    scope: "project",
-    cwd,
-    cascade: unreachableCascade,
-  });
-
-  // assert
-  assert.deepStrictEqual(notification.calls, [{ message: "● remove-me [project] (removed)" }]);
-  assert.strictEqual(
-    await readFile(locations.configJsonPath, "utf8"),
-    '{\n  "schemaVersion": 1,\n  "marketplaces": {},\n  "plugins": {}\n}\n',
-  );
-  assert.strictEqual(await readFile(locations.configLocalJsonPath, "utf8"), invalidLocalBytes);
-  assert.strictEqual(await readFile(path.join(cloneDir, "sentinel"), "utf8"), "clone");
-  assert.deepStrictEqual(
-    await loadState(locations.extensionRoot),
-    marketplaceState({
-      cwd,
-      name: "remove-me",
-      scope: "project",
-      source,
-      plugins: { tool: pluginRecord() },
-    }),
-  );
-  notification.verifyInteractions();
-});
-
 test("aborts a standalone local remove on invalid target config without leaking its path", async (testContext) => {
   // arrange
   const { cwd, locations } = await projectCase(testContext);
@@ -2090,6 +2032,10 @@ async function layerCase(testContext: TestContext, files: LayerFiles): Promise<L
 const TOOLS_DECLARED =
   '{"schemaVersion":1,"marketplaces":{"tools":{"source":"./tools"}},"plugins":{"tool@tools":{"enabled":true}}}\n';
 
+/** The refusal row of a remove whose other file, `claude-plugins.local.json`, is invalid. */
+const LOCAL_FILE_INVALID =
+  'Some operations have failed.\n\n⊘ tools [project] (failed)\n  ⊘ tools (failed) {invalid manifest}\n    cause: Config file "claude-plugins.local.json" failed schema validation.';
+
 for (const { title, files, local, expectedMessage } of [
   {
     title: "refuses a shared-file remove of a marketplace only the local file declares",
@@ -2112,8 +2058,13 @@ for (const { title, files, local, expectedMessage } of [
     title: "refuses a remove whose target file is silent while the other file is invalid",
     files: { shared: '{"schemaVersion":1}\n', local: "{ invalid local config" },
     local: false,
-    expectedMessage:
-      "A marketplace operation has failed.\n\n⊘ tools [project] (failed) {invalid manifest}",
+    expectedMessage: LOCAL_FILE_INVALID,
+  },
+  {
+    title: "refuses a remove whose target file declares it while the other file is invalid",
+    files: { shared: TOOLS_DECLARED, local: "{ invalid local config" },
+    local: false,
+    expectedMessage: LOCAL_FILE_INVALID,
   },
 ] satisfies readonly {
   readonly title: string;

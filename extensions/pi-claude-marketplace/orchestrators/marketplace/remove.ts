@@ -111,7 +111,7 @@ import {
 } from "./shared.ts";
 
 import type { DeclarationIndex } from "../../domain/dependency-orphans.ts";
-import type { ConfigLoadResult, ScopeConfig } from "../../persistence/config-io.ts";
+import type { ScopeConfig } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
@@ -588,12 +588,16 @@ function isDependencyRecord(plugin: ExtensionPluginRow): boolean {
 /**
  * LAYER-02 / D-MF-03: a named remove changes only its target layer. It loads
  * the other layer and stops the remove, before anything is mutated, when the
- * target layer does not declare the marketplace while the other layer does or
- * cannot be read. Reconcile-driven removals never call it (WR-09).
+ * target layer does not declare the marketplace while the other layer does, or
+ * when the other layer cannot be read. An unreadable other layer may declare
+ * the marketplace or any of its plugin keys, so the remove cannot tell which
+ * plugins it would leave without a declaration; the `{invalid manifest}` row
+ * names that file for the user to repair. Reconcile-driven removals never call
+ * it (WR-09).
  *
- * LAYER-03: while the other layer declares the marketplace, or cannot be read,
- * the remove is a layer remove. Otherwise, including a recorded marketplace no
- * layer declares, it is the full remove.
+ * LAYER-03: while the other layer declares the marketplace, the remove is a
+ * layer remove. Otherwise, including a recorded marketplace no layer declares,
+ * it is the full remove.
  */
 async function planStandaloneRemove(args: {
   readonly target: ScopeConfig;
@@ -612,41 +616,42 @@ async function planStandaloneRemove(args: {
     targetIsLocal,
     marketplace: args.marketplace,
   });
-  if (verdict.kind === "refused" || verdict.kind === "other-unreadable") {
+  if (verdict.kind === "refused") {
     throw new LayerGateStop(verdict);
   }
 
-  if (verdict.kind === "undeclared" || verdict.other === "silent") {
+  if (other.status === "invalid") {
+    throw new LayerGateStop({
+      kind: "other-unreadable",
+      otherBasename: path.basename(other.filePath),
+    });
+  }
+
+  if (verdict.kind !== "declared" || other.status !== "valid" || verdict.other === "silent") {
     return fullRemovePlan(args.record);
   }
 
   return {
     layerOnly: true,
-    entries: layerRemovalEntries(args.record, args.target, other, args.marketplace),
+    entries: layerRemovalEntries(args.record, args.target, other.config, args.marketplace),
   };
 }
 
 /**
  * LAYER-03: the recorded plugins whose `<plugin>@<marketplace>` key the target
  * layer declares and the other layer does not. A key both layers declare stays
- * installed. An unreadable other layer may declare any key, so it keeps every
- * plugin installed.
+ * installed.
  */
 function layerRemovalEntries(
   record: ExtensionMarketplaceRow,
   target: ScopeConfig,
-  other: ConfigLoadResult,
+  other: ScopeConfig,
   marketplace: string,
 ): readonly (readonly [string, ExtensionPluginRow])[] {
-  if (other.status !== "valid") {
-    return [];
-  }
-
   return Object.entries(record.plugins).filter(([plugin]) => {
     const key = `${plugin}@${marketplace}`;
     return (
-      ownValue(target.plugins, key) !== undefined &&
-      ownValue(other.config.plugins, key) === undefined
+      ownValue(target.plugins, key) !== undefined && ownValue(other.plugins, key) === undefined
     );
   });
 }
@@ -950,31 +955,24 @@ function surfaceCfgInvalid(args: {
 }
 
 /**
- * LAYER-02: the standalone row of a remove the layer gate stopped. A refusal
- * renders the failed header with one failed child carrying the reason and the
- * cause line; an unreadable other file renders the CFG-03 row naming it.
+ * LAYER-02: the standalone row of a remove the layer gate stopped: the failed
+ * header with one failed child carrying the reason and the cause line. For an
+ * unreadable other file the reason is `{invalid manifest}` and the cause line
+ * names that file by its basename, so the user knows which file to repair.
  */
 function surfaceLayerGateStop(
   opts: RemoveMarketplaceOptions,
   scope: Scope,
   verdict: LayerGateStopVerdict,
 ): RemoveMarketplaceOutcome {
-  if (verdict.kind === "other-unreadable") {
-    return surfaceCfgInvalid({
-      opts,
-      orchestrated: false,
-      configBasename: verdict.otherBasename,
-      scope,
-    });
-  }
-
-  return surfaceMarketplaceFailure({
-    opts,
-    orchestrated: false,
-    scope,
-    reason: verdict.reason,
-    error: verdict.refusal,
-  });
+  const { reason, error } =
+    verdict.kind === "other-unreadable"
+      ? {
+          reason: "invalid manifest" as const,
+          error: new Error(`Config file "${verdict.otherBasename}" failed schema validation.`),
+        }
+      : { reason: verdict.reason, error: verdict.refusal };
+  return surfaceMarketplaceFailure({ opts, orchestrated: false, scope, reason, error });
 }
 
 /**

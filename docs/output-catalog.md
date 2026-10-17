@@ -3664,6 +3664,20 @@ Some operations have failed.
     cause: The marketplace tools is declared only in claude-plugins.json. Run the command again without --local.
 ```
 
+### Failure -- the other configuration file cannot be read (LAYER-02)
+
+A named remove changes only its target file. When the other file of the scope fails schema validation, the remove is refused before anything changes, whether or not the target file declares the marketplace: the unreadable file may declare the marketplace or any of its plugins, so the remove cannot tell which plugins it would leave without a declaration. The `cause:` line names that file by its basename. Repair the file, then run the remove again. Severity `error`; no reload-hint.
+
+<!-- catalog-state: remove-other-config-file-invalid -->
+
+```text
+Some operations have failed.
+
+⊘ tools [project] (failed)
+  ⊘ tools (failed) {invalid manifest}
+    cause: Config file "claude-plugins.local.json" failed schema validation.
+```
+
 ### Failure -- a dependency declaration cannot be read (LAYER-03 / D-05-07)
 
 When the marketplace holds a plugin that was installed as a dependency, the remove reads what every installed plugin of the scope declares, so that it never removes a dependency another plugin still needs. If one of those declarations cannot be read, the whole remove is refused before anything changes: a needed dependency must never be removed on incomplete information. The remove reads no declarations when the marketplace holds no dependency. The `cause:` line names the first plugin, in state order, whose declaration could not be read, and why. To repair it, update that plugin's marketplace (`marketplace update`), or fix the manifest of a path marketplace, then run the remove again. Severity `error`; no reload-hint.

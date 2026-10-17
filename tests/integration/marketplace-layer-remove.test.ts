@@ -316,6 +316,34 @@ async function removeFootprint(scope: ProjectScope): Promise<readonly unknown[]>
   ];
 }
 
+test("LAYER-02: a remove refused because the other config file is unreadable changes nothing", async (t) => {
+  // arrange
+  const scope = await projectScope(t, "mp-layer-remove-other-unreadable-");
+  const boundary = createNotificationBoundary(4);
+  await addRepo(scope, boundary, false);
+  await addRepo(scope, boundary, true);
+  await installFrom(scope, boundary, "alpha", false);
+  await writeFile(scope.locations.configLocalJsonPath, "{ not json");
+  const footprintBefore = await removeFootprint(scope);
+
+  // act
+  await removeMp(scope, boundary);
+
+  // assert
+  assert.deepStrictEqual(boundary.notifications, [
+    ADDED,
+    ADDED,
+    installed("alpha"),
+    {
+      message:
+        'Some operations have failed.\n\n⊘ mp [project] (failed)\n  ⊘ mp (failed) {invalid manifest}\n    cause: Config file "claude-plugins.local.json" failed schema validation.',
+      severity: "error",
+    },
+  ]);
+  assert.deepStrictEqual(await removeFootprint(scope), footprintBefore);
+  boundary.verifyBoundary();
+});
+
 test("PRUNE-03: a dependency stays installed while the plugin that declares it fails to unstage", async (t) => {
   // arrange
   const scope = await projectScope(t, "mp-layer-remove-prune-", ALPHA_NEEDS_LIB);
