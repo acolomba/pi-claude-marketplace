@@ -88,7 +88,10 @@ import type {
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { InstallCloneCacheSeam } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-clone-probe.ts";
 import type { InstallHooksRouting } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-disable-cascade.ts";
-import type { InstallFailureCapture } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts";
+import type {
+  InstallFailureCapture,
+  InstallLedgerOptions,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts";
 import type { MarketplaceTagProbeOptions } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/marketplace-tag-probe.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type {
@@ -5601,6 +5604,488 @@ test("CMP-3 / PI-16: project-target install falls back to user-scope marketplace
       assert.equal(userAfter.marketplaces["mp"]?.plugins["hello"], undefined);
       assert.equal(projectAfter.marketplaces["mp"]?.scope, "project");
       assert.ok(projectAfter.marketplaces["mp"]?.plugins["hello"] !== undefined);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+type MarketplaceAddSeam = NonNullable<InstallLedgerOptions["marketplaceAdd"]>;
+
+/** One `settle` call, with whether the save that recorded the marketplace had landed. */
+interface SettledAdd {
+  readonly scope: Scope;
+  readonly name: string;
+  readonly saved: boolean;
+}
+
+/**
+ * LAYER-07: a `marketplaceAdd` seam whose `record` stands in for the add body.
+ * It copies the user-scope tree `sourceRoot` to `cloneDir`, as a clone would,
+ * and records the marketplace there. `emptyManifest` makes the copy list no
+ * plugin, `lockParent` makes `cloneDir` unremovable, and `afterRecord` edits the
+ * snapshot once the record is written. `settle` logs each call in `settled`.
+ */
+function stubMarketplaceAdd(options: {
+  readonly name: string;
+  readonly sourceRoot: string;
+  readonly cloneDir: string;
+  readonly settled: SettledAdd[];
+  readonly emptyManifest?: boolean;
+  readonly lockParent?: boolean;
+  readonly afterRecord?: (state: ExtensionState) => void;
+}): MarketplaceAddSeam {
+  return {
+    record: async (args) => {
+      await cp(options.sourceRoot, options.cloneDir, { recursive: true });
+      const manifestPath = path.join(options.cloneDir, ".claude-plugin", "marketplace.json");
+      if (options.emptyManifest === true) {
+        await writeFile(manifestPath, JSON.stringify({ name: options.name, plugins: [] }));
+      }
+
+      if (options.lockParent === true) {
+        await chmod(path.dirname(options.cloneDir), 0o555);
+      }
+
+      args.state.marketplaces[options.name] = {
+        name: options.name,
+        scope: args.locations.scope,
+        source: args.source,
+        addedFromCwd: args.cwd,
+        manifestPath,
+        marketplaceRoot: options.cloneDir,
+        plugins: {},
+      };
+      options.afterRecord?.(args.state);
+      return { name: options.name, cloneDir: options.cloneDir };
+    },
+    settle: async (args) => {
+      const persisted = await loadState(args.locations.extensionRoot);
+      options.settled.push({
+        scope: args.locations.scope,
+        name: args.name,
+        saved: persisted.marketplaces[args.name] !== undefined,
+      });
+    },
+  };
+}
+
+/**
+ * The message `rm` fails with on `dir`, which sits in a read-only parent. It is
+ * read back from the runtime, because Node versions word errno messages
+ * differently.
+ */
+async function removalFailure(dir: string): Promise<string> {
+  try {
+    await rm(dir, { recursive: true, force: true });
+  } catch (error: unknown) {
+    return error instanceof Error ? error.message : String(error);
+  }
+
+  return "removed";
+}
+
+/**
+ * LAYER-07: `hello@mp` in a project marketplace depends on
+ * `some-other-plugin@deps-mp`, which only the user scope records. Returns the
+ * user-scope tree of `deps-mp`.
+ */
+async function seedProjectRootWithUserDependency(cwd: string): Promise<string> {
+  const sourceRoot = path.join(cwd, "deps-mp-src");
+  await seedPathMarketplaceWithPlugin({
+    cwd,
+    marketplaceRoot: sourceRoot,
+    marketplaceName: "deps-mp",
+    pluginName: "some-other-plugin",
+    scope: "user",
+  });
+  await seedPathMarketplaceWithPlugin({
+    cwd,
+    marketplaceRoot: path.join(cwd, "mp-src"),
+    marketplaceName: "mp",
+    pluginName: "hello",
+    declareDependencies: true,
+    dependencyMarketplace: "deps-mp",
+    allowedDependencyMarketplaces: ["deps-mp"],
+  });
+  return sourceRoot;
+}
+
+test("WR-07 / LAYER-07: an install that fails after adding a marketplace removes the clone and saves nothing", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-add-throw-"));
+    try {
+      // arrange
+      const projectLocations = locationsFor("project", cwd);
+      const sourceRoot = path.join(cwd, "user-mp-src");
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: sourceRoot,
+        marketplaceName: "mp",
+        pluginName: "hello",
+        scope: "user",
+      });
+      const cloneDir = path.join(projectLocations.extensionRoot, "sources", "mp");
+      const settled: SettledAdd[] = [];
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        marketplaceAdd: stubMarketplaceAdd({
+          name: "mp",
+          sourceRoot,
+          cloneDir,
+          settled,
+          emptyManifest: true,
+        }),
+      });
+
+      // assert
+      assert.equal(outcome.status, "failed");
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            'A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello (failed) {not in manifest}\n    cause: Plugin "hello" not found in marketplace "mp".',
+          severity: "error",
+        },
+      ]);
+      assert.equal(await pathExists(cloneDir), false);
+      assert.equal(await pathExists(projectLocations.stateJsonPath), false);
+      assert.deepStrictEqual(settled, []);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WR-07 / LAYER-07: a clone the failed install cannot remove is appended to the reported error", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-add-throw-leak-"));
+    const lockedDir = path.join(cwd, "locked");
+    try {
+      // arrange
+      const sourceRoot = path.join(cwd, "user-mp-src");
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: sourceRoot,
+        marketplaceName: "mp",
+        pluginName: "hello",
+        scope: "user",
+      });
+      await mkdir(lockedDir);
+      const cloneDir = path.join(lockedDir, "mp");
+      const { ctx, run } = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        notifications: { mode: "orchestrated" },
+        marketplaceAdd: stubMarketplaceAdd({
+          name: "mp",
+          sourceRoot,
+          cloneDir,
+          settled: [],
+          emptyManifest: true,
+          lockParent: true,
+        }),
+      });
+
+      // assert
+      assert.ok(outcome.status === "failed");
+      assert.equal(
+        outcome.error.message,
+        `Plugin "hello" not found in marketplace "mp". (additionally: failed to clean up marketplace final clone ${cloneDir} at ${cloneDir}: ${await removalFailure(cloneDir)})`,
+      );
+      assert.ok(outcome.error.cause instanceof PluginShapeError);
+    } finally {
+      await chmod(lockedDir, 0o755);
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WR-07 / LAYER-07: an install that returns a failure without saving removes the clone its add made", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-add-arm-"));
+    try {
+      // arrange: the dependency's add also drops the root's project record from
+      // the snapshot, so the root member finds its marketplace in neither scope.
+      const projectLocations = locationsFor("project", cwd);
+      const sourceRoot = await seedProjectRootWithUserDependency(cwd);
+      const stateBefore = await readFile(projectLocations.stateJsonPath);
+      const cloneDir = path.join(projectLocations.extensionRoot, "sources", "deps-mp");
+      const settled: SettledAdd[] = [];
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        marketplaceAdd: stubMarketplaceAdd({
+          name: "deps-mp",
+          sourceRoot,
+          cloneDir,
+          settled,
+          afterRecord: (state) => {
+            delete state.marketplaces["mp"];
+          },
+        }),
+      });
+
+      // assert
+      assert.equal(outcome.status, "failed");
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A marketplace operation has failed.\n\n⊘ mp [project] (failed) {marketplace not added}",
+          severity: "error",
+        },
+      ]);
+      assert.equal(await pathExists(cloneDir), false);
+      assert.deepStrictEqual(await readFile(projectLocations.stateJsonPath), stateBefore);
+      assert.deepStrictEqual(settled, []);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WR-07 / LAYER-07: a clone a failure arm cannot remove goes to the debug log", async (t) => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-add-arm-leak-"));
+    const lockedDir = path.join(cwd, "locked");
+    try {
+      // arrange
+      const sourceRoot = await seedProjectRootWithUserDependency(cwd);
+      await mkdir(lockedDir);
+      const cloneDir = path.join(lockedDir, "deps-mp");
+      const { ctx, run } = makeCtx();
+      const logged = captureDebugLog(t);
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        marketplaceAdd: stubMarketplaceAdd({
+          name: "deps-mp",
+          sourceRoot,
+          cloneDir,
+          settled: [],
+          lockParent: true,
+          afterRecord: (state) => {
+            delete state.marketplaces["mp"];
+          },
+        }),
+      });
+
+      // assert
+      assert.equal(outcome.status, "failed");
+      assert.deepStrictEqual(logged, [
+        `[hooks] install saved no state; failed to clean up marketplace final clone ${cloneDir} at ${cloneDir}: ${await removalFailure(cloneDir)}`,
+      ]);
+    } finally {
+      await chmod(lockedDir, 0o755);
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WR-07 / LAYER-07: a config write-back failure after a path-source add saves nothing", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-add-path-writeback-"));
+    const projectLocations = locationsFor("project", cwd);
+    try {
+      // arrange: a read-only `.pi/` refuses the project config file, while the
+      // extension root inside it stays writable for the lock.
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "user-mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        scope: "user",
+      });
+      await mkdir(projectLocations.extensionRoot, { recursive: true });
+      await chmod(projectLocations.scopeRoot, 0o555);
+      const { ctx, run } = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      // assert
+      assert.ok(outcome.status === "failed");
+      assert.equal((outcome.error as NodeJS.ErrnoException).code, "EACCES");
+      assert.equal(await pathExists(projectLocations.stateJsonPath), false);
+      assert.equal(await pathExists(projectLocations.configJsonPath), false);
+    } finally {
+      await chmod(projectLocations.scopeRoot, 0o755);
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("LAYER-07 / D-03-INV / D-SEED-01: a saved install settles each marketplace it added, after the save", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-add-settle-"));
+    try {
+      // arrange
+      const projectLocations = locationsFor("project", cwd);
+      const sourceRoot = await seedProjectRootWithUserDependency(cwd);
+      const settled: SettledAdd[] = [];
+      const { ctx, run } = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        marketplaceAdd: stubMarketplaceAdd({
+          name: "deps-mp",
+          sourceRoot,
+          cloneDir: path.join(projectLocations.extensionRoot, "sources", "deps-mp"),
+          settled,
+        }),
+      });
+
+      // assert
+      assert.equal(outcome.status, "installed");
+      assert.deepStrictEqual(settled, [{ scope: "project", name: "deps-mp", saved: true }]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+/**
+ * MISS-01: `a@alpha` in a project marketplace permits `beta`, which only the
+ * user scope records and whose `b` is the missing dependency. Returns the
+ * user-scope tree of `beta`.
+ */
+async function seedMissingDependencyFromUserMarketplace(cwd: string): Promise<string> {
+  const sourceRoot = path.join(cwd, "beta-user-src");
+  await seedPathMarketplaceWithPlugin({
+    cwd,
+    scope: "user",
+    marketplaceRoot: sourceRoot,
+    marketplaceName: "beta",
+    pluginName: "b",
+  });
+  await seedPathMarketplaceWithPlugin({
+    cwd,
+    marketplaceRoot: path.join(cwd, "alpha-project-src"),
+    marketplaceName: "alpha",
+    pluginName: "a",
+    preInstall: true,
+    allowedDependencyMarketplaces: ["beta"],
+  });
+  return sourceRoot;
+}
+
+test("MISS-01 / LAYER-07: the missing-dependency install settles the marketplace it added", async () => {
+  await withHermeticHome(async ({ installMissingDependency }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-missing-add-settle-"));
+    try {
+      // arrange
+      const projectLocations = locationsFor("project", cwd);
+      const sourceRoot = await seedMissingDependencyFromUserMarketplace(cwd);
+      const settled: SettledAdd[] = [];
+      const { ctx, run } = makeCtx();
+
+      // act
+      const outcome = await installMissingDependency({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "beta",
+        plugin: "b",
+        ranges: [],
+        requiredBy: "a@alpha",
+        marketplaceAdd: stubMarketplaceAdd({
+          name: "beta",
+          sourceRoot,
+          cloneDir: path.join(projectLocations.extensionRoot, "sources", "beta"),
+          settled,
+        }),
+      });
+
+      // assert
+      assert.equal(outcome.status, "installed");
+      assert.deepStrictEqual(settled, [{ scope: "project", name: "beta", saved: true }]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("MISS-01 / WR-07: a failed missing-dependency install removes the clone its add made", async () => {
+  await withHermeticHome(async ({ installMissingDependency }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-missing-add-throw-"));
+    try {
+      // arrange
+      const projectLocations = locationsFor("project", cwd);
+      const sourceRoot = await seedMissingDependencyFromUserMarketplace(cwd);
+      const stateBefore = await readFile(projectLocations.stateJsonPath);
+      const cloneDir = path.join(projectLocations.extensionRoot, "sources", "beta");
+      const settled: SettledAdd[] = [];
+      const { ctx, run } = makeCtx();
+
+      // act
+      const outcome = await installMissingDependency({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "beta",
+        plugin: "b",
+        ranges: [],
+        requiredBy: "a@alpha",
+        marketplaceAdd: stubMarketplaceAdd({
+          name: "beta",
+          sourceRoot,
+          cloneDir,
+          settled,
+          emptyManifest: true,
+        }),
+      });
+
+      // assert
+      assert.ok(outcome.status === "failed");
+      assert.equal(
+        outcome.cause,
+        'Plugin "b" not found in marketplace "beta".\n\ncause: Plugin "b" not found in marketplace "beta".',
+      );
+      assert.equal(await pathExists(cloneDir), false);
+      assert.deepStrictEqual(await readFile(projectLocations.stateJsonPath), stateBefore);
+      assert.deepStrictEqual(settled, []);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

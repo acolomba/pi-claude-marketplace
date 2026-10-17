@@ -16,11 +16,12 @@ import { locationsFor } from "../../persistence/locations.ts";
 import { isRecordedButDisabled } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import {
+  appendLeaks,
   errorMessage,
   rethrowInvalidGitHubBaseUrl,
   type MarketplaceDeclaredLocallyError,
 } from "../../shared/errors.ts";
-import { createRemovalOps } from "../../shared/fs-utils.ts";
+import { cleanupStaging, createRemovalOps } from "../../shared/fs-utils.ts";
 import { notify, notifyMcpConfigNotices } from "../../shared/notification-dispatch.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
 import { companionSeverity, malformedReasonsForKinds } from "../../shared/notify-reasons.ts";
@@ -40,6 +41,7 @@ import { probeInstallClone } from "./install-clone-probe.ts";
 import { resolveInstallDeclaredEnabled } from "./install-declared-enabled.ts";
 import { composeInstallDisableCascade } from "./install-disable-cascade.ts";
 import {
+  DEFAULT_MARKETPLACE_ADD,
   installedPluginOutcome,
   ledgerDegradationSignals,
   runInstallLedger,
@@ -94,7 +96,10 @@ import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { ContentReason, McpConfigNotice } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { runPhases } from "../../transaction/phase-ledger.ts";
-import type { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
+import type {
+  LockedStateTransaction,
+  withLockedStateTransaction,
+} from "../../transaction/with-state-guard.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
 import type { InstallPluginOutcome } from "../types.ts";
 
@@ -259,7 +264,20 @@ export interface InstallPluginOptions {
    * (edge/cascade) owns its lifetime. Undefined = no memo (single install).
    */
   readonly authMemo?: Map<string, AuthAttemptResult>;
+  /**
+   * LAYER-07 / D-MF-04: the `marketplace add` seam. A cascade member's ledger
+   * records a marketplace this scope does not record yet through it, and the
+   * lock owner settles each such marketplace through it after the save.
+   * Undefined = the real add.
+   */
+  readonly marketplaceAdd?: InstallLedgerOptions["marketplaceAdd"];
 }
+
+/** LAYER-07: the `marketplace add` seam every cascade member of one install shares. */
+type MarketplaceAddSeam = NonNullable<InstallLedgerOptions["marketplaceAdd"]>;
+
+/** WR-07: one install transaction's list of the marketplaces its adds recorded. */
+type AddedMarketplaces = NonNullable<InstallLedgerOptions["addedMarketplaces"]>;
 
 /** Owns install's lock and phase-ledger schedule without exposing filesystem authority. */
 export interface InstallTransaction {
@@ -328,6 +346,12 @@ function buildInstallLedgerOptions(
     pinVersion?: string;
     /** D-04-01: whether THIS member is the plugin the caller named. */
     provenance?: PluginInstallRecord["provenance"];
+    /**
+     * LAYER-07 / WR-07: the transaction's add seam and its list of added
+     * marketplaces, shared by every member of the cascade.
+     */
+    marketplaceAdd: MarketplaceAddSeam;
+    addedMarketplaces: AddedMarketplaces;
   },
 ): InstallLedgerOptions {
   return {
@@ -352,7 +376,86 @@ function buildInstallLedgerOptions(
     ...(opts.credentialOps !== undefined && { credentialOps: opts.credentialOps }),
     ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
     ...(opts.authMemo !== undefined && { authMemo: opts.authMemo }),
+    marketplaceAdd: core.marketplaceAdd,
+    addedMarketplaces: core.addedMarketplaces,
   };
+}
+
+/**
+ * WR-07: remove the clone directory each listed add created; a path source
+ * has none. Returns one leak per entry, `undefined` for a clean removal.
+ */
+async function removeAddedClones(added: AddedMarketplaces): Promise<(string | undefined)[]> {
+  const removalOps = createRemovalOps();
+  return Promise.all(
+    added.map(async ({ cloneDir }) =>
+      cloneDir === undefined
+        ? undefined
+        : cleanupStaging(removalOps, cloneDir, `marketplace final clone ${cloneDir}`),
+    ),
+  );
+}
+
+/**
+ * WR-07 / LAYER-07 / D-MF-04: the install's state lock for a body whose ledger
+ * runs add marketplaces to the scope, each appended to `added`. The body gets
+ * a transaction whose save moves those adds to `committed`. When the body
+ * throws, or returns without saving, every clone an unsaved add created is
+ * removed before the lock is released, as `marketplace add` removes its own
+ * clone when its save fails. A removal leak is appended to a thrown error, or
+ * written to the debug log for an arm that returns.
+ */
+function discardingUnsavedAdds(
+  transaction: InstallTransaction,
+  added: AddedMarketplaces,
+  committed: AddedMarketplaces,
+): Pick<InstallTransaction, "withLockedStateTransaction"> {
+  return {
+    withLockedStateTransaction: async (locations, body, deps) =>
+      transaction.withLockedStateTransaction(
+        locations,
+        async (tx) => {
+          const observed: LockedStateTransaction = {
+            state: tx.state,
+            save: async () => {
+              await tx.save();
+              committed.push(...added.splice(0));
+            },
+          };
+          let value: Awaited<ReturnType<typeof body>>;
+          try {
+            value = await body(observed);
+          } catch (err) {
+            throw appendLeaks(err, await removeAddedClones(added));
+          }
+
+          for (const leak of await removeAddedClones(added)) {
+            if (leak !== undefined) {
+              hookDebugLog(`install saved no state; ${leak}`);
+            }
+          }
+
+          return value;
+        },
+        deps,
+      ),
+  };
+}
+
+/**
+ * D-03-INV / D-SEED-01: settle each marketplace a saved install added, as
+ * `marketplace add` settles one after its save. Each settle is best effort.
+ */
+async function settleAddedMarketplaces(
+  committed: AddedMarketplaces,
+  seam: MarketplaceAddSeam,
+  locations: ScopedLocations,
+  completionCache: CompletionCache,
+): Promise<void> {
+  for (const { marketplace } of committed) {
+    // eslint-disable-next-line no-await-in-loop -- two added marketplaces of one repository seed the same plugin mirrors.
+    await seam.settle({ locations, name: marketplace, completionCache });
+  }
 }
 
 /**
@@ -1594,6 +1697,10 @@ async function installPluginWithTransaction(
   // subject and the DFEN-05 precedence subject are all the same key by
   // construction, so they read one binding rather than three literals.
   const rootKey = `${plugin}@${marketplace}`;
+  const marketplaceAdd = opts.marketplaceAdd ?? DEFAULT_MARKETPLACE_ADD;
+  const addedMarketplaces: AddedMarketplaces = [];
+  const committedAdds: AddedMarketplaces = [];
+  const lockOwner = discardingUnsavedAdds(transaction, addedMarketplaces, committedAdds);
 
   let outcome: InstallTransactionOutcome;
   try {
@@ -1606,7 +1713,7 @@ async function installPluginWithTransaction(
     // state.json -- `withStateGuard` saved unconditionally on closure
     // return, bumping state.json's mtime on every abort, diverging from the
     // documented no-save abort discipline the sibling commands follow.
-    outcome = await transaction.withLockedStateTransaction(
+    outcome = await lockOwner.withLockedStateTransaction(
       locations,
       async (tx): Promise<InstallTransactionOutcome> => {
         // D-103-16: ONE selection, made before anything reads a config path, so
@@ -1761,6 +1868,8 @@ async function installPluginWithTransaction(
               // skips, so the key comparison alone decides provenance -- per
               // member, independent of install order.
               provenance: isRoot ? "explicit" : "dependency",
+              marketplaceAdd,
+              addedMarketplaces,
             });
           },
           installedKeys: collectInstalledKeys(state),
@@ -1891,14 +2000,14 @@ async function installPluginWithTransaction(
         // "enabled" default at consume time. The patch merges over the existing
         // entry, so no key the user already wrote is disturbed.
         //
-        // CR-02: when the scope's MERGED config view does
-        // not declare the marketplace -- the CMP-3 user-scope fallback adopted
-        // a cloned record into THIS scope's state, but `marketplace add` only
-        // ever ran at user scope -- declare the marketplace entry in the SAME
-        // batched patch (same lock, one atomic save). Without it the plugin
-        // key is a dangling declaration: the next reconcile plans the adopted
-        // clone's REMOVAL and renders a perpetual `<marketplace not declared>`
-        // failed row (invariant 5 violation).
+        // CR-02 / LAYER-07 / D-MF-04: when the scope's MERGED config view
+        // does not declare the marketplace -- the CMP-3 fallback added it to
+        // THIS scope through the `marketplace add` body, which writes no
+        // config -- declare the marketplace entry in the SAME batched patch
+        // (same lock, one atomic save). Without it the plugin key is a
+        // dangling declaration: the next reconcile plans the added record's
+        // REMOVAL and renders a perpetual `<marketplace not declared>` failed
+        // row (invariant 5 violation).
         //
         // UAT-05: the membership gate must consider BOTH physical files
         // (base ∪ local), not just the target. A `--local` install against a
@@ -2053,6 +2162,8 @@ async function installPluginWithTransaction(
     });
     return withMcpConfigNotices(ctx, run, orchestrated, failed, cascadeFailure.mcpConfigNotices);
   }
+
+  await settleAddedMarketplaces(committedAdds, marketplaceAdd, locations, completionCache);
 
   // ATTR-01 / ATTR-08 / M1: marketplace-absent precondition (set inside the
   // guard, no state mutated). The marketplace subject is reported via the
@@ -2322,6 +2433,8 @@ export interface InstallMissingDependencyOptions {
   readonly credentialOps?: CredentialOps;
   readonly deviceFlowHttp?: DeviceFlowHttp;
   readonly authMemo?: Map<string, AuthAttemptResult>;
+  /** LAYER-07: the `marketplace add` seam, as on `InstallPluginOptions`. */
+  readonly marketplaceAdd?: InstallLedgerOptions["marketplaceAdd"];
 }
 
 /**
@@ -2412,10 +2525,14 @@ async function installMissingDependencyWithTransaction(
   // the root this entry point was asked to install.
   const cascadeFailure: CascadeFailureSink = { mcpConfigNotices: [] };
   const rootKey = `${plugin}@${marketplace}`;
+  const marketplaceAdd = opts.marketplaceAdd ?? DEFAULT_MARKETPLACE_ADD;
+  const addedMarketplaces: AddedMarketplaces = [];
+  const committedAdds: AddedMarketplaces = [];
+  const lockOwner = discardingUnsavedAdds(transaction, addedMarketplaces, committedAdds);
 
   let outcome: InstallMissingDependencyTransactionOutcome;
   try {
-    outcome = await transaction.withLockedStateTransaction(
+    outcome = await lockOwner.withLockedStateTransaction(
       locations,
       async (tx): Promise<InstallMissingDependencyTransactionOutcome> => {
         const state = tx.state;
@@ -2507,6 +2624,8 @@ async function installMissingDependencyWithTransaction(
               // D-04-01: the caller decides provenance; every member of this
               // cascade, root included, exists to satisfy a declaration.
               provenance: "dependency",
+              marketplaceAdd,
+              addedMarketplaces,
             }),
           installedKeys: collectInstalledKeys(state),
           knownMarketplaces: await collectInstallReachableMarketplaces({
@@ -2577,6 +2696,7 @@ async function installMissingDependencyWithTransaction(
       : failedWithNotices;
   }
 
+  await settleAddedMarketplaces(committedAdds, marketplaceAdd, locations, completionCache);
   if (outcome.kind === "already-recorded") {
     return { status: "skipped" };
   }

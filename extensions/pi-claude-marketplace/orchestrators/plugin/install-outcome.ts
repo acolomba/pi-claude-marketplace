@@ -466,7 +466,7 @@ async function deriveInstallVersion(args: {
 }
 
 /** The real `marketplaceAdd` seam: the `marketplace add` body and settle. */
-const DEFAULT_MARKETPLACE_ADD = Object.freeze({
+export const DEFAULT_MARKETPLACE_ADD = Object.freeze({
   record: addMarketplaceToState,
   settle: settleAddedMarketplace,
 });

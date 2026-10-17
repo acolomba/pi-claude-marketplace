@@ -21,12 +21,12 @@
 // `tests/integration/concurrent-install.test.ts`.
 //
 // Discovered semantic gap (documented + worked around):
-//   When `installPlugin --scope project --marketplace official` falls
-//   back to a user-scope `official` marketplace via
-//   `cloneMarketplaceRecordForTargetScope`, the project state stores a
-//   record under the same name `official` with the SAME `marketplaceRoot`
-//   as the user-scope record. A subsequent `addMarketplace --scope
-//   project ./different-official-src` would throw
+//   When `installPlugin --scope project --marketplace official` finds
+//   only a user-scope `official` marketplace, it adds the marketplace to
+//   the project through the `marketplace add` code (LAYER-07 / D-MF-04).
+//   For a path source the project record gets the SAME `marketplaceRoot`
+//   as the user-scope record, so the fold still applies. A subsequent
+//   `addMarketplace --scope project ./different-official-src` would throw
 //   `MarketplaceDuplicateNameError` because the name is already taken
 //   in project state. The "adoption via real `marketplace add`" flow
 //   the plan/catalog describes therefore needs an explicit clean-state
