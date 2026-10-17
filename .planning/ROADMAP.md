@@ -226,7 +226,35 @@ Plans:
 3. Removing a marketplace from a layer uninstalls only the plugins that layer declares from it; plugins the other layer declares from the same marketplace stay installed (LAYER-03).
 4. A project-scope install from a user-scope marketplace declares the marketplace in the project config and gives the project its own record and clone; removing the marketplace from the user scope leaves the project's plugins, list, info, and `marketplace update` working (LAYER-07, D-MF-04).
 
-**Plans:** TBD
+**Plans:** 9 plans
+
+Plans:
+**Wave 1**
+- [ ] 03.2-01-PLAN.md — Tracer: a marketplace one layer declares can be added to the other layer too, with no clone (LAYER-01); duplicate-name guards, the git-kind proof, convergence
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 03.2-02-PLAN.md — Marketplace entries merge field by field, so a local declaration inherits the shared autoupdate (D-07); plugin entries stay wholesale; UAT-05 comments restated
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 03.2-03-PLAN.md — Refusal vocabulary: the 3.1 class moves to shared errors, the `marketplace declared in shared config` reason is enrolled everywhere, both refusal rows are cataloged
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 03.2-04-PLAN.md — The layer gate; a remove whose layer lacks the marketplace is refused; a remove from one layer keeps the other layer's plugins, the record, and the clone (LAYER-02, LAYER-03)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [ ] 03.2-05-PLAN.md — Dependency retention on marketplace remove, the unreadable refusal, cross-marketplace retention, and the retained record in the list
+
+**Wave 6** *(blocked on Wave 5 completion)*
+- [ ] 03.2-06-PLAN.md — Autoupdate and noautoupdate partitioned: named forms act on the target layer, nameless forms on every declaring layer or the local one with --local (LAYER-02)
+
+**Wave 7** *(blocked on Wave 6 completion)*
+- [ ] 03.2-07-PLAN.md — Each scope owns its marketplace: a project install adds a user-scope marketplace to the project through the `marketplace add` code, and a failed install removes the clone it added (LAYER-07)
+
+**Wave 8** *(blocked on Wave 7 completion)*
+- [ ] 03.2-08-PLAN.md — The integration proof that a user-scope remove keeps the project working; dependency marketplaces declared in the project; cross-scope scenarios (LAYER-07)
+
+**Wave 9** *(blocked on Wave 8 completion)*
+- [ ] 03.2-09-PLAN.md — Catalog, CHANGELOG, READMEs, and dependency guide; cucumber review; the phase gate
 
 ### Phase 3.3: Plugin Layer Partition (INSERTED)
 
@@ -324,6 +352,7 @@ Plans:
 3. A repository armed for 404 fails `add` as `source missing`; one armed for 5xx or a dropped connection fails it as `network unreachable`; and `update` against a host armed for 5xx, 404, or a dropped connection fails as `network unreachable`.
 4. A url source is cloned at exactly the URL typed, with no `.git` appended. A removed git marketplace can be added again from the same source. `list`, `info`, and `remove` of git marketplaces leave the request log exactly empty. Every refused source form fails as `unsupported source` and the stand-in receives no request. The re-add, empty-log, and refused GitHub-form scenarios carry `@github` Examples blocks for Phase 10.
 5. The phase's last plan removes `@url` from the `cucumber.json` exclusion, and every `@url` row the verb phases wrote passes.
+6. The `@url` rows that Phase 3.2 wrote for LAYER-07 run against the stand-in and pass: the cross-scope install Outline in `features/plugin/cross-scope-install.feature` and the three user-scope remove Outlines in `features/marketplace/remove.feature`. Each remove Outline's `@url` row is first shown failing, on a behavioral assertion, on code where a project install reuses the user-scope record instead of adding the marketplace (the install files planted from the parent of the commit that Phase 3.2's plan 07 SUMMARY names, or, if they no longer load, an equivalent local edit that is never committed), then passing on the current code. The install Outline's row guards the project declaration, which the older code also wrote, so it passes on both.
 
 **Plans:** TBD
 
@@ -339,6 +368,7 @@ Plans:
 2. `GitHub.com`, `www.github.com`, a `.git` suffix, and a trailing slash resolve to one source, and `owner/repo@ref` and `owner/repo#ref` clone that ref.
 3. `add` against a GitHub repository that answers 401 fails as `authentication required` without a stored credential and succeeds with one the scenario stores in the sandbox, which completes ADD-11 with Phase 9's url rows. `update` of a url or GitHub marketplace whose host now answers 401 fails as `authentication required`, with a cause line naming `git credential approve` for that host.
 4. The suite closes clean: a source-walk check fails if `cucumber.json` still excludes any tag; `cucumber-js --dry-run --format usage` reports no unused, undefined, or ambiguous step; the whole suite passes on Node 24 and Node 26; CI timing is recorded; a credential-isolation control run once by hand (a hostile `~/.gitconfig` and a planted system credential helper) changes no result; and a cucumber skill review of the suite finds no BLOCKER.
+5. The `@github` rows that Phase 3.2 wrote for LAYER-07 run through the override and pass: the cross-scope install Outline in `features/plugin/cross-scope-install.feature` and the three user-scope remove Outlines in `features/marketplace/remove.feature`. Each remove Outline's `@github` row is first shown failing, on a behavioral assertion, on code where a project install reuses the user-scope record instead of adding the marketplace (the install files planted from the parent of the commit that Phase 3.2's plan 07 SUMMARY names, or, if they no longer load, an equivalent local edit that is never committed), then passing on the current code. The install Outline's row guards the project declaration, which the older code also wrote, so it passes on both.
 
 **Plans:** TBD
 
