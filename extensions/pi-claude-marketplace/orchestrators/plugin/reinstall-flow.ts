@@ -95,7 +95,6 @@ import {
   emitMarketplaceNotAddedSignal,
   keepLocalLayerTargets,
   MarketplaceNotAddedSignal,
-  maybeWritePluginConfigBack,
   namedPluginLayerRefusal,
   removePluginRecord,
   surfaceDiscoveryWarnings,
@@ -113,11 +112,7 @@ import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { McpConfigNotice } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
-import type {
-  ReinstallFailedOutcome,
-  ReinstallOutcomeBase,
-  ReinstallPluginOutcome,
-} from "../types.ts";
+import type { ReinstallFailedOutcome, ReinstallPluginOutcome } from "../types.ts";
 import type { ReinstallCloneCacheSeam } from "./reinstall-clone-probe.ts";
 import type {
   ReinstallMaintenanceInput,
@@ -285,14 +280,6 @@ interface LockedSuccess {
   readonly bridgeWarnings: readonly string[];
   /** AFILE-04: the MCP replace's file notices; empty for a skipped reinstall. */
   readonly mcpConfigNotices: readonly McpConfigNotice[];
-  /**
-   * S5: the configuration file the write-back could not read, so it was
-   * skipped while the success notify proceeded. The single-plugin caller
-   * surfaces this as a separate warning row AFTER the reinstall success row,
-   * naming this file, so the user knows the on-disk artifacts were reinstalled
-   * but the config entry was not written.
-   */
-  readonly invalidConfigFile?: string;
 }
 
 // ATTR-03 / D-47-A: the structural marketplace-not-added signal thrown by the
@@ -374,9 +361,6 @@ async function reinstallPluginWithTransaction(
         discoveryWarnings: locked.discoveryWarnings,
       }),
       ...(locked.mcpConfigNotices.length > 0 && { mcpConfigNotices: locked.mcpConfigNotices }),
-      ...(locked.invalidConfigFile !== undefined && {
-        invalidConfigFile: locked.invalidConfigFile,
-      }),
     };
   }
 
@@ -421,58 +405,7 @@ async function reinstallPluginWithTransaction(
   // AFILE-04: this arm renders its own row, so it shows the MCP config file
   // notices after it.
   notifyMcpConfigNotices(ctx, run, locked.mcpConfigNotices);
-
-  if (locked.invalidConfigFile !== undefined) {
-    notifyInvalidConfigWriteBack(
-      ctx,
-      run,
-      { name: plugin, marketplace, scope },
-      locked.invalidConfigFile,
-      "single",
-    );
-  }
-
   return locked.outcome;
-}
-
-/**
- * S5: when the config write-back could not read a config file, emit a
- * separate `(failed)` row so the user sees that the on-disk artifacts were
- * reinstalled but the config entry was not written. The row names the file
- * by its basename only.
- */
-function notifyInvalidConfigWriteBack(
-  ctx: NotificationContext,
-  run: NotificationRun,
-  target: ReinstallOutcomeBase,
-  filePath: string,
-  cardinality: "single" | "plural",
-): void {
-  const targetBasename = path.basename(filePath);
-  notifyWithContext(
-    ctx,
-    run,
-    REINSTALL_CONTEXT,
-    [
-      {
-        name: target.marketplace,
-        scope: target.scope,
-        plugins: [
-          {
-            status: "failed",
-            name: target.name,
-            reasons: ["invalid manifest"] as const,
-            cause: new Error(`Config file "${targetBasename}" failed schema validation.`),
-            // D-03/D-06: invalid config write-back -> error, no reload.
-            severity: "error" as const,
-            needsReload: false,
-          },
-        ],
-      },
-    ],
-    undefined,
-    cardinality,
-  );
 }
 
 function maintenanceInput(opts: ReinstallPluginOptions): ReinstallMaintenanceInput {
@@ -620,7 +553,6 @@ async function reinstallPluginsWith(
   renderReinstallPartitionAndNotify(ctx, run, outcomes, cardinality);
   surfaceReinstallDiscoveryWarnings(ctx, run, outcomes);
   surfaceReinstallMcpConfigNotices(ctx, run, outcomes);
-  surfaceReinstallInvalidConfigFiles(ctx, run, outcomes, cardinality);
   return Object.freeze(outcomes);
 }
 
@@ -646,23 +578,6 @@ async function selectTargets(
     cardinality: selection.cardinality,
     targets: await keepLocalLayerTargets(selection.targets, opts.cwd),
   };
-}
-
-/**
- * S5: show one `(failed)` row for each reinstalled plugin whose config
- * write-back could not read a file, after the cascade and its notices.
- */
-function surfaceReinstallInvalidConfigFiles(
-  ctx: NotificationContext,
-  run: NotificationRun,
-  outcomes: readonly ReinstallPluginOutcome[],
-  cardinality: "single" | "plural",
-): void {
-  for (const outcome of outcomes) {
-    if (outcome.partition === "reinstalled" && outcome.invalidConfigFile !== undefined) {
-      notifyInvalidConfigWriteBack(ctx, run, outcome, outcome.invalidConfigFile, cardinality);
-    }
-  }
 }
 
 /**
@@ -884,7 +799,6 @@ async function runLockedReinstall(
   );
 
   const sourceKind = parsePluginSource(entry.source).kind;
-  let invalidConfigFile: string | undefined;
   let outcome: ReinstallPluginOutcome;
   try {
     outcome = owners.recordReinstallOutcome({
@@ -908,21 +822,8 @@ async function runLockedReinstall(
       placedWorkflowNames: replacement.placedWorkflowNames,
     });
 
-    // WB-01 / A7: deep-equal short-circuit preserves RECON-05
-    // mtime invariant. Reinstall is invoked by the user (both standalone and
-    // bulk-cascade paths are user-initiated); there is no orchestrated /
-    // reconcile-driven caller today. The deep-equal gate compares the
-    // prospective `{...existing, ...patch}` shape against the existing
-    // entry; a byte-stable patch (the common reinstall case -- entry shape
-    // unchanged) leaves the config file untouched.
-    const writeResult = await maybeWritePluginConfigBack({
-      locations,
-      marketplace,
-      plugin,
-      local: opts.local === true,
-    });
-    invalidConfigFile = writeResult.invalidConfig ? writeResult.filePath : undefined;
-
+    // LAYER-04 / D-MF-03: a reinstall changes the installation and its record,
+    // never a layer file, so a dependency it reinstalls stays undeclared.
     await tx.save();
   } catch (err) {
     throw errorWithManualRecovery(err, await transaction.rollbackReinstalledPlugin(replacement));
@@ -937,10 +838,10 @@ async function runLockedReinstall(
   // just-installed `hooks.json` (when present), then rebuild the
   // routing table once.
   //
-  // Moved AFTER `tx.save()` so a write-back throw or a tx.save throw
-  // aborts BEFORE the cache mutates -- otherwise a phantom routing
-  // entry survives a closure throw and the next dispatch fires against
-  // a record state.json never wrote.  Post-save semantics are safe:
+  // Moved AFTER `tx.save()` so a tx.save throw aborts BEFORE the cache
+  // mutates -- otherwise a phantom routing entry survives a closure throw and
+  // the next dispatch fires against a record state.json never wrote.
+  // Post-save semantics are safe:
   // state.json now matches in-memory state, and the next `/reload`'s
   // factory-time hydrate (D-59-03) rebuilds the cache from disk.
   // Synchronous + zero disk I/O per DISP-02; the readFile/parse path
@@ -986,7 +887,6 @@ async function runLockedReinstall(
     discoveryWarnings: replacement.discoveryWarnings,
     bridgeWarnings,
     mcpConfigNotices: replacement.mcpConfigNotices,
-    ...(invalidConfigFile !== undefined && { invalidConfigFile }),
   };
 }
 

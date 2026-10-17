@@ -45,3 +45,24 @@ Feature: Plugin reinstall
     Then the result lists these plugins:
       | marketplace name | marketplace scope | id          | name | status      | reasons | scope   | version |
       | fixtures         | project           | pp@fixtures | pp   | reinstalled |         | project | 1.0.0   |
+
+  Scenario: Reinstalling a dependency declares nothing in the configuration
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib          |
+      | lib  | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install app@tools --scope project"
+    When the user runs "/claude:plugin reinstall lib@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name | status      | reasons | scope   | version |
+      | tools            | project           | lib@tools | lib  | reinstalled |         | project | 1.0.0   |
+    Then the "claude-plugins.json" file of the project scope declares these plugins:
+      | id            |
+      | demo@fixtures |
+      | app@tools     |

@@ -43,10 +43,11 @@
 // exact argument list against it. That exact-argument gap is this owner's
 // recorded scope. Delegation is observed instead as the minimal on-disk effect a
 // reinstall leaves: which skill directories each scope root carries afterwards,
-// and which config layer the write-back landed in. Each seeded plugin owns a
-// DIFFERENTLY NAMED skill directory and each scope a different marketplace, so a
-// command that reached the wrong form, the wrong marketplace, or the wrong scope
-// materialises the wrong name rather than merely materialising nothing.
+// and each layer file, which no reinstall writes (LAYER-04). Each seeded plugin
+// owns a DIFFERENTLY NAMED skill directory and each scope a different
+// marketplace, so a command that reached the wrong form, the wrong marketplace,
+// or the wrong scope materialises the wrong name rather than merely
+// materialising nothing.
 //
 // The negative half of D-116-06 is proven in full. A rejecting case sizes the
 // boundary at one emission and NO stated working directory, and also reads back
@@ -342,17 +343,7 @@ const MARKETPLACE_FORM_MESSAGE =
 const PLUGIN_FORM_MESSAGE =
   "● mp [project]\n  ● alpha v1.0.0 (reinstalled)\n\n/reload to pick up changes";
 
-const ALL_PLUGINS_DECLARED = {
-  schemaVersion: 1,
-  plugins: { "alpha@mp": {}, "beta@mp": {}, "gamma@other": {} },
-};
-
 const USER_PLUGIN_DECLARED = { schemaVersion: 1, plugins: { "delta@umkt": {} } };
-
-const MARKETPLACE_FORM_DECLARED = {
-  schemaVersion: 1,
-  plugins: { "alpha@mp": {}, "beta@mp": {} },
-};
 
 // ---------------------------------------------------------------------------
 // The three target forms. Each narrower form must leave the names the wider one
@@ -377,9 +368,9 @@ test("re-materialises every installed plugin in both scopes when no positional i
   assert.deepStrictEqual(await readFootprint(workspace), {
     projectSkills: ["alpha-tool", "beta-tool", "gamma-tool"],
     userSkills: ["delta-tool"],
-    projectBase: ALL_PLUGINS_DECLARED,
+    projectBase: undefined,
     projectLocal: undefined,
-    userBase: USER_PLUGIN_DECLARED,
+    userBase: undefined,
     userLocal: undefined,
   });
   assert.strictEqual(workspace.transportCalls(), 0);
@@ -404,7 +395,7 @@ test("re-materialises only the named marketplace when a bare marketplace referen
   assert.deepStrictEqual(await readFootprint(workspace), {
     projectSkills: ["alpha-tool", "beta-tool"],
     userSkills: [],
-    projectBase: MARKETPLACE_FORM_DECLARED,
+    projectBase: undefined,
     projectLocal: undefined,
     userBase: undefined,
     userLocal: undefined,
@@ -438,7 +429,7 @@ test("re-materialises only the named plugin when a plugin reference is supplied 
   assert.deepStrictEqual(await readFootprint(workspace), {
     projectSkills: ["alpha-tool"],
     userSkills: [],
-    projectBase: { schemaVersion: 1, plugins: { "alpha@mp": {} } },
+    projectBase: undefined,
     projectLocal: undefined,
     userBase: undefined,
     userLocal: undefined,
@@ -471,7 +462,7 @@ for (const { expectedFootprint, expectedMessage, scopeValue } of [
     expectedFootprint: {
       projectSkills: ["alpha-tool", "beta-tool", "gamma-tool"],
       userSkills: [],
-      projectBase: ALL_PLUGINS_DECLARED,
+      projectBase: undefined,
       projectLocal: undefined,
       userBase: undefined,
       userLocal: undefined,
@@ -485,7 +476,7 @@ for (const { expectedFootprint, expectedMessage, scopeValue } of [
       userSkills: ["delta-tool"],
       projectBase: undefined,
       projectLocal: undefined,
-      userBase: USER_PLUGIN_DECLARED,
+      userBase: undefined,
       userLocal: undefined,
     },
   },
@@ -537,7 +528,7 @@ for (const { args, placement } of [
     assert.deepStrictEqual(await readFootprint(workspace), {
       projectSkills: ["alpha-tool", "beta-tool"],
       userSkills: [],
-      projectBase: MARKETPLACE_FORM_DECLARED,
+      projectBase: undefined,
       projectLocal: undefined,
       userBase: undefined,
       userLocal: undefined,
