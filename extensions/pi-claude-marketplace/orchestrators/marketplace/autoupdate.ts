@@ -71,6 +71,7 @@ import { writeBatchedConfigEntries } from "../../persistence/config-write-back.t
 import { locationsFor } from "../../persistence/locations.ts";
 import {
   InvalidMarketplaceManifestError,
+  isErrnoException,
   MarketplaceNotFoundError,
   StateLockHeldError,
 } from "../../shared/errors.ts";
@@ -180,13 +181,36 @@ interface ScopeRefusal {
   readonly verdict: RefusedVerdict;
 }
 
+/** The flip error that ended the flip in one scope, with the reason its row carries. */
+interface ScopeFailure {
+  readonly scope: Scope;
+  readonly reason: ContentReason;
+  readonly cause: Error;
+}
+
+/**
+ * Leaves the scope lock when a layer write fails, carrying the names whose
+ * every write had landed before it, so the flip still reports them (D-06).
+ */
+class FlipWriteFailure extends Error {
+  readonly written: readonly string[];
+  readonly failure: Error;
+  constructor(written: readonly string[], failure: Error) {
+    super("flip-write-failure");
+    this.name = "FlipWriteFailure";
+    this.written = written;
+    this.failure = failure;
+  }
+}
+
 /**
  * The reason of the synthetic failed child (`marketplaceFailureRows`) that
  * carries a flip error to the user. A held state lock narrows to `lock held`
  * (its message carries the retry hint), a CFG-03 abort to `invalid manifest`,
- * and anything else, such as a refused config write, to `not found`. A missing
- * marketplace and a layer refusal never reach it: `setMarketplaceAutoupdate`
- * collects both (ATTR-05, LAYER-02).
+ * a refused file access to `permission denied`, and anything else, such as a
+ * config write the writer refuses, to `unreadable`. A missing marketplace and
+ * a layer refusal never reach it: `setMarketplaceAutoupdate` collects both
+ * (ATTR-05, LAYER-02).
  */
 function autoupdateFailedReason(err: Error): ContentReason {
   if (err instanceof StateLockHeldError) {
@@ -197,7 +221,11 @@ function autoupdateFailedReason(err: Error): ContentReason {
     return "invalid manifest";
   }
 
-  return "not found";
+  if (isErrnoException(err) && err.code === "EACCES") {
+    return "permission denied";
+  }
+
+  return "unreadable";
 }
 
 /**
@@ -228,10 +256,19 @@ function notifyFlipFailure(
     opts.ctx,
     opts.run,
     flipContextFor(opts.enable),
-    marketplaceFailureRows(opts.name ?? "(unknown)", scope, failure.reason, failure.cause),
+    flipFailureRows(opts, scope, failure),
     undefined,
     cardinality,
   );
+}
+
+/** The failed header and its failed child for one scope's flip failure. */
+function flipFailureRows(
+  opts: AutoupdateOptions,
+  scope: Scope,
+  failure: { readonly reason: ContentReason; readonly cause: Error },
+): ReturnType<typeof marketplaceFailureRows> {
+  return marketplaceFailureRows(opts.name ?? "(unknown)", scope, failure.reason, failure.cause);
 }
 
 function invalidConfigError(basename: string): InvalidMarketplaceManifestError {
@@ -303,14 +340,26 @@ function planFlip(
 
 /**
  * One batched write per layer file (NFR-3). The patch carries `autoupdate`
- * only, so only an entry the layer already declares is changed.
+ * only, so only an entry the layer already declares is changed. A failed write
+ * leaves the earlier files written; `FlipWriteFailure` names the marketplaces
+ * whose every write had landed, so the flip reports them beside the failure.
  */
 async function writeFlipPlan(plan: FlipPlan, scopeRoot: string, enable: boolean): Promise<void> {
+  const written = new Set<FlipLayer>();
   for (const [layer, names] of plan.writes) {
-    // eslint-disable-next-line no-await-in-loop -- at most two layer files, written one after the other
-    await writeBatchedConfigEntries(layer.config, layer.filePath, scopeRoot, {
-      marketplaces: Object.fromEntries(names.map((name) => [name, { autoupdate: enable }])),
-    });
+    try {
+      // eslint-disable-next-line no-await-in-loop -- at most two layer files, written one after the other
+      await writeBatchedConfigEntries(layer.config, layer.filePath, scopeRoot, {
+        marketplaces: Object.fromEntries(names.map((name) => [name, { autoupdate: enable }])),
+      });
+    } catch (err: unknown) {
+      const done = plan.changed.filter((name) =>
+        [...plan.writes].every(([other, batch]) => written.has(other) || !batch.includes(name)),
+      );
+      throw new FlipWriteFailure(done, err as Error);
+    }
+
+    written.add(layer);
   }
 }
 
@@ -442,16 +491,15 @@ function collectFlipRows(rows: AutoupdateFlipRow[], scope: Scope, plan: FlipPlan
 
 /**
  * Flips each scope in SC-6 order. A missing marketplace and a layer refusal
- * are collected, because the other scope may still flip; any other failure is
- * reported at once and ends the flip (`undefined`).
+ * are collected, because the other scope may still flip; any other failure
+ * ends the flip and is reported together with the rows of what the flip had
+ * already written (D-06): an earlier scope, or an earlier file of this scope.
  */
-async function flipScopes(
-  opts: AutoupdateOptions,
-  cardinality: "single" | "plural",
-): Promise<
-  | { readonly rows: readonly AutoupdateFlipRow[]; readonly refusals: readonly ScopeRefusal[] }
-  | undefined
-> {
+async function flipScopes(opts: AutoupdateOptions): Promise<{
+  readonly rows: readonly AutoupdateFlipRow[];
+  readonly refusals: readonly ScopeRefusal[];
+  readonly failure?: ScopeFailure;
+}> {
   const scopes: readonly Scope[] = opts.scope === undefined ? ["project", "user"] : [opts.scope];
   const rows: AutoupdateFlipRow[] = [];
   const refusals: ScopeRefusal[] = [];
@@ -463,21 +511,28 @@ async function flipScopes(
       if (err instanceof FlipRefused) {
         refusals.push({ scope, verdict: err.verdict });
       } else if (!(err instanceof MarketplaceNotFoundError)) {
-        // `withLockedStateTransaction` normalizes every rejection through
-        // `toError`, so this caught value is an Error on every reachable path.
-        const cause = err as Error;
-        notifyFlipFailure(
-          opts,
-          scope,
-          { reason: autoupdateFailedReason(cause), cause },
-          cardinality,
-        );
-        return undefined;
+        return { rows, refusals, failure: scopeFailure(rows, scope, err) };
       }
     }
   }
 
   return { rows, refusals };
+}
+
+/**
+ * The failure that ended a flip in `scope`. A write failure adds the rows of
+ * the marketplaces its earlier writes flipped. `withLockedStateTransaction`
+ * normalizes every rejection through `toError`, so the caught value is an
+ * Error on every reachable path.
+ */
+function scopeFailure(rows: AutoupdateFlipRow[], scope: Scope, err: unknown): ScopeFailure {
+  if (err instanceof FlipWriteFailure) {
+    rows.push(...err.written.map((name) => ({ name, scope, alreadyMatching: false })));
+    return { scope, reason: autoupdateFailedReason(err.failure), cause: err.failure };
+  }
+
+  const cause = err as Error;
+  return { scope, reason: autoupdateFailedReason(cause), cause };
 }
 
 /**
@@ -540,6 +595,36 @@ function flipRowMessage(
 }
 
 /**
+ * D-06: a flip that failed after it wrote reports what it wrote and the
+ * failure in one emission; with nothing written, the failure alone keeps the
+ * command's cardinality.
+ */
+function notifyFlipWithFailure(
+  opts: AutoupdateOptions,
+  rows: readonly AutoupdateFlipRow[],
+  failure: ScopeFailure,
+  cardinality: "single" | "plural",
+): void {
+  if (rows.length === 0) {
+    notifyFlipFailure(opts, failure.scope, failure, cardinality);
+    return;
+  }
+
+  const marketplaces: MarketplaceRows<PluginFailedMessage>[] = [
+    ...rows.map((row) => flipRowMessage(row, opts.enable)),
+    ...flipFailureRows(opts, failure.scope, failure),
+  ];
+  notifyWithContext(
+    opts.ctx,
+    opts.run,
+    flipContextFor(opts.enable),
+    marketplaces,
+    undefined,
+    "plural",
+  );
+}
+
+/**
  * NotificationMessage construction recipe:
  * - One MarketplaceNotificationMessage per outcome, emitted via ONE
  *   notify(opts.ctx, opts.run, ...) call; `plugins: []` is required.
@@ -587,8 +672,9 @@ function notifyFlipRows(
 
 export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise<void> {
   const cardinality = opts.name === undefined ? "plural" : "single";
-  const outcome = await flipScopes(opts, cardinality);
-  if (outcome === undefined) {
+  const outcome = await flipScopes(opts);
+  if (outcome.failure !== undefined) {
+    notifyFlipWithFailure(opts, outcome.rows, outcome.failure, cardinality);
     return;
   }
 

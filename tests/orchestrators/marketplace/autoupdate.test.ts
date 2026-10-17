@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { chmod, mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, stat, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 
@@ -921,7 +921,7 @@ test("keeps the config bytes after an atomic write refusal and converges on retr
       matches: (message) => {
         const escapedScopeRoot = locations.scopeRoot.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
         return new RegExp(
-          `^Some operations have failed\\.\\n\\n⊘ mp \\[project\\] \\(failed\\)\\n  ⊘ mp \\(failed\\) \\{not found\\}\\n    cause: EACCES: permission denied, open '${escapedScopeRoot}/claude-plugins\\.json\\.[0-9]+'$`,
+          `^Some operations have failed\\.\\n\\n⊘ mp \\[project\\] \\(failed\\)\\n  ⊘ mp \\(failed\\) \\{permission denied\\}\\n    cause: EACCES: permission denied, open '${escapedScopeRoot}/claude-plugins\\.json\\.[0-9]+'$`,
         ).test(message);
       },
       severity: "error",
@@ -967,7 +967,7 @@ test("keeps the config bytes after an atomic write refusal and converges on retr
   });
 });
 
-test("retains a committed project flip when the user scope is locked and converges on retry", async () => {
+test("reports a committed project flip beside the failure when the user scope is locked and converges on retry", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
     const projectLocations = locationsFor("project", cwd);
@@ -991,9 +991,13 @@ test("retains a committed project flip when the user scope is locked and converg
       message: [
         "Some operations have failed.",
         "",
+        "● shared [project] <autoupdate>",
+        "",
         "⊘ shared [user] (failed)",
         "  ⊘ shared (failed) {lock held}",
         `    cause: Another pi-claude-marketplace operation is in progress for user scope (${userLocations.stateLockFile}). Retry after it completes. -> Lock file is already being held`,
+        "",
+        "Marketplace autoupdate: 2 failures, 1 success",
       ].join("\n"),
       severity: "error",
     });
@@ -1040,6 +1044,66 @@ test("retains a committed project flip when the user scope is locked and converg
     verify(partialBoundary.ui);
     verify(retryBoundary.ctx);
     verify(retryBoundary.ui);
+  });
+});
+
+test("D-06: an unnamed flip whose local write fails reports the marketplaces the shared write already flipped", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange: the local file is a link, which the config writer refuses to
+    // replace, so the shared write lands and the local write fails.
+    const locations = locationsFor("project", cwd);
+    await saveMarketplaces(locations, [
+      marketplaceRecord("extras", "project", cwd),
+      marketplaceRecord("mp", "project", cwd),
+    ]);
+    await writeConfig(locations, {
+      schemaVersion: 1,
+      marketplaces: { extras: { source: "./extras" }, mp: { source: "./src" } },
+    });
+    const localTarget = path.join(home, "claude-plugins.local.json");
+    await writeFile(localTarget, '{"schemaVersion":1,"marketplaces":{"mp":{"source":"./src"}}}\n');
+    await symlink(localTarget, locations.configLocalJsonPath);
+    const notifications: string[] = [];
+    const boundary = notificationBoundary({
+      matches: (message) => {
+        notifications.push(message);
+        return true;
+      },
+      severity: "error",
+    });
+
+    // act
+    await setMarketplaceAutoupdate({
+      ctx: boundary.ctx,
+      run: boundary.run,
+      enable: true,
+      scope: "project",
+      cwd,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      [
+        "Some operations have failed.",
+        "",
+        "● extras [project] <autoupdate>",
+        "",
+        "⊘ (unknown) [project] (failed)",
+        "  ⊘ (unknown) (failed) {unreadable}",
+        `    cause: saveConfig contains symlink ${locations.configLocalJsonPath} -> ${localTarget} (parent: ${locations.scopeRoot}, target: ${locations.configLocalJsonPath}).`,
+        "",
+        "Marketplace autoupdate: 2 failures, 1 success",
+      ].join("\n"),
+    ]);
+    assert.deepStrictEqual(
+      [await readFile(locations.configJsonPath, "utf8"), await readFile(localTarget, "utf8")],
+      [
+        '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "extras": {\n      "source": "./extras",\n      "autoupdate": true\n    },\n    "mp": {\n      "source": "./src",\n      "autoupdate": true\n    }\n  },\n  "plugins": {}\n}\n',
+        '{"schemaVersion":1,"marketplaces":{"mp":{"source":"./src"}}}\n',
+      ],
+    );
+    verify(boundary.ctx);
+    verify(boundary.ui);
   });
 });
 
