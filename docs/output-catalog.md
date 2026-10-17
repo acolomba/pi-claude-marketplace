@@ -3632,6 +3632,34 @@ A marketplace operation has failed.
 ⊘ ghost-mp (failed) {marketplace not added}
 ```
 
+### Failure -- the marketplace is declared only in the local file (LAYER-02 / D-MF-03)
+
+A named command without `--local` acts only on `claude-plugins.json`. When only `claude-plugins.local.json` declares the marketplace, the command is refused before anything changes. A marketplace row carries no cause (SNM-10), so one failed child row under it carries the reason and the `cause:` line, which names the remedy: run the command again with `--local`. `marketplace autoupdate` and `marketplace noautoupdate` render the same row. Severity `error`; no reload-hint.
+
+<!-- catalog-state: remove-marketplace-declared-locally -->
+
+```text
+Some operations have failed.
+
+⊘ tools [project] (failed)
+  ⊘ tools (failed) {marketplace declared locally}
+    cause: The marketplace tools is declared only in claude-plugins.local.json. Run the command again with --local.
+```
+
+### Failure -- the marketplace is declared only in the shared file (LAYER-02 / D-MF-03)
+
+A named command with `--local` acts only on `claude-plugins.local.json`. When only `claude-plugins.json` declares the marketplace, the command is refused before anything changes. As above, one failed child row carries the reason and the `cause:` line, which names the remedy: run the command again without `--local`. `marketplace autoupdate --local` and `marketplace noautoupdate --local` render the same row. Severity `error`; no reload-hint.
+
+<!-- catalog-state: remove-marketplace-declared-in-shared-config -->
+
+```text
+Some operations have failed.
+
+⊘ tools [project] (failed)
+  ⊘ tools (failed) {marketplace declared in shared config}
+    cause: The marketplace tools is declared only in claude-plugins.json. Run the command again without --local.
+```
+
 ______________________________________________________________________
 
 ## `/claude:plugin marketplace update [<name>]`

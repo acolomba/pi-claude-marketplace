@@ -76,5 +76,65 @@ export const MARKETPLACE_REMOVE_FIXTURES: FixtureMap = {
         name: "ghost-mp",
       },
     },
+
+    // LAYER-02: a command without --local names a marketplace only the local file declares.
+    "remove-marketplace-declared-locally": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        label: "Marketplace remove",
+        cardinality: "single",
+        marketplaces: [
+          {
+            name: "tools",
+            scope: "project",
+            status: "failed",
+            severity: "error",
+            plugins: [
+              {
+                status: "failed",
+                severity: "error",
+                needsReload: false,
+                name: "tools",
+                reasons: ["marketplace declared locally"],
+                cause: new Error(
+                  "The marketplace tools is declared only in claude-plugins.local.json. Run the command again with --local.",
+                ),
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // LAYER-02: a --local command names a marketplace only the shared file declares.
+    "remove-marketplace-declared-in-shared-config": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        label: "Marketplace remove",
+        cardinality: "single",
+        marketplaces: [
+          {
+            name: "tools",
+            scope: "project",
+            status: "failed",
+            severity: "error",
+            plugins: [
+              {
+                status: "failed",
+                severity: "error",
+                needsReload: false,
+                name: "tools",
+                reasons: ["marketplace declared in shared config"],
+                cause: new Error(
+                  "The marketplace tools is declared only in claude-plugins.json. Run the command again without --local.",
+                ),
+              },
+            ],
+          },
+        ],
+      },
+    },
   },
 };
