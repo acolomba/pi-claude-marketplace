@@ -1,4 +1,4 @@
-exclude: ^(\.agents/(?!skills/)|\.claude/(?!skills/)|\.codex/|\.gsd-path/|\.pi/|AGENTS\.md$|WORKFLOW\.md$|tests/domain/fixtures/hash-stability/)
+exclude: ^(\.agents/(?!skills/)|\.claude/(?!skills/)|\.codex/|\.gsd-path/|\.pi/|WORKFLOW\.md$|tests/domain/fixtures/hash-stability/)
 
 default_install_hook_types:
   - pre-commit
@@ -34,13 +34,13 @@ repos:
     rev: 0.7.1
     hooks:
       - id: fix-smartquotes
-        exclude: ^\.planning/
+        exclude: ^(\.planning/|AGENTS\.md$)
       - id: alphabetize-codeowners
       - id: fix-spaces
       - id: fix-unicode-dashes
-        exclude: ^\.planning/
+        exclude: ^(\.planning/|AGENTS\.md$)
       - id: fix-ligatures
-        exclude: ^\.planning/
+        exclude: ^(\.planning/|AGENTS\.md$)
       - id: forbid-bidi-controls
 
   - repo: https://github.com/trufflesecurity/trufflehog
@@ -81,7 +81,7 @@ repos:
           - mdformat-gfm
           - mdformat-gfm-alerts
           - mdformat-footnote
-        exclude: ^(tests/fixtures/|tests/bridges/_fixtures/|\.planning/)
+        exclude: ^(tests/fixtures/|tests/bridges/_fixtures/|\.planning/|AGENTS\.md$)
 
   - repo: https://github.com/DavidAnson/markdownlint-cli2
     rev: v0.20.0
@@ -99,6 +99,20 @@ repos:
 
   - repo: local
     hooks:
+      # the markdown fixers above skip AGENTS.md, because its gsd-path block
+      # must stay byte for byte; this runs them on the rest of the file
+      - id: format-agents-md
+        name: format AGENTS.md outside the gsd-path block
+        entry: python scripts/format-agents-md.py
+        language: python
+        files: ^AGENTS\.md$
+        additional_dependencies:
+          - mdformat==1.0.0
+          - mdformat-frontmatter
+          - mdformat-gfm
+          - mdformat-gfm-alerts
+          - mdformat-footnote
+          - texthooks==0.7.1
       - id: prettier
         name: prettier
         entry: node_modules/.bin/prettier --write --cache --cache-strategy content
