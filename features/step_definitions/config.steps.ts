@@ -1,8 +1,11 @@
 /**
- * @fileoverview Steps that read the configuration files a user owns in a
- * scope: `claude-plugins.json` and `claude-plugins.local.json`.
+ * @fileoverview Steps about the layer files a user owns in a scope: the shared
+ * layer `claude-plugins.json` and the local layer `claude-plugins.local.json`.
  *
- * The steps only read (D-07), so this module never writes or deletes a file.
+ * One setup step writes the `plugins` member of one layer file, to model a
+ * hand edit or a version-control update (D-18). It keeps the file's other
+ * members. Every other step only reads, so this module writes nothing else and
+ * deletes nothing.
  *
  * A missing file fails every step that reads one; it never reads as zero
  * declarations. A file whose `marketplaces` map is empty declares that no
@@ -22,9 +25,10 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
-import { type DataTable, Then } from "@cucumber/cucumber";
+import { type DataTable, Given, Then } from "@cucumber/cucumber";
 
 import { fieldRecord, flatten, isPlainObject, recordTable } from "../lib/field-rows.ts";
+import { readLayerPlugins, writeLayerPlugins } from "../lib/layer-file.ts";
 
 import type { ScenarioWorld } from "../support/world.ts";
 
@@ -36,6 +40,21 @@ const CONFIG_FILES: ReadonlySet<string> = new Set([
 function configFilePath(world: ScenarioWorld, fileName: string, scope: string): string {
   if (!CONFIG_FILES.has(fileName)) {
     throw new Error(`${fileName} is not a configuration file of a scope`);
+  }
+
+  return path.join(world.scopeRoot(scope), fileName);
+}
+
+// The file of each layer word a scenario names.
+const LAYER_FILES: ReadonlyMap<string, string> = new Map([
+  ["shared", "claude-plugins.json"],
+  ["local", "claude-plugins.local.json"],
+]);
+
+function layerFilePath(world: ScenarioWorld, scope: string, layer: string): string {
+  const fileName = LAYER_FILES.get(layer);
+  if (fileName === undefined) {
+    throw new Error(`unknown layer ${layer}; expected shared or local`);
   }
 
   return path.join(world.scopeRoot(scope), fileName);
@@ -95,6 +114,21 @@ async function compareDeclarations(
   const [stated = []] = table.raw();
   assert.deepStrictEqual(recordTable(stated, records), table.raw());
 }
+
+Given(
+  "a plugin configuration file in scope {word} and layer {word}, with these plugins:",
+  async function (this: ScenarioWorld, scope: string, layer: string, table: DataTable) {
+    const file = layerFilePath(this, scope, layer);
+    const plugins = readLayerPlugins(table);
+    await writeLayerPlugins(file, plugins);
+    const { config, content } = await readConfigObject(file);
+    assert.deepStrictEqual(
+      Reflect.get(config, "plugins"),
+      Object.fromEntries(plugins.map(({ key, entry }) => [key, entry])),
+      `${file} does not declare the plugins of the table: ${content}`,
+    );
+  },
+);
 
 Then(
   "the {string} file of the {word} scope declares these marketplaces:",

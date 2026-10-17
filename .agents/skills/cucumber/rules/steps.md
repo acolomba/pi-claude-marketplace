@@ -55,6 +55,8 @@ Use `@cucumber/cucumber` for the runner, `node:assert/strict` for assertions, an
 
 - A `Given` that performs setup asserts that the setup succeeded, so a broken precondition fails in the `Given` and not in a later `Then`.
 
+- The config steps read the layer files a user owns and never write them, with one exception. The step `a plugin configuration file in scope <scope> and layer <layer>, with these plugins:` writes the `plugins` member of one layer file through `features/lib/layer-file.ts` and keeps the other members of the file. It models a hand edit, or a version-control update of the shared layer. It is the only config step that writes.
+
 - A `Then` has no side effects. It reads what the `When` left on the world. One exception: a step that compares the row arrays of the last results calls `this.markRowsCompared()` after its comparison, so the world can fail a scenario whose rows no step compared (`.agents/skills/cucumber/rules/world-and-stand-ins.md`). No `Then` writes to the world in any other way.
 
 - Assert with `node:assert/strict`, comparing whole values: build the expected record or row set from the step argument and `deepStrictEqual` it against the same projection of the actual value. No `assert.ok(x.includes(...))`.
