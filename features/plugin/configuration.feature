@@ -24,6 +24,23 @@ Feature: Plugin configuration
       | id            |
       | demo@fixtures |
 
+  Scenario: A plugin the local layer enables is enabled although the shared layer disables it
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has run "/claude:plugin disable demo@fixtures --scope project"
+    Given the user has run "/claude:plugin install demo@fixtures --scope project --local"
+    Given the user has run "/claude:plugin enable demo@fixtures --scope project --local"
+    When the user starts a new pi session
+    Then the "claude-plugins.json" file of the project scope declares these plugins:
+      | id            | enabled |
+      | demo@fixtures | false   |
+    Then the "claude-plugins.local.json" file of the project scope declares these plugins:
+      | id            | enabled |
+      | demo@fixtures | true    |
+    Then the session offers these skills:
+      | command           | description            |
+      | /skill:demo-skill | A skill of demo 1.0.0. |
+
   Scenario: A plugin whose marketplace no layer declares keeps its dangling reference row
     Given a plugin configuration file in scope project and layer local, with these plugins:
       | marketplace | plugin | enabled |
