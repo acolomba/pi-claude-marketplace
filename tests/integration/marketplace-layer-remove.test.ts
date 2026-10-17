@@ -4,7 +4,7 @@
 // remove orchestrator, both config files, the state file, the bridges' staged
 // artifacts, and the git clone. A url-source marketplace is added through the
 // git double cloning a local checkout, and its plugins install through the
-// production install operation. The dependency cases (D-04-dep, PRUNE-03,
+// production install operation. The dependency cases (LAYER-03, PRUNE-03,
 // D-05-07) read the scope's declarations through the real offline index.
 
 import assert from "node:assert/strict";
@@ -413,7 +413,7 @@ test("D-05-07: a remove whose dependency declarations cannot be read changes not
   boundary.verifyBoundary();
 });
 
-test("D-04-dep: a full remove that keeps a dependency keeps the url marketplace's record, data, and clone, and converges", async (t) => {
+test("LAYER-03: a full remove that keeps a dependency keeps the url marketplace's record, data, and clone, and converges", async (t) => {
   // arrange
   const scope = await projectScope(t, "mp-layer-remove-kept-", ALPHA_NEEDS_LIB);
   const upstream = path.join(path.dirname(scope.fixture), "up");

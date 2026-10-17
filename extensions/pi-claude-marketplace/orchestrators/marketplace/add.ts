@@ -497,7 +497,7 @@ export function parseAddableSource(rawSource: string): GitHubSource | UrlSource 
 }
 
 /**
- * CR-01: the lock-free add body. It records the marketplace `source` names in
+ * LAYER-07 / D-MF-04: the lock-free add body. It records the marketplace `source` names in
  * `state` and, for a github or url source, clones it into `sources/<name>/`
  * with the MA-6 / MA-12 / MA-13 leftover handling and the MA-9 staging
  * cleanup. It returns the recorded name and, for a github or url source, the

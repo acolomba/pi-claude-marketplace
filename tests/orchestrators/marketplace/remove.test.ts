@@ -2293,7 +2293,7 @@ test("MR-7: a layer remove whose plugin fails to unstage writes no config and ke
   notification.verifyInteractions();
 });
 
-// D-04-dep / D-09: a remove also takes the dependency records under the
+// LAYER-03: a remove also takes the dependency records under the
 // marketplace that only its removed plugins needed, and keeps the ones a
 // staying plugin declares. The declaration index is a synthetic stand-in.
 
@@ -2409,7 +2409,7 @@ for (const { title, plugins, shape, unstaged, remaining, expectedMessage } of [
   readonly remaining: readonly string[];
   readonly expectedMessage: string;
 }[]) {
-  test(`D-04-dep: a layer remove ${title}`, async (testContext) => {
+  test(`LAYER-03: a layer remove ${title}`, async (testContext) => {
     // arrange
     const recordFor = (name: string): PluginRecord =>
       name === "lib" || name === "orphan" ? dependencyRecord() : pluginRecord();
@@ -2516,7 +2516,7 @@ test("LAYER-03: a layer remove keeps a dependency record its target file declare
   notification.verifyInteractions();
 });
 
-test("D-04-dep: a full remove keeps a dependency another marketplace's plugin needs, with its record, data, and clone", async (testContext) => {
+test("LAYER-03: a full remove keeps a dependency another marketplace's plugin needs, with its record, data, and clone", async (testContext) => {
   // arrange
   const source = { kind: "github", raw: "owner/repo", owner: "owner", repo: "repo" };
   const strayKey = '{"schemaVersion":1,"plugins":{"stray@tools":{"enabled":true}}}\n';
