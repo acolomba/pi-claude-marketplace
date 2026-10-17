@@ -26,6 +26,10 @@ Feature: Plugin reinstall
     Then the "claude-plugins.json" file of the project scope declares these plugins:
       | id            |
       | demo@fixtures |
+    When the user starts a new pi session
+    Then the session offers these skills:
+      | command           | description            |
+      | /skill:demo-skill | A skill of demo 1.0.0. |
 
   Scenario: Reinstalling every plugin with --local reinstalls only the plugins the local layer declares
     Given the marketplace "fixtures" offers these plugins:
@@ -66,3 +70,4 @@ Feature: Plugin reinstall
       | id            |
       | demo@fixtures |
       | app@tools     |
+    Then the "claude-plugins.local.json" file of the project scope does not exist
