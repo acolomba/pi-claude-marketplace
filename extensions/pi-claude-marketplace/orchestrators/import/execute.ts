@@ -1342,6 +1342,30 @@ function buildRepairPatchForScope(
   return { marketplaces, plugins };
 }
 
+interface LoadedConfig {
+  marketplaces?: Record<string, unknown>;
+  plugins?: Record<string, unknown>;
+}
+
+/**
+ * LAYER-06 / D-MF-03: a layer never declares a plugin without its
+ * marketplace, so a repaired plugin key is written only when the batch or the
+ * loaded file declares the marketplace (the part after the key's last `@`). A
+ * repair that cannot name the marketplace is dropped, and the next import or
+ * load reports the record as it stands.
+ */
+function declaresMarketplaceOf(
+  key: string,
+  batchMarketplaces: ImportConfigPatch["marketplaces"],
+  current: LoadedConfig,
+): boolean {
+  const marketplace = key.slice(key.lastIndexOf("@") + 1);
+  return (
+    ownValue(batchMarketplaces, marketplace) !== undefined ||
+    ownValue(current.marketplaces, marketplace) !== undefined
+  );
+}
+
 /**
  * WR-01: merge the always-written `ensure` patch with the subset of `repair`
  * entries whose keys are ABSENT from the loaded config. Already-declared
@@ -1352,7 +1376,7 @@ function buildRepairPatchForScope(
 function mergeEnsureAndRepairs(
   ensure: ImportConfigPatch,
   repair: ImportConfigPatch,
-  current: { marketplaces?: Record<string, unknown>; plugins?: Record<string, unknown> },
+  current: LoadedConfig,
 ): ImportConfigPatch {
   const marketplaces = { ...ensure.marketplaces };
   for (const [name, patch] of Object.entries(repair.marketplaces)) {
@@ -1366,7 +1390,11 @@ function mergeEnsureAndRepairs(
 
   const plugins = { ...ensure.plugins };
   for (const [key, patch] of Object.entries(repair.plugins)) {
-    if (ownValue(current.plugins, key) === undefined && ownValue(plugins, key) === undefined) {
+    if (
+      ownValue(current.plugins, key) === undefined &&
+      ownValue(plugins, key) === undefined &&
+      declaresMarketplaceOf(key, marketplaces, current)
+    ) {
       setOwn(plugins, key, patch);
     }
   }

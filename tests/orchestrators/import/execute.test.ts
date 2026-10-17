@@ -2814,6 +2814,69 @@ test("declares a missing config entry for a marketplace and plugin the state alr
   verifyBoundary();
 });
 
+// LAYER-06: the second scope plan repairs the plugin the first plan skipped,
+// but by then a hand edit has removed the first plan's declarations, and the
+// second plan names no source for that plugin's marketplace. A repaired plugin
+// key without its marketplace would make the shared layer fail its next load.
+test("LAYER-06: writes no repaired plugin key whose marketplace neither the batch nor the file declares", async (t) => {
+  // arrange
+  const { cwd, project } = await createHermeticScopes(t, "repair-no-marketplace");
+  const { ctx, verifyBoundary } = createNotificationBoundary(1);
+  const editedBytes = configBytes({ marketplaces: {}, plugins: {} });
+  const expectedBytes = configBytes({
+    marketplaces: { "mp-b": { source: "./b" } },
+    plugins: { "b@mp-b": {} },
+  });
+  const state = recordedState([
+    recordedMarketplace({
+      name: "mp-a",
+      plugins: ["a"],
+      scope: "project",
+      source: pathSource("./a"),
+    }),
+    recordedMarketplace({
+      name: "mp-b",
+      plugins: ["b"],
+      scope: "project",
+      source: pathSource("./b"),
+    }),
+  ]);
+  let stateReads = 0;
+
+  // act
+  await importClaudeSettings({
+    ctx,
+    run: runWithNothingLoaded(),
+    cwd,
+    deps: collaborators({
+      loadSettings: settingsSequence([
+        claudeSettings({
+          enabledPlugins: { "a@mp-a": true },
+          extraKnownMarketplaces: { "mp-a": { directory: "./a" } },
+        }),
+        claudeSettings({
+          enabledPlugins: { "b@mp-b": true },
+          extraKnownMarketplaces: { "mp-b": { directory: "./b" } },
+        }),
+      ]),
+      loadState: async () => {
+        stateReads += 1;
+        if (stateReads === 2) {
+          await writeFile(project.configJsonPath, editedBytes, "utf8");
+        }
+
+        return state;
+      },
+    }),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["project", "project"],
+  });
+
+  // assert
+  assert.strictEqual(await readFile(project.configJsonPath, "utf8"), expectedBytes);
+  verifyBoundary();
+});
+
 test("leaves an already-declared config byte-identical when every entry was a skip", async (t) => {
   // arrange
   const { cwd, project } = await createHermeticScopes(t, "repair-declared");
