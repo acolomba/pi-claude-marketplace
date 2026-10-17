@@ -270,14 +270,14 @@ Plans:
 4. A named uninstall of an installed plugin that no layer declares (a dependency) is refused listing the plugins in the target layer that need it, uninstalls nothing when only plugins of the other layer need it, and uninstalls it only when nothing needs it (LAYER-08).
 5. Plugin entries merge field by field across the two layers, local winning on conflicts such as `enabled` (LAYER-09).
 
-**Plans:** 1/10 plans executed
+**Plans:** 2/10 plans executed
 
 Plans:
 **Wave 1**
 - [x] 03.3-01-PLAN.md — Tracer: a named uninstall refuses when only the other layer declares the plugin, through a real Pi (LAYER-04)
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 03.3-02-PLAN.md — Plugin entries merge field by field, with the install's precedence read changed in the same commit (LAYER-09)
+- [x] 03.3-02-PLAN.md — Plugin entries merge field by field, with the install's precedence read changed in the same commit (LAYER-09)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 03.3-03-PLAN.md — Install, enable, and disable pick their layer by the flag; enable and disable refuse the other layer's plugin; a plugin's marketplace is declared in its own layer (LAYER-04, LAYER-06)
@@ -428,7 +428,7 @@ Plans:
 | 3. Marketplace Add | 3/3 | Complete    | 2026-10-16 |
 | 3.1. Local Declaration Leak Fix | 5/5 | Complete    | 2026-10-16 |
 | 3.2. Marketplace Layer Partition | 9/9 | Complete    | 2026-10-17 |
-| 3.3. Plugin Layer Partition | 1/10 | In Progress | - |
+| 3.3. Plugin Layer Partition | 2/10 | In Progress | - |
 | 4. Marketplace Remove and List | 0/TBD | Not started | - |
 | 5. Marketplace Info | 0/TBD | Not started | - |
 | 6. Marketplace Update and C-10 Fix | 0/TBD | Not started | - |

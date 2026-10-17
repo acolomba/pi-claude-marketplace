@@ -31,7 +31,7 @@
     {
       "number": "3.3",
       "name": "Plugin Layer Partition",
-      "status": "pending"
+      "status": "in_progress"
     },
     {
       "number": "4",
@@ -74,5 +74,5 @@
     "label": "Advance to the next step",
     "reason": "Phase 6 of 14 · 36% · executing"
   },
-  "updated_at": "2026-10-17T15:41:53.133Z"
+  "updated_at": "2026-10-17T15:55:07.218Z"
 }
