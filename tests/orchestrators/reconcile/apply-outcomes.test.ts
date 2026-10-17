@@ -11,6 +11,7 @@ import {
   MigrateConfigSaveError,
   sourceMismatchOutcomeSubject,
   type InvalidBlockOutcome,
+  type LayerMarketplaceGapOutcome,
   type MpAddedOutcome,
   type MpAddFailedOutcome,
   type MpRemovedOutcome,
@@ -212,6 +213,12 @@ void ({
   reason: "unparseable",
   cause: new Error("Unexpected token"),
 } satisfies InvalidBlockOutcome);
+void ({
+  kind: "layer-marketplace-gap",
+  scope: "project",
+  basename: "claude-plugins.local.json",
+  cause: new Error("the local layer declares alpha@mp without its marketplace"),
+} satisfies LayerMarketplaceGapOutcome);
 void ({ kind: "mp-added", scope: "user", marketplace: "official" } satisfies PerEntryOutcome);
 void ({
   kind: "plugin-uninstalled",
@@ -422,6 +429,12 @@ void ({
   // @ts-expect-error invalid block diagnostics are Error objects when present
   cause: "Unexpected token",
 } satisfies InvalidBlockOutcome);
+void ({
+  kind: "layer-marketplace-gap",
+  scope: "project",
+  basename: "claude-plugins.local.json",
+  // @ts-expect-error a layer marketplace gap always carries the cause that names the repair
+} satisfies LayerMarketplaceGapOutcome);
 void ({
   // @ts-expect-error per-entry outcomes reject unknown discriminants
   kind: "plugin-updated",

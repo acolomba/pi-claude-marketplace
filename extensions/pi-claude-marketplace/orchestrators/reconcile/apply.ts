@@ -145,10 +145,10 @@ function declaredConfig(result: ConfigLoadResult): ScopeConfig {
 }
 
 /**
- * LAYER-06 / D-MF-03: one CFG-03 invalid block per layer that declares a
- * plugin whose marketplace only the other layer declares. Like an invalid
- * layer file, it stops the scope's reload; the plugins the scope installed keep
- * loading from state, and no file is repaired.
+ * LAYER-06 / D-MF-03: one outcome per layer that declares a plugin whose
+ * marketplace only the other layer declares. Like an invalid layer file, it
+ * stops the scope's reload; the plugins the scope installed keep loading from
+ * state, and no file is repaired.
  */
 function layerMarketplaceGapOutcomes(
   outcome: ScopeLoadOutcome,
@@ -160,10 +160,9 @@ function layerMarketplaceGapOutcomes(
     declaredConfig(outcome.local),
   );
   return gaps.map((gap) => ({
-    kind: "invalid-block",
+    kind: "layer-marketplace-gap",
     scope,
     basename: path.basename(gap.layer === "shared" ? loc.configJsonPath : loc.configLocalJsonPath),
-    reason: "invalid manifest",
     cause: new Error(composeLayerMarketplaceCause(gap, scope)),
   }));
 }
@@ -1636,7 +1635,7 @@ function surfacePostCommitWarnings(
  * AFILE-04: one `notifyMcpConfigNotices` call over every outcome's notices, in
  * outcome order. The seam collapses repeats of one `(kind, scope, file)`, so
  * several operations rewriting the same file produce one line. The read-pass
- * rows (invalid blocks, source mismatches) come from no orchestrated
+ * rows (invalid blocks, layer gaps, source mismatches) come from no orchestrated
  * operation and carry none.
  */
 function surfaceMcpConfigNotices(
@@ -1647,7 +1646,9 @@ function surfaceMcpConfigNotices(
     opts.ctx,
     opts.run,
     outcomes.flatMap((outcome) =>
-      outcome.kind === "invalid-block" || outcome.kind === "source-mismatch"
+      outcome.kind === "invalid-block" ||
+      outcome.kind === "layer-marketplace-gap" ||
+      outcome.kind === "source-mismatch"
         ? []
         : (outcome.mcpConfigNotices ?? []),
     ),

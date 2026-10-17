@@ -141,7 +141,9 @@ export const RECONCILE_APPLIED_FIXTURES: FixtureMap = {
 
     // LAYER-06: the local layer declares a plugin whose marketplace only the
     // shared layer declares. The scope's reload stops as it does for an
-    // invalid layer file, and the cause names the repair.
+    // invalid layer file, and the cause names the repair. The file heads its
+    // block with no status, so the one failed row is the one error the tally
+    // counts, as in the pending diff.
     "reload-layer-marketplace-undeclared": {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",
@@ -153,9 +155,6 @@ export const RECONCILE_APPLIED_FIXTURES: FixtureMap = {
           {
             name: "claude-plugins.local.json",
             scope: "project",
-            status: "failed",
-            severity: "error",
-            reasons: ["invalid manifest"],
             plugins: [
               {
                 status: "failed",

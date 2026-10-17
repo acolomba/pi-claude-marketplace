@@ -120,23 +120,17 @@ async function treeBytes(root: string): Promise<readonly (readonly [string, stri
   );
 }
 
-/** The reload cascade of a scope whose one layer file is invalid for the given cause. */
-function layerError(basename: string, scope: Scope, cause: string): object {
-  return {
-    message:
-      "Some operations have failed.\n" +
-      "\n" +
-      `⊘ ${basename} [${scope}] (failed) {invalid manifest}\n` +
-      `  ⊘ ${basename} (failed) {invalid manifest}\n` +
-      `    cause: ${cause}\n` +
-      "\n" +
-      "Reconcile: 2 failures",
-    severity: "error",
-  };
-}
-
-/** The pending diff of the same scope: one failed row under the file's block. */
-function pendingLayerError(basename: string, scope: Scope, cause: string): object {
+/**
+ * The reload cascade, or with the `Reconcile pending` label the pending diff, of
+ * a scope whose one layer file is invalid for the given cause: one failed row
+ * under the file's block.
+ */
+function layerError(
+  basename: string,
+  scope: Scope,
+  cause: string,
+  label: "Reconcile" | "Reconcile pending" = "Reconcile",
+): object {
   return {
     message:
       "A plugin operation has failed.\n" +
@@ -145,7 +139,7 @@ function pendingLayerError(basename: string, scope: Scope, cause: string): objec
       `  ⊘ ${basename} (failed) {invalid manifest}\n` +
       `    cause: ${cause}\n` +
       "\n" +
-      "Reconcile pending: 1 failure",
+      `${label}: 1 failure`,
     severity: "error",
   };
 }
@@ -178,7 +172,7 @@ test("a local layer that declares a plugin whose marketplace only the shared lay
     layerError("claude-plugins.local.json", "project", LOCAL_GAP_CAUSE),
   ]);
   assert.deepStrictEqual(pending.notifications, [
-    pendingLayerError("claude-plugins.local.json", "project", LOCAL_GAP_CAUSE),
+    layerError("claude-plugins.local.json", "project", LOCAL_GAP_CAUSE, "Reconcile pending"),
   ]);
   pending.verifyBoundary();
   assert.deepStrictEqual(await treeBytes(scope.locations.scopeRoot), before);
@@ -280,7 +274,7 @@ test("before the first-run migration, pending reports the layer error the reload
 
   // assert
   assert.deepStrictEqual(pending.notifications, [
-    pendingLayerError("claude-plugins.local.json", "project", LOCAL_GAP_CAUSE),
+    layerError("claude-plugins.local.json", "project", LOCAL_GAP_CAUSE, "Reconcile pending"),
   ]);
   pending.verifyBoundary();
   assert.deepStrictEqual(applied, [
