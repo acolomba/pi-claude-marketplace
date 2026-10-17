@@ -59,7 +59,7 @@ path), **url** (https git URL on the loopback stand-in), and **gh**
 - [x] **Phase 3: Marketplace Add** — `marketplace add` scenarios, with dir, file, `@url`, and `@github` rows for every multi-kind add behavior (completed 2026-10-16)
 - [x] **Phase 3.1: Local Declaration Leak Fix** (INSERTED) — A marketplace added with `--local` stays out of `claude-plugins.json` across a reload, written test-first (completed 2026-10-16)
 - [x] **Phase 3.2: Marketplace Layer Partition** (INSERTED) — The same marketplace may live in both layers, and named marketplace mutations change only their own layer (completed 2026-10-17)
-- [ ] **Phase 3.3: Plugin Layer Partition** (INSERTED) — Named plugin mutations act on their own layer, a plugin may be declared in both layers and is installed once, and a plugin's marketplace is declared in the same layer
+- [x] **Phase 3.3: Plugin Layer Partition** (INSERTED) — Named plugin mutations act on their own layer, a plugin may be declared in both layers and is installed once, and a plugin's marketplace is declared in the same layer (completed 2026-10-17)
 - [ ] **Phase 3.4: Scope and Layer Terminology** (INSERTED) — Messages, reason tokens, docs, and code use the scope and layer terms consistently
 - [ ] **Phase 4: Marketplace Remove and List** — `remove`/`rm` with the plugin cascade, and `list`/`ls` across both scopes
 - [ ] **Phase 5: Marketplace Info** — `info` source details for every kind, scope fan-out, not-added forms, and a broken manifest
@@ -270,7 +270,7 @@ Plans:
 4. A named uninstall of an installed plugin that no layer declares (a dependency) is refused listing the plugins in the target layer that need it, uninstalls nothing when only plugins of the other layer need it, and uninstalls it only when nothing needs it (LAYER-08).
 5. Plugin entries merge field by field across the two layers, local winning on conflicts such as `enabled` (LAYER-09).
 
-**Plans:** 10/10 plans executed
+**Plans:** 10/10 plans complete
 
 Plans:
 **Wave 1**
@@ -428,7 +428,7 @@ Plans:
 | 3. Marketplace Add | 3/3 | Complete    | 2026-10-16 |
 | 3.1. Local Declaration Leak Fix | 5/5 | Complete    | 2026-10-16 |
 | 3.2. Marketplace Layer Partition | 9/9 | Complete    | 2026-10-17 |
-| 3.3. Plugin Layer Partition | 10/10 | In Progress | - |
+| 3.3. Plugin Layer Partition | 10/10 | Complete    | 2026-10-17 |
 | 4. Marketplace Remove and List | 0/TBD | Not started | - |
 | 5. Marketplace Info | 0/TBD | Not started | - |
 | 6. Marketplace Update and C-10 Fix | 0/TBD | Not started | - |

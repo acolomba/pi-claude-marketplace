@@ -2,20 +2,20 @@
 gsd_state_version: "1.0"
 milestone: marketplace-features
 milestone_name: Marketplace Behavioral Tests
-current_phase: "03.3"
-current_phase_name: Plugin Layer Partition
-status: verifying
-stopped_at: Completed 03.3-10-PLAN.md
-last_updated: "2026-10-17T20:00:35.745Z"
+current_phase: "03.4"
+current_phase_name: Scope and Layer Terminology
+status: planning
+stopped_at: Phase 03.3 complete, ready to plan Phase 03.4
+last_updated: "2026-10-17T23:47:07.845Z"
 last_activity: 2026-10-17
-last_activity_desc: Phase 03.3 execution started
-state_head: 2cba6e831c484505bb4a2622fc6145ef38c7fbd2
+last_activity_desc: Phase 03.3 complete, transitioned to Phase 03.4
+state_head: 59d45d4b12cbbbc3724b38a93ffddafed948dd23
 progress:
   total_phases: 14
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 37
   completed_plans: 37
-  percent: 36
+  percent: 46
 ---
 
 # Project State
@@ -31,12 +31,12 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: 03.3 (Plugin Layer Partition) — EXECUTING
-Plan: 10 of 10
-Status: Phase complete — ready for verification
-Last activity: 2026-10-17 — Phase 03.3 execution started
+Phase: 03.4 — Scope and Layer Terminology
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-10-17 — Phase 03.3 complete, transitioned to Phase 03.4
 
-Progress: [████░░░░░░] 36%
+Progress: [█████░░░░░] 46%
 
 ### mcp-4 closeout
 
@@ -182,7 +182,7 @@ hit the same wall; convert it rather than re-disclosing it.
 ## Session Continuity
 
 **Last session:** 2026-10-17T20:00:33.956Z
-**Stopped at:** Completed 03.3-10-PLAN.md
+**Stopped at:** Phase 03.3 complete, ready to plan Phase 03.4
 **Resume file:** None
 
 **Main merge (2026-10-11, quick task 261011-bsm):** `origin/main` at
