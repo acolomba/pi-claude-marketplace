@@ -180,7 +180,7 @@ export const PLUGIN_PENDING_FIXTURES: FixtureMap = {
                 name: "claude-plugins.local.json",
                 reasons: ["invalid manifest"],
                 cause: new Error(
-                  "The local layer (claude-plugins.local.json) declares helper@official, but only the shared layer declares its marketplace. Run /claude:plugin marketplace add <source> --local with the source the shared layer declares, or remove the plugin from the local layer.",
+                  "The local layer (claude-plugins.local.json) declares helper@official, but only the shared layer declares its marketplace. Run /claude:plugin marketplace add <source> --local --scope project with the source the shared layer declares, or remove the plugin from the local layer.",
                 ),
               },
             ],

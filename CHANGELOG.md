@@ -12,7 +12,7 @@
   - `update` and `reinstall` no longer write plugin declarations. Without a plugin name, `--local` limits them to the plugins that `claude-plugins.local.json` declares.
   - A plugin entry in `claude-plugins.local.json` now takes the fields it leaves out from `claude-plugins.json`. If your local file declares a plugin that `claude-plugins.json` disables, run `/claude:plugin list` to see whether it is enabled.
   - `install --local` also declares the plugin's marketplace in `claude-plugins.local.json`.
-  - A reload stops with `{invalid manifest}` when one file declares a plugin and only the other declares its marketplace. Nothing repairs files that older `--local` installs left this way. Run `/claude:plugin marketplace add <source> --local`, or remove the plugin.
+  - A reload stops with `{invalid manifest}` when one file declares a plugin and only the other declares its marketplace. Nothing repairs files that older `--local` installs left this way. To repair one, run the `marketplace add` command the error prints, or remove the plugin.
 
 - You can now declare a marketplace in both `claude-plugins.json` and `claude-plugins.local.json`. With a name, `marketplace remove`, `autoupdate`, and `noautoupdate` change only the file you target and fail when that file does not declare the marketplace.
 

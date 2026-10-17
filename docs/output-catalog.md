@@ -3383,7 +3383,7 @@ Some operations have failed.
 
 ⊘ claude-plugins.local.json [project] (failed) {invalid manifest}
   ⊘ claude-plugins.local.json (failed) {invalid manifest}
-    cause: The local layer (claude-plugins.local.json) declares helper@official, but only the shared layer declares its marketplace. Run /claude:plugin marketplace add <source> --local with the source the shared layer declares, or remove the plugin from the local layer.
+    cause: The local layer (claude-plugins.local.json) declares helper@official, but only the shared layer declares its marketplace. Run /claude:plugin marketplace add <source> --local --scope project with the source the shared layer declares, or remove the plugin from the local layer.
 
 Reconcile pending: 2 failures
 ```
@@ -3463,7 +3463,7 @@ OUT-03/D-04: both the mp-level failed row and its synthetic failed child are cou
 
 ### A layer declares a plugin without its marketplace (LAYER-06 / D-MF-03)
 
-A layer that declares a plugin must also declare the plugin's marketplace. When the other layer of the scope declares that marketplace and this layer does not, the reload stops for the scope as it does for an invalid layer file (CFG-03). The row names the layer file, and the `cause:` line names the plugins and the repair: add the marketplace to the same layer, or remove the plugin from it. A shared layer missing a marketplace that only the local layer declares renders the same row for `claude-plugins.json`, with the repair `marketplace add <source>` without `--local`. The plugins the scope already installed stay installed and keep loading, and no file is changed. A plugin whose marketplace no layer declares keeps its own `{dangling reference}` row instead. The tally counts the layer row and its child.
+A layer that declares a plugin must also declare the plugin's marketplace. When the other layer of the scope declares that marketplace and this layer does not, the reload stops for the scope as it does for an invalid layer file (CFG-03). The row names the layer file, and the `cause:` line names the plugins and the repair: add the marketplace to the same layer, or remove the plugin from it. The repair command names the scope with `--scope`, because `marketplace add` adds to the user scope when the flag is absent. A shared layer missing a marketplace that only the local layer declares renders the same row for `claude-plugins.json`, with the repair `marketplace add <source> --scope <scope>` without `--local`. The plugins the scope already installed stay installed and keep loading, and no file is changed. A plugin whose marketplace no layer declares keeps its own `{dangling reference}` row instead. The tally counts the layer row and its child.
 
 <!-- catalog-state: reload-layer-marketplace-undeclared -->
 
@@ -3472,7 +3472,7 @@ Some operations have failed.
 
 ⊘ claude-plugins.local.json [project] (failed) {invalid manifest}
   ⊘ claude-plugins.local.json (failed) {invalid manifest}
-    cause: The local layer (claude-plugins.local.json) declares helper@official, but only the shared layer declares its marketplace. Run /claude:plugin marketplace add <source> --local with the source the shared layer declares, or remove the plugin from the local layer.
+    cause: The local layer (claude-plugins.local.json) declares helper@official, but only the shared layer declares its marketplace. Run /claude:plugin marketplace add <source> --local --scope project with the source the shared layer declares, or remove the plugin from the local layer.
 
 Reconcile: 2 failures
 ```

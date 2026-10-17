@@ -164,7 +164,7 @@ function layerMarketplaceGapOutcomes(
     scope,
     basename: path.basename(gap.layer === "shared" ? loc.configJsonPath : loc.configLocalJsonPath),
     reason: "invalid manifest",
-    cause: new Error(composeLayerMarketplaceCause(gap)),
+    cause: new Error(composeLayerMarketplaceCause(gap, scope)),
   }));
 }
 

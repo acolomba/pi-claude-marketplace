@@ -185,7 +185,7 @@ A command that writes configuration changes only `claude-plugins.json`, or only 
 
 Plugin commands follow the same rule. `uninstall`, `enable`, `disable`, `update`, and `reinstall` with a plugin name change only the target file. They fail and change nothing when only the other file declares the plugin. A plugin that both files declare is installed once. So an `install` into one file only adds the declaration when the other file declares the installed plugin, and an `uninstall` from one file only removes that file's declaration. `update` and `reinstall` write no declaration. An `enable` or `disable` without `--local` also fails when `claude-plugins.local.json` sets the opposite `enabled` value, because the local value wins.
 
-A file that declares a plugin also declares the plugin's marketplace. `install --local` adds the marketplace to `claude-plugins.local.json` for you. When a file declares a plugin and only the other file declares its marketplace, a reload stops for that scope with `{invalid manifest}`. To repair the file, run `marketplace add <source>` (with `--local` for `claude-plugins.local.json`), or remove the plugin from the file.
+A file that declares a plugin also declares the plugin's marketplace. `install --local` adds the marketplace to `claude-plugins.local.json` for you. When a file declares a plugin and only the other file declares its marketplace, a reload stops for that scope with `{invalid manifest}`. To repair the file, run `marketplace add <source> --scope <scope>` for that scope, with `--local` for `claude-plugins.local.json`. The error prints this command. You can also remove the plugin from the file.
 
 ```text
 /claude:plugin marketplace add upstash/context7 --local

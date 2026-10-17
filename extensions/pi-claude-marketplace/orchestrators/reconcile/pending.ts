@@ -145,7 +145,7 @@ function invalidConfigBlocks(
   );
   for (const gap of gaps) {
     const filePath = gap.layer === "shared" ? loc.configJsonPath : loc.configLocalJsonPath;
-    blocks.push(buildInvalidConfigBlock(scope, filePath, composeLayerMarketplaceCause(gap)));
+    blocks.push(buildInvalidConfigBlock(scope, filePath, composeLayerMarketplaceCause(gap, scope)));
   }
 
   return blocks;

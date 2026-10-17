@@ -31,10 +31,13 @@ import type { ScopedLocations } from "../../extensions/pi-claude-marketplace/per
 import type { Scope } from "../../extensions/pi-claude-marketplace/shared/types.ts";
 
 const LOCAL_GAP_CAUSE =
-  "The local layer (claude-plugins.local.json) declares demo@mp, but only the shared layer declares its marketplace. Run /claude:plugin marketplace add <source> --local with the source the shared layer declares, or remove the plugin from the local layer.";
+  "The local layer (claude-plugins.local.json) declares demo@mp, but only the shared layer declares its marketplace. Run /claude:plugin marketplace add <source> --local --scope project with the source the shared layer declares, or remove the plugin from the local layer.";
 
 const SHARED_GAP_CAUSE =
-  "The shared layer (claude-plugins.json) declares demo@mp, but only the local layer declares its marketplace. Run /claude:plugin marketplace add <source> with the source the local layer declares, or remove the plugin from the shared layer.";
+  "The shared layer (claude-plugins.json) declares demo@mp, but only the local layer declares its marketplace. Run /claude:plugin marketplace add <source> --scope project with the source the local layer declares, or remove the plugin from the shared layer.";
+
+const USER_LOCAL_GAP_CAUSE =
+  "The local layer (claude-plugins.local.json) declares demo@mp, but only the shared layer declares its marketplace. Run /claude:plugin marketplace add <source> --local --scope user with the source the shared layer declares, or remove the plugin from the local layer.";
 
 interface LayerScope {
   readonly cwd: string;
@@ -204,7 +207,7 @@ test("a local layer of the user scope that declares a plugin without its marketp
 
   // assert
   assert.deepStrictEqual(applied, [
-    layerError("claude-plugins.local.json", "user", LOCAL_GAP_CAUSE, "Reconcile"),
+    layerError("claude-plugins.local.json", "user", USER_LOCAL_GAP_CAUSE, "Reconcile"),
   ]);
   assert.deepStrictEqual(await treeBytes(scope.locations.scopeRoot), before);
 });

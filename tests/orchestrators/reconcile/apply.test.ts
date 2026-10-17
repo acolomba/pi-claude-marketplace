@@ -947,7 +947,7 @@ describe("applyReconcile", () => {
           "\n" +
           "⊘ claude-plugins.local.json [project] (failed) {invalid manifest}\n" +
           "  ⊘ claude-plugins.local.json (failed) {invalid manifest}\n" +
-          "    cause: The local layer (claude-plugins.local.json) declares hello@mp, but only the shared layer declares its marketplace. Run /claude:plugin marketplace add <source> --local with the source the shared layer declares, or remove the plugin from the local layer.\n" +
+          "    cause: The local layer (claude-plugins.local.json) declares hello@mp, but only the shared layer declares its marketplace. Run /claude:plugin marketplace add <source> --local --scope project with the source the shared layer declares, or remove the plugin from the local layer.\n" +
           "\n" +
           "Reconcile: 2 failures",
         severity: "error",
@@ -989,11 +989,11 @@ describe("applyReconcile", () => {
           "\n" +
           "⊘ claude-plugins.json [project] (failed) {invalid manifest}\n" +
           "  ⊘ claude-plugins.json (failed) {invalid manifest}\n" +
-          "    cause: The shared layer (claude-plugins.json) declares lib@other, but only the local layer declares its marketplace. Run /claude:plugin marketplace add <source> with the source the local layer declares, or remove the plugin from the shared layer.\n" +
+          "    cause: The shared layer (claude-plugins.json) declares lib@other, but only the local layer declares its marketplace. Run /claude:plugin marketplace add <source> --scope project with the source the local layer declares, or remove the plugin from the shared layer.\n" +
           "\n" +
           "⊘ claude-plugins.local.json [project] (failed) {invalid manifest}\n" +
           "  ⊘ claude-plugins.local.json (failed) {invalid manifest}\n" +
-          "    cause: The local layer (claude-plugins.local.json) declares hello@mp, but only the shared layer declares its marketplace. Run /claude:plugin marketplace add <source> --local with the source the shared layer declares, or remove the plugin from the local layer.\n" +
+          "    cause: The local layer (claude-plugins.local.json) declares hello@mp, but only the shared layer declares its marketplace. Run /claude:plugin marketplace add <source> --local --scope project with the source the shared layer declares, or remove the plugin from the local layer.\n" +
           "\n" +
           "Reconcile: 4 failures",
         severity: "error",
