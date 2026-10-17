@@ -1,12 +1,6 @@
 # raises the per-file instructions budget from the 32 KiB default.
 project_doc_max_bytes = 65536
 
-# GSD Agent Configuration — managed by gsd-core installer
-
-[agents]
-max_depth = 1
-
-
 [features]
 hooks = true
 

@@ -33,6 +33,15 @@
             "command": "\"$CLAUDE_PROJECT_DIR\"/scripts/codegraph-worktree-hook.sh"
           }
         ]
+      },
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.gsd-path/guard_hook.py\""
+          }
+        ]
       }
     ],
     "SubagentStop": [

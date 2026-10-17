@@ -81,6 +81,15 @@
 # codegraph
 /.codegraph/
 
+# gsd-path: init.sh reinstalls the skill copies; updates back them up beside
+# each skills root
+/.agents/skills/gsd-path*/
+/.agents/skills/path/
+/.agents/disabled-gsd-skills*/
+/.claude/skills/gsd-path*/
+/.claude/skills/path/
+/.claude/disabled-gsd-skills*/
+
 # dependencies
 node_modules/
 

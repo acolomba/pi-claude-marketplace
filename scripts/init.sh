@@ -15,7 +15,8 @@ if ! command -v pre-commit >/dev/null 2>&1; then
     PATH="$PATH:$(pipx environment --value PIPX_BIN_DIR)"
 fi
 
-pre-commit install
+# the gsd-path guard chains this hook; reinstalling it would drop the guard
+grep -qs 'gsd-path guard' .git/hooks/pre-commit || pre-commit install
 
 # npm
 npm install
@@ -24,12 +25,11 @@ npm install
 npx --yes skills@latest add blader/humanizer -a universal claude-code -y
 npx --yes skills@latest add AminBlg/SimpleEnglish -a universal claude-code -y
 
-# gsd
-npx --yes @opengsd/gsd-core@latest --install --local --claude --codex --force-statusline
-node .codex/gsd-core/bin/gsd-tools.cjs capability install \
-    ./gsd-capabilities/discuss-agent-skills \
-    --scope project \
-    --yes
+# gsd-path: skills, project contracts, and guard hooks. A first install refuses
+# an existing project, so later runs refresh in place
+gsd_path_args=(--local --claude --codex --project . --hooks)
+[[ ! -e .gsd-path/runtime.json ]] || gsd_path_args=(--update "${gsd_path_args[@]}")
+npx --yes @opengsd/gsd-path@latest "${gsd_path_args[@]}"
 
 # codegraph
 if ! command -v codegraph >/dev/null 2>&1; then
