@@ -260,7 +260,12 @@ export type Reason =
   // `--local` targets the local layer, and only the shared layer declares the
   // plugin. The remedy, running the command again without `--local`, rides the
   // cause line.
-  | "plugin declared in shared config";
+  | "plugin declared in shared config"
+  // LAYER-05 / D-MF-03: an install into one layer of a plugin the other layer
+  // declares and the scope already installed. The install adds the declaration
+  // to the target layer and installs nothing; the token names the other layer.
+  | "already installed in shared layer"
+  | "already installed in local layer";
 
 /** Reasons that describe a content row rather than marketplace absence. */
 export type ContentReason = Exclude<

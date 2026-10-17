@@ -170,7 +170,9 @@
                           "marketplace declared locally",
                           "marketplace declared in shared config",
                           "plugin declared locally",
-                          "plugin declared in shared config"
+                          "plugin declared in shared config",
+                          "already installed in shared layer",
+                          "already installed in local layer"
                         ]
                       }
                     },
@@ -310,7 +312,9 @@
                     "marketplace declared locally",
                     "marketplace declared in shared config",
                     "plugin declared locally",
-                    "plugin declared in shared config"
+                    "plugin declared in shared config",
+                    "already installed in shared layer",
+                    "already installed in local layer"
                   ]
                 }
               }
@@ -500,7 +504,9 @@
                           "marketplace declared locally",
                           "marketplace declared in shared config",
                           "plugin declared locally",
-                          "plugin declared in shared config"
+                          "plugin declared in shared config",
+                          "already installed in shared layer",
+                          "already installed in local layer"
                         ]
                       }
                     },
@@ -640,7 +646,9 @@
                     "marketplace declared locally",
                     "marketplace declared in shared config",
                     "plugin declared locally",
-                    "plugin declared in shared config"
+                    "plugin declared in shared config",
+                    "already installed in shared layer",
+                    "already installed in local layer"
                   ]
                 }
               }
@@ -895,7 +903,9 @@
                       "marketplace declared locally",
                       "marketplace declared in shared config",
                       "plugin declared locally",
-                      "plugin declared in shared config"
+                      "plugin declared in shared config",
+                      "already installed in shared layer",
+                      "already installed in local layer"
                     ]
                   }
                 },
@@ -1078,7 +1088,9 @@
                       "marketplace declared locally",
                       "marketplace declared in shared config",
                       "plugin declared locally",
-                      "plugin declared in shared config"
+                      "plugin declared in shared config",
+                      "already installed in shared layer",
+                      "already installed in local layer"
                     ]
                   }
                 },
@@ -1344,7 +1356,9 @@
                             "marketplace declared locally",
                             "marketplace declared in shared config",
                             "plugin declared locally",
-                            "plugin declared in shared config"
+                            "plugin declared in shared config",
+                            "already installed in shared layer",
+                            "already installed in local layer"
                           ]
                         }
                       },
@@ -1533,7 +1547,9 @@
                             "marketplace declared locally",
                             "marketplace declared in shared config",
                             "plugin declared locally",
-                            "plugin declared in shared config"
+                            "plugin declared in shared config",
+                            "already installed in shared layer",
+                            "already installed in local layer"
                           ]
                         }
                       },
@@ -1666,7 +1682,9 @@
               "marketplace declared locally",
               "marketplace declared in shared config",
               "plugin declared locally",
-              "plugin declared in shared config"
+              "plugin declared in shared config",
+              "already installed in shared layer",
+              "already installed in local layer"
             ]
           }
         }

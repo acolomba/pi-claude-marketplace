@@ -109,3 +109,40 @@ Feature: Plugin install
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
+
+  Scenario: Installing with --local a plugin the shared layer declares adds the local declaration and installs nothing
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    When the user runs "/claude:plugin install demo@fixtures --scope project --local"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status  | reasons                           | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | skipped | already installed in shared layer | project | 1.0.0   |
+    Then the "claude-plugins.local.json" file of the project scope declares these plugins:
+      | id            |
+      | demo@fixtures |
+    Then the "claude-plugins.local.json" file of the project scope declares these marketplaces:
+      | name     | source                       |
+      | fixtures | {home}/marketplaces/fixtures |
+    Then the "claude-plugins.json" file of the project scope declares these plugins:
+      | id            |
+      | demo@fixtures |
+
+  Scenario: Installing without --local a plugin installed with --local adds the shared declaration and installs nothing
+    Given the user has run "/claude:plugin install demo@fixtures --scope project --local"
+    When the user runs "/claude:plugin install demo@fixtures --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status  | reasons                          | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | skipped | already installed in local layer | project | 1.0.0   |
+    Then the "claude-plugins.json" file of the project scope declares these plugins:
+      | id            |
+      | demo@fixtures |
+    Then the "claude-plugins.local.json" file of the project scope declares these plugins:
+      | id            |
+      | demo@fixtures |

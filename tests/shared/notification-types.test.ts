@@ -150,6 +150,8 @@ const EXPECTED_REASONS = [
   "marketplace declared in shared config",
   "plugin declared locally",
   "plugin declared in shared config",
+  "already installed in shared layer",
+  "already installed in local layer",
 ] as const;
 
 const EXPECTED_STATUS_TOKENS = [

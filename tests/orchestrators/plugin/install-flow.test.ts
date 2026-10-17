@@ -9058,6 +9058,335 @@ test("WB-01 / D-19: an install with --local of a plugin only the shared layer de
   });
 });
 
+// ───────────────────────────────────────────────────────────────────────────
+// LAYER-05 / D-MF-03 -- a plugin is installed once per scope, and each layer
+// may declare it. An install into one layer while the other layer installed
+// the plugin only adds the declaration.
+// ───────────────────────────────────────────────────────────────────────────
+
+const SHARED_LAYER_DECLARING_MP =
+  '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "mp": {\n      "source": "./mp-src"\n    }\n  }\n}\n';
+
+const LAYER_DECLARING_HELLO =
+  '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "mp": {\n      "source": "./mp-src"\n    }\n  },\n  "plugins": {\n    "hello@mp": {}\n  }\n}\n';
+
+/**
+ * LAYER-05: `hello` installed by name into one layer of the project scope.
+ * The shared layer declares the marketplace beforehand, so a flagless install
+ * under it is never the FIX-03 refusal.
+ */
+async function seedInstalledInOneLayer(
+  cwd: string,
+  installPlugin: InstallOperation,
+  seed: { readonly local: boolean; readonly landsDisabled?: boolean },
+): Promise<{
+  readonly ctx: NotificationContext;
+  readonly run: NotificationRun;
+  readonly notifications: NotifyRecord[];
+}> {
+  const locations = locationsFor("project", cwd);
+  await seedPathMarketplaceWithPlugin({
+    cwd,
+    marketplaceRoot: path.join(cwd, "mp-src"),
+    marketplaceName: "mp",
+    pluginName: "hello",
+    skills: [{ sourceName: "tool" }],
+    ...(seed.landsDisabled === true && { entryDefaultEnabled: false }),
+  });
+  await writeFile(locations.configJsonPath, SHARED_LAYER_DECLARING_MP);
+  const { ctx, run, notifications } = makeCtx();
+  const outcome = await installPlugin({
+    ctx,
+    run,
+    scope: "project",
+    cwd,
+    marketplace: "mp",
+    plugin: "hello",
+    local: seed.local,
+    ...(seed.landsDisabled === true && { applyDefaultEnabled: true }),
+  });
+  assert.equal(outcome.status, "installed", "the seeded install landed");
+  notifications.length = 0;
+  return { ctx, run, notifications };
+}
+
+/** LAYER-05: every ledger run the install makes, counted on the real ledger. */
+function countLedgerRuns(transactionControl: InstallTransactionControl): { count: number } {
+  const runs = { count: 0 };
+  transactionControl.runPhases = async <C>(phases: readonly Phase<C>[], ctx: C) => {
+    runs.count += 1;
+    return runPhases(phases, ctx);
+  };
+
+  return runs;
+}
+
+/** LAYER-05: both layer files and the state document, read as bytes. */
+async function projectScopeBytes(cwd: string): Promise<{
+  readonly shared: string | undefined;
+  readonly local: string | undefined;
+  readonly state: string;
+  readonly stateMtimeMs: number;
+}> {
+  const locations = locationsFor("project", cwd);
+  const optional = async (file: string): Promise<string | undefined> =>
+    (await pathExists(file)) ? readFile(file, "utf8") : undefined;
+  return {
+    shared: await optional(locations.configJsonPath),
+    local: await optional(locations.configLocalJsonPath),
+    state: await readFile(locations.stateJsonPath, "utf8"),
+    stateMtimeMs: (await stat(locations.stateJsonPath)).mtimeMs,
+  };
+}
+
+for (const direction of [
+  {
+    title:
+      "an install with --local of a plugin the shared layer installed declares it in the local layer and installs nothing",
+    installedLocal: false,
+    reason: "already installed in shared layer",
+    after: (before: Awaited<ReturnType<typeof projectScopeBytes>>) => ({
+      ...before,
+      local: LAYER_DECLARING_HELLO,
+    }),
+  },
+  {
+    title:
+      "a flagless install of a plugin the local layer installed declares it in the shared layer and installs nothing",
+    installedLocal: true,
+    reason: "already installed in local layer",
+    after: (before: Awaited<ReturnType<typeof projectScopeBytes>>) => ({
+      ...before,
+      shared: LAYER_DECLARING_HELLO,
+    }),
+  },
+]) {
+  test(`LAYER-05: ${direction.title}`, async () => {
+    await withHermeticHome(async ({ installPlugin, transactionControl }) => {
+      const cwd = await mkdtemp(path.join(tmpdir(), "install-layer05-noop-"));
+      try {
+        // arrange
+        const { ctx, run, notifications } = await seedInstalledInOneLayer(cwd, installPlugin, {
+          local: direction.installedLocal,
+        });
+        const before = await projectScopeBytes(cwd);
+        const ledgerRuns = countLedgerRuns(transactionControl);
+
+        // act
+        const outcome = await installPlugin({
+          ctx,
+          run,
+          scope: "project",
+          cwd,
+          marketplace: "mp",
+          plugin: "hello",
+          local: !direction.installedLocal,
+        });
+
+        // assert: the target layer gains the declaration (and the marketplace
+        // it lacked), the other layer and the state document keep their bytes,
+        // and no ledger ran.
+        assert.deepStrictEqual(
+          {
+            notifications,
+            outcome,
+            files: await projectScopeBytes(cwd),
+            ledgerRuns: ledgerRuns.count,
+          },
+          {
+            notifications: [
+              { message: `● mp [project]\n  ⊘ hello v0.0.1 (skipped) {${direction.reason}}` },
+            ],
+            outcome: {
+              status: "installed",
+              version: "0.0.1",
+              resourcesChanged: false,
+              declaresAgents: false,
+              declaresMcp: false,
+              declaresWorkflows: false,
+            },
+            files: direction.after(before),
+            ledgerRuns: 0,
+          },
+        );
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
+
+test("LAYER-05: a disabled plugin the shared layer installed takes the same no-op and stays disabled", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-layer05-disabled-"));
+    try {
+      // arrange: the plugin's own declaration lands it disabled, so the shared
+      // layer holds `enabled: false` and the record is disabled.
+      const { ctx, run, notifications } = await seedInstalledInOneLayer(cwd, installPlugin, {
+        local: false,
+        landsDisabled: true,
+      });
+      const before = await projectScopeBytes(cwd);
+
+      // act
+      await installPlugin({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        local: true,
+      });
+
+      // assert: the local layer declares the plugin without `enabled`, so the
+      // shared `enabled: false` still decides (LAYER-09), and the disabled
+      // record is untouched.
+      assert.deepStrictEqual(
+        { notifications, files: await projectScopeBytes(cwd) },
+        {
+          notifications: [
+            {
+              message:
+                "● mp [project]\n  ⊘ hello v0.0.1 (skipped) {already installed in shared layer}",
+            },
+          ],
+          files: { ...before, local: LAYER_DECLARING_HELLO },
+        },
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("LAYER-05: a version pin keeps the already-installed failure and changes nothing", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-layer05-pin-"));
+    try {
+      // arrange
+      const { ctx, run, notifications } = await seedInstalledInOneLayer(cwd, installPlugin, {
+        local: false,
+      });
+      const before = await projectScopeBytes(cwd);
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        local: true,
+        pinVersionOverride: "2.0.0",
+      });
+
+      // assert
+      assert.deepStrictEqual(
+        { notifications, status: outcome.status, files: await projectScopeBytes(cwd) },
+        {
+          notifications: [
+            {
+              message:
+                "A plugin operation has failed.\n\n" +
+                "● mp [project]\n" +
+                "  ⊘ hello (failed) {already installed}\n" +
+                '    cause: Plugin "hello" is already installed in marketplace "mp".',
+              severity: "error",
+            },
+          ],
+          status: "failed",
+          files: before,
+        },
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WR-09 / LAYER-05: an orchestrated install never takes the no-op and writes no layer", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-layer05-orchestrated-"));
+    try {
+      // arrange
+      const { ctx, run, notifications } = await seedInstalledInOneLayer(cwd, installPlugin, {
+        local: false,
+      });
+      const before = await projectScopeBytes(cwd);
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        local: true,
+        notifications: { mode: "orchestrated" },
+      });
+
+      // assert
+      assert.deepStrictEqual(
+        { notifications, status: outcome.status, files: await projectScopeBytes(cwd) },
+        { notifications: [], status: "failed", files: before },
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("LAYER-05 / D-04-07: a dependency record the other layer declares is promoted, not taken as the no-op", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-layer05-dependency-"));
+    try {
+      // arrange: a hand edit declares the dependency in the shared layer.
+      const locations = locationsFor("project", cwd);
+      const { ctx, run, notifications } = await seedDependencyInstalled(cwd, installPlugin);
+      await writeFile(
+        locations.configJsonPath,
+        '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "mp": {\n      "source": "./mp-src"\n    }\n  },\n  "plugins": {\n    "hello@mp": {},\n    "some-other-plugin@mp": {}\n  }\n}\n',
+      );
+
+      // act
+      await installPlugin({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "some-other-plugin",
+        local: true,
+      });
+
+      // assert
+      assert.deepStrictEqual(
+        {
+          notifications,
+          provenance: (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
+            "some-other-plugin"
+          ]?.provenance,
+        },
+        {
+          notifications: [
+            {
+              message:
+                "● mp [project]\n" +
+                "  ● some-other-plugin v0.0.1 (installed) {already installed, dependency promoted}",
+            },
+          ],
+          provenance: "explicit",
+        },
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 for (const arm of [
   { configSource: "local" as const, tmpPrefix: "install-wb01-orch-local-" },
   { configSource: "base" as const, tmpPrefix: "install-wb01-orch-base-" },

@@ -24,7 +24,11 @@ import {
 import { cleanupStaging, createRemovalOps } from "../../shared/fs-utils.ts";
 import { notify, notifyMcpConfigNotices } from "../../shared/notification-dispatch.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
-import { companionSeverity, malformedReasonsForKinds } from "../../shared/notify-reasons.ts";
+import {
+  companionSeverity,
+  malformedReasonsForKinds,
+  skipSeverity,
+} from "../../shared/notify-reasons.ts";
 import { ownValue } from "../../shared/own-key.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 import { cascadeUnstagePlugin, crossScopeFlag, foldUnstageNotices } from "../marketplace/shared.ts";
@@ -59,10 +63,12 @@ import {
   collectInstallReachableMarketplaces,
   localOnlyMarketplaceRefusal,
   overwriteDisabledMemberEntries,
+  pluginLayerVerdict,
   resolveInstallMarketplaceSource,
   selectDeclaringConfigWriteTarget,
   surfaceDiscoveryWarnings,
   writeAdoptingConfigEntries,
+  type DeclaringConfigWriteTarget,
   type LedgerDegradationSignals,
 } from "./shared.ts";
 import { garbageCollectWorkflowsStaging } from "./workflows-staging-gc.ts";
@@ -1708,6 +1714,109 @@ function standaloneLocalOnlyRefusal(
 }
 
 /**
+ * LAYER-05 / D-MF-03: the plugin is installed once per scope, and each layer
+ * may declare it. A standalone install into one layer of a plugin the user
+ * installed by name, while only the other layer declares it, adds the
+ * declaration to the target layer and installs nothing. The write also
+ * declares the plugin's marketplace in the target layer when that layer lacks
+ * it (LAYER-06). A version pin asks for more than a declaration, so it keeps
+ * the already-installed failure, as it does for the promotion; a dependency
+ * record goes to the promotion instead. No state is saved.
+ */
+async function declareInstalledPlugin(args: {
+  readonly opts: InstallPluginOptions;
+  readonly state: ExtensionState;
+  readonly locations: ScopedLocations;
+  readonly orchestrated: boolean;
+  readonly selection: Extract<DeclaringConfigWriteTarget, { kind: "selected" }>;
+}): Promise<InstallTransactionOutcome | undefined> {
+  const { opts, state, selection } = args;
+  const { marketplace, plugin } = opts;
+  const record = ownValue(ownValue(state.marketplaces, marketplace)?.plugins, plugin);
+  if (
+    args.orchestrated ||
+    record?.provenance !== "explicit" ||
+    opts.pinVersionOverride !== undefined ||
+    pluginLayerVerdict({
+      target: selection.current,
+      other: selection.sibling,
+      targetIsLocal: selection.targetIsLocal,
+      marketplace,
+      plugin,
+    }).kind !== "other-only"
+  ) {
+    return undefined;
+  }
+
+  await writeAdoptingConfigEntries({
+    current: selection.current,
+    sibling: selection.sibling,
+    state,
+    marketplace,
+    plugin,
+    targetConfigPath: selection.targetConfigPath,
+    scopeRoot: args.locations.scopeRoot,
+    pluginPatch: {},
+  });
+  return {
+    kind: "declared",
+    record,
+    reason: selection.targetIsLocal
+      ? "already installed in shared layer"
+      : "already installed in local layer",
+  };
+}
+
+/**
+ * LAYER-05: the one `(skipped)` row of an install that only added a
+ * declaration, at the severity `skipSeverity` gives an idempotent reason. The
+ * outcome is the `installed` shape a promotion of a record on disk returns:
+ * nothing changed on disk but the target layer.
+ */
+function declaredRowOutcome(args: {
+  readonly ctx: NotificationContext;
+  readonly run: NotificationRun;
+  readonly marketplace: string;
+  readonly scope: Scope;
+  readonly plugin: string;
+  readonly record: PluginInstallRecord;
+  readonly reason: "already installed in shared layer" | "already installed in local layer";
+}): InstallPluginOutcome {
+  const { record } = args;
+  const reasons: ContentReason[] = [args.reason];
+  notifyWithContext(
+    args.ctx,
+    args.run,
+    CASCADE_CONTEXT,
+    [
+      {
+        name: args.marketplace,
+        scope: args.scope,
+        plugins: [
+          {
+            status: "skipped",
+            name: args.plugin,
+            version: record.version,
+            reasons,
+            severity: skipSeverity(reasons),
+          },
+        ],
+      },
+    ],
+    undefined,
+    "single",
+  );
+  return {
+    status: "installed",
+    version: record.version,
+    resourcesChanged: false,
+    declaresAgents: record.resources.agents.length > 0,
+    declaresMcp: record.resources.mcpServers.length > 0,
+    declaresWorkflows: record.resources.workflows.length > 0,
+  };
+}
+
+/**
  * Outcome of the `withLockedStateTransaction` closure in
  * `installPluginWithTransaction`, mirroring the `SetEnabledOutcome` pattern
  * `enable-disable.ts` uses for its own locked-transaction closure: one typed
@@ -1729,6 +1838,9 @@ function standaloneLocalOnlyRefusal(
  * - `"marketplace-declared-locally"` -- FIX-03 / D-MF-02: the standalone write
  *   would declare the plugin in `claude-plugins.json` under a marketplace only
  *   `claude-plugins.local.json` declares. Nothing ran and nothing is saved.
+ * - `"declared"` -- LAYER-05: the plugin was already installed by name and
+ *   only the other layer declared it, so the target layer gained the
+ *   declaration and nothing else ran or was saved.
  * - `"promoted"` -- D-04-07: a recorded dependency the user has now named was
  *   promoted instead of cascaded. State was saved and any hooks hydrated
  *   inside the lock; the row, then any MCP config notice, is the whole report.
@@ -1748,6 +1860,11 @@ type InstallTransactionOutcome =
   | { kind: "invalid-config" }
   | { kind: "marketplace-absent" }
   | { kind: "marketplace-declared-locally"; refusal: MarketplaceDeclaredLocallyError }
+  | {
+      kind: "declared";
+      record: PluginInstallRecord;
+      reason: "already installed in shared layer" | "already installed in local layer";
+    }
   | { kind: "promoted"; promotion: PromotionOutcome }
   | {
       kind: "disable-cascade-failed";
@@ -1910,6 +2027,17 @@ async function installPluginWithTransaction(
         const refusal = standaloneLocalOnlyRefusal(opts, selection);
         if (refusal !== undefined) {
           return { kind: "marketplace-declared-locally", refusal };
+        }
+
+        const declared = await declareInstalledPlugin({
+          opts,
+          state,
+          locations,
+          orchestrated,
+          selection,
+        });
+        if (declared !== undefined) {
+          return declared;
         }
 
         // D-04-07: a recorded dependency the user has now named is promoted
@@ -2333,6 +2461,17 @@ async function installPluginWithTransaction(
         error: outcome.refusal,
         reasons: ["marketplace declared locally"],
         orchestrated,
+      });
+
+    case "declared":
+      return declaredRowOutcome({
+        ctx,
+        run,
+        marketplace,
+        scope,
+        plugin,
+        record: outcome.record,
+        reason: outcome.reason,
       });
 
     // D-04-07: the promotion arm. State was saved and any hooks hydrated inside

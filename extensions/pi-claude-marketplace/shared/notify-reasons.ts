@@ -46,6 +46,10 @@ const IDEMPOTENT_REASONS = [
   "already no autoupdate",
   "already enabled",
   "already disabled",
+  // LAYER-05: the target layer gained the declaration of a plugin the scope
+  // had already installed.
+  "already installed in shared layer",
+  "already installed in local layer",
 ] as const;
 type IdempotentReason = (typeof IDEMPOTENT_REASONS)[number];
 
