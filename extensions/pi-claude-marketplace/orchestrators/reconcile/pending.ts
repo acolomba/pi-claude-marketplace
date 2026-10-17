@@ -120,35 +120,43 @@ function buildInvalidConfigBlock(
   };
 }
 
-/**
- * The failed blocks of a scope whose layer files the planner must not read:
- * one per invalid layer file (CFG-03), and one per layer that declares a
- * plugin whose marketplace only the other layer declares (LAYER-06 /
- * D-MF-03). An invalid layer reads as declaring nothing, so it never also
- * reports a missing marketplace.
- */
+/** CFG-03: one failed block per invalid layer file of a scope. */
 function invalidConfigBlocks(
+  scope: Scope,
+  outcome: ScopeLoadOutcome,
+): MarketplaceRows<PendingMsg>[] {
+  return [outcome.base, outcome.local].flatMap((result) =>
+    result.status === "invalid" ? [buildInvalidConfigBlock(scope, result.filePath)] : [],
+  );
+}
+
+/**
+ * LAYER-06 / D-MF-03: one failed block per layer that declares a plugin whose
+ * marketplace only the other layer declares. It runs on the readable layers
+ * only, after `invalidConfigBlocks` found none.
+ *
+ * MIG-01 (DIFF-01): when the shared layer is absent, the load's first-run
+ * migration writes it from state before its own check, so this check reads
+ * the same `buildConfigFromState` projection the planner reads
+ * (`mergedViewForPlanning`). Pending then reports the error the next load
+ * stops on.
+ */
+function layerMarketplaceGapBlocks(
   scope: Scope,
   loc: ScopedLocations,
   outcome: ScopeLoadOutcome,
+  state: ExtensionState,
 ): MarketplaceRows<PendingMsg>[] {
-  const blocks: MarketplaceRows<PendingMsg>[] = [];
-  for (const result of [outcome.base, outcome.local]) {
-    if (result.status === "invalid") {
-      blocks.push(buildInvalidConfigBlock(scope, result.filePath));
-    }
-  }
-
-  const gaps = findLayerMarketplaceGaps(
-    outcome.base.status === "valid" ? outcome.base.config : {},
-    outcome.local.status === "valid" ? outcome.local.config : {},
+  const local = outcome.local.status === "valid" ? outcome.local.config : {};
+  const shared =
+    outcome.base.status === "valid" ? outcome.base.config : buildConfigFromState(state, local);
+  return findLayerMarketplaceGaps(shared, local).map((gap) =>
+    buildInvalidConfigBlock(
+      scope,
+      gap.layer === "shared" ? loc.configJsonPath : loc.configLocalJsonPath,
+      composeLayerMarketplaceCause(gap, scope),
+    ),
   );
-  for (const gap of gaps) {
-    const filePath = gap.layer === "shared" ? loc.configJsonPath : loc.configLocalJsonPath;
-    blocks.push(buildInvalidConfigBlock(scope, filePath, composeLayerMarketplaceCause(gap, scope)));
-  }
-
-  return blocks;
 }
 
 /**
@@ -238,12 +246,11 @@ export async function pendingReconcile(opts: PendingReconcileOptions): Promise<v
     // eslint-disable-next-line no-await-in-loop -- at most two scopes, one config read each
     const outcome = await loadMergedScopeConfig(loc);
 
-    // CFG-03 abort: if EITHER base or local config is invalid, or a layer
-    // declares a plugin without its marketplace (LAYER-06), emit a (failed)
+    // CFG-03 abort: if EITHER base or local config is invalid, emit a (failed)
     // {invalid manifest} row for that layer. Do NOT call planReconcile --
     // invalid input must never be coerced into an empty desired-state diff that
     // would render as a mass-uninstall list.
-    const configBlocks = invalidConfigBlocks(scope, loc, outcome);
+    const configBlocks = invalidConfigBlocks(scope, outcome);
     if (configBlocks.length > 0) {
       invalidBlocks.push(...configBlocks);
       continue;
@@ -270,6 +277,14 @@ export async function pendingReconcile(opts: PendingReconcileOptions): Promise<v
         severity: "error",
         plugins: [],
       });
+      continue;
+    }
+
+    // LAYER-06: a layer that declares a plugin without its marketplace stops
+    // the scope as an invalid layer file does, so nothing is planned for it.
+    const gapBlocks = layerMarketplaceGapBlocks(scope, loc, outcome, state);
+    if (gapBlocks.length > 0) {
+      invalidBlocks.push(...gapBlocks);
       continue;
     }
 

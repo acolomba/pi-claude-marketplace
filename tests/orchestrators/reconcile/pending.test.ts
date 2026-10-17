@@ -511,6 +511,40 @@ test("MIG-01: a local-only marketplace merges over the state projection and adds
   verifyBoundary();
 });
 
+test("LAYER-06 / MIG-01: before the first-run migration, a local layer missing the marketplace the migration declares reports the layer error", async (t) => {
+  // arrange
+  const { cwd, project } = await createHermeticScopes(t, "premigration-layer-gap");
+  await writeUnder(
+    project.stateJsonPath,
+    stateBytes("mp", "acme/tools", path.join(cwd, "clone"), [
+      { name: "p1", skills: ["mp-p1-tool"] },
+    ]),
+  );
+  await writeUnder(
+    project.configLocalJsonPath,
+    JSON.stringify({ schemaVersion: 1, plugins: { "p1@mp": {} } }),
+  );
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+
+  // act
+  await pendingReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project" });
+
+  // assert
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "Some operations have failed.\n\n" +
+        "⊘ claude-plugins.local.json [project] (failed) {invalid manifest}\n" +
+        "  ⊘ claude-plugins.local.json (failed) {invalid manifest}\n" +
+        "    cause: The local layer (claude-plugins.local.json) declares p1@mp, but only the shared layer declares its marketplace. Run /claude:plugin marketplace add <source> --local --scope project with the source the shared layer declares, or remove the plugin from the local layer.\n\n" +
+        "Reconcile pending: 2 failures",
+      severity: "error",
+    },
+  ]);
+  await assert.rejects(readFile(project.configJsonPath, "utf8"), { code: "ENOENT" });
+  verifyBoundary();
+});
+
 test("FIX-02: the pending view leaves out what the local file declares, as the load's migration does", async (t) => {
   // arrange
   const { cwd, project } = await createHermeticScopes(t, "premigration-local-declared");

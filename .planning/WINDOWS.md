@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 4
+open_count: 3
 waived_count: 51
-fixed_count: 44
+fixed_count: 45
 total_count: 99
-last_updated: 2026-10-17T19:17:47.670Z
+last_updated: 2026-10-17T20:49:33.381Z
 ---
 
 # Broken Windows Ledger
@@ -113,7 +113,7 @@ last_updated: 2026-10-17T19:17:47.670Z
 | 96 | 03.2 | todo | extensions/pi-claude-marketplace/shared/notification-json.ts | 410 | [marketplace-features] A cascade row for a cross-marketplace dependency renders id lib@tools@upstream on the JSON wire (wireRow appends the block name to a row name that already carries @marketplace); found by the cross-scope install scenario, which pins the current value | fixed |  | 2026-10-17T04:13:17.267Z | 2026-10-17T06:00:11.386Z |
 | 97 | 03.2 | todo | README.md | 305 | [marketplace-features] The command reference line 'Remove a marketplace and all plugins installed from it.' (and its README.es.md twin) predates the layer partition: a remove from one config file uninstalls only that file's plugins, and a dependency another plugin needs stays | fixed |  | 2026-10-17T04:38:40.511Z | 2026-10-17T06:03:01.499Z |
 | 98 | 03.2 | todo | extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts |  | [marketplace-features] A marketplace-level refusal row (marketplaceFailureRows: remove, autoupdate, add under the GitHub base override) carries a synthetic failed child named after the marketplace, so its JSON wire id reads <mp>@<mp> (tools@tools), as if a plugin named tools existed; the scenarios pin that value. Fixing it needs a wire decision (mark the child as a marketplace subject, or give it no plugin id), so the review fix left it open | open |  | 2026-10-17T06:00:17.471Z |  |
-| 99 | 03.3 | deviation | extensions/pi-claude-marketplace/orchestrators/reconcile/pending.ts |  | [marketplace-features] LAYER-06: in the MIG-01 pre-migration window (no claude-plugins.json, a populated state.json, and a local layer), pending checks the layer files on disk while the load checks them after the first-run migration writes the shared layer from state, so a local plugin whose marketplace only the migrated shared layer would declare is an error on load but not in pending | open |  | 2026-10-17T19:17:47.670Z |  |
+| 99 | 03.3 | deviation | extensions/pi-claude-marketplace/orchestrators/reconcile/pending.ts |  | [marketplace-features] LAYER-06: in the MIG-01 pre-migration window (no claude-plugins.json, a populated state.json, and a local layer), pending checks the layer files on disk while the load checks them after the first-run migration writes the shared layer from state, so a local plugin whose marketplace only the migrated shared layer would declare is an error on load but not in pending | fixed |  | 2026-10-17T19:17:47.670Z | 2026-10-17T20:49:33.381Z |
 
 ````json
 [
@@ -1342,10 +1342,10 @@ last_updated: 2026-10-17T19:17:47.670Z
     "file": "extensions/pi-claude-marketplace/orchestrators/reconcile/pending.ts",
     "line": null,
     "description": "[marketplace-features] LAYER-06: in the MIG-01 pre-migration window (no claude-plugins.json, a populated state.json, and a local layer), pending checks the layer files on disk while the load checks them after the first-run migration writes the shared layer from state, so a local plugin whose marketplace only the migrated shared layer would declare is an error on load but not in pending",
-    "status": "open",
+    "status": "fixed",
     "reason": "",
     "recorded_at": "2026-10-17T19:17:47.670Z",
-    "resolved_at": null,
+    "resolved_at": "2026-10-17T20:49:33.381Z",
     "milestone": null
   }
 ]

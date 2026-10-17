@@ -6,10 +6,11 @@
 // scope's reload as an invalid layer file does (CFG-03): the plugins the scope
 // already installed stay recorded, and no file is repaired. A plugin whose
 // marketplace no layer declares keeps its own dangling reference row, and the
-// rest of the scope still converges.
+// rest of the scope still converges. Before the first-run migration writes the
+// shared layer, pending checks the layers the migration would leave (MIG-01).
 
 import assert from "node:assert/strict";
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
 
@@ -238,6 +239,40 @@ test("the local layer an earlier --local install wrote keeps its bytes and its p
   ]);
   assert.equal(await readFile(scope.locations.configLocalJsonPath, "utf8"), legacy);
   assert.equal(await readFile(scope.locations.stateJsonPath, "utf8"), stateBytes);
+  assert.deepStrictEqual(await recordedPlugins(scope.locations), ["demo"]);
+});
+
+test("before the first-run migration, pending reports the layer error the reload stops on", async (t) => {
+  // arrange
+  const scope = await layerScope(t, "layer-gap-premigration-", "project");
+  await writeLayer(scope.locations.configJsonPath, {
+    marketplaces: { mp: { source: scope.source } },
+    plugins: { "demo@mp": {} },
+  });
+  assert.deepStrictEqual(await reload(scope), [
+    { message: "● mp [project] (added)\n  ● demo (installed)\n\nReconcile: 2 successes" },
+  ]);
+  await rm(scope.locations.configJsonPath);
+  await writeLayer(scope.locations.configLocalJsonPath, { plugins: { "demo@mp": {} } });
+  const pending = createNotificationBoundary(1);
+
+  // act
+  await pendingReconcile({
+    ctx: pending.ctx,
+    run: runWithNothingLoaded(),
+    cwd: scope.cwd,
+    scope: "project",
+  });
+  const applied = await reload(scope);
+
+  // assert
+  assert.deepStrictEqual(pending.notifications, [
+    layerError("claude-plugins.local.json", "project", LOCAL_GAP_CAUSE, "Reconcile pending"),
+  ]);
+  pending.verifyBoundary();
+  assert.deepStrictEqual(applied, [
+    layerError("claude-plugins.local.json", "project", LOCAL_GAP_CAUSE, "Reconcile"),
+  ]);
   assert.deepStrictEqual(await recordedPlugins(scope.locations), ["demo"]);
 });
 
