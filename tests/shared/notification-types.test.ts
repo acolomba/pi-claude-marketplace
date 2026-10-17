@@ -155,6 +155,8 @@ const EXPECTED_REASONS = [
   "already installed in local layer",
   "still installed in shared layer",
   "still installed in local layer",
+  "disabled in local layer",
+  "enabled in local layer",
 ] as const;
 
 const EXPECTED_STATUS_TOKENS = [

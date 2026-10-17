@@ -1571,6 +1571,9 @@ async function readEnabledDependents(args: {
  * that does not declare the plugin. A plugin no layer declares is a dependency
  * and is acted on (D-14). An orchestrated call reads its input from the
  * configuration and is never refused (WR-09).
+ *
+ * When both layers declare the plugin and the command targets the shared
+ * layer, the local layer's own `enabled` is checked too (`refuseLocalOverride`).
  */
 function refuseOtherLayerDeclaration(
   selection: SelectedConfigWriteTarget,
@@ -1590,6 +1593,39 @@ function refuseOtherLayerDeclaration(
   if (verdict.kind === "other-only") {
     throw new EnableRefusedError(verdict.reason, verdict.refusal.message);
   }
+
+  if (verdict.kind === "both" && !selection.targetIsLocal) {
+    refuseLocalOverride(selection.sibling, write);
+  }
+}
+
+/**
+ * LAYER-04 / D-MF-03: refuse a write to the shared layer that the local
+ * layer's opposite `enabled` overrides. The local value wins the field merge,
+ * so the next load would undo the write. Claude Code refuses the same write as
+ * governed by another settings file. The refusal applies even when the record
+ * already matches the request, because the write still loses at the next load.
+ * A local entry that sets no `enabled` leaves the shared value in force, so it
+ * is not refused.
+ */
+function refuseLocalOverride(
+  local: SelectedConfigWriteTarget["sibling"],
+  write: EnabledFlagWriteTarget,
+): void {
+  const localEnabled = ownValue(local.plugins, `${write.plugin}@${write.marketplace}`)?.enabled;
+  if (localEnabled !== !write.enable) {
+    return;
+  }
+
+  throw write.enable
+    ? new EnableRefusedError(
+        "disabled in local layer",
+        "Run the command again with --local to enable it.",
+      )
+    : new EnableRefusedError(
+        "enabled in local layer",
+        "Run the command again with --local to disable it.",
+      );
 }
 
 /**

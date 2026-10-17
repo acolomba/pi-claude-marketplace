@@ -271,7 +271,14 @@ export type Reason =
   // uninstalls nothing; the token names the other layer, and the remedy rides
   // the cause line.
   | "still installed in shared layer"
-  | "still installed in local layer";
+  | "still installed in local layer"
+  // LAYER-04 / D-MF-03: an enable or disable without `--local` targets the
+  // shared layer, and the local layer sets `enabled` to the opposite value.
+  // The local value wins the field merge, so the write would be undone at the
+  // next load. The refusal rides a `failed` row, and the remedy, running the
+  // command again with `--local`, rides the cause line.
+  | "disabled in local layer"
+  | "enabled in local layer";
 
 /** Reasons that describe a content row rather than marketplace absence. */
 export type ContentReason = Exclude<

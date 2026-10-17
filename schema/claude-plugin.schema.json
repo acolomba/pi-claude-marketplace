@@ -174,7 +174,9 @@
                           "already installed in shared layer",
                           "already installed in local layer",
                           "still installed in shared layer",
-                          "still installed in local layer"
+                          "still installed in local layer",
+                          "disabled in local layer",
+                          "enabled in local layer"
                         ]
                       }
                     },
@@ -318,7 +320,9 @@
                     "already installed in shared layer",
                     "already installed in local layer",
                     "still installed in shared layer",
-                    "still installed in local layer"
+                    "still installed in local layer",
+                    "disabled in local layer",
+                    "enabled in local layer"
                   ]
                 }
               }
@@ -512,7 +516,9 @@
                           "already installed in shared layer",
                           "already installed in local layer",
                           "still installed in shared layer",
-                          "still installed in local layer"
+                          "still installed in local layer",
+                          "disabled in local layer",
+                          "enabled in local layer"
                         ]
                       }
                     },
@@ -656,7 +662,9 @@
                     "already installed in shared layer",
                     "already installed in local layer",
                     "still installed in shared layer",
-                    "still installed in local layer"
+                    "still installed in local layer",
+                    "disabled in local layer",
+                    "enabled in local layer"
                   ]
                 }
               }
@@ -915,7 +923,9 @@
                       "already installed in shared layer",
                       "already installed in local layer",
                       "still installed in shared layer",
-                      "still installed in local layer"
+                      "still installed in local layer",
+                      "disabled in local layer",
+                      "enabled in local layer"
                     ]
                   }
                 },
@@ -1102,7 +1112,9 @@
                       "already installed in shared layer",
                       "already installed in local layer",
                       "still installed in shared layer",
-                      "still installed in local layer"
+                      "still installed in local layer",
+                      "disabled in local layer",
+                      "enabled in local layer"
                     ]
                   }
                 },
@@ -1372,7 +1384,9 @@
                             "already installed in shared layer",
                             "already installed in local layer",
                             "still installed in shared layer",
-                            "still installed in local layer"
+                            "still installed in local layer",
+                            "disabled in local layer",
+                            "enabled in local layer"
                           ]
                         }
                       },
@@ -1565,7 +1579,9 @@
                             "already installed in shared layer",
                             "already installed in local layer",
                             "still installed in shared layer",
-                            "still installed in local layer"
+                            "still installed in local layer",
+                            "disabled in local layer",
+                            "enabled in local layer"
                           ]
                         }
                       },
@@ -1702,7 +1718,9 @@
               "already installed in shared layer",
               "already installed in local layer",
               "still installed in shared layer",
-              "still installed in local layer"
+              "still installed in local layer",
+              "disabled in local layer",
+              "enabled in local layer"
             ]
           }
         }

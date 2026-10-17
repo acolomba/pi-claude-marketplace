@@ -1146,6 +1146,164 @@ test("WR-09: an orchestrated enable of a plugin only the local layer declares is
   });
 });
 
+// LAYER-04 / D-MF-03: a flagless enable or disable whose plugin the local
+// layer pins to the opposite value is refused, because the local value wins
+// the field merge at the next load.
+
+const DISABLED_IN_LOCAL_ROW = [
+  "  ⊘ foo (failed) {disabled in local layer}",
+  "    cause: Run the command again with --local to enable it.",
+];
+
+const ENABLED_IN_LOCAL_ROW = [
+  "  ⊘ foo (failed) {enabled in local layer}",
+  "    cause: Run the command again with --local to disable it.",
+];
+
+/** Seed `foo@mp` in user state, declared in the shared layer and with `localEntry` in the local layer. */
+async function seedBothLayers(
+  home: string,
+  record: { readonly disabled: boolean },
+  localEntry: object,
+): Promise<{
+  readonly configPath: string;
+  readonly configLocalPath: string;
+  readonly statePath: string;
+}> {
+  const paths = record.disabled
+    ? await seedRealDisabledMarketplace(home, {
+        marketplaceName: "mp",
+        pluginName: "foo",
+        version: "1.2.3",
+      })
+    : await writeUserState(home, { marketplaceName: "mp", pluginName: "foo", disabled: false });
+  await declareFooIn(paths.configPath, paths.mpRoot, {});
+  await declareFooIn(paths.configLocalPath, paths.mpRoot, localEntry);
+  return paths;
+}
+
+for (const { title, enable, disabled, localEntry, row } of [
+  {
+    title: "an enable of a plugin the local layer disables",
+    enable: true,
+    disabled: true,
+    localEntry: { enabled: false },
+    row: DISABLED_IN_LOCAL_ROW,
+  },
+  {
+    title: "a disable of a plugin the local layer enables",
+    enable: false,
+    disabled: false,
+    localEntry: { enabled: true },
+    row: ENABLED_IN_LOCAL_ROW,
+  },
+  {
+    title: "an enable the record already matches, of a plugin the local layer disables,",
+    enable: true,
+    disabled: false,
+    localEntry: { enabled: false },
+    row: DISABLED_IN_LOCAL_ROW,
+  },
+]) {
+  test(`LAYER-04: without --local, ${title} is refused and changes nothing`, async () => {
+    await withHermeticHome(async ({ cwd, home }) => {
+      // arrange
+      const paths = await seedBothLayers(home, { disabled }, localEntry);
+      const bytesBefore = await scopeBytes(paths);
+      const { transaction, calls } = countingTransaction();
+      const setPluginEnabledForOwner = createSetPluginEnabled(
+        transaction,
+        createHooksRouting(createHooksRuntime(), { readHooksJson }),
+      );
+      const { ctx, notifications } = makeCtx(cwd);
+
+      // act
+      await setPluginEnabledForOwner({
+        ctx,
+        run: runWithNothingLoaded(),
+        cwd,
+        marketplace: "mp",
+        plugin: "foo",
+        enable,
+        scope: "user",
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message: ["A plugin operation has failed.", "", "● mp [user]", ...row].join("\n"),
+          severity: "error",
+        },
+      ]);
+      assert.deepStrictEqual(calls, { cascadeUnstage: 0, save: 0 });
+      assert.deepStrictEqual(await scopeBytes(paths), bytesBefore);
+    });
+  });
+}
+
+test("LAYER-04: a flagless enable is not refused by a local entry that sets no enabled value", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const paths = await seedBothLayers(home, { disabled: true }, {});
+    const localBefore = await readFile(paths.configLocalPath, "utf8");
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert
+    const shared = (await readConfig(paths.configPath)) as { plugins?: Record<string, unknown> };
+    assert.deepStrictEqual(
+      {
+        notifications,
+        sharedEntry: shared.plugins?.["foo@mp"],
+        local: await readFile(paths.configLocalPath, "utf8"),
+        merged: await readMergedUserPluginEntry(cwd, "foo@mp"),
+      },
+      {
+        notifications: [
+          { message: "● mp [user]\n  ● foo v1.2.3 (installed)\n\n/reload to pick up changes" },
+        ],
+        sharedEntry: { enabled: true },
+        local: localBefore,
+        merged: { source: "local", declaredEnabled: true },
+      },
+    );
+  });
+});
+
+test("WR-09: an orchestrated enable of a plugin the local layer disables is not refused", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    await seedBothLayers(home, { disabled: true }, { enabled: false });
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    const outcome = await setPluginEnabled({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo",
+      enable: true,
+      scope: "user",
+      notifications: { mode: "orchestrated" },
+    });
+
+    // assert
+    assert.deepStrictEqual(outcome, { status: "enabled", name: "foo", version: "1.2.3" });
+    assert.deepStrictEqual(notifications, []);
+  });
+});
+
 test("LAYER-04: enable with --local of a plugin no layer declares writes the local layer", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange

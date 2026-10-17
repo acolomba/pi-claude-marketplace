@@ -30,3 +30,28 @@ Feature: Plugin disable
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
+
+  Scenario: Disabling without --local a plugin the local layer enables fails as enabled in local layer
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has run "/claude:plugin install demo@fixtures --scope project --local"
+    Given the user has run "/claude:plugin disable demo@fixtures --scope project --local"
+    Given the user has run "/claude:plugin enable demo@fixtures --scope project --local"
+    When the user runs "/claude:plugin disable demo@fixtures --scope project"
+    Then the result has these fields:
+      | kind         | cascade                        |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status | reasons                | scope   | cause chain                                       | cause truncated | leaks | rollback partial |
+      | fixtures         | project           | demo@fixtures | demo | failed | enabled in local layer | project | Run the command again with --local to disable it. | false           |       |                  |
+    Then the "claude-plugins.local.json" file of the project scope declares these plugins:
+      | id            | enabled |
+      | demo@fixtures | true    |
+    Then the "claude-plugins.json" file of the project scope declares these plugins:
+      | id            |
+      | demo@fixtures |
+    When the user starts a new pi session
+    Then the session offers these skills:
+      | command           | description            |
+      | /skill:demo-skill | A skill of demo 1.0.0. |

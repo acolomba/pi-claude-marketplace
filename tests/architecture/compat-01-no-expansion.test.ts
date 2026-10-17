@@ -305,6 +305,9 @@ const EXPECTED_REASONS = [
   // LAYER-05: an uninstall keeps a plugin the other layer still declares.
   "still installed in shared layer",
   "still installed in local layer",
+  // LAYER-04: a flagless enable or disable the local layer overrides is refused.
+  "disabled in local layer",
+  "enabled in local layer",
 ] as const;
 
 const EXPECTED_STATUS_TOKENS = [

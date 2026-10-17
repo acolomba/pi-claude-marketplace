@@ -422,4 +422,11 @@ type CommandPrivateReason =
   // declaration. It rides a `skipped` row at warning, because the plugin the
   // user asked to uninstall stays installed.
   | "still installed in shared layer"
-  | "still installed in local layer";
+  | "still installed in local layer"
+  // LAYER-04 / D-MF-03: enable's and disable's refusal markers, owned by
+  // `orchestrators/plugin/enable-disable.ts`. A command without `--local`
+  // would write a flag that the local layer's opposite `enabled` overrides at
+  // the next load, so nothing is written. They ride a `failed` row: the
+  // command was not carried out.
+  | "disabled in local layer"
+  | "enabled in local layer";
