@@ -935,9 +935,9 @@ interface ResolvedTarget {
 }
 
 /**
- * LAYER-04 / D-MF-03: a nameless update with `--local` covers only the
- * plugins the local layer declares; without the flag it covers every
- * installed plugin of the scope.
+ * LAYER-04 / D-MF-03: a nameless update with `--local` covers the plugins the
+ * local layer declares and the dependencies those plugins need; without the
+ * flag it covers every installed plugin of the scope.
  */
 async function enumerateTargets(opts: UpdatePluginsOptions): Promise<readonly ResolvedTarget[]> {
   const targets = await enumerateScopeTargets(opts);
