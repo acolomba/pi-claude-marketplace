@@ -5,16 +5,16 @@ milestone_name: Marketplace Behavioral Tests
 current_phase: "03.3"
 current_phase_name: Plugin Layer Partition
 status: executing
-stopped_at: Completed 03.3-02-PLAN.md
-last_updated: "2026-10-17T15:55:11.968Z"
+stopped_at: Completed 03.3-03-PLAN.md
+last_updated: "2026-10-17T16:30:11.187Z"
 last_activity: 2026-10-17
 last_activity_desc: Phase 03.3 execution started
-state_head: ca25a1337aae3a3cc1262207d8b5c77869ed2be3
+state_head: 12bee5e1b7eaf499bc2fe6c0990d643eec74a457
 progress:
   total_phases: 14
   completed_phases: 5
   total_plans: 37
-  completed_plans: 29
+  completed_plans: 30
   percent: 36
 ---
 
@@ -32,7 +32,7 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 03.3 (Plugin Layer Partition) — EXECUTING
-Plan: 3 of 10
+Plan: 4 of 10
 Status: Ready to execute
 Last activity: 2026-10-17 — Phase 03.3 execution started
 
@@ -181,8 +181,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-17T15:55:10.372Z
-**Stopped at:** Completed 03.3-02-PLAN.md
+**Last session:** 2026-10-17T16:30:09.312Z
+**Stopped at:** Completed 03.3-03-PLAN.md
 **Resume file:** None
 
 **Main merge (2026-10-11, quick task 261011-bsm):** `origin/main` at
@@ -320,6 +320,7 @@ archived milestone artifacts.
 | Phase 03.2 P05 | 25min | 3 tasks | 9 files |
 | Phase 03.3 P01 | 16min | 1 tasks | 16 files |
 | Phase 03.3 P02 | 9min | 1 tasks | 12 files |
+| Phase 03.3 P03 | 31min | 2 tasks | 9 files |
 
 ## Decisions
 
@@ -428,6 +429,8 @@ archived milestone artifacts.
 - [Phase 03.2]: An unreadable declaration index refuses a remove with {unreadable} before any change, in both modes (D-09 Q4)
 - [Phase 03.2]: [marketplace-features] A standalone project install declares every marketplace its transaction added (dependencies included) in the root's target config file, under the UAT-05 gate; no dependency plugin key (D-04-02); reload/import write nothing (WR-09)
 - [Phase 03.3]: pluginLayerVerdict (plugin/shared.ts) is the one layer verdict for named plugin verbs; a standalone uninstall reads both layers, refuses an invalid other layer with the CFG-03 row, and refuses other-only declarations after the record checks (LAYER-04)
+- [Phase 03.3]: Install, enable, and disable pick their layer by the --local flag alone (selectDeclaringConfigWriteTarget reads both layers, either invalid layer stops the command); standalone enable/disable refuse a plugin only the other layer declares, idempotent calls included (LAYER-04)
+- [Phase 03.3]: A command that writes a plugin declaration also declares the plugin's marketplace in that layer; dependency marketplaces keep the both-layer gate; CR-06 overwrites enabled:false in every layer with the plain writer (LAYER-06)
 
 ### mcp-4 decisions
 
