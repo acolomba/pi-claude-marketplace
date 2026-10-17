@@ -60,7 +60,7 @@ path), **url** (https git URL on the loopback stand-in), and **gh**
 - [x] **Phase 3.1: Local Declaration Leak Fix** (INSERTED) — A marketplace added with `--local` stays out of `claude-plugins.json` across a reload, written test-first (completed 2026-10-16)
 - [x] **Phase 3.2: Marketplace Layer Partition** (INSERTED) — The same marketplace may live in both layers, and named marketplace mutations change only their own layer (completed 2026-10-17)
 - [x] **Phase 3.3: Plugin Layer Partition** (INSERTED) — Named plugin mutations act on their own layer, a plugin may be declared in both layers and is installed once, and a plugin's marketplace is declared in the same layer (completed 2026-10-17)
-- [ ] **Phase 3.4: Scope and Layer Terminology** (INSERTED) — Messages, reason tokens, docs, and code use the scope and layer terms consistently
+- [ ] **Phase 3.4: Scope and Layer Terminology** (INSERTED) — Messages, reason tokens, docs, and code use scope, base/local layer, and config consistently
 - [ ] **Phase 4: Marketplace Remove and List** — `remove`/`rm` with the plugin cascade, and `list`/`ls` across both scopes
 - [ ] **Phase 5: Marketplace Info** — `info` source details for every kind, scope fan-out, not-added forms, and a broken manifest
 - [ ] **Phase 6: Marketplace Update and C-10 Fix** — Single and bare `update`, with and without autoupdate, path-source failures, and the C-10 fix written test-first
@@ -305,14 +305,15 @@ Plans:
 
 ### Phase 3.4: Scope and Layer Terminology (INSERTED)
 
-**Goal:** Every user-visible string, document, and code identifier uses the scope and layer terms defined in PROJECT.md, so "scope" always means user or project and "layer" always means the shared or local declaration file.
+**Goal:** Every user-visible string, document, and code identifier uses the scope and layer terms defined in PROJECT.md: a scope is user or project, a layer is base or local, and a config is the file that holds a layer's declarations.
 **Depends on:** Phase 3.3
 **Requirements:** TERM-01
 **Success Criteria** (what must be TRUE):
 
-1. Reason tokens, cause lines, and message text that name one of a scope's two files say "shared layer" or "local layer" (for example the `marketplace declared locally` and `marketplace declared in shared config` families), with the catalog, JSON guide, schema, and pins updated together (TERM-01).
-2. README, README.es, the docs, and the CHANGELOG use the terms consistently, and the CHANGELOG records any renamed reason token (TERM-01).
-3. Code identifiers and comments that mean the shared layer say `shared`, not `base` (for example in `persistence/config-merge.ts`), with no behavior change (TERM-01). Carried from the Phase 3.3 review (IN-02): the flag-only layer selector and the uninstall seam that now loads both layers are renamed to match what they do (`selectDeclaringConfigWriteTarget` / `DeclaringConfigWriteTarget`, for example to `selectLayerTarget`, and `UninstallTransaction.loadTargetConfig`, for example to `loadLayerConfig`).
+1. Reason tokens use the layer terms: `marketplace declared locally` becomes `marketplace in local layer only`, `marketplace declared in shared config` becomes `marketplace in base layer only`, `plugin declared locally` becomes `plugin in local layer only`, `plugin declared in shared config` becomes `plugin in base layer only`, and every other token that says "shared layer" says "base layer"; the catalog, JSON guide, schema, and pins change together, and the CHANGELOG records each renamed token (TERM-01).
+2. Cause lines and message prose name the level as "the base layer" or "the local layer" and the file as "the base config" or "the local config" (for example "the local config (`claude-plugins.local.json`)" on first mention); README, README.es, the docs, and the CHANGELOG follow the same terms (TERM-01).
+3. Code says `base` and `local` everywhere a layer is meant, never `shared`: `configJsonPath` becomes `baseConfigJsonPath` and `configLocalJsonPath` becomes `localConfigJsonPath`, error classes and identifiers follow, and comments match, with no behavior change. Carried from the Phase 3.3 review (IN-02): the flag-only layer selector and the uninstall seam that now loads both layers are renamed to match what they do (`selectDeclaringConfigWriteTarget` / `DeclaringConfigWriteTarget`, `UninstallTransaction.loadTargetConfig`) (TERM-01).
+4. The `{unreadable}` cause for unreadable dependency declarations names the record without the parser's detail, for `uninstall`, `marketplace remove`, and the nameless `update --local` / `reinstall --local` (Phase 3.3 security note).
 
 **Plans:** TBD
 

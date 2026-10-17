@@ -59,7 +59,7 @@ A scope (user or project) has two layers: shared (`claude-plugins.json`) and loc
 
 ### Terminology (TERM)
 
-- [ ] **TERM-01**: User-visible text (reason tokens, messages, catalog, docs, README) and code identifiers use the scope and layer terms of PROJECT.md consistently (for example `base` becomes `shared`, "config" becomes "layer" where it means one of the two files)
+- [ ] **TERM-01**: User-visible text (reason tokens, messages, catalog, docs, README) and code identifiers use the PROJECT.md terms consistently: scope (user/project), layer (base/local), and config (the file holding a layer); code says `base`, never `shared`
 
 ### marketplace add
 
