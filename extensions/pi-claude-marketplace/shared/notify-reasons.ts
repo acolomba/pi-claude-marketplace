@@ -376,13 +376,18 @@ type CommandPrivateReason =
   | "marketplace not added to user scope"
   | "marketplace not added to project scope"
   | "orphan rewake"
-  // EDEP-02: disable's refusal marker, owned by
-  // `orchestrators/plugin/enable-disable.ts`. An installed and ENABLED
-  // plugin in the same scope still declares the target, so the disable is
-  // refused and nothing is written; the dependent keys ride the cause line.
-  // It is the one member of this group that rides a `failed` row -- the
-  // command was NOT carried out, unlike its `dependents unsatisfied`
-  // neighbour above.
+  // Other plugins still need the target, so the command changed nothing; the
+  // plugins that need it ride the cause line. Three owners stamp it:
+  // - EDEP-02: `orchestrators/plugin/enable-disable.ts` refuses a disable
+  //   while an installed and ENABLED plugin in the scope declares the target.
+  // - LAYER-03: `orchestrators/marketplace/remove.ts` refuses a remove from
+  //   one layer while plugins that stay still need a plugin it would remove.
+  // - LAYER-08: `orchestrators/plugin/uninstall.ts` refuses an uninstall of a
+  //   plugin no layer declares while a plugin of the target layer needs it,
+  //   and skips it while only plugins of the other layer need it.
+  // The refusals ride a `failed` row and uninstall's skip rides a `skipped`
+  // row at warning. Unlike its `dependents unsatisfied` neighbour above, the
+  // command was not carried out.
   | "dependents remain"
   // MISS-01 / D-09-09: reload's marker for a missing declared dependency the
   // dependency-install step materialized, owned by

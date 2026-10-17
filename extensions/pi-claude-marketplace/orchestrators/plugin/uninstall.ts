@@ -7,11 +7,16 @@
 //     PU-5 silent converge: if record absent, set alreadyGone=true and return (NO save)
 //     LAYER-04 layer verdict (standalone only, WR-09): throw UninstallRefusedError
 //       when only the layer the command does not target declares the plugin
+//     LAYER-05: when both layers declare it, drop the target declaration and
+//       return with a skipped row
 //     D-06-06 declarer read: collect the OTHER records in this scope that
 //       declare the target, and throw UninstallRefusedError only when some
 //       record's declarations cannot be read (D-05-07) -- BEFORE the cascade,
 //       so a refusal leaves nothing off disk; the read hands back the
 //       declaration index, the walked records and the dependent keys
+//     LAYER-08 (standalone only): when no layer declares the plugin, throw
+//       UninstallRefusedError while a plugin of the target layer needs it,
+//       and return with a skipped row while only plugins of the other layer do
 //     outcome = await cascadeUnstagePlugin(plugin, marketplace, locations, installed)
 //     if (!outcome.ok) throw outcome.cause  // PU-7 propagation; state record retained
 //     delete state.marketplaces[mp].plugins[plugin]
@@ -63,7 +68,12 @@
 import { rm } from "node:fs/promises";
 import path from "node:path";
 
-import { findDependents, isHeldBy, pruneOrphans } from "../../domain/dependency-orphans.ts";
+import {
+  declaredNeedersByLayer,
+  findDependents,
+  isHeldBy,
+  pruneOrphans,
+} from "../../domain/dependency-orphans.ts";
 import { loadConfig } from "../../persistence/config-io.ts";
 import { deletePluginConfigEntry } from "../../persistence/config-write-back.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
@@ -73,6 +83,7 @@ import { type ContentReason } from "../../shared/notification-types.ts";
 import {
   type PluginFailedMessage,
   type PluginUninstalledMessage,
+  type PluginUninstallSkippedMessage,
   type Reason,
 } from "../../shared/notification-types.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
@@ -96,7 +107,9 @@ import {
   resolveCrossScopePluginTarget,
 } from "./shared.ts";
 import {
+  composeDependencyRefusalCause,
   composeKeptInstalledRow,
+  composeNeededElsewhereRow,
   composePrunedRow,
   composeRemovalBlocks,
   composeUninstalledRow,
@@ -106,6 +119,7 @@ import { garbageCollectWorkflowsStaging } from "./workflows-staging-gc.ts";
 
 import type { IndexedRecord, ScopeDeclarationIndexResult } from "./dependency-index.ts";
 import type { HooksRouting } from "../../bridges/hooks/index.ts";
+import type { DeclarationIndex, DeclaringLayers } from "../../domain/dependency-orphans.ts";
 import type { ScopeConfig } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
@@ -416,6 +430,126 @@ async function deleteTargetDeclaration(
     target.plugin,
     target.marketplace,
   );
+}
+
+/** Which layers declare a key, from the target layer's side. */
+function declaringLayers(inTarget: boolean, inOther: boolean): DeclaringLayers {
+  if (inTarget) {
+    return inOther ? "both" : "target";
+  }
+
+  return inOther ? "other" : "none";
+}
+
+/**
+ * LAYER-08 / D-MF-03: a plugin no layer declares is a dependency, and a named
+ * uninstall of it is decided by the declared plugins that still need it,
+ * walked through undeclared holders. A needer the target layer declares
+ * refuses the uninstall. Only needers the other layer declares give the
+ * skipped row, because the uninstall would break plugins this command does
+ * not manage. With no needer, the uninstall goes ahead.
+ *
+ * The refusal is the divergence D-MF-03 records: Claude Code uninstalls a
+ * needed plugin and reports its dependents. The walk reads the snapshot of the
+ * D-06-06 declarer read, under the same lock, and runs before the cascade and
+ * the save, so both arms change nothing. A reconcile-driven uninstall read no
+ * other layer and applies no layer rule (WR-09).
+ */
+function checkDependencyNeeders(
+  layers: Extract<UninstallLayers, { kind: "readable" }>,
+  index: DeclarationIndex,
+  args: {
+    readonly local: boolean;
+    readonly marketplace: string;
+    readonly plugin: string;
+    readonly version: string;
+  },
+): PluginUninstallSkippedMessage | undefined {
+  const { target, other } = layers;
+  if (other === undefined) {
+    return undefined;
+  }
+
+  const layerOf = (key: string): DeclaringLayers =>
+    declaringLayers(
+      ownValue(target.plugins, key) !== undefined,
+      ownValue(other.plugins, key) !== undefined,
+    );
+  const key = `${args.plugin}@${args.marketplace}`;
+  if (layerOf(key) !== "none") {
+    return undefined;
+  }
+
+  const needers = declaredNeedersByLayer(key, index, layerOf);
+  if (needers.target.length > 0) {
+    throw new UninstallRefusedError(
+      "dependents remain",
+      composeDependencyRefusalCause({ ...args, needers: needers.target }),
+    );
+  }
+
+  if (needers.other.length === 0) {
+    return undefined;
+  }
+
+  return composeNeededElsewhereRow({
+    ...args,
+    needers: needers.other,
+    otherLayer: args.local ? "shared" : "local",
+  });
+}
+
+/** What the locked read decided: a row that ends the uninstall, or the walk to remove with. */
+type RemovalDecision =
+  | { readonly kind: "skipped"; readonly row: PluginUninstallSkippedMessage }
+  | { readonly kind: "remove"; readonly reading: DeclarerReading };
+
+/**
+ * The layer rules and the declarer read, in order, inside the lock: the
+ * LAYER-04 refusal, the LAYER-05 drop of the target declaration while the
+ * other layer keeps the plugin, the D-06-06 / D-05-07 declarer read, and the
+ * LAYER-08 dependency rule over that read's snapshot. A skipped decision
+ * leaves before the cascade, `--prune`, and the save.
+ */
+async function decideRemoval(args: {
+  readonly transaction: UninstallTransaction;
+  readonly layers: Extract<UninstallLayers, { kind: "readable" }>;
+  readonly layerPaths: UninstallLayerPaths;
+  readonly state: ExtensionState;
+  readonly locations: ScopedLocations;
+  readonly local: boolean;
+  readonly marketplace: string;
+  readonly plugin: string;
+  readonly version: string;
+}): Promise<RemovalDecision> {
+  const { transaction, layers, layerPaths, locations, local, marketplace, plugin } = args;
+  const otherLayer = checkOtherLayerDeclaration(layers, { local, marketplace, plugin });
+  if (otherLayer !== undefined) {
+    await deleteTargetDeclaration(transaction, layerPaths, locations, { plugin, marketplace });
+    return {
+      kind: "skipped",
+      row: composeKeptInstalledRow({ plugin, version: args.version, otherLayer }),
+    };
+  }
+
+  // D-06-06 / D-05-07: the declarer read runs AFTER the two converge arms (a
+  // target that is not installed is `{not installed}`, never a refusal --
+  // D-05-03) and BEFORE the cascade, so the declarer set and the removal
+  // decision share one snapshot, and an unreadable declarer throws out of the
+  // closure with nothing removed and NO save. The walk it hands back is the
+  // sweep's input (same snapshot, same lock).
+  const reading = await readDeclarers({
+    state: args.state,
+    locations,
+    key: `${plugin}@${marketplace}`,
+  });
+  const row = checkDependencyNeeders(layers, reading.snapshot.index, {
+    local,
+    marketplace,
+    plugin,
+    version: args.version,
+  });
+  return row === undefined ? { kind: "remove", reading } : { kind: "skipped", row };
 }
 
 /**
@@ -1083,10 +1217,11 @@ function emitAlreadyGone(args: {
 }
 
 /**
- * LAYER-05: the one row of a standalone uninstall that dropped only its target
- * layer's declaration. Only the standalone path reaches it, and the standalone
- * entrypoint discards the outcome (WR-01), so it returns the existing
- * `converged` shape.
+ * LAYER-05 / LAYER-08: the one row of a standalone uninstall that uninstalled
+ * nothing, because the other layer still declares the plugin or only plugins
+ * the other layer declares still need it. Only the standalone path reaches it,
+ * and the standalone entrypoint discards the outcome (WR-01), so it returns
+ * the existing `converged` shape.
  */
 function emitKeptInstalled(args: {
   readonly ctx: NotificationContext;
@@ -1094,14 +1229,9 @@ function emitKeptInstalled(args: {
   readonly marketplace: string;
   readonly scope: Scope;
   readonly plugin: string;
-  readonly version: string | undefined;
-  readonly otherLayer: "shared" | "local";
+  readonly row: PluginUninstallSkippedMessage;
 }): UninstallPluginOutcome {
-  const row = composeKeptInstalledRow({
-    plugin: args.plugin,
-    version: args.version,
-    otherLayer: args.otherLayer,
-  });
+  const { row } = args;
   notifyWithContext(
     args.ctx,
     args.run,
@@ -1243,9 +1373,9 @@ async function runUninstallOutcome(
   // split, so the failing arms see what was already dropped.
   let retiredWorkflowCommand = false;
   const routeEffect = { removeAfterSave: false };
-  // LAYER-05: the other layer that still declares the plugin, when the
-  // uninstall only dropped the target layer's declaration.
-  const kept: { otherLayer: "shared" | "local" | undefined } = { otherLayer: undefined };
+  // LAYER-05 / LAYER-08: the skipped row of an uninstall that uninstalled
+  // nothing.
+  const kept: { row: PluginUninstallSkippedMessage | undefined } = { row: undefined };
   // D-05-10: the sweep's members, carried out of the closure for the
   // post-commit cleanup and the report.
   const prunedMembers: PrunedMember[] = [];
@@ -1300,25 +1430,27 @@ async function runUninstallOutcome(
       }
 
       removedVersion = installed.version;
-      // LAYER-05 / D-MF-03: each layer may declare the plugin, and it stays
-      // installed while either does. Dropping the target layer's declaration
-      // is the whole uninstall: no cascade, no prune, and no save.
-      kept.otherLayer = checkOtherLayerDeclaration(layers, { local, marketplace, plugin });
-      if (kept.otherLayer !== undefined) {
-        await deleteTargetDeclaration(transaction, layerPaths, locations, { plugin, marketplace });
+      // LAYER-05 / LAYER-08 / D-MF-03: a skipped decision is the whole
+      // uninstall: no cascade, no prune, and no save.
+      const decision = await decideRemoval({
+        transaction,
+        layers,
+        layerPaths,
+        state,
+        locations,
+        local,
+        marketplace,
+        plugin,
+        version: installed.version,
+      });
+      if (decision.kind === "skipped") {
+        kept.row = decision.row;
         return;
       }
 
-      // D-06-06 / D-05-07: the declarer read runs AFTER the two converge arms
-      // (a target that is not installed is `{not installed}`, never a refusal
-      // -- D-05-03) and BEFORE the cascade, so the declarer set and the
-      // removal decision share one snapshot, and an unreadable declarer throws
-      // out of the closure with nothing removed and NO save. The walk it hands
-      // back is the sweep's input (same snapshot, same lock).
       const primaryKey = `${plugin}@${marketplace}`;
-      const reading = await readDeclarers({ state, locations, key: primaryKey });
-      const snapshot = reading.snapshot;
-      dependents = reading.dependents;
+      const snapshot = decision.reading.snapshot;
+      dependents = decision.reading.dependents;
 
       // PU-1 ordering enforced INSIDE cascadeUnstagePlugin (D-03:
       // skills -> commands -> agents -> mcp).
@@ -1423,16 +1555,8 @@ async function runUninstallOutcome(
     return emitAlreadyGone({ ctx, run, marketplace, scope, plugin, orchestrated });
   }
 
-  if (kept.otherLayer !== undefined) {
-    return emitKeptInstalled({
-      ctx,
-      run,
-      marketplace,
-      scope,
-      plugin,
-      version: removedVersion,
-      otherLayer: kept.otherLayer,
-    });
+  if (kept.row !== undefined) {
+    return emitKeptInstalled({ ctx, run, marketplace, scope, plugin, row: kept.row });
   }
 
   if (routeEffect.removeAfterSave) {

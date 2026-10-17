@@ -136,3 +136,73 @@ Feature: Plugin uninstall
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
+
+  Scenario: Uninstalling a dependency that a plugin of the shared layer needs fails as dependents remain
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib          |
+      | lib  | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install app@tools --scope project"
+    When the user runs "/claude:plugin uninstall lib@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade                        |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name | status | reasons           | scope   | version | cause chain                                | cause truncated | leaks | rollback partial |
+      | tools            | project           | lib@tools | lib  | failed | dependents remain | project | 1.0.0   | Uninstall app@tools first, then lib@tools. | false           |       |                  |
+    Then the "claude-plugins.json" file of the project scope declares these plugins:
+      | id        |
+      | app@tools |
+    When the user starts a new pi session
+    Then the session offers these skills:
+      | command          | description           |
+      | /skill:app-skill | A skill of app 1.0.0. |
+      | /skill:lib-skill | A skill of lib 1.0.0. |
+
+  Scenario: Uninstalling with --local a dependency that only a plugin of the shared layer needs uninstalls nothing
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib          |
+      | lib  | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install app@tools --scope project"
+    When the user runs "/claude:plugin uninstall lib@tools --scope project --local"
+    Then the result has these fields:
+      | kind         | cascade                             |
+      | severity     | warning                             |
+      | needs reload | false                               |
+      | summary      | A plugin operation needs attention. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name | status  | reasons           | scope   | version | cause chain                                                                       | cause truncated | leaks | rollback partial |
+      | tools            | project           | lib@tools | lib  | skipped | dependents remain | project | 1.0.0   | The shared layer (claude-plugins.json) declares app@tools, which needs lib@tools. | false           |       |                  |
+    Then the "claude-plugins.local.json" file of the project scope does not exist
+    When the user starts a new pi session
+    Then the session offers these skills:
+      | command          | description           |
+      | /skill:app-skill | A skill of app 1.0.0. |
+      | /skill:lib-skill | A skill of lib 1.0.0. |
+
+  Scenario: Uninstalling a dependency that nothing needs uninstalls it
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib          |
+      | lib  | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install app@tools --scope project"
+    Given the user has run "/claude:plugin uninstall app@tools --scope project"
+    When the user runs "/claude:plugin uninstall lib@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name | status      | reasons | scope   | version |
+      | tools            | project           | lib@tools | lib  | uninstalled |         | project | 1.0.0   |
+    When the user starts a new pi session
+    Then the session offers no skills

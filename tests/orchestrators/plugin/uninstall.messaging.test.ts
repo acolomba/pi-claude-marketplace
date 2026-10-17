@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  composeDependencyRefusalCause,
   composeKeptInstalledRow,
+  composeNeededElsewhereRow,
   composePrunedRow,
   composeRemovalBlocks,
   composeUninstalledRow,
@@ -408,6 +410,103 @@ test("LAYER-05: composeKeptInstalledRow omits the version slot when the record c
     needsReload: false,
   });
 });
+
+for (const { title, needers, expected } of [
+  {
+    title: "names the one plugin the target layer declares that needs it",
+    needers: ["app@tools"],
+    expected: "Uninstall app@tools first, then lib@tools.",
+  },
+  {
+    title: "names every needer in the order given",
+    needers: ["alpha@tools", "zeta@up"],
+    expected: "Uninstall alpha@tools, zeta@up first, then lib@tools.",
+  },
+  {
+    title: "counts the needers when one key could forge the sentence",
+    needers: ['app@tools", then x@y', "zeta@up"],
+    expected: "Uninstall 2 other plugins first, then lib@tools.",
+  },
+]) {
+  test(`LAYER-08: composeDependencyRefusalCause ${title}`, () => {
+    // act
+    const cause = composeDependencyRefusalCause({
+      plugin: "lib",
+      marketplace: "tools",
+      needers,
+    });
+
+    // assert
+    assert.equal(cause, expected);
+  });
+}
+
+for (const { title, otherLayer, needers, version, expected } of [
+  {
+    title: "names the one needer the shared layer declares",
+    otherLayer: "shared",
+    needers: ["app@tools"],
+    version: "1.0.0",
+    expected: {
+      status: "skipped",
+      name: "lib",
+      version: "1.0.0",
+      reasons: ["dependents remain"],
+      cause: new Error(
+        "The shared layer (claude-plugins.json) declares app@tools, which needs lib@tools.",
+      ),
+      severity: "warning",
+      needsReload: false,
+    },
+  },
+  {
+    title: "names the needers the local layer declares and omits a missing version",
+    otherLayer: "local",
+    needers: ["alpha@tools", "zeta@up"],
+    version: undefined,
+    expected: {
+      status: "skipped",
+      name: "lib",
+      reasons: ["dependents remain"],
+      cause: new Error(
+        "The local layer (claude-plugins.local.json) declares alpha@tools, zeta@up, which need lib@tools.",
+      ),
+      severity: "warning",
+      needsReload: false,
+    },
+  },
+  {
+    title: "counts the one needer whose key could forge the sentence",
+    otherLayer: "shared",
+    needers: ['app@tools", which x@y'],
+    version: "1.0.0",
+    expected: {
+      status: "skipped",
+      name: "lib",
+      version: "1.0.0",
+      reasons: ["dependents remain"],
+      cause: new Error(
+        "The shared layer (claude-plugins.json) declares 1 other plugin, which needs lib@tools.",
+      ),
+      severity: "warning",
+      needsReload: false,
+    },
+  },
+] as const) {
+  test(`LAYER-08: composeNeededElsewhereRow ${title}`, () => {
+    // act
+    const row = composeNeededElsewhereRow({
+      plugin: "lib",
+      marketplace: "tools",
+      version,
+      needers,
+      otherLayer,
+    });
+
+    // assert
+    assert.deepStrictEqual(row, expected satisfies PluginUninstallSkippedMessage);
+  });
+}
 
 test("D-05-12: composeRemovalBlocks with no members is the primary's single block", () => {
   // arrange

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  declaredNeedersByLayer,
   findDependents,
   isHeldBy,
   pruneOrphans,
@@ -10,6 +11,7 @@ import {
 
 import type {
   DeclarationIndex,
+  DeclaringLayers,
   OrphanCandidate,
 } from "../../extensions/pi-claude-marketplace/domain/dependency-orphans.ts";
 
@@ -296,3 +298,97 @@ for (const { title, records, shape, removed, expected } of REACHABLE_CASES) {
     assert.deepStrictEqual(pruned, expected);
   });
 }
+
+type LayerShape = Readonly<Record<string, Exclude<DeclaringLayers, "none">>>;
+
+interface NeedersCase {
+  readonly title: string;
+  readonly shape: IndexShape;
+  readonly layers: LayerShape;
+  readonly expected: { readonly target: readonly string[]; readonly other: readonly string[] };
+}
+
+const NEEDERS_CASES: readonly NeedersCase[] = [
+  {
+    title: "LAYER-08: a holder the target layer declares needs the dependency in the target layer",
+    shape: { "app@tools": ["lib@tools"] },
+    layers: { "app@tools": "target" },
+    expected: { target: ["app@tools"], other: [] },
+  },
+  {
+    title:
+      "LAYER-08: a holder only the other layer declares needs the dependency in the other layer",
+    shape: { "app@tools": ["lib@tools"] },
+    layers: { "app@tools": "other" },
+    expected: { target: [], other: ["app@tools"] },
+  },
+  {
+    title: "LAYER-08: a holder both layers declare counts for the target layer",
+    shape: { "app@tools": ["lib@tools"] },
+    layers: { "app@tools": "both" },
+    expected: { target: ["app@tools"], other: [] },
+  },
+  {
+    title: "LAYER-08: an undeclared holder is walked through to the declared plugins that hold it",
+    shape: { "app@tools": ["mid@tools"], "mid@tools": ["lib@tools"] },
+    layers: { "app@tools": "other" },
+    expected: { target: [], other: ["app@tools"] },
+  },
+  {
+    title: "LAYER-08: an undeclared holder chain that reaches no declared plugin needs nothing",
+    shape: { "top@tools": ["mid@tools"], "mid@tools": ["lib@tools"] },
+    layers: {},
+    expected: { target: [], other: [] },
+  },
+  {
+    title: "LAYER-08: an undeclared cycle around the dependency ends with no needers",
+    shape: { "lib@tools": ["mid@tools"], "mid@tools": ["lib@tools"] },
+    layers: {},
+    expected: { target: [], other: [] },
+  },
+  {
+    title: "LAYER-08: each layer's needers are listed once in localeCompare order",
+    shape: {
+      "zeta@tools": ["lib@tools"],
+      "alpha@tools": ["mid@tools", "lib@tools"],
+      "mid@tools": ["lib@tools"],
+      "beta@up": ["mid@tools"],
+      "Kit@up": ["lib@tools"],
+      "app@up": ["other@tools"],
+    },
+    layers: {
+      "zeta@tools": "target",
+      "alpha@tools": "both",
+      "beta@up": "other",
+      "Kit@up": "other",
+      "app@up": "target",
+    },
+    expected: { target: ["alpha@tools", "zeta@tools"], other: ["beta@up", "Kit@up"] },
+  },
+];
+
+for (const { title, shape, layers, expected } of NEEDERS_CASES) {
+  test(title, () => {
+    // arrange
+    const index = declarationIndex(shape);
+    const layerOf = (key: string): DeclaringLayers => layers[key] ?? "none";
+
+    // act
+    const needers = declaredNeedersByLayer("lib@tools", index, layerOf);
+
+    // assert
+    assert.deepStrictEqual(needers, expected);
+  });
+}
+
+test("LAYER-08: the needer walk leaves its index unchanged", () => {
+  // arrange
+  const index = declarationIndex({ "app@tools": ["mid@tools"], "mid@tools": ["lib@tools"] });
+  const before = structuredClone(index);
+
+  // act
+  declaredNeedersByLayer("lib@tools", index, (key) => (key === "app@tools" ? "target" : "none"));
+
+  // assert
+  assert.deepStrictEqual(index, before);
+});

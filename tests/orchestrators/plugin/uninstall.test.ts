@@ -6051,6 +6051,208 @@ test("D-05-07: the orchestrated unreadable-declarer refusal still returns the ty
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// LAYER-08 / D-MF-03: a plugin no layer declares is a dependency. A named
+// uninstall of it is refused while a plugin the target layer declares needs
+// it, and uninstalls nothing while only plugins the other layer declares need
+// it. Both arms leave before the cascade and the save.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const EMPTY_LAYER = '{"schemaVersion":1}\n';
+const LAYER_DECLARING_APP = '{"schemaVersion":1,"plugins":{"app@mp":{}}}\n';
+
+for (const { title, plugins, layers, local, expected } of [
+  {
+    title: "a dependency a plugin of the target layer needs is refused",
+    plugins: { helper: { provenance: "dependency" }, app: { dependencies: ["helper"] } },
+    layers: { shared: LAYER_DECLARING_APP, local: EMPTY_LAYER },
+    local: false,
+    expected: {
+      message:
+        "A plugin operation has failed.\n\n● mp [project]\n" +
+        "  ⊘ helper v0.0.1 (failed) {dependents remain}\n" +
+        "    cause: Uninstall app@mp first, then helper@mp.",
+      severity: "error",
+    },
+  },
+  {
+    title: "a dependency a plugin of both layers needs is refused",
+    plugins: { helper: { provenance: "dependency" }, app: { dependencies: ["helper"] } },
+    layers: { shared: LAYER_DECLARING_APP, local: LAYER_DECLARING_APP },
+    local: true,
+    expected: {
+      message:
+        "A plugin operation has failed.\n\n● mp [project]\n" +
+        "  ⊘ helper v0.0.1 (failed) {dependents remain}\n" +
+        "    cause: Uninstall app@mp first, then helper@mp.",
+      severity: "error",
+    },
+  },
+  {
+    title: "a dependency held through an undeclared dependency is refused",
+    plugins: {
+      helper: { provenance: "dependency" },
+      mid: { provenance: "dependency", dependencies: ["helper"] },
+      app: { dependencies: ["mid"] },
+    },
+    layers: { shared: EMPTY_LAYER, local: LAYER_DECLARING_APP },
+    local: true,
+    expected: {
+      message:
+        "A plugin operation has failed.\n\n● mp [project]\n" +
+        "  ⊘ helper v0.0.1 (failed) {dependents remain}\n" +
+        "    cause: Uninstall app@mp first, then helper@mp.",
+      severity: "error",
+    },
+  },
+  {
+    title: "a --local uninstall of a dependency only the shared layer needs is skipped",
+    plugins: { helper: { provenance: "dependency" }, app: { dependencies: ["helper"] } },
+    layers: { shared: LAYER_DECLARING_APP, local: EMPTY_LAYER },
+    local: true,
+    expected: {
+      message:
+        "A plugin operation needs attention.\n\n● mp [project]\n" +
+        "  ⊘ helper v0.0.1 (skipped) {dependents remain}\n" +
+        "    cause: The shared layer (claude-plugins.json) declares app@mp, which needs helper@mp.",
+      severity: "warning",
+    },
+  },
+  {
+    title: "a flagless uninstall of a dependency only the local layer needs is skipped",
+    plugins: { helper: { provenance: "dependency" }, app: { dependencies: ["helper"] } },
+    layers: { shared: EMPTY_LAYER, local: LAYER_DECLARING_APP },
+    local: false,
+    expected: {
+      message:
+        "A plugin operation needs attention.\n\n● mp [project]\n" +
+        "  ⊘ helper v0.0.1 (skipped) {dependents remain}\n" +
+        "    cause: The local layer (claude-plugins.local.json) declares app@mp, which needs helper@mp.",
+      severity: "warning",
+    },
+  },
+] as const) {
+  test(`LAYER-08: ${title} and changes nothing`, async () => {
+    await withHermeticHome(async () => {
+      const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-needed-dependency-"));
+      try {
+        // arrange
+        const locations = locationsFor("project", cwd);
+        await seedDeclaringMarketplace(locations, "mp", plugins, cwd);
+        await writeLayerFiles(locations, layers);
+        const filesBefore = await readScopeFiles(locations);
+        const cascade = mock<typeof cascadeUnstagePlugin>({ exactParams: true, name: "cascade" });
+        const { ctx, run, notifications } = makeCtx();
+
+        // act
+        const outcome = await uninstallWithFreshOwner({
+          ctx,
+          run,
+          scope: "project",
+          cwd,
+          marketplace: "mp",
+          plugin: "helper",
+          local,
+          cascade,
+        });
+
+        // assert
+        assert.strictEqual(outcome, undefined);
+        assert.deepStrictEqual(notifications, [expected]);
+        assert.deepStrictEqual(await readScopeFiles(locations), filesBefore);
+        assert.deepStrictEqual(await stagedSkills(locations, ["mp-helper-skill"]), {
+          "mp-helper-skill": true,
+        });
+        verify(cascade);
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
+
+test("LOAD-03: a plugin a layer declares is uninstalled and names the plugins that still need it", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-declared-with-dependents-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedDeclaringMarketplace(
+        locations,
+        "mp",
+        { helper: {}, app: { dependencies: ["helper"] } },
+        cwd,
+      );
+      await writeLayerFiles(locations, {
+        shared: '{"schemaVersion":1,"plugins":{"app@mp":{},"helper@mp":{}}}\n',
+        local: EMPTY_LAYER,
+      });
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      const outcome = await uninstallWithFreshOwner({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "helper",
+      });
+
+      // assert
+      assert.strictEqual(outcome, undefined);
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "● mp [project]\n" +
+            "  ○ helper v0.0.1 (uninstalled) {dependents unsatisfied}\n" +
+            "    cause: required by app@mp\n\n" +
+            "/reload to pick up changes",
+        },
+      ]);
+      assert.deepStrictEqual(await recordedInventory(locations), { "app@mp": ["mp-app-skill"] });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WR-09: an orchestrated uninstall of a dependency a layer needs is not refused", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-needed-dependency-orchestrated-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedDeclaringMarketplace(
+        locations,
+        "mp",
+        { helper: { provenance: "dependency" }, app: { dependencies: ["helper"] } },
+        cwd,
+      );
+      await writeLayerFiles(locations, { shared: LAYER_DECLARING_APP, local: EMPTY_LAYER });
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      const outcome = await uninstallWithFreshOwner({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "helper",
+        notifications: { mode: "orchestrated" },
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, { status: "uninstalled", name: "helper", version: "0.0.1" });
+      assert.deepStrictEqual(notifications, []);
+      assert.deepStrictEqual(await recordedInventory(locations), { "app@mp": ["mp-app-skill"] });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // D-05-01 / D-05-02 / D-05-03 / D-05-09 / D-05-12 / D-05-13 / PRUNE-01..04:
 // the `--prune` sweep.
 //

@@ -1,4 +1,4 @@
-import { isRenderablePluginKey } from "../../domain/dependencies.ts";
+import { isRenderablePluginKey, renderDependentKeys } from "../../domain/dependencies.ts";
 import {
   type ContentReason,
   type PluginFailedMessage,
@@ -217,6 +217,53 @@ export function composeKeptInstalledRow(args: {
       shared
         ? "Run the command again without --local to uninstall it."
         : "Run the command again with --local to uninstall it.",
+    ),
+    severity: "warning",
+    needsReload: false,
+  };
+}
+
+/**
+ * LAYER-08 / D-MF-03: the cause line of an uninstall refused because plugins
+ * the target layer declares still need the plugin. It names them and the order
+ * that unblocks the uninstall. T-06-02: `renderDependentKeys` counts the
+ * needers when a key could forge the sentence.
+ */
+export function composeDependencyRefusalCause(args: {
+  readonly plugin: string;
+  readonly marketplace: string;
+  readonly needers: readonly string[];
+}): string {
+  return `Uninstall ${renderDependentKeys(args.needers)} first, then ${args.plugin}@${args.marketplace}.`;
+}
+
+/**
+ * LAYER-08 / D-MF-03: the row of an uninstall that removed nothing, because
+ * only plugins the other layer declares still need the plugin. It is a
+ * `warning`: the plugin the user asked to uninstall is still there, and
+ * nothing left disk, so there is no reload. The cause line names the needers
+ * and the layer file that declares them (T-06-02: through
+ * `renderDependentKeys`).
+ */
+export function composeNeededElsewhereRow(args: {
+  readonly plugin: string;
+  readonly marketplace: string;
+  readonly version?: string | undefined;
+  readonly needers: readonly string[];
+  readonly otherLayer: "shared" | "local";
+}): PluginUninstallSkippedMessage {
+  const layer =
+    args.otherLayer === "shared"
+      ? "The shared layer (claude-plugins.json)"
+      : "The local layer (claude-plugins.local.json)";
+  const verb = args.needers.length === 1 ? "needs" : "need";
+  return {
+    status: "skipped",
+    name: args.plugin,
+    ...(args.version !== undefined && { version: args.version }),
+    reasons: ["dependents remain"],
+    cause: new Error(
+      `${layer} declares ${renderDependentKeys(args.needers)}, which ${verb} ${args.plugin}@${args.marketplace}.`,
     ),
     severity: "warning",
     needsReload: false,
