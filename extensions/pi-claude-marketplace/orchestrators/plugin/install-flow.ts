@@ -442,6 +442,29 @@ function discardingUnsavedAdds(
   };
 }
 
+/** One install transaction's `marketplace add` seam, its add lists, and its lock owner. */
+interface InstallAdds {
+  readonly marketplaceAdd: MarketplaceAddSeam;
+  readonly addedMarketplaces: AddedMarketplaces;
+  readonly committedAdds: AddedMarketplaces;
+  readonly lockOwner: Pick<InstallTransaction, "withLockedStateTransaction">;
+}
+
+/** Starts the add bookkeeping of one install transaction (WR-07 / LAYER-07). */
+function trackInstallAdds(
+  transaction: InstallTransaction,
+  seam: MarketplaceAddSeam | undefined,
+): InstallAdds {
+  const addedMarketplaces: AddedMarketplaces = [];
+  const committedAdds: AddedMarketplaces = [];
+  return {
+    marketplaceAdd: seam ?? DEFAULT_MARKETPLACE_ADD,
+    addedMarketplaces,
+    committedAdds,
+    lockOwner: discardingUnsavedAdds(transaction, addedMarketplaces, committedAdds),
+  };
+}
+
 /**
  * D-03-INV / D-SEED-01: settle each marketplace a saved install added, as
  * `marketplace add` settles one after its save. Each settle is best effort.
@@ -1696,10 +1719,7 @@ async function installPluginWithTransaction(
   // subject and the DFEN-05 precedence subject are all the same key by
   // construction, so they read one binding rather than three literals.
   const rootKey = `${plugin}@${marketplace}`;
-  const marketplaceAdd = opts.marketplaceAdd ?? DEFAULT_MARKETPLACE_ADD;
-  const addedMarketplaces: AddedMarketplaces = [];
-  const committedAdds: AddedMarketplaces = [];
-  const lockOwner = discardingUnsavedAdds(transaction, addedMarketplaces, committedAdds);
+  const adds = trackInstallAdds(transaction, opts.marketplaceAdd);
 
   let outcome: InstallTransactionOutcome;
   try {
@@ -1712,7 +1732,7 @@ async function installPluginWithTransaction(
     // state.json -- `withStateGuard` saved unconditionally on closure
     // return, bumping state.json's mtime on every abort, diverging from the
     // documented no-save abort discipline the sibling commands follow.
-    outcome = await lockOwner.withLockedStateTransaction(
+    outcome = await adds.lockOwner.withLockedStateTransaction(
       locations,
       async (tx): Promise<InstallTransactionOutcome> => {
         // D-103-16: ONE selection, made before anything reads a config path, so
@@ -1867,8 +1887,8 @@ async function installPluginWithTransaction(
               // skips, so the key comparison alone decides provenance -- per
               // member, independent of install order.
               provenance: isRoot ? "explicit" : "dependency",
-              marketplaceAdd,
-              addedMarketplaces,
+              marketplaceAdd: adds.marketplaceAdd,
+              addedMarketplaces: adds.addedMarketplaces,
             });
           },
           installedKeys: collectInstalledKeys(state),
@@ -2043,7 +2063,7 @@ async function installPluginWithTransaction(
             // LAYER-07 / D-MF-04: the config does declare every marketplace the
             // install added to the scope, a dependency's included, so the
             // desired state names what the scope now owns.
-            addedMarketplaces: addedMarketplaces
+            addedMarketplaces: adds.addedMarketplaces
               .map((added) => added.marketplace)
               .filter((name) => name !== marketplace),
           });
@@ -2169,7 +2189,12 @@ async function installPluginWithTransaction(
     return withMcpConfigNotices(ctx, run, orchestrated, failed, cascadeFailure.mcpConfigNotices);
   }
 
-  await settleAddedMarketplaces(committedAdds, marketplaceAdd, locations, completionCache);
+  await settleAddedMarketplaces(
+    adds.committedAdds,
+    adds.marketplaceAdd,
+    locations,
+    completionCache,
+  );
 
   // ATTR-01 / ATTR-08 / M1: marketplace-absent precondition (set inside the
   // guard, no state mutated). The marketplace subject is reported via the
@@ -2531,14 +2556,11 @@ async function installMissingDependencyWithTransaction(
   // the root this entry point was asked to install.
   const cascadeFailure: CascadeFailureSink = { mcpConfigNotices: [] };
   const rootKey = `${plugin}@${marketplace}`;
-  const marketplaceAdd = opts.marketplaceAdd ?? DEFAULT_MARKETPLACE_ADD;
-  const addedMarketplaces: AddedMarketplaces = [];
-  const committedAdds: AddedMarketplaces = [];
-  const lockOwner = discardingUnsavedAdds(transaction, addedMarketplaces, committedAdds);
+  const adds = trackInstallAdds(transaction, opts.marketplaceAdd);
 
   let outcome: InstallMissingDependencyTransactionOutcome;
   try {
-    outcome = await lockOwner.withLockedStateTransaction(
+    outcome = await adds.lockOwner.withLockedStateTransaction(
       locations,
       async (tx): Promise<InstallMissingDependencyTransactionOutcome> => {
         const state = tx.state;
@@ -2630,8 +2652,8 @@ async function installMissingDependencyWithTransaction(
               // D-04-01: the caller decides provenance; every member of this
               // cascade, root included, exists to satisfy a declaration.
               provenance: "dependency",
-              marketplaceAdd,
-              addedMarketplaces,
+              marketplaceAdd: adds.marketplaceAdd,
+              addedMarketplaces: adds.addedMarketplaces,
             }),
           installedKeys: collectInstalledKeys(state),
           knownMarketplaces: await collectInstallReachableMarketplaces({
@@ -2702,7 +2724,12 @@ async function installMissingDependencyWithTransaction(
       : failedWithNotices;
   }
 
-  await settleAddedMarketplaces(committedAdds, marketplaceAdd, locations, completionCache);
+  await settleAddedMarketplaces(
+    adds.committedAdds,
+    adds.marketplaceAdd,
+    locations,
+    completionCache,
+  );
   if (outcome.kind === "already-recorded") {
     return { status: "skipped" };
   }
