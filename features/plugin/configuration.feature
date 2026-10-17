@@ -17,6 +17,12 @@ Feature: Plugin configuration
     Given the user has run "/claude:plugin install demo@fixtures --scope project --local"
     When the user starts a new pi session
     Then the session offers no skills
+    Then the "claude-plugins.json" file of the project scope declares these plugins:
+      | id            | enabled |
+      | demo@fixtures | false   |
+    Then the "claude-plugins.local.json" file of the project scope declares these plugins:
+      | id            |
+      | demo@fixtures |
 
   Scenario: A plugin whose marketplace no layer declares keeps its dangling reference row
     Given a plugin configuration file in scope project and layer local, with these plugins:
