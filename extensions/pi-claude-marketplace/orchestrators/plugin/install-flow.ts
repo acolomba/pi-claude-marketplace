@@ -638,17 +638,26 @@ function collectInstalledKeys(state: ExtensionState): ReadonlySet<string> {
   return keys;
 }
 
-/** The record one install transaction reads a marketplace from, or `undefined`. */
+/**
+ * The record one install transaction reads a marketplace from, or `undefined`.
+ * `plugin` names the plugin the caller installs from it (WR-05).
+ */
 type TargetRecordFor = (
   marketplace: string,
+  plugin?: string,
 ) => Promise<ExtensionState["marketplaces"][string] | undefined>;
 
-/** Reads the selected root marketplace's validated policy from its cached manifest. */
+/**
+ * Reads the selected root marketplace's validated policy from its cached
+ * manifest. It is the install's first read of the root marketplace, so a root
+ * plugin the user scope's manifest does not list fails here, before any add.
+ */
 async function loadInstallRootAllowlist(
   recordFor: TargetRecordFor,
   marketplace: string,
+  plugin: string,
 ): Promise<ReadonlySet<string>> {
-  const record = await recordFor(marketplace);
+  const record = await recordFor(marketplace, plugin);
   if (record === undefined) {
     return new Set<string>();
   }
@@ -777,8 +786,8 @@ function installCatalog(args: {
   readonly sink: CascadeFailureSink;
 }): { readonly recordFor: TargetRecordFor; readonly lookup: ClosureLookup } {
   const { state, locations, addOptions, sink } = args;
-  const recordFor: TargetRecordFor = (marketplace) =>
-    resolveTargetScopeMarketplace(state, locations, addOptions, marketplace);
+  const recordFor: TargetRecordFor = (marketplace, plugin) =>
+    resolveTargetScopeMarketplace(state, locations, addOptions, marketplace, plugin);
   return {
     recordFor,
     lookup: async (subject) => {
@@ -1884,7 +1893,11 @@ async function installPluginWithTransaction(
           state,
           locations,
           rootKey,
-          rootAllowedMarketplaces: await loadInstallRootAllowlist(catalog.recordFor, marketplace),
+          rootAllowedMarketplaces: await loadInstallRootAllowlist(
+            catalog.recordFor,
+            marketplace,
+            plugin,
+          ),
           lookup: catalog.lookup,
           // RESV-03 / CMP-3: the pin probe reads a member's source out of the
           // marketplace record, and it must reach that record the same way the
@@ -2670,7 +2683,11 @@ async function installMissingDependencyWithTransaction(
           state,
           locations,
           rootKey,
-          rootAllowedMarketplaces: await loadInstallRootAllowlist(catalog.recordFor, marketplace),
+          rootAllowedMarketplaces: await loadInstallRootAllowlist(
+            catalog.recordFor,
+            marketplace,
+            plugin,
+          ),
           // D-09-05: the declarers' folded ranges pin the root exactly as a
           // constrained member is pinned.
           rootRanges: opts.ranges,

@@ -326,7 +326,7 @@ async function projectFootprint(env: Scopes): Promise<readonly unknown[]> {
   ];
 }
 
-test("LAYER-07 / WR-07: an install of a plugin the manifest does not list leaves the project without the marketplace", async (t) => {
+test("LAYER-07 / WR-07: an install of a plugin the manifest does not list fails before the project clones the marketplace", async (t) => {
   // arrange
   const env = await scopes(t, "project-adds-user-mp-absent-");
   const fixture = await checkout(path.join(env.root, "checkout"), "mp", REPO_URL, [{ name: "p" }]);
@@ -346,10 +346,7 @@ test("LAYER-07 / WR-07: an install of a plugin the manifest does not list leaves
       severity: "error",
     },
   ]);
-  assert.deepStrictEqual(cloneTargets(double, env), [
-    [REPO_URL, "user"],
-    [REPO_URL, "project"],
-  ]);
+  assert.deepStrictEqual(cloneTargets(double, env), [[REPO_URL, "user"]]);
   assert.deepStrictEqual(await projectFootprint(env), [[], [], [], undefined]);
   boundary.verifyBoundary();
 });

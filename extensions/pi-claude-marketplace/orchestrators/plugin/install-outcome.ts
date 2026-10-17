@@ -533,6 +533,22 @@ async function addTargetScopeMarketplace(
 }
 
 /**
+ * WR-05 / NFR-5: the user record's cached manifest answers offline whether it
+ * lists `plugin`, so a mistyped or unlisted plugin fails `{not in manifest}`
+ * before the add clones anything.
+ */
+async function requireListedBeforeAdd(
+  sourceRecord: MarketplaceRecord,
+  plugin: string,
+  marketplace: string,
+): Promise<void> {
+  const manifest = await loadCachedMarketplaceManifest(sourceRecord.manifestPath);
+  if (!manifest.plugins.some((entry) => entry.name === plugin)) {
+    throw new PluginShapeError({ kind: "not-in-manifest", plugin, marketplace });
+  }
+}
+
+/**
  * LAYER-07 / D-MF-04: the record an install reads `marketplace` from. It is
  * the target scope's own record. When only the user scope records the
  * marketplace (CMP-3), the install first adds it to the target scope, so the
@@ -541,13 +557,15 @@ async function addTargetScopeMarketplace(
  *
  * The install's dependency walk calls this before it reads a marketplace, and
  * the ledger calls it again for each member, so every read of one install
- * sees the same record.
+ * sees the same record. A caller that names the `plugin` it installs gets the
+ * WR-05 offline check before the add.
  */
 export async function resolveTargetScopeMarketplace(
   state: ExtensionState,
   locations: ScopedLocations,
   opts: TargetScopeAddOptions,
   marketplace: string,
+  plugin?: string,
 ): Promise<ExtensionState["marketplaces"][string] | undefined> {
   const marketplaceAdd = opts.marketplaceAdd ?? DEFAULT_MARKETPLACE_ADD;
   const own = ownValue(state.marketplaces, marketplace);
@@ -563,16 +581,22 @@ export async function resolveTargetScopeMarketplace(
     marketplace,
     targetState: state,
   });
-  return source === undefined
-    ? undefined
-    : addTargetScopeMarketplace(
-        state,
-        locations,
-        opts,
-        marketplace,
-        source.sourceRecord,
-        marketplaceAdd.record,
-      );
+  if (source === undefined) {
+    return undefined;
+  }
+
+  if (plugin !== undefined) {
+    await requireListedBeforeAdd(source.sourceRecord, plugin, marketplace);
+  }
+
+  return addTargetScopeMarketplace(
+    state,
+    locations,
+    opts,
+    marketplace,
+    source.sourceRecord,
+    marketplaceAdd.record,
+  );
 }
 
 /**
@@ -604,7 +628,7 @@ async function preflightInstallResolve(
   // LAYER-07 / D-MF-04: the target scope's own record, or, when CMP-3 falls
   // back to the user marketplace, the record the add gives the target scope.
   // Every read below uses the target record.
-  const targetMp = await resolveTargetScopeMarketplace(state, locations, opts, marketplace);
+  const targetMp = await resolveTargetScopeMarketplace(state, locations, opts, marketplace, plugin);
   if (targetMp === undefined) {
     // M1: the CMP-3 fallback also missed. No state mutation, no plugin-row
     // `{not in manifest}` throw.

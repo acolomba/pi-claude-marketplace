@@ -1091,6 +1091,34 @@ test("CMP-3 / LAYER-07: a user record whose source the add refuses fails as an u
   assert.deepStrictEqual(seeded.state, { marketplaces: {}, schemaVersion: 2 });
 });
 
+test("CMP-3 / LAYER-07: a plugin the user record's manifest does not list fails before the add", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-cmp3-unlisted-");
+  const seeded = await seedPlugin(environment.cwd, { marketplaceScope: "user" });
+  const locations = locationsFor("project", environment.cwd);
+
+  // act
+  const operation = runInstallLedger(seeded.state, locations, {
+    ...projectInstallOptions(environment.cwd),
+    plugin: "ghost",
+    marketplaceAdd: marketplaceAddSeam(() =>
+      Promise.reject(new Error("an unlisted plugin adds no marketplace")),
+    ),
+  });
+
+  // assert
+  await assert.rejects(operation, (error: unknown) => {
+    assert.ok(error instanceof PluginShapeError);
+    assert.deepStrictEqual(error.shape, {
+      kind: "not-in-manifest",
+      plugin: "ghost",
+      marketplace: "marketplace",
+    });
+    return true;
+  });
+  assert.deepStrictEqual(seeded.state, { marketplaces: {}, schemaVersion: 2 });
+});
+
 test("CMP-3 / LAYER-07: an install with no list of added marketplaces still installs through the add", async (t) => {
   // arrange
   const environment = await createHermeticEnvironment(t, "install-outcome-cmp3-nolist-");
