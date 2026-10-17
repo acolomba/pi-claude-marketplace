@@ -1944,8 +1944,10 @@ async function installPluginWithTransaction(
           },
           installedKeys: collectInstalledKeys(state),
           // D-03-08: the marketplaces this install can READ. A dependency naming
-          // anything else fails the cascade; nothing here can add or clone a
-          // marketplace to satisfy one.
+          // anything else fails the cascade. This reachable set decides trust:
+          // a marketplace in it that only the user scope records is added to
+          // the target scope before the walk reads it (LAYER-07 / D-MF-04), and
+          // no marketplace outside it is ever added to satisfy a dependency.
           //
           // It is the CMP-3-aware set and NOT the raw target-scope key set,
           // because the walk's own catalog read resolves through the same
@@ -2726,9 +2728,9 @@ async function installMissingDependencyWithTransaction(
         const installed = unwrapCascade(cascade, capture, rootKey, cascadeFailure);
         if (installed === undefined) {
           // D-03-08: on this path the root IS a dependency, so a marketplace
-          // absent in both scopes is the walk's own not-added failure --
-          // nothing here adds or clones a marketplace to satisfy a
-          // declaration.
+          // absent in both scopes is the walk's own not-added failure. Only a
+          // marketplace one of the two scopes records is ever added to the
+          // target scope to satisfy a declaration (LAYER-07 / D-MF-04).
           cascadeFailure.subject = {
             kind: "closure",
             failure: {
