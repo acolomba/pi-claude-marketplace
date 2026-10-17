@@ -811,6 +811,108 @@ function installCatalog(args: {
   };
 }
 
+/** The cascade options both install owners pass the same way. */
+type SharedCascadeOptions = Pick<
+  Parameters<typeof runInstallCascade>[0],
+  | "state"
+  | "locations"
+  | "rootKey"
+  | "rootAllowedMarketplaces"
+  | "lookup"
+  | "marketplaceRecordFor"
+  | "installedKeys"
+  | "knownMarketplaces"
+  | "capture"
+  | "transaction"
+  | "tagProbe"
+  | "marketplaceTagProbe"
+>;
+
+/**
+ * RESV-01 / LAYER-07: the cascade options the plain install and the
+ * missing-dependency install build alike. The catalog reads go through
+ * `installCatalog`, so the walk reads the clone each member installs from.
+ *
+ * RESV-03 / CMP-3: the pin probe reads a member's source out of the
+ * marketplace record, and it must reach that record the same way the walk's
+ * own catalog read does. Reading the target snapshot directly would answer
+ * "no source" for a marketplace the CMP-3 fallback resolves, turning a
+ * resolvable constrained dependency into a `no-matching-tag` it never earned.
+ *
+ * D-03-08: `knownMarketplaces` is the set this install can READ. A dependency
+ * naming anything else fails the cascade. This reachable set decides trust: a
+ * marketplace in it that only the user scope records is added to the target
+ * scope before the walk reads it (LAYER-07 / D-MF-04), and no marketplace
+ * outside it is ever added to satisfy a dependency. It is the CMP-3-aware set
+ * and NOT the raw target-scope key set, because the walk's own catalog read
+ * resolves through the same project -> user fallback. Seeding the guard from
+ * the narrower set would put two notions of "reachable" in one walk, and the
+ * guard runs FIRST -- so the stricter one would win and refuse a dependency
+ * the lookup one step later resolves, under the one cascade message that
+ * carries a trust rule. Every name in this set is one the user added
+ * themselves, so that trust rule is unchanged. The requested plugin's own
+ * marketplace needs no special seeding: it is in this set whenever the ledger
+ * could resolve it, and the ledger still owns reporting the double-miss
+ * through the `marketplace-absent` arm.
+ */
+async function sharedCascadeOptions(args: {
+  readonly opts: InstallLedgerCallerOptions &
+    Pick<InstallPluginOptions, "tagProbe" | "marketplaceTagProbe">;
+  readonly env: ClaudeEnv;
+  readonly state: ExtensionState;
+  readonly locations: ScopedLocations;
+  readonly root: {
+    readonly scope: Scope;
+    readonly cwd: string;
+    readonly marketplace: string;
+    readonly plugin: string;
+    readonly rootKey: string;
+  };
+  readonly adds: InstallAdds;
+  readonly sink: CascadeFailureSink;
+  readonly capture: InstallFailureCapture;
+  readonly transaction: InstallTransaction;
+}): Promise<SharedCascadeOptions> {
+  const { opts, state, locations, root, adds } = args;
+  const catalog = installCatalog({
+    state,
+    locations,
+    addOptions: buildInstallLedgerOptions(opts, args.env, {
+      scope: root.scope,
+      cwd: root.cwd,
+      marketplace: root.marketplace,
+      plugin: root.plugin,
+      marketplaceAdd: adds.marketplaceAdd,
+      addedMarketplaces: adds.addedMarketplaces,
+    }),
+    sink: args.sink,
+  });
+  return {
+    state,
+    locations,
+    rootKey: root.rootKey,
+    rootAllowedMarketplaces: await loadInstallRootAllowlist(
+      catalog.recordFor,
+      root.marketplace,
+      root.plugin,
+    ),
+    lookup: catalog.lookup,
+    marketplaceRecordFor: catalog.recordFor,
+    installedKeys: collectInstalledKeys(state),
+    knownMarketplaces: await collectInstallReachableMarketplaces({
+      targetScope: root.scope,
+      cwd: root.cwd,
+      targetState: state,
+    }),
+    capture: args.capture,
+    transaction: args.transaction,
+    ...(opts.tagProbe !== undefined && { tagProbe: opts.tagProbe }),
+    ...(opts.marketplaceTagProbe !== undefined && {
+      marketplaceTagProbe: opts.marketplaceTagProbe,
+    }),
+  };
+}
+
 /**
  * Where `unwrapCascade` leaves the structured failure for the catch site.
  *
@@ -1876,36 +1978,18 @@ async function installPluginWithTransaction(
         // D-03-05: every member installs into the requesting plugin's OWN
         // `locations` and `scope`; there is no per-member scope argument and no
         // way for a dependency to land in the other scope.
-        const catalog = installCatalog({
-          state,
-          locations,
-          addOptions: buildInstallLedgerOptions(opts, env, {
-            scope,
-            cwd,
-            marketplace,
-            plugin,
-            marketplaceAdd: adds.marketplaceAdd,
-            addedMarketplaces: adds.addedMarketplaces,
-          }),
-          sink: cascadeFailure,
-        });
         const cascade = await runInstallCascade({
-          state,
-          locations,
-          rootKey,
-          rootAllowedMarketplaces: await loadInstallRootAllowlist(
-            catalog.recordFor,
-            marketplace,
-            plugin,
-          ),
-          lookup: catalog.lookup,
-          // RESV-03 / CMP-3: the pin probe reads a member's source out of the
-          // marketplace record, and it must reach that record the same way the
-          // walk's own catalog read does. Reading the target snapshot directly
-          // would answer "no source" for a marketplace the CMP-3 fallback
-          // resolves, turning a resolvable constrained dependency into a
-          // `no-matching-tag` it never earned.
-          marketplaceRecordFor: catalog.recordFor,
+          ...(await sharedCascadeOptions({
+            opts,
+            env,
+            state,
+            locations,
+            root: { scope, cwd, marketplace, plugin, rootKey },
+            adds,
+            sink: cascadeFailure,
+            capture,
+            transaction,
+          })),
           // RESV-03: a member whose constraint selected a release tag carries the
           // commit that tag resolves to AND the semver that tag names, and this
           // builder is where both enter that member's install. An unconstrained
@@ -1942,37 +2026,6 @@ async function installPluginWithTransaction(
               addedMarketplaces: adds.addedMarketplaces,
             });
           },
-          installedKeys: collectInstalledKeys(state),
-          // D-03-08: the marketplaces this install can READ. A dependency naming
-          // anything else fails the cascade. This reachable set decides trust:
-          // a marketplace in it that only the user scope records is added to
-          // the target scope before the walk reads it (LAYER-07 / D-MF-04), and
-          // no marketplace outside it is ever added to satisfy a dependency.
-          //
-          // It is the CMP-3-aware set and NOT the raw target-scope key set,
-          // because the walk's own catalog read resolves through the same
-          // project -> user fallback. Seeding the guard from the narrower set
-          // would put two notions of "reachable" in one walk, and the guard runs
-          // FIRST -- so the stricter one would win and refuse a dependency the
-          // lookup one step later resolves, under the one cascade message that
-          // carries a trust rule. Every name in this set is one the user added
-          // themselves, so that trust rule is unchanged.
-          //
-          // The requested plugin's own marketplace needs no special seeding: it
-          // is in this set whenever the ledger could resolve it, and the ledger
-          // still owns reporting the double-miss through the `marketplace-absent`
-          // arm below.
-          knownMarketplaces: await collectInstallReachableMarketplaces({
-            targetScope: scope,
-            cwd,
-            targetState: state,
-          }),
-          capture,
-          transaction,
-          ...(opts.tagProbe !== undefined && { tagProbe: opts.tagProbe }),
-          ...(opts.marketplaceTagProbe !== undefined && {
-            marketplaceTagProbe: opts.marketplaceTagProbe,
-          }),
         });
         const installed = unwrapCascade(cascade, capture, rootKey, cascadeFailure);
         if (installed === undefined) {
@@ -2668,36 +2721,24 @@ async function installMissingDependencyWithTransaction(
           throw cascadeFailureCause(cascadeFailure.subject, rootKey);
         }
 
-        const catalog = installCatalog({
-          state,
-          locations,
-          addOptions: buildInstallLedgerOptions(opts, env, {
-            scope,
-            cwd,
-            marketplace,
-            plugin,
-            marketplaceAdd: adds.marketplaceAdd,
-            addedMarketplaces: adds.addedMarketplaces,
-          }),
-          sink: cascadeFailure,
-        });
         const cascade = await runInstallCascade({
-          state,
-          locations,
-          rootKey,
-          rootAllowedMarketplaces: await loadInstallRootAllowlist(
-            catalog.recordFor,
-            marketplace,
-            plugin,
-          ),
+          ...(await sharedCascadeOptions({
+            opts,
+            env,
+            state,
+            locations,
+            root: { scope, cwd, marketplace, plugin, rootKey },
+            adds,
+            sink: cascadeFailure,
+            capture,
+            transaction,
+          })),
           // D-09-05: the declarers' folded ranges pin the root exactly as a
           // constrained member is pinned.
           rootRanges: opts.ranges,
           // D-09-04: a disabled recorded dependency is a wall on this path,
           // never a read-through member.
           treatDisabledAsWall: true,
-          lookup: catalog.lookup,
-          marketplaceRecordFor: catalog.recordFor,
           ledgerOptionsFor: (member) =>
             buildInstallLedgerOptions(opts, env, {
               scope,
@@ -2712,18 +2753,6 @@ async function installMissingDependencyWithTransaction(
               marketplaceAdd: adds.marketplaceAdd,
               addedMarketplaces: adds.addedMarketplaces,
             }),
-          installedKeys: collectInstalledKeys(state),
-          knownMarketplaces: await collectInstallReachableMarketplaces({
-            targetScope: scope,
-            cwd,
-            targetState: state,
-          }),
-          capture,
-          transaction,
-          ...(opts.tagProbe !== undefined && { tagProbe: opts.tagProbe }),
-          ...(opts.marketplaceTagProbe !== undefined && {
-            marketplaceTagProbe: opts.marketplaceTagProbe,
-          }),
         });
         const installed = unwrapCascade(cascade, capture, rootKey, cascadeFailure);
         if (installed === undefined) {
