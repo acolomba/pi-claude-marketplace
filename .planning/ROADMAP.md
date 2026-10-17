@@ -270,7 +270,38 @@ Plans:
 4. A named uninstall of an installed plugin that no layer declares (a dependency) is refused listing the plugins in the target layer that need it, uninstalls nothing when only plugins of the other layer need it, and uninstalls it only when nothing needs it (LAYER-08).
 5. Plugin entries merge field by field across the two layers, local winning on conflicts such as `enabled` (LAYER-09).
 
-**Plans:** TBD
+**Plans:** 10 plans
+
+Plans:
+**Wave 1**
+- [ ] 03.3-01-PLAN.md — Tracer: a named uninstall refuses when only the other layer declares the plugin, through a real Pi (LAYER-04)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 03.3-02-PLAN.md — Plugin entries merge field by field, with the install's precedence read changed in the same commit (LAYER-09)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 03.3-03-PLAN.md — Install, enable, and disable pick their layer by the flag; enable and disable refuse the other layer's plugin; a plugin's marketplace is declared in its own layer (LAYER-04, LAYER-06)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 03.3-04-PLAN.md — The install and uninstall no-op rows for a plugin both layers declare, installed once; the field merge through a real Pi (LAYER-05, LAYER-09)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [ ] 03.3-05-PLAN.md — A named uninstall of a dependency refuses, skips, or uninstalls by who needs it; a flagless enable or disable the local layer overrides is refused (LAYER-08, LAYER-04)
+
+**Wave 6** *(blocked on Wave 5 completion)*
+- [ ] 03.3-06-PLAN.md — Update and reinstall refuse a plugin only the other layer declares; with --local and no name they cover the local layer only (LAYER-04)
+
+**Wave 7** *(blocked on Wave 6 completion)*
+- [ ] 03.3-07-PLAN.md — Update and reinstall write no declaration; the write-back family is deleted under a fallow dead-code check (LAYER-04, LAYER-06, LAYER-08)
+
+**Wave 8** *(blocked on Wave 7 completion)*
+- [ ] 03.3-08-PLAN.md — The writing layer-file step; a layer that declares a plugin without its marketplace stops its scope's load; the import repair guard (LAYER-06)
+
+**Wave 9** *(blocked on Wave 8 completion)*
+- [ ] 03.3-09-PLAN.md — Integration proof that layer refusals change nothing and update and reinstall declare nothing; the catalog rows (LAYER-04, LAYER-05, LAYER-06, LAYER-08)
+
+**Wave 10** *(blocked on Wave 9 completion)*
+- [ ] 03.3-10-PLAN.md — CHANGELOG, READMEs, and guides; cucumber review; the phase gate
 
 ### Phase 3.4: Scope and Layer Terminology (INSERTED)
 
