@@ -524,6 +524,31 @@ export const PLUGIN_INSTALL_FIXTURES: FixtureMap = {
       },
     },
 
+    // LAYER-05: the shared layer declares and installed the plugin, so an
+    // install with --local only adds the local declaration. Nothing is
+    // installed, so the row is info with no reload-hint.
+    "install-already-installed-in-other-layer": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "skipped",
+                severity: "info",
+                needsReload: false,
+                name: "helper",
+                version: "1.0.0",
+                reasons: ["already installed in shared layer"],
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     // RESV-01 / RESV-06: the dependency cascade's success block. One row per
     // closure member beside the requesting plugin's own row, in the canonical
     // name-then-scope order. A dependency renders by its full `<plugin>@<mp>`

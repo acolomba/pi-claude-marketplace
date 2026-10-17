@@ -156,5 +156,37 @@ export const PLUGIN_PENDING_FIXTURES: FixtureMap = {
         ],
       },
     },
+
+    // LAYER-06: the same layer error in the pending diff; pending plans
+    // nothing for the scope.
+    "pending-layer-marketplace-undeclared": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        label: "Reconcile pending",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "claude-plugins.local.json",
+            scope: "project",
+            status: "failed",
+            severity: "error",
+            reasons: ["invalid manifest"],
+            plugins: [
+              {
+                status: "failed",
+                severity: "error",
+                needsReload: false,
+                name: "claude-plugins.local.json",
+                reasons: ["invalid manifest"],
+                cause: new Error(
+                  "The local layer (claude-plugins.local.json) declares helper@official, but only the shared layer declares its marketplace. Run /claude:plugin marketplace add <source> --local with the source the shared layer declares, or remove the plugin from the local layer.",
+                ),
+              },
+            ],
+          },
+        ],
+      },
+    },
   },
 };

@@ -401,5 +401,141 @@ export const PLUGIN_UNINSTALL_FIXTURES: FixtureMap = {
         ],
       },
     },
+
+    // LAYER-04: a named uninstall without --local acts on the shared layer, so
+    // a plugin only the local layer declares is refused and nothing changes.
+    "uninstall-plugin-declared-locally": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "failed",
+                severity: "error",
+                needsReload: false,
+                name: "helper",
+                version: "1.0.0",
+                reasons: ["plugin declared locally"],
+                cause: new Error(
+                  "The plugin helper@official is declared only in the local layer (claude-plugins.local.json). Run the command again with --local.",
+                ),
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // LAYER-04: the mirror refusal of a named uninstall with --local.
+    "uninstall-plugin-declared-in-shared-config": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "failed",
+                severity: "error",
+                needsReload: false,
+                name: "helper",
+                version: "1.0.0",
+                reasons: ["plugin declared in shared config"],
+                cause: new Error(
+                  "The plugin helper@official is declared only in the shared layer (claude-plugins.json). Run the command again without --local.",
+                ),
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // LAYER-05: both layers declare the plugin, so a flagless uninstall drops
+    // only the shared declaration and keeps the installation. A warning: the
+    // plugin the user asked to uninstall is still there.
+    "uninstall-still-installed-in-other-layer": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "warning",
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "skipped",
+                severity: "warning",
+                needsReload: false,
+                name: "helper",
+                version: "1.0.0",
+                reasons: ["still installed in local layer"],
+                cause: new Error("Run the command again with --local to uninstall it."),
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // LAYER-08: no layer declares the target, and a plugin the target layer
+    // declares still needs it, so the uninstall is refused.
+    "uninstall-dependency-needed-in-layer": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "failed",
+                severity: "error",
+                needsReload: false,
+                name: "shared-lib",
+                version: "1.0.0",
+                reasons: ["dependents remain"],
+                cause: new Error("Uninstall helper@official first, then shared-lib@official."),
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // LAYER-08: only a plugin the other layer declares needs the target, so
+    // the uninstall removes nothing and names that layer.
+    "uninstall-dependency-needed-in-other-layer": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "warning",
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "skipped",
+                severity: "warning",
+                needsReload: false,
+                name: "shared-lib",
+                version: "1.0.0",
+                reasons: ["dependents remain"],
+                cause: new Error(
+                  "The local layer (claude-plugins.local.json) declares helper@official, which needs shared-lib@official.",
+                ),
+              },
+            ],
+          },
+        ],
+      },
+    },
   },
 };

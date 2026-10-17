@@ -118,6 +118,31 @@ export const PLUGIN_DISABLE_FIXTURES: FixtureMap = {
       },
     },
 
+    // LAYER-04: the mirror of the enable refusal, for a plugin the local
+    // layer enables.
+    "disable-enabled-in-local-layer": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "claude-plugins-official",
+            scope: "user",
+            plugins: [
+              {
+                status: "failed",
+                severity: "error",
+                needsReload: false,
+                name: "foo-plugin",
+                reasons: ["enabled in local layer"],
+                cause: new Error("Run the command again with --local to disable it."),
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     "disable-invalid-config": {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",

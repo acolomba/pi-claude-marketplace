@@ -316,6 +316,31 @@ export const PLUGIN_ENABLE_FIXTURES: FixtureMap = {
       },
     },
 
+    // LAYER-04: both layers declare the plugin and the local layer disables
+    // it, so a flagless enable would be undone by the merge at the next load.
+    "enable-disabled-in-local-layer": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "claude-plugins-official",
+            scope: "user",
+            plugins: [
+              {
+                status: "failed",
+                severity: "error",
+                needsReload: false,
+                name: "foo-plugin",
+                reasons: ["disabled in local layer"],
+                cause: new Error("Run the command again with --local to enable it."),
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     "enable-invalid-config": {
       // CFG-03 abort. T-53-02-02: the marketplace name carries
       // the file BASENAME via the renderer; here the plugin row carries the
