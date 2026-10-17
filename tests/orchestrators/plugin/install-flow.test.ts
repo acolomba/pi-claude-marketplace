@@ -831,7 +831,12 @@ async function seedPathMarketplaceWithPlugin(opts: {
       [marketplaceName]: {
         name: marketplaceName,
         scope,
-        source: pathSource(`./${path.basename(marketplaceRoot)}`),
+        // A user-scope source is absolute: a project install adds it to the
+        // project from its raw source, which resolves from the process
+        // directory, as `marketplace add` resolves it.
+        source: pathSource(
+          scope === "user" ? marketplaceRoot : `./${path.basename(marketplaceRoot)}`,
+        ),
         addedFromCwd: cwd,
         manifestPath,
         marketplaceRoot,
