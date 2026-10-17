@@ -9,7 +9,7 @@ import {
   renderReinstallPartitionAndNotify,
   reinstalledRowFromOutcome,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts";
-import { MarketplaceDeclaredLocallyError } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts";
+import { MarketplaceDeclaredLocallyError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { type Severity } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 

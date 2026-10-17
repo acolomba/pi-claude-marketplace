@@ -2,12 +2,13 @@ import {
   composeErrorWithCauseChain,
   findManualRecoveryError,
   ManualRecoveryError,
+  MarketplaceDeclaredLocallyError,
   PluginShapeError,
   StateLockHeldError,
 } from "../../shared/errors.ts";
 import { ownValue, setOwn } from "../../shared/own-key.ts";
 
-import { MarketplaceDeclaredLocallyError, retiresWorkflowCommand } from "./shared.ts";
+import { retiresWorkflowCommand } from "./shared.ts";
 
 import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
 import type { ExtensionState, PluginInstallRecord } from "../../persistence/state-io.ts";

@@ -16,7 +16,6 @@ import {
   emitMarketplaceNotAddedSignal,
   enableRowDependencies,
   localOnlyMarketplaceRefusal,
-  MarketplaceDeclaredLocallyError,
   MarketplaceNotAddedSignal,
   missIsNotInstalled,
   maybeWritePluginConfigBack,
@@ -40,6 +39,7 @@ import { locationsFor } from "../../../extensions/pi-claude-marketplace/persiste
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import {
   CrossPluginConflictError,
+  MarketplaceDeclaredLocallyError,
   MarketplaceNotFoundError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { createJsonCapture } from "../../edge/json-capture.ts";
@@ -1016,28 +1016,6 @@ describe("selectDeclaringConfigWriteTarget", () => {
       // assert
       assert.deepStrictEqual(target, { kind: "unreadable", filePath: locations.configJsonPath });
     });
-  });
-});
-
-describe("MarketplaceDeclaredLocallyError", () => {
-  test("names the marketplace and suggests --local in its message", () => {
-    // arrange
-    const marketplace = "mp";
-
-    // act
-    const error = new MarketplaceDeclaredLocallyError(marketplace);
-
-    // assert
-    assert.ok(error instanceof Error);
-    assert.deepStrictEqual(
-      { name: error.name, marketplace: error.marketplace, message: error.message },
-      {
-        name: "MarketplaceDeclaredLocallyError",
-        marketplace: "mp",
-        message:
-          "The marketplace mp is declared only in claude-plugins.local.json. Run the command again with --local.",
-      },
-    );
   });
 });
 

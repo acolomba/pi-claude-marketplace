@@ -67,6 +67,7 @@ import {
   cleanupFailuresFromError,
   composeErrorWithCauseChain,
   InvalidMarketplaceManifestError,
+  MarketplaceDeclaredLocallyError,
   MarketplaceNotFoundError,
   PluginUpdateConcurrencyError,
   PluginUpdatePhase3Error,
@@ -85,7 +86,6 @@ import { marketplaceInOtherScope } from "../marketplace/shared.ts";
 import { garbageCollectPluginClones } from "./clone-gc.ts";
 import {
   emitMarketplaceNotAddedSignal,
-  MarketplaceDeclaredLocallyError,
   MarketplaceNotAddedSignal,
   resolveInstalledMarketplaceTarget,
   resolveInstalledPluginTarget,

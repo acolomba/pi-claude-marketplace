@@ -43,7 +43,6 @@ import {
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts";
 import { runInstallLedger } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts";
 import { createInstallOperation } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
-import { MarketplaceDeclaredLocallyError } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   clonePluginRecord,
@@ -56,6 +55,7 @@ import {
   DependencyCascadeError,
   InvalidGitHubBaseUrlError,
   InvalidMarketplaceManifestError,
+  MarketplaceDeclaredLocallyError,
   PluginShapeError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import {

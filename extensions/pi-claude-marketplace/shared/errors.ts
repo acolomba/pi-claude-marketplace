@@ -372,6 +372,30 @@ export class MarketplaceNotFoundError extends Error {
   }
 }
 
+/**
+ * FIX-03 / D-MF-02: the refusal of a command that would write a plugin
+ * declaration into `claude-plugins.json` while only `claude-plugins.local.json`
+ * declares the plugin's marketplace.
+ *
+ * The message IS the failed row's cause line. It is built from fixed text and a
+ * marketplace name that passed `assertSafeName`, so it carries no path. One
+ * exported class lets `instanceof` agree across the plugin verbs, as with
+ * `MarketplaceNotAddedSignal`. It lives here because the marketplace verbs
+ * refuse with it too (LAYER-02), and `orchestrators/marketplace/shared.ts`
+ * cannot import `orchestrators/plugin/shared.ts`, which already imports
+ * `orchestrators/marketplace/shared.ts`.
+ */
+export class MarketplaceDeclaredLocallyError extends Error {
+  readonly marketplace: string;
+  constructor(marketplace: string) {
+    super(
+      `The marketplace ${marketplace} is declared only in claude-plugins.local.json. Run the command again with --local.`,
+    );
+    this.name = "MarketplaceDeclaredLocallyError";
+    this.marketplace = marketplace;
+  }
+}
+
 /** D-14 / MU-5: marketplace update failure preserves the retry-hint slot per MU-5. */
 export class MarketplaceUpdateError extends Error {
   readonly retryHint: string;

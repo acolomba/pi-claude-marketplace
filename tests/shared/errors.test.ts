@@ -26,6 +26,7 @@ import {
   isErrnoException,
   ManualRecoveryError,
   manualRecoveryLeaks,
+  MarketplaceDeclaredLocallyError,
   MarketplaceDuplicateNameError,
   MarketplaceNotFoundError,
   MarketplaceUpdateError,
@@ -835,6 +836,28 @@ describe("MarketplaceNotFoundError", () => {
       {
         message: 'Marketplace "official" not found in user, project scopes.',
         scopes: ["user", "project"],
+      },
+    );
+  });
+});
+
+describe("MarketplaceDeclaredLocallyError", () => {
+  test("names the marketplace and suggests --local in its message", () => {
+    // arrange
+    const marketplace = "mp";
+
+    // act
+    const error = new MarketplaceDeclaredLocallyError(marketplace);
+
+    // assert
+    assert.ok(error instanceof Error);
+    assert.deepStrictEqual(
+      { name: error.name, marketplace: error.marketplace, message: error.message },
+      {
+        name: "MarketplaceDeclaredLocallyError",
+        marketplace: "mp",
+        message:
+          "The marketplace mp is declared only in claude-plugins.local.json. Run the command again with --local.",
       },
     );
   });

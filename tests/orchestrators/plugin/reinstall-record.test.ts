@@ -5,9 +5,9 @@ import {
   recordReinstallOutcome,
   reinstallReasonsFromError,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-record.ts";
-import { MarketplaceDeclaredLocallyError } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts";
 import {
   ManualRecoveryError,
+  MarketplaceDeclaredLocallyError,
   PluginShapeError,
   StateLockHeldError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";

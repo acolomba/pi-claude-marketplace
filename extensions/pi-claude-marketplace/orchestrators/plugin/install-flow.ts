@@ -15,7 +15,11 @@ import { writePluginConfigEntry } from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { isRecordedButDisabled } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
-import { errorMessage, rethrowInvalidGitHubBaseUrl } from "../../shared/errors.ts";
+import {
+  errorMessage,
+  rethrowInvalidGitHubBaseUrl,
+  type MarketplaceDeclaredLocallyError,
+} from "../../shared/errors.ts";
 import { createRemovalOps } from "../../shared/fs-utils.ts";
 import { notify, notifyMcpConfigNotices } from "../../shared/notification-dispatch.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
@@ -57,7 +61,6 @@ import {
   surfaceDiscoveryWarnings,
   writeAdoptingConfigEntries,
   type LedgerDegradationSignals,
-  type MarketplaceDeclaredLocallyError,
 } from "./shared.ts";
 import { garbageCollectWorkflowsStaging } from "./workflows-staging-gc.ts";
 

@@ -30,6 +30,7 @@ import {
   CrossPluginConflictError,
   errorMessage,
   isErrnoException,
+  MarketplaceDeclaredLocallyError,
   MarketplaceNotFoundError,
 } from "../../shared/errors.ts";
 import { notify, notifyDiagnostic } from "../../shared/notification-dispatch.ts";
@@ -779,27 +780,6 @@ type InvalidConfigLoad = Extract<ConfigLoadResult, { status: "invalid" }>;
 
 function configOrEmpty(result: ConfigLoadResult): ScopeConfig {
   return result.status === "valid" ? result.config : { schemaVersion: 1 };
-}
-
-/**
- * FIX-03 / D-MF-02: the refusal of a command that would write a plugin
- * declaration into `claude-plugins.json` while only `claude-plugins.local.json`
- * declares the plugin's marketplace.
- *
- * The message IS the failed row's cause line. It is built from fixed text and a
- * marketplace name that passed `assertSafeName`, so it carries no path. One
- * exported class lets `instanceof` agree across the plugin verbs, as with
- * `MarketplaceNotAddedSignal`.
- */
-export class MarketplaceDeclaredLocallyError extends Error {
-  readonly marketplace: string;
-  constructor(marketplace: string) {
-    super(
-      `The marketplace ${marketplace} is declared only in claude-plugins.local.json. Run the command again with --local.`,
-    );
-    this.name = "MarketplaceDeclaredLocallyError";
-    this.marketplace = marketplace;
-  }
 }
 
 /**
