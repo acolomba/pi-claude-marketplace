@@ -245,7 +245,12 @@ export type Reason =
   // command again with `--local`, rides the cause line. `dangling reference`
   // cannot carry it: there the merged configuration lacks the marketplace, and
   // here it declares it, in the per-machine file only.
-  | "marketplace declared locally";
+  | "marketplace declared locally"
+  // LAYER-02 / D-MF-03: a command run with `--local` names a marketplace that
+  // only `claude-plugins.json` declares. The refusal rides a `failed` row, and
+  // the remedy, running the command again without `--local`, rides the cause
+  // line.
+  | "marketplace declared in shared config";
 
 /** Reasons that describe a content row rather than marketplace absence. */
 export type ContentReason = Exclude<

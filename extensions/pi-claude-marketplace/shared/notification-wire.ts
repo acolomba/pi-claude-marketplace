@@ -147,6 +147,7 @@ const REASONS = {
   "components now supported": true,
   "unsupported mcp": true,
   "marketplace declared locally": true,
+  "marketplace declared in shared config": true,
 } as const satisfies Record<Reason, true>;
 
 const SEVERITIES = {

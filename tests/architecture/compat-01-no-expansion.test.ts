@@ -293,6 +293,8 @@ const EXPECTED_REASONS = [
   "unsupported mcp",
   // FIX-03: a shared declaration would name a marketplace only the local file declares.
   "marketplace declared locally",
+  // LAYER-02: a `--local` command names a marketplace only the shared file declares.
+  "marketplace declared in shared config",
 ] as const;
 
 const EXPECTED_STATUS_TOKENS = [
