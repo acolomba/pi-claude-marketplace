@@ -99,20 +99,6 @@ repos:
 
   - repo: local
     hooks:
-      # the markdown fixers above skip AGENTS.md, because its gsd-path block
-      # must stay byte for byte; this runs them on the rest of the file
-      - id: format-agents-md
-        name: format AGENTS.md outside the gsd-path block
-        entry: python scripts/format-agents-md.py
-        language: python
-        files: ^AGENTS\.md$
-        additional_dependencies:
-          - mdformat==1.0.0
-          - mdformat-frontmatter
-          - mdformat-gfm
-          - mdformat-gfm-alerts
-          - mdformat-footnote
-          - texthooks==0.7.1
       - id: prettier
         name: prettier
         entry: node_modules/.bin/prettier --write --cache --cache-strategy content
