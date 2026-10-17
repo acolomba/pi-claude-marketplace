@@ -3,8 +3,9 @@
  * them to a scope, shared by every marketplace verb.
  *
  * A scenario publishes a marketplace once, naming its source kind, and that
- * step offers no plugins. Stating the plugins it offers republishes it as the
- * same kind, so a scenario states the kind before the plugins.
+ * step offers no plugins. Stating the plugins it offers, with or without the
+ * dependencies each declares, republishes it as the same kind, so a scenario
+ * states the kind before the plugins.
  */
 
 import assert from "node:assert/strict";
@@ -12,7 +13,10 @@ import { rm } from "node:fs/promises";
 
 import { type DataTable, Given } from "@cucumber/cucumber";
 
-import { readOfferedPlugins } from "../../lib/path-marketplace.ts";
+import {
+  readOfferedPlugins,
+  readOfferedPluginsWithDependencies,
+} from "../../lib/path-marketplace.ts";
 import { runCommand } from "../../lib/pi-commands.ts";
 import {
   invalidateManifest,
@@ -20,8 +24,22 @@ import {
   requireFreeRoot,
 } from "../../lib/published-marketplace.ts";
 
+import type { OfferedPlugin } from "../../lib/path-marketplace.ts";
 import type { SourceKind } from "../../lib/published-marketplace.ts";
 import type { ScenarioWorld } from "../../support/world.ts";
+
+/** Republishes the marketplace `name` as its recorded kind, offering `plugins`. */
+async function offer(
+  world: ScenarioWorld,
+  name: string,
+  plugins: readonly OfferedPlugin[],
+): Promise<void> {
+  const { kind } = world.requirePublished(name);
+  world.recordPublished(
+    name,
+    await publishMarketplace(world.marketplacesRoot, name, kind, plugins),
+  );
+}
 
 Given(
   "the marketplace {string} is published as a {source kind} source",
@@ -39,12 +57,14 @@ Given(
 Given(
   "the marketplace {string} offers these plugins:",
   async function (this: ScenarioWorld, name: string, table: DataTable) {
-    const { kind } = this.requirePublished(name);
-    const plugins = readOfferedPlugins(table);
-    this.recordPublished(
-      name,
-      await publishMarketplace(this.marketplacesRoot, name, kind, plugins),
-    );
+    await offer(this, name, readOfferedPlugins(table));
+  },
+);
+
+Given(
+  "the marketplace {string} offers these plugins with dependencies:",
+  async function (this: ScenarioWorld, name: string, table: DataTable) {
+    await offer(this, name, readOfferedPluginsWithDependencies(table));
   },
 );
 

@@ -5,7 +5,9 @@
  * plugin per entry, each with a single skill whose description names the
  * plugin version, so a new session shows which version is installed. Pi adds
  * it as a path source, so no scenario touches the network (NFR-5). Writing it
- * again with new versions publishes an update.
+ * again with new versions publishes an update. A plugin's dependencies go in
+ * its own `plugin.json`, which outranks the marketplace entry when Pi reads
+ * what the plugin declares.
  */
 
 import { mkdir, writeFile } from "node:fs/promises";
@@ -17,20 +19,42 @@ import type { DataTable } from "@cucumber/cucumber";
 export interface OfferedPlugin {
   readonly name: string;
   readonly version: string;
+  /** Dependency elements such as `lib` or `lib@tools`; absent means none. */
+  readonly dependencies?: readonly string[];
 }
 
-const OFFERED_PLUGIN_COLUMNS = ["name", "version"];
+/** Throws unless the table's header is exactly `columns`. */
+function requireColumns(table: DataTable, columns: readonly string[]): void {
+  const [header] = table.raw();
+  if (JSON.stringify(header) !== JSON.stringify(columns)) {
+    throw new Error(`expected the columns ${columns.join(", ")}, got ${header?.join(", ")}`);
+  }
+}
 
 /** Reads a `| name | version |` table, throwing on a missing or unknown column. */
 export function readOfferedPlugins(table: DataTable): OfferedPlugin[] {
-  const [header] = table.raw();
-  if (JSON.stringify(header) !== JSON.stringify(OFFERED_PLUGIN_COLUMNS)) {
-    throw new Error(
-      `expected the columns ${OFFERED_PLUGIN_COLUMNS.join(", ")}, got ${header?.join(", ")}`,
-    );
-  }
-
+  requireColumns(table, ["name", "version"]);
   return table.hashes().map((row) => ({ name: String(row.name), version: String(row.version) }));
+}
+
+/**
+ * Reads a `| name | version | dependencies |` table, throwing on a missing or
+ * unknown column. The `dependencies` cell is a comma-separated list of
+ * elements such as `lib` or `lib@tools`; an empty cell means none.
+ */
+export function readOfferedPluginsWithDependencies(table: DataTable): OfferedPlugin[] {
+  requireColumns(table, ["name", "version", "dependencies"]);
+  return table.hashes().map((row) => {
+    const dependencies = String(row.dependencies)
+      .split(",")
+      .map((element) => element.trim())
+      .filter((element) => element !== "");
+    return {
+      name: String(row.name),
+      version: String(row.version),
+      ...(dependencies.length > 0 && { dependencies }),
+    };
+  });
 }
 
 function manifestPath(root: string): string {
@@ -44,7 +68,11 @@ async function writePlugin(root: string, plugin: OfferedPlugin): Promise<void> {
   await mkdir(skillDir, { recursive: true });
   await writeFile(
     path.join(pluginRoot, ".claude-plugin", "plugin.json"),
-    JSON.stringify({ name: plugin.name, version: plugin.version }),
+    JSON.stringify({
+      name: plugin.name,
+      version: plugin.version,
+      ...(plugin.dependencies !== undefined && { dependencies: plugin.dependencies }),
+    }),
   );
   await writeFile(
     path.join(skillDir, "SKILL.md"),

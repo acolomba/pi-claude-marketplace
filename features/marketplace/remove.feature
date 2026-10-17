@@ -137,3 +137,76 @@ Feature: Marketplace remove
     Then the "claude-plugins.local.json" file of the project scope declares these plugins:
       | id         |
       | beta@tools |
+
+  Scenario: Removing a marketplace from the shared configuration uninstalls the dependencies of the plugins it removes
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name  | version | dependencies |
+      | alpha | 1.0.0   | lib          |
+      | beta  | 1.0.0   |              |
+      | lib   | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin marketplace add {home}/marketplaces/tools --scope project --local"
+    Given the user has run "/claude:plugin install alpha@tools --scope project"
+    Given the user has run "/claude:plugin install beta@tools --scope project --local"
+    When the user runs "/claude:plugin marketplace remove tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id          | name  | status      | reasons | scope   |
+      | tools            | project           | removed            | alpha@tools | alpha | uninstalled |         | project |
+      | tools            | project           | removed            | lib@tools   | lib   | uninstalled |         | project |
+    Then the "claude-plugins.json" file of the project scope declares no plugins
+    Then the "claude-plugins.local.json" file of the project scope declares these plugins:
+      | id         |
+      | beta@tools |
+
+  Scenario: Removing a marketplace from the shared configuration keeps a dependency that a plugin of the local configuration still needs
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name  | version | dependencies |
+      | alpha | 1.0.0   | lib          |
+      | beta  | 1.0.0   | lib          |
+      | lib   | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin marketplace add {home}/marketplaces/tools --scope project --local"
+    Given the user has run "/claude:plugin install alpha@tools --scope project"
+    Given the user has run "/claude:plugin install beta@tools --scope project --local"
+    When the user runs "/claude:plugin marketplace remove tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id          | name  | status      | reasons | scope   |
+      | tools            | project           | removed            | alpha@tools | alpha | uninstalled |         | project |
+    Then the "claude-plugins.local.json" file of the project scope declares these plugins:
+      | id         |
+      | beta@tools |
+
+  Scenario: Removing a marketplace whose dependency declarations cannot be read fails and changes nothing
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name  | version | dependencies |
+      | alpha | 1.0.0   | lib          |
+      | lib   | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install alpha@tools --scope project"
+    Given the manifest of the marketplace "tools" has become invalid
+    When the user runs "/claude:plugin marketplace remove tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade                      |
+      | severity     | error                        |
+      | needs reload | false                        |
+      | summary      | Some operations have failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id          | name  | status | reasons    | scope   | cause chain                                                                                         | cause truncated | leaks | rollback partial |
+      | tools            | project           | failed             | tools@tools | tools | failed | unreadable | project | cannot read the dependencies of lib@tools: marketplace.json schema invalid: /plugins: must be array | false           |       |                  |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name  | source                    |
+      | tools | {home}/marketplaces/tools |
+    Then the "claude-plugins.json" file of the project scope declares these plugins:
+      | id          |
+      | alpha@tools |
