@@ -3228,6 +3228,143 @@ for (const { direction, shared, local, flag, refusal, reason, cause } of [
   });
 }
 
+/**
+ * Install `hello` and `other` from marketplace `mp` in the project scope, then
+ * write `localBytes` into the local layer.
+ */
+async function seedTwoPluginReinstall(
+  cwd: string,
+  localBytes: string,
+): Promise<ReturnType<typeof locationsFor>> {
+  for (const pluginName of ["hello", "other"]) {
+    await seedMarketplace({
+      cwd,
+      marketplaceRoot: path.join(cwd, "mp-src"),
+      pluginName,
+      resources: { skill: pluginName },
+      install: true,
+    });
+  }
+
+  const locations = locationsFor("project", cwd);
+  await writeFile(locations.configLocalJsonPath, localBytes, "utf8");
+  return locations;
+}
+
+for (const { form, target } of [
+  { form: "bare", target: { kind: "all" } },
+  { form: "@marketplace", target: { kind: "marketplace", marketplace: "mp" } },
+] as const) {
+  test(`D-15: the ${form} reinstall with --local reinstalls only the plugins the local layer declares`, async () => {
+    await withHermeticHome(async () => {
+      const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-nameless-local-"));
+      try {
+        // arrange
+        await seedTwoPluginReinstall(cwd, HELLO_DECLARED_LAYER);
+        const { ctx, run, notifications } = makeCtx();
+
+        // act
+        const outcomes = await reinstallPlugins({
+          ctx,
+          run,
+          scope: "project",
+          cwd,
+          target,
+          local: true,
+        });
+
+        // assert
+        assert.deepEqual(
+          outcomes.map((outcome) => [outcome.name, outcome.partition]),
+          [["hello", "reinstalled"]],
+        );
+        assert.deepEqual(notifications, [
+          {
+            message:
+              "● mp [project]\n  ● hello v1.0.0 (reinstalled)\n\nPlugin reinstall: 1 success\n\n/reload to pick up changes",
+          },
+        ]);
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+
+  test(`D-15: the ${form} reinstall without --local reinstalls every installed plugin of the scope`, async () => {
+    await withHermeticHome(async () => {
+      const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-nameless-flagless-"));
+      try {
+        // arrange
+        await seedTwoPluginReinstall(cwd, HELLO_DECLARED_LAYER);
+        const { ctx, run } = makeCtx();
+
+        // act
+        const outcomes = await reinstallPlugins({ ctx, run, scope: "project", cwd, target });
+
+        // assert
+        assert.deepEqual(
+          outcomes.map((outcome) => [outcome.name, outcome.partition]),
+          [
+            ["hello", "reinstalled"],
+            ["other", "reinstalled"],
+          ],
+        );
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
+
+for (const { form, target, blockName } of [
+  { form: "bare", target: { kind: "all" }, blockName: "(reinstall)" },
+  { form: "@marketplace", target: { kind: "marketplace", marketplace: "mp" }, blockName: "mp" },
+] as const) {
+  test(`CFG-03: the ${form} reinstall with --local fails naming an unreadable local layer and touches no plugin`, async () => {
+    await withHermeticHome(async () => {
+      const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-nameless-local-invalid-"));
+      try {
+        // arrange
+        const locations = await seedTwoPluginReinstall(cwd, "{ invalid");
+        const stateBytes = await readFile(locations.stateJsonPath, "utf8");
+        const sharedBytes = await readFile(locations.configJsonPath, "utf8");
+        const { ctx, run, notifications } = makeCtx();
+
+        // act
+        const outcomes = await reinstallPlugins({
+          ctx,
+          run,
+          scope: "project",
+          cwd,
+          target,
+          local: true,
+        });
+
+        // assert
+        assert.deepEqual([...outcomes], []);
+        assert.deepEqual(notifications, [
+          {
+            message: [
+              "A plugin operation has failed.",
+              "",
+              `● ${blockName} [project]`,
+              "  ⊘ (reinstall) (failed) {invalid manifest}",
+              '    cause: Config file "claude-plugins.local.json" failed schema validation.',
+              "",
+              "Plugin reinstall: 1 failure",
+            ].join("\n"),
+            severity: "error",
+          },
+        ]);
+        assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
+        assert.equal(await readFile(locations.configJsonPath, "utf8"), sharedBytes);
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
+
 test("FIX-03: a bare reinstall under a marketplace only the local file declares writes no declaration", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-local-mp-"));

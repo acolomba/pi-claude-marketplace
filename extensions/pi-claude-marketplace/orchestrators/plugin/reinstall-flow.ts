@@ -93,6 +93,7 @@ import {
 import {
   assertNoCrossPluginConflicts,
   emitMarketplaceNotAddedSignal,
+  keepLocalLayerTargets,
   MarketplaceNotAddedSignal,
   maybeWritePluginConfigBack,
   namedPluginLayerRefusal,
@@ -123,7 +124,7 @@ import type {
   ReinstallTransaction,
   RemoveDataDirFn,
 } from "./reinstall-replace.ts";
-import type { ReinstallPluginsTarget, SelectedReinstallTarget } from "./reinstall-targets.ts";
+import type { ReinstallPluginsTarget, ReinstallTargetSelection } from "./reinstall-targets.ts";
 
 /** Hook-routing capabilities consumed by committed reinstall finalization. */
 export type ReinstallHooksRouting = Pick<
@@ -562,16 +563,9 @@ async function reinstallPluginsWith(
   reinstallPlugin: ReinstallPluginFn,
 ): Promise<readonly ReinstallPluginOutcome[]> {
   const { ctx, run, cwd } = opts;
-  let selection: {
-    readonly cardinality: "single" | "plural";
-    readonly targets: readonly SelectedReinstallTarget[];
-  };
+  let selection: ReinstallTargetSelection;
   try {
-    selection = await owners.selectReinstallTargets({
-      cwd,
-      target: opts.target,
-      ...(opts.scope !== undefined && { scope: opts.scope }),
-    });
+    selection = await selectTargets(owners, opts);
   } catch (err) {
     // Enumeration failures occur before the selector can return, so preserve
     // invocation-form cardinality at this error-projection boundary.
@@ -628,6 +622,30 @@ async function reinstallPluginsWith(
   surfaceReinstallMcpConfigNotices(ctx, run, outcomes);
   surfaceReinstallInvalidConfigFiles(ctx, run, outcomes, cardinality);
   return Object.freeze(outcomes);
+}
+
+/**
+ * LAYER-04 / D-MF-03: a nameless reinstall with `--local` covers only the
+ * plugins the local layer declares; without the flag it covers every
+ * installed plugin of the scope.
+ */
+async function selectTargets(
+  owners: ReinstallFlowOwners,
+  opts: ReinstallPluginsOptions,
+): Promise<ReinstallTargetSelection> {
+  const selection = await owners.selectReinstallTargets({
+    cwd: opts.cwd,
+    target: opts.target,
+    ...(opts.scope !== undefined && { scope: opts.scope }),
+  });
+  if (opts.local !== true || opts.target.kind === "plugin") {
+    return selection;
+  }
+
+  return {
+    cardinality: selection.cardinality,
+    targets: await keepLocalLayerTargets(selection.targets, opts.cwd),
+  };
 }
 
 /**

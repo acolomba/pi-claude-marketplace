@@ -26,3 +26,22 @@ Feature: Plugin reinstall
     Then the "claude-plugins.json" file of the project scope declares these plugins:
       | id            |
       | demo@fixtures |
+
+  Scenario: Reinstalling every plugin with --local reinstalls only the plugins the local layer declares
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+      | pp   | 1.0.0   |
+    Given the user has run "/claude:plugin install pp@fixtures --scope project --local"
+    When the user runs "/claude:plugin reinstall --scope project --local"
+    Then the result has these fields:
+      | kind                | cascade          |
+      | severity            | info             |
+      | needs reload        | true             |
+      | tally label         | Plugin reinstall |
+      | tally failures      | 0                |
+      | tally warnings      | 0                |
+      | tally success count | 1                |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id          | name | status      | reasons | scope   | version |
+      | fixtures         | project           | pp@fixtures | pp   | reinstalled |         | project | 1.0.0   |

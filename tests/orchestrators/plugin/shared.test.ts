@@ -17,6 +17,7 @@ import {
   emitMarketplaceNotAdded,
   emitMarketplaceNotAddedSignal,
   enableRowDependencies,
+  keepLocalLayerTargets,
   localOnlyMarketplaceRefusal,
   MarketplaceNotAddedSignal,
   missIsNotInstalled,
@@ -1375,6 +1376,124 @@ describe("namedPluginLayerRefusal", () => {
       });
     });
   }
+});
+
+describe("keepLocalLayerTargets", () => {
+  test("D-15: keeps, in order, the targets whose key the scope's local layer declares", async () => {
+    // arrange
+    await withTempScopes(async ({ cwd }) => {
+      const locations = locationsFor("project", cwd);
+      await writeConfig(locations.configLocalJsonPath, {
+        schemaVersion: 1,
+        plugins: { "alpha@mp": {}, "gamma@mp": {} },
+      });
+      const targets = [
+        { plugin: "gamma", marketplace: "mp", scope: "project" },
+        { plugin: "beta", marketplace: "mp", scope: "project" },
+        { plugin: "alpha", marketplace: "mp", scope: "project" },
+      ] as const;
+
+      // act
+      const kept = await keepLocalLayerTargets(targets, cwd);
+
+      // assert
+      assert.deepStrictEqual(kept, [
+        { plugin: "gamma", marketplace: "mp", scope: "project" },
+        { plugin: "alpha", marketplace: "mp", scope: "project" },
+      ]);
+    });
+  });
+
+  test("D-15: keeps no target when the local layer is absent", async () => {
+    // arrange
+    await withTempScopes(async ({ cwd }) => {
+      await writeConfig(locationsFor("project", cwd).configJsonPath, {
+        schemaVersion: 1,
+        plugins: { "alpha@mp": {} },
+      });
+
+      // act
+      const kept = await keepLocalLayerTargets(
+        [{ plugin: "alpha", marketplace: "mp", scope: "project" }],
+        cwd,
+      );
+
+      // assert
+      assert.deepStrictEqual(kept, []);
+    });
+  });
+
+  test("D-15: reads each scope's own local layer", async () => {
+    // arrange
+    await withTempScopes(async ({ cwd }) => {
+      await writeConfig(locationsFor("project", cwd).configLocalJsonPath, {
+        schemaVersion: 1,
+        plugins: { "alpha@mp": {} },
+      });
+      await writeConfig(locationsFor("user", cwd).configLocalJsonPath, {
+        schemaVersion: 1,
+        plugins: { "beta@mp": {} },
+      });
+      const targets = [
+        { plugin: "alpha", marketplace: "mp", scope: "project" },
+        { plugin: "alpha", marketplace: "mp", scope: "user" },
+        { plugin: "beta", marketplace: "mp", scope: "project" },
+        { plugin: "beta", marketplace: "mp", scope: "user" },
+      ] as const;
+
+      // act
+      const kept = await keepLocalLayerTargets(targets, cwd);
+
+      // assert
+      assert.deepStrictEqual(kept, [
+        { plugin: "alpha", marketplace: "mp", scope: "project" },
+        { plugin: "beta", marketplace: "mp", scope: "user" },
+      ]);
+    });
+  });
+
+  test("CFG-03: an unreadable local layer is an invalid manifest naming claude-plugins.local.json", async () => {
+    // arrange
+    await withTempScopes(async ({ cwd }) => {
+      const locations = locationsFor("project", cwd);
+      await mkdir(path.dirname(locations.configLocalJsonPath), { recursive: true });
+      await writeFile(locations.configLocalJsonPath, "{");
+
+      // act & assert
+      await assert.rejects(
+        keepLocalLayerTargets([{ plugin: "alpha", marketplace: "mp", scope: "project" }], cwd),
+        (error: unknown) => {
+          assert.ok(error instanceof InvalidMarketplaceManifestError);
+          assert.equal(
+            error.message,
+            'Config file "claude-plugins.local.json" failed schema validation.',
+          );
+          return true;
+        },
+      );
+    });
+  });
+
+  test("D-15: a plugins entry named __proto__ declares nothing it holds", async () => {
+    // arrange
+    await withTempScopes(async ({ cwd }) => {
+      const locations = locationsFor("project", cwd);
+      await mkdir(path.dirname(locations.configLocalJsonPath), { recursive: true });
+      await writeFile(
+        locations.configLocalJsonPath,
+        '{"schemaVersion":1,"plugins":{"__proto__":{"alpha@mp":{}}}}',
+      );
+
+      // act
+      const kept = await keepLocalLayerTargets(
+        [{ plugin: "alpha", marketplace: "mp", scope: "project" }],
+        cwd,
+      );
+
+      // assert
+      assert.deepStrictEqual(kept, []);
+    });
+  });
 });
 
 describe("writeAdoptingConfigEntries", () => {

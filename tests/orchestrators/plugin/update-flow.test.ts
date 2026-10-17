@@ -5372,6 +5372,130 @@ async function recordedHelloVersion(
   return (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.hello?.version;
 }
 
+/**
+ * Seed `hello` and `other` 1.0.0 installed in the project scope with 1.0.1
+ * offered, and write `localBytes` into the local layer.
+ */
+async function seedTwoPluginUpdate(
+  cwd: string,
+  localBytes: string,
+): Promise<ReturnType<typeof locationsFor>> {
+  const locations = locationsFor("project", cwd);
+  await seedPathMarketplace({
+    cwd,
+    marketplaceRoot: path.join(cwd, "mp-src"),
+    marketplaceName: "mp",
+    manifestPlugins: {
+      hello: { version: "1.0.1", hasSkill: true },
+      other: { version: "1.0.1", hasSkill: true },
+    },
+    installedVersions: { hello: "1.0.0", other: "1.0.0" },
+  });
+  await writeFile(locations.configLocalJsonPath, localBytes, "utf8");
+  return locations;
+}
+
+async function recordedVersions(
+  locations: ReturnType<typeof locationsFor>,
+): Promise<Record<string, string | undefined>> {
+  const plugins = (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins;
+  return { hello: plugins?.hello?.version, other: plugins?.other?.version };
+}
+
+for (const { form, target } of [
+  { form: "bare", target: { kind: "all" } },
+  { form: "@marketplace", target: { kind: "marketplace", marketplace: "mp" } },
+] as const) {
+  test(`D-15: the ${form} update with --local updates only the plugins the local layer declares`, async () => {
+    await withHermeticHome(async () => {
+      const cwd = await createCaseDir("update-nameless-local-");
+      try {
+        // arrange
+        const locations = await seedTwoPluginUpdate(cwd, HELLO_DECLARED);
+        const { ctx, run, notifications } = makeCtx();
+
+        // act
+        await updatePlugins({ ctx, run, scope: "project", cwd, target, local: true });
+
+        // assert
+        assert.deepEqual(await recordedVersions(locations), { hello: "1.0.1", other: "1.0.0" });
+        assert.deepEqual(notifications, [
+          {
+            message:
+              "● mp [project]\n  ● hello v1.0.0 → v1.0.1 (updated)\n\nPlugin update: 1 updated\n\n/reload to pick up changes",
+          },
+        ]);
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+
+  test(`D-15: the ${form} update without --local updates every installed plugin of the scope`, async () => {
+    await withHermeticHome(async () => {
+      const cwd = await createCaseDir("update-nameless-flagless-");
+      try {
+        // arrange
+        const locations = await seedTwoPluginUpdate(cwd, HELLO_DECLARED);
+        const { ctx, run } = makeCtx();
+
+        // act
+        await updatePlugins({ ctx, run, scope: "project", cwd, target });
+
+        // assert
+        assert.deepEqual(await recordedVersions(locations), { hello: "1.0.1", other: "1.0.1" });
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
+
+for (const { form, target, rowName, blockName } of [
+  { form: "bare", target: { kind: "all" }, rowName: "(update)", blockName: "(update)" },
+  {
+    form: "@marketplace",
+    target: { kind: "marketplace", marketplace: "mp" },
+    rowName: "(mp)",
+    blockName: "mp",
+  },
+] as const) {
+  test(`CFG-03: the ${form} update with --local fails naming an unreadable local layer and touches no plugin`, async () => {
+    await withHermeticHome(async () => {
+      const cwd = await createCaseDir("update-nameless-local-invalid-");
+      try {
+        // arrange
+        const locations = await seedTwoPluginUpdate(cwd, "{ not json");
+        const filesBefore = await updateFileSnapshot(locations);
+        const { ctx, run, notifications } = makeCtx();
+
+        // act
+        await updatePlugins({ ctx, run, scope: "project", cwd, target, local: true });
+
+        // assert
+        assert.deepEqual(notifications, [
+          {
+            message: [
+              "A plugin operation has failed.",
+              "",
+              `● ${blockName} [project]`,
+              `  ⊘ ${rowName} (failed) {invalid manifest}`,
+              '    cause: Config file "claude-plugins.local.json" failed schema validation.',
+              "",
+              "Plugin update: 1 failure",
+            ].join("\n"),
+            severity: "error",
+          },
+        ]);
+        assert.deepEqual(await updateFileSnapshot(locations), filesBefore);
+        assert.deepEqual(await recordedVersions(locations), { hello: "1.0.0", other: "1.0.0" });
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
+
 test("FIX-03: a bare update under a marketplace only the local file declares updates and writes no declaration", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-local-mp-");

@@ -785,9 +785,7 @@ export async function namedPluginLayerRefusal(opts: {
 }): Promise<Error | undefined> {
   const selection = await selectDeclaringConfigWriteTarget(opts);
   if (selection.kind === "unreadable") {
-    return new InvalidMarketplaceManifestError(
-      `Config file "${path.basename(selection.filePath)}" failed schema validation.`,
-    );
+    return unreadableLayerError(selection.filePath);
   }
 
   const verdict = pluginLayerVerdict({
@@ -798,6 +796,45 @@ export async function namedPluginLayerRefusal(opts: {
     plugin: opts.plugin,
   });
   return verdict.kind === "other-only" ? verdict.refusal : undefined;
+}
+
+/** CFG-03: an unreadable layer file, named by its basename only. */
+function unreadableLayerError(filePath: string): InvalidMarketplaceManifestError {
+  return new InvalidMarketplaceManifestError(
+    `Config file "${path.basename(filePath)}" failed schema validation.`,
+  );
+}
+
+/**
+ * LAYER-04 / D-MF-03: a nameless update or reinstall with `--local` covers
+ * only the plugins the local layer declares, as the nameless autoupdate does.
+ * Keeps, in order, the targets whose `<plugin>@<marketplace>` key their
+ * scope's `claude-plugins.local.json` declares. Each scope's local layer is
+ * read once, and membership is an own-key read.
+ *
+ * CFG-03: an unreadable local layer throws `InvalidMarketplaceManifestError`
+ * naming it, instead of reading as a layer that declares nothing.
+ */
+export async function keepLocalLayerTargets<
+  T extends { readonly plugin: string; readonly marketplace: string; readonly scope: Scope },
+>(targets: readonly T[], cwd: string): Promise<readonly T[]> {
+  const scopes = [...new Set(targets.map((target) => target.scope))];
+  const declared = new Set(
+    (await Promise.all(scopes.map((scope) => localLayerKeys(scope, cwd)))).flat(),
+  );
+  return targets.filter((target) =>
+    declared.has(`${target.scope}:${target.plugin}@${target.marketplace}`),
+  );
+}
+
+/** The scope-qualified plugin keys one scope's local layer declares. */
+async function localLayerKeys(scope: Scope, cwd: string): Promise<readonly string[]> {
+  const loaded = await loadConfig(locationsFor(scope, cwd).configLocalJsonPath);
+  if (loaded.status === "invalid") {
+    throw unreadableLayerError(loaded.filePath);
+  }
+
+  return Object.keys(configOrEmpty(loaded).plugins ?? {}).map((key) => `${scope}:${key}`);
 }
 
 /**

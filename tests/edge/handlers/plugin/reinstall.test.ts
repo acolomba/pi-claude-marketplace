@@ -28,12 +28,12 @@
 //     too-many-arguments sentence. There is no arity below zero, so only the
 //     surplus half of the arity obligation has a target here;
 //   * the scope-target flag is ACCEPTED. It reaches the shared scanner, which
-//     consumes it and strips it from the residual, and it discriminates: the
-//     write-back lands in the override config layer instead of the base one;
+//     consumes it and strips it from the residual, and it discriminates: a form
+//     naming no plugin reinstalls only the plugins the local layer declares;
 //   * a scope flag and the scope-target flag driven TOGETHER are ACCEPTED and
-//     both honoured -- the user scope's override layer takes the write-back --
-//     so the inherited "mutually exclusive selectors are rejected" claim has no
-//     target on this module;
+//     both honoured -- only the plugins the user scope's local layer declares
+//     are reinstalled -- so the inherited "mutually exclusive selectors are
+//     rejected" claim has no target on this module;
 //   * a lone separator is NOT the marketplace form. That branch demands a length
 //     beyond the separator, so a bare separator falls through to the reference
 //     split and takes the malformed-reference sentence.
@@ -549,19 +549,31 @@ for (const { args, placement } of [
 
 // ---------------------------------------------------------------------------
 // The scope-target flag. It is ACCEPTED here, and it discriminates: the same
-// reference without it declares the write-back in the base layer above, and with
-// it in the override layer. Both placements are driven because the shared
-// scanner promises position independence (WR-02).
+// reference without it reinstalls both plugins of the marketplace above, and
+// with it only the one the local layer declares (D-15). Both placements are
+// driven because the shared scanner promises position independence (WR-02).
 // ---------------------------------------------------------------------------
+
+const LOCAL_ALPHA_DECLARED = { schemaVersion: 1, plugins: { "alpha@mp": {} } };
+
+const LOCAL_ALPHA_MESSAGE =
+  "● mp [project]\n" +
+  "  ● alpha v1.0.0 (reinstalled)\n\n" +
+  "Plugin reinstall: 1 success\n\n" +
+  "/reload to pick up changes";
 
 for (const { args, placement } of [
   { args: "--local @mp", placement: "before the positional" },
   { args: "@mp --local", placement: "after the positional" },
 ]) {
-  test(`declares the write-back in the override layer when the scope-target flag appears ${placement} (WB-01)`, async (t) => {
+  test(`reinstalls only the plugins the local layer declares when the scope-target flag appears ${placement} (D-15)`, async (t) => {
     // arrange
     const workspace = await createHermeticWorkspace(t, "scope-target-position");
     await seedBothScopes(workspace);
+    await writeUnder(
+      path.join(workspace.projectRoot, "claude-plugins.local.json"),
+      JSON.stringify(LOCAL_ALPHA_DECLARED),
+    );
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
       value: workspace.cwd,
       reads: 1,
@@ -572,12 +584,12 @@ for (const { args, placement } of [
     await reinstallHandler(args, ctx, runWithNothingLoaded());
 
     // assert
-    assert.deepStrictEqual(notifications, [{ message: MARKETPLACE_FORM_MESSAGE }]);
+    assert.deepStrictEqual(notifications, [{ message: LOCAL_ALPHA_MESSAGE }]);
     assert.deepStrictEqual(await readFootprint(workspace), {
-      projectSkills: ["alpha-tool", "beta-tool"],
+      projectSkills: ["alpha-tool"],
       userSkills: [],
       projectBase: undefined,
-      projectLocal: MARKETPLACE_FORM_DECLARED,
+      projectLocal: LOCAL_ALPHA_DECLARED,
       userBase: undefined,
       userLocal: undefined,
     });
@@ -590,6 +602,15 @@ test("honours a scope flag and the scope-target flag driven together (WB-02)", a
   // arrange
   const workspace = await createHermeticWorkspace(t, "both-selectors");
   await seedBothScopes(workspace);
+  await seedMarketplace(workspace, "user", "extra", ["epsilon"]);
+  await writeUnder(
+    path.join(workspace.projectRoot, "claude-plugins.local.json"),
+    JSON.stringify(LOCAL_ALPHA_DECLARED),
+  );
+  await writeUnder(
+    path.join(workspace.userRoot, "claude-plugins.local.json"),
+    JSON.stringify(USER_PLUGIN_DECLARED),
+  );
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
     value: workspace.cwd,
     reads: 1,
@@ -605,7 +626,7 @@ test("honours a scope flag and the scope-target flag driven together (WB-02)", a
     projectSkills: [],
     userSkills: ["delta-tool"],
     projectBase: undefined,
-    projectLocal: undefined,
+    projectLocal: LOCAL_ALPHA_DECLARED,
     userBase: undefined,
     userLocal: USER_PLUGIN_DECLARED,
   });

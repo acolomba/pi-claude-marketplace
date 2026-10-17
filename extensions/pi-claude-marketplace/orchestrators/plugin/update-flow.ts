@@ -87,6 +87,7 @@ import { marketplaceInOtherScope } from "../marketplace/shared.ts";
 import { garbageCollectPluginClones } from "./clone-gc.ts";
 import {
   emitMarketplaceNotAddedSignal,
+  keepLocalLayerTargets,
   MarketplaceNotAddedSignal,
   namedPluginLayerRefusal,
   resolveInstalledMarketplaceTarget,
@@ -933,7 +934,21 @@ interface ResolvedTarget {
   readonly locations: ScopedLocations;
 }
 
+/**
+ * LAYER-04 / D-MF-03: a nameless update with `--local` covers only the
+ * plugins the local layer declares; without the flag it covers every
+ * installed plugin of the scope.
+ */
 async function enumerateTargets(opts: UpdatePluginsOptions): Promise<readonly ResolvedTarget[]> {
+  const targets = await enumerateScopeTargets(opts);
+  return opts.local === true && opts.target.kind !== "plugin"
+    ? keepLocalLayerTargets(targets, opts.cwd)
+    : targets;
+}
+
+async function enumerateScopeTargets(
+  opts: UpdatePluginsOptions,
+): Promise<readonly ResolvedTarget[]> {
   const { cwd, target } = opts;
   const explicitScope = opts.scope;
 
