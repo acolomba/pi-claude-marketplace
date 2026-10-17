@@ -5,6 +5,8 @@
 // Composition (D-09):
 //   withLockedStateTransaction(locations, async (tx) => {
 //     PU-5 silent converge: if record absent, set alreadyGone=true and return (NO save)
+//     LAYER-04 layer verdict (standalone only, WR-09): throw UninstallRefusedError
+//       when only the layer the command does not target declares the plugin
 //     D-06-06 declarer read: collect the OTHER records in this scope that
 //       declare the target, and throw UninstallRefusedError only when some
 //       record's declarations cannot be read (D-05-07) -- BEFORE the cascade,
@@ -87,8 +89,10 @@ import { buildScopeDeclarationIndex } from "./dependency-index.ts";
 import {
   absentTargetReasons,
   applyPartialCascadeFold,
+  configOrEmpty,
   emitMarketplaceNotAdded,
   missIsNotInstalled,
+  pluginLayerVerdict,
   resolveCrossScopePluginTarget,
 } from "./shared.ts";
 import {
@@ -101,6 +105,7 @@ import { garbageCollectWorkflowsStaging } from "./workflows-staging-gc.ts";
 
 import type { IndexedRecord, ScopeDeclarationIndexResult } from "./dependency-index.ts";
 import type { HooksRouting } from "../../bridges/hooks/index.ts";
+import type { ScopeConfig } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
@@ -301,6 +306,88 @@ async function readDeclarers(args: {
   }
 
   return { snapshot: result, dependents: findDependents(args.key, result.index) };
+}
+
+/** The layer files a named uninstall reads: its target and, standalone, the other one. */
+interface UninstallLayerPaths {
+  readonly target: string;
+  /** Undefined under orchestration, which applies no layer rule (WR-09). */
+  readonly other: string | undefined;
+}
+
+/**
+ * WB-01: the target layer is chosen by the flag alone, once, before the lock,
+ * so the command never falls back to the shared file when the local one is
+ * absent.
+ */
+function uninstallLayerPaths(
+  locations: Pick<ScopedLocations, "configJsonPath" | "configLocalJsonPath">,
+  local: boolean,
+  orchestrated: boolean,
+): UninstallLayerPaths {
+  const [target, other] = local
+    ? [locations.configLocalJsonPath, locations.configJsonPath]
+    : [locations.configJsonPath, locations.configLocalJsonPath];
+  return { target, other: orchestrated ? undefined : other };
+}
+
+/** Both layer parses, or the basename of the first file that cannot be read. */
+type UninstallLayers =
+  | { readonly kind: "invalid"; readonly basename: string }
+  | { readonly kind: "readable"; readonly target: ScopeConfig; readonly other?: ScopeConfig };
+
+/**
+ * CFG-03 / T-56-03-04: read the target layer and, for a standalone uninstall,
+ * the other one, inside the lock. An invalid file stops the uninstall before
+ * any change, named by its basename only. An invalid other layer is never read
+ * as declaring nothing: it may declare the plugin.
+ */
+async function readUninstallLayers(
+  loadConfigFile: UninstallTransaction["loadTargetConfig"],
+  paths: UninstallLayerPaths,
+): Promise<UninstallLayers> {
+  const target = await loadConfigFile(paths.target);
+  if (target.status === "invalid") {
+    return { kind: "invalid", basename: path.basename(paths.target) };
+  }
+
+  if (paths.other === undefined) {
+    return { kind: "readable", target: configOrEmpty(target) };
+  }
+
+  const other = await loadConfigFile(paths.other);
+  if (other.status === "invalid") {
+    return { kind: "invalid", basename: path.basename(paths.other) };
+  }
+
+  return { kind: "readable", target: configOrEmpty(target), other: configOrEmpty(other) };
+}
+
+/**
+ * LAYER-04 / D-MF-03: a named uninstall acts on its target layer, so it is
+ * refused when only the other layer declares the plugin. The refusal leaves
+ * the closure before the declarer read, the cascade, any config write, and the
+ * save. A reconcile-driven uninstall read no other layer and is never refused
+ * (WR-09).
+ */
+function refuseOtherLayerDeclaration(
+  layers: Extract<UninstallLayers, { kind: "readable" }>,
+  args: { readonly local: boolean; readonly marketplace: string; readonly plugin: string },
+): void {
+  if (layers.other === undefined) {
+    return;
+  }
+
+  const verdict = pluginLayerVerdict({
+    target: layers.target,
+    other: layers.other,
+    targetIsLocal: args.local,
+    marketplace: args.marketplace,
+    plugin: args.plugin,
+  });
+  if (verdict.kind === "other-only") {
+    throw new UninstallRefusedError(verdict.reason, verdict.refusal.message);
+  }
 }
 
 /**
@@ -514,8 +601,8 @@ function emitConfigInvalid(args: {
  * An absent/invalid layer, or a valid layer that does not declare the key, is
  * left untouched (never rewritten) -- writing anyway would rewrite the file, or
  * CREATE it with empty maps when absent, for a semantic no-op (RECON-05
- * byte/mtime stability). The sibling layer being invalid is NOT a CFG-03 abort
- * (that is scoped to the target layer inside the guard closure).
+ * byte/mtime stability). A standalone uninstall reads both layers for CFG-03
+ * inside the guard closure, so an invalid layer here is one that changed since.
  */
 async function deletePluginFromLayer(
   configPath: string,
@@ -1096,16 +1183,13 @@ async function runUninstallOutcome(
 
   const { scope, locations } = resolution;
 
-  // WB-01: target-path selection happens ONCE before the lock so
-  // the orchestrator NEVER falls back to the base file on ENOENT.
-  const targetConfigPath =
-    opts.local === true ? locations.configLocalJsonPath : locations.configJsonPath;
-  const configBasename = path.basename(targetConfigPath);
+  const local = opts.local === true;
+  const layerPaths = uninstallLayerPaths(locations, local, orchestrated);
 
   let alreadyGone = false;
-  // WB-01 / CFG-03: invalid-config sentinel; surfaced post-guard with a
-  // basename-only cause (T-56-03-04 information-disclosure mitigation).
-  let configInvalid = false;
+  // WB-01 / CFG-03: the basename of an invalid layer file; surfaced post-guard
+  // as a basename-only cause (T-56-03-04 information-disclosure mitigation).
+  let invalidConfigBasename: string | undefined;
   // Lifted from inside the guard closure so the post-guard success path can
   // populate the PluginUninstalledMessage.version slot without re-reading
   // state. Undefined when alreadyGone (no row to render in that case).
@@ -1147,12 +1231,11 @@ async function runUninstallOutcome(
     // documented no-save abort discipline the sibling commands follow.
     await transaction.withLockedStateTransaction(locations, async (tx) => {
       const state = tx.state;
-      // CFG-03 / T-56-03-04: abort BEFORE any state mutation. The
-      // basename-only message prevents an absolute-path information leak.
-      // NO tx.save() -- state.json bytes and mtime are untouched.
-      const cfg = await transaction.loadTargetConfig(targetConfigPath);
-      if (cfg.status === "invalid") {
-        configInvalid = true;
+      // CFG-03 / T-56-03-04: abort BEFORE any state mutation. NO tx.save() --
+      // state.json bytes and mtime are untouched.
+      const layers = await readUninstallLayers(transaction.loadTargetConfig, layerPaths);
+      if (layers.kind === "invalid") {
+        invalidConfigBasename = layers.basename;
         return;
       }
 
@@ -1181,6 +1264,7 @@ async function runUninstallOutcome(
       }
 
       removedVersion = installed.version;
+      refuseOtherLayerDeclaration(layers, { local, marketplace, plugin });
 
       // D-06-06 / D-05-07: the declarer read runs AFTER the two converge arms
       // (a target that is not installed is `{not installed}`, never a refusal
@@ -1281,15 +1365,14 @@ async function runUninstallOutcome(
 
   // WB-01 / CFG-03 / T-56-03-04: invalid-config abort. No state mutation
   // (the closure returned before reading state); no write-back.
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- mutated inside the withLockedStateTransaction closure above.
-  if (configInvalid) {
+  if (invalidConfigBasename !== undefined) {
     return emitConfigInvalid({
       ctx,
       run,
       marketplace,
       scope,
       plugin,
-      configBasename,
+      configBasename: invalidConfigBasename,
       orchestrated,
     });
   }

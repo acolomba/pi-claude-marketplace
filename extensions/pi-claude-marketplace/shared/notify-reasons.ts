@@ -159,7 +159,12 @@ export type FailureReason =
   | "marketplace declared locally"
   // LAYER-02: the mirror refusal of the same layer rule, shared by
   // `marketplace remove`, `autoupdate`, and `noautoupdate`.
-  | "marketplace declared in shared config";
+  | "marketplace declared in shared config"
+  // LAYER-04: a named plugin command refuses when its target layer does not
+  // declare the plugin and the other layer does. Uninstall, enable, disable,
+  // update, and reinstall share both refusals.
+  | "plugin declared locally"
+  | "plugin declared in shared config";
 
 /**
  * D-102-06: author-declared install-time state -- a fact the plugin's OWN

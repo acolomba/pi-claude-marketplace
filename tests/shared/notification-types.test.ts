@@ -148,6 +148,8 @@ const EXPECTED_REASONS = [
   "unsupported mcp",
   "marketplace declared locally",
   "marketplace declared in shared config",
+  "plugin declared locally",
+  "plugin declared in shared config",
 ] as const;
 
 const EXPECTED_STATUS_TOKENS = [

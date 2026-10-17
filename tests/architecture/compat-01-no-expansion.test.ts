@@ -295,6 +295,10 @@ const EXPECTED_REASONS = [
   "marketplace declared locally",
   // LAYER-02: a `--local` command names a marketplace only the shared file declares.
   "marketplace declared in shared config",
+  // LAYER-04: a flagless plugin command names a plugin only the local layer declares.
+  "plugin declared locally",
+  // LAYER-04: a `--local` plugin command names a plugin only the shared layer declares.
+  "plugin declared in shared config",
 ] as const;
 
 const EXPECTED_STATUS_TOKENS = [

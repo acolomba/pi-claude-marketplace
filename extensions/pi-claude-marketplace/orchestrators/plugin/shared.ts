@@ -32,6 +32,8 @@ import {
   isErrnoException,
   MarketplaceDeclaredLocallyError,
   MarketplaceNotFoundError,
+  PluginDeclaredInSharedConfigError,
+  PluginDeclaredLocallyError,
 } from "../../shared/errors.ts";
 import { notify, notifyDiagnostic } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
@@ -761,7 +763,8 @@ function resolveTargetIsLocal(
 
 type InvalidConfigLoad = Extract<ConfigLoadResult, { status: "invalid" }>;
 
-function configOrEmpty(result: ConfigLoadResult): ScopeConfig {
+/** A readable layer's parse; an absent layer reads as one that declares nothing. */
+export function configOrEmpty(result: ConfigLoadResult): ScopeConfig {
   return result.status === "valid" ? result.config : { schemaVersion: 1 };
 }
 
@@ -794,6 +797,65 @@ export function localOnlyMarketplaceRefusal(
   }
 
   return new MarketplaceDeclaredLocallyError(marketplace);
+}
+
+/**
+ * Where a plugin a named command targets is declared, as seen from the
+ * command's target layer:
+ *
+ * - `target-only`: only the target layer declares it.
+ * - `both`: both layers declare it.
+ * - `other-only`: only the other layer declares it; `refusal` is the cause line.
+ * - `neither`: no layer declares it (a dependency, or a hand-removed entry).
+ */
+export type PluginLayerVerdict =
+  | { readonly kind: "target-only" }
+  | { readonly kind: "both" }
+  | {
+      readonly kind: "other-only";
+      readonly reason: "plugin declared locally" | "plugin declared in shared config";
+      readonly refusal: PluginDeclaredLocallyError | PluginDeclaredInSharedConfigError;
+    }
+  | { readonly kind: "neither" };
+
+/**
+ * LAYER-04 / D-MF-03: a named plugin command acts on its target layer, and
+ * fails when that layer does not declare the plugin while the other one does.
+ *
+ * Pure: the caller loads both layers inside its lock and handles an invalid
+ * file first (CFG-03), so both arguments are readable parses. Membership is an
+ * own-key read, so a key the layer holds only through its prototype declares
+ * nothing.
+ */
+export function pluginLayerVerdict(args: {
+  readonly target: ScopeConfig;
+  readonly other: ScopeConfig;
+  readonly targetIsLocal: boolean;
+  readonly marketplace: string;
+  readonly plugin: string;
+}): PluginLayerVerdict {
+  const key = `${args.plugin}@${args.marketplace}`;
+  const inTarget = ownValue(args.target.plugins, key) !== undefined;
+  const inOther = ownValue(args.other.plugins, key) !== undefined;
+  if (inTarget) {
+    return { kind: inOther ? "both" : "target-only" };
+  }
+
+  if (!inOther) {
+    return { kind: "neither" };
+  }
+
+  return args.targetIsLocal
+    ? {
+        kind: "other-only",
+        reason: "plugin declared in shared config",
+        refusal: new PluginDeclaredInSharedConfigError(args.plugin, args.marketplace),
+      }
+    : {
+        kind: "other-only",
+        reason: "plugin declared locally",
+        refusal: new PluginDeclaredLocallyError(args.plugin, args.marketplace),
+      };
 }
 
 /**

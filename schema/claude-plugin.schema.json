@@ -168,7 +168,9 @@
                           "components now supported",
                           "unsupported mcp",
                           "marketplace declared locally",
-                          "marketplace declared in shared config"
+                          "marketplace declared in shared config",
+                          "plugin declared locally",
+                          "plugin declared in shared config"
                         ]
                       }
                     },
@@ -306,7 +308,9 @@
                     "components now supported",
                     "unsupported mcp",
                     "marketplace declared locally",
-                    "marketplace declared in shared config"
+                    "marketplace declared in shared config",
+                    "plugin declared locally",
+                    "plugin declared in shared config"
                   ]
                 }
               }
@@ -494,7 +498,9 @@
                           "components now supported",
                           "unsupported mcp",
                           "marketplace declared locally",
-                          "marketplace declared in shared config"
+                          "marketplace declared in shared config",
+                          "plugin declared locally",
+                          "plugin declared in shared config"
                         ]
                       }
                     },
@@ -632,7 +638,9 @@
                     "components now supported",
                     "unsupported mcp",
                     "marketplace declared locally",
-                    "marketplace declared in shared config"
+                    "marketplace declared in shared config",
+                    "plugin declared locally",
+                    "plugin declared in shared config"
                   ]
                 }
               }
@@ -885,7 +893,9 @@
                       "components now supported",
                       "unsupported mcp",
                       "marketplace declared locally",
-                      "marketplace declared in shared config"
+                      "marketplace declared in shared config",
+                      "plugin declared locally",
+                      "plugin declared in shared config"
                     ]
                   }
                 },
@@ -1066,7 +1076,9 @@
                       "components now supported",
                       "unsupported mcp",
                       "marketplace declared locally",
-                      "marketplace declared in shared config"
+                      "marketplace declared in shared config",
+                      "plugin declared locally",
+                      "plugin declared in shared config"
                     ]
                   }
                 },
@@ -1330,7 +1342,9 @@
                             "components now supported",
                             "unsupported mcp",
                             "marketplace declared locally",
-                            "marketplace declared in shared config"
+                            "marketplace declared in shared config",
+                            "plugin declared locally",
+                            "plugin declared in shared config"
                           ]
                         }
                       },
@@ -1517,7 +1531,9 @@
                             "components now supported",
                             "unsupported mcp",
                             "marketplace declared locally",
-                            "marketplace declared in shared config"
+                            "marketplace declared in shared config",
+                            "plugin declared locally",
+                            "plugin declared in shared config"
                           ]
                         }
                       },
@@ -1648,7 +1664,9 @@
               "components now supported",
               "unsupported mcp",
               "marketplace declared locally",
-              "marketplace declared in shared config"
+              "marketplace declared in shared config",
+              "plugin declared locally",
+              "plugin declared in shared config"
             ]
           }
         }

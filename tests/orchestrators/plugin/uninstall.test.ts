@@ -18,6 +18,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
+import { mock, verify } from "strong-mock";
+
 import { GENERATED_AGENT_MARKER } from "../../../extensions/pi-claude-marketplace/bridges/agents/marker.ts";
 import {
   createHooksRouting,
@@ -2723,6 +2725,220 @@ test("CFG-03 orchestrated invalid config returns a typed result without notifica
   });
 });
 
+// ──────────────────────────────────────────────────────────────────────────
+// LAYER-04 / D-MF-03: a named uninstall acts on its target layer only
+// ──────────────────────────────────────────────────────────────────────────
+
+const SHARED_LAYER_WITH_MARKETPLACE =
+  '{"schemaVersion":1,"marketplaces":{"mp":{"source":"./src"}}}\n';
+const LAYER_DECLARING_HELLO = '{"schemaVersion":1,"plugins":{"hello@mp":{}}}\n';
+
+/** Write the shared and local layer files of the scope as the exact bytes given. */
+async function writeLayerFiles(
+  locations: ReturnType<typeof locationsFor>,
+  layers: { readonly shared: string; readonly local: string },
+): Promise<void> {
+  await mkdir(locations.scopeRoot, { recursive: true });
+  await writeFile(locations.configJsonPath, layers.shared, "utf8");
+  await writeFile(locations.configLocalJsonPath, layers.local, "utf8");
+}
+
+/** The bytes of both layer files and of `state.json`, with the state file's mtime. */
+async function readScopeFiles(locations: ReturnType<typeof locationsFor>): Promise<{
+  readonly shared: string;
+  readonly local: string;
+  readonly state: string;
+  readonly stateMtime: number;
+}> {
+  return {
+    shared: await readFile(locations.configJsonPath, "utf8"),
+    local: await readFile(locations.configLocalJsonPath, "utf8"),
+    state: await readFile(locations.stateJsonPath, "utf8"),
+    stateMtime: (await stat(locations.stateJsonPath)).mtimeMs,
+  };
+}
+
+for (const { title, local, layers, expectedMessage } of [
+  {
+    title: "a flagless uninstall of a plugin only the local layer declares",
+    local: false,
+    layers: { shared: SHARED_LAYER_WITH_MARKETPLACE, local: LAYER_DECLARING_HELLO },
+    expectedMessage:
+      "A plugin operation has failed.\n\n● mp [project]\n" +
+      "  ⊘ hello v0.0.1 (failed) {plugin declared locally}\n" +
+      "    cause: The plugin hello@mp is declared only in the local layer (claude-plugins.local.json). Run the command again with --local.",
+  },
+  {
+    title: "a --local uninstall of a plugin only the shared layer declares",
+    local: true,
+    layers: { shared: LAYER_DECLARING_HELLO, local: '{"schemaVersion":1}\n' },
+    expectedMessage:
+      "A plugin operation has failed.\n\n● mp [project]\n" +
+      "  ⊘ hello v0.0.1 (failed) {plugin declared in shared config}\n" +
+      "    cause: The plugin hello@mp is declared only in the shared layer (claude-plugins.json). Run the command again without --local.",
+  },
+]) {
+  test(`LAYER-04: ${title} is refused and changes nothing`, async () => {
+    await withHermeticHome(async () => {
+      const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-layer-refusal-"));
+      try {
+        // arrange
+        const locations = locationsFor("project", cwd);
+        await seedFullPlugin(locations, "mp", "hello", cwd);
+        await writeLayerFiles(locations, layers);
+        const filesBefore = await readScopeFiles(locations);
+        const cascade = mock<typeof cascadeUnstagePlugin>({ exactParams: true, name: "cascade" });
+        const { ctx, run, notifications } = makeCtx();
+
+        // act
+        const outcome = await uninstallWithFreshOwner({
+          ctx,
+          run,
+          scope: "project",
+          cwd,
+          marketplace: "mp",
+          plugin: "hello",
+          local,
+          cascade,
+        });
+
+        // assert
+        assert.strictEqual(outcome, undefined);
+        assert.deepStrictEqual(notifications, [{ message: expectedMessage, severity: "error" }]);
+        assert.deepStrictEqual(await readScopeFiles(locations), filesBefore);
+        verify(cascade);
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
+
+test("CFG-03: a standalone uninstall whose other layer is invalid names that file and changes nothing", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-layer-other-invalid-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedFullPlugin(locations, "mp", "hello", cwd);
+      await writeLayerFiles(locations, {
+        shared: LAYER_DECLARING_HELLO,
+        local: "{ not valid json",
+      });
+      const filesBefore = await readScopeFiles(locations);
+      const cascade = mock<typeof cascadeUnstagePlugin>({ exactParams: true, name: "cascade" });
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      const outcome = await uninstallWithFreshOwner({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        cascade,
+      });
+
+      // assert
+      assert.strictEqual(outcome, undefined);
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n● mp [project]\n" +
+            "  ⊘ hello (failed) {invalid manifest}\n" +
+            '    cause: Config file "claude-plugins.local.json" failed schema validation.',
+          severity: "error",
+        },
+      ]);
+      assert.deepStrictEqual(await readScopeFiles(locations), filesBefore);
+      verify(cascade);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WR-09: an orchestrated uninstall of a plugin only the local layer declares is not refused", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-layer-orchestrated-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedFullPlugin(locations, "mp", "hello", cwd);
+      await writeLayerFiles(locations, {
+        shared: SHARED_LAYER_WITH_MARKETPLACE,
+        local: LAYER_DECLARING_HELLO,
+      });
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      const outcome = await uninstallWithFreshOwner({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        notifications: { mode: "orchestrated" },
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, { status: "uninstalled", name: "hello", version: "0.0.1" });
+      assert.deepStrictEqual(notifications, []);
+      assert.strictEqual(
+        await readFile(locations.configLocalJsonPath, "utf8"),
+        LAYER_DECLARING_HELLO,
+      );
+      assert.strictEqual(
+        (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins["hello"],
+        undefined,
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("LAYER-04: a plugin that is not installed reports not installed whatever the other layer declares", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-layer-not-installed-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedFullPlugin(locations, "mp", "other", cwd);
+      await writeLayerFiles(locations, {
+        shared: SHARED_LAYER_WITH_MARKETPLACE,
+        local: LAYER_DECLARING_HELLO,
+      });
+      const filesBefore = await readScopeFiles(locations);
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await uninstallWithFreshOwner({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello (failed) {not installed}",
+          severity: "error",
+        },
+      ]);
+      assert.deepStrictEqual(await readScopeFiles(locations), filesBefore);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 // WR-03 / D-60-05: after a successful uninstallPlugin, the hooks-bridge
 // routing table no longer contains entries for the uninstalled plugin.
@@ -3199,7 +3415,7 @@ test("GC never rolls back the committed uninstall: the state record is deleted e
   });
 });
 
-test("cross-layer cascade: uninstall sweeps the plugin key from the sibling layer when declared there", async () => {
+test("cross-layer cascade: a --local uninstall clears the key only the local layer declares", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-xlayer-"));
     try {
@@ -3236,7 +3452,9 @@ test("cross-layer cascade: uninstall sweeps the plugin key from the sibling laye
       );
 
       const { ctx, run } = makeCtx();
-      // STANDALONE mode (notifications omitted), targeting BASE.
+      // STANDALONE mode (notifications omitted), targeting the local layer: a
+      // flagless uninstall of a key only the local layer declares is refused
+      // (LAYER-04).
       await uninstallWithFreshOwner({
         ctx,
         run,
@@ -3244,6 +3462,7 @@ test("cross-layer cascade: uninstall sweeps the plugin key from the sibling laye
         cwd,
         marketplace: "m",
         plugin: "p",
+        local: true,
       });
 
       const { loadConfig } =

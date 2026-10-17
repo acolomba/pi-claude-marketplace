@@ -54,3 +54,43 @@ Feature: Plugin uninstall
     Then the result lists these plugins:
       | marketplace name | marketplace scope | id            | name | status | reasons       | scope   | leaks | rollback partial |
       | fixtures         | project           | demo@fixtures | demo | failed | not installed | project |       |                  |
+
+  Scenario: Uninstalling without --local a plugin installed with --local fails as plugin declared locally
+    Given the user has run "/claude:plugin install demo@fixtures --scope project --local"
+    When the user runs "/claude:plugin uninstall demo@fixtures --scope project"
+    Then the result has these fields:
+      | kind         | cascade                        |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status | reasons                 | scope   | version | cause chain                                                                                                                | cause truncated | leaks | rollback partial |
+      | fixtures         | project           | demo@fixtures | demo | failed | plugin declared locally | project | 1.0.0   | The plugin demo@fixtures is declared only in the local layer (claude-plugins.local.json). Run the command again with --local. | false           |       |                  |
+    Then the "claude-plugins.local.json" file of the project scope declares these plugins:
+      | id            |
+      | demo@fixtures |
+    Then the "claude-plugins.json" file of the project scope declares no plugins
+    When the user starts a new pi session
+    Then the session offers these skills:
+      | command           | description            |
+      | /skill:demo-skill | A skill of demo 1.0.0. |
+
+  Scenario: Uninstalling with --local a plugin only the shared layer declares fails as plugin declared in shared config
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    When the user runs "/claude:plugin uninstall demo@fixtures --scope project --local"
+    Then the result has these fields:
+      | kind         | cascade                        |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status | reasons                          | scope   | version | cause chain                                                                                                                 | cause truncated | leaks | rollback partial |
+      | fixtures         | project           | demo@fixtures | demo | failed | plugin declared in shared config | project | 1.0.0   | The plugin demo@fixtures is declared only in the shared layer (claude-plugins.json). Run the command again without --local. | false           |       |                  |
+    Then the "claude-plugins.json" file of the project scope declares these plugins:
+      | id            |
+      | demo@fixtures |
+    Then the "claude-plugins.local.json" file of the project scope does not exist
+    When the user starts a new pi session
+    Then the session offers these skills:
+      | command           | description            |
+      | /skill:demo-skill | A skill of demo 1.0.0. |

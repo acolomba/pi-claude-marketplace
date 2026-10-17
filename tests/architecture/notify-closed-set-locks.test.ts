@@ -108,6 +108,8 @@ const REASON_ENROLLMENT: Record<Reason, true> = {
   "unsupported mcp": true,
   "marketplace declared locally": true,
   "marketplace declared in shared config": true,
+  "plugin declared locally": true,
+  "plugin declared in shared config": true,
 };
 
 const STATUS_TOKEN_ENROLLMENT: Record<StatusToken, true> = {
@@ -200,7 +202,7 @@ const NOTIFICATION_KIND_ENROLLMENT: Record<
   "reconcile-applied-cascade": true,
 };
 
-test("OUT-08: Reason is the closed 68-entry reason set", () => {
+test("OUT-08: Reason is the closed 70-entry reason set", () => {
   // The set is append-only and its declared order is catalog-stable, so this
   // length is a tripwire: an additive drift has to be a deliberate bump made
   // here, in the same edit as the member. The MEMBERSHIP is pinned separately by
@@ -211,7 +213,7 @@ test("OUT-08: Reason is the closed 68-entry reason set", () => {
   // not a gate, and a count restated far from this assertion is a claim nothing
   // turns red for.
   // act & assert
-  assert.strictEqual(Object.keys(REASON_ENROLLMENT).length, 68);
+  assert.strictEqual(Object.keys(REASON_ENROLLMENT).length, 70);
 });
 
 test("SNM-02: StatusToken is the closed 24-entry token set", () => {

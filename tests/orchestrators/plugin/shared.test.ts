@@ -19,6 +19,7 @@ import {
   missIsNotInstalled,
   maybeWritePluginConfigBack,
   overwriteDisabledMemberEntries,
+  pluginLayerVerdict,
   removePluginRecord,
   resolveCrossScopePluginTarget,
   resolveInstalledMarketplaceTarget,
@@ -40,6 +41,8 @@ import {
   CrossPluginConflictError,
   MarketplaceDeclaredLocallyError,
   MarketplaceNotFoundError,
+  PluginDeclaredInSharedConfigError,
+  PluginDeclaredLocallyError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { createJsonCapture } from "../../edge/json-capture.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
@@ -1081,6 +1084,145 @@ describe("localOnlyMarketplaceRefusal", () => {
       assert.strictEqual(refusal, expectedRefusal);
     });
   }
+});
+
+describe("pluginLayerVerdict", () => {
+  for (const { layout, target, other, kind } of [
+    {
+      layout: "only the target layer declares the plugin",
+      target: { schemaVersion: 1, plugins: { "demo@mp": {} } },
+      other: { schemaVersion: 1 },
+      kind: "target-only",
+    },
+    {
+      layout: "both layers declare the plugin",
+      target: { schemaVersion: 1, plugins: { "demo@mp": {} } },
+      other: { schemaVersion: 1, plugins: { "demo@mp": { enabled: false } } },
+      kind: "both",
+    },
+    {
+      layout: "neither layer declares the plugin",
+      target: { schemaVersion: 1, plugins: { "other@mp": {} } },
+      other: { schemaVersion: 1, plugins: { "demo@other-mp": {} } },
+      kind: "neither",
+    },
+  ] satisfies readonly {
+    layout: string;
+    target: ScopeConfig;
+    other: ScopeConfig;
+    kind: "target-only" | "both" | "neither";
+  }[]) {
+    test(`answers ${kind} when ${layout}`, () => {
+      // arrange
+      const expectedVerdict = { kind };
+
+      // act
+      const verdict = pluginLayerVerdict({
+        target,
+        other,
+        targetIsLocal: false,
+        marketplace: "mp",
+        plugin: "demo",
+      });
+
+      // assert
+      assert.deepStrictEqual(verdict, expectedVerdict);
+    });
+  }
+
+  test("refuses as plugin declared locally when only the local layer declares a shared-layer target", () => {
+    // arrange
+    const target: ScopeConfig = { schemaVersion: 1 };
+    const other: ScopeConfig = { schemaVersion: 1, plugins: { "demo@mp": {} } };
+
+    // act
+    const verdict = pluginLayerVerdict({
+      target,
+      other,
+      targetIsLocal: false,
+      marketplace: "mp",
+      plugin: "demo",
+    });
+
+    // assert
+    assert.ok(verdict.kind === "other-only");
+    assert.ok(verdict.refusal instanceof PluginDeclaredLocallyError);
+    assert.deepStrictEqual(
+      {
+        kind: verdict.kind,
+        reason: verdict.reason,
+        plugin: verdict.refusal.plugin,
+        marketplace: verdict.refusal.marketplace,
+        message: verdict.refusal.message,
+      },
+      {
+        kind: "other-only",
+        reason: "plugin declared locally",
+        plugin: "demo",
+        marketplace: "mp",
+        message:
+          "The plugin demo@mp is declared only in the local layer (claude-plugins.local.json). Run the command again with --local.",
+      },
+    );
+  });
+
+  test("refuses as plugin declared in shared config when only the shared layer declares a local-layer target", () => {
+    // arrange
+    const target: ScopeConfig = { schemaVersion: 1, plugins: {} };
+    const other: ScopeConfig = { schemaVersion: 1, plugins: { "demo@mp": { enabled: true } } };
+
+    // act
+    const verdict = pluginLayerVerdict({
+      target,
+      other,
+      targetIsLocal: true,
+      marketplace: "mp",
+      plugin: "demo",
+    });
+
+    // assert
+    assert.ok(verdict.kind === "other-only");
+    assert.ok(verdict.refusal instanceof PluginDeclaredInSharedConfigError);
+    assert.deepStrictEqual(
+      {
+        kind: verdict.kind,
+        reason: verdict.reason,
+        plugin: verdict.refusal.plugin,
+        marketplace: verdict.refusal.marketplace,
+        message: verdict.refusal.message,
+      },
+      {
+        kind: "other-only",
+        reason: "plugin declared in shared config",
+        plugin: "demo",
+        marketplace: "mp",
+        message:
+          "The plugin demo@mp is declared only in the shared layer (claude-plugins.json). Run the command again without --local.",
+      },
+    );
+  });
+
+  test("does not count a plugin key the other layer holds only through its prototype", () => {
+    // arrange
+    const inherited: ScopeConfig["plugins"] = Object.create({ "demo@mp": {} }) as Record<
+      string,
+      { enabled?: boolean }
+    >;
+    const target: ScopeConfig = { schemaVersion: 1 };
+    const other: ScopeConfig = { schemaVersion: 1, plugins: inherited };
+
+    // act
+    const verdict = pluginLayerVerdict({
+      target,
+      other,
+      targetIsLocal: false,
+      marketplace: "mp",
+      plugin: "demo",
+    });
+
+    // assert
+    assert.deepStrictEqual(verdict, { kind: "neither" });
+  });
 });
 
 describe("writeAdoptingConfigEntries", () => {

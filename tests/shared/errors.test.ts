@@ -32,6 +32,8 @@ import {
   MarketplaceDuplicateNameError,
   MarketplaceNotFoundError,
   MarketplaceUpdateError,
+  PluginDeclaredInSharedConfigError,
+  PluginDeclaredLocallyError,
   PluginShapeError,
   PluginUpdateConcurrencyError,
   PluginUpdatePhase3Error,
@@ -882,6 +884,64 @@ describe("MarketplaceDeclaredInSharedConfigError", () => {
         marketplace: "mp",
         message:
           "The marketplace mp is declared only in claude-plugins.json. Run the command again without --local.",
+      },
+    );
+  });
+});
+
+describe("PluginDeclaredLocallyError", () => {
+  test("names the plugin and the local layer and suggests --local in its message", () => {
+    // arrange
+    const plugin = "demo";
+    const marketplace = "mp";
+
+    // act
+    const error = new PluginDeclaredLocallyError(plugin, marketplace);
+
+    // assert
+    assert.ok(error instanceof Error);
+    assert.deepStrictEqual(
+      {
+        name: error.name,
+        plugin: error.plugin,
+        marketplace: error.marketplace,
+        message: error.message,
+      },
+      {
+        name: "PluginDeclaredLocallyError",
+        plugin: "demo",
+        marketplace: "mp",
+        message:
+          "The plugin demo@mp is declared only in the local layer (claude-plugins.local.json). Run the command again with --local.",
+      },
+    );
+  });
+});
+
+describe("PluginDeclaredInSharedConfigError", () => {
+  test("names the plugin and the shared layer and suggests dropping --local in its message", () => {
+    // arrange
+    const plugin = "demo";
+    const marketplace = "mp";
+
+    // act
+    const error = new PluginDeclaredInSharedConfigError(plugin, marketplace);
+
+    // assert
+    assert.ok(error instanceof Error);
+    assert.deepStrictEqual(
+      {
+        name: error.name,
+        plugin: error.plugin,
+        marketplace: error.marketplace,
+        message: error.message,
+      },
+      {
+        name: "PluginDeclaredInSharedConfigError",
+        plugin: "demo",
+        marketplace: "mp",
+        message:
+          "The plugin demo@mp is declared only in the shared layer (claude-plugins.json). Run the command again without --local.",
       },
     );
   });

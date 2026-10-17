@@ -418,6 +418,47 @@ export class MarketplaceDeclaredInSharedConfigError extends Error {
 }
 
 /**
+ * LAYER-04 / D-MF-03: the refusal of a named plugin command without `--local`
+ * when only the local layer declares the plugin. A named command changes only
+ * its target layer, so it cannot act on a declaration in the other one.
+ *
+ * The message IS the failed row's cause line. It is built from fixed text and
+ * names that passed `assertSafeName`, so it carries no path.
+ */
+export class PluginDeclaredLocallyError extends Error {
+  readonly plugin: string;
+  readonly marketplace: string;
+  constructor(plugin: string, marketplace: string) {
+    super(
+      `The plugin ${plugin}@${marketplace} is declared only in the local layer (claude-plugins.local.json). Run the command again with --local.`,
+    );
+    this.name = "PluginDeclaredLocallyError";
+    this.plugin = plugin;
+    this.marketplace = marketplace;
+  }
+}
+
+/**
+ * LAYER-04 / D-MF-03: the refusal of a named plugin command with `--local`
+ * when only the shared layer declares the plugin.
+ *
+ * The message IS the failed row's cause line. It is built from fixed text and
+ * names that passed `assertSafeName`, so it carries no path.
+ */
+export class PluginDeclaredInSharedConfigError extends Error {
+  readonly plugin: string;
+  readonly marketplace: string;
+  constructor(plugin: string, marketplace: string) {
+    super(
+      `The plugin ${plugin}@${marketplace} is declared only in the shared layer (claude-plugins.json). Run the command again without --local.`,
+    );
+    this.name = "PluginDeclaredInSharedConfigError";
+    this.plugin = plugin;
+    this.marketplace = marketplace;
+  }
+}
+
+/**
  * WR-04 / LAYER-07: the `marketplace add` that a project install runs for a
  * marketplace only the user scope records failed. `reason` is the token
  * `marketplace add` reports for the same failure, so the install row carries

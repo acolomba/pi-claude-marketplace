@@ -250,7 +250,17 @@ export type Reason =
   // only `claude-plugins.json` declares. The refusal rides a `failed` row, and
   // the remedy, running the command again without `--local`, rides the cause
   // line.
-  | "marketplace declared in shared config";
+  | "marketplace declared in shared config"
+  // LAYER-04 / D-MF-03: a named plugin command without `--local` targets the
+  // shared layer, and only the local layer declares the plugin. The refusal
+  // rides a `failed` row, and the remedy, running the command again with
+  // `--local`, rides the cause line.
+  | "plugin declared locally"
+  // LAYER-04 / D-MF-03: the mirror refusal: a named plugin command with
+  // `--local` targets the local layer, and only the shared layer declares the
+  // plugin. The remedy, running the command again without `--local`, rides the
+  // cause line.
+  | "plugin declared in shared config";
 
 /** Reasons that describe a content row rather than marketplace absence. */
 export type ContentReason = Exclude<
