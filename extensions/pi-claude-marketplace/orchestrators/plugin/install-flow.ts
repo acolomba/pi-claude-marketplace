@@ -548,11 +548,10 @@ async function hydrateInstalledHooks(args: {
  * absent-as-enabled (D-04), finds the record disabled, and plans an enable,
  * re-enabling a plugin whose author declared it off.
  *
- * D-04-02: the cascade's dependencies are declared nowhere. The desired-state
- * config names only the plugins the user asked for by name; each dependency's
- * record carries `provenance: "dependency"`, and D-04-05's exemption in
- * `buildUninstallBucket` is what keeps that record out of the uninstall sweep
- * on the next reload.
+ * D-04-02: no dependency plugin gets a key. The desired-state config names
+ * only the plugins the user asked for by name; each dependency's record carries
+ * `provenance: "dependency"`, and D-04-05's exemption in `buildUninstallBucket`
+ * is what keeps that record out of the uninstall sweep on the next reload.
  *
  * The stamp addresses `targetConfigPath` -- which for reconcile is the file the
  * plugin's own declaration lives in (see `InstallPluginOptions.local`) -- and
@@ -2029,7 +2028,8 @@ async function installPluginWithTransaction(
             scopeRoot: locations.scopeRoot,
             // DFEN-04: the plugin key alone unless the install actually landed
             // disabled, in which case the declaration carries it through.
-            // D-04-02: the cascade's dependencies are declared nowhere -- each
+            // D-04-02: no dependency plugin gets a key -- the config names only
+            // the plugins the user asked for by name, and each dependency's
             // record carries `provenance: "dependency"`, which D-04-05's
             // reconcile exemption reads on the next reload.
             //
@@ -2040,6 +2040,12 @@ async function installPluginWithTransaction(
             // pending a widen of the helper's return that would route it to a
             // (failed) row.
             pluginPatch: { ...(landedDisabled && { enabled: false }) },
+            // LAYER-07 / D-MF-04: the config does declare every marketplace the
+            // install added to the scope, a dependency's included, so the
+            // desired state names what the scope now owns.
+            addedMarketplaces: addedMarketplaces
+              .map((added) => added.marketplace)
+              .filter((name) => name !== marketplace),
           });
           await writeReEnabledCascadeMemberConfigEntries(locations, state, installed.members);
         } else {

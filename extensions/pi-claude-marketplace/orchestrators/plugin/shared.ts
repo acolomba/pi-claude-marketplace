@@ -852,7 +852,12 @@ function synthesizeAdoptedMarketplaceSource(opts: {
  * explicit `enabled`, while `install` writes `enabled: false` only when the
  * install actually landed disabled and otherwise writes an empty patch. The
  * requesting plugin's key is the only plugin key this write declares (D-04-02:
- * the desired-state config names only plugins the user asked for by name).
+ * the desired-state config names only the plugins the user asked for by name).
+ *
+ * LAYER-07 / D-MF-04: `addedMarketplaces` names the further marketplaces the
+ * caller's install added to the scope, such as a dependency's. Each one is
+ * declared in the same patch under the same membership gate as the owning
+ * marketplace, so the desired state names every marketplace the scope now owns.
  */
 export async function writeAdoptingConfigEntries(opts: {
   readonly current: ScopeConfig;
@@ -863,18 +868,20 @@ export async function writeAdoptingConfigEntries(opts: {
   readonly targetConfigPath: string;
   readonly scopeRoot: string;
   readonly pluginPatch: Partial<PluginConfigEntry>;
+  readonly addedMarketplaces?: readonly string[];
 }): Promise<void> {
-  const adoptedSource = synthesizeAdoptedMarketplaceSource({
-    current: opts.current,
-    sibling: opts.sibling,
-    state: opts.state,
-    marketplace: opts.marketplace,
+  const adopted = [opts.marketplace, ...(opts.addedMarketplaces ?? [])].flatMap((marketplace) => {
+    const source = synthesizeAdoptedMarketplaceSource({
+      current: opts.current,
+      sibling: opts.sibling,
+      state: opts.state,
+      marketplace,
+    });
+    return source === undefined ? [] : [[marketplace, { source }] as const];
   });
 
   await writeBatchedConfigEntries(opts.current, opts.targetConfigPath, opts.scopeRoot, {
-    ...(adoptedSource !== undefined && {
-      marketplaces: { [opts.marketplace]: { source: adoptedSource } },
-    }),
+    marketplaces: Object.fromEntries(adopted),
     plugins: { [`${opts.plugin}@${opts.marketplace}`]: opts.pluginPatch },
   });
 }

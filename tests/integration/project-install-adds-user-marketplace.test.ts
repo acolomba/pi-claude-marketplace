@@ -468,5 +468,13 @@ test("LAYER-07: a project install adds the user-scope git marketplace of its dep
       true,
     ],
   );
+  assert.strictEqual(
+    await readIfPresent(env.project.configJsonPath),
+    jsonFile({
+      schemaVersion: 1,
+      marketplaces: { upstream: { source: upstream }, tools: { source: TOOLS_URL } },
+      plugins: { "app@upstream": {} },
+    }),
+  );
   boundary.verifyBoundary();
 });

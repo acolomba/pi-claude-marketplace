@@ -1234,6 +1234,75 @@ describe("writeAdoptingConfigEntries", () => {
       );
     });
   });
+
+  for (const { behavior, current, sibling, addedMarketplaces, config } of [
+    {
+      behavior: "declares each added marketplace beside the root's in the one write",
+      current: { schemaVersion: 1 },
+      sibling: { schemaVersion: 1 },
+      addedMarketplaces: ["tools"],
+      config:
+        '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "mp": {\n      "source": "./mp-source"\n    },\n    "tools": {\n      "source": "./tools-source"\n    }\n  },\n  "plugins": {\n    "alpha@mp": {}\n  }\n}\n',
+    },
+    {
+      behavior: "declares no added marketplace that either config file declares",
+      current: { schemaVersion: 1, marketplaces: { tools: { source: "./declared" } } },
+      sibling: { schemaVersion: 1, marketplaces: { extra: { source: "./sibling" } } },
+      addedMarketplaces: ["tools", "extra"],
+      config:
+        '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "tools": {\n      "source": "./declared"\n    },\n    "mp": {\n      "source": "./mp-source"\n    }\n  },\n  "plugins": {\n    "alpha@mp": {}\n  }\n}\n',
+    },
+    {
+      behavior: "declares no added marketplace when the sibling config is unreadable",
+      current: { schemaVersion: 1 },
+      sibling: undefined,
+      addedMarketplaces: ["tools"],
+      config:
+        '{\n  "schemaVersion": 1,\n  "marketplaces": {},\n  "plugins": {\n    "alpha@mp": {}\n  }\n}\n',
+    },
+    {
+      behavior: "declares the root's marketplace once when it is also an added one",
+      current: { schemaVersion: 1 },
+      sibling: { schemaVersion: 1 },
+      addedMarketplaces: ["mp"],
+      config:
+        '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "mp": {\n      "source": "./mp-source"\n    }\n  },\n  "plugins": {\n    "alpha@mp": {}\n  }\n}\n',
+    },
+  ] satisfies readonly {
+    behavior: string;
+    current: ScopeConfig;
+    sibling: ScopeConfig | undefined;
+    addedMarketplaces: readonly string[];
+    config: string;
+  }[]) {
+    test(`LAYER-07 / UAT-05: ${behavior}`, async () => {
+      // arrange
+      await withTempScopes(async ({ cwd }) => {
+        const locations = locationsFor("project", cwd);
+        const state = makeState({
+          mp: { scope: "project", plugins: {} },
+          tools: { scope: "project", plugins: {} },
+          extra: { scope: "project", plugins: {} },
+        });
+
+        // act
+        await writeAdoptingConfigEntries({
+          current,
+          sibling,
+          state,
+          marketplace: "mp",
+          plugin: "alpha",
+          targetConfigPath: locations.configJsonPath,
+          scopeRoot: locations.scopeRoot,
+          pluginPatch: {},
+          addedMarketplaces,
+        });
+
+        // assert
+        assert.equal(await readFile(locations.configJsonPath, "utf8"), config);
+      });
+    });
+  }
 });
 
 describe("overwriteDisabledMemberEntries", () => {

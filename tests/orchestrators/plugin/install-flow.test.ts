@@ -5985,6 +5985,204 @@ test("LAYER-07 / D-03-INV / D-SEED-01: a saved install settles each marketplace 
 });
 
 /**
+ * LAYER-07: `hello@mp` depends on `some-other-plugin@deps-mp`, and the user
+ * scope alone records both path marketplaces. Returns their source trees.
+ */
+async function seedUserRootWithUserDependency(
+  cwd: string,
+): Promise<{ readonly mpSource: string; readonly depsSource: string }> {
+  const depsSource = path.join(cwd, "deps-mp-src");
+  const mpSource = path.join(cwd, "mp-src");
+  await seedPathMarketplaceWithPlugin({
+    cwd,
+    marketplaceRoot: depsSource,
+    marketplaceName: "deps-mp",
+    pluginName: "some-other-plugin",
+    scope: "user",
+  });
+  const userRoot = locationsFor("user", cwd).extensionRoot;
+  const depsRecord = (await loadState(userRoot)).marketplaces["deps-mp"];
+  assert.ok(depsRecord);
+  await seedPathMarketplaceWithPlugin({
+    cwd,
+    marketplaceRoot: mpSource,
+    marketplaceName: "mp",
+    pluginName: "hello",
+    scope: "user",
+    declareDependencies: true,
+    dependencyMarketplace: "deps-mp",
+    allowedDependencyMarketplaces: ["deps-mp"],
+  });
+  const userState = await loadState(userRoot);
+  userState.marketplaces["deps-mp"] = depsRecord;
+  await saveState(userRoot, userState);
+  return { mpSource, depsSource };
+}
+
+/** The bytes `saveConfig` writes for `config`. */
+function configBytes(config: object): string {
+  return `${JSON.stringify(config, null, 2)}\n`;
+}
+
+test("LAYER-07 / D-04-02: a project install declares the dependency marketplace it added and no dependency plugin key", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-declare-dep-mp-"));
+    try {
+      // arrange
+      const projectLocations = locationsFor("project", cwd);
+      const { mpSource, depsSource } = await seedUserRootWithUserDependency(cwd);
+      const { ctx, run } = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      // assert
+      assert.equal(outcome.status, "installed");
+      assert.equal(
+        await readFile(projectLocations.configJsonPath, "utf8"),
+        configBytes({
+          schemaVersion: 1,
+          marketplaces: { mp: { source: mpSource }, "deps-mp": { source: depsSource } },
+          plugins: { "hello@mp": {} },
+        }),
+      );
+      assert.equal(await pathExists(projectLocations.configLocalJsonPath), false);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("LAYER-07 / WB-01: a --local project install declares the dependency marketplace it added in the local file", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-declare-dep-mp-local-"));
+    try {
+      // arrange
+      const projectLocations = locationsFor("project", cwd);
+      const { mpSource, depsSource } = await seedUserRootWithUserDependency(cwd);
+      const { ctx, run } = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        local: true,
+      });
+
+      // assert
+      assert.equal(outcome.status, "installed");
+      assert.equal(
+        await readFile(projectLocations.configLocalJsonPath, "utf8"),
+        configBytes({
+          schemaVersion: 1,
+          marketplaces: { mp: { source: mpSource }, "deps-mp": { source: depsSource } },
+          plugins: { "hello@mp": {} },
+        }),
+      );
+      assert.equal(await pathExists(projectLocations.configJsonPath), false);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("LAYER-07 / UAT-05: a --local project install declares no dependency marketplace the base file declares", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-declare-dep-mp-base-"));
+    try {
+      // arrange
+      const projectLocations = locationsFor("project", cwd);
+      const { mpSource } = await seedUserRootWithUserDependency(cwd);
+      const baseBytes = configBytes({
+        schemaVersion: 1,
+        marketplaces: { "deps-mp": { source: "./declared" } },
+      });
+      await mkdir(projectLocations.scopeRoot, { recursive: true });
+      await writeFile(projectLocations.configJsonPath, baseBytes);
+      const { ctx, run } = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        local: true,
+      });
+
+      // assert
+      assert.equal(outcome.status, "installed");
+      assert.deepStrictEqual(
+        [
+          await readFile(projectLocations.configLocalJsonPath, "utf8"),
+          await readFile(projectLocations.configJsonPath, "utf8"),
+        ],
+        [
+          configBytes({
+            schemaVersion: 1,
+            marketplaces: { mp: { source: mpSource } },
+            plugins: { "hello@mp": {} },
+          }),
+          baseBytes,
+        ],
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WR-09 / LAYER-07: an orchestrated project install that adds a dependency marketplace writes no config", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-declare-dep-mp-orchestrated-"));
+    try {
+      // arrange
+      const projectLocations = locationsFor("project", cwd);
+      await seedUserRootWithUserDependency(cwd);
+      const { ctx, run } = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        notifications: { mode: "orchestrated" },
+      });
+
+      // assert
+      const projectState = await loadState(projectLocations.extensionRoot);
+      assert.equal(outcome.status, "installed");
+      assert.deepStrictEqual(
+        [
+          Object.keys(projectState.marketplaces).sort(),
+          await pathExists(projectLocations.configJsonPath),
+          await pathExists(projectLocations.configLocalJsonPath),
+        ],
+        [["deps-mp", "mp"], false, false],
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+/**
  * MISS-01: `a@alpha` in a project marketplace permits `beta`, which only the
  * user scope records and whose `b` is the missing dependency. Returns the
  * user-scope tree of `beta`.
@@ -6197,9 +6395,9 @@ test("D-04-05 / CMP-3: a dependency adopted from a user-scope marketplace surviv
       // arrange: `marketplace add` ran at user scope for `deps-mp`, which holds
       // the dependency, and `mp` is a project-scope marketplace whose `hello`
       // names `some-other-plugin@deps-mp`. The install targets project, so the
-      // cascade resolves the dependency through the CMP-3 fallback and records
-      // it under a `deps-mp` record the project config never declares -- only
-      // the requesting plugin's own marketplace is adopted into the config.
+      // cascade resolves the dependency through the CMP-3 fallback and adds
+      // `deps-mp` to the project. The project config declares `deps-mp` beside
+      // `mp` and gives the dependency plugin no key (LAYER-07, D-04-02).
       const projectLocations = locationsFor("project", cwd);
       await seedPathMarketplaceWithPlugin({
         cwd,
@@ -6245,9 +6443,12 @@ test("D-04-05 / CMP-3: a dependency adopted from a user-scope marketplace surviv
       assert.equal(declared.status, "valid");
       if (declared.status === "valid") {
         assert.deepEqual(
-          Object.keys(declared.config.marketplaces ?? {}),
-          ["mp"],
-          "the dependency's marketplace is declared nowhere, which is what the planner must respect",
+          [
+            Object.keys(declared.config.marketplaces ?? {}),
+            Object.keys(declared.config.plugins ?? {}),
+          ],
+          [["mp", "deps-mp"], ["hello@mp"]],
+          "the install declares the marketplace it added for the dependency and no dependency key",
         );
       }
 
