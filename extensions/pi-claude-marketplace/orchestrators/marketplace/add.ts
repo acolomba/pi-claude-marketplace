@@ -99,6 +99,7 @@ import {
   buildAuthForHost,
   buildGitHubAuth,
   hostFromCloneUrl,
+  type AuthAttemptResult,
 } from "../auth-host.ts";
 import { seedSameRepoPluginMirrors } from "../plugin/clone-cache.ts";
 
@@ -494,8 +495,13 @@ export async function addMarketplaceToState(args: {
   readonly credentialOps?: CredentialOps | undefined;
   readonly deviceFlowHttp?: DeviceFlowHttp | undefined;
   readonly gitOps?: GitOps | undefined;
+  /**
+   * FTCH-06 / D-79-02: the command's once-per-host Device Flow memo. An
+   * install passes its own, so its add and its plugin clones share one memo.
+   */
+  readonly authMemo?: Map<string, AuthAttemptResult> | undefined;
 }): Promise<{ readonly name: string; readonly cloneDir?: string }> {
-  const { state, locations, source, cwd, removalOps, deviceFlowHttp } = args;
+  const { state, locations, source, cwd, removalOps, deviceFlowHttp, authMemo } = args;
   const gitOps = args.gitOps ?? DEFAULT_GIT_OPS;
   const credentialOps = args.credentialOps ?? DEFAULT_CREDENTIAL_OPS;
   if (source.kind === "path") {
@@ -511,6 +517,7 @@ export async function addMarketplaceToState(args: {
     credentialOps,
     removalOps,
     ...(deviceFlowHttp !== undefined && { deviceFlowHttp }),
+    ...(authMemo !== undefined && { authMemo }),
     cwd,
   };
   // MURL-01 / D-76-06: source.url is the stored canonical identity; the wire
@@ -1109,6 +1116,7 @@ async function addGithubInGuard(args: {
   gitOps: GitOps;
   credentialOps: CredentialOps;
   deviceFlowHttp?: DeviceFlowHttp;
+  authMemo?: Map<string, AuthAttemptResult>;
   cwd: string;
 }): Promise<string> {
   const { ctx, state, locations, source, gitOps, credentialOps, deviceFlowHttp, cwd, removalOps } =
@@ -1128,6 +1136,7 @@ async function addGithubInGuard(args: {
     ctx,
     run: args.run,
     ...(deviceFlowHttp !== undefined && { deviceFlowHttp }),
+    ...(args.authMemo !== undefined && { authMemo: args.authMemo }),
   });
 
   return addGitClonedInGuard({
@@ -1163,6 +1172,7 @@ async function addUrlInGuard(args: {
   gitOps: GitOps;
   credentialOps: CredentialOps;
   deviceFlowHttp?: DeviceFlowHttp;
+  authMemo?: Map<string, AuthAttemptResult>;
   cwd: string;
 }): Promise<string> {
   const { ctx, state, locations, source, gitOps, credentialOps, deviceFlowHttp, cwd, removalOps } =
@@ -1174,6 +1184,7 @@ async function addUrlInGuard(args: {
     ctx,
     run: args.run,
     ...(deviceFlowHttp !== undefined && { deviceFlowHttp }),
+    ...(args.authMemo !== undefined && { authMemo: args.authMemo }),
   });
 
   return addGitClonedInGuard({

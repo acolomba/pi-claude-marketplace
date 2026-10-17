@@ -484,6 +484,7 @@ export type TargetScopeAddOptions = Pick<
   | "removalOps"
   | "credentialOps"
   | "deviceFlowHttp"
+  | "authMemo"
   | "marketplaceAdd"
   | "addedMarketplaces"
 >;
@@ -520,6 +521,7 @@ async function addTargetScopeMarketplace(
     removalOps: opts.removalOps,
     credentialOps: opts.credentialOps,
     deviceFlowHttp: opts.deviceFlowHttp,
+    authMemo: opts.authMemo,
   });
   opts.addedMarketplaces?.push({ marketplace: added.name, cloneDir: added.cloneDir });
   const targetRecord = ownValue(state.marketplaces, marketplace);

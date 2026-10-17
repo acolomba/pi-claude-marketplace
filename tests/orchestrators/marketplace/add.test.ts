@@ -20,7 +20,11 @@ import test, { type TestContext } from "node:test";
 import { mock, verify, when } from "strong-mock";
 
 import { NO_STORED_CREDENTIAL_CAUSE } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
-import { addMarketplace as addMarketplaceWithCache } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts";
+import {
+  addMarketplace as addMarketplaceWithCache,
+  addMarketplaceToState,
+  parseAddableSource,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts";
 import { loadConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
@@ -38,7 +42,10 @@ import {
   UnremovableLeftoverCloneError,
   UnsupportedSourceError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
-import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
+import {
+  createRemovalOps,
+  pathExists,
+} from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { SymlinkRefusedError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
@@ -57,6 +64,8 @@ import type {
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts";
 import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import type { AuthAttemptResult } from "../../../extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts";
 import type {
   GitCredentials,
   ListRemotesResult,
@@ -4357,3 +4366,44 @@ test("MURL-09 / D-2-02: an add against a suffix-only port sends the verbatim URL
     assert.equal(state.cloneCalls[0]?.url, "https://gitlab.example.com/team/git-only-mp");
   });
 });
+
+for (const { rawSource, host } of [
+  { rawSource: "anthropics/claude-plugins-official", host: "github.com" },
+  { rawSource: "https://gitlab.com/team/mp", host: "gitlab.com" },
+]) {
+  test(`FTCH-06 / D-79-02: an add of ${rawSource} answers its auth challenge from the command's memo`, async () => {
+    await withTmpScope(async ({ cwd, locations }) => {
+      // arrange
+      const { ctx, run } = makeCtx(0);
+      const { credOps: credentialOps } = createCredentialOps();
+      const { http: deviceFlowHttp, state: deviceFlowState } = createDeviceFlowHttp();
+      const { gitOps, state } = createGitOps({
+        fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+      });
+      const remembered: AuthAttemptResult = { ok: false, reason: "declined earlier" };
+      const snapshot: ExtensionState = { schemaVersion: 2, marketplaces: {} };
+
+      // act
+      await addMarketplaceToState({
+        state: snapshot,
+        locations,
+        source: parseAddableSource(rawSource),
+        cwd,
+        ctx,
+        run,
+        removalOps: createRemovalOps(),
+        credentialOps,
+        deviceFlowHttp,
+        gitOps,
+        authMemo: new Map([[host, remembered]]),
+      });
+      const auth = state.cloneCalls[0]?.auth;
+      assert.ok(auth?.kind === "device-flow");
+      const attempt = await auth.onAuthRequired();
+
+      // assert
+      assert.equal(attempt, remembered);
+      assert.deepStrictEqual(deviceFlowState.requestCodeCalls, []);
+    });
+  });
+}

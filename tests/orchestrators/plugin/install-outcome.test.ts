@@ -933,6 +933,7 @@ test("CMP-3 / LAYER-07: a project install adds the user-scope marketplace to the
   const addedMarketplaces: NonNullable<InstallLedgerOptions["addedMarketplaces"]> = [];
   const options = projectInstallOptions(environment.cwd);
   const credentials = createCredentialOpsFake({ boundary: "memory" });
+  const authMemo = new Map<string, AuthAttemptResult>();
   const deviceFlow = createDeviceFlowFake({
     boundary: "memory",
     network: "disabled",
@@ -950,6 +951,7 @@ test("CMP-3 / LAYER-07: a project install adds the user-scope marketplace to the
     ...options,
     credentialOps: credentials.credentialOps,
     deviceFlowHttp: deviceFlow.http,
+    authMemo,
     addedMarketplaces,
     marketplaceAdd: marketplaceAddSeam((args) => {
       recordCalls.push(args);
@@ -973,6 +975,7 @@ test("CMP-3 / LAYER-07: a project install adds the user-scope marketplace to the
       removalOps: options.removalOps,
       credentialOps: credentials.credentialOps,
       deviceFlowHttp: deviceFlow.http,
+      authMemo,
     },
   ]);
   assert.deepStrictEqual(addedMarketplaces, [{ marketplace: "marketplace", cloneDir }]);
