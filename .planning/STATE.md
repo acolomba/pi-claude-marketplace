@@ -5,16 +5,16 @@ milestone_name: Marketplace Behavioral Tests
 current_phase: "03.2"
 current_phase_name: Marketplace Layer Partition
 status: executing
-stopped_at: Completed 03.2-04-PLAN.md
-last_updated: "2026-10-17T01:54:53.124Z"
+stopped_at: Completed 03.2-05-PLAN.md
+last_updated: "2026-10-17T02:23:08.904Z"
 last_activity: 2026-10-16
 last_activity_desc: Phase 03.2 execution started
-state_head: e8d257ffbebf5c95d76f23c9eca4dcf4f93eec40
+state_head: 678223f1b30ef550d0f137fff1125dd6ed45eaeb
 progress:
   total_phases: 13
   completed_phases: 4
   total_plans: 27
-  completed_plans: 22
+  completed_plans: 23
   percent: 31
 ---
 
@@ -32,7 +32,7 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 03.2 (Marketplace Layer Partition) — EXECUTING
-Plan: 5 of 9
+Plan: 6 of 9
 Status: Ready to execute
 Last activity: 2026-10-16 — Phase 03.2 execution started
 
@@ -181,8 +181,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-17T01:54:51.894Z
-**Stopped at:** Completed 03.2-04-PLAN.md
+**Last session:** 2026-10-17T02:23:07.735Z
+**Stopped at:** Completed 03.2-05-PLAN.md
 **Resume file:** None
 
 **Main merge (2026-10-11, quick task 261011-bsm):** `origin/main` at
@@ -317,6 +317,7 @@ archived milestone artifacts.
 | Phase 03.1 P05 | 11min | 3 tasks | 7 files |
 | Phase 03.2 P03 | 15min | 3 tasks | 24 files |
 | Phase 03.2 P04 | 38min | 3 tasks | 11 files |
+| Phase 03.2 P05 | 25min | 3 tasks | 9 files |
 
 ## Decisions
 
@@ -420,6 +421,9 @@ archived milestone artifacts.
 - [Phase 03.2]: D-04: the mirror refusal reason is 'marketplace declared in shared config'; MarketplaceDeclaredLocallyError lives in shared/errors.ts so marketplace verbs can raise it
 - [Phase 03.2]: An unreadable other layer keeps every plugin installed on a layer remove (A-07 applied to plugin keys)
 - [Phase 03.2]: Plugin-clone GC still runs whenever no plugin failed; the marketplace data dir and clone go only when the state record was deleted
+- [Phase 03.2]: The full marketplace remove unstages only explicit records; every dependency record under it goes through the retention order (D-04-dep)
+- [Phase 03.2]: Remove retention reads dependency candidates from the marketplace record; the scope index answers only who holds what
+- [Phase 03.2]: An unreadable declaration index refuses a remove with {unreadable} before any change, in both modes (D-09 Q4)
 
 ### mcp-4 decisions
 
