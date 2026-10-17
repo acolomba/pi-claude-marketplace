@@ -176,7 +176,12 @@ Each scope can also have a `claude-plugins.local.json` file alongside the base f
 
 The local file overrides entries from the base file. You can declare a marketplace in both files. Its local entry overrides only the fields that it sets, and it takes the other fields from the base file. For example, a local entry without `autoupdate` uses the `autoupdate` value of the base file. Plugin entries are different: the local file's entry for a plugin replaces the base file's entry as a whole.
 
-A command that writes configuration changes only `claude-plugins.json`, or only `claude-plugins.local.json` with `--local`. `marketplace remove`, `marketplace autoupdate`, and `marketplace noautoupdate` fail when that file does not declare the marketplace. A remove from one file uninstalls only the plugins that file declares, and the marketplace stays while the other file declares it. Reads always combine both configuration files. Marketplace `update` still refreshes cached sources and installed-plugin state.
+A command that writes configuration changes only `claude-plugins.json`, or only `claude-plugins.local.json` with `--local`. There are two exceptions:
+
+- A remove that takes the marketplace out of the scope also clears its plugin keys from both files.
+- `marketplace autoupdate` and `marketplace noautoupdate` without a name set the value in every file that declares each marketplace. With `--local`, they change only `claude-plugins.local.json`.
+
+`marketplace remove`, `marketplace autoupdate`, and `marketplace noautoupdate` with a name fail when the target file does not declare the marketplace. A remove from one file uninstalls only the plugins that file declares, and the marketplace stays while the other file declares it. The remove fails and changes nothing when the other file is not valid, or when a plugin that stays still needs a plugin it would uninstall. Reads always combine both configuration files. Marketplace `update` still refreshes cached sources and installed-plugin state.
 
 ```text
 /claude:plugin marketplace add upstash/context7 --local

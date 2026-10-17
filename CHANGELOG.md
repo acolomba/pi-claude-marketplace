@@ -2,9 +2,13 @@
 
 ## [Unreleased]
 
-- You can now declare a marketplace in both `claude-plugins.json` and `claude-plugins.local.json`. `marketplace remove`, `autoupdate`, and `noautoupdate` change only the file you target and fail when that file does not declare the marketplace.
+- You can now declare a marketplace in both `claude-plugins.json` and `claude-plugins.local.json`. With a name, `marketplace remove`, `autoupdate`, and `noautoupdate` change only the file you target and fail when that file does not declare the marketplace.
 
   - Removing a marketplace from one file uninstalls only the plugins that file declares and the dependencies only those plugins needed. The marketplace stays while the other file declares it.
+  - A remove from one file fails and changes nothing when the other file is not valid, or when a plugin that stays needs a plugin it would uninstall (`{dependents remain}`).
+  - Removing a marketplace from the scope clears its plugin keys from both files. It keeps a dependency another plugin still needs, so the marketplace stays listed.
+  - `marketplace remove` fails with `{unreadable}` and changes nothing when it cannot read a plugin's dependencies.
+  - Without a name, `autoupdate` and `noautoupdate` set the value in every file that declares each marketplace, or only in `claude-plugins.local.json` with `--local`.
   - A marketplace entry in `claude-plugins.local.json` now takes the fields it leaves out from `claude-plugins.json`, so a local entry without `autoupdate` follows the shared setting. If your local file also declares a marketplace, run `marketplace list` to see which `autoupdate` setting applies.
   - A project-scope install from a user-scope marketplace now adds that marketplace, and those of its dependencies, to the project as `marketplace add --scope project` does. The project's `claude-plugins.json` declares them, and each git marketplace gets its own project clone.
 

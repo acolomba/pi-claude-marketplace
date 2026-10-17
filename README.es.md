@@ -174,7 +174,12 @@ Cada ámbito también puede tener un archivo `claude-plugins.local.json` junto a
 
 El archivo local anula entradas del archivo base. Puedes declarar un mercado en ambos archivos. Su entrada local anula solo los campos que define, y toma los demás campos del archivo base. Por ejemplo, una entrada local sin `autoupdate` usa el valor de `autoupdate` del archivo base. Las entradas de complementos son distintas: la entrada local de un complemento reemplaza por completo la entrada del archivo base.
 
-Un comando que escribe la configuración modifica solo `claude-plugins.json`, o solo `claude-plugins.local.json` con `--local`. `marketplace remove`, `marketplace autoupdate` y `marketplace noautoupdate` fallan cuando ese archivo no declara el mercado. Una eliminación desde un archivo desinstala solo los complementos que declara ese archivo, y el mercado se mantiene mientras el otro archivo lo declare. Las lecturas siempre combinan ambos archivos de configuración. `update` de un mercado sigue actualizando las fuentes en caché y el estado de los complementos instalados.
+Un comando que escribe la configuración modifica solo `claude-plugins.json`, o solo `claude-plugins.local.json` con `--local`. Hay dos excepciones:
+
+- Una eliminación que quita el mercado del ámbito también borra sus claves de complementos de ambos archivos.
+- `marketplace autoupdate` y `marketplace noautoupdate` sin un nombre fijan el valor en cada archivo que declara cada mercado. Con `--local`, modifican solo `claude-plugins.local.json`.
+
+`marketplace remove`, `marketplace autoupdate` y `marketplace noautoupdate` con un nombre fallan cuando el archivo de destino no declara el mercado. Una eliminación desde un archivo desinstala solo los complementos que declara ese archivo, y el mercado se mantiene mientras el otro archivo lo declare. La eliminación falla y no cambia nada cuando el otro archivo no es válido, o cuando un complemento que se queda todavía necesita un complemento que desinstalaría. Las lecturas siempre combinan ambos archivos de configuración. `update` de un mercado sigue actualizando las fuentes en caché y el estado de los complementos instalados.
 
 ```text
 /claude:plugin marketplace add upstash/context7 --local
