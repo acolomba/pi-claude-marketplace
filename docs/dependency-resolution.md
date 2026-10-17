@@ -219,9 +219,11 @@ If no dependency qualifies, both commands report `Nothing to prune in user scope
 
 `marketplace remove` uninstalls the plugins of the marketplace, and it treats their dependencies with the same care as `uninstall`. A dependency goes only when no plugin that stays declares it. This includes a plugin of another marketplace and a plugin that the other configuration file keeps. A dependency that stays keeps its marketplace recorded and listed, even when no configuration file declares that marketplace any more. A dependency that the remove takes shows a plain `(uninstalled)` row.
 
-A remove from one configuration file takes only the plugins that file declares, and only the dependencies that those plugins alone needed. The marketplace stays recorded while the other file still declares it.
+A remove from one configuration file takes only the plugins that file declares, and only the dependencies that those plugins alone needed. The marketplace stays recorded while the other file still declares it. A plugin installed as a dependency follows that rule even when the file declares it.
 
-To decide what stays, the remove reads what every installed plugin in the scope declares, but only when the marketplace holds a plugin installed as a dependency. If one of those declarations cannot be read, the remove is refused before anything changes. The row reads `{unreadable}`, and the `cause:` line names the first plugin that could not be read and why. To repair it, update that plugin's marketplace, or fix the manifest of a path marketplace. Then run the remove again.
+A remove from one configuration file never uninstalls a plugin that a plugin it keeps still declares, such as a plugin of the other file or of another marketplace. The remove is refused before anything changes. The row reads `{dependents remain}`, and the `cause:` line names the plugins that still need it. Uninstall them first, or remove the marketplace from the other file too, then run the remove again.
+
+To decide what stays, the remove reads what every installed plugin in the scope declares, but only when the marketplace holds a plugin installed as a dependency, or when a remove from one file uninstalls a plugin. If one of those declarations cannot be read, the remove is refused before anything changes. The row reads `{unreadable}`, and the `cause:` line names the first plugin that could not be read and why. To repair it, update that plugin's marketplace, or fix the manifest of a path marketplace. Then run the remove again.
 
 ```text
 /claude:plugin marketplace update <name>

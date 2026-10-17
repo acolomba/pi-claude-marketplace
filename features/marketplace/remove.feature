@@ -186,6 +186,34 @@ Feature: Marketplace remove
       | id         |
       | beta@tools |
 
+  Scenario: Removing a marketplace from the shared configuration fails while a plugin of the local configuration still needs one of its plugins
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name  | version | dependencies |
+      | alpha | 1.0.0   |              |
+      | beta  | 1.0.0   | alpha        |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin marketplace add {home}/marketplaces/tools --scope project --local"
+    Given the user has run "/claude:plugin install alpha@tools --scope project"
+    Given the user has run "/claude:plugin install beta@tools --scope project --local"
+    When the user runs "/claude:plugin marketplace remove tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade                      |
+      | severity     | error                        |
+      | needs reload | false                        |
+      | summary      | Some operations have failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id          | name  | status | reasons           | scope   | cause chain                                                         | cause truncated | leaks | rollback partial |
+      | tools            | project           | failed             | alpha@tools | alpha | failed | dependents remain | project | Uninstall beta@tools first, then remove the marketplace tools again. | false           |       |                  |
+    Then the "claude-plugins.json" file of the project scope declares these plugins:
+      | id          |
+      | alpha@tools |
+    When the user starts a new pi session
+    Then the session offers these skills:
+      | command            | description             |
+      | /skill:alpha-skill | A skill of alpha 1.0.0. |
+      | /skill:beta-skill  | A skill of beta 1.0.0.  |
+
   Scenario: Removing a marketplace whose dependency declarations cannot be read fails and changes nothing
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins with dependencies:

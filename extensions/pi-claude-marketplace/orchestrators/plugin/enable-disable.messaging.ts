@@ -1,4 +1,4 @@
-import { isRenderablePluginKey } from "../../domain/dependencies.ts";
+import { renderDependentKeys } from "../../domain/dependencies.ts";
 import { compareByNameThenScope } from "../../shared/compare-name-scope.ts";
 import { isErrnoException, PluginShapeError } from "../../shared/errors.ts";
 import {
@@ -97,23 +97,6 @@ export const DISABLE_CONTEXT = {
     failed: { markers: false, contentReasons: true },
   },
 } as const satisfies CommandContext<DisableStatus>;
-
-/**
- * The dependents as EDEP-02's refusal sentence names them: the keys
- * themselves when every one of them is renderable, and their count when any
- * is not. Local mirror of `uninstall.messaging.ts::renderDependents` --
- * T-08-06: the keys are holder keys `findDependents` derived from STATE
- * records, bounded only by `domain/name.ts::assertSafeName`, which admits
- * `"`, `,`, spaces and bidi controls. Interpolated unchecked, one hostile
- * name could forge the rest of the sentence.
- */
-function renderDependentKeys(dependents: readonly string[]): string {
-  if (dependents.every(isRenderablePluginKey)) {
-    return dependents.join(", ");
-  }
-
-  return dependents.length === 1 ? "1 other plugin" : `${dependents.length} other plugins`;
-}
 
 /**
  * D-08-01: the disable refusal's plain-English instruction. Upstream's

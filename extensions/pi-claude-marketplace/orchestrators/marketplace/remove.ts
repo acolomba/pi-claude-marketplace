@@ -68,6 +68,7 @@ import { rm } from "node:fs/promises";
 import path from "node:path";
 
 import {
+  findDependents,
   isHeldBy,
   pruneOrphans,
   pruneOrphansReachableFrom,
@@ -98,7 +99,7 @@ import {
 import { garbageCollectPluginClones } from "../plugin/clone-gc.ts";
 import { buildScopeDeclarationIndex } from "../plugin/dependency-index.ts";
 
-import { REMOVE_CONTEXT, type RemoveRowMsg } from "./remove.messaging.ts";
+import { composeHeldRemovalCause, REMOVE_CONTEXT, type RemoveRowMsg } from "./remove.messaging.ts";
 import {
   AgentsUnstageFailureError,
   cascadeUnstagePlugin,
@@ -638,9 +639,11 @@ async function planStandaloneRemove(args: {
 }
 
 /**
- * LAYER-03: the recorded plugins whose `<plugin>@<marketplace>` key the target
+ * LAYER-03: the explicit plugins whose `<plugin>@<marketplace>` key the target
  * layer declares and the other layer does not. A key both layers declare stays
- * installed.
+ * installed. A dependency record follows the retention rule in
+ * `cascadeDependencies`, as on the full remove, even when a file declares its
+ * key.
  */
 function layerRemovalEntries(
   record: ExtensionMarketplaceRow,
@@ -648,10 +651,12 @@ function layerRemovalEntries(
   other: ScopeConfig,
   marketplace: string,
 ): readonly (readonly [string, ExtensionPluginRow])[] {
-  return Object.entries(record.plugins).filter(([plugin]) => {
+  return Object.entries(record.plugins).filter(([plugin, installed]) => {
     const key = `${plugin}@${marketplace}`;
     return (
-      ownValue(target.plugins, key) !== undefined && ownValue(other.plugins, key) === undefined
+      !isDependencyRecord(installed) &&
+      ownValue(target.plugins, key) !== undefined &&
+      ownValue(other.plugins, key) === undefined
     );
   });
 }
@@ -699,20 +704,23 @@ class DeclarationIndexStop extends Error {
 }
 
 /**
- * The scope's declaration index, read offline (NFR-5) only when the record
- * holds a dependency record: without one, retention has nothing to decide, and
- * a marketplace whose own manifest broke stays removable. D-05-05: one state
- * document, so every holder is a record of this scope, including a plugin of a
- * marketplace a project install brought in from the user scope. D-05-07: an
- * index that cannot be read refuses the remove before any cascade.
+ * The scope's declaration index, read offline (NFR-5) only when the remove has
+ * something to decide with it: the record holds a dependency record, or a
+ * layer remove uninstalls a plugin that a staying plugin may declare. Without
+ * either, a marketplace whose own manifest broke stays removable. D-05-05: one
+ * state document, so every holder is a record of this scope, including a
+ * plugin of a marketplace a project install brought in from the user scope.
+ * D-05-07: an index that cannot be read refuses the remove before any cascade.
  */
 async function readRetentionIndex(args: {
   readonly state: ExtensionState;
   readonly record: ExtensionMarketplaceRow;
+  readonly plan: RemovePlan;
   readonly locations: ScopedLocations;
   readonly read: typeof buildScopeDeclarationIndex;
 }): Promise<DeclarationIndex | undefined> {
-  if (!Object.values(args.record.plugins).some(isDependencyRecord)) {
+  const layerUninstalls = args.plan.layerOnly && args.plan.entries.length > 0;
+  if (!layerUninstalls && !Object.values(args.record.plugins).some(isDependencyRecord)) {
     return undefined;
   }
 
@@ -722,6 +730,55 @@ async function readRetentionIndex(args: {
   }
 
   return result.index;
+}
+
+/** One plugin a layer remove would uninstall while staying plugins declare it. */
+interface HeldRemoval {
+  readonly plugin: string;
+  readonly dependents: readonly string[];
+}
+
+/**
+ * Leaves the state lock without `tx.save()` when a layer remove would
+ * uninstall a plugin that a staying plugin still declares, carrying those
+ * plugins to the row emitter.
+ */
+class HeldRemovalStop extends Error {
+  readonly held: readonly [HeldRemoval, ...HeldRemoval[]];
+  constructor(held: readonly [HeldRemoval, ...HeldRemoval[]]) {
+    super("held-removal-stop");
+    this.name = "HeldRemovalStop";
+    this.held = held;
+  }
+}
+
+/**
+ * LAYER-03: a layer remove never uninstalls a plugin that a plugin it leaves
+ * installed still declares, whether that plugin is under the same marketplace
+ * in the other file or under another marketplace. Such a remove is refused
+ * before anything changes, as `disable` refuses (`{dependents remain}`): the
+ * user uninstalls the dependents first, or removes the marketplace from the
+ * other file too. The full remove applies no such rule, because it removes the
+ * marketplace from the scope.
+ */
+function refuseHeldRemovals(
+  plan: RemovePlan,
+  index: DeclarationIndex | undefined,
+  marketplace: string,
+): void {
+  if (!plan.layerOnly || index === undefined) {
+    return;
+  }
+
+  const keyOf = (plugin: string): string => `${plugin}@${marketplace}`;
+  const removed = new Set(plan.entries.map(([plugin]) => keyOf(plugin)));
+  const [first, ...rest] = plan.entries.flatMap(([plugin]): HeldRemoval[] => {
+    const dependents = findDependents(keyOf(plugin), index).filter((key) => !removed.has(key));
+    return dependents.length === 0 ? [] : [{ plugin, dependents }];
+  });
+  if (first !== undefined) {
+    throw new HeldRemovalStop([first, ...rest]);
+  }
 }
 
 /**
@@ -843,9 +900,11 @@ async function runRemoveLockBody(args: {
   const index = await readRetentionIndex({
     state: tx.state as ExtensionState,
     record,
+    plan,
     locations,
     read: opts.declarationIndex ?? buildScopeDeclarationIndex,
   });
+  refuseHeldRemovals(plan, index, opts.name);
 
   // D-02: per-plugin cascade loop (MR-3 continuation across failures).
   const removal = {
@@ -973,6 +1032,42 @@ function surfaceLayerGateStop(
         }
       : { reason: verdict.reason, error: verdict.refusal };
   return surfaceMarketplaceFailure({ opts, orchestrated: false, scope, reason, error });
+}
+
+/**
+ * LAYER-03: the standalone row of a layer remove refused because staying
+ * plugins still declare plugins it would uninstall: the failed header with one
+ * `{dependents remain}` child per such plugin, its cause line naming the
+ * plugins that declare it. Only a standalone remove makes a layer remove.
+ */
+function surfaceHeldRemovals(
+  opts: RemoveMarketplaceOptions,
+  scope: Scope,
+  held: HeldRemovalStop["held"],
+): RemoveMarketplaceOutcome {
+  const refusals = held.map(({ plugin, dependents }) => ({
+    plugin,
+    cause: new Error(composeHeldRemovalCause(opts.name, dependents)),
+  }));
+  const heldRows: Single<MarketplaceRows<RemoveRowMsg>> = [
+    {
+      name: opts.name,
+      scope,
+      status: "failed",
+      severity: "error",
+      plugins: refusals.map(({ plugin, cause }): PluginFailedMessage => ({
+        status: "failed",
+        name: plugin,
+        reasons: ["dependents remain"],
+        cause,
+        severity: "error",
+        needsReload: false,
+      })),
+    },
+  ];
+  notifyWithContext(opts.ctx, opts.run, REMOVE_CONTEXT, heldRows, undefined, "single");
+  const error = new Error(composeHeldRemovalCause(opts.name, held[0].dependents));
+  return { status: "failed", reason: "dependents remain", error, cause: errorMessage(error) };
 }
 
 /**
@@ -1199,6 +1294,10 @@ async function runRemoveOutcome(
   } catch (err) {
     if (err instanceof LayerGateStop) {
       return surfaceLayerGateStop(opts, resolved.scope, err.verdict);
+    }
+
+    if (err instanceof HeldRemovalStop) {
+      return surfaceHeldRemovals(opts, resolved.scope, err.held);
     }
 
     if (err instanceof DeclarationIndexStop) {

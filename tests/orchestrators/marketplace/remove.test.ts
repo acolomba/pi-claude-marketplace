@@ -915,6 +915,7 @@ test("LAYER-03: drops only the shared layer's declarations while the local layer
     name: "remove-me",
     scope: "project",
     cwd,
+    declarationIndex: syntheticIndex({ "tool@remove-me": [] }),
   });
 
   // assert
@@ -2141,6 +2142,7 @@ const TOOL_UNINSTALLED =
 const unstagingCascade: typeof cascadeUnstagePlugin = () =>
   Promise.resolve({ ok: true, dropped: emptyDropped() });
 
+/** Removes `tools`; no installed plugin of these cases declares a dependency. */
 async function removeTools(
   cwd: string,
   notification: NotificationBoundary,
@@ -2154,6 +2156,7 @@ async function removeTools(
     scope: "project",
     cwd,
     cascade,
+    declarationIndex: syntheticIndex({}),
   });
 }
 
@@ -2440,6 +2443,78 @@ for (const { title, plugins, shape, unstaged, remaining, expectedMessage } of [
     notification.verifyInteractions();
   });
 }
+
+for (const { holder, title } of [
+  { holder: "beta@tools", title: "a plugin the other file declares" },
+  { holder: "app@upstream", title: "a plugin of another marketplace" },
+]) {
+  test(`LAYER-03: a layer remove of a plugin that ${title} still needs is refused as dependents remain and changes nothing`, async (testContext) => {
+    // arrange
+    const { cwd, bytesOnDisk } = await dependencyCase(
+      testContext,
+      { shared: ALPHA_DECLARED, local: BETA_DECLARED },
+      { alpha: pluginRecord(), beta: pluginRecord() },
+    );
+    const expectedBytes = await bytesOnDisk();
+    const notification = notificationBoundary(1);
+
+    // act
+    await removeToolsWith(cwd, notification, {
+      cascade: unreachableCascade,
+      declarationIndex: syntheticIndex({
+        "alpha@tools": [],
+        "beta@tools": [],
+        [holder]: ["alpha@tools"],
+      }),
+    });
+
+    // assert
+    assert.deepStrictEqual(notification.calls, [
+      {
+        message: `Some operations have failed.\n\n⊘ tools [project] (failed)\n  ⊘ alpha (failed) {dependents remain}\n    cause: Uninstall ${holder} first, then remove the marketplace tools again.`,
+        severity: "error",
+      },
+    ]);
+    assert.deepStrictEqual(await bytesOnDisk(), expectedBytes);
+    notification.verifyInteractions();
+  });
+}
+
+test("LAYER-03: a layer remove keeps a dependency record its target file declares while a staying plugin needs it", async (testContext) => {
+  // arrange
+  const sharedDeclaresLib =
+    '{"schemaVersion":1,"marketplaces":{"tools":{"source":"./tools"}},"plugins":{"alpha@tools":{"enabled":true},"lib@tools":{"enabled":true}}}\n';
+  const { cwd, locations } = await dependencyCase(
+    testContext,
+    { shared: sharedDeclaresLib, local: BETA_DECLARED },
+    { alpha: pluginRecord(), beta: pluginRecord(), lib: dependencyRecord() },
+  );
+  const calls: string[] = [];
+  const notification = notificationBoundary(1);
+
+  // act
+  await removeToolsWith(cwd, notification, {
+    cascade: recordingCascade(calls),
+    declarationIndex: syntheticIndex({
+      "alpha@tools": [],
+      "beta@tools": ["lib@tools"],
+      "lib@tools": [],
+    }),
+  });
+
+  // assert
+  assert.deepStrictEqual(calls, ["alpha"]);
+  assert.deepStrictEqual(notification.calls, [
+    {
+      message: "● tools [project] (removed)\n  ○ alpha (uninstalled)\n\n/reload to pick up changes",
+    },
+  ]);
+  assert.deepStrictEqual(
+    await loadState(locations.extensionRoot),
+    toolsState(cwd, pathSource("./tools"), { beta: pluginRecord(), lib: dependencyRecord() }),
+  );
+  notification.verifyInteractions();
+});
 
 test("D-04-dep: a full remove keeps a dependency another marketplace's plugin needs, with its record, data, and clone", async (testContext) => {
   // arrange

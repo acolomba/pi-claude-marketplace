@@ -166,6 +166,34 @@ export const MARKETPLACE_REMOVE_FIXTURES: FixtureMap = {
         ],
       },
     },
+    "remove-dependents-remain": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        label: "Marketplace remove",
+        cardinality: "single",
+        marketplaces: [
+          {
+            name: "tools",
+            scope: "project",
+            status: "failed",
+            severity: "error",
+            plugins: [
+              {
+                status: "failed",
+                severity: "error",
+                needsReload: false,
+                name: "alpha",
+                reasons: ["dependents remain"],
+                cause: new Error(
+                  "Uninstall beta@tools first, then remove the marketplace tools again.",
+                ),
+              },
+            ],
+          },
+        ],
+      },
+    },
     "remove-other-config-file-invalid": {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",

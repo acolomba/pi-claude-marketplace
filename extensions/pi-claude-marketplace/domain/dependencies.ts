@@ -75,6 +75,22 @@ export function isRenderablePluginKey(key: string): boolean {
 }
 
 /**
+ * The dependents as a refusal sentence names them: the keys themselves when
+ * every one of them is renderable, and their count when any is not. T-08-06:
+ * the keys are holder keys `findDependents` derived from STATE records,
+ * bounded only by `domain/name.ts::assertSafeName`, which admits `"`, `,`,
+ * spaces and bidi controls. Interpolated unchecked, one hostile name could
+ * forge the rest of the sentence.
+ */
+export function renderDependentKeys(dependents: readonly string[]): string {
+  if (dependents.every(isRenderablePluginKey)) {
+    return dependents.join(", ");
+  }
+
+  return dependents.length === 1 ? "1 other plugin" : `${dependents.length} other plugins`;
+}
+
+/**
  * Object-form version text, bounded to 64 characters, including `^1.0.0`, `~1.2`,
  * `>=1.0.0 <2.0.0`, `1.x`, `*`, `1.0.0-beta.1`, `1.0.0 || 2.0.0` (D-01-33).
  * The space and the pipe are admitted deliberately: rejecting them would

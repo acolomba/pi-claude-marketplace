@@ -3664,6 +3664,20 @@ Some operations have failed.
     cause: The marketplace tools is declared only in claude-plugins.json. Run the command again without --local.
 ```
 
+### Failure -- a plugin that stays still needs a plugin the remove would uninstall (LAYER-03)
+
+A remove from one file never uninstalls a plugin that a plugin it leaves installed still declares: a plugin of the other file, or a plugin of another marketplace. The remove is refused before anything changes. Each such plugin gets one failed child row carrying `{dependents remain}`, the reason `disable` uses for the same refusal, and its `cause:` line names the plugins that declare it, sorted, or their count when a name cannot be shown safely. Uninstall those plugins first, or remove the marketplace from the other file too, then run the remove again. The full remove applies no such rule. Severity `error`; no reload-hint.
+
+<!-- catalog-state: remove-dependents-remain -->
+
+```text
+Some operations have failed.
+
+⊘ tools [project] (failed)
+  ⊘ alpha (failed) {dependents remain}
+    cause: Uninstall beta@tools first, then remove the marketplace tools again.
+```
+
 ### Failure -- the other configuration file cannot be read (LAYER-02)
 
 A named remove changes only its target file. When the other file of the scope fails schema validation, the remove is refused before anything changes, whether or not the target file declares the marketplace: the unreadable file may declare the marketplace or any of its plugins, so the remove cannot tell which plugins it would leave without a declaration. The `cause:` line names that file by its basename. Repair the file, then run the remove again. Severity `error`; no reload-hint.
