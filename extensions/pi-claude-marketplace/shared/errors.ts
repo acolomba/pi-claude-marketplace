@@ -647,6 +647,25 @@ export class LayerFileUnreadableError extends InvalidMarketplaceManifestError {
 }
 
 /**
+ * LAYER-04 / D-05-07: a nameless `update` or `reinstall` with `--local` could
+ * not read the dependencies of a plugin it covers, so it cannot tell which
+ * dependencies to cover. The whole command refuses with `{unreadable}` and
+ * changes nothing, as `uninstall` and `marketplace remove` refuse.
+ *
+ * The message IS the failed row's cause line. It names the plugin by its
+ * `<plugin>@<marketplace>` key and carries detail that is already
+ * path-redacted, so no `{ cause }` is chained behind it.
+ */
+export class DependencyDeclarationsUnreadableError extends Error {
+  readonly declarer: string;
+  constructor(declarer: string, message: string) {
+    super(message);
+    this.name = "DependencyDeclarationsUnreadableError";
+    this.declarer = declarer;
+  }
+}
+
+/**
  * ATTR-07 (D-48-C A3): typed unsupported-source refusal for `marketplace add`.
  *
  * Thrown by `orchestrators/marketplace/add.ts` when the parsed source kind is

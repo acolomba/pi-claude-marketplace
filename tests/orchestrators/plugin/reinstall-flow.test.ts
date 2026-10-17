@@ -3203,6 +3203,84 @@ for (const { form, target, blockName } of [
   });
 }
 
+/**
+ * Install `hello` and `other`, declare both in the local layer, then drop
+ * `other` from the marketplace, so its dependencies cannot be read.
+ */
+async function seedUnreadableLocalDeclaration(
+  cwd: string,
+): Promise<ReturnType<typeof locationsFor>> {
+  const locations = await seedTwoPluginReinstall(
+    cwd,
+    JSON.stringify({
+      schemaVersion: 1,
+      marketplaces: { mp: { source: "./mp-src" } },
+      plugins: { "hello@mp": {}, "other@mp": {} },
+    }),
+  );
+  const manifestPath = path.join(cwd, "mp-src", ".claude-plugin", "marketplace.json");
+  const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
+    readonly plugins: readonly { readonly name: string }[];
+  };
+  await writeFile(
+    manifestPath,
+    JSON.stringify({
+      ...manifest,
+      plugins: manifest.plugins.filter((entry) => entry.name !== "other"),
+    }),
+  );
+  return locations;
+}
+
+for (const { form, target, blockName } of [
+  { form: "bare", target: { kind: "all" }, blockName: "(reinstall)" },
+  { form: "@marketplace", target: { kind: "marketplace", marketplace: "mp" }, blockName: "mp" },
+] as const) {
+  test(`LAYER-04: the ${form} reinstall with --local fails as unreadable when a local plugin's dependencies cannot be read, and touches no plugin`, async () => {
+    await withHermeticHome(async () => {
+      const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-nameless-local-unreadable-"));
+      try {
+        // arrange
+        const locations = await seedUnreadableLocalDeclaration(cwd);
+        const stateBytes = await readFile(locations.stateJsonPath, "utf8");
+        const localBytes = await readFile(locations.configLocalJsonPath, "utf8");
+        const { ctx, run, notifications } = makeCtx();
+
+        // act
+        const outcomes = await reinstallPlugins({
+          ctx,
+          run,
+          scope: "project",
+          cwd,
+          target,
+          local: true,
+        });
+
+        // assert
+        assert.deepEqual([...outcomes], []);
+        assert.deepEqual(notifications, [
+          {
+            message: [
+              "A plugin operation has failed.",
+              "",
+              `● ${blockName} [project]`,
+              "  ⊘ (reinstall) (failed) {unreadable}",
+              "    cause: cannot read the dependencies of other@mp: not declared by its marketplace",
+              "",
+              "Plugin reinstall: 1 failure",
+            ].join("\n"),
+            severity: "error",
+          },
+        ]);
+        assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
+        assert.equal(await readFile(locations.configLocalJsonPath, "utf8"), localBytes);
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
+
 test("FIX-03: a bare reinstall under a marketplace only the local file declares writes no declaration", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-local-mp-"));

@@ -75,6 +75,33 @@ Feature: Plugin reinstall
       | tools            | project           | app@tools | app  | reinstalled |         | project | 1.0.0   |
       | tools            | project           | lib@tools | lib  | reinstalled |         | project | 1.0.0   |
 
+  Scenario: Reinstalling every plugin with --local fails and reinstalls nothing when the dependencies of a local plugin cannot be read
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+      | pp   | 1.0.0   |
+    Given the user has run "/claude:plugin install pp@fixtures --scope project --local"
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib          |
+      | lib  | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install app@tools --scope project --local"
+    Given the manifest of the marketplace "tools" has become invalid
+    When the user runs "/claude:plugin reinstall --scope project --local"
+    Then the result has these fields:
+      | kind           | cascade                        |
+      | severity       | error                          |
+      | needs reload   | false                          |
+      | summary        | A plugin operation has failed. |
+      | tally label    | Plugin reinstall               |
+      | tally failures | 1                              |
+      | tally warnings | 0                              |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id                      | name        | status | reasons    | scope   | cause chain                                                                                         | cause truncated | leaks | rollback partial |
+      | (reinstall)      | project           | (reinstall)@(reinstall) | (reinstall) | failed | unreadable | project | cannot read the dependencies of app@tools: marketplace.json schema invalid: /plugins: must be array | false           |       |                  |
+
   Scenario: Reinstalling a dependency declares nothing in the configuration
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins with dependencies:

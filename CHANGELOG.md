@@ -10,6 +10,7 @@
   - A named `uninstall` of a dependency that no file declares fails with `{dependents remain}` while a plugin of the target file needs it. While only plugins of the other file need it, the command skips it with a warning.
   - A flagless `enable` or `disable` fails with `{disabled in local layer}` or `{enabled in local layer}` when `claude-plugins.local.json` sets the opposite `enabled` value. Run it again with `--local`.
   - `update` and `reinstall` no longer write plugin declarations. Without a plugin name, `--local` limits them to the plugins that `claude-plugins.local.json` declares and the dependencies those plugins need.
+  - Without a plugin name, `update --local` and `reinstall --local` fail with `{unreadable}` and change nothing when they cannot read a local plugin's dependencies.
   - A plugin entry in `claude-plugins.local.json` now takes the fields it leaves out from `claude-plugins.json`. If your local file declares a plugin that `claude-plugins.json` disables, run `/claude:plugin list` to see whether it is enabled.
   - `install --local` also declares the plugin's marketplace in `claude-plugins.local.json`.
   - A reload stops with `{invalid manifest}` when one file declares a plugin and only the other declares its marketplace. Older `--local` runs of `install`, `enable`, `disable`, `update`, and `reinstall` left files this way. The error says how to fix it.

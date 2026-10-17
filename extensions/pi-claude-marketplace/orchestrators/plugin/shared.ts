@@ -28,6 +28,7 @@ import { isRecordedButDisabled, loadState } from "../../persistence/state-io.ts"
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import {
   CrossPluginConflictError,
+  DependencyDeclarationsUnreadableError,
   errorMessage,
   isErrnoException,
   LayerFileUnreadableError,
@@ -845,6 +846,8 @@ function unreadableLayerError(filePath: string): LayerFileUnreadableError {
  *
  * CFG-03: an unreadable layer throws `LayerFileUnreadableError` naming it,
  * the local layer first, instead of reading as a layer that declares nothing.
+ * D-05-07: a covered plugin whose dependencies cannot be read throws
+ * `DependencyDeclarationsUnreadableError` naming it.
  */
 export async function keepLocalLayerTargets<
   T extends { readonly plugin: string; readonly marketplace: string; readonly scope: Scope },
@@ -866,10 +869,9 @@ export async function keepLocalLayerTargets<
  * is not covered. This is the walk the LAYER-08 uninstall rule makes, read in
  * the other direction.
  *
- * D-05-06: declarations are read offline, as the uninstall reads them. A
- * plugin whose declarations cannot be read adds no dependency. Update and
- * reinstall remove nothing, so the D-05-07 fail-closed rule does not apply,
- * and that plugin's own row still runs.
+ * D-05-06 / D-05-07: declarations are read offline and fail closed, as the
+ * uninstall reads them. A plugin whose declarations cannot be read stops the
+ * walk, because the dependencies it would add are unknown.
  */
 async function localLayerCoverage(scope: Scope, cwd: string): Promise<readonly string[]> {
   const locations = locationsFor(scope, cwd);
@@ -894,7 +896,11 @@ async function localLayerCoverage(scope: Scope, cwd: string): Promise<readonly s
       record.marketplace,
       record.plugin,
     );
-    for (const dependency of read.ok ? read.declared : []) {
+    if (!read.ok) {
+      throw new DependencyDeclarationsUnreadableError(read.declarer, read.cause.message);
+    }
+
+    for (const dependency of read.declared) {
       const dependencyKey = `${dependency.name}@${dependency.marketplace}`;
       if (
         !covered.has(dependencyKey) &&

@@ -66,6 +66,7 @@ import {
   CleanupContextError,
   cleanupFailuresFromError,
   composeErrorWithCauseChain,
+  DependencyDeclarationsUnreadableError,
   InvalidMarketplaceManifestError,
   MarketplaceNotFoundError,
   PluginDeclaredInSharedConfigError,
@@ -838,6 +839,10 @@ function narrowDirectFailReason(err: Error): ContentReason {
 
   if (primary instanceof PluginDeclaredInSharedConfigError) {
     return "plugin declared in shared config";
+  }
+
+  if (primary instanceof DependencyDeclarationsUnreadableError) {
+    return "unreadable";
   }
 
   const transportReason = classifyGitTransportFailure(primary);

@@ -43,6 +43,7 @@ import { locationsFor } from "../../../extensions/pi-claude-marketplace/persiste
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import {
   CrossPluginConflictError,
+  DependencyDeclarationsUnreadableError,
   LayerFileUnreadableError,
   MarketplaceDeclaredLocallyError,
   MarketplaceNotFoundError,
@@ -1713,7 +1714,7 @@ describe("keepLocalLayerTargets", () => {
     });
   });
 
-  test("LAYER-04: a plugin whose dependencies cannot be read adds no dependency", async () => {
+  test("LAYER-04: a local plugin whose dependencies cannot be read refuses the selection, naming it", async () => {
     // arrange
     await withTempScopes(async ({ cwd, root }) => {
       await writeConfig(locationsFor("project", cwd).configLocalJsonPath, {
@@ -1731,11 +1732,18 @@ describe("keepLocalLayerTargets", () => {
         { plugin: "lib", marketplace: "tools", scope: "project" },
       ] as const;
 
-      // act
-      const kept = await keepLocalLayerTargets(targets, cwd);
-
-      // assert
-      assert.deepStrictEqual(kept, [{ plugin: "app", marketplace: "tools", scope: "project" }]);
+      // act & assert
+      await assert.rejects(keepLocalLayerTargets(targets, cwd), (error: unknown) => {
+        assert.ok(error instanceof DependencyDeclarationsUnreadableError);
+        assert.deepStrictEqual(
+          { declarer: error.declarer, message: error.message },
+          {
+            declarer: "app@tools",
+            message: "cannot read the dependencies of app@tools: not declared by its marketplace",
+          },
+        );
+        return true;
+      });
     });
   });
 

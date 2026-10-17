@@ -1,5 +1,6 @@
 import {
   composeErrorWithCauseChain,
+  DependencyDeclarationsUnreadableError,
   findManualRecoveryError,
   LayerFileUnreadableError,
   ManualRecoveryError,
@@ -109,6 +110,10 @@ export function reinstallReasonsFromError(error: unknown): readonly ContentReaso
 
   if (isLayerRefusal(error)) {
     return [layerRefusalReason(error)] as const;
+  }
+
+  if (error instanceof DependencyDeclarationsUnreadableError) {
+    return ["unreadable"] as const;
   }
 
   if (error instanceof Error) {

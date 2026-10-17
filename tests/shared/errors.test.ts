@@ -13,6 +13,7 @@ import {
   CrossOriginChallengeError,
   CrossPluginConflictError,
   DependencyCascadeError,
+  DependencyDeclarationsUnreadableError,
   DeviceFlowUnavailableError,
   errorMessage,
   errorWithCleanupFailures,
@@ -886,6 +887,28 @@ describe("MarketplaceDeclaredInSharedConfigError", () => {
         marketplace: "mp",
         message:
           "The marketplace mp is declared only in claude-plugins.json. Run the command again without --local.",
+      },
+    );
+  });
+});
+
+describe("DependencyDeclarationsUnreadableError", () => {
+  test("names the plugin whose dependencies it could not read and keeps the cause line as its message", () => {
+    // arrange
+    const message = "cannot read the dependencies of app@tools: not declared by its marketplace";
+
+    // act
+    const error = new DependencyDeclarationsUnreadableError("app@tools", message);
+
+    // assert
+    assert.ok(error instanceof Error);
+    assert.deepStrictEqual(
+      { name: error.name, declarer: error.declarer, message: error.message, cause: error.cause },
+      {
+        name: "DependencyDeclarationsUnreadableError",
+        declarer: "app@tools",
+        message: "cannot read the dependencies of app@tools: not declared by its marketplace",
+        cause: undefined,
       },
     );
   });

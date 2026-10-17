@@ -5508,6 +5508,78 @@ for (const { form, target, rowName, blockName } of [
   });
 }
 
+/**
+ * Install `hello`, `other`, and `gone` from marketplace `mp` in the project
+ * scope, with `gone` no longer in the marketplace, and declare `hello` and
+ * `gone` in the local layer.
+ */
+async function seedUnreadableLocalDeclaration(
+  cwd: string,
+): Promise<ReturnType<typeof locationsFor>> {
+  const locations = locationsFor("project", cwd);
+  await seedPathMarketplace({
+    cwd,
+    marketplaceRoot: path.join(cwd, "mp-src"),
+    marketplaceName: "mp",
+    manifestPlugins: {
+      hello: { version: "1.0.1", hasSkill: true },
+      other: { version: "1.0.1", hasSkill: true },
+    },
+    installedVersions: { hello: "1.0.0", other: "1.0.0", gone: "1.0.0" },
+  });
+  await writeFile(
+    locations.configLocalJsonPath,
+    JSON.stringify({ schemaVersion: 1, plugins: { "hello@mp": {}, "gone@mp": {} } }),
+    "utf8",
+  );
+  return locations;
+}
+
+for (const { form, target, rowName, blockName } of [
+  { form: "bare", target: { kind: "all" }, rowName: "(update)", blockName: "(update)" },
+  {
+    form: "@marketplace",
+    target: { kind: "marketplace", marketplace: "mp" },
+    rowName: "(mp)",
+    blockName: "mp",
+  },
+] as const) {
+  test(`LAYER-04: the ${form} update with --local fails as unreadable when a local plugin's dependencies cannot be read, and changes nothing`, async () => {
+    await withHermeticHome(async () => {
+      const cwd = await createCaseDir("update-nameless-local-unreadable-");
+      try {
+        // arrange
+        const locations = await seedUnreadableLocalDeclaration(cwd);
+        const filesBefore = await updateFileSnapshot(locations);
+        const { ctx, run, notifications } = makeCtx();
+
+        // act
+        await updatePlugins({ ctx, run, scope: "project", cwd, target, local: true });
+
+        // assert
+        assert.deepEqual(notifications, [
+          {
+            message: [
+              "A plugin operation has failed.",
+              "",
+              `● ${blockName} [project]`,
+              `  ⊘ ${rowName} (failed) {unreadable}`,
+              "    cause: cannot read the dependencies of gone@mp: not declared by its marketplace",
+              "",
+              "Plugin update: 1 failure",
+            ].join("\n"),
+            severity: "error",
+          },
+        ]);
+        assert.deepEqual(await updateFileSnapshot(locations), filesBefore);
+        assert.deepEqual(await recordedVersions(locations), { hello: "1.0.0", other: "1.0.0" });
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
+
 test("FIX-03: a bare update under a marketplace only the local file declares updates and writes no declaration", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-local-mp-");

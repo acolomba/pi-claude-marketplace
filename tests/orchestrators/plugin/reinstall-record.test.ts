@@ -6,6 +6,7 @@ import {
   reinstallReasonsFromError,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-record.ts";
 import {
+  DependencyDeclarationsUnreadableError,
   InvalidMarketplaceManifestError,
   LayerFileUnreadableError,
   ManualRecoveryError,
@@ -592,4 +593,18 @@ test("a manifest parse failure carries no cause and no layer reason", () => {
       'marketplace.json is not valid JSON: SyntaxError: "{ broken" is not valid JSON\n\ncause: marketplace.json is not valid JSON: SyntaxError: "{ broken" is not valid JSON',
     ],
   });
+});
+
+test("LAYER-04: an unreadable dependency declaration narrows to unreadable", () => {
+  // arrange
+  const error = new DependencyDeclarationsUnreadableError(
+    "app@tools",
+    "cannot read the dependencies of app@tools: not declared by its marketplace",
+  );
+
+  // act
+  const reasons = reinstallReasonsFromError(error);
+
+  // assert
+  assert.deepStrictEqual(reasons, ["unreadable"]);
 });
