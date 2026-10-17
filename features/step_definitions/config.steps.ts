@@ -3,9 +3,9 @@
  * layer `claude-plugins.json` and the local layer `claude-plugins.local.json`.
  *
  * One setup step writes the `plugins` member of one layer file, to model a
- * hand edit or a version-control update (D-18). It keeps the file's other
- * members. Every other step only reads, so this module writes nothing else and
- * deletes nothing.
+ * hand edit or a version-control update. It keeps the file's other members.
+ * Every other step only reads, so this module writes nothing else and deletes
+ * nothing.
  *
  * A missing file fails every step that reads one; it never reads as zero
  * declarations. A file whose `marketplaces` map is empty declares that no
