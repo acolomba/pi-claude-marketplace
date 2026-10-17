@@ -2005,3 +2005,146 @@ test("rethrows a state save failure unchanged when no cascade rewrote an MCP con
   assert.deepStrictEqual(notification.calls, []);
   notification.verifyInteractions();
 });
+
+// LAYER-02 / D-MF-03: a named remove changes only its target layer, and the
+// layer gate decides before anything changes.
+
+const unreachableCascade: typeof cascadeUnstagePlugin = () => {
+  assert.fail("a stopped remove must not unstage any plugin");
+};
+
+interface LayerFiles {
+  readonly shared?: string;
+  readonly local?: string;
+}
+
+interface LayerCase {
+  readonly cwd: string;
+  readonly locations: ScopedLocations;
+  readonly bytesOnDisk: () => Promise<readonly (string | undefined)[]>;
+}
+
+async function readIfPresent(filePath: string): Promise<string | undefined> {
+  return (await pathExists(filePath)) ? await readFile(filePath, "utf8") : undefined;
+}
+
+/**
+ * A project scope recording `tools` with an installed `tool`, with the two
+ * config files written as the given raw text (an omitted file is absent).
+ */
+async function layerCase(testContext: TestContext, files: LayerFiles): Promise<LayerCase> {
+  const { cwd, locations } = await projectCase(testContext);
+  await seedMarketplace(locations, {
+    cwd,
+    name: "tools",
+    source: pathSource("./tools"),
+    plugins: { tool: pluginRecord({ skills: ["tool-skill"] }) },
+  });
+  if (files.shared !== undefined) {
+    await writeFile(locations.configJsonPath, files.shared);
+  }
+
+  if (files.local !== undefined) {
+    await writeFile(locations.configLocalJsonPath, files.local);
+  }
+
+  return {
+    cwd,
+    locations,
+    bytesOnDisk: async () =>
+      await Promise.all([
+        readFile(locations.stateJsonPath, "utf8"),
+        readIfPresent(locations.configJsonPath),
+        readIfPresent(locations.configLocalJsonPath),
+      ]),
+  };
+}
+
+const TOOLS_DECLARED =
+  '{"schemaVersion":1,"marketplaces":{"tools":{"source":"./tools"}},"plugins":{"tool@tools":{"enabled":true}}}\n';
+
+for (const { title, files, local, expectedMessage } of [
+  {
+    title: "refuses a shared-file remove of a marketplace only the local file declares",
+    files: {
+      shared: '{"schemaVersion":1,"marketplaces":{"base":{"source":"./base"}}}\n',
+      local: TOOLS_DECLARED,
+    },
+    local: false,
+    expectedMessage:
+      "Some operations have failed.\n\n⊘ tools [project] (failed)\n  ⊘ tools (failed) {marketplace declared locally}\n    cause: The marketplace tools is declared only in claude-plugins.local.json. Run the command again with --local.",
+  },
+  {
+    title: "refuses a local-file remove of a marketplace only the shared file declares",
+    files: { shared: TOOLS_DECLARED },
+    local: true,
+    expectedMessage:
+      "Some operations have failed.\n\n⊘ tools [project] (failed)\n  ⊘ tools (failed) {marketplace declared in shared config}\n    cause: The marketplace tools is declared only in claude-plugins.json. Run the command again without --local.",
+  },
+  {
+    title: "refuses a remove whose target file is silent while the other file is invalid",
+    files: { shared: '{"schemaVersion":1}\n', local: "{ invalid local config" },
+    local: false,
+    expectedMessage:
+      "A marketplace operation has failed.\n\n⊘ tools [project] (failed) {invalid manifest}",
+  },
+] satisfies readonly {
+  readonly title: string;
+  readonly files: LayerFiles;
+  readonly local: boolean;
+  readonly expectedMessage: string;
+}[]) {
+  test(`LAYER-02: ${title} and changes nothing`, async (testContext) => {
+    // arrange
+    const { cwd, bytesOnDisk } = await layerCase(testContext, files);
+    const expectedBytes = await bytesOnDisk();
+    const notification = notificationBoundary(1);
+
+    // act
+    const outcome = await removeMarketplace({
+      completionCache: createCompletionCache(),
+      ctx: notification.ctx,
+      run: notification.run,
+      name: "tools",
+      scope: "project",
+      cwd,
+      cascade: unreachableCascade,
+      local,
+    });
+
+    // assert
+    assert.strictEqual(outcome, undefined);
+    assert.deepStrictEqual(notification.calls, [{ message: expectedMessage, severity: "error" }]);
+    assert.deepStrictEqual(await bytesOnDisk(), expectedBytes);
+    notification.verifyInteractions();
+  });
+}
+
+test("WR-09: an orchestrated remove applies no layer rule and writes no config", async (testContext) => {
+  // arrange
+  const { cwd, locations, bytesOnDisk } = await layerCase(testContext, { local: TOOLS_DECLARED });
+  const notification = notificationBoundary(0);
+
+  // act
+  const outcome = await removeMarketplace({
+    completionCache: createCompletionCache(),
+    ctx: notification.ctx,
+    run: notification.run,
+    name: "tools",
+    scope: "project",
+    cwd,
+    cascade: () => Promise.resolve({ ok: true, dropped: emptyDropped() }),
+    notifications: { mode: "orchestrated" },
+  });
+
+  // assert
+  assert.deepStrictEqual(outcome, { status: "removed", name: "tools", unstaged: ["tool"] });
+  assert.deepStrictEqual(await loadState(locations.extensionRoot), {
+    schemaVersion: 3,
+    marketplaces: {},
+  });
+  const [, sharedBytes, localBytes] = await bytesOnDisk();
+  assert.deepStrictEqual([sharedBytes, localBytes], [undefined, TOOLS_DECLARED]);
+  assert.deepStrictEqual(notification.calls, []);
+  notification.verifyInteractions();
+});

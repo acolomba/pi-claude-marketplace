@@ -27,6 +27,10 @@
 //        "invalid"`, surface the basename-only failure WITHOUT touching
 //        state or saving. No `tx.save()` on this arm.
 //        record = tx.state.marketplaces[name]
+//        LAYER-02 (standalone only): load the other layer and stop through
+//        `LayerGateStop`, again without `tx.save()`, when the target layer
+//        does not declare the marketplace while the other one declares it or
+//        cannot be read.
 //        for each plugin in record.plugins:
 //          outcome = cascade(plugin, marketplace, locations, installedPlugin)
 //                    // cascade is opts.cascade ?? cascadeUnstagePlugin (DI seam
@@ -81,11 +85,15 @@ import { REMOVE_CONTEXT, type RemoveRowMsg } from "./remove.messaging.ts";
 import {
   AgentsUnstageFailureError,
   cascadeUnstagePlugin,
+  marketplaceFailureRows,
+  marketplaceLayerVerdict,
   mcpConfigNoticesMember,
   narrowCascadeFailure,
   resolveScopeOrNotifyNotAdded,
+  type MarketplaceLayerVerdict,
 } from "./shared.ts";
 
+import type { ScopeConfig } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
@@ -504,6 +512,51 @@ async function commitFullRemove(args: {
   await cascadeRemoveFromLayer(locations.configLocalJsonPath, locations.scopeRoot, marketplace);
 }
 
+/** A layer gate verdict that stops a standalone remove before any change. */
+type LayerGateStopVerdict = Extract<
+  MarketplaceLayerVerdict,
+  { kind: "refused" | "other-unreadable" }
+>;
+
+/**
+ * Leaves the state lock without `tx.save()` when the layer gate stops a
+ * remove, carrying the verdict to the row emitter outside the lock.
+ */
+class LayerGateStop extends Error {
+  readonly verdict: LayerGateStopVerdict;
+  constructor(verdict: LayerGateStopVerdict) {
+    super("layer-gate-stop");
+    this.name = "LayerGateStop";
+    this.verdict = verdict;
+  }
+}
+
+/**
+ * LAYER-02 / D-MF-03: a named remove changes only its target layer. It loads
+ * the other layer and stops the remove, before anything is mutated, when the
+ * target layer does not declare the marketplace while the other layer does or
+ * cannot be read. Reconcile-driven removals never call it (WR-09).
+ */
+async function gateStandaloneLayers(args: {
+  readonly target: ScopeConfig;
+  readonly locations: ScopedLocations;
+  readonly targetIsLocal: boolean;
+  readonly marketplace: string;
+}): Promise<void> {
+  const { locations, targetIsLocal } = args;
+  const verdict = marketplaceLayerVerdict({
+    target: args.target,
+    other: await loadConfig(
+      targetIsLocal ? locations.configJsonPath : locations.configLocalJsonPath,
+    ),
+    targetIsLocal,
+    marketplace: args.marketplace,
+  });
+  if (verdict.kind === "refused" || verdict.kind === "other-unreadable") {
+    throw new LayerGateStop(verdict);
+  }
+}
+
 /**
  * Body of the per-scope state lock. Returns the detected `source.kind` for
  * the post-guard cleanup branching (github clone retention). A CFG-03 throw
@@ -553,6 +606,15 @@ async function runRemoveLockBody(args: {
     // header-only `(removed)` row.
     await tx.save();
     return undefined;
+  }
+
+  if (!orchestrated) {
+    await gateStandaloneLayers({
+      target: cfg.status === "valid" ? cfg.config : { schemaVersion: 1 },
+      locations,
+      targetIsLocal: opts.local === true,
+      marketplace: opts.name,
+    });
   }
 
   const src = record.source as { kind?: unknown };
@@ -658,6 +720,41 @@ function surfaceCfgInvalid(args: {
   }
 
   return outcome;
+}
+
+/**
+ * LAYER-02: the standalone row of a remove the layer gate stopped. A refusal
+ * renders the failed header with one failed child carrying the reason and the
+ * cause line; an unreadable other file renders the CFG-03 row naming it.
+ */
+function surfaceLayerGateStop(
+  opts: RemoveMarketplaceOptions,
+  scope: Scope,
+  verdict: LayerGateStopVerdict,
+): RemoveMarketplaceOutcome {
+  if (verdict.kind === "other-unreadable") {
+    return surfaceCfgInvalid({
+      opts,
+      orchestrated: false,
+      configBasename: verdict.otherBasename,
+      scope,
+    });
+  }
+
+  notifyWithContext(
+    opts.ctx,
+    opts.run,
+    REMOVE_CONTEXT,
+    marketplaceFailureRows(opts.name, scope, verdict.reason, verdict.refusal),
+    undefined,
+    "single",
+  );
+  return {
+    status: "failed",
+    reason: verdict.reason,
+    error: verdict.refusal,
+    cause: errorMessage(verdict.refusal),
+  };
 }
 
 /**
@@ -840,6 +937,10 @@ async function runRemoveOutcome(
       opts.stateTransaction,
     );
   } catch (err) {
+    if (err instanceof LayerGateStop) {
+      return surfaceLayerGateStop(opts, resolved.scope, err.verdict);
+    }
+
     if (err !== cfgInvalidSentinel) {
       rethrowWithMcpConfigNotices(err, opts, orchestrated, mcpConfigNotices);
     }

@@ -16,6 +16,7 @@ import {
   foldUnstageNotices,
   marketplaceFailureRows,
   marketplaceInOtherScope,
+  marketplaceLayerVerdict,
   narrowCascadeFailure,
   refreshGitHubClone,
   refreshUrlClone,
@@ -30,6 +31,8 @@ import { McpConfigFileError } from "../../../extensions/pi-claude-marketplace/sh
 import {
   CrossOriginChallengeError,
   InvalidMarketplaceManifestError,
+  MarketplaceDeclaredInSharedConfigError,
+  MarketplaceDeclaredLocallyError,
   MarketplaceNotFoundError,
   PluginShapeError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
@@ -43,9 +46,14 @@ import type {
   AutoupdateFlipResult,
   GitAuthBundle,
   GitOps,
+  MarketplaceLayerVerdict,
   UnstageOutcome,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { AgentsIndex } from "../../../extensions/pi-claude-marketplace/persistence/agents-index-schema.ts";
+import type {
+  ConfigLoadResult,
+  ScopeConfig,
+} from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { AuthAttemptResult } from "../../../extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts";
@@ -2393,3 +2401,143 @@ test("marketplaceFailureRows puts the reason and the cause on one failed child o
     },
   ]);
 });
+
+const LOCAL_FILE = "/scope/.pi/claude-plugins.local.json";
+const SHARED_FILE = "/scope/.pi/claude-plugins.json";
+
+function declaring(...marketplaces: readonly string[]): ScopeConfig {
+  return {
+    schemaVersion: 1,
+    marketplaces: Object.fromEntries(marketplaces.map((name) => [name, { source: `./${name}` }])),
+  };
+}
+
+for (const { title, target, other, targetIsLocal, marketplace, expectedVerdict } of [
+  {
+    title: "a marketplace only the target layer declares, with the other file absent, as declared",
+    target: declaring("tools"),
+    other: { status: "absent" },
+    targetIsLocal: false,
+    marketplace: "tools",
+    expectedVerdict: { kind: "declared", other: "silent" },
+  },
+  {
+    title: "a marketplace only the target layer declares, with the other file silent, as declared",
+    target: declaring("tools"),
+    other: { status: "valid", filePath: LOCAL_FILE, config: declaring("extras") },
+    targetIsLocal: false,
+    marketplace: "tools",
+    expectedVerdict: { kind: "declared", other: "silent" },
+  },
+  {
+    title: "a marketplace both layers declare as declared by the other layer too",
+    target: declaring("tools"),
+    other: { status: "valid", filePath: SHARED_FILE, config: declaring("tools") },
+    targetIsLocal: true,
+    marketplace: "tools",
+    expectedVerdict: { kind: "declared", other: "declares" },
+  },
+  {
+    title:
+      "a marketplace the target layer declares beside an invalid other file as possibly declared there",
+    target: declaring("tools"),
+    other: { status: "invalid", filePath: LOCAL_FILE, error: "bad json" },
+    targetIsLocal: false,
+    marketplace: "tools",
+    expectedVerdict: { kind: "declared", other: "unreadable" },
+  },
+  {
+    title:
+      "a shared-file target whose marketplace only the local file declares as declared locally",
+    target: declaring("extras"),
+    other: { status: "valid", filePath: LOCAL_FILE, config: declaring("tools") },
+    targetIsLocal: false,
+    marketplace: "tools",
+    expectedVerdict: {
+      kind: "refused",
+      reason: "marketplace declared locally",
+      refusal: new MarketplaceDeclaredLocallyError("tools"),
+    },
+  },
+  {
+    title:
+      "a local-file target whose marketplace only the shared file declares as declared in shared config",
+    target: { schemaVersion: 1 },
+    other: { status: "valid", filePath: SHARED_FILE, config: declaring("tools") },
+    targetIsLocal: true,
+    marketplace: "tools",
+    expectedVerdict: {
+      kind: "refused",
+      reason: "marketplace declared in shared config",
+      refusal: new MarketplaceDeclaredInSharedConfigError("tools"),
+    },
+  },
+  {
+    title: "a marketplace neither layer declares, with the other file absent, as undeclared",
+    target: { schemaVersion: 1 },
+    other: { status: "absent" },
+    targetIsLocal: true,
+    marketplace: "tools",
+    expectedVerdict: { kind: "undeclared" },
+  },
+  {
+    title: "a marketplace neither layer declares, with the other file silent, as undeclared",
+    target: declaring("extras"),
+    other: { status: "valid", filePath: LOCAL_FILE, config: declaring("base") },
+    targetIsLocal: false,
+    marketplace: "tools",
+    expectedVerdict: { kind: "undeclared" },
+  },
+  {
+    title: "a target silent beside an invalid other file as unreadable, naming its basename only",
+    target: declaring("extras"),
+    other: { status: "invalid", filePath: SHARED_FILE, error: "bad json" },
+    targetIsLocal: true,
+    marketplace: "tools",
+    expectedVerdict: { kind: "other-unreadable", otherBasename: "claude-plugins.json" },
+  },
+  {
+    title: "a marketplace named constructor that no file owns as undeclared",
+    target: declaring("extras"),
+    other: { status: "valid", filePath: LOCAL_FILE, config: declaring("base") },
+    targetIsLocal: false,
+    marketplace: "constructor",
+    expectedVerdict: { kind: "undeclared" },
+  },
+  {
+    title: "a marketplace named __proto__ that only the local file owns as declared locally",
+    target: { schemaVersion: 1, marketplaces: {} },
+    other: {
+      status: "valid",
+      filePath: LOCAL_FILE,
+      config: JSON.parse(
+        '{ "schemaVersion": 1, "marketplaces": { "__proto__": { "source": "./proto" } } }',
+      ) as ScopeConfig,
+    },
+    targetIsLocal: false,
+    marketplace: "__proto__",
+    expectedVerdict: {
+      kind: "refused",
+      reason: "marketplace declared locally",
+      refusal: new MarketplaceDeclaredLocallyError("__proto__"),
+    },
+  },
+] satisfies readonly {
+  readonly title: string;
+  readonly target: ScopeConfig;
+  readonly other: ConfigLoadResult;
+  readonly targetIsLocal: boolean;
+  readonly marketplace: string;
+  readonly expectedVerdict: MarketplaceLayerVerdict;
+}[]) {
+  test(`marketplaceLayerVerdict classifies ${title}`, () => {
+    // arrange
+    const layers = { target, other, targetIsLocal, marketplace };
+
+    // act
+    const verdict = marketplaceLayerVerdict(layers);
+
+    // assert
+    assert.deepStrictEqual(verdict, expectedVerdict);
+  });
+}

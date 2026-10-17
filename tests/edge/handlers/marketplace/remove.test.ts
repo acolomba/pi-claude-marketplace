@@ -26,12 +26,12 @@
 // case states one emission and one working-directory read; D-05 has the
 // workflow render from the run the handler receives.
 //
-// The scope-target flag is observable ONLY through which config layer the
-// CFG-03 precondition validates: the removal's config write-back sweeps both
-// layers regardless, so a valid-config workspace cannot tell the flag apart
-// from its absence. The rows that drive it therefore run against a workspace
-// whose `claude-plugins.local.json` fails schema validation, where supplying
-// the flag aborts the removal and omitting it does not.
+// The scope-target flag is observed through which config layer the CFG-03
+// precondition validates. The rows that drive it run against a workspace whose
+// `claude-plugins.json` declares the marketplace and whose
+// `claude-plugins.local.json` fails schema validation, where supplying the flag
+// aborts the removal and omitting it removes the marketplace from the valid
+// shared layer.
 //
 // Every case also installs a fail-fast replacement of `https.request`, the door
 // the git transport opens. NO CASE ASSERTS A CALL COUNT AGAINST IT. The git
@@ -180,6 +180,20 @@ async function seedInvalidLocalConfig(cwd: string, scope: Scope): Promise<void> 
   await writeFile(locations.configLocalJsonPath, '{"schemaVersion": "not-a-number"}', "utf8");
 }
 
+/** Write a `claude-plugins.json` that declares the path-source marketplace `name`. */
+async function seedSharedConfigDeclaring(cwd: string, scope: Scope, name: string): Promise<void> {
+  const locations = locationsFor(scope, cwd);
+  await mkdir(locations.scopeRoot, { recursive: true });
+  await writeFile(
+    locations.configJsonPath,
+    JSON.stringify({
+      schemaVersion: 1,
+      marketplaces: { [name]: { source: `/seeded/${scope}/${name}` } },
+    }),
+    "utf8",
+  );
+}
+
 /** Read the marketplace names each scope records, absent files reading empty. */
 async function readMarketplaceFootprint(cwd: string): Promise<MarketplaceFootprint> {
   const [project, user] = await Promise.all([
@@ -300,6 +314,7 @@ for (const { args, expectedFootprint, expectedNotification, placement } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, "scope-target");
     await seedMarketplace(workspace.cwd, "project", "alpha");
+    await seedSharedConfigDeclaring(workspace.cwd, "project", "alpha");
     await seedInvalidLocalConfig(workspace.cwd, "project");
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
       reads: 1,

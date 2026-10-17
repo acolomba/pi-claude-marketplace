@@ -396,6 +396,25 @@ export class MarketplaceDeclaredLocallyError extends Error {
   }
 }
 
+/**
+ * LAYER-02 / D-MF-03: the refusal of a `--local` command that names a
+ * marketplace only `claude-plugins.json` declares. A named command changes
+ * only its target layer, so it cannot act on a declaration in the other one.
+ *
+ * The message IS the failed row's cause line. It is built from fixed text and a
+ * marketplace name that passed `assertSafeName`, so it carries no path.
+ */
+export class MarketplaceDeclaredInSharedConfigError extends Error {
+  readonly marketplace: string;
+  constructor(marketplace: string) {
+    super(
+      `The marketplace ${marketplace} is declared only in claude-plugins.json. Run the command again without --local.`,
+    );
+    this.name = "MarketplaceDeclaredInSharedConfigError";
+    this.marketplace = marketplace;
+  }
+}
+
 /** D-14 / MU-5: marketplace update failure preserves the retry-hint slot per MU-5. */
 export class MarketplaceUpdateError extends Error {
   readonly retryHint: string;

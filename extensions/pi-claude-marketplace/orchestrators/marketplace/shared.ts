@@ -29,6 +29,8 @@
 // ledger runner halts on first throw). Code review enforces; ESLint
 // does not.
 
+import path from "node:path";
+
 import { unstagePluginAgents } from "../../bridges/agents/index.ts";
 import { unstagePluginCommands } from "../../bridges/commands/index.ts";
 import { removeHookConfig } from "../../bridges/hooks/index.ts";
@@ -46,6 +48,8 @@ import {
   errorMessage,
   InvalidMarketplaceManifestError,
   isErrnoException,
+  MarketplaceDeclaredInSharedConfigError,
+  MarketplaceDeclaredLocallyError,
   MarketplaceNotFoundError,
   PluginShapeError,
 } from "../../shared/errors.ts";
@@ -60,6 +64,7 @@ import type { UnstageAgentFailure } from "../../bridges/agents/types.ts";
 import type { UnstageWorkflowFailure } from "../../bridges/workflows/types.ts";
 import type { DeviceFlowHttp } from "../../domain/github-auth.ts";
 import type { UrlSource } from "../../domain/source.ts";
+import type { ConfigLoadResult, ScopeConfig } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type {
@@ -1059,4 +1064,72 @@ export function marketplaceFailureRows(
       ],
     },
   ];
+}
+
+/**
+ * Where a marketplace a named command targets is declared, as seen from the
+ * command's target layer:
+ *
+ * - `declared`: the target layer declares it; `other` says whether the other
+ *   layer declares it too, or could not be read.
+ * - `refused`: only the other layer declares it; `refusal` is the cause line.
+ * - `undeclared`: neither layer declares it (a recorded marketplace).
+ * - `other-unreadable`: the target layer does not declare it and the other
+ *   file is invalid; `otherBasename` names that file without its path.
+ */
+export type MarketplaceLayerVerdict =
+  | { readonly kind: "declared"; readonly other: "declares" | "silent" | "unreadable" }
+  | {
+      readonly kind: "refused";
+      readonly reason: "marketplace declared locally" | "marketplace declared in shared config";
+      readonly refusal: MarketplaceDeclaredLocallyError | MarketplaceDeclaredInSharedConfigError;
+    }
+  | { readonly kind: "undeclared" }
+  | { readonly kind: "other-unreadable"; readonly otherBasename: string };
+
+/**
+ * LAYER-02 / D-MF-03: a named command changes only its target layer, and fails
+ * when that layer does not declare the marketplace while the other one does.
+ *
+ * Pure: the caller loads both files inside its lock and handles a CFG-03
+ * invalid target first. Membership is an own-key read, so a `__proto__` or
+ * `constructor` name is declared only by an own entry. An unreadable other
+ * file is never read as declaring nothing, as with
+ * `localOnlyMarketplaceRefusal`: it may declare the marketplace.
+ */
+export function marketplaceLayerVerdict(args: {
+  readonly target: ScopeConfig;
+  readonly other: ConfigLoadResult;
+  readonly targetIsLocal: boolean;
+  readonly marketplace: string;
+}): MarketplaceLayerVerdict {
+  const inTarget = ownValue(args.target.marketplaces, args.marketplace) !== undefined;
+  if (args.other.status === "invalid") {
+    return inTarget
+      ? { kind: "declared", other: "unreadable" }
+      : { kind: "other-unreadable", otherBasename: path.basename(args.other.filePath) };
+  }
+
+  const inOther =
+    args.other.status === "valid" &&
+    ownValue(args.other.config.marketplaces, args.marketplace) !== undefined;
+  if (inTarget) {
+    return { kind: "declared", other: inOther ? "declares" : "silent" };
+  }
+
+  if (!inOther) {
+    return { kind: "undeclared" };
+  }
+
+  return args.targetIsLocal
+    ? {
+        kind: "refused",
+        reason: "marketplace declared in shared config",
+        refusal: new MarketplaceDeclaredInSharedConfigError(args.marketplace),
+      }
+    : {
+        kind: "refused",
+        reason: "marketplace declared locally",
+        refusal: new MarketplaceDeclaredLocallyError(args.marketplace),
+      };
 }
