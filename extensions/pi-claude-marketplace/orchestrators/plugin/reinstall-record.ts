@@ -1,8 +1,10 @@
 import {
   composeErrorWithCauseChain,
   findManualRecoveryError,
+  InvalidMarketplaceManifestError,
   ManualRecoveryError,
-  MarketplaceDeclaredLocallyError,
+  PluginDeclaredInSharedConfigError,
+  PluginDeclaredLocallyError,
   PluginShapeError,
   StateLockHeldError,
 } from "../../shared/errors.ts";
@@ -105,8 +107,8 @@ export function reinstallReasonsFromError(error: unknown): readonly ContentReaso
     return ["lock held"] as const;
   }
 
-  if (error instanceof MarketplaceDeclaredLocallyError) {
-    return ["marketplace declared locally"] as const;
+  if (isLayerRefusal(error)) {
+    return [layerRefusalReason(error)] as const;
   }
 
   if (error instanceof Error) {
@@ -121,6 +123,30 @@ export function reinstallReasonsFromError(error: unknown): readonly ContentReaso
   }
 
   return undefined;
+}
+
+/** LAYER-04 / CFG-03: the refusals of a named reinstall's layer check. */
+type LayerRefusal =
+  PluginDeclaredLocallyError | PluginDeclaredInSharedConfigError | InvalidMarketplaceManifestError;
+
+function isLayerRefusal(error: unknown): error is LayerRefusal {
+  return (
+    error instanceof PluginDeclaredLocallyError ||
+    error instanceof PluginDeclaredInSharedConfigError ||
+    error instanceof InvalidMarketplaceManifestError
+  );
+}
+
+function layerRefusalReason(error: LayerRefusal): ContentReason {
+  if (error instanceof PluginDeclaredLocallyError) {
+    return "plugin declared locally";
+  }
+
+  if (error instanceof PluginDeclaredInSharedConfigError) {
+    return "plugin declared in shared config";
+  }
+
+  return "invalid manifest";
 }
 
 function skippedOutcome(input: RecordSkippedOutcomeInput): ReinstallSkippedOutcome {
@@ -145,7 +171,7 @@ function failedOutcome(input: RecordFailedOutcomeInput): ReinstallFailedOutcome 
     notes: [message],
     ...(isManualRecovery && { failureClass: "manual-recovery" as const }),
     ...(typedReasons !== undefined && { reasons: typedReasons }),
-    ...(input.error instanceof MarketplaceDeclaredLocallyError && { cause: input.error }),
+    ...(isLayerRefusal(input.error) && { cause: input.error }),
   };
 }
 

@@ -85,7 +85,9 @@ import {
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import {
   InvalidGitHubBaseUrlError,
-  MarketplaceDeclaredLocallyError,
+  InvalidMarketplaceManifestError,
+  PluginDeclaredInSharedConfigError,
+  PluginDeclaredLocallyError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
@@ -3101,40 +3103,130 @@ async function seedLocalLayerReinstall(
   return locations;
 }
 
-test("D-MF-03: a flagless reinstall of a plugin the local file declares writes nothing to claude-plugins.json", async () => {
-  await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-local-key-"));
-    try {
-      // arrange
-      const baseBytes = JSON.stringify({
-        schemaVersion: 1,
-        marketplaces: { mp: { source: "./mp-src" } },
-      });
-      const localBytes = JSON.stringify({ schemaVersion: 1, plugins: { "hello@mp": {} } });
-      const locations = await seedLocalLayerReinstall(cwd, baseBytes, localBytes);
-      const { ctx, run } = makeCtx();
+/** The bytes of both layer files, of `state.json` with its mtime, and of the staged skill. */
+async function reinstallFileSnapshot(
+  cwd: string,
+  locations: ReturnType<typeof locationsFor>,
+): Promise<{
+  readonly shared: string;
+  readonly local: string;
+  readonly state: string;
+  readonly stateMtimeMs: number;
+  readonly skill: string;
+}> {
+  return {
+    shared: await readFile(locations.configJsonPath, "utf8"),
+    local: await readFile(locations.configLocalJsonPath, "utf8"),
+    state: await readFile(locations.stateJsonPath, "utf8"),
+    stateMtimeMs: (await stat(locations.stateJsonPath)).mtimeMs,
+    skill: await readSkill(cwd),
+  };
+}
 
-      // act
-      const outcomes = await reinstallPlugins({
-        ctx,
-        run,
-        scope: "project",
-        cwd,
-        target: { kind: "plugin", marketplace: "mp", plugin: "hello" },
-      });
+/** A transaction whose replacement and rollback fail the case when they run. */
+function refusingReinstallTransaction(calls: string[]): ReinstallTransaction {
+  return {
+    ...REAL_REINSTALL_TRANSACTION,
+    replaceReinstalledPlugin: () => {
+      calls.push("replaceReinstalledPlugin");
+      return Promise.reject(new Error("replaceReinstalledPlugin must not run"));
+    },
+    rollbackReinstalledPlugin: () => {
+      calls.push("rollbackReinstalledPlugin");
+      return Promise.reject(new Error("rollbackReinstalledPlugin must not run"));
+    },
+  };
+}
 
-      // assert
-      assert.deepEqual(
-        outcomes.map((outcome) => outcome.partition),
-        ["reinstalled"],
-      );
-      assert.equal(await readFile(locations.configJsonPath, "utf8"), baseBytes);
-      assert.equal(await readFile(locations.configLocalJsonPath, "utf8"), localBytes);
-    } finally {
-      await rm(cwd, { recursive: true, force: true });
-    }
-  });
+const SHARED_MARKETPLACE_ONLY = JSON.stringify({
+  schemaVersion: 1,
+  marketplaces: { mp: { source: "./mp-src" } },
 });
+const HELLO_DECLARED_LAYER = JSON.stringify({
+  schemaVersion: 1,
+  marketplaces: { mp: { source: "./mp-src" } },
+  plugins: { "hello@mp": {} },
+});
+
+for (const { direction, shared, local, flag, refusal, reason, cause } of [
+  {
+    direction: "without --local a plugin only the local layer declares",
+    shared: SHARED_MARKETPLACE_ONLY,
+    local: HELLO_DECLARED_LAYER,
+    flag: false,
+    refusal: new PluginDeclaredLocallyError("hello", "mp"),
+    reason: "plugin declared locally",
+    cause:
+      "The plugin hello@mp is declared only in the local layer (claude-plugins.local.json). Run the command again with --local.",
+  },
+  {
+    direction: "with --local a plugin only the shared layer declares",
+    shared: HELLO_DECLARED_LAYER,
+    local: SHARED_MARKETPLACE_ONLY,
+    flag: true,
+    refusal: new PluginDeclaredInSharedConfigError("hello", "mp"),
+    reason: "plugin declared in shared config",
+    cause:
+      "The plugin hello@mp is declared only in the shared layer (claude-plugins.json). Run the command again without --local.",
+  },
+] as const) {
+  test(`LAYER-04: a named reinstall ${direction} is refused before anything is resolved or replaced`, async () => {
+    await withHermeticHome(async () => {
+      const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-layer-refusal-"));
+      try {
+        // arrange
+        const locations = await seedLocalLayerReinstall(cwd, shared, local);
+        const filesBefore = await reinstallFileSnapshot(cwd, locations);
+        const transactionCalls: string[] = [];
+        const reinstall = createReinstallPlugin(
+          refusingReinstallTransaction(transactionCalls),
+          createHooksRouting(createHooksRuntime(), { readHooksJson }),
+          createCompletionCache(),
+        );
+        const { ctx, run, notifications } = makeCtx();
+
+        // act
+        const outcome = await reinstall({
+          ctx,
+          run,
+          scope: "project",
+          cwd,
+          marketplace: "mp",
+          plugin: "hello",
+          named: true,
+          local: flag,
+        });
+
+        // assert
+        assert.deepStrictEqual(outcome, {
+          partition: "failed",
+          name: "hello",
+          marketplace: "mp",
+          scope: "project",
+          notes: [`${cause}\n\ncause: ${cause}`],
+          reasons: [reason],
+          cause: refusal,
+        });
+        assert.deepEqual(notifications, [
+          {
+            message: [
+              "A plugin operation has failed.",
+              "",
+              "● mp [project]",
+              `  ⊘ hello (failed) {${reason}}`,
+              `    cause: ${cause}`,
+            ].join("\n"),
+            severity: "error",
+          },
+        ]);
+        assert.deepStrictEqual(transactionCalls, []);
+        assert.deepStrictEqual(await reinstallFileSnapshot(cwd, locations), filesBefore);
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
 
 test("FIX-03: a bare reinstall under a marketplace only the local file declares writes no declaration", async () => {
   await withHermeticHome(async () => {
@@ -3171,23 +3263,16 @@ test("FIX-03: a bare reinstall under a marketplace only the local file declares 
   });
 });
 
-const LOCAL_ONLY_MARKETPLACE_CAUSE =
-  "The marketplace mp is declared only in claude-plugins.local.json. Run the command again with --local.";
-
-test("FIX-03: a named reinstall without --local under a marketplace only the local file declares is refused before replacement", async () => {
+test("D-14: a named reinstall of a plugin no layer declares, under a marketplace only the local layer declares, reinstalls it", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-local-mp-named-"));
     try {
       // arrange
-      const baseBytes = JSON.stringify({ schemaVersion: 1 });
-      const localBytes = JSON.stringify({
-        schemaVersion: 1,
-        marketplaces: { mp: { source: "./mp-src" } },
-      });
-      const locations = await seedLocalLayerReinstall(cwd, baseBytes, localBytes);
-      const stateBytes = await readFile(locations.stateJsonPath, "utf8");
-      const stateMtime = (await stat(locations.stateJsonPath)).mtimeMs;
-      const skillBytes = await readSkill(cwd);
+      await seedLocalLayerReinstall(
+        cwd,
+        JSON.stringify({ schemaVersion: 1 }),
+        SHARED_MARKETPLACE_ONLY,
+      );
       const { ctx, run, notifications } = makeCtx();
 
       // act
@@ -3200,34 +3285,13 @@ test("FIX-03: a named reinstall without --local under a marketplace only the loc
       });
 
       // assert
-      assert.deepStrictEqual(outcomes, [
-        {
-          partition: "failed",
-          name: "hello",
-          marketplace: "mp",
-          scope: "project",
-          notes: [`${LOCAL_ONLY_MARKETPLACE_CAUSE}\n\ncause: ${LOCAL_ONLY_MARKETPLACE_CAUSE}`],
-          reasons: ["marketplace declared locally"],
-          cause: new MarketplaceDeclaredLocallyError("mp"),
-        },
-      ]);
+      assert.deepEqual(
+        outcomes.map((outcome) => outcome.partition),
+        ["reinstalled"],
+      );
       assert.deepEqual(notifications, [
-        {
-          message: [
-            "A plugin operation has failed.",
-            "",
-            "● mp [project]",
-            "  ⊘ hello (failed) {marketplace declared locally}",
-            `    cause: ${LOCAL_ONLY_MARKETPLACE_CAUSE}`,
-          ].join("\n"),
-          severity: "error",
-        },
+        { message: "● mp [project]\n  ● hello v1.0.0 (reinstalled)\n\n/reload to pick up changes" },
       ]);
-      assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
-      assert.equal((await stat(locations.stateJsonPath)).mtimeMs, stateMtime);
-      assert.equal(await readFile(locations.configJsonPath, "utf8"), baseBytes);
-      assert.equal(await readFile(locations.configLocalJsonPath, "utf8"), localBytes);
-      assert.equal(await readSkill(cwd), skillBytes);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -3274,9 +3338,12 @@ test("FIX-03: a named reinstall with --local under a marketplace only the local 
   });
 });
 
-test("S5: a flagless reinstall whose local file cannot be read names claude-plugins.local.json", async () => {
+const INVALID_LOCAL_LAYER_CAUSE =
+  'Config file "claude-plugins.local.json" failed schema validation.';
+
+test("S5: a bare flagless reinstall whose local layer cannot be read reinstalls and names claude-plugins.local.json", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-local-invalid-"));
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-bare-local-invalid-"));
     try {
       // arrange
       const baseBytes = JSON.stringify({
@@ -3292,7 +3359,7 @@ test("S5: a flagless reinstall whose local file cannot be read names claude-plug
         run,
         scope: "project",
         cwd,
-        target: { kind: "plugin", marketplace: "mp", plugin: "hello" },
+        target: { kind: "all" },
       });
 
       // assert
@@ -3301,19 +3368,80 @@ test("S5: a flagless reinstall whose local file cannot be read names claude-plug
         ["reinstalled"],
       );
       assert.deepEqual(notifications, [
-        { message: "● mp [project]\n  ● hello v1.0.0 (reinstalled)\n\n/reload to pick up changes" },
+        {
+          message:
+            "● mp [project]\n  ● hello v1.0.0 (reinstalled)\n\nPlugin reinstall: 1 success\n\n/reload to pick up changes",
+        },
         {
           message: [
             "A plugin operation has failed.",
             "",
             "● mp [project]",
             "  ⊘ hello (failed) {invalid manifest}",
-            '    cause: Config file "claude-plugins.local.json" failed schema validation.',
+            `    cause: ${INVALID_LOCAL_LAYER_CAUSE}`,
+            "",
+            "Plugin reinstall: 1 failure",
           ].join("\n"),
           severity: "error",
         },
       ]);
       assert.equal(await readFile(locations.configJsonPath, "utf8"), baseBytes);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("CFG-03: a named flagless reinstall whose local layer cannot be read is refused naming it", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-local-invalid-"));
+    try {
+      // arrange
+      const baseBytes = JSON.stringify({
+        schemaVersion: 1,
+        marketplaces: { mp: { source: "./mp-src" } },
+      });
+      const locations = await seedLocalLayerReinstall(cwd, baseBytes, "{ invalid");
+      const stateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const skillBytes = await readSkill(cwd);
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      const outcomes = await reinstallPlugins({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", marketplace: "mp", plugin: "hello" },
+      });
+
+      // assert
+      assert.deepStrictEqual(outcomes, [
+        {
+          partition: "failed",
+          name: "hello",
+          marketplace: "mp",
+          scope: "project",
+          notes: [`${INVALID_LOCAL_LAYER_CAUSE}\n\ncause: ${INVALID_LOCAL_LAYER_CAUSE}`],
+          reasons: ["invalid manifest"],
+          cause: new InvalidMarketplaceManifestError(INVALID_LOCAL_LAYER_CAUSE),
+        },
+      ]);
+      assert.deepEqual(notifications, [
+        {
+          message: [
+            "A plugin operation has failed.",
+            "",
+            "● mp [project]",
+            "  ⊘ hello (failed) {invalid manifest}",
+            `    cause: ${INVALID_LOCAL_LAYER_CAUSE}`,
+          ].join("\n"),
+          severity: "error",
+        },
+      ]);
+      assert.equal(await readFile(locations.configJsonPath, "utf8"), baseBytes);
+      assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
+      assert.equal(await readSkill(cwd), skillBytes);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -6676,9 +6804,12 @@ test("a local single reinstall names the invalid local config after a successful
   });
 });
 
-test("a bulk local reinstall writes only the local configuration", async () => {
+const SHARED_ONLY_CAUSE =
+  "The plugin hello@mp is declared only in the shared layer (claude-plugins.json). Run the command again without --local.";
+
+test("LAYER-04: the plugin form of reinstall with --local refuses a plugin only the shared layer declares", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-bulk-local-"));
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-named-local-"));
     try {
       // arrange
       await seedMarketplace({
@@ -6702,9 +6833,19 @@ test("a bulk local reinstall writes only the local configuration", async () => {
       });
 
       // assert
-      assert.equal(outcomes[0]?.partition, "reinstalled");
+      assert.deepStrictEqual(outcomes, [
+        {
+          partition: "failed",
+          name: "hello",
+          marketplace: "mp",
+          scope: "project",
+          notes: [`${SHARED_ONLY_CAUSE}\n\ncause: ${SHARED_ONLY_CAUSE}`],
+          reasons: ["plugin declared in shared config"],
+          cause: new PluginDeclaredInSharedConfigError("hello", "mp"),
+        },
+      ]);
       assert.equal(await readFile(locations.configJsonPath, "utf8"), baseConfigBefore);
-      assert.equal(await pathExists(locations.configLocalJsonPath), true);
+      assert.equal(await pathExists(locations.configLocalJsonPath), false);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

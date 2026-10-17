@@ -6,8 +6,10 @@ import {
   reinstallReasonsFromError,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-record.ts";
 import {
+  InvalidMarketplaceManifestError,
   ManualRecoveryError,
-  MarketplaceDeclaredLocallyError,
+  PluginDeclaredInSharedConfigError,
+  PluginDeclaredLocallyError,
   PluginShapeError,
   StateLockHeldError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
@@ -517,30 +519,49 @@ test("composes ordinary, typed, errno, and manual-recovery failures", () => {
   );
 });
 
-test("FIX-03: a local-only marketplace refusal carries its reason and its cause", () => {
-  // arrange
-  const refusal = new MarketplaceDeclaredLocallyError("mp");
+const LOCAL_CAUSE =
+  "The plugin hello@mp is declared only in the local layer (claude-plugins.local.json). Run the command again with --local.";
+const SHARED_CAUSE =
+  "The plugin hello@mp is declared only in the shared layer (claude-plugins.json). Run the command again without --local.";
+const INVALID_CAUSE = 'Config file "claude-plugins.local.json" failed schema validation.';
 
-  // act
-  const outcome = recordReinstallOutcome({
-    partition: "failed",
-    name: "hello",
-    marketplace: "mp",
-    scope: "project",
-    error: refusal,
-  });
+for (const { refusal, reason, note } of [
+  {
+    refusal: new PluginDeclaredLocallyError("hello", "mp"),
+    reason: "plugin declared locally",
+    note: `${LOCAL_CAUSE}\n\ncause: ${LOCAL_CAUSE}`,
+  },
+  {
+    refusal: new PluginDeclaredInSharedConfigError("hello", "mp"),
+    reason: "plugin declared in shared config",
+    note: `${SHARED_CAUSE}\n\ncause: ${SHARED_CAUSE}`,
+  },
+  {
+    refusal: new InvalidMarketplaceManifestError(INVALID_CAUSE),
+    reason: "invalid manifest",
+    note: `${INVALID_CAUSE}\n\ncause: ${INVALID_CAUSE}`,
+  },
+] as const) {
+  test(`LAYER-04: the ${reason} refusal carries its reason and its cause`, () => {
+    // act
+    const outcome = recordReinstallOutcome({
+      partition: "failed",
+      name: "hello",
+      marketplace: "mp",
+      scope: "project",
+      error: refusal,
+    });
 
-  // assert
-  assert.deepStrictEqual(outcome, {
-    partition: "failed",
-    name: "hello",
-    marketplace: "mp",
-    scope: "project",
-    notes: [
-      "The marketplace mp is declared only in claude-plugins.local.json. Run the command again with --local.\n\ncause: The marketplace mp is declared only in claude-plugins.local.json. Run the command again with --local.",
-    ],
-    reasons: ["marketplace declared locally"],
-    cause: refusal,
+    // assert
+    assert.deepStrictEqual(outcome, {
+      partition: "failed",
+      name: "hello",
+      marketplace: "mp",
+      scope: "project",
+      notes: [note],
+      reasons: [reason],
+      cause: refusal,
+    });
+    assert.strictEqual(outcome.cause, refusal);
   });
-  assert.strictEqual(outcome.cause, refusal);
-});
+}

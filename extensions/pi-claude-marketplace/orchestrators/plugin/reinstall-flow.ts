@@ -95,9 +95,9 @@ import {
   emitMarketplaceNotAddedSignal,
   MarketplaceNotAddedSignal,
   maybeWritePluginConfigBack,
+  namedPluginLayerRefusal,
   removePluginRecord,
   surfaceDiscoveryWarnings,
-  writeBackRefusal,
 } from "./shared.ts";
 
 import type { HooksRouting } from "../../bridges/hooks/index.ts";
@@ -143,12 +143,10 @@ export interface ReinstallPluginOptions {
   readonly render?: "default" | "none";
   readonly local?: boolean;
   /**
-   * FIX-03 / D-MF-02: the command named this plugin (`<plugin>@<marketplace>`).
-   * A named flagless reinstall that would declare the plugin in
-   * `claude-plugins.json` under a marketplace only `claude-plugins.local.json`
-   * declares is refused. A nameless form, the reconcile backfill, and any
-   * other caller that omits it cover every layer and are never refused
-   * (D-MF-03).
+   * LAYER-04 / D-MF-03: the command named this plugin
+   * (`<plugin>@<marketplace>`), so it acts on its target layer and is refused
+   * when only the other layer declares the plugin. A nameless form, the
+   * reconcile backfill, and any other caller that omits it are never refused.
    */
   readonly named?: boolean;
   readonly credentialOps?: CredentialOps;
@@ -824,7 +822,7 @@ async function runLockedReinstall(
     };
   }
 
-  await refuseLocalOnlyMarketplaceReinstall(locations, opts);
+  await refuseOtherLayerReinstall(locations, opts);
   const oldSnapshot = clonePluginRecord(oldRecord);
   const entry = await loadCachedEntry(mp.manifestPath, marketplace, plugin);
   const installable = await resolveInstallable(owners, {
@@ -975,11 +973,12 @@ async function runLockedReinstall(
 }
 
 /**
- * FIX-03 / D-MF-02: refuse a named flagless reinstall before anything is
- * resolved or replaced, so the write-back's rollback `catch` is never reached
- * and the locked closure leaves without a save (NFR-3).
+ * LAYER-04 / D-MF-03: refuse a named reinstall of a plugin only the other
+ * layer declares, or one whose layer file cannot be read (CFG-03). It runs
+ * before anything is resolved or replaced, so the rollback path is never
+ * reached and the locked closure leaves without a save (NFR-3).
  */
-async function refuseLocalOnlyMarketplaceReinstall(
+async function refuseOtherLayerReinstall(
   locations: ScopedLocations,
   opts: ReinstallPluginOptions,
 ): Promise<void> {
@@ -987,7 +986,7 @@ async function refuseLocalOnlyMarketplaceReinstall(
     return;
   }
 
-  const refusal = await writeBackRefusal({
+  const refusal = await namedPluginLayerRefusal({
     locations,
     local: opts.local === true,
     marketplace: opts.marketplace,

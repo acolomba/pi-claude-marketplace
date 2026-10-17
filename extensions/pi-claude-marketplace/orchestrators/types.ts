@@ -164,10 +164,10 @@ export interface ReinstallFailedOutcome extends ReinstallOutcomeBase {
    */
   readonly reasons?: readonly ContentReason[];
   /**
-   * FIX-03 / D-MF-02: set only for the local-only-marketplace refusal. Its
-   * message is the row's cause line, built from a safe marketplace name and
-   * fixed text. Every other failure keeps its text in `notes` only, because
-   * that text is not prepared for a rendered cause line.
+   * LAYER-04 / CFG-03: set only for a named reinstall's layer refusal. Its
+   * message is the row's cause line, built from fixed text and safe names or
+   * a file's basename. Every other failure keeps its text in `notes` only,
+   * because that text is not prepared for a rendered cause line.
    */
   readonly cause?: Error;
 }

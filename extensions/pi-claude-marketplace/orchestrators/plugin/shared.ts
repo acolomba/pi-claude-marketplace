@@ -1370,25 +1370,6 @@ function flaglessLayerWriteBack(args: {
 }
 
 /**
- * FIX-03 / D-MF-02: the refusal a named flagless update or reinstall meets
- * before anything is staged. It applies the same decision rule as the
- * post-success write-back, but the write-back reads both files again later.
- * If the user edits a file in between, the two can disagree. Neither outcome
- * leaks a declaration: a refused check stops the command, and a write-back
- * that sees a local-only marketplace writes nothing. An unreadable file is not a
- * refusal: the write-back reports it after the swap (S5).
- */
-export async function writeBackRefusal(opts: {
-  readonly locations: ScopedLocations;
-  readonly local: boolean;
-  readonly marketplace: string;
-  readonly plugin: string;
-}): Promise<MarketplaceDeclaredLocallyError | undefined> {
-  const decision = await selectLayerWriteBack(opts);
-  return decision.kind === "local-only-marketplace" ? decision.refusal : undefined;
-}
-
-/**
  * WB-01: the plugin write-back shared by the update and reinstall
  * post-success paths, which the load-time backfill also reaches through the
  * reinstall. It re-reads both configuration files inside the caller's guard
@@ -1398,10 +1379,9 @@ export async function writeBackRefusal(opts: {
  * forward-compat keys.
  *
  * The target and the hermetic-layer rules are `selectLayerWriteBack`'s
- * (D-MF-03). Under a marketplace only the local file declares, it writes
- * nothing: a named command already refused before staging, and a nameless
- * command, like the load-time backfill, covers every layer and authors no
- * shared declaration.
+ * (D-MF-03). Under a marketplace only the local file declares, a flagless
+ * command writes nothing, because a teammate who reads the shared file cannot
+ * resolve it (FIX-03).
  *
  * S5: an unreadable file returns `invalidConfig: true` with that file's path,
  * so the caller can name it in a warning row. The state mutation has already
