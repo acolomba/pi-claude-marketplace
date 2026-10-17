@@ -210,6 +210,11 @@ Feature: Marketplace remove
     Then the "claude-plugins.json" file of the project scope declares these plugins:
       | id          |
       | alpha@tools |
+    When the user starts a new pi session
+    Then the session offers these skills:
+      | command            | description             |
+      | /skill:alpha-skill | A skill of alpha 1.0.0. |
+      | /skill:lib-skill   | A skill of lib 1.0.0.   |
 
   Scenario: Removing a marketplace keeps a dependency that a plugin installed from a user-scope marketplace still needs
     Given the marketplace "tools" is published as a dir source
