@@ -2086,8 +2086,8 @@ async function installPluginWithTransaction(
         // the user never named would keep the marketplace after a later
         // `marketplace remove` from the base file (LAYER-02 / D-MF-03). Both
         // files are read fresh INSIDE the lock and used for the membership test
-        // only, and an UNREADABLE sibling skips the adoption write rather than
-        // counting as a file that declares nothing.
+        // only, and an UNREADABLE sibling skips the marketplace declaration
+        // rather than counting as a file that declares nothing.
         if (opts.notifications?.mode !== "orchestrated") {
           await writeAdoptingConfigEntries({
             current,
@@ -2104,8 +2104,8 @@ async function installPluginWithTransaction(
             // record carries `provenance: "dependency"`, which D-04-05's
             // reconcile exemption reads on the next reload.
             //
-            // S4 (PR #51, CONTEXT.md S4): the helper's `adoptedSource === undefined`
-            // arms collapse -- benign (already declared) and dangerous (no string
+            // S4 (#51): the helper's undefined synthesized source collapses two
+            // arms -- benign (already declared) and dangerous (no string
             // `source.raw` to synthesize from). This site therefore still writes a
             // dangling declaration in the dangerous arm; acknowledged trade-off
             // pending a widen of the helper's return that would route it to a

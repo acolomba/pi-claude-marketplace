@@ -550,11 +550,11 @@ export async function collectInstallReachableMarketplaces(opts: {
  * state; writing a source-less entry would trip `saveConfig`'s
  * required-`source` invariant throw).
  *
- * S4 (PR #51, CONTEXT.md S4): the `undefined` return is OVERLOADED across
- * two semantically distinct arms -- the BENIGN already-declared arm AND the
- * DANGEROUS no-string-raw arm. Callers compose
- * `...(adoptedSource !== undefined && { marketplaces: { ... } })` and write
- * the plugin key REGARDLESS, so the dangerous arm silently writes a
+ * S4 (#51): the `undefined` return is OVERLOADED across two semantically
+ * distinct arms -- the BENIGN already-declared arm AND the DANGEROUS
+ * no-string-raw arm. `writeAdoptingConfigEntries` leaves an `undefined` source
+ * out of its marketplace patch and writes the plugin key REGARDLESS, so the
+ * dangerous arm silently writes a
  * dangling plugin declaration the reconcile planner converts into a
  * destructive `<marketplace not declared>` + recorded-clone removal plan
  * (the exact invariant-5 violation the function doc warns about). The
@@ -772,7 +772,8 @@ function configOrEmpty(result: ConfigLoadResult): ScopeConfig {
  * base file does not declare `marketplace`, and the local file does.
  *
  * It reads only the target scope's own two files. A marketplace neither file
- * declares (the CMP-3 adoption path) and one both files declare (a shared
+ * declares (one a project install adds from the user scope, CMP-3) and one
+ * both files declare (a shared
  * declaration with a personal override) are never refused. An unreadable
  * sibling cannot prove the marketplace is local-only, so it never refuses; a
  * flagless selection already reports `unreadable` in that case.
@@ -801,12 +802,14 @@ export function localOnlyMarketplaceRefusal(
  * parses come from `selectDeclaringConfigWriteTarget` (read fresh inside the
  * caller's lock -- WB-01 discipline); neither is serialized back.
  *
- * An UNREADABLE sibling (`sibling === undefined`) SKIPS the adoption write. It
+ * An UNREADABLE sibling (`sibling === undefined`) SKIPS the marketplace
+ * declaration. It
  * is not read as "declares nothing": the file may well declare the marketplace,
  * and synthesizing a bare `{source}` entry into the other file would then be a
  * second declaration in a file the user never named, which keeps the
  * marketplace after a later `marketplace remove` from the repaired file
- * (LAYER-02 / D-MF-03). Refusing to adopt is the conservative half: the plugin entry itself is still targeted correctly, and a marketplace
+ * (LAYER-02 / D-MF-03). Skipping the declaration is the conservative half: the
+ * plugin entry itself is still targeted correctly, and a marketplace
  * that really is undeclared stays visible as the reconcile planner's
  * `<marketplace not declared>` row rather than being papered over from a file
  * nobody could read.
@@ -830,7 +833,7 @@ function synthesizeAdoptedMarketplaceSource(opts: {
 
 /**
  * CMP-3 / UAT-05: write a plugin declaration and, when the scope's MERGED
- * config view does not already declare the owning marketplace, adopt the
+ * config view does not already declare the owning marketplace, declare the
  * marketplace in the SAME batched patch. A bare plugin key would otherwise be a
  * dangling declaration the planner converts into a marketplace removal plus a
  * perpetual failed row.
@@ -839,10 +842,10 @@ function synthesizeAdoptedMarketplaceSource(opts: {
  * `--local` write never re-declares a base-declared marketplace: the scope
  * already declares it, and a second declaration in a file the user never named
  * would survive a later `marketplace remove` from the base file (LAYER-02 /
- * D-MF-03). An UNREADABLE sibling skips the adoption write rather than
- * counting as a file that declares nothing.
+ * D-MF-03). An UNREADABLE sibling skips the marketplace declaration rather
+ * than counting as a file that declares nothing.
  *
- * S4 (PR #51): `adoptedSource === undefined` collapses two arms -- benign
+ * S4 (#51): an `undefined` synthesized source collapses two arms -- benign
  * (already declared, no synthesis needed) and dangerous (no string `source.raw`
  * on the state record, so synthesis is impossible). The write proceeds with the
  * plugin key alone in BOTH arms, so the dangerous arm writes a dangling
