@@ -167,14 +167,14 @@ Whether Pi applies a declared plugin's components depends on the entry's optiona
 
 ### Local configuration files
 
-Each scope can also have a `claude-plugins.local.json` file alongside the base file.
+Each scope can also have a `claude-plugins.local.json` file alongside the base file. The two files are the scope's two layers: `claude-plugins.json` is the shared layer, and `claude-plugins.local.json` is the local layer.
 
 | Scope     | File path                               |
 | --------- | --------------------------------------- |
 | `user`    | `~/.pi/agent/claude-plugins.local.json` |
 | `project` | `<cwd>/.pi/claude-plugins.local.json`   |
 
-The local file overrides entries from the base file. You can declare a marketplace in both files. Its local entry overrides only the fields that it sets, and it takes the other fields from the base file. For example, a local entry without `autoupdate` uses the `autoupdate` value of the base file. Plugin entries are different: the local file's entry for a plugin replaces the base file's entry as a whole.
+The local file overrides entries from the base file. You can declare a marketplace or a plugin in both files. Its local entry overrides only the fields that it sets, and it takes the other fields from the base file. For example, a local marketplace entry without `autoupdate` uses the `autoupdate` value of the base file, and a local plugin entry without `enabled` uses the `enabled` value of the base file.
 
 A command that writes configuration changes only `claude-plugins.json`, or only `claude-plugins.local.json` with `--local`. There are two exceptions:
 
@@ -182,6 +182,10 @@ A command that writes configuration changes only `claude-plugins.json`, or only 
 - `marketplace autoupdate` and `marketplace noautoupdate` without a name set the value in every file that declares each marketplace. With `--local`, they change only `claude-plugins.local.json`.
 
 `marketplace remove`, `marketplace autoupdate`, and `marketplace noautoupdate` with a name fail when the target file does not declare the marketplace. A remove from one file uninstalls only the plugins that file declares, and the marketplace stays while the other file declares it. The remove fails and changes nothing when the other file is not valid, or when a plugin that stays still needs a plugin it would uninstall. Reads always combine both configuration files. Marketplace `update` still refreshes cached sources and installed-plugin state.
+
+Plugin commands follow the same rule. `uninstall`, `enable`, `disable`, `update`, and `reinstall` with a plugin name change only the target file. They fail and change nothing when only the other file declares the plugin. A plugin that both files declare is installed once. So an `install` into one file only adds the declaration when the other file declares the installed plugin, and an `uninstall` from one file only removes that file's declaration. `update` and `reinstall` write no declaration. An `enable` or `disable` without `--local` also fails when `claude-plugins.local.json` sets the opposite `enabled` value, because the local value wins.
+
+A file that declares a plugin also declares the plugin's marketplace. `install --local` adds the marketplace to `claude-plugins.local.json` for you. When a file declares a plugin and only the other file declares its marketplace, a reload stops for that scope with `{invalid manifest}`. To repair the file, run `marketplace add <source>` (with `--local` for `claude-plugins.local.json`), or remove the plugin from the file.
 
 ```text
 /claude:plugin marketplace add upstash/context7 --local

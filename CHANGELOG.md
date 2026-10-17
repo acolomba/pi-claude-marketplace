@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+- You can now declare a plugin in both `claude-plugins.json` and `claude-plugins.local.json`, and the scope installs it once. With a plugin name, `uninstall`, `enable`, `disable`, `update`, and `reinstall` change only the file you target.
+
+  - A named command fails with `{plugin declared locally}` or `{plugin declared in shared config}` and changes nothing when only the other file declares the plugin.
+  - An `install` into one file only adds the declaration when the other file declares the plugin and it is already installed. The row reads `{already installed in shared layer}` or `{already installed in local layer}`.
+  - An `uninstall` from one file keeps a plugin installed while the other file declares it, and drops only that file's declaration. The warning `{still installed in shared layer}` or `{still installed in local layer}` says how to uninstall it.
+  - A named `uninstall` of a dependency that no file declares fails with `{dependents remain}` while a plugin of the target file needs it. While only plugins of the other file need it, the command skips it with a warning.
+  - A flagless `enable` or `disable` fails with `{disabled in local layer}` or `{enabled in local layer}` when `claude-plugins.local.json` sets the opposite `enabled` value. Run it again with `--local`.
+  - `update` and `reinstall` no longer write plugin declarations. Without a plugin name, `--local` limits them to the plugins that `claude-plugins.local.json` declares.
+  - A plugin entry in `claude-plugins.local.json` now takes the fields it leaves out from `claude-plugins.json`. If your local file declares a plugin that `claude-plugins.json` disables, run `/claude:plugin list` to see whether it is enabled.
+  - `install --local` also declares the plugin's marketplace in `claude-plugins.local.json`.
+  - A reload stops with `{invalid manifest}` when one file declares a plugin and only the other declares its marketplace. Nothing repairs files that older `--local` installs left this way. Run `/claude:plugin marketplace add <source> --local`, or remove the plugin.
+
 - You can now declare a marketplace in both `claude-plugins.json` and `claude-plugins.local.json`. With a name, `marketplace remove`, `autoupdate`, and `noautoupdate` change only the file you target and fail when that file does not declare the marketplace.
 
   - Removing a marketplace from one file uninstalls only the plugins that file declares and the dependencies only those plugins needed. The marketplace stays while the other file declares it.
@@ -14,7 +26,7 @@
 
 - A marketplace you add or a plugin you install with `--local` now stays out of `claude-plugins.json`. If a reload already copied one there, remove that entry and run `/reload`.
 
-  - Installing, enabling, disabling, updating, or reinstalling a plugin into `claude-plugins.json` now fails and suggests `--local` when only `claude-plugins.local.json` declares its marketplace.
+  - Installing, enabling, or disabling a plugin into `claude-plugins.json` now fails and suggests `--local` when only `claude-plugins.local.json` declares its marketplace.
 
 - GitHub sources clone and fetch from another https git host, such as a mirror, when you set `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL`, a setting that Claude Code lacks.
 
