@@ -453,7 +453,7 @@ for (const { title, otherLayer, needers, version, expected } of [
       version: "1.0.0",
       reasons: ["dependents remain"],
       cause: new Error(
-        "The shared layer (claude-plugins.json) declares app@tools, which needs lib@tools.",
+        "The base config (claude-plugins.json) declares app@tools, which needs lib@tools.",
       ),
       severity: "warning",
       needsReload: false,
@@ -469,7 +469,7 @@ for (const { title, otherLayer, needers, version, expected } of [
       name: "lib",
       reasons: ["dependents remain"],
       cause: new Error(
-        "The local layer (claude-plugins.local.json) declares alpha@tools, zeta@up, which need lib@tools.",
+        "The local config (claude-plugins.local.json) declares alpha@tools, zeta@up, which need lib@tools.",
       ),
       severity: "warning",
       needsReload: false,
@@ -486,7 +486,7 @@ for (const { title, otherLayer, needers, version, expected } of [
       version: "1.0.0",
       reasons: ["dependents remain"],
       cause: new Error(
-        "The shared layer (claude-plugins.json) declares 1 other plugin, which needs lib@tools.",
+        "The base config (claude-plugins.json) declares 1 other plugin, which needs lib@tools.",
       ),
       severity: "warning",
       needsReload: false,

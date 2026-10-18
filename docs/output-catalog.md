@@ -1364,7 +1364,7 @@ A plugin operation needs attention.
 
 ● official [user]
   ⊘ shared-lib v1.0.0 (skipped) {dependents remain}
-    cause: The local layer (claude-plugins.local.json) declares helper@official, which needs shared-lib@official.
+    cause: The local config (claude-plugins.local.json) declares helper@official, which needs shared-lib@official.
 ```
 
 ### Success with `--prune` (PRUNE-01..04 / D-05-01 / D-05-02 / D-05-11)
@@ -3399,7 +3399,7 @@ A plugin operation has failed.
 
 ● claude-plugins.local.json [project]
   ⊘ claude-plugins.local.json (failed) {invalid manifest}
-    cause: The local layer (claude-plugins.local.json) declares helper@official, but only the shared layer declares its marketplace. Run /claude:plugin marketplace add <source> --local --scope project with the source the shared layer declares, or remove the plugin from the local layer.
+    cause: The local config (claude-plugins.local.json) declares helper@official, but only the base config (claude-plugins.json) declares its marketplace. Run /claude:plugin marketplace add <source> --local --scope project with the source the base config declares, or remove the plugin from the local config.
 
 Reconcile pending: 1 failure
 ```
@@ -3488,7 +3488,7 @@ A plugin operation has failed.
 
 ● claude-plugins.local.json [project]
   ⊘ claude-plugins.local.json (failed) {invalid manifest}
-    cause: The local layer (claude-plugins.local.json) declares helper@official, but only the shared layer declares its marketplace. Run /claude:plugin marketplace add <source> --local --scope project with the source the shared layer declares, or remove the plugin from the local layer.
+    cause: The local config (claude-plugins.local.json) declares helper@official, but only the base config (claude-plugins.json) declares its marketplace. Run /claude:plugin marketplace add <source> --local --scope project with the source the base config declares, or remove the plugin from the local config.
 
 Reconcile: 1 failure
 ```

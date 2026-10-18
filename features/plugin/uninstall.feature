@@ -178,8 +178,8 @@ Feature: Plugin uninstall
       | needs reload | false                               |
       | summary      | A plugin operation needs attention. |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id        | name | status  | reasons           | scope   | version | cause chain                                                                       | cause truncated | leaks | rollback partial |
-      | tools            | project           | lib@tools | lib  | skipped | dependents remain | project | 1.0.0   | The shared layer (claude-plugins.json) declares app@tools, which needs lib@tools. | false           |       |                  |
+      | marketplace name | marketplace scope | id        | name | status  | reasons           | scope   | version | cause chain                                                                      | cause truncated | leaks | rollback partial |
+      | tools            | project           | lib@tools | lib  | skipped | dependents remain | project | 1.0.0   | The base config (claude-plugins.json) declares app@tools, which needs lib@tools. | false           |       |                  |
     Then the "claude-plugins.local.json" file of the project scope does not exist
     Then the "claude-plugins.json" file of the project scope declares these plugins:
       | id        |

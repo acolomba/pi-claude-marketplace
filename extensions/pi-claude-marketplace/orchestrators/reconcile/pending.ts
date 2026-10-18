@@ -159,12 +159,12 @@ function layerMarketplaceGapBlocks(
   state: ExtensionState,
 ): MarketplaceRows<PendingMsg>[] {
   const local = outcome.local.status === "valid" ? outcome.local.config : {};
-  const shared =
+  const base =
     outcome.base.status === "valid" ? outcome.base.config : buildConfigFromState(state, local);
-  return findLayerMarketplaceGaps(shared, local).map((gap) =>
+  return findLayerMarketplaceGaps(base, local).map((gap) =>
     buildLayerGapBlock(
       scope,
-      gap.layer === "shared" ? loc.configJsonPath : loc.configLocalJsonPath,
+      gap.layer === "base" ? loc.configJsonPath : loc.configLocalJsonPath,
       composeLayerMarketplaceCause(gap, scope),
     ),
   );

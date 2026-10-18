@@ -242,7 +242,7 @@ export function composeDependencyRefusalCause(args: {
  * only plugins the other layer declares still need the plugin. It is a
  * `warning`: the plugin the user asked to uninstall is still there, and
  * nothing left disk, so there is no reload. The cause line names the needers
- * and the layer file that declares them (T-06-02: through
+ * and the config that declares them (T-06-02: through
  * `renderDependentKeys`).
  */
 export function composeNeededElsewhereRow(args: {
@@ -254,8 +254,8 @@ export function composeNeededElsewhereRow(args: {
 }): PluginUninstallSkippedMessage {
   const layer =
     args.otherLayer === "base"
-      ? "The shared layer (claude-plugins.json)"
-      : "The local layer (claude-plugins.local.json)";
+      ? "The base config (claude-plugins.json)"
+      : "The local config (claude-plugins.local.json)";
   const verb = args.needers.length === 1 ? "needs" : "need";
   return {
     status: "skipped",

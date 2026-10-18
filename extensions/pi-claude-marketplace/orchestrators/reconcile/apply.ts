@@ -162,7 +162,7 @@ function layerMarketplaceGapOutcomes(
   return gaps.map((gap) => ({
     kind: "layer-marketplace-gap",
     scope,
-    basename: path.basename(gap.layer === "shared" ? loc.configJsonPath : loc.configLocalJsonPath),
+    basename: path.basename(gap.layer === "base" ? loc.configJsonPath : loc.configLocalJsonPath),
     cause: new Error(composeLayerMarketplaceCause(gap, scope)),
   }));
 }

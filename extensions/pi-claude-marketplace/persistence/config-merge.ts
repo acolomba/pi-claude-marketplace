@@ -4,12 +4,12 @@
 // with per-entry provenance.
 //
 // The reducer is a PURE function: no I/O, no `node:fs` imports. A scope has
-// two layers: the shared layer `claude-plugins.json` and the local layer
-// `claude-plugins.local.json`. For marketplace and plugin entries alike the
-// override unit is the FIELD (LAYER-09 / D-MF-03): the same key may be
-// declared in both layers, and each field the local entry sets wins over the
-// shared entry. So a local marketplace entry without `autoupdate` follows the
-// shared one, a local plugin entry without `enabled` keeps the shared
+// two layers: the base layer, whose config is `claude-plugins.json`, and the
+// local layer, whose config is `claude-plugins.local.json`. For marketplace and
+// plugin entries alike the override unit is the FIELD (LAYER-09 / D-MF-03): the
+// same key may be declared in both layers, and each field the local entry sets
+// wins over the base entry. So a local marketplace entry without `autoupdate`
+// follows the base value, a local plugin entry without `enabled` keeps the base
 // `enabled`, and an explicit local value is a per-machine override. Unknown
 // fields of both entries survive.
 //
@@ -74,7 +74,7 @@ export interface ScopeLoadOutcome {
 }
 
 /**
- * CFG-02 / LAYER-09 / D-MF-03: merges the shared layer (`base`) and the local
+ * CFG-02 / LAYER-09 / D-MF-03: merges the base layer (`base`) and the local
  * layer (`local`) of one scope.
  *
  * For each key in the union of the two layers' marketplaces, and likewise of
@@ -82,7 +82,7 @@ export interface ScopeLoadOutcome {
  * `{ entry: { ...base[key], ...local[key] }, source: "local" }` when `local`
  * has the key, and `{ entry: base[key], source: "base" }` otherwise.
  *
- * The outer maps are built through a `Map`, and the shared entry is read back
+ * The outer maps are built through a `Map`, and the base entry is read back
  * from it, so a JSON key such as `__proto__` stays an own entry.
  */
 export function mergeScopeConfigs(base: ScopeConfig, local: ScopeConfig): MergedConfig {
@@ -97,8 +97,8 @@ export function mergeScopeConfigs(base: ScopeConfig, local: ScopeConfig): Merged
   }
 
   for (const [key, entry] of Object.entries(localMps)) {
-    const shared = marketplaceEntries.get(key)?.entry;
-    marketplaceEntries.set(key, { entry: { ...shared, ...entry }, source: "local" });
+    const baseEntry = marketplaceEntries.get(key)?.entry;
+    marketplaceEntries.set(key, { entry: { ...baseEntry, ...entry }, source: "local" });
   }
 
   const pluginEntries = new Map<string, MergedConfigEntry<PluginConfigEntry>>();
@@ -107,8 +107,8 @@ export function mergeScopeConfigs(base: ScopeConfig, local: ScopeConfig): Merged
   }
 
   for (const [key, entry] of Object.entries(localPlugins)) {
-    const shared = pluginEntries.get(key)?.entry;
-    pluginEntries.set(key, { entry: { ...shared, ...entry }, source: "local" });
+    const baseEntry = pluginEntries.get(key)?.entry;
+    pluginEntries.set(key, { entry: { ...baseEntry, ...entry }, source: "local" });
   }
 
   return {
@@ -122,7 +122,7 @@ export function mergeScopeConfigs(base: ScopeConfig, local: ScopeConfig): Merged
  * layer declares their marketplace.
  */
 export interface LayerMarketplaceGap {
-  readonly layer: "shared" | "local";
+  readonly layer: "base" | "local";
   readonly keys: readonly string[];
 }
 
@@ -148,18 +148,18 @@ function gapKeys(own: ScopeConfig, other: ScopeConfig): string[] {
 
 /**
  * LAYER-06 / D-MF-03: a layer must declare the marketplace of every plugin it
- * declares. Returns, shared layer first, each layer that declares a plugin
+ * declares. Returns, base layer first, each layer that declares a plugin
  * whose marketplace only the other layer declares, with those keys sorted. A
  * marketplace that no layer declares is not reported here: the planner reports
  * it on its own row as a dangling reference (D-16 above).
  */
 export function findLayerMarketplaceGaps(
-  shared: ScopeConfig,
+  base: ScopeConfig,
   local: ScopeConfig,
 ): readonly LayerMarketplaceGap[] {
   const gaps: LayerMarketplaceGap[] = [
-    { layer: "shared", keys: gapKeys(shared, local) },
-    { layer: "local", keys: gapKeys(local, shared) },
+    { layer: "base", keys: gapKeys(base, local) },
+    { layer: "local", keys: gapKeys(local, base) },
   ];
   return gaps.filter((gap) => gap.keys.length > 0);
 }

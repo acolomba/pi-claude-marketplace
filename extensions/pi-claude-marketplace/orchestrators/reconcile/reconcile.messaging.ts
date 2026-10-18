@@ -119,28 +119,29 @@ export const RECONCILE_APPLIED_CONTEXT = {
 // ---------------------------------------------------------------------------
 
 const LAYER_FILES = {
-  shared: "claude-plugins.json",
+  base: "claude-plugins.json",
   local: "claude-plugins.local.json",
 } as const;
 
 /**
  * LAYER-06 / D-MF-03: the cause line of a layer that declares plugins whose
- * marketplace only the other layer declares. It names the layer and its file,
- * the plugins, and the repair: declare the marketplace in that layer too, or
- * remove the plugins from it. The repair names the scope, because
+ * marketplace only the other layer declares. It names each config and its
+ * file, the plugins, and the repair: declare the marketplace in that layer too,
+ * or remove the plugins from its config. The repair names the scope, because
  * `marketplace add` writes the user scope when `--scope` is absent. The keys
  * come from a user file, so they render through `renderDependentKeys`, which
  * counts them when one could forge the sentence. No source and no path is
  * interpolated (T-53-02-02).
  */
 export function composeLayerMarketplaceCause(gap: LayerMarketplaceGap, scope: Scope): string {
-  const other = gap.layer === "local" ? "shared" : "local";
+  const other = gap.layer === "local" ? "base" : "local";
   const one = gap.keys.length === 1;
   const flags = `${gap.layer === "local" ? " --local" : ""} --scope ${scope}`;
   return (
-    `The ${gap.layer} layer (${LAYER_FILES[gap.layer]}) declares ${renderDependentKeys(gap.keys)}, ` +
-    `but only the ${other} layer declares ${one ? "its marketplace" : "their marketplaces"}. ` +
-    `Run /claude:plugin marketplace add <source>${flags} with the source the ${other} layer declares, ` +
-    `or remove ${one ? "the plugin" : "the plugins"} from the ${gap.layer} layer.`
+    `The ${gap.layer} config (${LAYER_FILES[gap.layer]}) declares ${renderDependentKeys(gap.keys)}, ` +
+    `but only the ${other} config (${LAYER_FILES[other]}) declares ` +
+    `${one ? "its marketplace" : "their marketplaces"}. ` +
+    `Run /claude:plugin marketplace add <source>${flags} with the source the ${other} config declares, ` +
+    `or remove ${one ? "the plugin" : "the plugins"} from the ${gap.layer} config.`
   );
 }

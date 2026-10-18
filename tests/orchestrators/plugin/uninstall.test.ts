@@ -6113,7 +6113,7 @@ for (const { title, plugins, layers, local, expected } of [
       message:
         "A plugin operation needs attention.\n\n● mp [project]\n" +
         "  ⊘ helper v0.0.1 (skipped) {dependents remain}\n" +
-        "    cause: The shared layer (claude-plugins.json) declares app@mp, which needs helper@mp.",
+        "    cause: The base config (claude-plugins.json) declares app@mp, which needs helper@mp.",
       severity: "warning",
     },
   },
@@ -6126,7 +6126,7 @@ for (const { title, plugins, layers, local, expected } of [
       message:
         "A plugin operation needs attention.\n\n● mp [project]\n" +
         "  ⊘ helper v0.0.1 (skipped) {dependents remain}\n" +
-        "    cause: The local layer (claude-plugins.local.json) declares app@mp, which needs helper@mp.",
+        "    cause: The local config (claude-plugins.local.json) declares app@mp, which needs helper@mp.",
       severity: "warning",
     },
   },

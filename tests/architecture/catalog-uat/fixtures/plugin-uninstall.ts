@@ -529,7 +529,7 @@ export const PLUGIN_UNINSTALL_FIXTURES: FixtureMap = {
                 version: "1.0.0",
                 reasons: ["dependents remain"],
                 cause: new Error(
-                  "The local layer (claude-plugins.local.json) declares helper@official, which needs shared-lib@official.",
+                  "The local config (claude-plugins.local.json) declares helper@official, which needs shared-lib@official.",
                 ),
               },
             ],

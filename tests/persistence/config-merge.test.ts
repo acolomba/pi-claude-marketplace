@@ -29,7 +29,7 @@ interface MergeCase {
 
 interface GapCase {
   readonly name: string;
-  readonly shared: ScopeConfig;
+  readonly base: ScopeConfig;
   readonly local: ScopeConfig;
   readonly expectedGaps: readonly LayerMarketplaceGap[];
 }
@@ -671,58 +671,58 @@ describe("loadMergedScopeConfig", () => {
 const gapCases: readonly GapCase[] = [
   {
     name: "reports a local plugin whose marketplace only the shared layer declares",
-    shared: { marketplaces: { mp: { source: "./mp" } } },
+    base: { marketplaces: { mp: { source: "./mp" } } },
     local: { plugins: { "demo@mp": {} } },
     expectedGaps: [{ layer: "local", keys: ["demo@mp"] }],
   },
   {
     name: "reports a shared plugin whose marketplace only the local layer declares",
-    shared: { plugins: { "demo@mp": { enabled: true } } },
+    base: { plugins: { "demo@mp": { enabled: true } } },
     local: { marketplaces: { mp: { source: "./mp" } } },
-    expectedGaps: [{ layer: "shared", keys: ["demo@mp"] }],
+    expectedGaps: [{ layer: "base", keys: ["demo@mp"] }],
   },
   {
     name: "reports both layers, the shared layer first",
-    shared: { marketplaces: { a: { source: "./a" } }, plugins: { "one@b": {} } },
+    base: { marketplaces: { a: { source: "./a" } }, plugins: { "one@b": {} } },
     local: { marketplaces: { b: { source: "./b" } }, plugins: { "two@a": {} } },
     expectedGaps: [
-      { layer: "shared", keys: ["one@b"] },
+      { layer: "base", keys: ["one@b"] },
       { layer: "local", keys: ["two@a"] },
     ],
   },
   {
     name: "reports nothing when the layer declares the marketplace of its plugin",
-    shared: {},
+    base: {},
     local: { marketplaces: { mp: { source: "./mp" } }, plugins: { "demo@mp": {} } },
     expectedGaps: [],
   },
   {
     name: "reports nothing when both layers declare the marketplace",
-    shared: { marketplaces: { mp: { source: "./mp" } }, plugins: { "demo@mp": {} } },
+    base: { marketplaces: { mp: { source: "./mp" } }, plugins: { "demo@mp": {} } },
     local: { marketplaces: { mp: { source: "./mp" } }, plugins: { "demo@mp": {} } },
     expectedGaps: [],
   },
   {
     name: "leaves a marketplace no layer declares to the dangling reference row",
-    shared: { plugins: { "demo@mp": {} } },
+    base: { plugins: { "demo@mp": {} } },
     local: { plugins: { "other@mp": {} } },
     expectedGaps: [],
   },
   {
     name: "skips a malformed plugin key",
-    shared: { marketplaces: { mp: { source: "./mp" } } },
+    base: { marketplaces: { mp: { source: "./mp" } } },
     local: { plugins: { "@mp": {}, "demo@": {}, mp: {} } },
     expectedGaps: [],
   },
   {
     name: "splits a plugin key on its last @",
-    shared: { marketplaces: { mp: { source: "./mp" } } },
+    base: { marketplaces: { mp: { source: "./mp" } } },
     local: { plugins: { "a@b@mp": {} } },
     expectedGaps: [{ layer: "local", keys: ["a@b@mp"] }],
   },
   {
     name: "sorts the keys of a layer",
-    shared: { marketplaces: { mp: { source: "./mp" } } },
+    base: { marketplaces: { mp: { source: "./mp" } } },
     local: { plugins: { "zeta@mp": {}, "alpha@mp": {}, "mid@mp": {} } },
     expectedGaps: [{ layer: "local", keys: ["alpha@mp", "mid@mp", "zeta@mp"] }],
   },
@@ -731,13 +731,13 @@ const gapCases: readonly GapCase[] = [
 describe("findLayerMarketplaceGaps", () => {
   test("does not read a marketplace the other layer holds only through Object.prototype", () => {
     // arrange
-    const shared = JSON.parse('{"marketplaces":{}}') as ScopeConfig;
+    const base = JSON.parse('{"marketplaces":{}}') as ScopeConfig;
     const local = JSON.parse(
       '{"plugins":{"demo@toString":{},"demo@constructor":{}}}',
     ) as ScopeConfig;
 
     // act
-    const gaps = findLayerMarketplaceGaps(shared, local);
+    const gaps = findLayerMarketplaceGaps(base, local);
 
     // assert
     assert.deepStrictEqual(gaps, []);
@@ -745,20 +745,20 @@ describe("findLayerMarketplaceGaps", () => {
 
   test("reads a JSON-derived __proto__ marketplace as an own declaration", () => {
     // arrange
-    const shared = JSON.parse('{"marketplaces":{"__proto__":{"source":"./p"}}}') as ScopeConfig;
+    const base = JSON.parse('{"marketplaces":{"__proto__":{"source":"./p"}}}') as ScopeConfig;
     const local = JSON.parse('{"plugins":{"demo@__proto__":{}}}') as ScopeConfig;
 
     // act
-    const gaps = findLayerMarketplaceGaps(shared, local);
+    const gaps = findLayerMarketplaceGaps(base, local);
 
     // assert
     assert.deepStrictEqual(gaps, [{ layer: "local", keys: ["demo@__proto__"] }]);
   });
 
-  for (const { name, shared, local, expectedGaps } of gapCases) {
+  for (const { name, base, local, expectedGaps } of gapCases) {
     test(name, () => {
       // act
-      const gaps = findLayerMarketplaceGaps(shared, local);
+      const gaps = findLayerMarketplaceGaps(base, local);
 
       // assert
       assert.deepStrictEqual(gaps, expectedGaps);

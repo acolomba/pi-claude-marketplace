@@ -369,7 +369,7 @@ const layerGapRows = [
       "claude-plugins.local.json": JSON.stringify({ schemaVersion: 1, plugins: { "p1@mp": {} } }),
     },
     cause:
-      "The local layer (claude-plugins.local.json) declares p1@mp, but only the shared layer declares its marketplace. Run /claude:plugin marketplace add <source> --local --scope project with the source the shared layer declares, or remove the plugin from the local layer.",
+      "The local config (claude-plugins.local.json) declares p1@mp, but only the base config (claude-plugins.json) declares its marketplace. Run /claude:plugin marketplace add <source> --local --scope project with the source the base config declares, or remove the plugin from the local config.",
   },
   {
     reported: "claude-plugins.json",
@@ -378,7 +378,7 @@ const layerGapRows = [
       "claude-plugins.local.json": configBytes("mp", "acme/tools", []),
     },
     cause:
-      "The shared layer (claude-plugins.json) declares p1@mp, but only the local layer declares its marketplace. Run /claude:plugin marketplace add <source> --scope project with the source the local layer declares, or remove the plugin from the shared layer.",
+      "The base config (claude-plugins.json) declares p1@mp, but only the local config (claude-plugins.local.json) declares its marketplace. Run /claude:plugin marketplace add <source> --scope project with the source the local config declares, or remove the plugin from the base config.",
   },
 ] satisfies readonly {
   readonly reported: string;
@@ -538,7 +538,7 @@ test("LAYER-06 / MIG-01: before the first-run migration, a local layer missing t
         "A plugin operation has failed.\n\n" +
         "● claude-plugins.local.json [project]\n" +
         "  ⊘ claude-plugins.local.json (failed) {invalid manifest}\n" +
-        "    cause: The local layer (claude-plugins.local.json) declares p1@mp, but only the shared layer declares its marketplace. Run /claude:plugin marketplace add <source> --local --scope project with the source the shared layer declares, or remove the plugin from the local layer.\n\n" +
+        "    cause: The local config (claude-plugins.local.json) declares p1@mp, but only the base config (claude-plugins.json) declares its marketplace. Run /claude:plugin marketplace add <source> --local --scope project with the source the base config declares, or remove the plugin from the local config.\n\n" +
         "Reconcile pending: 1 failure",
       severity: "error",
     },
