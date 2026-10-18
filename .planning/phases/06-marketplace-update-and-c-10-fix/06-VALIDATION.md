@@ -19,7 +19,7 @@ created: "2026-10-18"
 |----------|-------|
 | **Framework** | Cucumber 13.3.0 behavioral tests and Node.js `node:test` unit tests |
 | **Config file** | `cucumber.json`, `package.json` |
-| **Quick run command** | `npm run test:cucumber -- features/marketplace/update.feature --parallel 1` |
+| **Quick run command** | `npm run test:cucumber -- features/marketplace/update.feature features/marketplace/file-source-update.feature --parallel 1` |
 | **Full suite command** | `npm run check` |
 | **Estimated runtime** | ~30 seconds for focused feedback |
 
@@ -40,7 +40,7 @@ The task IDs are provisional until the phase plans are written. The planner must
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 06-01-01 | 01 | 1 | FIX-01 | — | Exact external manifest path is retained and reread without escaping its owning root | behavioral + unit | `npm run test:cucumber -- features/marketplace/update.feature --parallel 1 --name "An external manifest is refreshed from its original file"` | ❌ W0 | ⬜ pending |
+| 06-01-01 | 01 | 1 | FIX-01 | — | Exact external manifest path is retained and reread without escaping its owning root | behavioral + unit | `npm run test:cucumber -- features/marketplace/file-source-update.feature --parallel 1 --name "An external manifest is refreshed from its original file"` | ❌ W0 | ⬜ pending |
 | 06-01-02 | 01 | 1 | UPD-01 | — | N/A | behavioral + unit | `npm run test:cucumber -- features/marketplace/update.feature --parallel 1 --name "An unchanged marketplace is up to date"` | ❌ W0 | ⬜ pending |
 | 06-01-03 | 01 | 1 | UPD-02 | — | N/A | behavioral + unit | `npm run test:cucumber -- features/marketplace/update.feature --parallel 1 --name "A changed marketplace refreshes without plugin rows"` | ❌ W0 | ⬜ pending |
 | 06-01-04 | 01 | 2 | UPD-10 | — | Invalid refreshed data cannot replace the last successful baseline or mutate plugins | behavioral + unit | `npm run test:cucumber -- features/marketplace/update.feature --parallel 1 --name "An invalid refreshed manifest leaves installed plugins unchanged"` | ❌ W0 | ⬜ pending |
@@ -60,8 +60,9 @@ Each source edit must also pass its direct paired coverage command. For the upda
 
 ## Wave 0 Requirements
 
-- [ ] `features/marketplace/update.feature` — Phase 6 behavioral scenarios and exact output assertions
-- [ ] `features/step-definitions/marketplace.steps.ts` — row assertions that accept adjacent `mcp-config-notices` without weakening other result validation
+- [ ] `features/marketplace/update.feature` — general Phase 6 update scenarios and exact output assertions
+- [ ] `features/marketplace/file-source-update.feature` — file-only C-10 scenarios under the suite's single-kind feature rule
+- [ ] `features/step_definitions/command.steps.ts` — row assertions that accept adjacent `mcp-config-notices` without weakening other result validation
 - [ ] `tests/orchestrators/marketplace/update.test.ts` — owner tests for refresh baselines, equality, failure continuation, and ordering
 - [ ] Paired tests for every additional changed TypeScript source file — 100% direct statement, branch, function, and line coverage
 
