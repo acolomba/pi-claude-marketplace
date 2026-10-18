@@ -319,6 +319,103 @@ async function removeFootprint(scope: ProjectScope): Promise<readonly unknown[]>
   ];
 }
 
+test("a refused remove reports every blocker and preserves all installed state and skill bytes", async (t) => {
+  // arrange
+  const scope = await projectScope(t, "mp-layer-remove-blockers-", [
+    { name: "zebra" },
+    { name: "amber" },
+    { name: "elm" },
+    { name: "keeper-zebra", dependencies: ["zebra"] },
+    { name: "keeper-amber", dependencies: ["amber"] },
+  ]);
+  const setupBoundary = createNotificationBoundary(7);
+  await addRepo(scope, setupBoundary, false);
+  await addRepo(scope, setupBoundary, true);
+  await installFrom(scope, setupBoundary, "zebra", false);
+  await installFrom(scope, setupBoundary, "amber", false);
+  await installFrom(scope, setupBoundary, "elm", false);
+  await installFrom(scope, setupBoundary, "keeper-zebra", true);
+  await installFrom(scope, setupBoundary, "keeper-amber", true);
+  const footprintBefore = await removeFootprint(scope);
+  const skillPaths = ["zebra", "amber", "elm", "keeper-zebra", "keeper-amber"].map((plugin) =>
+    path.join(scope.locations.skillsTargetDir, `${plugin}-greet`, "SKILL.md"),
+  );
+  const skillsBefore = await Promise.all(skillPaths.map((skillPath) => readFile(skillPath)));
+  const machineBoundary = createMachineNotificationBoundary("json");
+
+  // act
+  await removeMarketplace({
+    ctx: machineBoundary.ctx,
+    run: machineBoundary.run,
+    name: "mp",
+    scope: "project",
+    cwd: scope.cwd,
+    completionCache: createCompletionCache(),
+  });
+
+  // assert
+  assert.deepStrictEqual(machineBoundary.capture.entries, [
+    {
+      customType: "claude-plugin",
+      payload: {
+        schemaVersion: 1,
+        kind: "cascade",
+        origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+        severity: "error",
+        needsReload: false,
+        summary: "Some operations have failed.",
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "project",
+            status: "failed",
+            plugins: [
+              {
+                status: "failed",
+                name: "zebra",
+                id: "zebra@mp",
+                reasons: ["dependents remain"],
+                scope: "project",
+                cause: {
+                  causeChain: [
+                    "Uninstall keeper-zebra@mp first, then remove the marketplace mp again.",
+                  ],
+                  truncated: false,
+                },
+                leaks: [],
+                rollbackPartial: [],
+              },
+              {
+                status: "failed",
+                name: "amber",
+                id: "amber@mp",
+                reasons: ["dependents remain"],
+                scope: "project",
+                cause: {
+                  causeChain: [
+                    "Uninstall keeper-amber@mp first, then remove the marketplace mp again.",
+                  ],
+                  truncated: false,
+                },
+                leaks: [],
+                rollbackPartial: [],
+              },
+            ],
+          },
+        ],
+      },
+    },
+  ]);
+  assert.deepStrictEqual(await removeFootprint(scope), footprintBefore);
+  assert.deepStrictEqual(
+    await Promise.all(skillPaths.map((skillPath) => readFile(skillPath))),
+    skillsBefore,
+  );
+  machineBoundary.capture.assertValid();
+  setupBoundary.verifyBoundary();
+  machineBoundary.verifyBoundary();
+});
+
 test("a partial remove persists successes and reports every failure in order", async (t) => {
   // arrange
   const scope = await projectScope(t, "mp-layer-remove-partial-", [
