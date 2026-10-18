@@ -1081,6 +1081,73 @@ test("implicit scope emits a failed project block before a healthy user block", 
   });
 });
 
+test("implicit scope emits failed project and user blocks in scope order", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const projectLocations = locationsFor("project", cwd);
+    const userLocations = locationsFor("user", cwd);
+    await saveMarketplace(
+      projectLocations,
+      marketplaceRecord({
+        addedFromCwd: cwd,
+        manifestPath: path.join(projectLocations.extensionRoot, "mixed.json"),
+        marketplaceRoot: "/repo/path/mixed-mp",
+        name: "mixed-mp",
+        scope: "project",
+        source: pathSource("/repo/path/mixed-mp"),
+      }),
+    );
+    await saveMarketplace(
+      userLocations,
+      marketplaceRecord({
+        addedFromCwd: cwd,
+        manifestPath: path.join(userLocations.extensionRoot, "mixed.json"),
+        marketplaceRoot: "/home/user/marketplaces/mixed-mp",
+        name: "mixed-mp",
+        scope: "user",
+        source: pathSource("/home/user/marketplaces/mixed-mp"),
+      }),
+    );
+    const before = await snapshotEnvironment(home, cwd);
+    const expectedNotifications: readonly NotificationExpectation[] = [
+      {
+        message: [
+          "A plugin operation has failed.",
+          "",
+          "● mixed-mp [project] <no autoupdate>",
+          "  ⊘ mixed-mp (failed) {source missing}",
+          "    components: not resolved",
+        ].join("\n"),
+        severity: "error",
+      },
+      {
+        message: [
+          "A plugin operation has failed.",
+          "",
+          "● mixed-mp [user] <no autoupdate>",
+          "  ⊘ mixed-mp (failed) {source missing}",
+          "    components: not resolved",
+        ].join("\n"),
+        severity: "error",
+      },
+    ];
+    const boundary = multiNotificationBoundary(expectedNotifications);
+
+    // act
+    await getMarketplaceInfo({
+      ctx: boundary.ctx,
+      run: boundary.run,
+      name: "mixed-mp",
+      cwd,
+    });
+
+    // assert
+    assert.deepStrictEqual(boundary.notifications, expectedNotifications);
+    assert.deepStrictEqual(await snapshotEnvironment(home, cwd), before);
+    boundary.verifyAll();
+  });
+});
+
 test("a malformed stored marketplace record rejects without notifying or mutating files", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
