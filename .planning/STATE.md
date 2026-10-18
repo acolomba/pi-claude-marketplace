@@ -5,16 +5,16 @@ milestone_name: Marketplace Behavioral Tests
 current_phase: "03.4"
 current_phase_name: Scope and Layer Terminology
 status: executing
-stopped_at: Phase 03.3 complete, ready to plan Phase 03.4
-last_updated: "2026-10-18T03:18:45.833Z"
+stopped_at: Completed 03.4-06-PLAN.md
+last_updated: "2026-10-18T03:38:43.986Z"
 last_activity: 2026-10-17
 last_activity_desc: Phase 03.4 execution started
-state_head: 921d35403d5f02be07fe2d43ccf9367043d0c9ba
+state_head: 71d918cf89183997a9454453cbc7a0fcecb9f93b
 progress:
   total_phases: 14
   completed_phases: 6
   total_plans: 47
-  completed_plans: 42
+  completed_plans: 43
   percent: 43
 ---
 
@@ -32,7 +32,7 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 03.4 (Scope and Layer Terminology) — EXECUTING
-Plan: 6 of 10
+Plan: 7 of 10
 Status: Ready to execute
 Last activity: 2026-10-17 — Phase 03.4 execution started
 
@@ -181,8 +181,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-17T20:00:33.956Z
-**Stopped at:** Phase 03.3 complete, ready to plan Phase 03.4
+**Last session:** 2026-10-18T03:38:41.484Z
+**Stopped at:** Completed 03.4-06-PLAN.md
 **Resume file:** None
 
 **Main merge (2026-10-11, quick task 261011-bsm):** `origin/main` at
@@ -325,6 +325,7 @@ archived milestone artifacts.
 | Phase 03.3 P05 | 28min | 2 tasks | 19 files |
 | Phase 03.3 P06 | 37min | 3 tasks | 13 files |
 | Phase 03.3 P10 | 16min | 2 tasks | 9 files |
+| Phase 03.4 P06 | 19min | 2 tasks | 10 files |
 
 ## Decisions
 
@@ -443,6 +444,7 @@ archived milestone artifacts.
 - [Phase 03.3]: An unreadable layer on a named update or reinstall is InvalidMarketplaceManifestError with the basename-only message, mapped to {invalid manifest}
 - [Phase 03.3]: Nameless update and reinstall with --local keep only the targets their scope's local layer declares (keepLocalLayerTargets: own keys, one read per scope)
 - [Phase 03.3]: [marketplace-features] Plugin layer docs: the READMEs define the two files as the scope's shared and local layers, and the CHANGELOG states the D-11 load error remedy (marketplace add <source> --local) with no automatic repair
+- [Phase 03.4]: IN-02 / D-02: the flag-only layer loader is loadTargetLayers (TargetLayers, arm loaded); seams loadTargetLayers and UninstallTransaction.loadLayerConfig; the other layer's parse is other
 
 ### mcp-4 decisions
 
