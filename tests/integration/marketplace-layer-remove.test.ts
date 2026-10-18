@@ -35,7 +35,10 @@ import { loadState } from "../../extensions/pi-claude-marketplace/persistence/st
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { StateLockHeldError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
-import { createNotificationBoundary } from "../edge/notification-boundary.ts";
+import {
+  createMachineNotificationBoundary,
+  createNotificationBoundary,
+} from "../edge/notification-boundary.ts";
 import { createCredentialOpsFake } from "../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../platform/git-ops-fake.ts";
 import { createHermeticEnvironment } from "../platform/hermetic-environment.ts";
@@ -315,6 +318,164 @@ async function removeFootprint(scope: ProjectScope): Promise<readonly unknown[]>
     await entriesOf(scope.locations.skillsTargetDir),
   ];
 }
+
+test("a partial remove persists successes and reports every failure in order", async (t) => {
+  // arrange
+  const scope = await projectScope(t, "mp-layer-remove-partial-", [
+    { name: "zebra" },
+    { name: "yak" },
+    { name: "amber" },
+    { name: "birch" },
+  ]);
+  const setupBoundary = createNotificationBoundary(5);
+  await addRepo(scope, setupBoundary, false);
+  await installFrom(scope, setupBoundary, "zebra", false);
+  await installFrom(scope, setupBoundary, "yak", false);
+  await installFrom(scope, setupBoundary, "amber", false);
+  await installFrom(scope, setupBoundary, "birch", false);
+  const marketplaceData = await scope.locations.marketplaceDataDir("mp");
+  const marketplaceDataSentinel = path.join(marketplaceData, "sentinel");
+  await mkdir(marketplaceData, { recursive: true });
+  await writeFile(marketplaceDataSentinel, "marketplace data");
+  const setupState = await loadState(scope.locations.extensionRoot);
+  const marketplaceBefore = setupState.marketplaces.mp;
+  assert.ok(marketplaceBefore !== undefined);
+  const yakBefore = marketplaceBefore.plugins.yak;
+  const birchBefore = marketplaceBefore.plugins.birch;
+  assert.ok(yakBefore !== undefined);
+  assert.ok(birchBefore !== undefined);
+  const baseConfigBefore = await readIfPresent(scope.locations.baseConfigJsonPath);
+  const localConfigBefore = await readIfPresent(scope.locations.localConfigJsonPath);
+  const cloneDir = await scope.locations.sourceCloneDir("mp");
+  const cloneEntriesBefore = await entriesOf(cloneDir);
+  const marketplaceManifest = path.join(cloneDir, ".claude-plugin", "marketplace.json");
+  const marketplaceManifestBefore = await readFile(marketplaceManifest, "utf8");
+  const marketplaceDataBefore = await readFile(marketplaceDataSentinel, "utf8");
+  const yakSkill = path.join(scope.locations.skillsTargetDir, "yak-greet", "SKILL.md");
+  const birchSkill = path.join(scope.locations.skillsTargetDir, "birch-greet", "SKILL.md");
+  const yakSkillBefore = await readFile(yakSkill, "utf8");
+  const birchSkillBefore = await readFile(birchSkill, "utf8");
+  const cascade: typeof cascadeUnstagePlugin = (plugin, ...rest) => {
+    if (plugin === "yak" || plugin === "birch") {
+      return Promise.resolve({
+        ok: false,
+        dropped: {
+          agents: [],
+          commands: [],
+          hooks: [],
+          mcpServers: [],
+          skills: [],
+          workflows: [],
+        },
+        cause: Object.assign(new Error(`${plugin} denied`), { code: "EACCES" }),
+      });
+    }
+
+    return cascadeUnstagePlugin(plugin, ...rest);
+  };
+
+  const machineBoundary = createMachineNotificationBoundary("json");
+
+  // act
+  await removeMarketplace({
+    ctx: machineBoundary.ctx,
+    run: machineBoundary.run,
+    name: "mp",
+    scope: "project",
+    cwd: scope.cwd,
+    completionCache: createCompletionCache(),
+    cascade,
+  });
+
+  // assert
+  assert.deepStrictEqual(machineBoundary.capture.entries, [
+    {
+      customType: "claude-plugin",
+      payload: {
+        schemaVersion: 1,
+        kind: "cascade",
+        origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+        severity: "error",
+        needsReload: true,
+        summary: "Some operations have failed.",
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "project",
+            status: "failed",
+            plugins: [
+              {
+                status: "uninstalled",
+                name: "zebra",
+                id: "zebra@mp",
+                reasons: [],
+                scope: "project",
+              },
+              {
+                status: "uninstalled",
+                name: "amber",
+                id: "amber@mp",
+                reasons: [],
+                scope: "project",
+              },
+              {
+                status: "failed",
+                name: "yak",
+                id: "yak@mp",
+                reasons: ["permission denied"],
+                scope: "project",
+                cause: { causeChain: ["yak denied"], truncated: false },
+                leaks: [],
+                rollbackPartial: [],
+              },
+              {
+                status: "failed",
+                name: "birch",
+                id: "birch@mp",
+                reasons: ["permission denied"],
+                scope: "project",
+                cause: { causeChain: ["birch denied"], truncated: false },
+                leaks: [],
+                rollbackPartial: [],
+              },
+            ],
+          },
+        ],
+      },
+    },
+  ]);
+  assert.deepStrictEqual(await loadState(scope.locations.extensionRoot), {
+    ...setupState,
+    marketplaces: {
+      ...setupState.marketplaces,
+      mp: {
+        ...marketplaceBefore,
+        plugins: { yak: yakBefore, birch: birchBefore },
+      },
+    },
+  });
+  assert.strictEqual(await readIfPresent(scope.locations.baseConfigJsonPath), baseConfigBefore);
+  assert.strictEqual(await readIfPresent(scope.locations.localConfigJsonPath), localConfigBefore);
+  assert.deepStrictEqual(await entriesOf(cloneDir), cloneEntriesBefore);
+  assert.strictEqual(await readFile(marketplaceManifest, "utf8"), marketplaceManifestBefore);
+  assert.strictEqual(await readFile(marketplaceDataSentinel, "utf8"), marketplaceDataBefore);
+  assert.deepStrictEqual(await entriesOf(scope.locations.skillsTargetDir), [
+    "birch-greet",
+    "yak-greet",
+  ]);
+  assert.strictEqual(await readFile(yakSkill, "utf8"), yakSkillBefore);
+  assert.strictEqual(await readFile(birchSkill, "utf8"), birchSkillBefore);
+  assert.deepStrictEqual(setupBoundary.notifications, [
+    ADDED,
+    installed("zebra"),
+    installed("yak"),
+    installed("amber"),
+    installed("birch"),
+  ]);
+  machineBoundary.capture.assertValid();
+  setupBoundary.verifyBoundary();
+  machineBoundary.verifyBoundary();
+});
 
 test("LAYER-02: a remove refused because the config of the other layer is unreadable changes nothing", async (t) => {
   // arrange
