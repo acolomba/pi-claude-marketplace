@@ -110,7 +110,7 @@ Feature: Plugin install
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
 
-  Scenario: Installing with --local a plugin the base layer declares but has not installed installs it
+  Scenario: Installing with --local a plugin the base layer declares and the scope has not installed installs it
     Given a config in scope project and layer base, with these plugins:
       | marketplace | plugin | enabled |
       | fixtures    | demo   |         |
