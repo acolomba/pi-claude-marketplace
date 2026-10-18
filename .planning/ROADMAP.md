@@ -310,12 +310,43 @@ Plans:
 **Requirements:** TERM-01
 **Success Criteria** (what must be TRUE):
 
-1. Reason tokens use the layer terms: `marketplace declared locally` becomes `marketplace in local layer only`, `marketplace declared in shared config` becomes `marketplace in base layer only`, `plugin declared locally` becomes `plugin in local layer only`, `plugin declared in shared config` becomes `plugin in base layer only`, and every other token that says "shared layer" says "base layer"; the catalog, JSON guide, schema, and pins change together, and the CHANGELOG records each renamed token (TERM-01).
+1. Reason tokens use the layer terms: `marketplace declared locally` becomes `marketplace in local layer only`, `marketplace declared in shared config` becomes `marketplace in base layer only`, `plugin declared locally` becomes `plugin in local layer only`, `plugin declared in shared config` becomes `plugin in base layer only`, and every other token that says "shared layer" says "base layer"; the catalog, JSON guide, schema, and pins change together, and the CHANGELOG's Unreleased entries use the new tokens (no rename list: the old tokens never shipped) (TERM-01).
 2. Cause lines and message prose name the level as "the base layer" or "the local layer" and the file as "the base config" or "the local config" (for example "the local config (`claude-plugins.local.json`)" on first mention); README, README.es, the docs, and the CHANGELOG follow the same terms (TERM-01).
 3. Code says `base` and `local` everywhere a layer is meant, never `shared`: `configJsonPath` becomes `baseConfigJsonPath` and `configLocalJsonPath` becomes `localConfigJsonPath`, error classes and identifiers follow, and comments match, with no behavior change. Carried from the Phase 3.3 review (IN-02): the flag-only layer selector and the uninstall seam that now loads both layers are renamed to match what they do (`selectDeclaringConfigWriteTarget` / `DeclaringConfigWriteTarget`, `UninstallTransaction.loadTargetConfig`) (TERM-01).
 4. The `{unreadable}` cause for unreadable dependency declarations names the record without the parser's detail, for `uninstall`, `marketplace remove`, and the nameless `update --local` / `reinstall --local` (Phase 3.3 security note).
 
-**Plans:** TBD
+**Plans:** 10 plans
+
+Plans:
+**Wave 1**
+- [ ] 03.4-01-PLAN.md — Tracer: the plugin refusal pair renamed end to end (tokens, classes, cause lines, schema, catalog, scenarios, the existing CHANGELOG entry) (TERM-01)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 03.4-02-PLAN.md — The marketplace refusal pair and the two base-layer no-op tokens; the uninstall's other layer is base or local (TERM-01)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 03.4-03-PLAN.md — The remaining cause lines and descriptions name the base and local configs; the layer gap is base or local (TERM-01)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 03.4-04-PLAN.md — Test-first: the `{unreadable}` dependency cause drops the text of a manifest that fails to load and keeps the fixed reasons, on every surface; the catalog, guide, and CHANGELOG follow (TERM-01, SC4)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [ ] 03.4-05-PLAN.md — One scripted word-boundary replace: `baseConfigJsonPath` / `localConfigJsonPath`, then typecheck and the leftover grep, with the write-seam gate kept armed (TERM-01)
+
+**Wave 6** *(blocked on Wave 5 completion)*
+- [ ] 03.4-06-PLAN.md — IN-02: the flag-only layer loader, its result type, and both seams renamed; the other layer is `other`, not `sibling` (TERM-01)
+
+**Wave 7** *(blocked on Wave 6 completion)*
+- [ ] 03.4-07-PLAN.md — Production identifiers and comments say base and local, the "sibling layer" comments included (TERM-01)
+
+**Wave 8** *(blocked on Wave 7 completion)*
+- [ ] 03.4-08-PLAN.md — Test identifiers, helpers, titles, and comments say base and local, with unchanged test counts (TERM-01)
+
+**Wave 9** *(blocked on Wave 8 completion)*
+- [ ] 03.4-09-PLAN.md — Feature titles, descriptions, the step's layer word, and the cucumber rule say base and local; cucumber review (TERM-01)
+
+**Wave 10** *(blocked on Wave 9 completion)*
+- [ ] 03.4-10-PLAN.md — READMEs, guides, catalog prose, and CHANGELOG; whole-tree leftover gates; `npm run check` and the fallow audit against `1c3fc6c9` (TERM-01)
 
 ### Phase 4: Marketplace Remove and List
 
