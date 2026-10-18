@@ -109,6 +109,55 @@ Feature: Marketplace remove
     Then the "claude-plugins.json" file of the project scope declares no marketplaces
     Then the "claude-plugins.json" file of the project scope declares no plugins
 
+  Scenario: A new session offers none of the removed plugins' skills
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins:
+      | name  | version |
+      | zebra | 1.0.0   |
+      | amber | 1.0.0   |
+      | elm   | 1.0.0   |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install zebra@tools --scope project"
+    Given the user has run "/claude:plugin install amber@tools --scope project"
+    Given the user has run "/claude:plugin install elm@tools --scope project"
+    Given the user has run "/claude:plugin marketplace remove tools --scope project"
+    When the user starts a new pi session
+    Then the session offers no skills
+
+  Scenario: A new session lists none of the removed plugins
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins:
+      | name  | version |
+      | zebra | 1.0.0   |
+      | amber | 1.0.0   |
+      | elm   | 1.0.0   |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install zebra@tools --scope project"
+    Given the user has run "/claude:plugin install amber@tools --scope project"
+    Given the user has run "/claude:plugin install elm@tools --scope project"
+    Given the user has run "/claude:plugin marketplace remove tools --scope project"
+    Given the user has started a new pi session
+    When the user runs "/claude:plugin list"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists no marketplaces
+
+  Scenario: A removed base-layer marketplace stays absent in a new session
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin marketplace remove tools --scope project"
+    Given the user has started a new pi session
+    When the user runs "/claude:plugin marketplace list"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists no marketplaces
+    Then the "claude-plugins.json" file of the project scope declares no marketplaces
+    Then the "claude-plugins.local.json" file of the project scope does not exist
+
   Scenario: An unscoped remove selects the project copy
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "extras" is published as a dir source
