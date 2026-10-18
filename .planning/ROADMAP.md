@@ -385,7 +385,12 @@ Plans:
 2. A name both scopes hold, without `--scope`, shows one block per scope, project first; a name neither scope holds fails as `marketplace not added` with no scope; and `--scope` naming the scope that misses, while the other holds the name, says which scope missed.
 3. Info on a marketplace whose manifest became invalid reports a failed `invalid manifest` row, and info shows the marketplaces a manifest allows cross-marketplace dependencies on.
 
-**Plans:** TBD
+**Plans:** 3 plans
+
+Plans:
+- [ ] 05-01-PLAN.md — Prove and correct project-first mixed-scope info emission.
+- [ ] 05-02-PLAN.md — Cover source identities, descriptions and declaration-order allowances.
+- [ ] 05-03-PLAN.md — Complete healthy fan-out and both directed scope misses.
 
 ### Phase 6: Marketplace Update and C-10 Fix
 
