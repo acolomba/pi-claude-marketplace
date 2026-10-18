@@ -477,6 +477,110 @@ test("a partial remove persists successes and reports every failure in order", a
   machineBoundary.verifyBoundary();
 });
 
+test("a failure-only remove keeps every plugin and needs no reload", async (t) => {
+  // arrange
+  const scope = await projectScope(t, "mp-layer-remove-failure-only-", [
+    { name: "yak" },
+    { name: "birch" },
+  ]);
+  const setupBoundary = createNotificationBoundary(3);
+  await addRepo(scope, setupBoundary, false);
+  await installFrom(scope, setupBoundary, "yak", false);
+  await installFrom(scope, setupBoundary, "birch", false);
+  const marketplaceData = await scope.locations.marketplaceDataDir("mp");
+  const marketplaceDataSentinel = path.join(marketplaceData, "sentinel");
+  await mkdir(marketplaceData, { recursive: true });
+  await writeFile(marketplaceDataSentinel, "marketplace data");
+  const footprintBefore = await removeFootprint(scope);
+  const marketplaceDataBefore = await readFile(marketplaceDataSentinel, "utf8");
+  const yakSkill = path.join(scope.locations.skillsTargetDir, "yak-greet", "SKILL.md");
+  const birchSkill = path.join(scope.locations.skillsTargetDir, "birch-greet", "SKILL.md");
+  const yakSkillBefore = await readFile(yakSkill, "utf8");
+  const birchSkillBefore = await readFile(birchSkill, "utf8");
+  const cascade: typeof cascadeUnstagePlugin = (plugin) =>
+    Promise.resolve({
+      ok: false,
+      dropped: {
+        agents: [],
+        commands: [],
+        hooks: [],
+        mcpServers: [],
+        skills: [],
+        workflows: [],
+      },
+      cause: Object.assign(new Error(`${plugin} denied`), { code: "EACCES" }),
+    });
+
+  const machineBoundary = createMachineNotificationBoundary("json");
+
+  // act
+  await removeMarketplace({
+    ctx: machineBoundary.ctx,
+    run: machineBoundary.run,
+    name: "mp",
+    scope: "project",
+    cwd: scope.cwd,
+    completionCache: createCompletionCache(),
+    cascade,
+  });
+
+  // assert
+  assert.deepStrictEqual(machineBoundary.capture.entries, [
+    {
+      customType: "claude-plugin",
+      payload: {
+        schemaVersion: 1,
+        kind: "cascade",
+        origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+        severity: "error",
+        needsReload: false,
+        summary: "Some operations have failed.",
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "project",
+            status: "failed",
+            plugins: [
+              {
+                status: "failed",
+                name: "yak",
+                id: "yak@mp",
+                reasons: ["permission denied"],
+                scope: "project",
+                cause: { causeChain: ["yak denied"], truncated: false },
+                leaks: [],
+                rollbackPartial: [],
+              },
+              {
+                status: "failed",
+                name: "birch",
+                id: "birch@mp",
+                reasons: ["permission denied"],
+                scope: "project",
+                cause: { causeChain: ["birch denied"], truncated: false },
+                leaks: [],
+                rollbackPartial: [],
+              },
+            ],
+          },
+        ],
+      },
+    },
+  ]);
+  assert.deepStrictEqual(await removeFootprint(scope), footprintBefore);
+  assert.strictEqual(await readFile(marketplaceDataSentinel, "utf8"), marketplaceDataBefore);
+  assert.strictEqual(await readFile(yakSkill, "utf8"), yakSkillBefore);
+  assert.strictEqual(await readFile(birchSkill, "utf8"), birchSkillBefore);
+  assert.deepStrictEqual(setupBoundary.notifications, [
+    ADDED,
+    installed("yak"),
+    installed("birch"),
+  ]);
+  machineBoundary.capture.assertValid();
+  setupBoundary.verifyBoundary();
+  machineBoundary.verifyBoundary();
+});
+
 test("LAYER-02: a remove refused because the config of the other layer is unreadable changes nothing", async (t) => {
   // arrange
   const scope = await projectScope(t, "mp-layer-remove-other-unreadable-");
