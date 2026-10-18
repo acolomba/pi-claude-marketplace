@@ -3,9 +3,9 @@ phase: "5"
 slug: "marketplace-info"
 # status lifecycle: draft (seeded by plan-phase) → validated (set by validate-phase §6)
 # audit-milestone §5.5 distinguishes NOT-VALIDATED (draft) from PARTIAL (validated + nyquist_compliant: false) (#2117)
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: validated
+nyquist_compliant: true
+wave_0_complete: true
 created: "2026-10-18"
 ---
 
@@ -23,7 +23,7 @@ created: "2026-10-18"
 | **Config file** | `cucumber.json` |
 | **Quick run command** | `npm run test:cucumber -- features/marketplace/info.feature` |
 | **Full suite command** | `npm run check` |
-| **Estimated runtime** | Focused Cucumber: under 30 seconds; full gate: measure during execution |
+| **Estimated runtime** | Focused Cucumber: under 30 seconds; full gate: about 2 minutes |
 
 ---
 
@@ -40,15 +40,15 @@ created: "2026-10-18"
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 05-01-01 | 01 | 1 | INFO-04, INFO-08 | T-05-01–T-05-04 | Invalid project precedes healthy user; exact invocation order and unchanged disk state are asserted. | unit + Cucumber + static | `node --test tests/orchestrators/marketplace/info.test.ts`; `npm run test:cucumber -- features/marketplace/info.feature`; `npm run check:features` | ✅ | ⬜ pending |
-| 05-01-02 | 01 | 1 | INFO-04, INFO-08 | T-05-01–T-05-04 | Opposite mixed case and all emission branches preserve independent scopes and failure shape. | direct coverage + Cucumber + static | `node --test tests/orchestrators/marketplace/info.test.ts`; `npm run test:coverage:direct -- extensions/pi-claude-marketplace/orchestrators/marketplace/info.ts`; `npm run test:cucumber -- features/marketplace/info.feature`; `npm run check:features` | ✅ | ⬜ pending |
-| 05-02-01 | 02 | 2 | INFO-01–INFO-03 | T-05-07–T-05-09, T-05-12 | Full source identity is compared; fixtures remain contained and remote rows excluded. | Cucumber + static | `npm run test:cucumber -- features/marketplace/info.feature`; `npm run check:features` | ✅ | ⬜ pending |
-| 05-02-02 | 02 | 2 | INFO-09 | T-05-07 | Complete allowance projection preserves declaration order. | Cucumber + static | `npm run test:cucumber -- features/marketplace/info.feature`; `npm run check:features` | ✅ | ⬜ pending |
-| 05-03-01 | 03 | 3 | INFO-04, INFO-05 | T-05-13 | Distinct healthy scope settings retain project-first identity; an unscoped miss has no scope. | Cucumber + static | `npm run test:cucumber -- features/marketplace/info.feature`; `npm run check:features` | ✅ | ⬜ pending |
-| 05-03-02 | 03 | 3 | INFO-06 | T-05-14–T-05-16 | Explicit scope never falls back and keeps its qualified missing-scope reason. | Cucumber + static + unit | `npm run test:cucumber -- features/marketplace/info.feature`; `npm run check:features`; `node --test tests/orchestrators/marketplace/info.test.ts` | ✅ | ⬜ pending |
-| wave-1-gate | 01 | 1 | INFO-04, INFO-08 | T-05-01–T-05-06, T-05-SC | Combined mixed-scope correction preserves the existing suite. | full gate | `npm run check` | ✅ | ⬜ pending |
-| wave-2-gate | 01–02 | 2 | INFO-01–INFO-04, INFO-08, INFO-09 | T-05-01–T-05-12, T-05-SC | Combined source and failure coverage preserves all inherited regressions. | full gate | `npm run check` | ✅ | ⬜ pending |
-| wave-3-and-phase-gate | 01–03 | 3 | INFO-01–INFO-06, INFO-08, INFO-09 | T-05-01–T-05-18, T-05-SC | Complete combined-tree info coverage retains scope isolation and inherited behavior. | full gate | `npm run check` | ✅ | ⬜ pending |
+| 05-01-01 | 01 | 1 | INFO-04, INFO-08 | T-05-01–T-05-04 | Invalid project precedes healthy user; exact invocation order and unchanged disk state are asserted. | unit + Cucumber + static | `node --test tests/orchestrators/marketplace/info.test.ts`; `npm run test:cucumber -- features/marketplace/info.feature`; `npm run check:features` | ✅ | ✅ green |
+| 05-01-02 | 01 | 1 | INFO-04, INFO-08 | T-05-01–T-05-04 | Opposite mixed case and all emission branches preserve independent scopes and failure shape. | direct coverage + Cucumber + static | `node --test tests/orchestrators/marketplace/info.test.ts`; `npm run test:coverage:direct -- extensions/pi-claude-marketplace/orchestrators/marketplace/info.ts`; `npm run test:cucumber -- features/marketplace/info.feature`; `npm run check:features` | ✅ | ✅ green |
+| 05-02-01 | 02 | 2 | INFO-01–INFO-03 | T-05-07–T-05-09, T-05-12 | Full source identity is compared; fixtures remain contained and remote rows excluded. | Cucumber + static | `npm run test:cucumber -- features/marketplace/info.feature`; `npm run check:features` | ✅ | ✅ green |
+| 05-02-02 | 02 | 2 | INFO-09 | T-05-07 | Complete allowance projection preserves declaration order. | Cucumber + static | `npm run test:cucumber -- features/marketplace/info.feature`; `npm run check:features` | ✅ | ✅ green |
+| 05-03-01 | 03 | 3 | INFO-04, INFO-05 | T-05-13 | Distinct healthy scope settings retain project-first identity; an unscoped miss has no scope. | Cucumber + static | `npm run test:cucumber -- features/marketplace/info.feature`; `npm run check:features` | ✅ | ✅ green |
+| 05-03-02 | 03 | 3 | INFO-06 | T-05-14–T-05-16 | Explicit scope never falls back and keeps its qualified missing-scope reason. | Cucumber + static + unit | `npm run test:cucumber -- features/marketplace/info.feature`; `npm run check:features`; `node --test tests/orchestrators/marketplace/info.test.ts` | ✅ | ✅ green |
+| wave-1-gate | 01 | 1 | INFO-04, INFO-08 | T-05-01–T-05-06, T-05-SC | Combined mixed-scope correction preserves the existing suite. | full gate | `npm run check` | ✅ | ✅ green |
+| wave-2-gate | 01–02 | 2 | INFO-01–INFO-04, INFO-08, INFO-09 | T-05-01–T-05-12, T-05-SC | Combined source and failure coverage preserves all inherited regressions. | full gate | `npm run check` | ✅ | ✅ green |
+| wave-3-and-phase-gate | 01–03 | 3 | INFO-01–INFO-06, INFO-08, INFO-09 | T-05-01–T-05-18, T-05-SC | Complete combined-tree info coverage retains scope isolation and inherited behavior. | full gate | `npm run check` | ✅ | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -70,11 +70,19 @@ All phase behaviors have automated verification. URL and GitHub runtime rows rem
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verification or Wave 0 dependencies.
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verification.
-- [ ] Wave 0 covers all MISSING references.
+- [x] All tasks have `<automated>` verification or Wave 0 dependencies.
+- [x] Sampling continuity: no 3 consecutive tasks without automated verification.
+- [x] Wave 0 covers all MISSING references.
 - [x] No watch-mode flags.
 - [x] Focused feedback latency is under 30 seconds.
-- [ ] `nyquist_compliant: true` set in frontmatter.
+- [x] `nyquist_compliant: true` set in frontmatter.
 
-**Approval:** pending execution and `$gsd-validate-phase 5`.
+**Approval:** approved 2026-10-18 after the full gate passed at `8bc4503d` with 146 scenarios, 1,537 steps and 280 direct-coverage records.
+
+## Validation Audit 2026-10-18
+
+| Metric | Count |
+|---|---|
+| Gaps found | 0 |
+| Resolved | 0 |
+| Escalated | 0 |
