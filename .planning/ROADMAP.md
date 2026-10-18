@@ -385,12 +385,12 @@ Plans:
 2. A name both scopes hold, without `--scope`, shows one block per scope, project first; a name neither scope holds fails as `marketplace not added` with no scope; and `--scope` naming the scope that misses, while the other holds the name, says which scope missed.
 3. Info on a marketplace whose manifest became invalid reports a failed `invalid manifest` row, and info shows the marketplaces a manifest allows cross-marketplace dependencies on.
 
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans executed
 
 Plans:
 - [x] 05-01-PLAN.md — Prove and correct project-first mixed-scope info emission.
 - [x] 05-02-PLAN.md — Cover source identities, descriptions and declaration-order allowances.
-- [ ] 05-03-PLAN.md — Complete healthy fan-out and both directed scope misses.
+- [x] 05-03-PLAN.md — Complete healthy fan-out and both directed scope misses.
 
 ### Phase 6: Marketplace Update and C-10 Fix
 
@@ -480,7 +480,7 @@ Plans:
 | 3.3. Plugin Layer Partition | 10/10 | Complete    | 2026-10-17 |
 | 3.4. Scope and Layer Terminology | 10/10 | Complete    | 2026-10-18 |
 | 4. Marketplace Remove and List | 4/4 | Complete    | 2026-10-18 |
-| 5. Marketplace Info | 2/3 | In Progress | - |
+| 5. Marketplace Info | 3/3 | In Progress | - |
 | 6. Marketplace Update and C-10 Fix | 0/TBD | Not started | - |
 | 7. Marketplace Autoupdate | 0/TBD | Not started | - |
 | 8. Marketplace Help and Usage Errors | 0/TBD | Not started | - |
