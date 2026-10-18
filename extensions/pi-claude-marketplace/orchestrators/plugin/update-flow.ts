@@ -70,7 +70,7 @@ import {
   InvalidMarketplaceManifestError,
   MarketplaceNotFoundError,
   PluginInBaseLayerOnlyError,
-  PluginDeclaredLocallyError,
+  PluginInLocalLayerOnlyError,
   PluginUpdateConcurrencyError,
   PluginUpdatePhase3Error,
   rethrowInvalidGitHubBaseUrl,
@@ -833,8 +833,8 @@ function narrowDirectFailReason(err: Error): ContentReason {
     return "invalid manifest";
   }
 
-  if (primary instanceof PluginDeclaredLocallyError) {
-    return "plugin declared locally";
+  if (primary instanceof PluginInLocalLayerOnlyError) {
+    return "plugin in local layer only";
   }
 
   if (primary instanceof PluginInBaseLayerOnlyError) {

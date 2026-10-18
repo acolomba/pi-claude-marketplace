@@ -36,7 +36,7 @@ import {
   MarketplaceSourceUndeclarableError,
   MarketplaceUpdateError,
   PluginInBaseLayerOnlyError,
-  PluginDeclaredLocallyError,
+  PluginInLocalLayerOnlyError,
   PluginShapeError,
   PluginUpdateConcurrencyError,
   PluginUpdatePhase3Error,
@@ -963,14 +963,14 @@ describe("MarketplaceSourceUndeclarableError", () => {
   });
 });
 
-describe("PluginDeclaredLocallyError", () => {
-  test("names the plugin and the local layer and suggests --local in its message", () => {
+describe("PluginInLocalLayerOnlyError", () => {
+  test("names the plugin and the local config and suggests --local in its message", () => {
     // arrange
     const plugin = "demo";
     const marketplace = "mp";
 
     // act
-    const error = new PluginDeclaredLocallyError(plugin, marketplace);
+    const error = new PluginInLocalLayerOnlyError(plugin, marketplace);
 
     // assert
     assert.ok(error instanceof Error);
@@ -982,11 +982,11 @@ describe("PluginDeclaredLocallyError", () => {
         message: error.message,
       },
       {
-        name: "PluginDeclaredLocallyError",
+        name: "PluginInLocalLayerOnlyError",
         plugin: "demo",
         marketplace: "mp",
         message:
-          "The plugin demo@mp is declared only in the local layer (claude-plugins.local.json). Run the command again with --local.",
+          "The plugin demo@mp is declared only in the local config (claude-plugins.local.json). Run the command again with --local.",
       },
     );
   });

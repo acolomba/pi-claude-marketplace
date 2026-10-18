@@ -49,7 +49,7 @@ import {
   MarketplaceNotFoundError,
   MarketplaceSourceUndeclarableError,
   PluginInBaseLayerOnlyError,
-  PluginDeclaredLocallyError,
+  PluginInLocalLayerOnlyError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { createJsonCapture } from "../../edge/json-capture.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
@@ -1256,7 +1256,7 @@ describe("pluginLayerVerdict", () => {
     });
   }
 
-  test("refuses as plugin declared locally when only the local layer declares a shared-layer target", () => {
+  test("refuses as plugin in local layer only when only the local layer declares a base-layer target", () => {
     // arrange
     const target: ScopeConfig = { schemaVersion: 1 };
     const other: ScopeConfig = { schemaVersion: 1, plugins: { "demo@mp": {} } };
@@ -1272,7 +1272,7 @@ describe("pluginLayerVerdict", () => {
 
     // assert
     assert.ok(verdict.kind === "other-only");
-    assert.ok(verdict.refusal instanceof PluginDeclaredLocallyError);
+    assert.ok(verdict.refusal instanceof PluginInLocalLayerOnlyError);
     assert.deepStrictEqual(
       {
         kind: verdict.kind,
@@ -1283,11 +1283,11 @@ describe("pluginLayerVerdict", () => {
       },
       {
         kind: "other-only",
-        reason: "plugin declared locally",
+        reason: "plugin in local layer only",
         plugin: "demo",
         marketplace: "mp",
         message:
-          "The plugin demo@mp is declared only in the local layer (claude-plugins.local.json). Run the command again with --local.",
+          "The plugin demo@mp is declared only in the local config (claude-plugins.local.json). Run the command again with --local.",
       },
     );
   });
@@ -1399,7 +1399,7 @@ describe("namedPluginLayerRefusal", () => {
     });
   }
 
-  test("LAYER-04: refuses as plugin declared locally a shared-layer target only the local layer declares", async () => {
+  test("LAYER-04: refuses as plugin in local layer only a base-layer target only the local layer declares", async () => {
     // arrange
     await withTempScopes(async ({ cwd }) => {
       const locations = locationsFor("project", cwd);
@@ -1417,14 +1417,14 @@ describe("namedPluginLayerRefusal", () => {
       });
 
       // assert
-      assert.ok(refusal instanceof PluginDeclaredLocallyError);
+      assert.ok(refusal instanceof PluginInLocalLayerOnlyError);
       assert.deepStrictEqual(
         { plugin: refusal.plugin, marketplace: refusal.marketplace, message: refusal.message },
         {
           plugin: "demo",
           marketplace: "mp",
           message:
-            "The plugin demo@mp is declared only in the local layer (claude-plugins.local.json). Run the command again with --local.",
+            "The plugin demo@mp is declared only in the local config (claude-plugins.local.json). Run the command again with --local.",
         },
       );
     });

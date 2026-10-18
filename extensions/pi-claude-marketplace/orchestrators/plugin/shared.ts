@@ -36,7 +36,7 @@ import {
   MarketplaceNotFoundError,
   MarketplaceSourceUndeclarableError,
   PluginInBaseLayerOnlyError,
-  PluginDeclaredLocallyError,
+  PluginInLocalLayerOnlyError,
 } from "../../shared/errors.ts";
 import { notify, notifyDiagnostic } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
@@ -754,8 +754,8 @@ export type PluginLayerVerdict =
   | { readonly kind: "both" }
   | {
       readonly kind: "other-only";
-      readonly reason: "plugin declared locally" | "plugin in base layer only";
-      readonly refusal: PluginDeclaredLocallyError | PluginInBaseLayerOnlyError;
+      readonly reason: "plugin in local layer only" | "plugin in base layer only";
+      readonly refusal: PluginInLocalLayerOnlyError | PluginInBaseLayerOnlyError;
     }
   | { readonly kind: "neither" };
 
@@ -794,8 +794,8 @@ export function pluginLayerVerdict(args: {
       }
     : {
         kind: "other-only",
-        reason: "plugin declared locally",
-        refusal: new PluginDeclaredLocallyError(args.plugin, args.marketplace),
+        reason: "plugin in local layer only",
+        refusal: new PluginInLocalLayerOnlyError(args.plugin, args.marketplace),
       };
 }
 

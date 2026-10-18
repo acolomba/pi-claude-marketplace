@@ -149,7 +149,7 @@ const EXPECTED_REASONS = [
   "unsupported mcp",
   "marketplace declared locally",
   "marketplace declared in shared config",
-  "plugin declared locally",
+  "plugin in local layer only",
   "plugin in base layer only",
   "already installed in shared layer",
   "already installed in local layer",

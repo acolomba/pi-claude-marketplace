@@ -5224,9 +5224,9 @@ for (const { direction, layers, local, reason, cause } of [
     direction: "without --local a plugin only the local layer declares",
     layers: { local: HELLO_DECLARED },
     local: false,
-    reason: "plugin declared locally",
+    reason: "plugin in local layer only",
     cause:
-      "The plugin hello@mp is declared only in the local layer (claude-plugins.local.json). Run the command again with --local.",
+      "The plugin hello@mp is declared only in the local config (claude-plugins.local.json). Run the command again with --local.",
   },
   {
     direction: "with --local a plugin only the shared layer declares",
@@ -5731,8 +5731,8 @@ test("LAYER-04: an up-to-date named update of a plugin only the local layer decl
       assert.deepEqual(notifications, [
         refusedUpdateNotification(
           "hello",
-          "plugin declared locally",
-          "The plugin hello@mp is declared only in the local layer (claude-plugins.local.json). Run the command again with --local.",
+          "plugin in local layer only",
+          "The plugin hello@mp is declared only in the local config (claude-plugins.local.json). Run the command again with --local.",
         ),
       ]);
     } finally {
@@ -7900,9 +7900,9 @@ for (const { direction, file, local, reason, cause } of [
     direction: "without --local a plugin only the local layer declares",
     file: "configLocalJsonPath",
     local: false,
-    reason: "plugin declared locally",
+    reason: "plugin in local layer only",
     cause:
-      "The plugin gp@mp is declared only in the local layer (claude-plugins.local.json). Run the command again with --local.",
+      "The plugin gp@mp is declared only in the local config (claude-plugins.local.json). Run the command again with --local.",
   },
   {
     direction: "with --local a plugin only the shared layer declares",

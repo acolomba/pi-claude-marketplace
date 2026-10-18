@@ -87,7 +87,7 @@ import {
   InvalidGitHubBaseUrlError,
   LayerFileUnreadableError,
   PluginInBaseLayerOnlyError,
-  PluginDeclaredLocallyError,
+  PluginInLocalLayerOnlyError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
@@ -2992,10 +2992,10 @@ for (const { direction, shared, local, flag, refusal, reason, cause } of [
     shared: SHARED_MARKETPLACE_ONLY,
     local: HELLO_DECLARED_LAYER,
     flag: false,
-    refusal: new PluginDeclaredLocallyError("hello", "mp"),
-    reason: "plugin declared locally",
+    refusal: new PluginInLocalLayerOnlyError("hello", "mp"),
+    reason: "plugin in local layer only",
     cause:
-      "The plugin hello@mp is declared only in the local layer (claude-plugins.local.json). Run the command again with --local.",
+      "The plugin hello@mp is declared only in the local config (claude-plugins.local.json). Run the command again with --local.",
   },
   {
     direction: "with --local a plugin only the shared layer declares",

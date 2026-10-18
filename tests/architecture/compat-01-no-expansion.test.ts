@@ -296,7 +296,7 @@ const EXPECTED_REASONS = [
   // LAYER-02: a `--local` command names a marketplace only the shared file declares.
   "marketplace declared in shared config",
   // LAYER-04: a flagless plugin command names a plugin only the local layer declares.
-  "plugin declared locally",
+  "plugin in local layer only",
   // LAYER-04: a `--local` plugin command names a plugin only the base layer declares.
   "plugin in base layer only",
   // LAYER-05: an install adds a declaration of a plugin the other layer installed.

@@ -2712,8 +2712,8 @@ for (const { title, local, layers, expectedMessage } of [
     layers: { shared: SHARED_LAYER_WITH_MARKETPLACE, local: LAYER_DECLARING_HELLO },
     expectedMessage:
       "A plugin operation has failed.\n\n● mp [project]\n" +
-      "  ⊘ hello v0.0.1 (failed) {plugin declared locally}\n" +
-      "    cause: The plugin hello@mp is declared only in the local layer (claude-plugins.local.json). Run the command again with --local.",
+      "  ⊘ hello v0.0.1 (failed) {plugin in local layer only}\n" +
+      "    cause: The plugin hello@mp is declared only in the local config (claude-plugins.local.json). Run the command again with --local.",
   },
   {
     title: "a --local uninstall of a plugin only the shared layer declares",

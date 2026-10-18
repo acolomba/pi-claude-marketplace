@@ -5,7 +5,7 @@ import {
   LayerFileUnreadableError,
   ManualRecoveryError,
   PluginInBaseLayerOnlyError,
-  PluginDeclaredLocallyError,
+  PluginInLocalLayerOnlyError,
   PluginShapeError,
   StateLockHeldError,
 } from "../../shared/errors.ts";
@@ -137,19 +137,19 @@ export function reinstallReasonsFromError(error: unknown): readonly ContentReaso
  * line.
  */
 type LayerRefusal =
-  PluginDeclaredLocallyError | PluginInBaseLayerOnlyError | LayerFileUnreadableError;
+  PluginInLocalLayerOnlyError | PluginInBaseLayerOnlyError | LayerFileUnreadableError;
 
 function isLayerRefusal(error: unknown): error is LayerRefusal {
   return (
-    error instanceof PluginDeclaredLocallyError ||
+    error instanceof PluginInLocalLayerOnlyError ||
     error instanceof PluginInBaseLayerOnlyError ||
     error instanceof LayerFileUnreadableError
   );
 }
 
 function layerRefusalReason(error: LayerRefusal): ContentReason {
-  if (error instanceof PluginDeclaredLocallyError) {
-    return "plugin declared locally";
+  if (error instanceof PluginInLocalLayerOnlyError) {
+    return "plugin in local layer only";
   }
 
   if (error instanceof PluginInBaseLayerOnlyError) {

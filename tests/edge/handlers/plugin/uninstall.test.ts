@@ -159,7 +159,7 @@ const USER_UNINSTALLED_DATA_KEPT = {
 // layer declares.
 const PROJECT_DECLARED_LOCALLY = {
   message:
-    "A plugin operation has failed.\n\n● alpha [project]\n  ⊘ demo v1.0.0 (failed) {plugin declared locally}\n    cause: The plugin demo@alpha is declared only in the local layer (claude-plugins.local.json). Run the command again with --local.",
+    "A plugin operation has failed.\n\n● alpha [project]\n  ⊘ demo v1.0.0 (failed) {plugin in local layer only}\n    cause: The plugin demo@alpha is declared only in the local config (claude-plugins.local.json). Run the command again with --local.",
   severity: "error",
 };
 

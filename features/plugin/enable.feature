@@ -11,7 +11,7 @@ Feature: Plugin enable
       | demo | 1.0.0   |
     Given the marketplace "fixtures" is added to the project scope
 
-  Scenario: Enabling without --local a plugin disabled with --local fails as plugin declared locally
+  Scenario: Enabling without --local a plugin disabled with --local fails as plugin in local layer only
     Given the user has run "/claude:plugin install demo@fixtures --scope project --local"
     Given the user has run "/claude:plugin disable demo@fixtures --scope project --local"
     When the user runs "/claude:plugin enable demo@fixtures --scope project"
@@ -21,8 +21,8 @@ Feature: Plugin enable
       | needs reload | false                          |
       | summary      | A plugin operation has failed. |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id            | name | status | reasons                 | scope   | cause chain                                                                                                                | cause truncated | leaks | rollback partial |
-      | fixtures         | project           | demo@fixtures | demo | failed | plugin declared locally | project | The plugin demo@fixtures is declared only in the local layer (claude-plugins.local.json). Run the command again with --local. | false           |       |                  |
+      | marketplace name | marketplace scope | id            | name | status | reasons                    | scope   | cause chain                                                                                                                    | cause truncated | leaks | rollback partial |
+      | fixtures         | project           | demo@fixtures | demo | failed | plugin in local layer only | project | The plugin demo@fixtures is declared only in the local config (claude-plugins.local.json). Run the command again with --local. | false           |       |                  |
     Then the "claude-plugins.local.json" file of the project scope declares these plugins:
       | id            | enabled |
       | demo@fixtures | false   |

@@ -252,10 +252,10 @@ export type Reason =
   // line.
   | "marketplace declared in shared config"
   // LAYER-04 / D-MF-03: a named plugin command without `--local` targets the
-  // shared layer, and only the local layer declares the plugin. The refusal
+  // base layer, and only the local layer declares the plugin. The refusal
   // rides a `failed` row, and the remedy, running the command again with
   // `--local`, rides the cause line.
-  | "plugin declared locally"
+  | "plugin in local layer only"
   // LAYER-04 / D-MF-03: the mirror refusal: a named plugin command with
   // `--local` targets the local layer, and only the base layer declares the
   // plugin. The remedy, running the command again without `--local`, rides the

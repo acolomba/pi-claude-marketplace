@@ -966,8 +966,8 @@ async function scopeBytes(paths: {
 }
 
 const DECLARED_LOCALLY_ROW = [
-  "  ⊘ foo (failed) {plugin declared locally}",
-  "    cause: The plugin foo@mp is declared only in the local layer (claude-plugins.local.json). Run the command again with --local.",
+  "  ⊘ foo (failed) {plugin in local layer only}",
+  "    cause: The plugin foo@mp is declared only in the local config (claude-plugins.local.json). Run the command again with --local.",
 ];
 
 const DECLARED_IN_SHARED_ROW = [

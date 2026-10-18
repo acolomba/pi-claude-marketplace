@@ -404,7 +404,7 @@ export const PLUGIN_UNINSTALL_FIXTURES: FixtureMap = {
 
     // LAYER-04: a named uninstall without --local acts on the shared layer, so
     // a plugin only the local layer declares is refused and nothing changes.
-    "uninstall-plugin-declared-locally": {
+    "uninstall-plugin-in-local-layer-only": {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",
       message: {
@@ -419,9 +419,9 @@ export const PLUGIN_UNINSTALL_FIXTURES: FixtureMap = {
                 needsReload: false,
                 name: "helper",
                 version: "1.0.0",
-                reasons: ["plugin declared locally"],
+                reasons: ["plugin in local layer only"],
                 cause: new Error(
-                  "The plugin helper@official is declared only in the local layer (claude-plugins.local.json). Run the command again with --local.",
+                  "The plugin helper@official is declared only in the local config (claude-plugins.local.json). Run the command again with --local.",
                 ),
               },
             ],

@@ -167,7 +167,7 @@ export type FailureReason =
   // LAYER-04: a named plugin command refuses when its target layer does not
   // declare the plugin and the other layer does. Uninstall, enable, disable,
   // update, and reinstall share both refusals.
-  | "plugin declared locally"
+  | "plugin in local layer only"
   | "plugin in base layer only";
 
 /**

@@ -1295,20 +1295,20 @@ A plugin operation has failed.
     cause: cannot read the dependencies of other@official: not declared by its marketplace
 ```
 
-### Failure -- the plugin is declared only in the local layer (LAYER-04 / D-MF-03)
+### Failure -- the plugin is declared in the local layer only (LAYER-04 / D-MF-03)
 
-A named uninstall acts on one layer of the scope: the shared layer `claude-plugins.json`, or the local layer `claude-plugins.local.json` with `--local`. It reads both layers. When only the local layer declares the plugin, an uninstall without `--local` is refused before anything changes. The `cause:` line names the layer and the remedy: run the command again with `--local`.
+A named uninstall acts on the base layer, or on the local layer with `--local`. It reads both layers. When only the local layer declares the plugin, an uninstall without `--local` is refused before anything changes. The `cause:` line names the local config (`claude-plugins.local.json`) and the remedy: run the command again with `--local`.
 
 `enable`, `disable`, `update <plugin>@<marketplace>`, and `reinstall <plugin>@<marketplace>` render the same row under their own labels, without the version. A refused named `update` does not look for a new version first, because that check can need the network, so an up-to-date plugin is refused too. A reload, an import, and the `update` and `reinstall` forms that name no plugin are never refused. When either layer file cannot be read, each of these named verbs is refused with the `{invalid manifest}` row instead, and its `cause:` line names that file by its basename: `Config file "claude-plugins.local.json" failed schema validation.` Severity `error`; no reload-hint (nothing changed).
 
-<!-- catalog-state: uninstall-plugin-declared-locally -->
+<!-- catalog-state: uninstall-plugin-in-local-layer-only -->
 
 ```text
 A plugin operation has failed.
 
 ● official [user]
-  ⊘ helper v1.0.0 (failed) {plugin declared locally}
-    cause: The plugin helper@official is declared only in the local layer (claude-plugins.local.json). Run the command again with --local.
+  ⊘ helper v1.0.0 (failed) {plugin in local layer only}
+    cause: The plugin helper@official is declared only in the local config (claude-plugins.local.json). Run the command again with --local.
 ```
 
 ### Failure -- the plugin is declared only in the base layer (LAYER-04 / D-MF-03)
@@ -1635,7 +1635,7 @@ ______________________________________________________________________
 
 Multi-plugin cascade. One marketplace header per affected marketplace; plugin rows indent two spaces underneath.
 
-A reinstall changes the installation and its record only. It writes no declaration to either layer, so a reinstalled dependency stays undeclared (LAYER-04 / D-MF-03). A named `reinstall <plugin>@<marketplace>` acts on the shared layer, or on the local layer with `--local`. It refuses a plugin that only the other layer declares, and a layer file it cannot read, with the rows of the `uninstall-plugin-declared-locally` state under `/claude:plugin uninstall`. The forms that name no plugin cover the plugins of both layers. With `--local`, they cover the plugins the local layer declares and the dependencies those plugins need, but not a dependency that only shared-layer plugins need. When they cannot read the dependencies of one of those plugins, they change nothing and fail with one `{unreadable}` row whose cause names that plugin.
+A reinstall changes the installation and its record only. It writes no declaration to either layer, so a reinstalled dependency stays undeclared (LAYER-04 / D-MF-03). A named `reinstall <plugin>@<marketplace>` acts on the base layer, or on the local layer with `--local`. It refuses a plugin that only the other layer declares, and a layer file it cannot read, with the rows of the `uninstall-plugin-in-local-layer-only` state under `/claude:plugin uninstall`. The forms that name no plugin cover the plugins of both layers. With `--local`, they cover the plugins the local layer declares and the dependencies those plugins need, but not a dependency that only base-layer plugins need. When they cannot read the dependencies of one of those plugins, they change nothing and fail with one `{unreadable}` row whose cause names that plugin.
 
 ### Single marketplace, all reinstalled
 
@@ -1868,7 +1868,7 @@ ______________________________________________________________________
 
 Multi-plugin cascade. Same shape as `reinstall` with version-arrow rows (`v<from> → v<to>`) per D-15-04 / Phase 16 `composeVersionArrow`.
 
-An update changes the installation and its record only. It writes no declaration to either layer, so an updated dependency stays undeclared (LAYER-04 / D-MF-03). A named `update <plugin>@<marketplace>` acts on the shared layer, or on the local layer with `--local`. It refuses a plugin that only the other layer declares, and a layer file it cannot read, with the rows of the `uninstall-plugin-declared-locally` state under `/claude:plugin uninstall`, before it looks for a new version. The forms that name no plugin cover the plugins of both layers. With `--local`, they cover the plugins the local layer declares and the dependencies those plugins need, but not a dependency that only shared-layer plugins need. When they cannot read the dependencies of one of those plugins, they change nothing and fail with one `{unreadable}` row whose cause names that plugin.
+An update changes the installation and its record only. It writes no declaration to either layer, so an updated dependency stays undeclared (LAYER-04 / D-MF-03). A named `update <plugin>@<marketplace>` acts on the base layer, or on the local layer with `--local`. It refuses a plugin that only the other layer declares, and a layer file it cannot read, with the rows of the `uninstall-plugin-in-local-layer-only` state under `/claude:plugin uninstall`, before it looks for a new version. The forms that name no plugin cover the plugins of both layers. With `--local`, they cover the plugins the local layer declares and the dependencies those plugins need, but not a dependency that only base-layer plugins need. When they cannot read the dependencies of one of those plugins, they change nothing and fail with one `{unreadable}` row whose cause names that plugin.
 
 ### Single marketplace, mixed
 

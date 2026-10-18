@@ -11,7 +11,7 @@ import {
   LayerFileUnreadableError,
   ManualRecoveryError,
   PluginInBaseLayerOnlyError,
-  PluginDeclaredLocallyError,
+  PluginInLocalLayerOnlyError,
   PluginShapeError,
   StateLockHeldError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
@@ -522,15 +522,15 @@ test("composes ordinary, typed, errno, and manual-recovery failures", () => {
 });
 
 const LOCAL_CAUSE =
-  "The plugin hello@mp is declared only in the local layer (claude-plugins.local.json). Run the command again with --local.";
+  "The plugin hello@mp is declared only in the local config (claude-plugins.local.json). Run the command again with --local.";
 const SHARED_CAUSE =
   "The plugin hello@mp is declared only in the base config (claude-plugins.json). Run the command again without --local.";
 const INVALID_CAUSE = 'Config file "claude-plugins.local.json" failed schema validation.';
 
 for (const { refusal, reason, note } of [
   {
-    refusal: new PluginDeclaredLocallyError("hello", "mp"),
-    reason: "plugin declared locally",
+    refusal: new PluginInLocalLayerOnlyError("hello", "mp"),
+    reason: "plugin in local layer only",
     note: `${LOCAL_CAUSE}\n\ncause: ${LOCAL_CAUSE}`,
   },
   {
