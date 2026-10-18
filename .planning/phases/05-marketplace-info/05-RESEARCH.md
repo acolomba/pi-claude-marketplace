@@ -309,8 +309,10 @@ No unverified product behavior is promoted to a locked decision. Proposed helper
 
 ## Open Questions
 
-- The failed-project ordering defect is established from control flow, not a newly executed failing regression. The implementation plan must reproduce it first. The current suite passes because it has no such behavioral case. [VERIFIED: extensions/pi-claude-marketplace/orchestrators/marketplace/info.ts:178-209] [VERIFIED: features/marketplace/info.feature:7-70]
-- Remote ref fixtures must honor the ref named by the Outline when the remote phases activate them. This phase defines the expectation but cannot execute the excluded rows. [VERIFIED: cucumber.json:6-7] [VERIFIED: features/lib/published-marketplace.ts:127-129]
+Resolved during planning; no research question remains open.
+
+- **RESOLVED — regression execution contract:** The failed-project ordering defect is established from control flow, not a newly executed failing regression. `05-01-PLAN.md` Task 1 requires the owner test to record exact notification invocation order and the real-Pi scenario to fail on the current ordering before the narrow production correction. Task 2 verifies the opposite direction and remaining branches. This resolves the implementation approach under D-01 and D-02; red/green execution evidence is still required during execution and is not claimed here. [VERIFIED: extensions/pi-claude-marketplace/orchestrators/marketplace/info.ts:178-209] [VERIFIED: features/marketplace/info.feature:7-70]
+- **RESOLVED — deferred remote fixture contract:** `05-02-PLAN.md` Task 1 specifies nonempty `stable` refs and explicit URL/GitHub identity fields in the source Outline, retains `@url`/`@github` runtime exclusions, and validates their bindings now. The stand-ins delivered in Phases 9 and 10 must honor those declared refs when activating the rows. Runtime proof belongs to those phases, as CONTEXT.md explicitly defers it; no remote fixture implementation or execution is required in Phase 5. [VERIFIED: cucumber.json:6-7] [VERIFIED: features/lib/published-marketplace.ts:127-129]
 
 ## Sources and Metadata
 
