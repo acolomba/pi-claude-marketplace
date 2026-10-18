@@ -231,7 +231,7 @@ for (const { label, addedLocally, reason, cause } of refusalCases) {
   });
 }
 
-test("CFG-03: a named flip whose target layer is silent while the other file is invalid changes no file", async (t) => {
+test("CFG-03: a named flip whose target layer is silent while the config of the other layer is invalid changes no file", async (t) => {
   // arrange
   const scope = await projectScope(t, "mp-layer-autoupdate-unreadable-", ["tools"]);
   const boundary = createNotificationBoundary(2);

@@ -316,7 +316,7 @@ async function removeFootprint(scope: ProjectScope): Promise<readonly unknown[]>
   ];
 }
 
-test("LAYER-02: a remove refused because the other config file is unreadable changes nothing", async (t) => {
+test("LAYER-02: a remove refused because the config of the other layer is unreadable changes nothing", async (t) => {
   // arrange
   const scope = await projectScope(t, "mp-layer-remove-other-unreadable-");
   const boundary = createNotificationBoundary(4);

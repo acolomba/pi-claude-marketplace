@@ -2479,7 +2479,7 @@ for (const { holder, title } of [
   });
 }
 
-test("LAYER-03: a layer remove keeps a dependency record its target file declares while a staying plugin needs it", async (testContext) => {
+test("LAYER-03: a layer remove keeps a dependency record its target layer declares while a staying plugin needs it", async (testContext) => {
   // arrange
   const baseDeclaresLib =
     '{"schemaVersion":1,"marketplaces":{"tools":{"source":"./tools"}},"plugins":{"alpha@tools":{"enabled":true},"lib@tools":{"enabled":true}}}\n';
