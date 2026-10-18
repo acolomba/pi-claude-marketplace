@@ -57,6 +57,58 @@ Feature: Marketplace remove
       | name   | source                     |
       | extras | {home}/marketplaces/extras |
 
+  Scenario: Removing a marketplace uninstalls every plugin in installation order
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins:
+      | name  | version |
+      | zebra | 1.0.0   |
+      | amber | 1.0.0   |
+      | elm   | 1.0.0   |
+    Given the marketplace "extras" is published as a dir source
+    Given the marketplace "extras" offers these plugins:
+      | name     | version |
+      | sentinel | 1.0.0   |
+    Given the marketplace "tools" is added to the project scope
+    Given the marketplace "extras" is added to the project scope
+    Given the user has run "/claude:plugin install zebra@tools --scope project"
+    Given the user has run "/claude:plugin install amber@tools --scope project"
+    Given the user has run "/claude:plugin install elm@tools --scope project"
+    Given the user has run "/claude:plugin install sentinel@extras --scope project"
+    When the user runs "/claude:plugin marketplace remove tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id          | name  | status      | reasons | scope   |
+      | tools            | project           | removed            | zebra@tools | zebra | uninstalled |         | project |
+      | tools            | project           | removed            | amber@tools | amber | uninstalled |         | project |
+      | tools            | project           | removed            | elm@tools   | elm   | uninstalled |         | project |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name   | source                     |
+      | extras | {home}/marketplaces/extras |
+    Then the "claude-plugins.json" file of the project scope declares these plugins:
+      | id              |
+      | sentinel@extras |
+
+  Scenario: The rm alias uninstalls its only plugin and needs a reload
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install demo@tools --scope project"
+    When the user runs "/claude:plugin marketplace rm tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id         | name | status      | reasons | scope   |
+      | tools            | project           | removed            | demo@tools | demo | uninstalled |         | project |
+    Then the "claude-plugins.json" file of the project scope declares no marketplaces
+    Then the "claude-plugins.json" file of the project scope declares no plugins
+
   Scenario: An unscoped remove selects the project copy
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "extras" is published as a dir source
