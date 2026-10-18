@@ -162,7 +162,9 @@ function layerMarketplaceGapOutcomes(
   return gaps.map((gap) => ({
     kind: "layer-marketplace-gap",
     scope,
-    basename: path.basename(gap.layer === "base" ? loc.configJsonPath : loc.configLocalJsonPath),
+    basename: path.basename(
+      gap.layer === "base" ? loc.baseConfigJsonPath : loc.localConfigJsonPath,
+    ),
     cause: new Error(composeLayerMarketplaceCause(gap, scope)),
   }));
 }
@@ -196,7 +198,7 @@ async function readPassForScope(
 
   const stateExists = await pathExists(loc.stateJsonPath);
   const configExists =
-    (await pathExists(loc.configJsonPath)) || (await pathExists(loc.configLocalJsonPath));
+    (await pathExists(loc.baseConfigJsonPath)) || (await pathExists(loc.localConfigJsonPath));
   if (!stateExists && !configExists) {
     // Pristine scope: nothing recorded, nothing declared -- no-op without
     // touching the disk.
@@ -225,7 +227,7 @@ async function readPassForScope(
       try {
         await migrateFirstRunConfig(loc, state);
       } catch (err) {
-        throw new MigrateConfigSaveError(loc.configJsonPath, err);
+        throw new MigrateConfigSaveError(loc.baseConfigJsonPath, err);
       }
 
       // (2) Load the merged scope config (base + local).

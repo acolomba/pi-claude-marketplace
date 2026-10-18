@@ -101,8 +101,8 @@ async function fileSnapshot(
 async function scopeSnapshot(locations: ScopedLocations): Promise<readonly unknown[]> {
   return [
     await fileSnapshot(locations.stateJsonPath),
-    await fileSnapshot(locations.configJsonPath),
-    await fileSnapshot(locations.configLocalJsonPath),
+    await fileSnapshot(locations.baseConfigJsonPath),
+    await fileSnapshot(locations.localConfigJsonPath),
   ];
 }
 
@@ -111,8 +111,8 @@ async function autoupdateReadings(
   scope: ProjectScope,
   name: string,
 ): Promise<{ readonly shared: unknown; readonly local: unknown; readonly listed: unknown }> {
-  const shared = await loadConfig(scope.locations.configJsonPath);
-  const local = await loadConfig(scope.locations.configLocalJsonPath);
+  const shared = await loadConfig(scope.locations.baseConfigJsonPath);
+  const local = await loadConfig(scope.locations.localConfigJsonPath);
   const entries = await loadMarketplaceListEntries({ cwd: scope.cwd, scope: "project" });
   const block = entries.find((entry) => entry.record.name === name)?.block;
   return {
@@ -130,7 +130,7 @@ test("D-09: a recorded marketplace neither layer declares is not added to a name
   const boundary = createNotificationBoundary(2);
   await addTo(scope, boundary, "tools", false);
   await saveConfig(
-    scope.locations.configJsonPath,
+    scope.locations.baseConfigJsonPath,
     { schemaVersion: 1, marketplaces: {} },
     scope.locations.scopeRoot,
   );
@@ -159,7 +159,7 @@ test("D-09: an unnamed flip gives no row to a recorded marketplace no layer decl
   await addTo(scope, boundary, "tools", false);
   await addTo(scope, boundary, "extras", false);
   await saveConfig(
-    scope.locations.configJsonPath,
+    scope.locations.baseConfigJsonPath,
     {
       schemaVersion: 1,
       marketplaces: { extras: { source: path.join(scope.marketplacesRoot, "extras") } },
@@ -176,9 +176,9 @@ test("D-09: an unnamed flip gives no row to a recorded marketplace no layer decl
     { message: "● extras [project] (added)" },
     { message: "● extras [project] <autoupdate>\n\nMarketplace autoupdate: 1 success" },
   ]);
-  assert.deepStrictEqual(await loadConfig(scope.locations.configJsonPath), {
+  assert.deepStrictEqual(await loadConfig(scope.locations.baseConfigJsonPath), {
     status: "valid",
-    filePath: scope.locations.configJsonPath,
+    filePath: scope.locations.baseConfigJsonPath,
     config: {
       schemaVersion: 1,
       marketplaces: {
@@ -236,7 +236,7 @@ test("CFG-03: a named flip whose target layer is silent while the other file is 
   const scope = await projectScope(t, "mp-layer-autoupdate-unreadable-", ["tools"]);
   const boundary = createNotificationBoundary(2);
   await addTo(scope, boundary, "tools", true);
-  await writeFile(scope.locations.configLocalJsonPath, "{ malformed", "utf8");
+  await writeFile(scope.locations.localConfigJsonPath, "{ malformed", "utf8");
   const snapshotBefore = await scopeSnapshot(scope.locations);
 
   // act

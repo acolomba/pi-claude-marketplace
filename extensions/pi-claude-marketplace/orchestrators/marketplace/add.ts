@@ -584,7 +584,7 @@ async function runAddInGuard(args: {
   // WB-01: target-path selection happens ONCE before the lock so
   // the orchestrator NEVER falls back to the base file on ENOENT.
   const targetConfigPath =
-    opts.local === true ? locations.configLocalJsonPath : locations.configJsonPath;
+    opts.local === true ? locations.localConfigJsonPath : locations.baseConfigJsonPath;
   const configBasename = path.basename(targetConfigPath);
 
   return withLockedStateTransaction(locations, async (tx) => {

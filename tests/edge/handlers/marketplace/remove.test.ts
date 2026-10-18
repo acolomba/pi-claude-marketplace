@@ -174,7 +174,7 @@ async function seedSharedConfigDeclaring(cwd: string, scope: Scope, name: string
   const locations = locationsFor(scope, cwd);
   await mkdir(locations.scopeRoot, { recursive: true });
   await writeFile(
-    locations.configJsonPath,
+    locations.baseConfigJsonPath,
     JSON.stringify({
       schemaVersion: 1,
       marketplaces: { [name]: { source: `/seeded/${scope}/${name}` } },

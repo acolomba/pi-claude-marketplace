@@ -24,7 +24,7 @@ const EXTENSION_ROOT = path.join(REPO_ROOT, EXTENSION_ROOT_REL);
  * This test locks ownership at the architecture level so the seams cannot
  * be bypassed as new code paths are added. A new orchestrator or
  * reconcile-path file CANNOT grow
- * a call to `atomicWriteJson(<configJsonPath>, ...)` without either being
+ * a call to `atomicWriteJson(<baseConfigJsonPath>, ...)` without either being
  * added to `ALLOWED_CONFIG_JSON_WRITERS` (which forces an explicit edit to
  * the sibling 'exactly N' assertion below in the same commit) or being
  * caught at CI time.
@@ -36,11 +36,11 @@ const EXTENSION_ROOT = path.join(REPO_ROOT, EXTENSION_ROOT_REL);
  *
  * Forbidden call patterns (regex on the source text):
  *   - `atomicWriteJson(<...>stateJsonPath, ...)`         outside ALLOWED_STATE_JSON_WRITERS
- *   - `atomicWriteJson(<...>configJsonPath, ...)`        outside ALLOWED_CONFIG_JSON_WRITERS
- *   - `atomicWriteJson(<...>configLocalJsonPath, ...)`   outside ALLOWED_CONFIG_JSON_WRITERS
+ *   - `atomicWriteJson(<...>baseConfigJsonPath, ...)`        outside ALLOWED_CONFIG_JSON_WRITERS
+ *   - `atomicWriteJson(<...>localConfigJsonPath, ...)`   outside ALLOWED_CONFIG_JSON_WRITERS
  *
  * The `<...>` matches an optional `<identifier>.` prefix (e.g.
- * `loc.stateJsonPath`, `locations.configJsonPath`) AND the bare-identifier
+ * `loc.stateJsonPath`, `locations.baseConfigJsonPath`) AND the bare-identifier
  * form (e.g. `stateJsonPath`). The current legitimate callsites use both
  * shapes: `state-io.ts::saveState` and `migrate.ts::persistMigratedState`
  * pass a bare `stateJsonPath` local; `config-io.ts::saveConfig` passes a
@@ -102,13 +102,13 @@ async function* walkTsFiles(dir: string): AsyncGenerator<string> {
 
 // Regex notes:
 //   - `(?:\w+\.)?` allows an optional `<identifier>.` member-access prefix
-//     so `loc.stateJsonPath` / `locations.configJsonPath` match alongside
+//     so `loc.stateJsonPath` / `locations.baseConfigJsonPath` match alongside
 //     the bare-identifier callsite shape (`stateJsonPath`).
 //   - `\b` word-boundary on the right prevents accidental matches on
 //     `stateJsonPathLegacy` or similar suffixed identifiers.
 const FORBIDDEN_STATE_JSON_PATTERN = /atomicWriteJson\(\s*(?:\w+\.)?stateJsonPath\b/;
-const FORBIDDEN_CONFIG_JSON_PATTERN = /atomicWriteJson\(\s*(?:\w+\.)?configJsonPath\b/;
-const FORBIDDEN_CONFIG_LOCAL_JSON_PATTERN = /atomicWriteJson\(\s*(?:\w+\.)?configLocalJsonPath\b/;
+const FORBIDDEN_CONFIG_JSON_PATTERN = /atomicWriteJson\(\s*(?:\w+\.)?baseConfigJsonPath\b/;
+const FORBIDDEN_CONFIG_LOCAL_JSON_PATTERN = /atomicWriteJson\(\s*(?:\w+\.)?localConfigJsonPath\b/;
 
 test("SPLIT-02: only saveConfig writes claude-plugins.json / claude-plugins.local.json", async () => {
   // arrange

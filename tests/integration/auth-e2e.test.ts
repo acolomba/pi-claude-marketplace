@@ -156,7 +156,7 @@ function assertPrintRefusal(error: unknown): error is DeviceFlowUnavailableError
 async function assertUncommittedPrintAdd(fixture: Awaited<ReturnType<typeof createPrintAdd>>) {
   assert.deepStrictEqual(await loadState(fixture.locations.extensionRoot), fixture.priorState);
   assert.strictEqual(await readFile(fixture.locations.stateJsonPath, "utf8"), fixture.priorBytes);
-  await assert.rejects(readFile(fixture.locations.configJsonPath), { code: "ENOENT" });
+  await assert.rejects(readFile(fixture.locations.baseConfigJsonPath), { code: "ENOENT" });
   await assert.rejects(readdir(fixture.locations.sourcesDir), { code: "ENOENT" });
   assert.deepStrictEqual(fixture.notifications, []);
   assert.deepStrictEqual(fixture.requests, [

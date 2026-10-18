@@ -600,7 +600,7 @@ for (const scope of ["user", "project"] as const) {
             path.join(dataDir, "nested", "session.bin"),
             Buffer.from([0, 7, 255, 10]),
           );
-          await writeFile(locations.configJsonPath, '{"plugins":{"hello@mp":{}}}\n');
+          await writeFile(locations.baseConfigJsonPath, '{"plugins":{"hello@mp":{}}}\n');
           const otherLocations = locationsFor(scope === "user" ? "project" : "user", cwd);
           const otherDataDir = await otherLocations.pluginDataDir("mp", "hello");
           await mkdir(path.join(otherDataDir, "nested"), { recursive: true });
@@ -639,7 +639,7 @@ for (const scope of ["user", "project"] as const) {
             },
           });
           assert.strictEqual(
-            await readFile(locations.configJsonPath, "utf8"),
+            await readFile(locations.baseConfigJsonPath, "utf8"),
             '{\n  "plugins": {},\n  "schemaVersion": 1\n}\n',
           );
           assert.deepStrictEqual(
@@ -2464,7 +2464,7 @@ test("WB-01: standalone uninstall deletes the plugin entry from claude-plugins.j
       const { saveConfig } =
         await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
       await saveConfig(
-        locations.configJsonPath,
+        locations.baseConfigJsonPath,
         {
           schemaVersion: 1,
           plugins: { "hello@mp": {}, "keep@mp": {} },
@@ -2484,7 +2484,7 @@ test("WB-01: standalone uninstall deletes the plugin entry from claude-plugins.j
 
       const { loadConfig } =
         await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
-      const cfg = await loadConfig(locations.configJsonPath);
+      const cfg = await loadConfig(locations.baseConfigJsonPath);
       assert.equal(cfg.status, "valid");
       if (cfg.status === "valid") {
         assert.equal(cfg.config.plugins?.["hello@mp"], undefined);
@@ -2507,11 +2507,11 @@ test("WR-09 / T-56-03-01: orchestrated-mode uninstall SKIPS write-back; config u
       const { saveConfig } =
         await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
       await saveConfig(
-        locations.configJsonPath,
+        locations.baseConfigJsonPath,
         { schemaVersion: 1, plugins: { "hello@mp": {} } },
         locations.scopeRoot,
       );
-      const bytesBefore = await readFile(locations.configJsonPath);
+      const bytesBefore = await readFile(locations.baseConfigJsonPath);
 
       const { ctx, run } = makeCtx();
       await uninstallWithFreshOwner({
@@ -2525,7 +2525,7 @@ test("WR-09 / T-56-03-01: orchestrated-mode uninstall SKIPS write-back; config u
       });
 
       // Config file byte-identical -- orchestrated mode skipped the write-back.
-      const bytesAfter = await readFile(locations.configJsonPath);
+      const bytesAfter = await readFile(locations.baseConfigJsonPath);
       assert.deepEqual(bytesAfter, bytesBefore);
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -2560,11 +2560,11 @@ test("WB-01: ALREADY-GONE uninstall leaves config byte-unchanged", async () => {
       const { saveConfig } =
         await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
       await saveConfig(
-        locations.configJsonPath,
+        locations.baseConfigJsonPath,
         { schemaVersion: 1, plugins: { "hello@mp": {} } },
         locations.scopeRoot,
       );
-      const bytesBefore = await readFile(locations.configJsonPath);
+      const bytesBefore = await readFile(locations.baseConfigJsonPath);
 
       const { ctx, run } = makeCtx();
       await uninstallWithFreshOwner({
@@ -2577,7 +2577,7 @@ test("WB-01: ALREADY-GONE uninstall leaves config byte-unchanged", async () => {
       });
 
       // Config bytes UNCHANGED -- alreadyGone arm short-circuits before write-back.
-      const bytesAfter = await readFile(locations.configJsonPath);
+      const bytesAfter = await readFile(locations.baseConfigJsonPath);
       assert.deepEqual(bytesAfter, bytesBefore);
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -2593,8 +2593,8 @@ test("CFG-03 / T-56-03-04: invalid config aborts uninstall; basename-only cause;
       await seedFullPlugin(locations, "mp", "hello", cwd);
 
       // Seed invalid base config.
-      await mkdir(path.dirname(locations.configJsonPath), { recursive: true });
-      await writeFile(locations.configJsonPath, "{ not valid json", "utf8");
+      await mkdir(path.dirname(locations.baseConfigJsonPath), { recursive: true });
+      await writeFile(locations.baseConfigJsonPath, "{ not valid json", "utf8");
 
       // WR-04: the abort must not rewrite state.json at
       // all -- bytes AND mtime stable (no-save abort discipline).
@@ -2616,8 +2616,8 @@ test("CFG-03 / T-56-03-04: invalid config aborts uninstall; basename-only cause;
       const note = notifications[0]!;
       assert.match(note.message, /\{invalid manifest\}/);
       assert.ok(
-        !note.message.includes(locations.configJsonPath),
-        `MUST NOT leak absolute configJsonPath, got: ${note.message}`,
+        !note.message.includes(locations.baseConfigJsonPath),
+        `MUST NOT leak absolute baseConfigJsonPath, got: ${note.message}`,
       );
 
       // State record was NOT removed.
@@ -2640,8 +2640,8 @@ test("CFG-03 orchestrated invalid config returns a typed result without notifica
       // arrange
       const locations = locationsFor("project", cwd);
       await seedFullPlugin(locations, "mp", "hello", cwd);
-      await mkdir(path.dirname(locations.configJsonPath), { recursive: true });
-      await writeFile(locations.configJsonPath, "{ not valid json", "utf8");
+      await mkdir(path.dirname(locations.baseConfigJsonPath), { recursive: true });
+      await writeFile(locations.baseConfigJsonPath, "{ not valid json", "utf8");
       const stateBytes = await readFile(locations.stateJsonPath, "utf8");
       const cause = 'Config file "claude-plugins.json" failed schema validation.';
       const { ctx, run, notifications } = makeCtx();
@@ -2686,8 +2686,8 @@ async function writeLayerFiles(
   layers: { readonly shared: string; readonly local: string },
 ): Promise<void> {
   await mkdir(locations.scopeRoot, { recursive: true });
-  await writeFile(locations.configJsonPath, layers.shared, "utf8");
-  await writeFile(locations.configLocalJsonPath, layers.local, "utf8");
+  await writeFile(locations.baseConfigJsonPath, layers.shared, "utf8");
+  await writeFile(locations.localConfigJsonPath, layers.local, "utf8");
 }
 
 /** The bytes of both layer files and of `state.json`, with the state file's mtime. */
@@ -2698,8 +2698,8 @@ async function readScopeFiles(locations: ReturnType<typeof locationsFor>): Promi
   readonly stateMtime: number;
 }> {
   return {
-    base: await readFile(locations.configJsonPath, "utf8"),
-    local: await readFile(locations.configLocalJsonPath, "utf8"),
+    base: await readFile(locations.baseConfigJsonPath, "utf8"),
+    local: await readFile(locations.localConfigJsonPath, "utf8"),
     state: await readFile(locations.stateJsonPath, "utf8"),
     stateMtime: (await stat(locations.stateJsonPath)).mtimeMs,
   };
@@ -2834,7 +2834,7 @@ test("WR-09: an orchestrated uninstall of a plugin only the local layer declares
       assert.deepStrictEqual(outcome, { status: "uninstalled", name: "hello", version: "0.0.1" });
       assert.deepStrictEqual(notifications, []);
       assert.strictEqual(
-        await readFile(locations.configLocalJsonPath, "utf8"),
+        await readFile(locations.localConfigJsonPath, "utf8"),
         LAYER_DECLARING_HELLO,
       );
       assert.strictEqual(
@@ -2984,7 +2984,7 @@ test("WR-02: an uninstall deletes the key from its target layer and never writes
         shared: LAYER_DECLARING_MP_AND_HELLO,
         local: SHARED_LAYER_WITH_MARKETPLACE,
       });
-      const localMtime = (await stat(locations.configLocalJsonPath)).mtimeMs;
+      const localMtime = (await stat(locations.localConfigJsonPath)).mtimeMs;
       const { ctx, run, notifications } = makeCtx();
 
       // act
@@ -3001,9 +3001,9 @@ test("WR-02: an uninstall deletes the key from its target layer and never writes
       assert.deepStrictEqual(
         {
           notifications,
-          shared: await readFile(locations.configJsonPath, "utf8"),
-          local: await readFile(locations.configLocalJsonPath, "utf8"),
-          localMtime: (await stat(locations.configLocalJsonPath)).mtimeMs,
+          shared: await readFile(locations.baseConfigJsonPath, "utf8"),
+          local: await readFile(locations.localConfigJsonPath, "utf8"),
+          localMtime: (await stat(locations.localConfigJsonPath)).mtimeMs,
         },
         {
           notifications: [
@@ -3527,13 +3527,13 @@ test("cross-layer cascade: a --local uninstall clears the key only the local lay
         await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
       // Base declares the marketplace but NOT the plugin key.
       await saveConfig(
-        locations.configJsonPath,
+        locations.baseConfigJsonPath,
         { schemaVersion: 1, marketplaces: { m: { source: "./src" } } },
         locations.scopeRoot,
       );
       // Local declares ONLY the plugin key `p@m`.
       await saveConfig(
-        locations.configLocalJsonPath,
+        locations.localConfigJsonPath,
         { schemaVersion: 1, plugins: { "p@m": {} } },
         locations.scopeRoot,
       );
@@ -3556,13 +3556,13 @@ test("cross-layer cascade: a --local uninstall clears the key only the local lay
         await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
 
       // Neither physical file declares `p@m` afterward.
-      const baseCfg = await loadConfig(locations.configJsonPath);
+      const baseCfg = await loadConfig(locations.baseConfigJsonPath);
       assert.equal(baseCfg.status, "valid");
       if (baseCfg.status === "valid") {
         assert.equal(baseCfg.config.plugins?.["p@m"], undefined);
       }
 
-      const localCfg = await loadConfig(locations.configLocalJsonPath);
+      const localCfg = await loadConfig(locations.localConfigJsonPath);
       assert.equal(localCfg.status, "valid");
       if (localCfg.status === "valid") {
         assert.equal(localCfg.config.plugins?.["p@m"], undefined);
@@ -4117,7 +4117,7 @@ test("retry proof: uninstall: a hooks cascade refusal persists the shrunken reco
       await mkdir(path.join(dataDir, "nested"), { recursive: true });
       await writeFile(path.join(dataDir, "nested", "history"), "hooks history\n");
       const configBytes = JSON.stringify({ schemaVersion: 1, plugins: { "hello@mp": {} } });
-      await writeFile(locations.configJsonPath, configBytes, "utf8");
+      await writeFile(locations.baseConfigJsonPath, configBytes, "utf8");
       const firstSchedule: string[] = [];
       const secondSchedule: string[] = [];
       const activeSchedule = { current: firstSchedule };
@@ -4228,7 +4228,7 @@ test("retry proof: uninstall: a hooks cascade refusal persists the shrunken reco
         "pi-claude-marketplace/resources/skills/",
         "pi-claude-marketplace/state.json",
       ]);
-      assert.equal(await readFile(locations.configJsonPath, "utf8"), configBytes);
+      assert.equal(await readFile(locations.baseConfigJsonPath, "utf8"), configBytes);
       assert.deepStrictEqual(JSON.parse(await readFile(locations.mcpAdapterJsonPath, "utf8")), {
         mcpServers: {},
       });
@@ -4256,12 +4256,12 @@ test("retry proof: uninstall: foreign agent content preserves the whole record a
       const agentName = path.basename(seeded.agentFile, ".md");
       await writeFile(seeded.agentFile, "---\nname: foreign\n---\n\nOwned by another process.\n");
       await writeFile(
-        locations.configJsonPath,
+        locations.baseConfigJsonPath,
         JSON.stringify({ schemaVersion: 1, plugins: { "hello@mp": {} } }),
         "utf8",
       );
       const stateBytes = await readFile(locations.stateJsonPath, "utf8");
-      const configBytes = await readFile(locations.configJsonPath, "utf8");
+      const configBytes = await readFile(locations.baseConfigJsonPath, "utf8");
       const foreignBytes = await readFile(seeded.agentFile, "utf8");
       const firstSchedule: string[] = [];
       const secondSchedule: string[] = [];
@@ -4286,7 +4286,7 @@ test("retry proof: uninstall: foreign agent content preserves the whole record a
       const firstTree = await retryTree(locations.scopeRoot);
       const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
       const firstIndex = await loadAgentsIndex(locations);
-      const firstConfigBytes = await readFile(locations.configJsonPath, "utf8");
+      const firstConfigBytes = await readFile(locations.baseConfigJsonPath, "utf8");
       const firstForeignBytes = await readFile(seeded.agentFile, "utf8");
       await unlink(seeded.agentFile);
       activeSchedule.current = secondSchedule;
@@ -4326,7 +4326,7 @@ test("retry proof: uninstall: foreign agent content preserves the whole record a
         [agentName],
       );
       assert.equal(await pathExists(seeded.agentFile), false);
-      assert.deepStrictEqual(JSON.parse(await readFile(locations.configJsonPath, "utf8")), {
+      assert.deepStrictEqual(JSON.parse(await readFile(locations.baseConfigJsonPath, "utf8")), {
         plugins: {},
         schemaVersion: 1,
       });
@@ -4511,7 +4511,7 @@ test("retry proof: uninstall: an invalid config aborts before any mutation and t
       // arrange
       const locations = locationsFor("project", cwd);
       await seedFullPlugin(locations, "mp", "hello", cwd);
-      await writeFile(locations.configJsonPath, "{ not valid json", "utf8");
+      await writeFile(locations.baseConfigJsonPath, "{ not valid json", "utf8");
       const stateBytes = await readFile(locations.stateJsonPath, "utf8");
       const stateMtime = (await stat(locations.stateJsonPath)).mtimeMs;
       const firstSchedule: string[] = [];
@@ -4537,7 +4537,7 @@ test("retry proof: uninstall: an invalid config aborts before any mutation and t
       const firstTree = await retryTree(locations.scopeRoot);
       const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
       const firstStateMtime = (await stat(locations.stateJsonPath)).mtimeMs;
-      await unlink(locations.configJsonPath);
+      await unlink(locations.baseConfigJsonPath);
       activeSchedule.current = secondSchedule;
       const second = await uninstallWithFreshOwner({
         ctx,
@@ -4656,12 +4656,12 @@ test("retry proof: uninstall: a refused config write-back keeps the record and t
         },
       });
       await writeFile(
-        locations.configJsonPath,
+        locations.baseConfigJsonPath,
         JSON.stringify({ plugins: { "hello@mp": {}, "keep@mp": {} }, schemaVersion: 1 }),
         "utf8",
       );
       const stateBytes = await readFile(locations.stateJsonPath, "utf8");
-      const configBytes = await readFile(locations.configJsonPath, "utf8");
+      const configBytes = await readFile(locations.baseConfigJsonPath, "utf8");
       const firstSchedule: string[] = [];
       const secondSchedule: string[] = [];
       const activeSchedule = { current: firstSchedule };
@@ -4686,7 +4686,7 @@ test("retry proof: uninstall: a refused config write-back keeps the record and t
       const firstNotifications = [...notifications];
       const firstTree = await retryTree(locations.scopeRoot);
       const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
-      const firstConfigBytes = await readFile(locations.configJsonPath, "utf8");
+      const firstConfigBytes = await readFile(locations.baseConfigJsonPath, "utf8");
       fault.enabled = false;
       activeSchedule.current = secondSchedule;
       const second = await uninstallWithFreshOwner({
@@ -4717,7 +4717,7 @@ test("retry proof: uninstall: a refused config write-back keeps the record and t
       ]);
       assert.equal(firstStateBytes, stateBytes);
       assert.equal(firstConfigBytes, configBytes);
-      assert.deepStrictEqual(JSON.parse(await readFile(locations.configJsonPath, "utf8")), {
+      assert.deepStrictEqual(JSON.parse(await readFile(locations.baseConfigJsonPath, "utf8")), {
         plugins: { "keep@mp": {} },
         schemaVersion: 1,
       });
@@ -4804,7 +4804,7 @@ test("retry proof: uninstall: a refused state save leaves the swept config diver
         },
       });
       await writeFile(
-        locations.configJsonPath,
+        locations.baseConfigJsonPath,
         JSON.stringify({ plugins: { "hello@mp": {}, "keep@mp": {} }, schemaVersion: 1 }),
         "utf8",
       );
@@ -4837,8 +4837,8 @@ test("retry proof: uninstall: a refused state save leaves the swept config diver
       const firstTree = await retryTree(locations.scopeRoot);
       const firstDataBytes = await readFile(path.join(dataDir, "nested", "history"), "utf8");
       const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
-      const firstConfigBytes = await readFile(locations.configJsonPath, "utf8");
-      const firstConfigMtime = (await stat(locations.configJsonPath)).mtimeMs;
+      const firstConfigBytes = await readFile(locations.baseConfigJsonPath, "utf8");
+      const firstConfigMtime = (await stat(locations.baseConfigJsonPath)).mtimeMs;
       fault.enabled = false;
       activeSchedule.current = secondSchedule;
       const second = await uninstallWithFreshOwner({
@@ -4874,8 +4874,8 @@ test("retry proof: uninstall: a refused state save leaves the swept config diver
         plugins: { "keep@mp": {} },
         schemaVersion: 1,
       });
-      assert.equal(await readFile(locations.configJsonPath, "utf8"), firstConfigBytes);
-      assert.equal((await stat(locations.configJsonPath)).mtimeMs, firstConfigMtime);
+      assert.equal(await readFile(locations.baseConfigJsonPath, "utf8"), firstConfigBytes);
+      assert.equal((await stat(locations.baseConfigJsonPath)).mtimeMs, firstConfigMtime);
       assert.equal(
         "hello" in ((await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins ?? {}),
         false,

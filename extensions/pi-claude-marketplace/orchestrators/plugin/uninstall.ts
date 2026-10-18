@@ -330,13 +330,13 @@ interface UninstallLayerPaths {
  * absent.
  */
 function uninstallLayerPaths(
-  locations: Pick<ScopedLocations, "configJsonPath" | "configLocalJsonPath">,
+  locations: Pick<ScopedLocations, "baseConfigJsonPath" | "localConfigJsonPath">,
   local: boolean,
   orchestrated: boolean,
 ): UninstallLayerPaths {
   const [target, other] = local
-    ? [locations.configLocalJsonPath, locations.configJsonPath]
-    : [locations.configJsonPath, locations.configLocalJsonPath];
+    ? [locations.localConfigJsonPath, locations.baseConfigJsonPath]
+    : [locations.baseConfigJsonPath, locations.localConfigJsonPath];
   return { target, other: orchestrated ? undefined : other };
 }
 

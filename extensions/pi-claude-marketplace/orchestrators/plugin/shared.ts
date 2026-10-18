@@ -595,14 +595,14 @@ function selectConfigWriteTarget(
 ): { readonly targetConfigPath: string; readonly siblingConfigPath: string } {
   if (local === true) {
     return {
-      targetConfigPath: locations.configLocalJsonPath,
-      siblingConfigPath: locations.configJsonPath,
+      targetConfigPath: locations.localConfigJsonPath,
+      siblingConfigPath: locations.baseConfigJsonPath,
     };
   }
 
   return {
-    targetConfigPath: locations.configJsonPath,
-    siblingConfigPath: locations.configLocalJsonPath,
+    targetConfigPath: locations.baseConfigJsonPath,
+    siblingConfigPath: locations.localConfigJsonPath,
   };
 }
 
@@ -1020,7 +1020,7 @@ export async function overwriteDisabledMemberEntries(args: {
   readonly locations: ScopedLocations;
   readonly keys: readonly string[];
 }): Promise<void> {
-  const layers = [args.locations.configJsonPath, args.locations.configLocalJsonPath];
+  const layers = [args.locations.baseConfigJsonPath, args.locations.localConfigJsonPath];
   for (const configPath of layers) {
     for (const key of args.keys) {
       // eslint-disable-next-line no-await-in-loop -- per-key read-modify-write of one layer file

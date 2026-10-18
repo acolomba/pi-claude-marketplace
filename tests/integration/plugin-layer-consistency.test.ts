@@ -147,14 +147,14 @@ function layerError(
 test("a local layer that declares a plugin whose marketplace only the shared layer declares stops the reload and changes no file", async (t) => {
   // arrange
   const scope = await layerScope(t, "layer-gap-local-", "project");
-  await writeLayer(scope.locations.configJsonPath, {
+  await writeLayer(scope.locations.baseConfigJsonPath, {
     marketplaces: { mp: { source: scope.source } },
     plugins: { "other@mp": {} },
   });
   assert.deepStrictEqual(await reload(scope), [
     { message: "● mp [project] (added)\n  ● other (installed)\n\nReconcile: 2 successes" },
   ]);
-  await writeLayer(scope.locations.configLocalJsonPath, { plugins: { "demo@mp": {} } });
+  await writeLayer(scope.locations.localConfigJsonPath, { plugins: { "demo@mp": {} } });
   const before = await treeBytes(scope.locations.scopeRoot);
   const pending = createNotificationBoundary(1);
 
@@ -182,14 +182,14 @@ test("a local layer that declares a plugin whose marketplace only the shared lay
 test("a shared layer that declares a plugin whose marketplace only the local layer declares stops the reload and changes no file", async (t) => {
   // arrange
   const scope = await layerScope(t, "layer-gap-shared-", "project");
-  await writeLayer(scope.locations.configLocalJsonPath, {
+  await writeLayer(scope.locations.localConfigJsonPath, {
     marketplaces: { mp: { source: scope.source } },
     plugins: { "other@mp": {} },
   });
   assert.deepStrictEqual(await reload(scope), [
     { message: "● mp [project] (added)\n  ● other (installed)\n\nReconcile: 2 successes" },
   ]);
-  await writeLayer(scope.locations.configJsonPath, { plugins: { "demo@mp": {} } });
+  await writeLayer(scope.locations.baseConfigJsonPath, { plugins: { "demo@mp": {} } });
   const before = await treeBytes(scope.locations.scopeRoot);
 
   // act
@@ -204,10 +204,10 @@ test("a shared layer that declares a plugin whose marketplace only the local lay
 test("a local layer of the user scope that declares a plugin without its marketplace stops the user reload", async (t) => {
   // arrange
   const scope = await layerScope(t, "layer-gap-user-", "user");
-  await writeLayer(scope.locations.configJsonPath, {
+  await writeLayer(scope.locations.baseConfigJsonPath, {
     marketplaces: { mp: { source: scope.source } },
   });
-  await writeLayer(scope.locations.configLocalJsonPath, { plugins: { "demo@mp": {} } });
+  await writeLayer(scope.locations.localConfigJsonPath, { plugins: { "demo@mp": {} } });
   const before = await treeBytes(scope.locations.scopeRoot);
 
   // act
@@ -223,18 +223,18 @@ test("a local layer of the user scope that declares a plugin without its marketp
 test("the local layer an earlier --local install wrote keeps its bytes and its plugin stays recorded", async (t) => {
   // arrange
   const scope = await layerScope(t, "layer-gap-legacy-", "project");
-  await writeLayer(scope.locations.configJsonPath, {
+  await writeLayer(scope.locations.baseConfigJsonPath, {
     marketplaces: { mp: { source: scope.source } },
     plugins: { "demo@mp": {} },
   });
   assert.deepStrictEqual(await reload(scope), [
     { message: "● mp [project] (added)\n  ● demo (installed)\n\nReconcile: 2 successes" },
   ]);
-  await writeLayer(scope.locations.configJsonPath, {
+  await writeLayer(scope.locations.baseConfigJsonPath, {
     marketplaces: { mp: { source: scope.source } },
   });
   const legacy = '{"schemaVersion":1,"plugins":{"demo@mp":{}}}';
-  await writeFile(scope.locations.configLocalJsonPath, legacy);
+  await writeFile(scope.locations.localConfigJsonPath, legacy);
   const stateBytes = await readFile(scope.locations.stateJsonPath, "utf8");
 
   // act
@@ -244,7 +244,7 @@ test("the local layer an earlier --local install wrote keeps its bytes and its p
   assert.deepStrictEqual(applied, [
     layerError("claude-plugins.local.json", "project", LOCAL_GAP_CAUSE),
   ]);
-  assert.equal(await readFile(scope.locations.configLocalJsonPath, "utf8"), legacy);
+  assert.equal(await readFile(scope.locations.localConfigJsonPath, "utf8"), legacy);
   assert.equal(await readFile(scope.locations.stateJsonPath, "utf8"), stateBytes);
   assert.deepStrictEqual(await recordedPlugins(scope.locations), ["demo"]);
 });
@@ -252,15 +252,15 @@ test("the local layer an earlier --local install wrote keeps its bytes and its p
 test("before the first-run migration, pending reports the layer error the reload stops on", async (t) => {
   // arrange
   const scope = await layerScope(t, "layer-gap-premigration-", "project");
-  await writeLayer(scope.locations.configJsonPath, {
+  await writeLayer(scope.locations.baseConfigJsonPath, {
     marketplaces: { mp: { source: scope.source } },
     plugins: { "demo@mp": {} },
   });
   assert.deepStrictEqual(await reload(scope), [
     { message: "● mp [project] (added)\n  ● demo (installed)\n\nReconcile: 2 successes" },
   ]);
-  await rm(scope.locations.configJsonPath);
-  await writeLayer(scope.locations.configLocalJsonPath, { plugins: { "demo@mp": {} } });
+  await rm(scope.locations.baseConfigJsonPath);
+  await writeLayer(scope.locations.localConfigJsonPath, { plugins: { "demo@mp": {} } });
   const pending = createNotificationBoundary(1);
 
   // act
@@ -286,11 +286,11 @@ test("before the first-run migration, pending reports the layer error the reload
 test("a plugin whose marketplace no layer declares keeps its dangling reference row while a declared plugin installs", async (t) => {
   // arrange
   const scope = await layerScope(t, "layer-dangling-", "project");
-  await writeLayer(scope.locations.configJsonPath, {
+  await writeLayer(scope.locations.baseConfigJsonPath, {
     marketplaces: { mp: { source: scope.source } },
     plugins: { "other@mp": {} },
   });
-  await writeLayer(scope.locations.configLocalJsonPath, { plugins: { "ghost@nowhere": {} } });
+  await writeLayer(scope.locations.localConfigJsonPath, { plugins: { "ghost@nowhere": {} } });
 
   // act
   const applied = await reload(scope);
@@ -317,11 +317,11 @@ test("a plugin whose marketplace no layer declares keeps its dangling reference 
 test("a malformed plugin key reaches the planner's diagnostic and no layer error", async (t) => {
   // arrange
   const scope = await layerScope(t, "layer-malformed-", "project");
-  await writeLayer(scope.locations.configJsonPath, {
+  await writeLayer(scope.locations.baseConfigJsonPath, {
     marketplaces: { mp: { source: scope.source } },
     plugins: { "other@mp": {} },
   });
-  await writeLayer(scope.locations.configLocalJsonPath, { plugins: { "demo@": {} } });
+  await writeLayer(scope.locations.localConfigJsonPath, { plugins: { "demo@": {} } });
 
   // act
   const applied = await reload(scope);

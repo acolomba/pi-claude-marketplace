@@ -286,8 +286,8 @@ function assertLocationsEquivalent(
       agentsStagingDir: locations.agentsStagingDir,
       cacheDir: locations.cacheDir,
       commandsStagingDir: locations.commandsStagingDir,
-      configJsonPath: locations.configJsonPath,
-      configLocalJsonPath: locations.configLocalJsonPath,
+      baseConfigJsonPath: locations.baseConfigJsonPath,
+      localConfigJsonPath: locations.localConfigJsonPath,
       dataRoot: locations.dataRoot,
       extensionRoot: locations.extensionRoot,
       hooksDir: locations.hooksDir,
@@ -310,8 +310,8 @@ function assertLocationsEquivalent(
       agentsStagingDir: expectedLocations.agentsStagingDir,
       cacheDir: expectedLocations.cacheDir,
       commandsStagingDir: expectedLocations.commandsStagingDir,
-      configJsonPath: expectedLocations.configJsonPath,
-      configLocalJsonPath: expectedLocations.configLocalJsonPath,
+      baseConfigJsonPath: expectedLocations.baseConfigJsonPath,
+      localConfigJsonPath: expectedLocations.localConfigJsonPath,
       dataRoot: expectedLocations.dataRoot,
       extensionRoot: expectedLocations.extensionRoot,
       hooksDir: expectedLocations.hooksDir,
@@ -936,7 +936,7 @@ describe("selectDeclaringConfigWriteTarget", () => {
         schemaVersion: 1,
         plugins: { "alpha@mp": { enabled: false } },
       };
-      await writeConfig(locations.configLocalJsonPath, localConfig);
+      await writeConfig(locations.localConfigJsonPath, localConfig);
 
       // act
       const target = await selectDeclaringConfigWriteTarget({ locations, local: undefined });
@@ -944,7 +944,7 @@ describe("selectDeclaringConfigWriteTarget", () => {
       // assert
       assert.deepStrictEqual(target, {
         kind: "selected",
-        targetConfigPath: locations.configJsonPath,
+        targetConfigPath: locations.baseConfigJsonPath,
         targetIsLocal: false,
         current: { schemaVersion: 1 },
         sibling: localConfig,
@@ -961,7 +961,7 @@ describe("selectDeclaringConfigWriteTarget", () => {
         marketplaces: { mp: { source: "./mp" } },
         plugins: { "alpha@mp": {} },
       };
-      await writeConfig(locations.configJsonPath, sharedConfig);
+      await writeConfig(locations.baseConfigJsonPath, sharedConfig);
 
       // act
       const target = await selectDeclaringConfigWriteTarget({ locations, local: true });
@@ -969,7 +969,7 @@ describe("selectDeclaringConfigWriteTarget", () => {
       // assert
       assert.deepStrictEqual(target, {
         kind: "selected",
-        targetConfigPath: locations.configLocalJsonPath,
+        targetConfigPath: locations.localConfigJsonPath,
         targetIsLocal: true,
         current: { schemaVersion: 1 },
         sibling: sharedConfig,
@@ -988,7 +988,7 @@ describe("selectDeclaringConfigWriteTarget", () => {
       // assert
       assert.deepStrictEqual(target, {
         kind: "selected",
-        targetConfigPath: locations.configJsonPath,
+        targetConfigPath: locations.baseConfigJsonPath,
         targetIsLocal: false,
         current: { schemaVersion: 1 },
         sibling: { schemaVersion: 1 },
@@ -997,13 +997,13 @@ describe("selectDeclaringConfigWriteTarget", () => {
   });
 
   for (const { invalid, file, local, layer } of [
-    { invalid: "local", file: "configLocalJsonPath", local: undefined, layer: "the other layer" },
-    { invalid: "local", file: "configLocalJsonPath", local: true, layer: "the target layer" },
-    { invalid: "shared", file: "configJsonPath", local: false, layer: "the target layer" },
-    { invalid: "shared", file: "configJsonPath", local: true, layer: "the other layer" },
+    { invalid: "local", file: "localConfigJsonPath", local: undefined, layer: "the other layer" },
+    { invalid: "local", file: "localConfigJsonPath", local: true, layer: "the target layer" },
+    { invalid: "shared", file: "baseConfigJsonPath", local: false, layer: "the target layer" },
+    { invalid: "shared", file: "baseConfigJsonPath", local: true, layer: "the other layer" },
   ] satisfies readonly {
     invalid: string;
-    file: "configJsonPath" | "configLocalJsonPath";
+    file: "baseConfigJsonPath" | "localConfigJsonPath";
     local: boolean | undefined;
     layer: string;
   }[]) {
@@ -1028,9 +1028,9 @@ describe("selectDeclaringConfigWriteTarget", () => {
     // arrange
     await withTempScopes(async ({ cwd }) => {
       const locations = locationsFor("project", cwd);
-      await mkdir(path.dirname(locations.configJsonPath), { recursive: true });
-      await writeFile(locations.configJsonPath, "{");
-      await writeFile(locations.configLocalJsonPath, "{");
+      await mkdir(path.dirname(locations.baseConfigJsonPath), { recursive: true });
+      await writeFile(locations.baseConfigJsonPath, "{");
+      await writeFile(locations.localConfigJsonPath, "{");
 
       // act
       const target = await selectDeclaringConfigWriteTarget({ locations, local: true });
@@ -1038,7 +1038,7 @@ describe("selectDeclaringConfigWriteTarget", () => {
       // assert
       assert.deepStrictEqual(target, {
         kind: "unreadable",
-        filePath: locations.configLocalJsonPath,
+        filePath: locations.localConfigJsonPath,
       });
     });
   });
@@ -1381,9 +1381,9 @@ describe("namedPluginLayerRefusal", () => {
       // arrange
       await withTempScopes(async ({ cwd }) => {
         const locations = locationsFor("project", cwd);
-        await mkdir(path.dirname(locations.configJsonPath), { recursive: true });
-        await writeOptionalFile(locations.configJsonPath, shared);
-        await writeOptionalFile(locations.configLocalJsonPath, localFile);
+        await mkdir(path.dirname(locations.baseConfigJsonPath), { recursive: true });
+        await writeOptionalFile(locations.baseConfigJsonPath, shared);
+        await writeOptionalFile(locations.localConfigJsonPath, localFile);
 
         // act
         const refusal = await namedPluginLayerRefusal({
@@ -1403,7 +1403,7 @@ describe("namedPluginLayerRefusal", () => {
     // arrange
     await withTempScopes(async ({ cwd }) => {
       const locations = locationsFor("project", cwd);
-      await writeConfig(locations.configLocalJsonPath, {
+      await writeConfig(locations.localConfigJsonPath, {
         schemaVersion: 1,
         plugins: { "demo@mp": {} },
       });
@@ -1434,7 +1434,7 @@ describe("namedPluginLayerRefusal", () => {
     // arrange
     await withTempScopes(async ({ cwd }) => {
       const locations = locationsFor("project", cwd);
-      await writeConfig(locations.configJsonPath, {
+      await writeConfig(locations.baseConfigJsonPath, {
         schemaVersion: 1,
         plugins: { "demo@mp": {} },
       });
@@ -1463,31 +1463,31 @@ describe("namedPluginLayerRefusal", () => {
 
   for (const { file, basename, local, layer } of [
     {
-      file: "configJsonPath",
+      file: "baseConfigJsonPath",
       basename: "claude-plugins.json",
       local: false,
       layer: "the target layer",
     },
     {
-      file: "configLocalJsonPath",
+      file: "localConfigJsonPath",
       basename: "claude-plugins.local.json",
       local: false,
       layer: "the other layer",
     },
     {
-      file: "configLocalJsonPath",
+      file: "localConfigJsonPath",
       basename: "claude-plugins.local.json",
       local: true,
       layer: "the target layer",
     },
     {
-      file: "configJsonPath",
+      file: "baseConfigJsonPath",
       basename: "claude-plugins.json",
       local: true,
       layer: "the other layer",
     },
   ] satisfies readonly {
-    file: "configJsonPath" | "configLocalJsonPath";
+    file: "baseConfigJsonPath" | "localConfigJsonPath";
     basename: string;
     local: boolean;
     layer: string;
@@ -1523,7 +1523,7 @@ describe("keepLocalLayerTargets", () => {
     // arrange
     await withTempScopes(async ({ cwd }) => {
       const locations = locationsFor("project", cwd);
-      await writeConfig(locations.configLocalJsonPath, {
+      await writeConfig(locations.localConfigJsonPath, {
         schemaVersion: 1,
         plugins: { "alpha@mp": {}, "gamma@mp": {} },
       });
@@ -1547,7 +1547,7 @@ describe("keepLocalLayerTargets", () => {
   test("LAYER-04: keeps no target when the local layer is absent", async () => {
     // arrange
     await withTempScopes(async ({ cwd }) => {
-      await writeConfig(locationsFor("project", cwd).configJsonPath, {
+      await writeConfig(locationsFor("project", cwd).baseConfigJsonPath, {
         schemaVersion: 1,
         plugins: { "alpha@mp": {} },
       });
@@ -1566,11 +1566,11 @@ describe("keepLocalLayerTargets", () => {
   test("LAYER-04: reads each scope's own local layer", async () => {
     // arrange
     await withTempScopes(async ({ cwd }) => {
-      await writeConfig(locationsFor("project", cwd).configLocalJsonPath, {
+      await writeConfig(locationsFor("project", cwd).localConfigJsonPath, {
         schemaVersion: 1,
         plugins: { "alpha@mp": {} },
       });
-      await writeConfig(locationsFor("user", cwd).configLocalJsonPath, {
+      await writeConfig(locationsFor("user", cwd).localConfigJsonPath, {
         schemaVersion: 1,
         plugins: { "beta@mp": {} },
       });
@@ -1596,8 +1596,8 @@ describe("keepLocalLayerTargets", () => {
     // arrange
     await withTempScopes(async ({ cwd }) => {
       const locations = locationsFor("project", cwd);
-      await mkdir(path.dirname(locations.configLocalJsonPath), { recursive: true });
-      await writeFile(locations.configLocalJsonPath, "{");
+      await mkdir(path.dirname(locations.localConfigJsonPath), { recursive: true });
+      await writeFile(locations.localConfigJsonPath, "{");
 
       // act & assert
       await assert.rejects(
@@ -1621,9 +1621,9 @@ describe("keepLocalLayerTargets", () => {
     // arrange
     await withTempScopes(async ({ cwd }) => {
       const locations = locationsFor("project", cwd);
-      await mkdir(path.dirname(locations.configLocalJsonPath), { recursive: true });
+      await mkdir(path.dirname(locations.localConfigJsonPath), { recursive: true });
       await writeFile(
-        locations.configLocalJsonPath,
+        locations.localConfigJsonPath,
         '{"schemaVersion":1,"plugins":{"__proto__":{"alpha@mp":{}}}}',
       );
 
@@ -1642,11 +1642,11 @@ describe("keepLocalLayerTargets", () => {
     // arrange
     await withTempScopes(async ({ cwd, root }) => {
       const locations = locationsFor("project", cwd);
-      await writeConfig(locations.configLocalJsonPath, {
+      await writeConfig(locations.localConfigJsonPath, {
         schemaVersion: 1,
         plugins: { "app@tools": {} },
       });
-      await writeConfig(locations.configJsonPath, {
+      await writeConfig(locations.baseConfigJsonPath, {
         schemaVersion: 1,
         plugins: { "svc@tools": {} },
       });
@@ -1686,11 +1686,11 @@ describe("keepLocalLayerTargets", () => {
     // arrange
     await withTempScopes(async ({ cwd, root }) => {
       const locations = locationsFor("project", cwd);
-      await writeConfig(locations.configLocalJsonPath, {
+      await writeConfig(locations.localConfigJsonPath, {
         schemaVersion: 1,
         plugins: { "app@tools": {} },
       });
-      await writeConfig(locations.configJsonPath, {
+      await writeConfig(locations.baseConfigJsonPath, {
         schemaVersion: 1,
         plugins: { "kit@tools": {} },
       });
@@ -1717,7 +1717,7 @@ describe("keepLocalLayerTargets", () => {
   test("LAYER-04: a local plugin whose dependencies cannot be read refuses the selection, naming it", async () => {
     // arrange
     await withTempScopes(async ({ cwd, root }) => {
-      await writeConfig(locationsFor("project", cwd).configLocalJsonPath, {
+      await writeConfig(locationsFor("project", cwd).localConfigJsonPath, {
         schemaVersion: 1,
         plugins: { "app@tools": {} },
       });
@@ -1751,8 +1751,8 @@ describe("keepLocalLayerTargets", () => {
     // arrange
     await withTempScopes(async ({ cwd }) => {
       const locations = locationsFor("project", cwd);
-      await mkdir(path.dirname(locations.configJsonPath), { recursive: true });
-      await writeFile(locations.configJsonPath, "{");
+      await mkdir(path.dirname(locations.baseConfigJsonPath), { recursive: true });
+      await writeFile(locations.baseConfigJsonPath, "{");
 
       // act & assert
       await assert.rejects(
@@ -1789,7 +1789,7 @@ describe("writeAdoptingConfigEntries", () => {
         state,
         marketplace: "mp",
         plugin: "alpha",
-        targetConfigPath: locations.configJsonPath,
+        targetConfigPath: locations.baseConfigJsonPath,
         targetIsLocal: false,
         scopeRoot: locations.scopeRoot,
         pluginPatch: { enabled: false },
@@ -1797,7 +1797,7 @@ describe("writeAdoptingConfigEntries", () => {
 
       // assert
       assert.equal(
-        await readFile(locations.configJsonPath, "utf8"),
+        await readFile(locations.baseConfigJsonPath, "utf8"),
         '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "mp": {\n      "source": "./mp-source"\n    }\n  },\n  "plugins": {\n    "alpha@mp": {\n      "enabled": false\n    }\n  }\n}\n',
       );
       assert.deepStrictEqual(current, { schemaVersion: 1 });
@@ -1823,7 +1823,7 @@ describe("writeAdoptingConfigEntries", () => {
         state,
         marketplace: "mp",
         plugin: "alpha",
-        targetConfigPath: locations.configJsonPath,
+        targetConfigPath: locations.baseConfigJsonPath,
         targetIsLocal: false,
         scopeRoot: locations.scopeRoot,
         pluginPatch: {},
@@ -1831,7 +1831,7 @@ describe("writeAdoptingConfigEntries", () => {
 
       // assert
       assert.equal(
-        await readFile(locations.configJsonPath, "utf8"),
+        await readFile(locations.baseConfigJsonPath, "utf8"),
         '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "mp": {\n      "source": "./declared",\n      "autoupdate": false\n    }\n  },\n  "plugins": {\n    "alpha@mp": {}\n  }\n}\n',
       );
     });
@@ -1855,7 +1855,7 @@ describe("writeAdoptingConfigEntries", () => {
         state,
         marketplace: "mp",
         plugin: "alpha",
-        targetConfigPath: locations.configLocalJsonPath,
+        targetConfigPath: locations.localConfigJsonPath,
         targetIsLocal: true,
         scopeRoot: locations.scopeRoot,
         pluginPatch: { enabled: true },
@@ -1863,7 +1863,7 @@ describe("writeAdoptingConfigEntries", () => {
 
       // assert
       assert.equal(
-        await readFile(locations.configLocalJsonPath, "utf8"),
+        await readFile(locations.localConfigJsonPath, "utf8"),
         '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "mp": {\n      "source": "./mp-source"\n    }\n  },\n  "plugins": {\n    "alpha@mp": {\n      "enabled": true\n    }\n  }\n}\n',
       );
     });
@@ -1891,7 +1891,7 @@ describe("writeAdoptingConfigEntries", () => {
         state,
         marketplace: "mp",
         plugin: "alpha",
-        targetConfigPath: locations.configLocalJsonPath,
+        targetConfigPath: locations.localConfigJsonPath,
         targetIsLocal: true,
         scopeRoot: locations.scopeRoot,
         pluginPatch: {},
@@ -1899,7 +1899,7 @@ describe("writeAdoptingConfigEntries", () => {
 
       // assert
       assert.equal(
-        await readFile(locations.configLocalJsonPath, "utf8"),
+        await readFile(locations.localConfigJsonPath, "utf8"),
         '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "mp": {\n      "source": "acme/mp"\n    }\n  },\n  "plugins": {\n    "alpha@mp": {}\n  }\n}\n',
       );
     });
@@ -1922,7 +1922,7 @@ describe("writeAdoptingConfigEntries", () => {
         state: unknownSourceState(),
         marketplace: "mp",
         plugin: "alpha",
-        targetConfigPath: locations.configLocalJsonPath,
+        targetConfigPath: locations.localConfigJsonPath,
         targetIsLocal: true,
         scopeRoot: locations.scopeRoot,
         pluginPatch: {},
@@ -1930,7 +1930,7 @@ describe("writeAdoptingConfigEntries", () => {
 
       // assert
       assert.equal(
-        await readFile(locations.configLocalJsonPath, "utf8"),
+        await readFile(locations.localConfigJsonPath, "utf8"),
         '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "mp": {\n      "source": "./sibling"\n    }\n  },\n  "plugins": {\n    "alpha@mp": {}\n  }\n}\n',
       );
     });
@@ -1945,8 +1945,8 @@ describe("writeAdoptingConfigEntries", () => {
       await withTempScopes(async ({ cwd }) => {
         const locations = locationsFor("project", cwd);
         const targetConfigPath = targetIsLocal
-          ? locations.configLocalJsonPath
-          : locations.configJsonPath;
+          ? locations.localConfigJsonPath
+          : locations.baseConfigJsonPath;
         const current: ScopeConfig = { schemaVersion: 1 };
         const sibling: ScopeConfig = { schemaVersion: 1 };
 
@@ -2026,7 +2026,7 @@ describe("writeAdoptingConfigEntries", () => {
           state,
           marketplace: "mp",
           plugin: "alpha",
-          targetConfigPath: locations.configJsonPath,
+          targetConfigPath: locations.baseConfigJsonPath,
           targetIsLocal: false,
           scopeRoot: locations.scopeRoot,
           pluginPatch: {},
@@ -2034,7 +2034,7 @@ describe("writeAdoptingConfigEntries", () => {
         });
 
         // assert
-        assert.equal(await readFile(locations.configJsonPath, "utf8"), config);
+        assert.equal(await readFile(locations.baseConfigJsonPath, "utf8"), config);
       });
     });
   }
@@ -2086,8 +2086,8 @@ describe("overwriteDisabledMemberEntries", () => {
       await withTempScopes(async ({ cwd }) => {
         const locations = locationsFor("project", cwd);
         await mkdir(locations.scopeRoot, { recursive: true });
-        await writeOptionalFile(locations.configJsonPath, shared);
-        await writeOptionalFile(locations.configLocalJsonPath, local);
+        await writeOptionalFile(locations.baseConfigJsonPath, shared);
+        await writeOptionalFile(locations.localConfigJsonPath, local);
 
         // act
         await overwriteDisabledMemberEntries({
@@ -2098,8 +2098,8 @@ describe("overwriteDisabledMemberEntries", () => {
         // assert
         assert.deepStrictEqual(
           {
-            shared: await readOptionalFile(locations.configJsonPath),
-            local: await readOptionalFile(locations.configLocalJsonPath),
+            shared: await readOptionalFile(locations.baseConfigJsonPath),
+            local: await readOptionalFile(locations.localConfigJsonPath),
           },
           { shared: expectedShared, local: expectedLocal },
         );
@@ -2121,8 +2121,8 @@ describe("overwriteDisabledMemberEntries", () => {
       // assert
       assert.deepStrictEqual(
         {
-          shared: await readOptionalFile(locations.configJsonPath),
-          local: await readOptionalFile(locations.configLocalJsonPath),
+          shared: await readOptionalFile(locations.baseConfigJsonPath),
+          local: await readOptionalFile(locations.localConfigJsonPath),
         },
         { shared: undefined, local: undefined },
       );
@@ -2135,7 +2135,7 @@ describe("overwriteDisabledMemberEntries", () => {
       const locations = locationsFor("project", cwd);
       const seeded = '{"schemaVersion":1,"plugins":{"b@mp":{"enabled":true}}}';
       await mkdir(locations.scopeRoot, { recursive: true });
-      await writeFile(locations.configLocalJsonPath, seeded);
+      await writeFile(locations.localConfigJsonPath, seeded);
 
       // act
       await overwriteDisabledMemberEntries({
@@ -2144,7 +2144,7 @@ describe("overwriteDisabledMemberEntries", () => {
       });
 
       // assert
-      assert.strictEqual(await readFile(locations.configLocalJsonPath, "utf8"), seeded);
+      assert.strictEqual(await readFile(locations.localConfigJsonPath, "utf8"), seeded);
     });
   });
 
@@ -2154,7 +2154,7 @@ describe("overwriteDisabledMemberEntries", () => {
       const locations = locationsFor("project", cwd);
       await mkdir(locations.scopeRoot, { recursive: true });
       await writeFile(
-        locations.configJsonPath,
+        locations.baseConfigJsonPath,
         '{"schemaVersion":1,"plugins":{"b@mp":{"enabled":false},"c@mp":{"enabled":false}}}',
       );
 
@@ -2166,7 +2166,7 @@ describe("overwriteDisabledMemberEntries", () => {
 
       // assert
       assert.strictEqual(
-        await readFile(locations.configJsonPath, "utf8"),
+        await readFile(locations.baseConfigJsonPath, "utf8"),
         '{\n  "schemaVersion": 1,\n  "plugins": {\n    "b@mp": {\n      "enabled": true\n    },\n    "c@mp": {\n      "enabled": true\n    }\n  }\n}\n',
       );
     });

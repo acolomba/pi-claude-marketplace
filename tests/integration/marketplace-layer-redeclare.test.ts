@@ -108,8 +108,8 @@ test("declares a url marketplace in the local layer with one clone in total", as
     { message: "● mp [project] (added)" },
     { message: "● mp [project] (added)" },
   ]);
-  assert.strictEqual(await readFile(scope.locations.configJsonPath, "utf8"), MP_DECLARED);
-  assert.strictEqual(await readFile(scope.locations.configLocalJsonPath, "utf8"), MP_DECLARED);
+  assert.strictEqual(await readFile(scope.locations.baseConfigJsonPath, "utf8"), MP_DECLARED);
+  assert.strictEqual(await readFile(scope.locations.localConfigJsonPath, "utf8"), MP_DECLARED);
   assert.strictEqual(await readFile(scope.locations.stateJsonPath, "utf8"), stateBefore);
   assert.deepStrictEqual(
     first.git.state.calls.clone.map(({ url }) => url),
@@ -126,7 +126,7 @@ test("declares again a url marketplace the scope records but no layer declares",
   const boundary = createNotificationBoundary(2);
   await addRepo(scope, boundary, false);
   await saveConfig(
-    scope.locations.configJsonPath,
+    scope.locations.baseConfigJsonPath,
     { schemaVersion: 1, marketplaces: {} },
     scope.locations.scopeRoot,
   );
@@ -140,8 +140,8 @@ test("declares again a url marketplace the scope records but no layer declares",
     { message: "● mp [project] (added)" },
     { message: "● mp [project] (added)" },
   ]);
-  assert.strictEqual(await readFile(scope.locations.configJsonPath, "utf8"), MP_DECLARED);
-  assert.strictEqual(await pathExists(scope.locations.configLocalJsonPath), false);
+  assert.strictEqual(await readFile(scope.locations.baseConfigJsonPath, "utf8"), MP_DECLARED);
+  assert.strictEqual(await pathExists(scope.locations.localConfigJsonPath), false);
   assert.strictEqual(await readFile(scope.locations.stateJsonPath, "utf8"), stateBefore);
   assert.deepStrictEqual(second.git.state.calls, NO_GIT_CALLS);
   assert.deepStrictEqual(second.credentials.calls, { approve: [], fill: [], reject: [] });

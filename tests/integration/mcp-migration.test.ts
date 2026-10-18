@@ -326,7 +326,7 @@ test("AMIG-04: when claude-plugins.json declares the owner, the reload installs 
     await writeProjectLegacyEntry(cwd);
     const locations = locationsFor("project", cwd);
     await saveConfig(
-      locations.configJsonPath,
+      locations.baseConfigJsonPath,
       {
         marketplaces: { mp: { source: "./mp-src" } },
         plugins: { "hello@mp": { enabled: true } },

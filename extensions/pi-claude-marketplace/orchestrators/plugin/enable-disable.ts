@@ -40,7 +40,7 @@
 // network.
 //
 // --local file isolation: when `opts.local === true`,
-// `targetConfigPath = locations.configLocalJsonPath` UNCONDITIONALLY -- the
+// `targetConfigPath = locations.localConfigJsonPath` UNCONDITIONALLY -- the
 // orchestrator NEVER falls back to the base file on ENOENT (`loadConfig`'s
 // absent arm yields an empty starting shape that `saveConfig` writes back to
 // the local file, creating it fresh).
@@ -2365,7 +2365,7 @@ async function runSetEnabledOutcome(
   // could not be read, and the row is rendered after the lock closes, so the
   // basename escapes the closure through this `let`. It starts at the shared
   // layer, the target the no-flag call selects, so the type stays definite.
-  let configBasename = path.basename(locations.configJsonPath);
+  let configBasename = path.basename(locations.baseConfigJsonPath);
   // EDEP-01: the enable cascade's classified member rows, threaded out of the
   // locked closure below for the standalone renderer. Stays empty for
   // `disable`, for orchestrated mode (a reconcile-driven enable is a

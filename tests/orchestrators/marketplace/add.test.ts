@@ -1753,7 +1753,7 @@ test("normalizes a non-Error config-write throw after a path mutation", async (t
     const { gitOps, state } = createGitOps();
     const originalDirname = path.dirname.bind(path);
     t.mock.method(path, "dirname", (value: string) => {
-      if (value === locations.configJsonPath) {
+      if (value === locations.baseConfigJsonPath) {
         // eslint-disable-next-line @typescript-eslint/only-throw-error -- the public boundary accepts unknown throws from persistence.
         throw "config writer stopped";
       }
@@ -1931,7 +1931,7 @@ test("D-03-INV :: add invalidates marketplace-names cache for the new scope", as
     const recorded = persisted.marketplaces["valid-marketplace"];
     assert.ok(recorded);
     const { lastUpdatedAt, ...stableRecord } = recorded;
-    const config = await loadConfig(locations.configJsonPath);
+    const config = await loadConfig(locations.baseConfigJsonPath);
     const tree = (await readdir(locations.scopeRoot, { recursive: true })).sort();
     const sourceRoot = await locations.sourceCloneDir("valid-marketplace");
 
@@ -1963,7 +1963,7 @@ test("D-03-INV :: add invalidates marketplace-names cache for the new scope", as
     assert.match(lastUpdatedAt ?? "", /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
     assert.deepStrictEqual(config, {
       status: "valid",
-      filePath: locations.configJsonPath,
+      filePath: locations.baseConfigJsonPath,
       config: {
         schemaVersion: 1,
         marketplaces: {
@@ -2017,7 +2017,7 @@ test("invalidates names before the plugin index only after the add is durable", 
         }
 
         const persisted = await loadState(locations.extensionRoot);
-        const config = await loadConfig(locations.configJsonPath);
+        const config = await loadConfig(locations.baseConfigJsonPath);
         durableAtFirstInvalidation =
           persisted.marketplaces["valid-marketplace"] !== undefined &&
           config.status === "valid" &&
@@ -2080,7 +2080,7 @@ test("does not invalidate a duplicate no-effect add through the same cache owner
       });
       recorder.clearCalls();
       const stateBeforeDuplicate = await readFile(locations.stateJsonPath, "utf8");
-      const configBeforeDuplicate = await loadConfig(locations.configJsonPath);
+      const configBeforeDuplicate = await loadConfig(locations.baseConfigJsonPath);
       const treeBeforeDuplicate = (await readdir(locations.scopeRoot, { recursive: true })).sort();
 
       // act
@@ -2104,7 +2104,7 @@ test("does not invalidate a duplicate no-effect add through the same cache owner
 
       assert.deepStrictEqual(recorder.calls, []);
       assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBeforeDuplicate);
-      assert.deepStrictEqual(await loadConfig(locations.configJsonPath), configBeforeDuplicate);
+      assert.deepStrictEqual(await loadConfig(locations.baseConfigJsonPath), configBeforeDuplicate);
       assert.deepStrictEqual(
         (await readdir(locations.scopeRoot, { recursive: true })).sort(),
         treeBeforeDuplicate,
@@ -2148,7 +2148,7 @@ test("does not invalidate when source validation fails before commit", async () 
       schemaVersion: 3,
       marketplaces: {},
     });
-    assert.deepStrictEqual(await loadConfig(locations.configJsonPath), {
+    assert.deepStrictEqual(await loadConfig(locations.baseConfigJsonPath), {
       status: "absent",
     });
     assert.deepStrictEqual(notifications, []);
@@ -2175,7 +2175,7 @@ test("swallows each cache hygiene failure without rewriting the durable add", as
             }
 
             committedStateBytes = await readFile(locations.stateJsonPath, "utf8");
-            committedConfigBytes = await readFile(locations.configJsonPath, "utf8");
+            committedConfigBytes = await readFile(locations.baseConfigJsonPath, "utf8");
             committedTree = (await readdir(locations.scopeRoot, { recursive: true })).sort();
           },
         });
@@ -2197,7 +2197,10 @@ test("swallows each cache hygiene failure without rewriting the durable add", as
         assert.notStrictEqual(committedConfigBytes, undefined);
         assert.notStrictEqual(committedTree, undefined);
         assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), committedStateBytes);
-        assert.strictEqual(await readFile(locations.configJsonPath, "utf8"), committedConfigBytes);
+        assert.strictEqual(
+          await readFile(locations.baseConfigJsonPath, "utf8"),
+          committedConfigBytes,
+        );
         assert.deepStrictEqual(
           (await readdir(locations.scopeRoot, { recursive: true })).sort(),
           committedTree,
@@ -2740,7 +2743,7 @@ test("orchestrated mode normalizes a non-Error opaque failure without mutation",
     const { gitOps, state } = createGitOps();
     const originalBasename = path.basename.bind(path);
     t.mock.method(path, "basename", (value: string, suffix?: string) => {
-      if (value === locations.configJsonPath) {
+      if (value === locations.baseConfigJsonPath) {
         // eslint-disable-next-line @typescript-eslint/only-throw-error -- this case proves the public unknown-throw normalizer.
         throw "opaque add failure";
       }
@@ -2798,7 +2801,7 @@ test("normalizes a structurally classified exotic throw in orchestrated mode", a
     const { gitOps, state } = createGitOps();
     const originalBasename = path.basename.bind(path);
     t.mock.method(path, "basename", (value: string, suffix?: string) => {
-      if (value === locations.configJsonPath) {
+      if (value === locations.baseConfigJsonPath) {
         // eslint-disable-next-line @typescript-eslint/only-throw-error -- an exotic thenable-free value exercises unknown-throw normalization.
         throw exoticDuplicate;
       }
@@ -3050,7 +3053,7 @@ test("WB-01: standalone add writes the marketplace entry to claude-plugins.json 
 
     const { loadConfig } =
       await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
-    const cfg = await loadConfig(locations.configJsonPath);
+    const cfg = await loadConfig(locations.baseConfigJsonPath);
     // assert
     assert.equal(cfg.status, "valid");
     if (cfg.status !== "valid") {
@@ -3066,7 +3069,7 @@ test("WB-01: standalone add writes the marketplace entry to claude-plugins.json 
     );
 
     // The local file MUST NOT have been touched on the base-target path.
-    const localCfg = await loadConfig(locations.configLocalJsonPath);
+    const localCfg = await loadConfig(locations.localConfigJsonPath);
     assert.equal(localCfg.status, "absent");
   });
 });
@@ -3092,7 +3095,7 @@ test("WB-01: --local routes the write to claude-plugins.local.json and never tou
 
     const { loadConfig } =
       await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
-    const localCfg = await loadConfig(locations.configLocalJsonPath);
+    const localCfg = await loadConfig(locations.localConfigJsonPath);
     // assert
     assert.equal(localCfg.status, "valid");
     if (localCfg.status === "valid") {
@@ -3103,7 +3106,7 @@ test("WB-01: --local routes the write to claude-plugins.local.json and never tou
     }
 
     // The base file MUST be untouched.
-    const baseCfg = await loadConfig(locations.configJsonPath);
+    const baseCfg = await loadConfig(locations.baseConfigJsonPath);
     assert.equal(baseCfg.status, "absent");
   });
 });
@@ -3149,11 +3152,11 @@ for (const { declaredLayer, targetLayer, firstLocal, secondLocal } of [
       // assert
       assert.deepStrictEqual(notifications, [{ message: "● tools [project] (added)" }]);
       assert.strictEqual(
-        await readFile(locations.configJsonPath, "utf8"),
+        await readFile(locations.baseConfigJsonPath, "utf8"),
         declaredMarketplaceBytes("tools", marketplaceRoot),
       );
       assert.strictEqual(
-        await readFile(locations.configLocalJsonPath, "utf8"),
+        await readFile(locations.localConfigJsonPath, "utf8"),
         declaredMarketplaceBytes("tools", marketplaceRoot),
       );
       assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
@@ -3205,7 +3208,7 @@ test("LAYER-01 / WR-06: a relative path typed in another directory adds that dir
       severity: "error",
     },
   ]);
-  assert.strictEqual(await pathExists(userLocations.configLocalJsonPath), false);
+  assert.strictEqual(await pathExists(userLocations.localConfigJsonPath), false);
   assert.strictEqual(await readFile(userLocations.stateJsonPath, "utf8"), stateBefore);
 });
 
@@ -3245,11 +3248,11 @@ test("LAYER-01: declares a github marketplace in the local layer with only the c
     // assert
     assert.deepStrictEqual(notifications, [{ message: "● valid-marketplace [project] (added)" }]);
     assert.strictEqual(
-      await readFile(locations.configJsonPath, "utf8"),
+      await readFile(locations.baseConfigJsonPath, "utf8"),
       declaredMarketplaceBytes("valid-marketplace", "anthropics/claude-plugins-official"),
     );
     assert.strictEqual(
-      await readFile(locations.configLocalJsonPath, "utf8"),
+      await readFile(locations.localConfigJsonPath, "utf8"),
       declaredMarketplaceBytes("valid-marketplace", "anthropics/claude-plugins-official"),
     );
     assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
@@ -3297,10 +3300,10 @@ test("LAYER-01: declares a marketplace the scope records but no layer declares, 
     // assert
     assert.deepStrictEqual(notifications, [{ message: "● tools [project] (added)" }]);
     assert.strictEqual(
-      await readFile(locations.configJsonPath, "utf8"),
+      await readFile(locations.baseConfigJsonPath, "utf8"),
       declaredMarketplaceBytes("tools", marketplaceRoot),
     );
-    assert.strictEqual(await pathExists(locations.configLocalJsonPath), false);
+    assert.strictEqual(await pathExists(locations.localConfigJsonPath), false);
     assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
     assert.deepStrictEqual(gitState.cloneCalls, []);
   });
@@ -3377,8 +3380,8 @@ test("WR-09 / T-56-02-01: orchestrated-mode add SKIPS config write-back (neither
     assert.deepStrictEqual(outcome, { status: "added", name: "valid-marketplace" });
     const { loadConfig } =
       await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
-    assert.equal((await loadConfig(locations.configJsonPath)).status, "absent");
-    assert.equal((await loadConfig(locations.configLocalJsonPath)).status, "absent");
+    assert.equal((await loadConfig(locations.baseConfigJsonPath)).status, "absent");
+    assert.equal((await loadConfig(locations.localConfigJsonPath)).status, "absent");
   });
 });
 
@@ -3387,7 +3390,7 @@ test("CFG-03 / T-56-02-05: --local path with an invalid config aborts the add; b
     // Seed an invalid claude-plugins.local.json (malformed JSON).
     // arrange
     const { writeFile } = await import("node:fs/promises");
-    await writeFile(locations.configLocalJsonPath, "{ not valid json", "utf8");
+    await writeFile(locations.localConfigJsonPath, "{ not valid json", "utf8");
 
     const { ctx, run, notifications } = makeCtx();
     const { gitOps } = createGitOps({
@@ -3415,8 +3418,8 @@ test("CFG-03 / T-56-02-05: --local path with an invalid config aborts the add; b
     );
     // T-56-02-05: the absolute path MUST NOT be leaked in the rendered cause.
     assert.ok(
-      !note.message.includes(locations.configLocalJsonPath),
-      `must NOT leak absolute configLocalJsonPath, got: ${note.message}`,
+      !note.message.includes(locations.localConfigJsonPath),
+      `must NOT leak absolute localConfigJsonPath, got: ${note.message}`,
     );
 
     // State was NOT mutated (the marketplace record was never recorded).
@@ -3436,7 +3439,7 @@ test("WR-07: config write failure after the clone rename cleans up the final clo
     // Valid pre-existing config so the CFG-03 pre-check passes -- the
     // failure must land AFTER addGithubInGuard renamed the clone into its
     // final sources/<name>/ path.
-    await writeFile(locations.configJsonPath, JSON.stringify({ schemaVersion: 1 }), "utf8");
+    await writeFile(locations.baseConfigJsonPath, JSON.stringify({ schemaVersion: 1 }), "utf8");
     // Read-only scope root: saveConfig's tmp+rename write into scopeRoot
     // fails with EACCES, while everything under extensionRoot (state lock,
     // sources/, sources-staging/) stays writable.
@@ -3505,7 +3508,7 @@ test("cleans a URL clone after state-save failure and a second invocation conver
       firstError = error;
     }
 
-    const configAfterFailure = await readFile(locations.configJsonPath, "utf8");
+    const configAfterFailure = await readFile(locations.baseConfigJsonPath, "utf8");
     const finalClone = await locations.sourceCloneDir("valid-marketplace");
     const finalCloneAfterFailure = await pathExists(finalClone);
     await rm(locations.stateJsonPath, { recursive: true, force: true });

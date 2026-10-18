@@ -156,11 +156,11 @@ test("MSG-GR-3: an omitted scope walks both scopes and orders a shared marketpla
   // arrange
   const { cwd, project, user } = await createHermeticScopes(t, "fanout");
   await writeUnder(
-    project.configJsonPath,
+    project.baseConfigJsonPath,
     configBytes("mp", "acme/tools", [{ key: "p-proj@mp", enabled: true }]),
   );
   await writeUnder(
-    user.configJsonPath,
+    user.baseConfigJsonPath,
     configBytes("mp", "acme/tools", [{ key: "p-user@mp", enabled: true }]),
   );
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
@@ -184,11 +184,11 @@ test("an explicit user scope reports the user scope's pending work and never rea
   // arrange
   const { cwd, project, user } = await createHermeticScopes(t, "user-only");
   await writeUnder(
-    project.configJsonPath,
+    project.baseConfigJsonPath,
     configBytes("mp", "acme/tools", [{ key: "p-proj@mp", enabled: true }]),
   );
   await writeUnder(
-    user.configJsonPath,
+    user.baseConfigJsonPath,
     configBytes("mp", "acme/tools", [{ key: "p-user@mp", enabled: true }]),
   );
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
@@ -207,11 +207,11 @@ test("an explicit project scope reports the project scope's pending work and nev
   // arrange
   const { cwd, project, user } = await createHermeticScopes(t, "project-only");
   await writeUnder(
-    project.configJsonPath,
+    project.baseConfigJsonPath,
     configBytes("mp", "acme/tools", [{ key: "p-proj@mp", enabled: true }]),
   );
   await writeUnder(
-    user.configJsonPath,
+    user.baseConfigJsonPath,
     configBytes("mp", "acme/tools", [{ key: "p-user@mp", enabled: true }]),
   );
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
@@ -233,7 +233,7 @@ test("DIFF-01 / NFR-5: a repeated invocation emits the same notification and lea
   const recordedState = stateBytes("mp", "acme/tools", path.join(cwd, "clone"), [
     { name: "p1", skills: ["mp-p1-tool"] },
   ]);
-  await writeUnder(project.configJsonPath, declaredConfig);
+  await writeUnder(project.baseConfigJsonPath, declaredConfig);
   await writeUnder(project.stateJsonPath, recordedState);
   const expectedNotification = {
     message: "● mp [project]\n  ○ p1 (will uninstall)\n\nReconcile pending: 1 success",
@@ -252,7 +252,7 @@ test("DIFF-01 / NFR-5: a repeated invocation emits the same notification and lea
     "pi-claude-marketplace/state.json",
   ]);
   assert.deepStrictEqual(await retryTree(user.scopeRoot), []);
-  assert.strictEqual(await readFile(project.configJsonPath, "utf8"), declaredConfig);
+  assert.strictEqual(await readFile(project.baseConfigJsonPath, "utf8"), declaredConfig);
   assert.strictEqual(await readFile(project.stateJsonPath, "utf8"), recordedState);
   verifyBoundary();
 });
@@ -335,7 +335,7 @@ for (const { condition, bytes, reason } of stateLoadFailureRows) {
   test(`WR-04: ${condition} is contained as a failed block reporting {${reason}}`, async (t) => {
     // arrange
     const { cwd, project } = await createHermeticScopes(t, "state-load-failure");
-    await writeUnder(project.configJsonPath, configBytes("mp", "acme/tools", []));
+    await writeUnder(project.baseConfigJsonPath, configBytes("mp", "acme/tools", []));
     await writeUnder(project.stateJsonPath, bytes);
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
 
@@ -422,9 +422,9 @@ for (const { reported, files, cause } of layerGapRows) {
 test("MSG-GR-3: a failed configuration block sorts among the plan blocks by name rather than trailing them", async (t) => {
   // arrange
   const { cwd, project, user } = await createHermeticScopes(t, "mixed-order");
-  await writeUnder(project.configJsonPath, "{");
+  await writeUnder(project.baseConfigJsonPath, "{");
   await writeUnder(
-    user.configJsonPath,
+    user.baseConfigJsonPath,
     configBytes("zzz-mp", "acme/z", [{ key: "pp@zzz-mp", enabled: true }]),
   );
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
@@ -500,7 +500,7 @@ test("MIG-01: a local-only marketplace merges over the state projection and adds
       { name: "p1", skills: ["mp-p1-tool"] },
     ]),
   );
-  await writeUnder(project.configLocalJsonPath, configBytes("zzz-extra", "acme/extra", []));
+  await writeUnder(project.localConfigJsonPath, configBytes("zzz-extra", "acme/extra", []));
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
 
   // act
@@ -523,7 +523,7 @@ test("LAYER-06 / MIG-01: before the first-run migration, a local layer missing t
     ]),
   );
   await writeUnder(
-    project.configLocalJsonPath,
+    project.localConfigJsonPath,
     JSON.stringify({ schemaVersion: 1, plugins: { "p1@mp": {} } }),
   );
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
@@ -543,7 +543,7 @@ test("LAYER-06 / MIG-01: before the first-run migration, a local layer missing t
       severity: "error",
     },
   ]);
-  await assert.rejects(readFile(project.configJsonPath, "utf8"), { code: "ENOENT" });
+  await assert.rejects(readFile(project.baseConfigJsonPath, "utf8"), { code: "ENOENT" });
   verifyBoundary();
 });
 
@@ -556,7 +556,7 @@ test("FIX-02: the pending view leaves out what the local file declares, as the l
       { name: "p1", skills: ["mp-p1-tool"] },
     ]),
   );
-  await writeUnder(project.configLocalJsonPath, configBytes("mp", "acme/tools", []));
+  await writeUnder(project.localConfigJsonPath, configBytes("mp", "acme/tools", []));
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
 
   // act
@@ -613,7 +613,7 @@ async function stagePlannedInstall(
     }),
   );
   await writeUnder(
-    locations.configJsonPath,
+    locations.baseConfigJsonPath,
     configBytes("mp-github", "acme/tools", [{ key: "cr@mp-github", enabled: true }]),
   );
   return { marketplaceRoot, manifestPath };
@@ -646,7 +646,7 @@ const plannedInstallRows = [
     condition: "a marketplace that is declared but not recorded",
     stage: async (_cwd: string, locations: ScopedLocations): Promise<void> => {
       await writeUnder(
-        locations.configJsonPath,
+        locations.baseConfigJsonPath,
         configBytes("newmp", "acme/new", [{ key: "pp@newmp", enabled: true }]),
       );
     },
@@ -760,7 +760,7 @@ test("WR-06: the steady state names a retained workflow staging tree", async (t)
 test("WR-06: the cascade arm carries the identical retained-tree line", async (t) => {
   // arrange
   const { cwd, project, user } = await createHermeticScopes(t, "retained-cascade");
-  await writeUnder(project.configJsonPath, configBytes("mp", "acme/tools", []));
+  await writeUnder(project.baseConfigJsonPath, configBytes("mp", "acme/tools", []));
   await writeUnder(
     project.stateJsonPath,
     stateBytes("mp", "acme/tools", path.join(cwd, "clone"), [
@@ -790,11 +790,11 @@ test("WR-06: renders the advisory once for an invocation that walks both scopes"
   // so a scan run inside the per-scope loop would render this line twice.
   const { cwd, project, user } = await createHermeticScopes(t, "retained-fanout");
   await writeUnder(
-    project.configJsonPath,
+    project.baseConfigJsonPath,
     configBytes("mp", "acme/tools", [{ key: "p-proj@mp", enabled: true }]),
   );
   await writeUnder(
-    user.configJsonPath,
+    user.baseConfigJsonPath,
     configBytes("mp", "acme/tools", [{ key: "p-user@mp", enabled: true }]),
   );
   await seedRetainedStagingTree(user, "staging-aaa", 2);

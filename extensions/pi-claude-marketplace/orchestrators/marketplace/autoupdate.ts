@@ -406,7 +406,7 @@ async function planNamedFlip(
 ): Promise<FlipPlan> {
   const local = opts.local === true;
   const target = await loadFlipLayer(
-    local ? locations.configLocalJsonPath : locations.configJsonPath,
+    local ? locations.localConfigJsonPath : locations.baseConfigJsonPath,
     local,
   );
   if (ownValue(state.marketplaces, name) === undefined) {
@@ -416,7 +416,7 @@ async function planNamedFlip(
   if (opts.notifications?.mode !== "orchestrated") {
     await requireTargetDeclares(
       target,
-      local ? locations.configJsonPath : locations.configLocalJsonPath,
+      local ? locations.baseConfigJsonPath : locations.localConfigJsonPath,
       name,
     );
   }
@@ -438,10 +438,10 @@ async function planEveryFlip(
 ): Promise<FlipPlan> {
   const layers =
     opts.local === true
-      ? [await loadFlipLayer(locations.configLocalJsonPath, true)]
+      ? [await loadFlipLayer(locations.localConfigJsonPath, true)]
       : [
-          await loadFlipLayer(locations.configJsonPath, false),
-          await loadFlipLayer(locations.configLocalJsonPath, true),
+          await loadFlipLayer(locations.baseConfigJsonPath, false),
+          await loadFlipLayer(locations.localConfigJsonPath, true),
         ];
   return planFlip(
     Object.keys(state.marketplaces),

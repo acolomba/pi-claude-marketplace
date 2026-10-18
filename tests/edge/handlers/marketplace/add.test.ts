@@ -212,8 +212,8 @@ async function readScopeFootprint(scope: Scope, cwd: string): Promise<ScopeFootp
   const locations = locationsFor(scope, cwd);
   return {
     state: await exists(locations.stateJsonPath),
-    config: await exists(locations.configJsonPath),
-    localConfig: await exists(locations.configLocalJsonPath),
+    config: await exists(locations.baseConfigJsonPath),
+    localConfig: await exists(locations.localConfigJsonPath),
   };
 }
 

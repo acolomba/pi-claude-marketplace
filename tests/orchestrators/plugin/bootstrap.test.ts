@@ -110,7 +110,7 @@ async function seedAddedMarketplace(
   locations: ScopedLocations,
   cwd: string,
   autoupdate: boolean,
-  configPath = locations.configJsonPath,
+  configPath = locations.baseConfigJsonPath,
 ): Promise<void> {
   await mkdir(locations.extensionRoot, { recursive: true });
   const marketplaceRoot = await locations.sourceCloneDir("claude-plugins-official");
@@ -214,7 +214,7 @@ test("adds the canonical marketplace and enables autoupdate on a clean user scop
     },
   });
   // WB-04: both composed writes converge on one config entry.
-  assert.deepStrictEqual(JSON.parse(await readFile(locations.configJsonPath, "utf8")), {
+  assert.deepStrictEqual(JSON.parse(await readFile(locations.baseConfigJsonPath, "utf8")), {
     schemaVersion: 1,
     marketplaces: {
       "claude-plugins-official": {
@@ -247,7 +247,7 @@ test("converges on a second bootstrap without changing the recorded state or the
     gitOps,
   });
   const stateAfterFirst = await readFile(locations.stateJsonPath, "utf8");
-  const configAfterFirst = await readFile(locations.configJsonPath, "utf8");
+  const configAfterFirst = await readFile(locations.baseConfigJsonPath, "utf8");
   const treeAfterFirst = await retryTree(locations.scopeRoot);
   await bootstrapClaudePlugin({
     completionCache,
@@ -267,7 +267,7 @@ test("converges on a second bootstrap without changing the recorded state or the
     { message: "● claude-plugins-official [user] <autoupdate> {already autoupdate}" },
   ]);
   assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateAfterFirst);
-  assert.strictEqual(await readFile(locations.configJsonPath, "utf8"), configAfterFirst);
+  assert.strictEqual(await readFile(locations.baseConfigJsonPath, "utf8"), configAfterFirst);
   assert.deepStrictEqual(treeAfterFirst, bootstrappedScopeTree());
   assert.deepStrictEqual(await retryTree(locations.scopeRoot), treeAfterFirst);
   // WR-05: the re-run's source matches the recorded one, so the duplicate name
@@ -281,7 +281,7 @@ test("reports an idempotent autoupdate when the marketplace is already bootstrap
   const { cwd, locations } = await createHermeticUserScope(t, "already");
   await seedAddedMarketplace(locations, cwd, true);
   const seededState = await readFile(locations.stateJsonPath, "utf8");
-  const seededConfig = await readFile(locations.configJsonPath, "utf8");
+  const seededConfig = await readFile(locations.baseConfigJsonPath, "utf8");
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
   const { gitOps, clonedUrls } = createBootstrapGitOps();
   const completionCache = createCompletionCache();
@@ -301,7 +301,7 @@ test("reports an idempotent autoupdate when the marketplace is already bootstrap
   ]);
   assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), seededState);
   // RECON-05: an idempotent flip skips the write-back, so the config stays byte-stable.
-  assert.strictEqual(await readFile(locations.configJsonPath, "utf8"), seededConfig);
+  assert.strictEqual(await readFile(locations.baseConfigJsonPath, "utf8"), seededConfig);
   assert.deepStrictEqual(await retryTree(locations.scopeRoot), seededScopeTree());
   assert.deepStrictEqual(clonedUrls(), []);
   verifyBoundary();
@@ -329,7 +329,7 @@ test("flips autoupdate on when the marketplace is added but autoupdate is off", 
   assert.deepStrictEqual(notifications, [
     { message: "● claude-plugins-official [user] <autoupdate>" },
   ]);
-  assert.deepStrictEqual(JSON.parse(await readFile(locations.configJsonPath, "utf8")), {
+  assert.deepStrictEqual(JSON.parse(await readFile(locations.baseConfigJsonPath, "utf8")), {
     schemaVersion: 1,
     marketplaces: {
       "claude-plugins-official": {
@@ -349,9 +349,9 @@ test("flips autoupdate on when the marketplace is added but autoupdate is off", 
 test("LAYER-01: declares a marketplace only the local layer holds in the shared layer without a clone", async (t) => {
   // arrange
   const { cwd, locations } = await createHermeticUserScope(t, "local-only");
-  await seedAddedMarketplace(locations, cwd, false, locations.configLocalJsonPath);
+  await seedAddedMarketplace(locations, cwd, false, locations.localConfigJsonPath);
   const seededState = await readFile(locations.stateJsonPath, "utf8");
-  const seededLocalConfig = await readFile(locations.configLocalJsonPath, "utf8");
+  const seededLocalConfig = await readFile(locations.localConfigJsonPath, "utf8");
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2);
   const { gitOps, clonedUrls } = createBootstrapGitOps();
   const completionCache = createCompletionCache();
@@ -370,7 +370,7 @@ test("LAYER-01: declares a marketplace only the local layer holds in the shared 
     { message: "● claude-plugins-official [user] (added)" },
     { message: "● claude-plugins-official [user] <autoupdate>" },
   ]);
-  assert.deepStrictEqual(JSON.parse(await readFile(locations.configJsonPath, "utf8")), {
+  assert.deepStrictEqual(JSON.parse(await readFile(locations.baseConfigJsonPath, "utf8")), {
     schemaVersion: 1,
     marketplaces: {
       "claude-plugins-official": {
@@ -380,7 +380,7 @@ test("LAYER-01: declares a marketplace only the local layer holds in the shared 
     },
     plugins: {},
   });
-  assert.strictEqual(await readFile(locations.configLocalJsonPath, "utf8"), seededLocalConfig);
+  assert.strictEqual(await readFile(locations.localConfigJsonPath, "utf8"), seededLocalConfig);
   assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), seededState);
   assert.deepStrictEqual(clonedUrls(), []);
   verifyBoundary();
@@ -404,7 +404,7 @@ test("preserves the committed add when the real autoupdate child rejects its con
       ownedCache.invalidateMarketplaceNames(marketplaceNamesCachePath, scope),
     async dropMarketplaceCache(pluginCachePath, scope, marketplace) {
       await ownedCache.dropMarketplaceCache(pluginCachePath, scope, marketplace);
-      await writeFile(locations.configJsonPath, malformedConfig, "utf8");
+      await writeFile(locations.baseConfigJsonPath, malformedConfig, "utf8");
     },
   };
 
@@ -440,7 +440,7 @@ test("preserves the committed add when the real autoupdate child rejects its con
       },
     },
   });
-  assert.strictEqual(await readFile(locations.configJsonPath, "utf8"), malformedConfig);
+  assert.strictEqual(await readFile(locations.baseConfigJsonPath, "utf8"), malformedConfig);
   assert.deepStrictEqual(await retryTree(locations.scopeRoot), bootstrappedScopeTree());
   assert.deepStrictEqual(clonedUrls(), [BOOTSTRAP_REMOTE]);
   verifyBoundary();

@@ -1985,7 +1985,7 @@ async function installPluginWithTransaction(
   // could not be read, and that row renders after the lock closes, so the
   // basename escapes the closure through this `let`. It starts at the shared
   // layer, the target the no-flag call selects, so the type stays definite.
-  let configBasename = path.basename(locations.configJsonPath);
+  let configBasename = path.basename(locations.baseConfigJsonPath);
   const orchestrated = opts.notifications?.mode === "orchestrated";
   // The requested plugin's key: the cascade's root, the write-target selection
   // subject and the DFEN-05 precedence subject are all the same key by

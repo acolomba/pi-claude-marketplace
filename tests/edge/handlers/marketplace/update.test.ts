@@ -553,8 +553,8 @@ for (const { args, tally } of [
       '{ "marketplaces": { "alpha": { "source": "./alpha-src", "autoupdate": false } }, "plugins": { "hello@alpha": { "enabled": true } } }\n';
     const localBytes =
       '{ "marketplaces": { "alpha": { "source": "./alpha-local", "autoupdate": true } }, "plugins": { "keep@alpha": { "enabled": false } } }\n';
-    await writeFile(locations.configJsonPath, sharedBytes);
-    await writeFile(locations.configLocalJsonPath, localBytes);
+    await writeFile(locations.baseConfigJsonPath, sharedBytes);
+    await writeFile(locations.localConfigJsonPath, localBytes);
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
       value: cwd,
       reads: 1,
@@ -593,8 +593,8 @@ for (const { args, tally } of [
     );
     assert.deepStrictEqual(
       [
-        await readFile(locations.configJsonPath, "utf8"),
-        await readFile(locations.configLocalJsonPath, "utf8"),
+        await readFile(locations.baseConfigJsonPath, "utf8"),
+        await readFile(locations.localConfigJsonPath, "utf8"),
       ],
       [sharedBytes, localBytes],
     );

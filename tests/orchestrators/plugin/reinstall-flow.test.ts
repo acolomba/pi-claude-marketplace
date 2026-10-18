@@ -2936,8 +2936,8 @@ async function seedLocalLayerReinstall(
     install: true,
   });
   const locations = locationsFor("project", cwd);
-  await writeFile(locations.configJsonPath, baseBytes, "utf8");
-  await writeFile(locations.configLocalJsonPath, localBytes, "utf8");
+  await writeFile(locations.baseConfigJsonPath, baseBytes, "utf8");
+  await writeFile(locations.localConfigJsonPath, localBytes, "utf8");
   return locations;
 }
 
@@ -2953,8 +2953,8 @@ async function reinstallFileSnapshot(
   readonly skill: string;
 }> {
   return {
-    shared: await readFile(locations.configJsonPath, "utf8"),
-    local: await readFile(locations.configLocalJsonPath, "utf8"),
+    shared: await readFile(locations.baseConfigJsonPath, "utf8"),
+    local: await readFile(locations.localConfigJsonPath, "utf8"),
     state: await readFile(locations.stateJsonPath, "utf8"),
     stateMtimeMs: (await stat(locations.stateJsonPath)).mtimeMs,
     skill: await readSkill(cwd),
@@ -3085,7 +3085,7 @@ async function seedTwoPluginReinstall(
   }
 
   const locations = locationsFor("project", cwd);
-  await writeFile(locations.configLocalJsonPath, localBytes, "utf8");
+  await writeFile(locations.localConfigJsonPath, localBytes, "utf8");
   return locations;
 }
 
@@ -3165,7 +3165,7 @@ for (const { form, target, blockName } of [
         // arrange
         const locations = await seedTwoPluginReinstall(cwd, "{ invalid");
         const stateBytes = await readFile(locations.stateJsonPath, "utf8");
-        const sharedBytes = await readFile(locations.configJsonPath, "utf8");
+        const sharedBytes = await readFile(locations.baseConfigJsonPath, "utf8");
         const { ctx, run, notifications } = makeCtx();
 
         // act
@@ -3195,7 +3195,7 @@ for (const { form, target, blockName } of [
           },
         ]);
         assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
-        assert.equal(await readFile(locations.configJsonPath, "utf8"), sharedBytes);
+        assert.equal(await readFile(locations.baseConfigJsonPath, "utf8"), sharedBytes);
       } finally {
         await rm(cwd, { recursive: true, force: true });
       }
@@ -3243,7 +3243,7 @@ for (const { form, target, blockName } of [
         // arrange
         const locations = await seedUnreadableLocalDeclaration(cwd);
         const stateBytes = await readFile(locations.stateJsonPath, "utf8");
-        const localBytes = await readFile(locations.configLocalJsonPath, "utf8");
+        const localBytes = await readFile(locations.localConfigJsonPath, "utf8");
         const { ctx, run, notifications } = makeCtx();
 
         // act
@@ -3273,7 +3273,7 @@ for (const { form, target, blockName } of [
           },
         ]);
         assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
-        assert.equal(await readFile(locations.configLocalJsonPath, "utf8"), localBytes);
+        assert.equal(await readFile(locations.localConfigJsonPath, "utf8"), localBytes);
       } finally {
         await rm(cwd, { recursive: true, force: true });
       }
@@ -3308,8 +3308,8 @@ test("FIX-03: a bare reinstall under a marketplace only the local file declares 
         outcomes.map((outcome) => outcome.partition),
         ["reinstalled"],
       );
-      assert.equal(await readFile(locations.configJsonPath, "utf8"), baseBytes);
-      assert.equal(await readFile(locations.configLocalJsonPath, "utf8"), localBytes);
+      assert.equal(await readFile(locations.baseConfigJsonPath, "utf8"), baseBytes);
+      assert.equal(await readFile(locations.localConfigJsonPath, "utf8"), localBytes);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -3406,8 +3406,8 @@ async function layerFiles(locations: ReturnType<typeof locationsFor>): Promise<{
   readonly local: LayerFile | undefined;
 }> {
   return {
-    shared: await readLayerFile(locations.configJsonPath),
-    local: await readLayerFile(locations.configLocalJsonPath),
+    shared: await readLayerFile(locations.baseConfigJsonPath),
+    local: await readLayerFile(locations.localConfigJsonPath),
   };
 }
 
@@ -3618,7 +3618,7 @@ test("CFG-03: a named flagless reinstall whose local layer cannot be read is ref
           severity: "error",
         },
       ]);
-      assert.equal(await readFile(locations.configJsonPath, "utf8"), baseBytes);
+      assert.equal(await readFile(locations.baseConfigJsonPath, "utf8"), baseBytes);
       assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
       assert.equal(await readSkill(cwd), skillBytes);
     } finally {
@@ -5384,7 +5384,7 @@ test("LAYER-04: a reinstall over an unreadable shared layer reinstalls, renders 
         resources: { skill: "old skill", command: "old command" },
         install: true,
       });
-      await writeFile(locations.configJsonPath, "{ not json ", "utf8");
+      await writeFile(locations.baseConfigJsonPath, "{ not json ", "utf8");
 
       // act
       const { ctx, run, notifications } = makeCtx();
@@ -5400,7 +5400,7 @@ test("LAYER-04: a reinstall over an unreadable shared layer reinstalls, renders 
       // assert
       assert.equal(outcome.partition, "reinstalled");
       assert.deepEqual(notifications, [HELLO_REINSTALLED_ROW]);
-      assert.equal(await readFile(locations.configJsonPath, "utf8"), "{ not json ");
+      assert.equal(await readFile(locations.baseConfigJsonPath, "utf8"), "{ not json ");
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -5572,7 +5572,7 @@ test("DFEN-07 / D-103-12 / ENBL-18: reinstall over a disabled record writes noth
       assert.ok(recordBefore !== undefined);
       assert.equal(recordBefore.enabled, false);
       const stateBefore = await readFile(locations.stateJsonPath, "utf8");
-      const configBefore = await readFile(locations.configJsonPath, "utf8");
+      const configBefore = await readFile(locations.baseConfigJsonPath, "utf8");
 
       // act
       const { ctx, run } = makeCtx();
@@ -5590,7 +5590,7 @@ test("DFEN-07 / D-103-12 / ENBL-18: reinstall over a disabled record writes noth
         "hello"
       ];
       assert.deepEqual(recordAfter, recordBefore);
-      assert.equal(await readFile(locations.configJsonPath, "utf8"), configBefore);
+      assert.equal(await readFile(locations.baseConfigJsonPath, "utf8"), configBefore);
       assert.equal(await pathExists(skillDir), false, "nothing may be re-materialized");
       // WLIF-01: the recorded envelope is left exactly as it was -- the
       // disabled skip runs before any prepare, so nothing displaces it.
@@ -6945,7 +6945,7 @@ test("LAYER-04: a local single reinstall over an unreadable local layer renders 
         install: true,
       });
       const locations = locationsFor("project", cwd);
-      await writeFile(locations.configLocalJsonPath, "{ invalid", "utf8");
+      await writeFile(locations.localConfigJsonPath, "{ invalid", "utf8");
       const { ctx, run, notifications } = makeCtx();
 
       // act
@@ -6962,7 +6962,7 @@ test("LAYER-04: a local single reinstall over an unreadable local layer renders 
       // assert
       assert.equal(outcome.partition, "reinstalled");
       assert.deepEqual(notifications, [HELLO_REINSTALLED_ROW]);
-      assert.equal(await readFile(locations.configLocalJsonPath, "utf8"), "{ invalid");
+      assert.equal(await readFile(locations.localConfigJsonPath, "utf8"), "{ invalid");
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -6984,7 +6984,7 @@ test("LAYER-04: the plugin form of reinstall with --local refuses a plugin only 
         install: true,
       });
       const locations = locationsFor("project", cwd);
-      const baseConfigBefore = await readFile(locations.configJsonPath, "utf8");
+      const baseConfigBefore = await readFile(locations.baseConfigJsonPath, "utf8");
       const { ctx, run } = makeCtx();
 
       // act
@@ -7009,8 +7009,8 @@ test("LAYER-04: the plugin form of reinstall with --local refuses a plugin only 
           cause: new PluginInBaseLayerOnlyError("hello", "mp"),
         },
       ]);
-      assert.equal(await readFile(locations.configJsonPath, "utf8"), baseConfigBefore);
-      assert.equal(await pathExists(locations.configLocalJsonPath), false);
+      assert.equal(await readFile(locations.baseConfigJsonPath, "utf8"), baseConfigBefore);
+      assert.equal(await pathExists(locations.localConfigJsonPath), false);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -7412,7 +7412,7 @@ test("retry proof: reinstall: skills prepare failure with no prepared handles co
       });
       const manifestBytes = await readFile(seeded.manifestPath, "utf8");
       const stateBytes = await readFile(locations.stateJsonPath, "utf8");
-      const configBytes = await readFile(locations.configJsonPath, "utf8");
+      const configBytes = await readFile(locations.baseConfigJsonPath, "utf8");
       const oldSkill = await readSkill(cwd);
       const oldCommand = await readCommand(cwd);
       await rm(locations.skillsStagingDir, { force: true, recursive: true });
@@ -7492,7 +7492,7 @@ test("retry proof: reinstall: skills prepare failure with no prepared handles co
       assert.deepStrictEqual(notifications, []);
       assert.equal(firstStateBytes, stateBytes);
       assert.equal(await readFile(seeded.manifestPath, "utf8"), manifestBytes);
-      assert.equal(await readFile(locations.configJsonPath, "utf8"), configBytes);
+      assert.equal(await readFile(locations.baseConfigJsonPath, "utf8"), configBytes);
       assert.equal(firstSkill, oldSkill);
       assert.equal(firstCommand, oldCommand);
       assert.deepStrictEqual(firstSchedule, []);
@@ -8926,7 +8926,7 @@ test("retry proof: reinstall: an unreadable shared layer is left unchanged by a 
         command: "new command",
         skill: "new skill",
       });
-      await writeFile(locations.configJsonPath, "{ not json ", "utf8");
+      await writeFile(locations.baseConfigJsonPath, "{ not json ", "utf8");
       const firstSchedule: string[] = [];
       const secondSchedule: string[] = [];
       const activeSchedule = { current: firstSchedule };
@@ -8949,7 +8949,7 @@ test("retry proof: reinstall: an unreadable shared layer is left unchanged by a 
         stateTransaction,
       });
       const firstTree = await retryTree(locations.scopeRoot);
-      const firstConfigBytes = await readFile(locations.configJsonPath, "utf8");
+      const firstConfigBytes = await readFile(locations.baseConfigJsonPath, "utf8");
       const firstNotifications = [...notifications];
       const firstRecord = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
         "hello"
@@ -8974,7 +8974,7 @@ test("retry proof: reinstall: an unreadable shared layer is left unchanged by a 
       assert.equal(firstConfigBytes, "{ not json ");
       assert.equal(second.partition, "reinstalled");
       assert.deepStrictEqual(notifications.slice(1), [HELLO_REINSTALLED_ROW]);
-      assert.equal(await readFile(locations.configJsonPath, "utf8"), "{ not json ");
+      assert.equal(await readFile(locations.baseConfigJsonPath, "utf8"), "{ not json ");
       assert.equal(firstRecord?.version, "1.0.0");
       assert.deepStrictEqual(firstSchedule, ["save:state", "drop:cache", "remove:data"]);
       assert.deepStrictEqual(secondSchedule, firstSchedule);

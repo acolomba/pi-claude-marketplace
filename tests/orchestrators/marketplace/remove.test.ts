@@ -350,7 +350,7 @@ test("invalidates committed full removal after persistence and before data hygie
     plugins: { tool: pluginRecord() },
   });
   await saveConfig(
-    locations.configJsonPath,
+    locations.baseConfigJsonPath,
     {
       schemaVersion: 1,
       marketplaces: { [marketplace]: { source: "./ordered-remove" } },
@@ -372,7 +372,7 @@ test("invalidates committed full removal after persistence and before data hygie
         schemaVersion: 3,
         marketplaces: {},
       });
-      const config = await loadConfig(locations.configJsonPath);
+      const config = await loadConfig(locations.baseConfigJsonPath);
       assert.strictEqual(config.status, "valid");
       if (config.status === "valid") {
         assert.deepStrictEqual(config.config, {
@@ -881,7 +881,7 @@ test("LAYER-03: drops only the shared layer's declarations while the local layer
     plugins: { tool: pluginRecord() },
   });
   await saveConfig(
-    locations.configJsonPath,
+    locations.baseConfigJsonPath,
     {
       schemaVersion: 1,
       marketplaces: {
@@ -896,7 +896,7 @@ test("LAYER-03: drops only the shared layer's declarations while the local layer
     locations.scopeRoot,
   );
   await saveConfig(
-    locations.configLocalJsonPath,
+    locations.localConfigJsonPath,
     {
       schemaVersion: 1,
       marketplaces: { "remove-me": { source: "./local-remove", autoupdate: true } },
@@ -904,7 +904,7 @@ test("LAYER-03: drops only the shared layer's declarations while the local layer
     },
     locations.scopeRoot,
   );
-  const localBytes = await readFile(locations.configLocalJsonPath, "utf8");
+  const localBytes = await readFile(locations.localConfigJsonPath, "utf8");
   const notification = notificationBoundary(1);
 
   // act
@@ -927,10 +927,10 @@ test("LAYER-03: drops only the shared layer's declarations while the local layer
     },
   ]);
   assert.strictEqual(
-    await readFile(locations.configJsonPath, "utf8"),
+    await readFile(locations.baseConfigJsonPath, "utf8"),
     '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "keep": {\n      "source": "./keep"\n    }\n  },\n  "plugins": {\n    "keep@keep": {\n      "enabled": true\n    }\n  }\n}\n',
   );
-  assert.strictEqual(await readFile(locations.configLocalJsonPath, "utf8"), localBytes);
+  assert.strictEqual(await readFile(locations.localConfigJsonPath, "utf8"), localBytes);
   assert.deepStrictEqual(
     await loadState(locations.extensionRoot),
     marketplaceState({
@@ -952,12 +952,12 @@ test("leaves a valid unrelated sibling config layer byte-identical", async (test
     source: pathSource("./remove-me"),
   });
   await saveConfig(
-    locations.configJsonPath,
+    locations.baseConfigJsonPath,
     { schemaVersion: 1, marketplaces: { "remove-me": { source: "./remove-me" } } },
     locations.scopeRoot,
   );
   await saveConfig(
-    locations.configLocalJsonPath,
+    locations.localConfigJsonPath,
     {
       schemaVersion: 1,
       marketplaces: { keep: { source: "./keep" } },
@@ -965,7 +965,7 @@ test("leaves a valid unrelated sibling config layer byte-identical", async (test
     },
     locations.scopeRoot,
   );
-  const localBytes = await readFile(locations.configLocalJsonPath, "utf8");
+  const localBytes = await readFile(locations.localConfigJsonPath, "utf8");
   const notification = notificationBoundary(1);
 
   // act
@@ -980,7 +980,7 @@ test("leaves a valid unrelated sibling config layer byte-identical", async (test
 
   // assert
   assert.deepStrictEqual(notification.calls, [{ message: "● remove-me [project] (removed)" }]);
-  assert.strictEqual(await readFile(locations.configLocalJsonPath, "utf8"), localBytes);
+  assert.strictEqual(await readFile(locations.localConfigJsonPath, "utf8"), localBytes);
   assert.deepStrictEqual(await loadState(locations.extensionRoot), {
     schemaVersion: 3,
     marketplaces: {},
@@ -998,7 +998,7 @@ test("aborts a standalone local remove on invalid target config without leaking 
   });
   const stateBytes = await readFile(locations.stateJsonPath, "utf8");
   const invalidBytes = "{ invalid local config";
-  await writeFile(locations.configLocalJsonPath, invalidBytes);
+  await writeFile(locations.localConfigJsonPath, invalidBytes);
   const notification = notificationBoundary(1);
 
   // act
@@ -1021,9 +1021,9 @@ test("aborts a standalone local remove on invalid target config without leaking 
       severity: "error",
     },
   ]);
-  assert.strictEqual(notification.calls[0]?.message.includes(locations.configLocalJsonPath), false);
+  assert.strictEqual(notification.calls[0]?.message.includes(locations.localConfigJsonPath), false);
   assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
-  assert.strictEqual(await readFile(locations.configLocalJsonPath, "utf8"), invalidBytes);
+  assert.strictEqual(await readFile(locations.localConfigJsonPath, "utf8"), invalidBytes);
   notification.verifyInteractions();
 });
 
@@ -1036,7 +1036,7 @@ test("returns an orchestrated invalid-config outcome without notifying or saving
     source: pathSource("./invalid"),
   });
   const stateBytes = await readFile(locations.stateJsonPath, "utf8");
-  await writeFile(locations.configJsonPath, "{ invalid base config");
+  await writeFile(locations.baseConfigJsonPath, "{ invalid base config");
   const notification = notificationBoundary(0);
   const invalidations: InvalidationCall[] = [];
 
@@ -1074,22 +1074,22 @@ test("propagates config write failure, preserves state, and converges on retry",
   });
   await saveState(locations.extensionRoot, initialState);
   await saveConfig(
-    locations.configJsonPath,
+    locations.baseConfigJsonPath,
     { schemaVersion: 1, marketplaces: { "write-failure": { source: "./write-failure" } } },
     locations.scopeRoot,
   );
-  const configBytes = await readFile(locations.configJsonPath, "utf8");
+  const configBytes = await readFile(locations.baseConfigJsonPath, "utf8");
   const outsideRoot = await mkdtemp(path.join(tmpdir(), "marketplace-remove-config-outside-"));
   testContext.after(() => rm(outsideRoot, { recursive: true, force: true }));
   const outsideConfigPath = path.join(outsideRoot, "claude-plugins.json");
   await writeFile(outsideConfigPath, configBytes);
-  const originalConfigPath = `${locations.configJsonPath}.original`;
+  const originalConfigPath = `${locations.baseConfigJsonPath}.original`;
   const firstNotification = notificationBoundary(0);
   let blockWrite = true;
   const firstCascade: typeof cascadeUnstagePlugin = async () => {
     if (blockWrite) {
-      await rename(locations.configJsonPath, originalConfigPath);
-      await symlink(outsideConfigPath, locations.configJsonPath);
+      await rename(locations.baseConfigJsonPath, originalConfigPath);
+      await symlink(outsideConfigPath, locations.baseConfigJsonPath);
     }
 
     return { ok: true, dropped: emptyDropped() };
@@ -1114,9 +1114,9 @@ test("propagates config write failure, preserves state, and converges on retry",
   }
 
   const stateAfterFailure = await loadState(locations.extensionRoot);
-  const configAfterFailure = await readFile(locations.configJsonPath, "utf8");
-  await rm(locations.configJsonPath, { force: true });
-  await rename(originalConfigPath, locations.configJsonPath);
+  const configAfterFailure = await readFile(locations.baseConfigJsonPath, "utf8");
+  await rm(locations.baseConfigJsonPath, { force: true });
+  await rename(originalConfigPath, locations.baseConfigJsonPath);
   blockWrite = false;
   const retryNotification = notificationBoundary(1);
   const retryOutcome = await removeMarketplace({
@@ -1164,7 +1164,7 @@ test("preserves the state record after state-save failure while retaining commit
   });
   await saveState(locations.extensionRoot, initialState);
   await saveConfig(
-    locations.configJsonPath,
+    locations.baseConfigJsonPath,
     {
       schemaVersion: 1,
       marketplaces: { "state-failure": { source: "./state-failure" } },
@@ -1204,7 +1204,7 @@ test("preserves the state record after state-save failure while retaining commit
   await rm(locations.stateJsonPath, { recursive: true, force: true });
   await rename(originalStatePath, locations.stateJsonPath);
   const stateAfterFailure = await loadState(locations.extensionRoot);
-  const configAfterFailure = await loadConfig(locations.configJsonPath);
+  const configAfterFailure = await loadConfig(locations.baseConfigJsonPath);
   breakStateSave = false;
   const retryNotification = notificationBoundary(1);
   const retryOutcome = await removeMarketplace({
@@ -1224,7 +1224,7 @@ test("preserves the state record after state-save failure while retaining commit
   assert.deepStrictEqual(stateAfterFailure, initialState);
   assert.deepStrictEqual(configAfterFailure, {
     status: "valid",
-    filePath: locations.configJsonPath,
+    filePath: locations.baseConfigJsonPath,
     config: { schemaVersion: 1, marketplaces: {}, plugins: {} },
   });
   assert.strictEqual(retryOutcome, undefined);
@@ -1262,7 +1262,7 @@ test("keeps exact partial state and silent cleanup residue before retry converge
     },
   });
   await saveConfig(
-    locations.configJsonPath,
+    locations.baseConfigJsonPath,
     {
       schemaVersion: 1,
       marketplaces: { [marketplace]: { source: "owner/repo" } },
@@ -1274,7 +1274,7 @@ test("keeps exact partial state and silent cleanup residue before retry converge
     },
     locations.scopeRoot,
   );
-  const configBytes = await readFile(locations.configJsonPath, "utf8");
+  const configBytes = await readFile(locations.baseConfigJsonPath, "utf8");
   const marketplaceData = await locations.marketplaceDataDir(marketplace);
   const alphaData = await locations.pluginDataDir(marketplace, "alpha");
   const betaData = await locations.pluginDataDir(marketplace, "beta");
@@ -1328,7 +1328,7 @@ test("keeps exact partial state and silent cleanup residue before retry converge
     cascade,
   });
   const stateAfterFirst = await loadState(locations.extensionRoot);
-  const configAfterFirst = await readFile(locations.configJsonPath, "utf8");
+  const configAfterFirst = await readFile(locations.baseConfigJsonPath, "utf8");
   const residueAfterFirst = {
     alpha: await pathExists(alphaData),
     beta: await pathExists(betaData),
@@ -2011,11 +2011,11 @@ async function layerCase(testContext: TestContext, files: LayerFiles): Promise<L
     plugins: { tool: pluginRecord({ skills: ["tool-skill"] }) },
   });
   if (files.shared !== undefined) {
-    await writeFile(locations.configJsonPath, files.shared);
+    await writeFile(locations.baseConfigJsonPath, files.shared);
   }
 
   if (files.local !== undefined) {
-    await writeFile(locations.configLocalJsonPath, files.local);
+    await writeFile(locations.localConfigJsonPath, files.local);
   }
 
   return {
@@ -2024,8 +2024,8 @@ async function layerCase(testContext: TestContext, files: LayerFiles): Promise<L
     bytesOnDisk: async () =>
       await Promise.all([
         readFile(locations.stateJsonPath, "utf8"),
-        readIfPresent(locations.configJsonPath),
-        readIfPresent(locations.configLocalJsonPath),
+        readIfPresent(locations.baseConfigJsonPath),
+        readIfPresent(locations.localConfigJsonPath),
       ]),
   };
 }
@@ -2198,8 +2198,8 @@ test("LAYER-03: a layer remove keeps a github marketplace's clone and data direc
     ],
     [true, true, false],
   );
-  assert.strictEqual(await readFile(locations.configJsonPath, "utf8"), NO_DECLARATIONS);
-  assert.strictEqual(await readFile(locations.configLocalJsonPath, "utf8"), TOOLS_DECLARED_ONLY);
+  assert.strictEqual(await readFile(locations.baseConfigJsonPath, "utf8"), NO_DECLARATIONS);
+  assert.strictEqual(await readFile(locations.localConfigJsonPath, "utf8"), TOOLS_DECLARED_ONLY);
   assert.deepStrictEqual(await loadState(locations.extensionRoot), toolsState(cwd, source, {}));
   notification.verifyInteractions();
 });
@@ -2217,8 +2217,8 @@ test("LAYER-03: a plugin key both layers declare stays installed and only the ta
 
   // assert
   assert.deepStrictEqual(notification.calls, [{ message: "● tools [project] (removed)" }]);
-  assert.strictEqual(await readFile(locations.configJsonPath, "utf8"), NO_DECLARATIONS);
-  assert.strictEqual(await readFile(locations.configLocalJsonPath, "utf8"), TOOLS_DECLARED);
+  assert.strictEqual(await readFile(locations.baseConfigJsonPath, "utf8"), NO_DECLARATIONS);
+  assert.strictEqual(await readFile(locations.localConfigJsonPath, "utf8"), TOOLS_DECLARED);
   assert.deepStrictEqual(
     await loadState(locations.extensionRoot),
     toolsState(cwd, pathSource("./tools"), { tool: pluginRecord({ skills: ["tool-skill"] }) }),
@@ -2243,11 +2243,11 @@ test("LAYER-03: a recorded marketplace no layer declares is fully removed and bo
   // assert
   assert.deepStrictEqual(notification.calls, [{ message: TOOL_UNINSTALLED }]);
   assert.strictEqual(
-    await readFile(locations.configJsonPath, "utf8"),
+    await readFile(locations.baseConfigJsonPath, "utf8"),
     '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "base": {\n      "source": "./base"\n    }\n  },\n  "plugins": {}\n}\n',
   );
   assert.strictEqual(
-    await readFile(locations.configLocalJsonPath, "utf8"),
+    await readFile(locations.localConfigJsonPath, "utf8"),
     '{\n  "schemaVersion": 1,\n  "plugins": {},\n  "marketplaces": {}\n}\n',
   );
   assert.strictEqual(await pathExists(marketplaceData), false);
@@ -2430,8 +2430,8 @@ for (const { title, plugins, shape, unstaged, remaining, expectedMessage } of [
     // assert
     assert.deepStrictEqual(calls, unstaged);
     assert.deepStrictEqual(notification.calls, [{ message: expectedMessage }]);
-    assert.strictEqual(await readFile(locations.configJsonPath, "utf8"), NO_DECLARATIONS);
-    assert.strictEqual(await readFile(locations.configLocalJsonPath, "utf8"), BETA_DECLARED);
+    assert.strictEqual(await readFile(locations.baseConfigJsonPath, "utf8"), NO_DECLARATIONS);
+    assert.strictEqual(await readFile(locations.localConfigJsonPath, "utf8"), BETA_DECLARED);
     assert.deepStrictEqual(
       await loadState(locations.extensionRoot),
       toolsState(
@@ -2565,9 +2565,9 @@ test("LAYER-03: a full remove keeps a dependency another marketplace's plugin ne
         "● tools [project] (removed)\n  ○ alpha (uninstalled)\n  ○ orphan (uninstalled)\n\n/reload to pick up changes",
     },
   ]);
-  assert.strictEqual(await readFile(locations.configJsonPath, "utf8"), NO_DECLARATIONS);
+  assert.strictEqual(await readFile(locations.baseConfigJsonPath, "utf8"), NO_DECLARATIONS);
   assert.strictEqual(
-    await readFile(locations.configLocalJsonPath, "utf8"),
+    await readFile(locations.localConfigJsonPath, "utf8"),
     '{\n  "schemaVersion": 1,\n  "plugins": {},\n  "marketplaces": {}\n}\n',
   );
   assert.deepStrictEqual(
@@ -2683,7 +2683,7 @@ test("PRUNE-03: a dependency stays while the plugin that declares it fails to un
       severity: "error",
     },
   ]);
-  assert.strictEqual(await readFile(locations.configJsonPath, "utf8"), sharedBytes);
+  assert.strictEqual(await readFile(locations.baseConfigJsonPath, "utf8"), sharedBytes);
   assert.deepStrictEqual(
     await loadState(locations.extensionRoot),
     toolsState(cwd, pathSource("./tools"), { alpha: pluginRecord(), lib: dependencyRecord() }),

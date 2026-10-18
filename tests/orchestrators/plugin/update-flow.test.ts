@@ -5131,11 +5131,11 @@ test("RECON-05: an up-to-date named update leaves the shared layer unchanged", a
       const { saveConfig } =
         await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
       await saveConfig(
-        locations.configJsonPath,
+        locations.baseConfigJsonPath,
         { schemaVersion: 1, plugins: { "hello@mp": {} } },
         locations.scopeRoot,
       );
-      const bytesBefore = await readFile(locations.configJsonPath);
+      const bytesBefore = await readFile(locations.baseConfigJsonPath);
 
       const { ctx, run } = makeCtx();
       await updatePlugins({
@@ -5146,7 +5146,7 @@ test("RECON-05: an up-to-date named update leaves the shared layer unchanged", a
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
       });
 
-      const bytesAfter = await readFile(locations.configJsonPath);
+      const bytesAfter = await readFile(locations.baseConfigJsonPath);
       assert.deepEqual(bytesAfter, bytesBefore);
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -5172,11 +5172,11 @@ async function seedLayeredUpdate(
     installedVersions: { hello: "1.0.0" },
   });
   if (layers.shared !== undefined) {
-    await writeFile(locations.configJsonPath, layers.shared, "utf8");
+    await writeFile(locations.baseConfigJsonPath, layers.shared, "utf8");
   }
 
   if (layers.local !== undefined) {
-    await writeFile(locations.configLocalJsonPath, layers.local, "utf8");
+    await writeFile(locations.localConfigJsonPath, layers.local, "utf8");
   }
 
   return locations;
@@ -5192,8 +5192,8 @@ async function updateFileSnapshot(locations: ReturnType<typeof locationsFor>): P
   const readIfPresent = async (filePath: string): Promise<string | undefined> =>
     (await pathExists(filePath)) ? readFile(filePath, "utf8") : undefined;
   return {
-    shared: await readIfPresent(locations.configJsonPath),
-    local: await readIfPresent(locations.configLocalJsonPath),
+    shared: await readIfPresent(locations.baseConfigJsonPath),
+    local: await readIfPresent(locations.localConfigJsonPath),
     state: await readFile(locations.stateJsonPath, "utf8"),
     stateMtimeMs: (await stat(locations.stateJsonPath)).mtimeMs,
   };
@@ -5291,8 +5291,8 @@ async function layerFiles(locations: ReturnType<typeof locationsFor>): Promise<{
   readonly local: LayerFile | undefined;
 }> {
   return {
-    shared: await readLayerFile(locations.configJsonPath),
-    local: await readLayerFile(locations.configLocalJsonPath),
+    shared: await readLayerFile(locations.baseConfigJsonPath),
+    local: await readLayerFile(locations.localConfigJsonPath),
   };
 }
 
@@ -5382,7 +5382,7 @@ async function seedTwoPluginUpdate(
     },
     installedVersions: { hello: "1.0.0", other: "1.0.0" },
   });
-  await writeFile(locations.configLocalJsonPath, localBytes, "utf8");
+  await writeFile(locations.localConfigJsonPath, localBytes, "utf8");
   return locations;
 }
 
@@ -5528,7 +5528,7 @@ async function seedUnreadableLocalDeclaration(
     installedVersions: { hello: "1.0.0", other: "1.0.0", gone: "1.0.0" },
   });
   await writeFile(
-    locations.configLocalJsonPath,
+    locations.localConfigJsonPath,
     JSON.stringify({ schemaVersion: 1, plugins: { "hello@mp": {}, "gone@mp": {} } }),
     "utf8",
   );
@@ -5597,8 +5597,8 @@ test("FIX-03: a bare update under a marketplace only the local file declares upd
 
       // assert
       assert.equal(await recordedHelloVersion(locations), "1.0.1");
-      assert.equal(await pathExists(locations.configJsonPath), false);
-      assert.equal(await readFile(locations.configLocalJsonPath, "utf8"), localBytes);
+      assert.equal(await pathExists(locations.baseConfigJsonPath), false);
+      assert.equal(await readFile(locations.localConfigJsonPath, "utf8"), localBytes);
       assert.deepEqual(
         notifications.filter((n) => n.message.includes("(failed)")),
         [],
@@ -7898,7 +7898,7 @@ const GP_DECLARED = JSON.stringify({ schemaVersion: 1, plugins: { "gp@mp": {} } 
 for (const { direction, file, local, reason, cause } of [
   {
     direction: "without --local a plugin only the local layer declares",
-    file: "configLocalJsonPath",
+    file: "localConfigJsonPath",
     local: false,
     reason: "plugin in local layer only",
     cause:
@@ -7906,7 +7906,7 @@ for (const { direction, file, local, reason, cause } of [
   },
   {
     direction: "with --local a plugin only the shared layer declares",
-    file: "configJsonPath",
+    file: "baseConfigJsonPath",
     local: true,
     reason: "plugin in base layer only",
     cause:

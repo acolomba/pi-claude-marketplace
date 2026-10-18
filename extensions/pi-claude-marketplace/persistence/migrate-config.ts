@@ -217,9 +217,9 @@ export async function migrateFirstRunConfig(
   loc: ScopedLocations,
   state: ExtensionState,
 ): Promise<MigrateFirstRunResult> {
-  const result = await loadConfig(loc.configJsonPath);
+  const result = await loadConfig(loc.baseConfigJsonPath);
   if (result.status === "valid") {
-    return { migrated: false, reason: "existing-valid", filePath: loc.configJsonPath };
+    return { migrated: false, reason: "existing-valid", filePath: loc.baseConfigJsonPath };
   }
 
   if (result.status === "invalid") {
@@ -227,13 +227,13 @@ export async function migrateFirstRunConfig(
       migrated: false,
       reason: "existing-invalid",
       error: result.error,
-      filePath: loc.configJsonPath,
+      filePath: loc.baseConfigJsonPath,
     };
   }
 
-  const localResult = await loadConfig(loc.configLocalJsonPath);
+  const localResult = await loadConfig(loc.localConfigJsonPath);
   if (localResult.status === "invalid") {
-    return { migrated: false, reason: "local-invalid", filePath: loc.configJsonPath };
+    return { migrated: false, reason: "local-invalid", filePath: loc.baseConfigJsonPath };
   }
 
   const local = localResult.status === "valid" ? localResult.config : {};
@@ -244,9 +244,9 @@ export async function migrateFirstRunConfig(
     // state.json must NOT spawn an empty claude-plugins.json in every scope
     // root. The config file first appears when there is real desired state to
     // record (migration of a populated state, or command write-back).
-    return { migrated: false, reason: "empty-state", filePath: loc.configJsonPath };
+    return { migrated: false, reason: "empty-state", filePath: loc.baseConfigJsonPath };
   }
 
-  await saveConfig(loc.configJsonPath, config, loc.scopeRoot);
-  return { migrated: true, entryCount, filePath: loc.configJsonPath };
+  await saveConfig(loc.baseConfigJsonPath, config, loc.scopeRoot);
+  return { migrated: true, entryCount, filePath: loc.baseConfigJsonPath };
 }

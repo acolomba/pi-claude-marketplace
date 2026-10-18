@@ -260,7 +260,7 @@ async function seedGithubMarketplace(opts: {
   // observe the autoupdate truth.
   if (opts.autoupdate !== undefined) {
     await saveConfig(
-      locations.configJsonPath,
+      locations.baseConfigJsonPath,
       {
         schemaVersion: 1,
         marketplaces: {
@@ -1642,7 +1642,7 @@ async function seedPathMarketplace(opts: {
   // loadMergedScopeConfig. Mirror the github helper's paired config write.
   if (opts.autoupdate !== undefined) {
     await saveConfig(
-      locations.configJsonPath,
+      locations.baseConfigJsonPath,
       {
         schemaVersion: 1,
         marketplaces: {
@@ -3162,7 +3162,7 @@ test("updateAllMarketplaces forwards optional Device Flow and plugin cascade por
       plugins: { alpha: makePluginRecord() },
     });
     const locations = locationsFor("project", cwd);
-    const configBytes = await readFile(locations.configJsonPath, "utf8");
+    const configBytes = await readFile(locations.baseConfigJsonPath, "utf8");
     const { ctx, run, notifications } = makeCtx();
     const deviceFlow = createDeviceFlowHttp();
     const cascadeCalls: Array<{ marketplace: string; plugin: string; scope: Scope }> = [];
@@ -3216,7 +3216,7 @@ test("updateAllMarketplaces forwards optional Device Flow and plugin cascade por
         },
       },
     });
-    assert.strictEqual(await readFile(locations.configJsonPath, "utf8"), configBytes);
+    assert.strictEqual(await readFile(locations.baseConfigJsonPath, "utf8"), configBytes);
   });
 });
 
@@ -4073,7 +4073,7 @@ test("silently retains a failed changed-target cache cleanup and preserves later
 
     record.manifestPath = path.join(marketplaceRoot, ".claude-plugin", "before-update.json");
     await saveState(locations.extensionRoot, state);
-    const configBytes = await readFile(locations.configJsonPath, "utf8").catch(() => undefined);
+    const configBytes = await readFile(locations.baseConfigJsonPath, "utf8").catch(() => undefined);
     const pluginCachePath = await locations.pluginCacheFile("cache-mp");
     await mkdir(pluginCachePath, { recursive: true });
     const residuePath = path.join(pluginCachePath, "residue");
@@ -4131,7 +4131,7 @@ test("silently retains a failed changed-target cache cleanup and preserves later
     assert.strictEqual(residueAfterFailure, "cache residue");
     assert.strictEqual(await pathExists(pluginCachePath), false);
     assert.strictEqual(
-      await readFile(locations.configJsonPath, "utf8").catch(() => undefined),
+      await readFile(locations.baseConfigJsonPath, "utf8").catch(() => undefined),
       configBytes,
     );
     assert.deepStrictEqual(git.calls, []);

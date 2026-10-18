@@ -291,18 +291,18 @@ test("preserves an existing valid config without rewriting its bytes", async (t)
   // arrange
   const { locations } = await createCaseLocations(t);
   const configBytes = '{"schemaVersion":1,"marketplaces":{"kept":{"source":"manual"}}}\n';
-  await writeFile(locations.configJsonPath, configBytes);
+  await writeFile(locations.baseConfigJsonPath, configBytes);
   const state = populatedState();
 
   // act
   const migration = await migrateFirstRunConfig(locations, state);
-  const storedBytes = await readFile(locations.configJsonPath, "utf8");
+  const storedBytes = await readFile(locations.baseConfigJsonPath, "utf8");
 
   // assert
   assert.deepStrictEqual(migration, {
     migrated: false,
     reason: "existing-valid",
-    filePath: locations.configJsonPath,
+    filePath: locations.baseConfigJsonPath,
   });
   assert.strictEqual(storedBytes, configBytes);
 });
@@ -311,19 +311,19 @@ test("preserves an existing invalid config and returns its complete validation f
   // arrange
   const { locations } = await createCaseLocations(t);
   const configBytes = "null\n";
-  await writeFile(locations.configJsonPath, configBytes);
+  await writeFile(locations.baseConfigJsonPath, configBytes);
   const state = populatedState();
 
   // act
   const migration = await migrateFirstRunConfig(locations, state);
-  const storedBytes = await readFile(locations.configJsonPath, "utf8");
+  const storedBytes = await readFile(locations.baseConfigJsonPath, "utf8");
 
   // assert
   assert.deepStrictEqual(migration, {
     migrated: false,
     reason: "existing-invalid",
     error: "schema validation failed: <root>: must be object",
-    filePath: locations.configJsonPath,
+    filePath: locations.baseConfigJsonPath,
   });
   assert.strictEqual(storedBytes, configBytes);
 });
@@ -341,7 +341,7 @@ test("leaves an absent config absent when state has no entries", async (t) => {
   assert.deepStrictEqual(migration, {
     migrated: false,
     reason: "empty-state",
-    filePath: locations.configJsonPath,
+    filePath: locations.baseConfigJsonPath,
   });
   assert.deepStrictEqual(scopeEntries, []);
 });
@@ -355,23 +355,23 @@ test("writes exact first-run bytes and replays as a byte-identical no-op", async
 
   // act
   const migration = await migrateFirstRunConfig(locations, state);
-  const firstBytes = await readFile(locations.configJsonPath, "utf8");
-  const firstStat = await stat(locations.configJsonPath, { bigint: true });
+  const firstBytes = await readFile(locations.baseConfigJsonPath, "utf8");
+  const firstStat = await stat(locations.baseConfigJsonPath, { bigint: true });
   const replay = await migrateFirstRunConfig(locations, state);
-  const replayBytes = await readFile(locations.configJsonPath, "utf8");
-  const replayStat = await stat(locations.configJsonPath, { bigint: true });
+  const replayBytes = await readFile(locations.baseConfigJsonPath, "utf8");
+  const replayStat = await stat(locations.baseConfigJsonPath, { bigint: true });
 
   // assert
   assert.deepStrictEqual(migration, {
     migrated: true,
     entryCount: 1,
-    filePath: locations.configJsonPath,
+    filePath: locations.baseConfigJsonPath,
   });
   assert.strictEqual(firstBytes, expectedBytes);
   assert.deepStrictEqual(replay, {
     migrated: false,
     reason: "existing-valid",
-    filePath: locations.configJsonPath,
+    filePath: locations.baseConfigJsonPath,
   });
   assert.strictEqual(replayBytes, expectedBytes);
   assert.deepStrictEqual(
@@ -394,21 +394,21 @@ test("FIX-02: writes only the non-local records on a first load", async (t) => {
   // arrange
   const { locations } = await createCaseLocations(t);
   const localBytes = '{"schemaVersion":1,"marketplaces":{"personal":{"source":"./personal"}}}\n';
-  await writeFile(locations.configLocalJsonPath, localBytes);
+  await writeFile(locations.localConfigJsonPath, localBytes);
   const state = stateRecording({ shared: ["alpha"], personal: ["beta", "gamma"] });
   const expectedBytes =
     '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "shared": {\n      "source": "./shared"\n    }\n  },\n  "plugins": {\n    "alpha@shared": {}\n  }\n}\n';
 
   // act
   const migration = await migrateFirstRunConfig(locations, state);
-  const configBytes = await readFile(locations.configJsonPath, "utf8");
-  const storedLocalBytes = await readFile(locations.configLocalJsonPath, "utf8");
+  const configBytes = await readFile(locations.baseConfigJsonPath, "utf8");
+  const storedLocalBytes = await readFile(locations.localConfigJsonPath, "utf8");
 
   // assert
   assert.deepStrictEqual(migration, {
     migrated: true,
     entryCount: 2,
-    filePath: locations.configJsonPath,
+    filePath: locations.baseConfigJsonPath,
   });
   assert.strictEqual(configBytes, expectedBytes);
   assert.strictEqual(storedLocalBytes, localBytes);
@@ -418,14 +418,14 @@ test("FIX-02: writes no base file when the local file declares every record", as
   // arrange
   const { locations } = await createCaseLocations(t);
   await writeFile(
-    locations.configLocalJsonPath,
+    locations.localConfigJsonPath,
     '{"schemaVersion":1,"marketplaces":{"shared":{"source":"./shared"},"personal":{"source":"./personal"}}}\n',
   );
   const state = stateRecording({ shared: ["alpha"], personal: ["beta"] });
   const expectedMigration = {
     migrated: false,
     reason: "empty-state",
-    filePath: locations.configJsonPath,
+    filePath: locations.baseConfigJsonPath,
   };
 
   // act
@@ -443,19 +443,19 @@ test("FIX-02: declines on an unreadable local file and writes nothing", async (t
   // arrange
   const { locations } = await createCaseLocations(t);
   const localBytes = "{ not json";
-  await writeFile(locations.configLocalJsonPath, localBytes);
+  await writeFile(locations.localConfigJsonPath, localBytes);
   const state = populatedState();
 
   // act
   const migration = await migrateFirstRunConfig(locations, state);
   const scopeEntries = await readdir(locations.scopeRoot);
-  const storedLocalBytes = await readFile(locations.configLocalJsonPath, "utf8");
+  const storedLocalBytes = await readFile(locations.localConfigJsonPath, "utf8");
 
   // assert
   assert.deepStrictEqual(migration, {
     migrated: false,
     reason: "local-invalid",
-    filePath: locations.configJsonPath,
+    filePath: locations.baseConfigJsonPath,
   });
   assert.deepStrictEqual(scopeEntries, ["claude-plugins.local.json"]);
   assert.strictEqual(storedLocalBytes, localBytes);
@@ -465,7 +465,7 @@ test("propagates containment failure without creating config bytes", async (t) =
   // arrange
   const { directory, locations } = await createCaseLocations(t);
   const escapedConfigPath = path.join(directory, "escaped.json");
-  const escapedLocations = { ...locations, configJsonPath: escapedConfigPath };
+  const escapedLocations = { ...locations, baseConfigJsonPath: escapedConfigPath };
   const state = populatedState();
 
   // act

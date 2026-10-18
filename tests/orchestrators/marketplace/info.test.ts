@@ -133,7 +133,7 @@ async function seedConfigAutoupdate(
   autoupdate: boolean,
 ): Promise<void> {
   await saveConfig(
-    locations.configJsonPath,
+    locations.baseConfigJsonPath,
     { schemaVersion: 1, marketplaces: { [name]: { source, autoupdate } } },
     locations.scopeRoot,
   );

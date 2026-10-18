@@ -2889,8 +2889,8 @@ test("EDEP-03 re-enabling a dependency writes no entry into either config file",
 
   // assert
   assert.strictEqual(cascade.kind, "installed");
-  assert.strictEqual(fs.existsSync(locations.configJsonPath), false);
-  assert.strictEqual(fs.existsSync(locations.configLocalJsonPath), false);
+  assert.strictEqual(fs.existsSync(locations.baseConfigJsonPath), false);
+  assert.strictEqual(fs.existsSync(locations.localConfigJsonPath), false);
 });
 
 test("EDEP-03 an already-enabled already-installed dependency is left untouched", async (t) => {

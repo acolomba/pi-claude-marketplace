@@ -1137,7 +1137,7 @@ async function executeScopedPlan(
  *
  * Target: import does NOT support `--local` (per RESEARCH project structure;
  * the flag is per-command and not on the import surface), so the batch
- * targets `locations.configJsonPath`. The one exception is a re-enabled
+ * targets `locations.baseConfigJsonPath`. The one exception is a re-enabled
  * promotion whose key the local file declares: its `{ enabled: true }` goes
  * to the local file (`stampReenabledWhereLocalDeclares`) and the batch keeps
  * the bare key.
@@ -1164,7 +1164,7 @@ async function writeBatchedConfigForScope(
   }
 
   const locations = locationsFor(scope, opts.cwd);
-  const targetConfigPath = locations.configJsonPath;
+  const targetConfigPath = locations.baseConfigJsonPath;
 
   try {
     await withLockedStateTransaction(locations, async () => {
@@ -1238,7 +1238,7 @@ async function stampReenabledWhereLocalDeclares(
 
     const key = `${installed.plugin}@${installed.marketplace}`;
     // eslint-disable-next-line no-await-in-loop -- each stamp reads the previous stamp's write
-    const localCfg = await loadConfig(locations.configLocalJsonPath);
+    const localCfg = await loadConfig(locations.localConfigJsonPath);
     if (localCfg.status !== "valid" || ownValue(localCfg.config.plugins, key) === undefined) {
       continue;
     }
@@ -1246,7 +1246,7 @@ async function stampReenabledWhereLocalDeclares(
     // eslint-disable-next-line no-await-in-loop -- read-modify-write of the local config file
     await writePluginConfigEntry(
       localCfg.config,
-      locations.configLocalJsonPath,
+      locations.localConfigJsonPath,
       locations.scopeRoot,
       installed.plugin,
       installed.marketplace,

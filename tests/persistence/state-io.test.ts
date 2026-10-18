@@ -1655,5 +1655,5 @@ test("derives the config migration gate path from the public locations contract"
   const derivedConfigPath = path.join(path.dirname(locations.extensionRoot), "claude-plugins.json");
 
   // assert
-  assert.strictEqual(derivedConfigPath, locations.configJsonPath);
+  assert.strictEqual(derivedConfigPath, locations.baseConfigJsonPath);
 });

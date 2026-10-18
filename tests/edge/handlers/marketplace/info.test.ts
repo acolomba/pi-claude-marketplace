@@ -280,8 +280,8 @@ for (const { name, autoupdate } of [
       '{ "marketplaces": { "shared": { "source": "./shared", "autoupdate": true }, "overlap": { "source": "./overlap", "autoupdate": true } } }\n';
     const localBytes =
       '{ "marketplaces": { "local": { "source": "./local", "autoupdate": true }, "overlap": { "source": "./override", "autoupdate": false } } }\n';
-    await writeFile(locations.configJsonPath, sharedBytes);
-    await writeFile(locations.configLocalJsonPath, localBytes);
+    await writeFile(locations.baseConfigJsonPath, sharedBytes);
+    await writeFile(locations.localConfigJsonPath, localBytes);
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
       value: cwd,
       reads: 1,
@@ -297,8 +297,8 @@ for (const { name, autoupdate } of [
     ]);
     assert.deepStrictEqual(
       [
-        await readFile(locations.configJsonPath, "utf8"),
-        await readFile(locations.configLocalJsonPath, "utf8"),
+        await readFile(locations.baseConfigJsonPath, "utf8"),
+        await readFile(locations.localConfigJsonPath, "utf8"),
       ],
       [sharedBytes, localBytes],
     );

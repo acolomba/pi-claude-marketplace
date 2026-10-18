@@ -168,8 +168,8 @@ async function readIfPresent(filePath: string): Promise<string | undefined> {
 /** The bytes of both layer files; an absent file reads as undefined. */
 async function layerFiles(scope: LayerScope): Promise<readonly (string | undefined)[]> {
   return [
-    await readIfPresent(scope.locations.configJsonPath),
-    await readIfPresent(scope.locations.configLocalJsonPath),
+    await readIfPresent(scope.locations.baseConfigJsonPath),
+    await readIfPresent(scope.locations.localConfigJsonPath),
   ];
 }
 
@@ -191,13 +191,13 @@ const DIRECTIONS: readonly Direction[] = [
     flag: "",
     local: false,
     unreadable: "claude-plugins.local.json",
-    unreadablePath: (locations) => locations.configLocalJsonPath,
+    unreadablePath: (locations) => locations.localConfigJsonPath,
   },
   {
     flag: " --local",
     local: true,
     unreadable: "claude-plugins.json",
-    unreadablePath: (locations) => locations.configJsonPath,
+    unreadablePath: (locations) => locations.baseConfigJsonPath,
   },
 ];
 
@@ -442,7 +442,7 @@ test("LAYER-06: install --local is refused and changes nothing when no layer dec
   const scope = await installedScope(t, "plugin-layer-no-source-", "alpha", false);
   await forgetRecordedSource(scope);
   await writeFile(
-    scope.locations.configJsonPath,
+    scope.locations.baseConfigJsonPath,
     JSON.stringify({ schemaVersion: 1, plugins: { "alpha@mp": {} } }),
   );
   const before = await scopeFiles(scope);

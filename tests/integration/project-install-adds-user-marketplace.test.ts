@@ -306,7 +306,7 @@ test("LAYER-07: a project keeps the marketplace its install added after a user-s
     ],
   );
   assert.strictEqual(
-    await readIfPresent(env.project.configJsonPath),
+    await readIfPresent(env.project.baseConfigJsonPath),
     jsonFile({
       schemaVersion: 1,
       marketplaces: { mp: { source: REPO_URL } },
@@ -322,7 +322,7 @@ async function projectFootprint(env: Scopes): Promise<readonly unknown[]> {
     Object.keys((await loadState(env.project.extensionRoot)).marketplaces),
     await treeOf(path.join(env.project.extensionRoot, "sources")),
     await treeOf(path.join(env.project.extensionRoot, "sources-staging")),
-    await readIfPresent(env.project.configJsonPath),
+    await readIfPresent(env.project.baseConfigJsonPath),
   ];
 }
 
@@ -497,7 +497,7 @@ test("LAYER-07: a project install adds the user-scope git marketplace of its dep
     ],
   );
   assert.strictEqual(
-    await readIfPresent(env.project.configJsonPath),
+    await readIfPresent(env.project.baseConfigJsonPath),
     jsonFile({
       schemaVersion: 1,
       marketplaces: { upstream: { source: upstream }, tools: { source: TOOLS_URL } },

@@ -1024,8 +1024,8 @@ test("LAYER-04: a direct swap writes no layer file", async () => {
       // assert
       assert.deepStrictEqual(outcome, DIRECT_UPDATED_OUTCOME);
       assert.deepStrictEqual(messages, []);
-      await assert.rejects(readFile(locations.configJsonPath), { code: "ENOENT" });
-      await assert.rejects(readFile(locations.configLocalJsonPath), { code: "ENOENT" });
+      await assert.rejects(readFile(locations.baseConfigJsonPath), { code: "ENOENT" });
+      await assert.rejects(readFile(locations.localConfigJsonPath), { code: "ENOENT" });
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -1038,8 +1038,8 @@ test("LAYER-04: a direct swap with an unreadable local layer updates, renders no
     const cwd = await mkdtemp(path.join(tmpdir(), "update-swap-invalid-layer-"));
     try {
       const { locations, args, messages } = await prepareDirectUpdate(cwd);
-      await writeFile(locations.configLocalJsonPath, "{ not json");
-      const mtimeBefore = (await stat(locations.configLocalJsonPath)).mtimeMs;
+      await writeFile(locations.localConfigJsonPath, "{ not json");
+      const mtimeBefore = (await stat(locations.localConfigJsonPath)).mtimeMs;
       const preflight = await preflightOf(args);
 
       // act
@@ -1048,9 +1048,9 @@ test("LAYER-04: a direct swap with an unreadable local layer updates, renders no
       // assert
       assert.deepStrictEqual(outcome, DIRECT_UPDATED_OUTCOME);
       assert.deepStrictEqual(messages, []);
-      assert.strictEqual(await readFile(locations.configLocalJsonPath, "utf8"), "{ not json");
-      assert.strictEqual((await stat(locations.configLocalJsonPath)).mtimeMs, mtimeBefore);
-      await assert.rejects(readFile(locations.configJsonPath), { code: "ENOENT" });
+      assert.strictEqual(await readFile(locations.localConfigJsonPath, "utf8"), "{ not json");
+      assert.strictEqual((await stat(locations.localConfigJsonPath)).mtimeMs, mtimeBefore);
+      await assert.rejects(readFile(locations.baseConfigJsonPath), { code: "ENOENT" });
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

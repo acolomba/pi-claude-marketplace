@@ -479,8 +479,8 @@ export async function loadState(
   // (pinned by a drift-guard test in tests/persistence/state-io.test.ts).
   // We do NOT import `locationsFor` here because the external
   // `loadState` keeps the extension-root path contract for orchestrator callers.
-  const configJsonPath = path.join(path.dirname(extensionRoot), "claude-plugins.json");
-  const scrubAutoupdate = existsSync(configJsonPath);
+  const baseConfigJsonPath = path.join(path.dirname(extensionRoot), "claude-plugins.json");
+  const scrubAutoupdate = existsSync(baseConfigJsonPath);
   const { marketplaces, mutated } = migrateLegacyMarketplaceRecords(
     parsed,
     extensionRoot,

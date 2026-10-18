@@ -168,7 +168,7 @@ export function findLayerMarketplaceGaps(
  * D-18: per-scope loader returning both the merged view and
  * the per-file `ConfigLoadResult`s.
  *
- * Loads `loc.configJsonPath` (base) and `loc.configLocalJsonPath` (local) via
+ * Loads `loc.baseConfigJsonPath` (base) and `loc.localConfigJsonPath` (local) via
  * `loadConfig` (which NEVER throws -- every failure mode is encoded in the
  * returned union). When an arm is `absent` or `invalid`, its contribution to
  * the merged view is treated as empty `ScopeConfig` (`{}`), so a sensible
@@ -182,8 +182,8 @@ export function findLayerMarketplaceGaps(
  * This function is a pure data seam.
  */
 export async function loadMergedScopeConfig(loc: ScopedLocations): Promise<ScopeLoadOutcome> {
-  const base = await loadConfig(loc.configJsonPath);
-  const local = await loadConfig(loc.configLocalJsonPath);
+  const base = await loadConfig(loc.baseConfigJsonPath);
+  const local = await loadConfig(loc.localConfigJsonPath);
 
   const baseConfig: ScopeConfig = base.status === "valid" ? base.config : {};
   const localConfig: ScopeConfig = local.status === "valid" ? local.config : {};

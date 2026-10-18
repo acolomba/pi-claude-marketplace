@@ -6772,7 +6772,7 @@ test("CR-06: enable a --local overwrites a base-file stale entry for a re-enable
     assert.equal(stateAfter.marketplaces.official?.plugins.b?.enabled, true);
     const baseCfg = (await readConfig(configPath)) as { plugins?: Record<string, unknown> };
     assert.deepEqual(baseCfg.plugins?.["b@official"], { enabled: true });
-    const localCfg = (await readConfig(locationsFor("user", cwd).configLocalJsonPath)) as {
+    const localCfg = (await readConfig(locationsFor("user", cwd).localConfigJsonPath)) as {
       plugins?: Record<string, unknown>;
     };
     assert.deepEqual(localCfg.plugins, { "a@official": { enabled: true } });

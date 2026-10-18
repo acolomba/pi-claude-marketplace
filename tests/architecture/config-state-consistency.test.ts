@@ -181,7 +181,7 @@ test("WB-01 SC#4 (add path): after addMarketplace, reconcile is a no-op AND stat
     });
 
     // 1. The config file was written under the locked transaction.
-    const cfg = await loadConfig(locations.configJsonPath);
+    const cfg = await loadConfig(locations.baseConfigJsonPath);
     assert.strictEqual(cfg.status, "valid");
     if (cfg.status !== "valid") {
       return;
@@ -223,7 +223,7 @@ test("WB-01 SC#4 (add + autoupdate enable): post-flip reconcile is a no-op AND u
     //    saveConfig is the SOLE sanctioned writer (SPLIT-02); validated
     //    against the lenient schema, unknown keys survive the round trip.
     await saveConfig(
-      locations.configJsonPath,
+      locations.baseConfigJsonPath,
       {
         schemaVersion: 1,
         marketplaces: {
@@ -261,7 +261,7 @@ test("WB-01 SC#4 (add + autoupdate enable): post-flip reconcile is a no-op AND u
 
     // 3. Read back the config; unknown keys at BOTH entry and top level
     //    survived every write-back (add, then autoupdate flip).
-    const cfg = await loadConfig(locations.configJsonPath);
+    const cfg = await loadConfig(locations.baseConfigJsonPath);
     assert.strictEqual(cfg.status, "valid");
     if (cfg.status !== "valid") {
       return;
@@ -337,7 +337,7 @@ test("WB-01 SC#4 (add + autoupdate disable): post-flip reconcile is a no-op", as
       cwd,
     });
 
-    const cfg = await loadConfig(locations.configJsonPath);
+    const cfg = await loadConfig(locations.baseConfigJsonPath);
     assert.strictEqual(cfg.status, "valid");
     if (cfg.status !== "valid") {
       return;
@@ -392,7 +392,7 @@ test("WB-01 SC#4 (add + remove cascade): post-remove reconcile is a no-op and co
       cwd,
     });
 
-    const cfg = await loadConfig(locations.configJsonPath);
+    const cfg = await loadConfig(locations.baseConfigJsonPath);
     assert.strictEqual(cfg.status, "valid");
     if (cfg.status !== "valid") {
       return;
@@ -449,7 +449,7 @@ test("WB-01 SC#4 (bare-form autoupdate flip, 2 marketplaces): BOTH config entrie
       marketplaces: { mp1: mpRecord("mp1"), mp2: mpRecord("mp2") },
     } as never);
     await saveConfig(
-      locations.configJsonPath,
+      locations.baseConfigJsonPath,
       {
         schemaVersion: 1,
         marketplaces: { mp1: { source: "./mp1-src" }, mp2: { source: "./mp2-src" } },
@@ -466,7 +466,7 @@ test("WB-01 SC#4 (bare-form autoupdate flip, 2 marketplaces): BOTH config entrie
       cwd,
     });
 
-    const cfg = await loadConfig(locations.configJsonPath);
+    const cfg = await loadConfig(locations.baseConfigJsonPath);
     assert.strictEqual(cfg.status, "valid");
     if (cfg.status !== "valid") {
       return;
@@ -558,7 +558,7 @@ test("WB-01 SC#4 (cross-scope CMP-3 install): project-scope install via user-sco
       plugin: "tool",
     });
 
-    const cfg = await loadConfig(projectLocations.configJsonPath);
+    const cfg = await loadConfig(projectLocations.baseConfigJsonPath);
     assert.strictEqual(cfg.status, "valid");
     if (cfg.status !== "valid") {
       return;
@@ -599,8 +599,8 @@ test("WR-09 orchestrated-mode SKIP: addMarketplace with notifications.mode 'orch
     // Pre-seed config with a known fixture so we can prove byte-stability.
     await mkdir(locations.scopeRoot, { recursive: true });
     const initialBytes = JSON.stringify({ schemaVersion: 1 });
-    await writeFile(locations.configJsonPath, initialBytes, "utf8");
-    const beforeStat = await stat(locations.configJsonPath);
+    await writeFile(locations.baseConfigJsonPath, initialBytes, "utf8");
+    const beforeStat = await stat(locations.baseConfigJsonPath);
 
     await addMarketplace({
       ctx,
@@ -616,8 +616,8 @@ test("WR-09 orchestrated-mode SKIP: addMarketplace with notifications.mode 'orch
     // Config file bytes + mtime UNCHANGED: orchestrated mode skipped the
     // write-back. State MAY have changed (the orchestrator still recorded
     // the marketplace in state.json); only the config side is asserted here.
-    const afterBytes = await readFile(locations.configJsonPath, "utf8");
-    const afterStat = await stat(locations.configJsonPath);
+    const afterBytes = await readFile(locations.baseConfigJsonPath, "utf8");
+    const afterStat = await stat(locations.baseConfigJsonPath);
     assert.strictEqual(afterBytes, initialBytes);
     assert.strictEqual(afterStat.mtimeMs, beforeStat.mtimeMs);
   } finally {

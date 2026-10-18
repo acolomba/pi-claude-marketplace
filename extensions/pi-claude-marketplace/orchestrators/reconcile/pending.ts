@@ -164,7 +164,7 @@ function layerMarketplaceGapBlocks(
   return findLayerMarketplaceGaps(base, local).map((gap) =>
     buildLayerGapBlock(
       scope,
-      gap.layer === "base" ? loc.configJsonPath : loc.configLocalJsonPath,
+      gap.layer === "base" ? loc.baseConfigJsonPath : loc.localConfigJsonPath,
       composeLayerMarketplaceCause(gap, scope),
     ),
   );

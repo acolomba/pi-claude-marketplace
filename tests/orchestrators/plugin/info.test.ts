@@ -6527,7 +6527,7 @@ test("DFEN-04 / DFEN-05: a config `enabled` declaration SUPPRESSES `{installs di
     // the state in which a candidate row is read.
     const locations = locationsFor("user", cwd);
     await saveConfig(
-      locations.configJsonPath,
+      locations.baseConfigJsonPath,
       {
         schemaVersion: 1,
         plugins: { "yes@mp": { enabled: true }, "no@mp": { enabled: false } },

@@ -203,7 +203,7 @@ test("a shared-layer remove keeps the clone, the data directory, the local file,
   const marketplaceData = await scope.locations.marketplaceDataDir("mp");
   await mkdir(marketplaceData, { recursive: true });
   await writeFile(path.join(marketplaceData, "sentinel"), "marketplace data");
-  const localBytes = await readFile(scope.locations.configLocalJsonPath, "utf8");
+  const localBytes = await readFile(scope.locations.localConfigJsonPath, "utf8");
   const cloneDir = await scope.locations.sourceCloneDir("mp");
   const cloneEntries = await entriesOf(cloneDir);
 
@@ -223,7 +223,7 @@ test("a shared-layer remove keeps the clone, the data directory, the local file,
     await readFile(path.join(marketplaceData, "sentinel"), "utf8"),
     "marketplace data",
   );
-  assert.strictEqual(await readFile(scope.locations.configLocalJsonPath, "utf8"), localBytes);
+  assert.strictEqual(await readFile(scope.locations.localConfigJsonPath, "utf8"), localBytes);
   assert.deepStrictEqual(await entriesOf(scope.locations.skillsTargetDir), ["beta-greet"]);
   const state = await loadState(scope.locations.extensionRoot);
   assert.deepStrictEqual(Object.keys(state.marketplaces.mp?.plugins ?? {}), ["beta"]);
@@ -236,7 +236,7 @@ test("a named remove fully removes a recorded url marketplace no layer declares"
   const boundary = createNotificationBoundary(2);
   await addRepo(scope, boundary, false);
   await saveConfig(
-    scope.locations.configJsonPath,
+    scope.locations.baseConfigJsonPath,
     { schemaVersion: 1, marketplaces: {} },
     scope.locations.scopeRoot,
   );
@@ -269,8 +269,8 @@ test("a refused remove changes no state, config, clone, or staged artifact", asy
   const cloneDir = await scope.locations.sourceCloneDir("mp");
   const footprint = async (): Promise<readonly unknown[]> => [
     await readFile(scope.locations.stateJsonPath, "utf8"),
-    await readIfPresent(scope.locations.configJsonPath),
-    await readFile(scope.locations.configLocalJsonPath, "utf8"),
+    await readIfPresent(scope.locations.baseConfigJsonPath),
+    await readFile(scope.locations.localConfigJsonPath, "utf8"),
     await entriesOf(cloneDir),
     await entriesOf(scope.locations.skillsTargetDir),
   ];
@@ -308,8 +308,8 @@ async function removeFootprint(scope: ProjectScope): Promise<readonly unknown[]>
   const cloneDir = await scope.locations.sourceCloneDir("mp");
   return [
     await readFile(scope.locations.stateJsonPath, "utf8"),
-    await readIfPresent(scope.locations.configJsonPath),
-    await readIfPresent(scope.locations.configLocalJsonPath),
+    await readIfPresent(scope.locations.baseConfigJsonPath),
+    await readIfPresent(scope.locations.localConfigJsonPath),
     await entriesOf(cloneDir),
     await readFile(path.join(cloneDir, ".claude-plugin", "marketplace.json"), "utf8"),
     await entriesOf(scope.locations.skillsTargetDir),
@@ -323,7 +323,7 @@ test("LAYER-02: a remove refused because the other config file is unreadable cha
   await addRepo(scope, boundary, false);
   await addRepo(scope, boundary, true);
   await installFrom(scope, boundary, "alpha", false);
-  await writeFile(scope.locations.configLocalJsonPath, "{ not json");
+  await writeFile(scope.locations.localConfigJsonPath, "{ not json");
   const footprintBefore = await removeFootprint(scope);
 
   // act
@@ -468,7 +468,7 @@ test("LAYER-03: a full remove that keeps a dependency keeps the url marketplace'
       ["up", ["app"]],
     ],
   );
-  const shared = await loadConfig(scope.locations.configJsonPath);
+  const shared = await loadConfig(scope.locations.baseConfigJsonPath);
   assert.ok(shared.status === "valid");
   assert.deepStrictEqual(
     planReconcile(mergeScopeConfigs(shared.config, {}), state, "project"),

@@ -538,8 +538,8 @@ async function commitFullRemove(args: {
   // the sibling layer; cleaning only the target layer leaves it as a
   // perpetual dangling-reference. Each layer is loaded fresh and swept
   // independently (WR-02 no-op guard per file, NFR-1 atomic save per file).
-  await cascadeRemoveFromLayer(locations.configJsonPath, locations.scopeRoot, marketplace);
-  await cascadeRemoveFromLayer(locations.configLocalJsonPath, locations.scopeRoot, marketplace);
+  await cascadeRemoveFromLayer(locations.baseConfigJsonPath, locations.scopeRoot, marketplace);
+  await cascadeRemoveFromLayer(locations.localConfigJsonPath, locations.scopeRoot, marketplace);
 }
 
 /** A layer gate verdict that stops a standalone remove before any change. */
@@ -609,7 +609,7 @@ async function planStandaloneRemove(args: {
 }): Promise<RemovePlan> {
   const { locations, targetIsLocal } = args;
   const other = await loadConfig(
-    targetIsLocal ? locations.configJsonPath : locations.configLocalJsonPath,
+    targetIsLocal ? locations.baseConfigJsonPath : locations.localConfigJsonPath,
   );
   const verdict = marketplaceLayerVerdict({
     target: args.target,
@@ -1257,7 +1257,7 @@ async function runRemoveOutcome(
   // WB-01: target-path selection happens ONCE before the lock so
   // the orchestrator NEVER falls back to the base file on ENOENT.
   const targetConfigPath =
-    opts.local === true ? locations.configLocalJsonPath : locations.configJsonPath;
+    opts.local === true ? locations.localConfigJsonPath : locations.baseConfigJsonPath;
   const configBasename = path.basename(targetConfigPath);
 
   // Per-plugin tracking accumulators captured by the guard closure.

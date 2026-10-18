@@ -107,7 +107,7 @@ async function writeConfig(
   local = false,
 ): Promise<void> {
   await saveConfig(
-    local ? locations.configLocalJsonPath : locations.configJsonPath,
+    local ? locations.localConfigJsonPath : locations.baseConfigJsonPath,
     config,
     locations.scopeRoot,
   );
@@ -144,8 +144,8 @@ async function scopeBytes(locations: ScopedLocations): Promise<{
 }> {
   return {
     state: await readOptionalBytes(locations.stateJsonPath),
-    shared: await readOptionalBytes(locations.configJsonPath),
-    local: await readOptionalBytes(locations.configLocalJsonPath),
+    shared: await readOptionalBytes(locations.baseConfigJsonPath),
+    local: await readOptionalBytes(locations.localConfigJsonPath),
   };
 }
 
@@ -246,8 +246,8 @@ for (const scenario of oneRowInvocationCases) {
       });
 
       // assert
-      assert.equal(await readFile(locations.configJsonPath, "utf8"), expectedConfigBytes);
-      assert.equal(await readOptionalBytes(locations.configLocalJsonPath), undefined);
+      assert.equal(await readFile(locations.baseConfigJsonPath, "utf8"), expectedConfigBytes);
+      assert.equal(await readOptionalBytes(locations.localConfigJsonPath), undefined);
       assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
       verify(boundary.ctx);
       verify(boundary.ui);
@@ -298,7 +298,7 @@ test("disables one project marketplace when base config is enabled", async () =>
     });
 
     // assert
-    assert.equal(await readFile(locations.configJsonPath, "utf8"), expectedConfigBytes);
+    assert.equal(await readFile(locations.baseConfigJsonPath, "utf8"), expectedConfigBytes);
     assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
     verify(boundary.ctx);
     verify(boundary.ui);
@@ -315,7 +315,7 @@ test("reports an already-enabled base entry without changing bytes or metadata",
       marketplaces: { mp: { source: "./src", autoupdate: true } },
     });
     const stateBytes = await readFile(locations.stateJsonPath, "utf8");
-    const configBefore = await configSnapshot(locations.configJsonPath);
+    const configBefore = await configSnapshot(locations.baseConfigJsonPath);
     const boundary = notificationBoundary({
       message: "● mp [project] <autoupdate> {already autoupdate}",
     });
@@ -331,7 +331,7 @@ test("reports an already-enabled base entry without changing bytes or metadata",
     });
 
     // assert
-    assert.deepEqual(await configSnapshot(locations.configJsonPath), configBefore);
+    assert.deepEqual(await configSnapshot(locations.baseConfigJsonPath), configBefore);
     assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
     verify(boundary.ctx);
     verify(boundary.ui);
@@ -348,7 +348,7 @@ test("reports an already-disabled base entry without changing bytes or metadata"
       marketplaces: { mp: { source: "./src", autoupdate: false } },
     });
     const stateBytes = await readFile(locations.stateJsonPath, "utf8");
-    const configBefore = await configSnapshot(locations.configJsonPath);
+    const configBefore = await configSnapshot(locations.baseConfigJsonPath);
     const boundary = notificationBoundary({
       message: "● mp [project] <no autoupdate> {already no autoupdate}",
     });
@@ -364,7 +364,7 @@ test("reports an already-disabled base entry without changing bytes or metadata"
     });
 
     // assert
-    assert.deepEqual(await configSnapshot(locations.configJsonPath), configBefore);
+    assert.deepEqual(await configSnapshot(locations.baseConfigJsonPath), configBefore);
     assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
     verify(boundary.ctx);
     verify(boundary.ui);
@@ -424,7 +424,7 @@ test("enables all project marketplaces in changed-before-unchanged order with on
     });
 
     // assert
-    assert.equal(await readFile(locations.configJsonPath, "utf8"), expectedConfigBytes);
+    assert.equal(await readFile(locations.baseConfigJsonPath, "utf8"), expectedConfigBytes);
     assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
     verify(boundary.ctx);
     verify(boundary.ui);
@@ -450,9 +450,9 @@ test("reports an empty implicit two-scope inventory without creating files", asy
 
     // assert
     assert.equal(await readOptionalBytes(projectLocations.stateJsonPath), undefined);
-    assert.equal(await readOptionalBytes(projectLocations.configJsonPath), undefined);
+    assert.equal(await readOptionalBytes(projectLocations.baseConfigJsonPath), undefined);
     assert.equal(await readOptionalBytes(userLocations.stateJsonPath), undefined);
-    assert.equal(await readOptionalBytes(userLocations.configJsonPath), undefined);
+    assert.equal(await readOptionalBytes(userLocations.baseConfigJsonPath), undefined);
     verify(boundary.ctx);
     verify(boundary.ui);
   });
@@ -481,9 +481,9 @@ test("finds a named user marketplace after an implicit project miss", async () =
     });
 
     // assert
-    assert.equal(await readOptionalBytes(projectLocations.configJsonPath), undefined);
+    assert.equal(await readOptionalBytes(projectLocations.baseConfigJsonPath), undefined);
     assert.equal(
-      await readFile(userLocations.configJsonPath, "utf8"),
+      await readFile(userLocations.baseConfigJsonPath, "utf8"),
       '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "only": {\n      "source": "./src",\n      "autoupdate": true\n    }\n  },\n  "plugins": {}\n}\n',
     );
     assert.equal(await readFile(userLocations.stateJsonPath, "utf8"), stateBytes);
@@ -555,7 +555,7 @@ test("LAYER-02: a local flip writes an explicit value into a local entry that ha
       { schemaVersion: 1, marketplaces: { mp: { source: "./src" } } },
       true,
     );
-    const baseBytes = await readFile(locations.configJsonPath, "utf8");
+    const baseBytes = await readFile(locations.baseConfigJsonPath, "utf8");
     const stateBytes = await readFile(locations.stateJsonPath, "utf8");
     const boundary = notificationBoundary({ message: "● mp [user] <no autoupdate>" });
     const expectedLocalBytes = [
@@ -584,8 +584,8 @@ test("LAYER-02: a local flip writes an explicit value into a local entry that ha
     });
 
     // assert
-    assert.equal(await readFile(locations.configJsonPath, "utf8"), baseBytes);
-    assert.equal(await readFile(locations.configLocalJsonPath, "utf8"), expectedLocalBytes);
+    assert.equal(await readFile(locations.baseConfigJsonPath, "utf8"), baseBytes);
+    assert.equal(await readFile(locations.localConfigJsonPath, "utf8"), expectedLocalBytes);
     assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
     verify(boundary.ctx);
     verify(boundary.ui);
@@ -612,8 +612,8 @@ test("orchestrated enable preserves semantic output while suppressing config wri
     });
 
     // assert
-    assert.equal(await readOptionalBytes(locations.configJsonPath), undefined);
-    assert.equal(await readOptionalBytes(locations.configLocalJsonPath), undefined);
+    assert.equal(await readOptionalBytes(locations.baseConfigJsonPath), undefined);
+    assert.equal(await readOptionalBytes(locations.localConfigJsonPath), undefined);
     assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
     verify(boundary.ctx);
     verify(boundary.ui);
@@ -643,7 +643,7 @@ for (const { label, invocation, expectedMessage } of orchestratedConfiguredCases
         schemaVersion: 1,
         marketplaces: { mp: { source: "./configured", autoupdate: false } },
       });
-      const configBefore = await configSnapshot(locations.configJsonPath);
+      const configBefore = await configSnapshot(locations.baseConfigJsonPath);
       const stateBytes = await readFile(locations.stateJsonPath, "utf8");
       const boundary = notificationBoundary({ message: expectedMessage });
 
@@ -659,7 +659,7 @@ for (const { label, invocation, expectedMessage } of orchestratedConfiguredCases
       });
 
       // assert
-      assert.deepEqual(await configSnapshot(locations.configJsonPath), configBefore);
+      assert.deepEqual(await configSnapshot(locations.baseConfigJsonPath), configBefore);
       assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
       verify(boundary.ctx);
       verify(boundary.ui);
@@ -704,8 +704,8 @@ test("rejects malformed base config with a basename-only failure and unchanged s
     // arrange
     const locations = locationsFor("project", cwd);
     await saveMarketplaces(locations, [marketplaceRecord("mp", "project", cwd)]);
-    await writeFile(locations.configJsonPath, "{ malformed", "utf8");
-    const configBytes = await readFile(locations.configJsonPath, "utf8");
+    await writeFile(locations.baseConfigJsonPath, "{ malformed", "utf8");
+    const configBytes = await readFile(locations.baseConfigJsonPath, "utf8");
     const stateBytes = await readFile(locations.stateJsonPath, "utf8");
     const boundary = notificationBoundary({
       message: [
@@ -729,7 +729,7 @@ test("rejects malformed base config with a basename-only failure and unchanged s
     });
 
     // assert
-    assert.equal(await readFile(locations.configJsonPath, "utf8"), configBytes);
+    assert.equal(await readFile(locations.baseConfigJsonPath, "utf8"), configBytes);
     assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
     verify(boundary.ctx);
     verify(boundary.ui);
@@ -742,11 +742,11 @@ test("rejects schema-invalid local config with a basename-only failure and uncha
     const locations = locationsFor("project", cwd);
     await saveMarketplaces(locations, [marketplaceRecord("mp", "project", cwd)]);
     await writeFile(
-      locations.configLocalJsonPath,
+      locations.localConfigJsonPath,
       JSON.stringify({ schemaVersion: 2, marketplaces: {} }),
       "utf8",
     );
-    const configBytes = await readFile(locations.configLocalJsonPath, "utf8");
+    const configBytes = await readFile(locations.localConfigJsonPath, "utf8");
     const stateBytes = await readFile(locations.stateJsonPath, "utf8");
     const boundary = notificationBoundary({
       message: [
@@ -771,7 +771,7 @@ test("rejects schema-invalid local config with a basename-only failure and uncha
     });
 
     // assert
-    assert.equal(await readFile(locations.configLocalJsonPath, "utf8"), configBytes);
+    assert.equal(await readFile(locations.localConfigJsonPath, "utf8"), configBytes);
     assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
     verify(boundary.ctx);
     verify(boundary.ui);
@@ -783,7 +783,7 @@ test("rejects a local config read failure without replacing the directory", asyn
     // arrange
     const locations = locationsFor("project", cwd);
     await saveMarketplaces(locations, [marketplaceRecord("mp", "project", cwd)]);
-    await mkdir(locations.configLocalJsonPath, { recursive: true });
+    await mkdir(locations.localConfigJsonPath, { recursive: true });
     const stateBytes = await readFile(locations.stateJsonPath, "utf8");
     const boundary = notificationBoundary({
       message: [
@@ -808,7 +808,7 @@ test("rejects a local config read failure without replacing the directory", asyn
     });
 
     // assert
-    assert.equal((await stat(locations.configLocalJsonPath)).isDirectory(), true);
+    assert.equal((await stat(locations.localConfigJsonPath)).isDirectory(), true);
     assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
     verify(boundary.ctx);
     verify(boundary.ui);
@@ -859,7 +859,7 @@ test("reports a held named scope lock and succeeds after the lock is released", 
 
     // assert
     assert.equal(
-      await readFile(locations.configJsonPath, "utf8"),
+      await readFile(locations.baseConfigJsonPath, "utf8"),
       '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "mp": {\n      "source": "./src",\n      "autoupdate": true\n    }\n  },\n  "plugins": {}\n}\n',
     );
     assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
@@ -903,7 +903,7 @@ test("reports a held unnamed scope lock against the unknown aggregate subject", 
     await release();
 
     // assert
-    assert.equal(await readOptionalBytes(locations.configJsonPath), undefined);
+    assert.equal(await readOptionalBytes(locations.baseConfigJsonPath), undefined);
     verify(boundary.ctx);
     verify(boundary.ui);
   });
@@ -915,7 +915,7 @@ test("keeps the config bytes after an atomic write refusal and converges on retr
     const locations = locationsFor("project", cwd);
     await saveMarketplaces(locations, [marketplaceRecord("mp", "project", cwd)]);
     await writeConfig(locations, { schemaVersion: 1, marketplaces: { mp: { source: "./src" } } });
-    const configBytes = await readFile(locations.configJsonPath, "utf8");
+    const configBytes = await readFile(locations.baseConfigJsonPath, "utf8");
     const stateBytes = await readFile(locations.stateJsonPath, "utf8");
     const failedBoundary = notificationBoundary({
       matches: (message) => {
@@ -943,7 +943,7 @@ test("keeps the config bytes after an atomic write refusal and converges on retr
       await chmod(locations.scopeRoot, 0o700);
     }
 
-    const configAfterFailure = await readFile(locations.configJsonPath, "utf8");
+    const configAfterFailure = await readFile(locations.baseConfigJsonPath, "utf8");
     await setMarketplaceAutoupdate({
       ctx: retryBoundary.ctx,
       run: retryBoundary.run,
@@ -956,7 +956,7 @@ test("keeps the config bytes after an atomic write refusal and converges on retr
     // assert
     assert.equal(configAfterFailure, configBytes);
     assert.equal(
-      await readFile(locations.configJsonPath, "utf8"),
+      await readFile(locations.baseConfigJsonPath, "utf8"),
       '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "mp": {\n      "source": "./src",\n      "autoupdate": true\n    }\n  },\n  "plugins": {}\n}\n',
     );
     assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
@@ -980,7 +980,7 @@ test("reports a committed project flip beside the failure when the user scope is
     };
     await writeConfig(projectLocations, declaration);
     await writeConfig(userLocations, declaration);
-    const userConfigBytes = await readFile(userLocations.configJsonPath, "utf8");
+    const userConfigBytes = await readFile(userLocations.baseConfigJsonPath, "utf8");
     const projectStateBytes = await readFile(projectLocations.stateJsonPath, "utf8");
     const userStateBytes = await readFile(userLocations.stateJsonPath, "utf8");
     const release = await lockfile.lock(userLocations.extensionRoot, {
@@ -1017,8 +1017,8 @@ test("reports a committed project flip beside the failure when the user scope is
       enable: true,
       cwd,
     });
-    const projectConfigAfterFailure = await readFile(projectLocations.configJsonPath, "utf8");
-    const userConfigAfterFailure = await readFile(userLocations.configJsonPath, "utf8");
+    const projectConfigAfterFailure = await readFile(projectLocations.baseConfigJsonPath, "utf8");
+    const userConfigAfterFailure = await readFile(userLocations.baseConfigJsonPath, "utf8");
     await release();
     await setMarketplaceAutoupdate({
       ctx: retryBoundary.ctx,
@@ -1035,7 +1035,7 @@ test("reports a committed project flip beside the failure when the user scope is
     );
     assert.equal(userConfigAfterFailure, userConfigBytes);
     assert.equal(
-      await readFile(userLocations.configJsonPath, "utf8"),
+      await readFile(userLocations.baseConfigJsonPath, "utf8"),
       '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "shared": {\n      "source": "./src",\n      "autoupdate": true\n    }\n  },\n  "plugins": {}\n}\n',
     );
     assert.equal(await readFile(projectLocations.stateJsonPath, "utf8"), projectStateBytes);
@@ -1062,7 +1062,7 @@ test("D-06: an unnamed flip whose local write fails reports the marketplaces the
     });
     const localTarget = path.join(home, "claude-plugins.local.json");
     await writeFile(localTarget, '{"schemaVersion":1,"marketplaces":{"mp":{"source":"./src"}}}\n');
-    await symlink(localTarget, locations.configLocalJsonPath);
+    await symlink(localTarget, locations.localConfigJsonPath);
     const notifications: string[] = [];
     const boundary = notificationBoundary({
       matches: (message) => {
@@ -1090,13 +1090,13 @@ test("D-06: an unnamed flip whose local write fails reports the marketplaces the
         "",
         "⊘ (unknown) [project] (failed)",
         "  ⊘ (unknown) (failed) {unreadable}",
-        `    cause: saveConfig contains symlink ${locations.configLocalJsonPath} -> ${localTarget} (parent: ${locations.scopeRoot}, target: ${locations.configLocalJsonPath}).`,
+        `    cause: saveConfig contains symlink ${locations.localConfigJsonPath} -> ${localTarget} (parent: ${locations.scopeRoot}, target: ${locations.localConfigJsonPath}).`,
         "",
         "Marketplace autoupdate: 2 failures, 1 success",
       ].join("\n"),
     ]);
     assert.deepStrictEqual(
-      [await readFile(locations.configJsonPath, "utf8"), await readFile(localTarget, "utf8")],
+      [await readFile(locations.baseConfigJsonPath, "utf8"), await readFile(localTarget, "utf8")],
       [
         '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "extras": {\n      "source": "./extras",\n      "autoupdate": true\n    },\n    "mp": {\n      "source": "./src",\n      "autoupdate": true\n    }\n  },\n  "plugins": {}\n}\n',
         '{"schemaVersion":1,"marketplaces":{"mp":{"source":"./src"}}}\n',
@@ -1117,7 +1117,7 @@ test("LAYER-02: a shared flip writes only the shared entry while the local file 
       { schemaVersion: 1, marketplaces: { mp: { source: "./src" } } },
       true,
     );
-    const localBefore = await configSnapshot(locations.configLocalJsonPath);
+    const localBefore = await configSnapshot(locations.localConfigJsonPath);
     const stateBytes = await readFile(locations.stateJsonPath, "utf8");
     const boundary = notificationBoundary({ message: "● mp [project] <autoupdate>" });
 
@@ -1132,8 +1132,8 @@ test("LAYER-02: a shared flip writes only the shared entry while the local file 
     });
 
     // assert
-    assert.equal(await readFile(locations.configJsonPath, "utf8"), SHARED_FLIP_BYTES);
-    assert.deepEqual(await configSnapshot(locations.configLocalJsonPath), localBefore);
+    assert.equal(await readFile(locations.baseConfigJsonPath, "utf8"), SHARED_FLIP_BYTES);
+    assert.deepEqual(await configSnapshot(locations.localConfigJsonPath), localBefore);
     assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
     verify(boundary.ctx);
     verify(boundary.ui);
@@ -1253,7 +1253,7 @@ test("CFG-03: names the unreadable other layer when the target layer does not de
       schemaVersion: 1,
       marketplaces: { base: { source: "./base" } },
     });
-    await writeFile(locations.configLocalJsonPath, "{ malformed", "utf8");
+    await writeFile(locations.localConfigJsonPath, "{ malformed", "utf8");
     const bytesBefore = await scopeBytes(locations);
     const boundary = notificationBoundary({
       message: [
@@ -1381,7 +1381,7 @@ for (const { label, layer, entry } of targetLayerIdempotencyCases) {
         layer === "local",
       );
       const targetPath =
-        layer === "local" ? locations.configLocalJsonPath : locations.configJsonPath;
+        layer === "local" ? locations.localConfigJsonPath : locations.baseConfigJsonPath;
       const targetBefore = await configSnapshot(targetPath);
       const boundary = notificationBoundary({
         message: "● mp [project] <no autoupdate> {already no autoupdate}",
@@ -1430,7 +1430,7 @@ for (const { label, entry, expectedMessage, expectedBytes } of unnamedDisableCas
       const locations = locationsFor("project", cwd);
       await saveMarketplaces(locations, [marketplaceRecord("mp", "project", cwd)]);
       await writeConfig(locations, { schemaVersion: 1, marketplaces: { mp: entry } });
-      const configBytes = await readFile(locations.configJsonPath, "utf8");
+      const configBytes = await readFile(locations.baseConfigJsonPath, "utf8");
       const boundary = notificationBoundary({ message: expectedMessage });
 
       // act
@@ -1443,7 +1443,10 @@ for (const { label, entry, expectedMessage, expectedBytes } of unnamedDisableCas
       });
 
       // assert
-      assert.equal(await readFile(locations.configJsonPath, "utf8"), expectedBytes ?? configBytes);
+      assert.equal(
+        await readFile(locations.baseConfigJsonPath, "utf8"),
+        expectedBytes ?? configBytes,
+      );
       verify(boundary.ctx);
       verify(boundary.ui);
     });
@@ -1455,7 +1458,7 @@ test("CFG-03: an unnamed --local flip over an invalid local file fails and write
     // arrange
     const locations = locationsFor("project", cwd);
     await recordAndDeclare(locations, cwd, "shared");
-    await writeFile(locations.configLocalJsonPath, "{ malformed", "utf8");
+    await writeFile(locations.localConfigJsonPath, "{ malformed", "utf8");
     const bytesBefore = await scopeBytes(locations);
     const boundary = notificationBoundary({
       message: [
@@ -1591,8 +1594,8 @@ for (const { label, localEntry, expectedMessage, expectedLocal } of sharedOnUnna
         marketplaces: { mp: { source: "./src", autoupdate: true } },
       });
       await writeConfig(locations, { schemaVersion: 1, marketplaces: { mp: localEntry } }, true);
-      const sharedBefore = await configSnapshot(locations.configJsonPath);
-      const localBytes = await readFile(locations.configLocalJsonPath, "utf8");
+      const sharedBefore = await configSnapshot(locations.baseConfigJsonPath);
+      const localBytes = await readFile(locations.localConfigJsonPath, "utf8");
       const boundary = notificationBoundary({ message: expectedMessage });
 
       // act
@@ -1605,9 +1608,9 @@ for (const { label, localEntry, expectedMessage, expectedLocal } of sharedOnUnna
       });
 
       // assert
-      assert.deepEqual(await configSnapshot(locations.configJsonPath), sharedBefore);
+      assert.deepEqual(await configSnapshot(locations.baseConfigJsonPath), sharedBefore);
       assert.equal(
-        await readFile(locations.configLocalJsonPath, "utf8"),
+        await readFile(locations.localConfigJsonPath, "utf8"),
         expectedLocal ?? localBytes,
       );
       verify(boundary.ctx);
@@ -1633,7 +1636,7 @@ test("D-09: an unnamed --local flip changes only the local file and skips what i
       { schemaVersion: 1, marketplaces: { mp: { source: "./src" } } },
       true,
     );
-    const sharedBefore = await configSnapshot(locations.configJsonPath);
+    const sharedBefore = await configSnapshot(locations.baseConfigJsonPath);
     const boundary = notificationBoundary({
       message: "● mp [project] <no autoupdate>\n\nMarketplace noautoupdate: 1 success",
     });
@@ -1649,9 +1652,9 @@ test("D-09: an unnamed --local flip changes only the local file and skips what i
     });
 
     // assert
-    assert.deepEqual(await configSnapshot(locations.configJsonPath), sharedBefore);
+    assert.deepEqual(await configSnapshot(locations.baseConfigJsonPath), sharedBefore);
     assert.equal(
-      await readFile(locations.configLocalJsonPath, "utf8"),
+      await readFile(locations.localConfigJsonPath, "utf8"),
       '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "mp": {\n      "source": "./src",\n      "autoupdate": false\n    }\n  },\n  "plugins": {}\n}\n',
     );
     verify(boundary.ctx);
@@ -1664,7 +1667,7 @@ test("CFG-03: an unnamed flip without --local over an invalid local file fails a
     // arrange
     const locations = locationsFor("project", cwd);
     await recordAndDeclare(locations, cwd, "shared");
-    await writeFile(locations.configLocalJsonPath, "{ malformed", "utf8");
+    await writeFile(locations.localConfigJsonPath, "{ malformed", "utf8");
     const bytesBefore = await scopeBytes(locations);
     const boundary = notificationBoundary({
       message: [
@@ -1700,8 +1703,8 @@ test("D-09: an unnamed --local flip reads only the local file", async () => {
     // arrange
     const locations = locationsFor("project", cwd);
     await recordAndDeclare(locations, cwd, "local");
-    await writeFile(locations.configJsonPath, "{ malformed", "utf8");
-    const sharedBytes = await readFile(locations.configJsonPath, "utf8");
+    await writeFile(locations.baseConfigJsonPath, "{ malformed", "utf8");
+    const sharedBytes = await readFile(locations.baseConfigJsonPath, "utf8");
     const boundary = notificationBoundary({
       message: "● mp [project] <autoupdate>\n\nMarketplace autoupdate: 1 success",
     });
@@ -1717,8 +1720,8 @@ test("D-09: an unnamed --local flip reads only the local file", async () => {
     });
 
     // assert
-    assert.equal(await readFile(locations.configJsonPath, "utf8"), sharedBytes);
-    assert.equal(await readFile(locations.configLocalJsonPath, "utf8"), SHARED_FLIP_BYTES);
+    assert.equal(await readFile(locations.baseConfigJsonPath, "utf8"), sharedBytes);
+    assert.equal(await readFile(locations.localConfigJsonPath, "utf8"), SHARED_FLIP_BYTES);
     verify(boundary.ctx);
     verify(boundary.ui);
   });

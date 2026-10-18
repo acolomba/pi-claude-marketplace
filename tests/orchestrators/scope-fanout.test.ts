@@ -67,7 +67,7 @@ async function seedConfig(
   config: ScopeConfig,
   target: "base" | "local" = "base",
 ): Promise<void> {
-  const filePath = target === "base" ? locations.configJsonPath : locations.configLocalJsonPath;
+  const filePath = target === "base" ? locations.baseConfigJsonPath : locations.localConfigJsonPath;
   await saveConfig(filePath, config, locations.scopeRoot);
 }
 
@@ -263,8 +263,8 @@ test("skips an absent marketplace before malformed config files are relevant", a
   // arrange
   const { cwd, project, root } = await makeTestScopes(t, "scope-fanout-skip-");
   await seedState(project, { other: marketplaceRecord("project", "other", root) });
-  await seedMalformedFile(project.configJsonPath, "malformed base config");
-  await seedMalformedFile(project.configLocalJsonPath, "malformed local config");
+  await seedMalformedFile(project.baseConfigJsonPath, "malformed base config");
+  await seedMalformedFile(project.localConfigJsonPath, "malformed local config");
 
   // act
   const records = await collectMarketplaceRecordsByScope({
@@ -282,7 +282,7 @@ test("uses valid local declarations after a malformed base config", async (t) =>
   // arrange
   const { cwd, project, root } = await makeTestScopes(t, "scope-fanout-base-failure-");
   await seedState(project, { alpha: marketplaceRecord("project", "alpha", root) });
-  await seedMalformedFile(project.configJsonPath, "malformed base config");
+  await seedMalformedFile(project.baseConfigJsonPath, "malformed base config");
   await seedConfig(
     project,
     {
@@ -333,7 +333,7 @@ test("uses valid base declarations when the local config is malformed", async (t
     marketplaces: { alpha: { source: "./base-alpha", autoupdate: true } },
     plugins: { "tool@alpha": { enabled: false } },
   });
-  await seedMalformedFile(project.configLocalJsonPath, "malformed local config");
+  await seedMalformedFile(project.localConfigJsonPath, "malformed local config");
 
   // act
   const records = await collectMarketplaceRecordsByScope({

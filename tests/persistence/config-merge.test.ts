@@ -328,7 +328,7 @@ const loadCases = [
     name: "preserves a valid base outcome beside an absent local outcome",
     prepare: async (locations) => {
       await writeFile(
-        locations.configJsonPath,
+        locations.baseConfigJsonPath,
         '{"schemaVersion":1,"marketplaces":{"base":{"source":"base/repository","autoupdate":true}},"plugins":{"tool@base":{"enabled":true}}}',
         "utf8",
       );
@@ -347,7 +347,7 @@ const loadCases = [
       },
       base: {
         status: "valid",
-        filePath: locations.configJsonPath,
+        filePath: locations.baseConfigJsonPath,
         config: {
           schemaVersion: 1,
           marketplaces: {
@@ -365,7 +365,7 @@ const loadCases = [
     name: "preserves an absent base outcome beside a valid local outcome",
     prepare: async (locations) => {
       await writeFile(
-        locations.configLocalJsonPath,
+        locations.localConfigJsonPath,
         '{"schemaVersion":1,"marketplaces":{"local":{"source":"local/repository"}},"plugins":{"tool@local":{"enabled":false}}}',
         "utf8",
       );
@@ -382,7 +382,7 @@ const loadCases = [
       base: { status: "absent" },
       local: {
         status: "valid",
-        filePath: locations.configLocalJsonPath,
+        filePath: locations.localConfigJsonPath,
         config: {
           schemaVersion: 1,
           marketplaces: {
@@ -398,13 +398,13 @@ const loadCases = [
   {
     name: "preserves an invalid base outcome beside an absent local outcome",
     prepare: async (locations) => {
-      await writeFile(locations.configJsonPath, "", "utf8");
+      await writeFile(locations.baseConfigJsonPath, "", "utf8");
     },
     expectedOutcome: (locations) => ({
       merged: { marketplaces: {}, plugins: {} },
       base: {
         status: "invalid",
-        filePath: locations.configJsonPath,
+        filePath: locations.baseConfigJsonPath,
         error: invalidJsonError,
       },
       local: { status: "absent" },
@@ -413,14 +413,14 @@ const loadCases = [
   {
     name: "preserves an absent base outcome beside an invalid local outcome",
     prepare: async (locations) => {
-      await writeFile(locations.configLocalJsonPath, "", "utf8");
+      await writeFile(locations.localConfigJsonPath, "", "utf8");
     },
     expectedOutcome: (locations) => ({
       merged: { marketplaces: {}, plugins: {} },
       base: { status: "absent" },
       local: {
         status: "invalid",
-        filePath: locations.configLocalJsonPath,
+        filePath: locations.localConfigJsonPath,
         error: invalidJsonError,
       },
     }),
@@ -429,12 +429,12 @@ const loadCases = [
     name: "preserves two valid outcomes beside the stable merged view",
     prepare: async (locations) => {
       await writeFile(
-        locations.configJsonPath,
+        locations.baseConfigJsonPath,
         '{"schemaVersion":1,"marketplaces":{"zebra":{"source":"base/zebra"},"shared":{"source":"base/shared","autoupdate":true}},"plugins":{"zebra@zebra":{"enabled":true},"shared@shared":{"enabled":false}}}',
         "utf8",
       );
       await writeFile(
-        locations.configLocalJsonPath,
+        locations.localConfigJsonPath,
         '{"schemaVersion":1,"marketplaces":{"shared":{"source":"local/shared"},"alpha":{"source":"local/alpha"}},"plugins":{"shared@shared":{},"alpha@alpha":{"enabled":true}}}',
         "utf8",
       );
@@ -454,7 +454,7 @@ const loadCases = [
       },
       base: {
         status: "valid",
-        filePath: locations.configJsonPath,
+        filePath: locations.baseConfigJsonPath,
         config: {
           schemaVersion: 1,
           marketplaces: {
@@ -469,7 +469,7 @@ const loadCases = [
       },
       local: {
         status: "valid",
-        filePath: locations.configLocalJsonPath,
+        filePath: locations.localConfigJsonPath,
         config: {
           schemaVersion: 1,
           marketplaces: {
@@ -487,9 +487,9 @@ const loadCases = [
   {
     name: "preserves an invalid base outcome beside a valid local fallback",
     prepare: async (locations) => {
-      await writeFile(locations.configJsonPath, "", "utf8");
+      await writeFile(locations.baseConfigJsonPath, "", "utf8");
       await writeFile(
-        locations.configLocalJsonPath,
+        locations.localConfigJsonPath,
         '{"marketplaces":{"local":{"source":"local/fallback"}},"plugins":{"tool@local":{}}}',
         "utf8",
       );
@@ -505,12 +505,12 @@ const loadCases = [
       },
       base: {
         status: "invalid",
-        filePath: locations.configJsonPath,
+        filePath: locations.baseConfigJsonPath,
         error: invalidJsonError,
       },
       local: {
         status: "valid",
-        filePath: locations.configLocalJsonPath,
+        filePath: locations.localConfigJsonPath,
         config: {
           marketplaces: {
             local: { source: "local/fallback" },
@@ -526,11 +526,11 @@ const loadCases = [
     name: "preserves a valid base fallback beside an invalid local outcome",
     prepare: async (locations) => {
       await writeFile(
-        locations.configJsonPath,
+        locations.baseConfigJsonPath,
         '{"marketplaces":{"base":{"source":"base/fallback"}},"plugins":{"tool@base":{"enabled":false}}}',
         "utf8",
       );
-      await writeFile(locations.configLocalJsonPath, "", "utf8");
+      await writeFile(locations.localConfigJsonPath, "", "utf8");
     },
     expectedOutcome: (locations) => ({
       merged: {
@@ -543,7 +543,7 @@ const loadCases = [
       },
       base: {
         status: "valid",
-        filePath: locations.configJsonPath,
+        filePath: locations.baseConfigJsonPath,
         config: {
           marketplaces: {
             base: { source: "base/fallback" },
@@ -555,7 +555,7 @@ const loadCases = [
       },
       local: {
         status: "invalid",
-        filePath: locations.configLocalJsonPath,
+        filePath: locations.localConfigJsonPath,
         error: invalidJsonError,
       },
     }),
@@ -563,19 +563,19 @@ const loadCases = [
   {
     name: "preserves two invalid outcomes beside an empty merged view",
     prepare: async (locations) => {
-      await writeFile(locations.configJsonPath, "", "utf8");
-      await writeFile(locations.configLocalJsonPath, "", "utf8");
+      await writeFile(locations.baseConfigJsonPath, "", "utf8");
+      await writeFile(locations.localConfigJsonPath, "", "utf8");
     },
     expectedOutcome: (locations) => ({
       merged: { marketplaces: {}, plugins: {} },
       base: {
         status: "invalid",
-        filePath: locations.configJsonPath,
+        filePath: locations.baseConfigJsonPath,
         error: invalidJsonError,
       },
       local: {
         status: "invalid",
-        filePath: locations.configLocalJsonPath,
+        filePath: locations.localConfigJsonPath,
         error: invalidJsonError,
       },
     }),
@@ -586,7 +586,7 @@ async function createConfigMergeLocations(t: TestContext): Promise<ScopedLocatio
   const directory = await mkdtemp(path.join(tmpdir(), "config-merge-"));
   t.after(() => rm(directory, { recursive: true, force: true }));
   const locations = locationsFor("project", directory);
-  await mkdir(path.dirname(locations.configJsonPath), { recursive: true });
+  await mkdir(path.dirname(locations.baseConfigJsonPath), { recursive: true });
   return locations;
 }
 

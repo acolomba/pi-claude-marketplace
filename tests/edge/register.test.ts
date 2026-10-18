@@ -2111,7 +2111,7 @@ describe("registerClaudePluginCommand", () => {
         },
       },
     });
-    assert.deepStrictEqual(JSON.parse(await readFile(userLocations.configJsonPath, "utf8")), {
+    assert.deepStrictEqual(JSON.parse(await readFile(userLocations.baseConfigJsonPath, "utf8")), {
       schemaVersion: 1,
       marketplaces: {
         "claude-plugins-official": {
