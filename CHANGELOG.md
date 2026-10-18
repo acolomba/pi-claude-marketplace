@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- When `uninstall`, `marketplace remove`, `update --local`, or `reinstall --local` cannot read a plugin's dependencies, the `{unreadable}` cause no longer shows a manifest's parser error.
+
 - You can now declare a plugin in both `claude-plugins.json` and `claude-plugins.local.json`, and the scope installs it once. With a plugin name, `uninstall`, `enable`, `disable`, `update`, and `reinstall` change only the file you target.
 
   - Named commands fail with `{plugin in local layer only}` or `{plugin in base layer only}` and change nothing when only the other file declares it.

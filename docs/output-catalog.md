@@ -1283,7 +1283,7 @@ Triggered when `uninstall <plugin>@<marketplace>` names a plugin that another in
 
 ### Failure -- refused, a declarer could not be read (D-05-07)
 
-Triggered when some OTHER installed record in the scope has declarations the guard cannot establish: its marketplace manifest fails to load, that manifest does not list it, its declaration parses as unusable, or its own manifest is present but cannot be read. The rule is fail-closed -- an unreadable record is never read as "declares nothing", because deleting on incomplete information is the one outcome the guard must never produce -- so the uninstall is refused rather than risked. The brace carries `unreadable` -- the "could not read on-disk state" default -- and NOT the declarer's own read-failure token: the row's subject is the plugin the user named, whose manifest is fine, and the brace states a fact about the row's subject. The `cause:` trailer names which record could not be read and why (not declared by its marketplace, an unusable declaration, the marketplace manifest's load error, or an own manifest that is present but cannot be read), never an absolute path. The first remedy is `uninstall <unreadable-plugin>@<marketplace>` on the record the cause names: the target of an uninstall is never indexed, so that command passes the guard, and the guard then passes for everything else. When the record should stay, repair its own manifest or its marketplace (`marketplace update`); when the marketplace is stale, remove it (`marketplace remove`). Severity: `error`. No reload-hint.
+Triggered when some OTHER installed record in the scope has declarations the guard cannot establish: its marketplace manifest fails to load, that manifest does not list it, its declaration parses as unusable, or its own manifest is present but cannot be read. The rule is fail-closed -- an unreadable record is never read as "declares nothing", because deleting on incomplete information is the one outcome the guard must never produce -- so the uninstall is refused rather than risked. The brace carries `unreadable` -- the "could not read on-disk state" default -- and NOT the declarer's own read-failure token: the row's subject is the plugin the user named, whose manifest is fine, and the brace states a fact about the row's subject. The `cause:` trailer names the record that could not be read. It says why only for a reason that this extension writes: not declared by its marketplace, an unusable declaration, or an own manifest that is present but cannot be read. It leaves out the error text of a manifest that fails to load, because that text can come from the marketplace's own files. The first remedy is `uninstall <unreadable-plugin>@<marketplace>` on the record the cause names: the target of an uninstall is never indexed, so that command passes the guard, and the guard then passes for everything else. When the record should stay, repair its own manifest or its marketplace (`marketplace update`); when the marketplace is stale, remove it (`marketplace remove`). Severity: `error`. No reload-hint.
 
 <!-- catalog-state: refused-declarer-unreadable -->
 
@@ -3829,7 +3829,7 @@ Some operations have failed.
 
 ### Failure -- a dependency declaration cannot be read (LAYER-03 / D-05-07)
 
-When the marketplace holds a plugin that was installed as a dependency, the remove reads what every installed plugin of the scope declares, so that it never removes a dependency another plugin still needs. If one of those declarations cannot be read, the whole remove is refused before anything changes: a needed dependency must never be removed on incomplete information. The remove reads no declarations when the marketplace holds no dependency. The `cause:` line names the first plugin, in state order, whose declaration could not be read, and why. To repair it, update that plugin's marketplace (`marketplace update`), or fix the manifest of a path marketplace, then run the remove again. Severity `error`; no reload-hint.
+When the marketplace holds a plugin that was installed as a dependency, the remove reads what every installed plugin of the scope declares, so that it never removes a dependency another plugin still needs. If one of those declarations cannot be read, the whole remove is refused before anything changes: a needed dependency must never be removed on incomplete information. The remove reads no declarations when the marketplace holds no dependency. The `cause:` line names the first plugin, in state order, whose declaration could not be read. It says why only for a reason that this extension writes, such as `not declared by its marketplace`. It leaves out the error text of a manifest that fails to load, because that text can come from the marketplace's own files. To repair it, update that plugin's marketplace (`marketplace update`), or fix the manifest of a path marketplace, then run the remove again. Severity `error`; no reload-hint.
 
 <!-- catalog-state: remove-dependency-declarations-unreadable -->
 
@@ -3838,7 +3838,7 @@ Some operations have failed.
 
 ⊘ tools [project] (failed)
   ⊘ tools (failed) {unreadable}
-    cause: cannot read the dependencies of lib@tools: marketplace.json schema invalid: /plugins: must be array
+    cause: cannot read the dependencies of lib@tools
 ```
 
 ______________________________________________________________________

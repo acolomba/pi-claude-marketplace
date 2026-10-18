@@ -157,9 +157,7 @@ export const MARKETPLACE_REMOVE_FIXTURES: FixtureMap = {
                 needsReload: false,
                 name: "tools",
                 reasons: ["unreadable"],
-                cause: new Error(
-                  "cannot read the dependencies of lib@tools: marketplace.json schema invalid: /plugins: must be array",
-                ),
+                cause: new Error("cannot read the dependencies of lib@tools"),
               },
             ],
           },
