@@ -62,16 +62,16 @@ import {
 } from "./install.messaging.ts";
 import {
   collectInstallReachableMarketplaces,
+  loadTargetLayers,
   localOnlyMarketplaceRefusal,
   overwriteDisabledMemberEntries,
   pluginLayerVerdict,
   resolveInstallMarketplaceSource,
-  selectDeclaringConfigWriteTarget,
   surfaceDiscoveryWarnings,
   undeclarableMarketplaceRefusal,
   writeAdoptingConfigEntries,
-  type DeclaringConfigWriteTarget,
   type LedgerDegradationSignals,
+  type TargetLayers,
 } from "./shared.ts";
 import { garbageCollectWorkflowsStaging } from "./workflows-staging-gc.ts";
 
@@ -202,9 +202,9 @@ export interface InstallPluginOptions {
    * shape that saveConfig writes back to the local path.
    *
    * LAYER-04 / D-MF-03: the flag alone picks the layer, whatever layer
-   * already declares the plugin -- the rule `selectDeclaringConfigWriteTarget`
-   * states, shared with `enable` and `disable` so the three verbs that author
-   * an enablement declaration pick their layer the same way.
+   * already declares the plugin -- the rule `loadTargetLayers` applies,
+   * shared with `enable` and `disable` so the three verbs that author an
+   * enablement declaration pick their layer the same way.
    *
    * Two callers set it. The edge handler passes the user's `--local` flag.
    * The reconcile apply loop derives it from
@@ -1744,7 +1744,7 @@ async function declareInstalledPlugin(args: {
   readonly state: ExtensionState;
   readonly locations: ScopedLocations;
   readonly orchestrated: boolean;
-  readonly selection: Extract<DeclaringConfigWriteTarget, { kind: "selected" }>;
+  readonly selection: Extract<TargetLayers, { kind: "loaded" }>;
 }): Promise<InstallTransactionOutcome | undefined> {
   const { opts, state, selection } = args;
   const { marketplace, plugin } = opts;
@@ -2017,7 +2017,7 @@ async function installPluginWithTransaction(
         // which of `current` and the sibling is the local layer, because
         // `resolveInstallDeclaredEnabled` reads the local layer's `enabled`
         // before the shared one's.
-        const selection = await selectDeclaringConfigWriteTarget({
+        const selection = await loadTargetLayers({
           locations,
           local: opts.local,
         });
@@ -2760,7 +2760,7 @@ function assertOrchestratedFailedOutcome(
  * for a reload's missing-dependency step. It runs the SAME locked transaction,
  * catalog lookup, marketplace resolution and hooks hydration `installPlugin`
  * runs for a plugin's own cascade, minus every arm that names a config file or
- * a disabled landing: there is no `selectDeclaringConfigWriteTarget`, no
+ * a disabled landing: there is no `loadTargetLayers`, no
  * `promoteDependencyRecord`, no `resolveInstallDeclaredEnabled`, no disable
  * cascade, no `writeAdoptingConfigEntries` and no
  * `writeOrchestratedDeclarations` (D-04-02, D-04-07, DFEN-04). A

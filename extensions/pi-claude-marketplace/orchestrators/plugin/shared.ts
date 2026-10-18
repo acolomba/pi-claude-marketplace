@@ -584,12 +584,13 @@ function undeclaredMarketplaceSource(
 }
 
 /**
- * WB-01: the physical file pair a locality names. The flag alone picks the
- * target, so the write path never falls back to the base file on ENOENT:
+ * WB-01: a scope's two config paths, the target first. `--local` targets the
+ * local config and no flag the base config. The flag alone picks the target,
+ * so the write path never falls back to the base config on ENOENT:
  * `loadConfig`'s `absent` arm yields an empty shape that `saveConfig` writes
  * back to the target, creating it fresh.
  */
-function selectConfigWriteTarget(
+function targetLayerPaths(
   locations: ScopedLocations,
   local: boolean | undefined,
 ): { readonly targetConfigPath: string; readonly siblingConfigPath: string } {
@@ -607,14 +608,15 @@ function selectConfigWriteTarget(
 }
 
 /**
- * The layer a named command writes, with both layers' parses. Discriminated,
- * because a scope whose layer cannot be read has no answer, and a caller must
- * be unable to ignore that (NFR-7 precedent).
+ * What `loadTargetLayers` returns: both layers' parses with the target layer
+ * marked, or the first config that cannot be read. Discriminated, because a
+ * scope whose layer cannot be read has no answer, and a caller must be unable
+ * to ignore that (NFR-7 precedent).
  */
-export type DeclaringConfigWriteTarget =
+export type TargetLayers =
   | { readonly kind: "unreadable"; readonly filePath: string }
   | {
-      readonly kind: "selected";
+      readonly kind: "loaded";
       readonly targetConfigPath: string;
       readonly targetIsLocal: boolean;
       /** The target layer's parse; an absent file yields the empty shape. */
@@ -624,11 +626,10 @@ export type DeclaringConfigWriteTarget =
     };
 
 /**
- * LAYER-04 / D-MF-03: select the layer a named install, enable, or disable
- * writes, and hand back both layers' parses. `--local` targets the local layer
- * and no flag targets the shared layer, whatever layer already declares the
- * plugin. The caller reads the other layer from `sibling` to refuse a plugin
- * only that layer declares.
+ * LAYER-04 / D-MF-03: load both layers of a scope and mark the one that
+ * `--local` targets, the base layer without the flag, whatever layer already
+ * declares the plugin. The caller reads the other layer from `sibling` to
+ * refuse a plugin only that layer declares.
  *
  * CFG-03: an invalid target layer returns `unreadable` naming it, and then an
  * invalid other layer returns `unreadable` naming that file. The other layer
@@ -640,21 +641,18 @@ export type DeclaringConfigWriteTarget =
  *
  * `targetIsLocal` reports which parse is the local one, so callers that read
  * across both layers (`install-declared-enabled.ts` reads the local `enabled`
- * first, then the shared one) do not compare paths.
+ * first, then the base one) do not compare paths.
  *
  * WB-01: both reads happen inside the caller's lock, and neither parse is
  * serialized back. The lock excludes other extension processes; it does not
  * exclude a user editing these hand-authored files, so the worst case is a
  * decision made from a config one edit old. The write itself is atomic.
  */
-export async function selectDeclaringConfigWriteTarget(opts: {
+export async function loadTargetLayers(opts: {
   readonly locations: ScopedLocations;
   readonly local: boolean | undefined;
-}): Promise<DeclaringConfigWriteTarget> {
-  const { targetConfigPath, siblingConfigPath } = selectConfigWriteTarget(
-    opts.locations,
-    opts.local,
-  );
+}): Promise<TargetLayers> {
+  const { targetConfigPath, siblingConfigPath } = targetLayerPaths(opts.locations, opts.local);
   const [targetCfg, siblingCfg] = await Promise.all([
     loadConfig(targetConfigPath),
     loadConfig(siblingConfigPath),
@@ -668,7 +666,7 @@ export async function selectDeclaringConfigWriteTarget(opts: {
   }
 
   return {
-    kind: "selected",
+    kind: "loaded",
     targetConfigPath,
     targetIsLocal: opts.local === true,
     current: configOrEmpty(targetCfg),
@@ -694,7 +692,7 @@ export function configOrEmpty(result: ConfigLoadResult): ScopeConfig {
  */
 export function localOnlyMarketplaceRefusal(
   selection: Pick<
-    Extract<DeclaringConfigWriteTarget, { kind: "selected" }>,
+    Extract<TargetLayers, { kind: "loaded" }>,
     "targetIsLocal" | "current" | "sibling"
   >,
   marketplace: string,
@@ -720,7 +718,7 @@ export function localOnlyMarketplaceRefusal(
  */
 export function undeclarableMarketplaceRefusal(
   selection: Pick<
-    Extract<DeclaringConfigWriteTarget, { kind: "selected" }>,
+    Extract<TargetLayers, { kind: "loaded" }>,
     "targetIsLocal" | "current" | "sibling"
   >,
   state: ExtensionState,
@@ -818,7 +816,7 @@ export async function namedPluginLayerRefusal(opts: {
   readonly marketplace: string;
   readonly plugin: string;
 }): Promise<Error | undefined> {
-  const selection = await selectDeclaringConfigWriteTarget(opts);
+  const selection = await loadTargetLayers(opts);
   if (selection.kind === "unreadable") {
     return unreadableLayerError(selection.filePath);
   }
@@ -875,7 +873,7 @@ export async function keepLocalLayerTargets<
  */
 async function localLayerCoverage(scope: Scope, cwd: string): Promise<readonly string[]> {
   const locations = locationsFor(scope, cwd);
-  const layers = await selectDeclaringConfigWriteTarget({ locations, local: true });
+  const layers = await loadTargetLayers({ locations, local: true });
   if (layers.kind === "unreadable") {
     throw unreadableLayerError(layers.filePath);
   }

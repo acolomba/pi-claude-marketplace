@@ -49,7 +49,7 @@
 // without `--local`, the local layer with it. A standalone call whose plugin
 // only the other layer declares is refused and changes nothing
 // (`refuseOtherLayerDeclaration`). Both layers are read INSIDE the lock -- see
-// `selectDeclaringConfigWriteTarget`.
+// `loadTargetLayers`.
 //
 // T-53-02-02 / T-54-02-02 information disclosure mitigation: the CFG-03
 // abort row carries `path.basename(targetConfigPath)` -- never the absolute
@@ -104,10 +104,10 @@ import {
   resolveCrossScopePluginTarget,
   retiresWorkflowCommand,
   undeclarableMarketplaceRefusal,
-  type selectDeclaringConfigWriteTarget,
   type CrossScopePluginResolution,
-  type DeclaringConfigWriteTarget,
   type LedgerDegradationSignals,
+  type loadTargetLayers,
+  type TargetLayers,
   type writeAdoptingConfigEntries,
 } from "./shared.ts";
 
@@ -274,7 +274,7 @@ interface SetEnabledRunOptions extends EnableDisablePluginOptions {
 export interface EnableDisableTransaction {
   readonly cascadeUnstagePlugin: typeof cascadeUnstagePlugin;
   readonly runInstallLedger: typeof runInstallLedger;
-  readonly selectConfigWriteTarget: typeof selectDeclaringConfigWriteTarget;
+  readonly loadTargetLayers: typeof loadTargetLayers;
   readonly withLockedStateTransaction: typeof withLockedStateTransaction;
   readonly writeConfigEntries: typeof writeAdoptingConfigEntries;
 }
@@ -1167,7 +1167,7 @@ function buildEnableCascadeConfigPhase(
   state: ExtensionState,
   rootWrite?: {
     readonly write: EnabledFlagWriteTarget;
-    readonly selection: SelectedConfigWriteTarget;
+    readonly selection: LoadedTargetLayers;
   },
 ): Phase<EnableCascadeRun> {
   return {
@@ -1266,7 +1266,7 @@ async function runEnableCascadeWithRoot(args: {
   readonly members: readonly EnableCascadeMember[];
   readonly rootKey: string;
   readonly write: EnabledFlagWriteTarget;
-  readonly selection: SelectedConfigWriteTarget;
+  readonly selection: LoadedTargetLayers;
 }): Promise<
   | {
       readonly ok: true;
@@ -1578,7 +1578,7 @@ async function readEnabledDependents(args: {
  * layer, the local layer's own `enabled` is checked too (`refuseLocalOverride`).
  */
 function refuseOtherLayerDeclaration(
-  selection: SelectedConfigWriteTarget,
+  selection: LoadedTargetLayers,
   write: EnabledFlagWriteTarget,
 ): void {
   if (write.orchestrated) {
@@ -1611,7 +1611,7 @@ function refuseOtherLayerDeclaration(
  * is not refused.
  */
 function refuseLocalOverride(
-  local: SelectedConfigWriteTarget["sibling"],
+  local: LoadedTargetLayers["sibling"],
   write: EnabledFlagWriteTarget,
 ): void {
   const localEnabled = ownValue(local.plugins, `${write.plugin}@${write.marketplace}`)?.enabled;
@@ -1645,7 +1645,7 @@ function refuseLocalOverride(
  *   is known to declare it there with.
  */
 function refuseMarketplaceDeclarationWrite(args: {
-  readonly selection: SelectedConfigWriteTarget;
+  readonly selection: LoadedTargetLayers;
   readonly write: EnabledFlagWriteTarget;
   readonly installed: InstalledPluginRecord;
   readonly state: ExtensionState;
@@ -1960,8 +1960,8 @@ interface EnabledFlagWriteTarget {
   readonly scopeRoot: string;
 }
 
-/** LAYER-04: the selection arm that actually names a write target. */
-type SelectedConfigWriteTarget = Extract<DeclaringConfigWriteTarget, { kind: "selected" }>;
+/** LAYER-04: the loaded arm, both layers' parses with the target marked. */
+type LoadedTargetLayers = Extract<TargetLayers, { kind: "loaded" }>;
 
 /**
  * Write the plugin's `enabled` flag back through the SOLE sanctioned
@@ -1983,7 +1983,7 @@ type SelectedConfigWriteTarget = Extract<DeclaringConfigWriteTarget, { kind: "se
 async function writeEnabledFlagBack(
   transaction: EnableDisableTransaction,
   write: EnabledFlagWriteTarget,
-  selection: SelectedConfigWriteTarget,
+  selection: LoadedTargetLayers,
   state: ExtensionState,
 ): Promise<void> {
   await transaction.writeConfigEntries({
@@ -2016,7 +2016,7 @@ async function writeEnabledFlagBack(
 async function resolveIdempotentOutcome(
   transaction: EnableDisableTransaction,
   write: EnabledFlagWriteTarget,
-  selection: SelectedConfigWriteTarget,
+  selection: LoadedTargetLayers,
   state: ExtensionState,
   installed: { readonly version: string },
 ): Promise<SetEnabledOutcome> {
@@ -2034,7 +2034,7 @@ async function resolveIdempotentOutcome(
  */
 function idempotentWritesFlag(
   write: EnabledFlagWriteTarget,
-  selection: SelectedConfigWriteTarget,
+  selection: LoadedTargetLayers,
 ): boolean {
   const key = `${write.plugin}@${write.marketplace}`;
   const configEnabled = ownValue(selection.current.plugins, key)?.enabled;
@@ -2115,7 +2115,7 @@ async function settleIdempotentEnableCascade(args: {
   readonly state: ExtensionState;
   readonly installed: InstalledPluginRecord;
   readonly write: EnabledFlagWriteTarget;
-  readonly selection: SelectedConfigWriteTarget;
+  readonly selection: LoadedTargetLayers;
   readonly cascadeMembers: readonly EnableCascadeMember[];
   readonly tx: { readonly save: () => Promise<void> };
   readonly sink: McpConfigNoticeSink;
@@ -2199,7 +2199,7 @@ async function runFreshEnableCascadeWithRoot(args: {
   readonly state: ExtensionState;
   readonly installed: InstalledPluginRecord;
   readonly write: EnabledFlagWriteTarget;
-  readonly selection: SelectedConfigWriteTarget;
+  readonly selection: LoadedTargetLayers;
   readonly cascadeMembers: readonly EnableCascadeMember[];
   readonly rootKey: string;
   readonly tx: { readonly save: () => Promise<void> };
@@ -2399,7 +2399,7 @@ async function runSetEnabledOutcome(
         // drift onto different files. It reads both layers inside the lock --
         // the WB-01 discipline that sibling reads happen fresh under the lock
         // the write also holds.
-        const selection = await transaction.selectConfigWriteTarget({
+        const selection = await transaction.loadTargetLayers({
           locations,
           local: opts.local,
         });

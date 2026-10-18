@@ -233,7 +233,8 @@ export interface UninstallPluginOptions {
 export interface UninstallTransaction {
   readonly cascadeUnstagePlugin: typeof cascadeUnstagePlugin;
   readonly commitPluginRemoval: typeof commitPluginRemoval;
-  readonly loadTargetConfig: typeof loadConfig;
+  /** Loads one layer's config; called for the target layer and the other layer. */
+  readonly loadLayerConfig: typeof loadConfig;
   readonly runPostCommitCleanup: typeof runPostUninstallCleanup;
   readonly deleteLayerDeclaration: typeof deletePluginFromLayer;
   readonly withLockedStateTransaction: typeof withLockedStateTransaction;
@@ -352,7 +353,7 @@ type UninstallLayers =
  * as declaring nothing: it may declare the plugin.
  */
 async function readUninstallLayers(
-  loadConfigFile: UninstallTransaction["loadTargetConfig"],
+  loadConfigFile: UninstallTransaction["loadLayerConfig"],
   paths: UninstallLayerPaths,
 ): Promise<UninstallLayers> {
   const target = await loadConfigFile(paths.target);
@@ -562,7 +563,7 @@ async function decideRemoval(args: {
 export const REAL_UNINSTALL_TRANSACTION: UninstallTransaction = {
   cascadeUnstagePlugin,
   commitPluginRemoval,
-  loadTargetConfig: loadConfig,
+  loadLayerConfig: loadConfig,
   runPostCommitCleanup: runPostUninstallCleanup,
   deleteLayerDeclaration: deletePluginFromLayer,
   withLockedStateTransaction,
@@ -1399,7 +1400,7 @@ async function runUninstallOutcome(
       const state = tx.state;
       // CFG-03 / T-56-03-04: abort BEFORE any state mutation. NO tx.save() --
       // state.json bytes and mtime are untouched.
-      const layers = await readUninstallLayers(transaction.loadTargetConfig, layerPaths);
+      const layers = await readUninstallLayers(transaction.loadLayerConfig, layerPaths);
       if (layers.kind === "invalid") {
         invalidConfigBasename = layers.basename;
         return;

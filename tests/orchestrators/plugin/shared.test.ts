@@ -18,6 +18,7 @@ import {
   emitMarketplaceNotAddedSignal,
   enableRowDependencies,
   keepLocalLayerTargets,
+  loadTargetLayers,
   localOnlyMarketplaceRefusal,
   MarketplaceNotAddedSignal,
   missIsNotInstalled,
@@ -31,7 +32,6 @@ import {
   resolveInstallMarketplaceSource,
   resolvePluginVersion,
   retiresWorkflowCommand,
-  selectDeclaringConfigWriteTarget,
   splitStagingWarnings,
   surfaceDiscoveryWarnings,
   undeclarableMarketplaceRefusal,
@@ -927,7 +927,7 @@ describe("collectInstallReachableMarketplaces", () => {
   });
 });
 
-describe("selectDeclaringConfigWriteTarget", () => {
+describe("loadTargetLayers", () => {
   test("targets the shared layer without --local even when only the local layer declares the plugin", async () => {
     // arrange
     await withTempScopes(async ({ cwd }) => {
@@ -939,11 +939,11 @@ describe("selectDeclaringConfigWriteTarget", () => {
       await writeConfig(locations.localConfigJsonPath, localConfig);
 
       // act
-      const target = await selectDeclaringConfigWriteTarget({ locations, local: undefined });
+      const target = await loadTargetLayers({ locations, local: undefined });
 
       // assert
       assert.deepStrictEqual(target, {
-        kind: "selected",
+        kind: "loaded",
         targetConfigPath: locations.baseConfigJsonPath,
         targetIsLocal: false,
         current: { schemaVersion: 1 },
@@ -964,11 +964,11 @@ describe("selectDeclaringConfigWriteTarget", () => {
       await writeConfig(locations.baseConfigJsonPath, sharedConfig);
 
       // act
-      const target = await selectDeclaringConfigWriteTarget({ locations, local: true });
+      const target = await loadTargetLayers({ locations, local: true });
 
       // assert
       assert.deepStrictEqual(target, {
-        kind: "selected",
+        kind: "loaded",
         targetConfigPath: locations.localConfigJsonPath,
         targetIsLocal: true,
         current: { schemaVersion: 1 },
@@ -983,11 +983,11 @@ describe("selectDeclaringConfigWriteTarget", () => {
       const locations = locationsFor("project", cwd);
 
       // act
-      const target = await selectDeclaringConfigWriteTarget({ locations, local: false });
+      const target = await loadTargetLayers({ locations, local: false });
 
       // assert
       assert.deepStrictEqual(target, {
-        kind: "selected",
+        kind: "loaded",
         targetConfigPath: locations.baseConfigJsonPath,
         targetIsLocal: false,
         current: { schemaVersion: 1 },
@@ -1016,7 +1016,7 @@ describe("selectDeclaringConfigWriteTarget", () => {
         await writeFile(invalidPath, "{");
 
         // act
-        const target = await selectDeclaringConfigWriteTarget({ locations, local });
+        const target = await loadTargetLayers({ locations, local });
 
         // assert
         assert.deepStrictEqual(target, { kind: "unreadable", filePath: invalidPath });
@@ -1033,7 +1033,7 @@ describe("selectDeclaringConfigWriteTarget", () => {
       await writeFile(locations.localConfigJsonPath, "{");
 
       // act
-      const target = await selectDeclaringConfigWriteTarget({ locations, local: true });
+      const target = await loadTargetLayers({ locations, local: true });
 
       // assert
       assert.deepStrictEqual(target, {

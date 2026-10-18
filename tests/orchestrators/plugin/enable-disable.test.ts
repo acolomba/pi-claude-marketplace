@@ -29,7 +29,7 @@ import {
   createReinstallOperation,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
 import {
-  selectDeclaringConfigWriteTarget,
+  loadTargetLayers,
   writeAdoptingConfigEntries,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts";
 import { createPluginUpdateOperations } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts";
@@ -72,7 +72,7 @@ const applyReconcile = createApplyReconcile({ loadState });
 const REAL_ENABLE_DISABLE_TRANSACTION: EnableDisableTransaction = {
   cascadeUnstagePlugin,
   runInstallLedger,
-  selectConfigWriteTarget: selectDeclaringConfigWriteTarget,
+  loadTargetLayers,
   withLockedStateTransaction,
   writeConfigEntries: writeAdoptingConfigEntries,
 };
