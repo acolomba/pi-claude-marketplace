@@ -210,7 +210,7 @@ Feature: Plugin uninstall
     When the user starts a new pi session
     Then the session offers no skills
 
-  Scenario: Uninstalling a plugin whose dependency declarations cannot be read fails and changes nothing
+  Scenario: Uninstalling a plugin whose dependency's declarations cannot be read fails and changes nothing
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins with dependencies:
       | name | version | dependencies |
