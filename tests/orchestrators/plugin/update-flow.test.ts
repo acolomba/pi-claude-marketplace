@@ -5232,9 +5232,9 @@ for (const { direction, layers, local, reason, cause } of [
     direction: "with --local a plugin only the shared layer declares",
     layers: { shared: HELLO_DECLARED },
     local: true,
-    reason: "plugin declared in shared config",
+    reason: "plugin in base layer only",
     cause:
-      "The plugin hello@mp is declared only in the shared layer (claude-plugins.json). Run the command again without --local.",
+      "The plugin hello@mp is declared only in the base config (claude-plugins.json). Run the command again without --local.",
   },
 ] as const) {
   test(`LAYER-04: a named update ${direction} is refused and changes nothing`, async () => {
@@ -7908,9 +7908,9 @@ for (const { direction, file, local, reason, cause } of [
     direction: "with --local a plugin only the shared layer declares",
     file: "configJsonPath",
     local: true,
-    reason: "plugin declared in shared config",
+    reason: "plugin in base layer only",
     cause:
-      "The plugin gp@mp is declared only in the shared layer (claude-plugins.json). Run the command again without --local.",
+      "The plugin gp@mp is declared only in the base config (claude-plugins.json). Run the command again without --local.",
   },
 ] as const) {
   test(`NFR-5: a refused named git-source update ${direction} builds no credentials and clones, fetches, and lists nothing`, async () => {

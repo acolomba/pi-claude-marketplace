@@ -971,8 +971,8 @@ const DECLARED_LOCALLY_ROW = [
 ];
 
 const DECLARED_IN_SHARED_ROW = [
-  "  ⊘ foo (failed) {plugin declared in shared config}",
-  "    cause: The plugin foo@mp is declared only in the shared layer (claude-plugins.json). Run the command again without --local.",
+  "  ⊘ foo (failed) {plugin in base layer only}",
+  "    cause: The plugin foo@mp is declared only in the base config (claude-plugins.json). Run the command again without --local.",
 ];
 
 for (const { verb, enable, local, layer, row, seed } of [

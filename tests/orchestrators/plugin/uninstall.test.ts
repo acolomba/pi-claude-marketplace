@@ -2721,8 +2721,8 @@ for (const { title, local, layers, expectedMessage } of [
     layers: { shared: LAYER_DECLARING_HELLO, local: '{"schemaVersion":1}\n' },
     expectedMessage:
       "A plugin operation has failed.\n\n● mp [project]\n" +
-      "  ⊘ hello v0.0.1 (failed) {plugin declared in shared config}\n" +
-      "    cause: The plugin hello@mp is declared only in the shared layer (claude-plugins.json). Run the command again without --local.",
+      "  ⊘ hello v0.0.1 (failed) {plugin in base layer only}\n" +
+      "    cause: The plugin hello@mp is declared only in the base config (claude-plugins.json). Run the command again without --local.",
   },
 ]) {
   test(`LAYER-04: ${title} is refused and changes nothing`, async () => {

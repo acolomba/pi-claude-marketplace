@@ -48,7 +48,7 @@ import {
   MarketplaceDeclaredLocallyError,
   MarketplaceNotFoundError,
   MarketplaceSourceUndeclarableError,
-  PluginDeclaredInSharedConfigError,
+  PluginInBaseLayerOnlyError,
   PluginDeclaredLocallyError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { createJsonCapture } from "../../edge/json-capture.ts";
@@ -1292,7 +1292,7 @@ describe("pluginLayerVerdict", () => {
     );
   });
 
-  test("refuses as plugin declared in shared config when only the shared layer declares a local-layer target", () => {
+  test("refuses as plugin in base layer only when only the base layer declares a local-layer target", () => {
     // arrange
     const target: ScopeConfig = { schemaVersion: 1, plugins: {} };
     const other: ScopeConfig = { schemaVersion: 1, plugins: { "demo@mp": { enabled: true } } };
@@ -1308,7 +1308,7 @@ describe("pluginLayerVerdict", () => {
 
     // assert
     assert.ok(verdict.kind === "other-only");
-    assert.ok(verdict.refusal instanceof PluginDeclaredInSharedConfigError);
+    assert.ok(verdict.refusal instanceof PluginInBaseLayerOnlyError);
     assert.deepStrictEqual(
       {
         kind: verdict.kind,
@@ -1319,11 +1319,11 @@ describe("pluginLayerVerdict", () => {
       },
       {
         kind: "other-only",
-        reason: "plugin declared in shared config",
+        reason: "plugin in base layer only",
         plugin: "demo",
         marketplace: "mp",
         message:
-          "The plugin demo@mp is declared only in the shared layer (claude-plugins.json). Run the command again without --local.",
+          "The plugin demo@mp is declared only in the base config (claude-plugins.json). Run the command again without --local.",
       },
     );
   });
@@ -1430,7 +1430,7 @@ describe("namedPluginLayerRefusal", () => {
     });
   });
 
-  test("LAYER-04: refuses as plugin declared in shared config a local-layer target only the shared layer declares", async () => {
+  test("LAYER-04: refuses as plugin in base layer only a local-layer target only the base layer declares", async () => {
     // arrange
     await withTempScopes(async ({ cwd }) => {
       const locations = locationsFor("project", cwd);
@@ -1448,14 +1448,14 @@ describe("namedPluginLayerRefusal", () => {
       });
 
       // assert
-      assert.ok(refusal instanceof PluginDeclaredInSharedConfigError);
+      assert.ok(refusal instanceof PluginInBaseLayerOnlyError);
       assert.deepStrictEqual(
         { plugin: refusal.plugin, marketplace: refusal.marketplace, message: refusal.message },
         {
           plugin: "demo",
           marketplace: "mp",
           message:
-            "The plugin demo@mp is declared only in the shared layer (claude-plugins.json). Run the command again without --local.",
+            "The plugin demo@mp is declared only in the base config (claude-plugins.json). Run the command again without --local.",
         },
       );
     });

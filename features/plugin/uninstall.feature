@@ -75,7 +75,7 @@ Feature: Plugin uninstall
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
 
-  Scenario: Uninstalling with --local a plugin only the shared layer declares fails as plugin declared in shared config
+  Scenario: Uninstalling with --local a plugin only the base layer declares fails as plugin in base layer only
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
     When the user runs "/claude:plugin uninstall demo@fixtures --scope project --local"
     Then the result has these fields:
@@ -84,8 +84,8 @@ Feature: Plugin uninstall
       | needs reload | false                          |
       | summary      | A plugin operation has failed. |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id            | name | status | reasons                          | scope   | version | cause chain                                                                                                                 | cause truncated | leaks | rollback partial |
-      | fixtures         | project           | demo@fixtures | demo | failed | plugin declared in shared config | project | 1.0.0   | The plugin demo@fixtures is declared only in the shared layer (claude-plugins.json). Run the command again without --local. | false           |       |                  |
+      | marketplace name | marketplace scope | id            | name | status | reasons                   | scope   | version | cause chain                                                                                                                | cause truncated | leaks | rollback partial |
+      | fixtures         | project           | demo@fixtures | demo | failed | plugin in base layer only | project | 1.0.0   | The plugin demo@fixtures is declared only in the base config (claude-plugins.json). Run the command again without --local. | false           |       |                  |
     Then the "claude-plugins.json" file of the project scope declares these plugins:
       | id            |
       | demo@fixtures |

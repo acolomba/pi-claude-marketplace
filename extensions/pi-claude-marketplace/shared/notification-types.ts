@@ -257,10 +257,10 @@ export type Reason =
   // `--local`, rides the cause line.
   | "plugin declared locally"
   // LAYER-04 / D-MF-03: the mirror refusal: a named plugin command with
-  // `--local` targets the local layer, and only the shared layer declares the
+  // `--local` targets the local layer, and only the base layer declares the
   // plugin. The remedy, running the command again without `--local`, rides the
   // cause line.
-  | "plugin declared in shared config"
+  | "plugin in base layer only"
   // LAYER-05 / D-MF-03: an install into one layer of a plugin the other layer
   // declares and the scope already installed. The install adds the declaration
   // to the target layer and installs nothing; the token names the other layer.

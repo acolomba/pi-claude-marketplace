@@ -168,7 +168,7 @@ export type FailureReason =
   // declare the plugin and the other layer does. Uninstall, enable, disable,
   // update, and reinstall share both refusals.
   | "plugin declared locally"
-  | "plugin declared in shared config";
+  | "plugin in base layer only";
 
 /**
  * D-102-06: author-declared install-time state -- a fact the plugin's OWN

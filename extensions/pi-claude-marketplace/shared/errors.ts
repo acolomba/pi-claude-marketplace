@@ -470,14 +470,14 @@ export class PluginDeclaredLocallyError extends Error {
  * The message IS the failed row's cause line. It is built from fixed text and
  * names that passed `assertSafeName`, so it carries no path.
  */
-export class PluginDeclaredInSharedConfigError extends Error {
+export class PluginInBaseLayerOnlyError extends Error {
   readonly plugin: string;
   readonly marketplace: string;
   constructor(plugin: string, marketplace: string) {
     super(
-      `The plugin ${plugin}@${marketplace} is declared only in the shared layer (claude-plugins.json). Run the command again without --local.`,
+      `The plugin ${plugin}@${marketplace} is declared only in the base config (claude-plugins.json). Run the command again without --local.`,
     );
-    this.name = "PluginDeclaredInSharedConfigError";
+    this.name = "PluginInBaseLayerOnlyError";
     this.plugin = plugin;
     this.marketplace = marketplace;
   }

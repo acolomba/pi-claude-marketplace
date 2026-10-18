@@ -431,7 +431,7 @@ export const PLUGIN_UNINSTALL_FIXTURES: FixtureMap = {
     },
 
     // LAYER-04: the mirror refusal of a named uninstall with --local.
-    "uninstall-plugin-declared-in-shared-config": {
+    "uninstall-plugin-in-base-layer-only": {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",
       message: {
@@ -446,9 +446,9 @@ export const PLUGIN_UNINSTALL_FIXTURES: FixtureMap = {
                 needsReload: false,
                 name: "helper",
                 version: "1.0.0",
-                reasons: ["plugin declared in shared config"],
+                reasons: ["plugin in base layer only"],
                 cause: new Error(
-                  "The plugin helper@official is declared only in the shared layer (claude-plugins.json). Run the command again without --local.",
+                  "The plugin helper@official is declared only in the base config (claude-plugins.json). Run the command again without --local.",
                 ),
               },
             ],

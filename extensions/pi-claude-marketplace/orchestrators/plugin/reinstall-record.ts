@@ -4,7 +4,7 @@ import {
   findManualRecoveryError,
   LayerFileUnreadableError,
   ManualRecoveryError,
-  PluginDeclaredInSharedConfigError,
+  PluginInBaseLayerOnlyError,
   PluginDeclaredLocallyError,
   PluginShapeError,
   StateLockHeldError,
@@ -137,12 +137,12 @@ export function reinstallReasonsFromError(error: unknown): readonly ContentReaso
  * line.
  */
 type LayerRefusal =
-  PluginDeclaredLocallyError | PluginDeclaredInSharedConfigError | LayerFileUnreadableError;
+  PluginDeclaredLocallyError | PluginInBaseLayerOnlyError | LayerFileUnreadableError;
 
 function isLayerRefusal(error: unknown): error is LayerRefusal {
   return (
     error instanceof PluginDeclaredLocallyError ||
-    error instanceof PluginDeclaredInSharedConfigError ||
+    error instanceof PluginInBaseLayerOnlyError ||
     error instanceof LayerFileUnreadableError
   );
 }
@@ -152,8 +152,8 @@ function layerRefusalReason(error: LayerRefusal): ContentReason {
     return "plugin declared locally";
   }
 
-  if (error instanceof PluginDeclaredInSharedConfigError) {
-    return "plugin declared in shared config";
+  if (error instanceof PluginInBaseLayerOnlyError) {
+    return "plugin in base layer only";
   }
 
   return "invalid manifest";

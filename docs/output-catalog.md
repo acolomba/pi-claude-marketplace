@@ -1311,18 +1311,18 @@ A plugin operation has failed.
     cause: The plugin helper@official is declared only in the local layer (claude-plugins.local.json). Run the command again with --local.
 ```
 
-### Failure -- the plugin is declared only in the shared layer (LAYER-04 / D-MF-03)
+### Failure -- the plugin is declared only in the base layer (LAYER-04 / D-MF-03)
 
-The mirror refusal. An uninstall with `--local` acts on the local layer, so a plugin that only the shared layer declares is refused before anything changes, and the `cause:` line says to run the command again without `--local`. The other named verbs render the same row under their own labels, as above. Severity `error`; no reload-hint.
+The mirror refusal. An uninstall with `--local` acts on the local layer, so a plugin that only the base layer declares is refused before anything changes, and the `cause:` line says to run the command again without `--local`. The other named verbs render the same row under their own labels, as above. Severity `error`; no reload-hint.
 
-<!-- catalog-state: uninstall-plugin-declared-in-shared-config -->
+<!-- catalog-state: uninstall-plugin-in-base-layer-only -->
 
 ```text
 A plugin operation has failed.
 
 ● official [user]
-  ⊘ helper v1.0.0 (failed) {plugin declared in shared config}
-    cause: The plugin helper@official is declared only in the shared layer (claude-plugins.json). Run the command again without --local.
+  ⊘ helper v1.0.0 (failed) {plugin in base layer only}
+    cause: The plugin helper@official is declared only in the base config (claude-plugins.json). Run the command again without --local.
 ```
 
 ### Kept installed -- the other layer still declares the plugin (LAYER-05)

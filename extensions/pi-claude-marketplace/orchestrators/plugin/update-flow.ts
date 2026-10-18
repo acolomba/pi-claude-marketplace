@@ -69,7 +69,7 @@ import {
   DependencyDeclarationsUnreadableError,
   InvalidMarketplaceManifestError,
   MarketplaceNotFoundError,
-  PluginDeclaredInSharedConfigError,
+  PluginInBaseLayerOnlyError,
   PluginDeclaredLocallyError,
   PluginUpdateConcurrencyError,
   PluginUpdatePhase3Error,
@@ -837,8 +837,8 @@ function narrowDirectFailReason(err: Error): ContentReason {
     return "plugin declared locally";
   }
 
-  if (primary instanceof PluginDeclaredInSharedConfigError) {
-    return "plugin declared in shared config";
+  if (primary instanceof PluginInBaseLayerOnlyError) {
+    return "plugin in base layer only";
   }
 
   if (primary instanceof DependencyDeclarationsUnreadableError) {

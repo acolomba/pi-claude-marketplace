@@ -86,7 +86,7 @@ import { createCompletionCache } from "../../../extensions/pi-claude-marketplace
 import {
   InvalidGitHubBaseUrlError,
   LayerFileUnreadableError,
-  PluginDeclaredInSharedConfigError,
+  PluginInBaseLayerOnlyError,
   PluginDeclaredLocallyError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
@@ -3002,10 +3002,10 @@ for (const { direction, shared, local, flag, refusal, reason, cause } of [
     shared: HELLO_DECLARED_LAYER,
     local: SHARED_MARKETPLACE_ONLY,
     flag: true,
-    refusal: new PluginDeclaredInSharedConfigError("hello", "mp"),
-    reason: "plugin declared in shared config",
+    refusal: new PluginInBaseLayerOnlyError("hello", "mp"),
+    reason: "plugin in base layer only",
     cause:
-      "The plugin hello@mp is declared only in the shared layer (claude-plugins.json). Run the command again without --local.",
+      "The plugin hello@mp is declared only in the base config (claude-plugins.json). Run the command again without --local.",
   },
 ] as const) {
   test(`LAYER-04: a named reinstall ${direction} is refused before anything is resolved or replaced`, async () => {
@@ -6970,7 +6970,7 @@ test("LAYER-04: a local single reinstall over an unreadable local layer renders 
 });
 
 const SHARED_ONLY_CAUSE =
-  "The plugin hello@mp is declared only in the shared layer (claude-plugins.json). Run the command again without --local.";
+  "The plugin hello@mp is declared only in the base config (claude-plugins.json). Run the command again without --local.";
 
 test("LAYER-04: the plugin form of reinstall with --local refuses a plugin only the shared layer declares", async () => {
   await withHermeticHome(async () => {
@@ -7005,8 +7005,8 @@ test("LAYER-04: the plugin form of reinstall with --local refuses a plugin only 
           marketplace: "mp",
           scope: "project",
           notes: [`${SHARED_ONLY_CAUSE}\n\ncause: ${SHARED_ONLY_CAUSE}`],
-          reasons: ["plugin declared in shared config"],
-          cause: new PluginDeclaredInSharedConfigError("hello", "mp"),
+          reasons: ["plugin in base layer only"],
+          cause: new PluginInBaseLayerOnlyError("hello", "mp"),
         },
       ]);
       assert.equal(await readFile(locations.configJsonPath, "utf8"), baseConfigBefore);

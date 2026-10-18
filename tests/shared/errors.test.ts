@@ -35,7 +35,7 @@ import {
   MarketplaceNotFoundError,
   MarketplaceSourceUndeclarableError,
   MarketplaceUpdateError,
-  PluginDeclaredInSharedConfigError,
+  PluginInBaseLayerOnlyError,
   PluginDeclaredLocallyError,
   PluginShapeError,
   PluginUpdateConcurrencyError,
@@ -992,14 +992,14 @@ describe("PluginDeclaredLocallyError", () => {
   });
 });
 
-describe("PluginDeclaredInSharedConfigError", () => {
-  test("names the plugin and the shared layer and suggests dropping --local in its message", () => {
+describe("PluginInBaseLayerOnlyError", () => {
+  test("names the plugin and the base config and suggests dropping --local in its message", () => {
     // arrange
     const plugin = "demo";
     const marketplace = "mp";
 
     // act
-    const error = new PluginDeclaredInSharedConfigError(plugin, marketplace);
+    const error = new PluginInBaseLayerOnlyError(plugin, marketplace);
 
     // assert
     assert.ok(error instanceof Error);
@@ -1011,11 +1011,11 @@ describe("PluginDeclaredInSharedConfigError", () => {
         message: error.message,
       },
       {
-        name: "PluginDeclaredInSharedConfigError",
+        name: "PluginInBaseLayerOnlyError",
         plugin: "demo",
         marketplace: "mp",
         message:
-          "The plugin demo@mp is declared only in the shared layer (claude-plugins.json). Run the command again without --local.",
+          "The plugin demo@mp is declared only in the base config (claude-plugins.json). Run the command again without --local.",
       },
     );
   });

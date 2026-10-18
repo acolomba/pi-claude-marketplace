@@ -109,7 +109,7 @@ const REASON_ENROLLMENT: Record<Reason, true> = {
   "marketplace declared locally": true,
   "marketplace declared in shared config": true,
   "plugin declared locally": true,
-  "plugin declared in shared config": true,
+  "plugin in base layer only": true,
   "already installed in shared layer": true,
   "already installed in local layer": true,
   "still installed in shared layer": true,

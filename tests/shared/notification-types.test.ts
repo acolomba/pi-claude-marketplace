@@ -150,7 +150,7 @@ const EXPECTED_REASONS = [
   "marketplace declared locally",
   "marketplace declared in shared config",
   "plugin declared locally",
-  "plugin declared in shared config",
+  "plugin in base layer only",
   "already installed in shared layer",
   "already installed in local layer",
   "still installed in shared layer",
