@@ -43,6 +43,31 @@ Feature: Marketplace info
       | source kind | source            | expected source kind | source abs path | source url | source owner | source repo | source ref |
       | github      | acme/tools#stable | github               |                 |            | acme         | tools       | stable     |
 
+  Scenario: Info preserves the declared order of allowed marketplaces
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "tools" allows dependencies on the marketplace "zebra"
+    Given the marketplace "tools" allows dependencies on the marketplace "alpha"
+    Given the marketplace "tools" is added to the project scope
+    When the user runs "/claude:plugin marketplace info tools --scope project"
+    Then the marketplace info result has these fields:
+      | kind                    | marketplace-info          |
+      | name                    | tools                     |
+      | scope                   | project                   |
+      | details autoupdate      | false                     |
+      | details last updated at | {scenario time}           |
+      | source kind             | path                      |
+      | source abs path         | {home}/marketplaces/tools |
+      | source url              |                           |
+      | source owner            |                           |
+      | source repo             |                           |
+      | source ref              |                           |
+      | allowed marketplaces    | zebra, alpha              |
+      | severity                | info                      |
+      | needs reload            | false                     |
+
   Scenario: Info on a marketplace neither scope holds fails as not added
     When the user runs "/claude:plugin marketplace info tools"
     Then the result has these fields:
