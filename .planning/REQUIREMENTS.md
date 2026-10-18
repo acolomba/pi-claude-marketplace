@@ -92,10 +92,10 @@ A scope (user or project) has two layers: shared (`claude-plugins.json`) and loc
 
 ### marketplace list / ls
 
-- [ ] **LS-01**: With nothing added, the list is empty
-- [ ] **LS-02**: The list shows every marketplace of both scopes, project first, each with its autoupdate state and last-updated time
-- [ ] **LS-03**: `--scope` narrows the list to one scope
-- [ ] **LS-04**: `ls` behaves as `list`
+- [x] **LS-01**: With nothing added, the list is empty
+- [x] **LS-02**: The list shows every marketplace of both scopes, project first, each with its autoupdate state and last-updated time
+- [x] **LS-03**: `--scope` narrows the list to one scope
+- [x] **LS-04**: `ls` behaves as `list`
 - [ ] **LS-05**: Listing git marketplaces makes no request to the stand-in
 
 ### marketplace info
@@ -227,10 +227,10 @@ A scope (user or project) has two layers: shared (`claude-plugins.json`) and loc
 | RM-07 | Phase 4 | Complete |
 | RM-08 | Phase 4 | Complete |
 | RM-09 | Phase 9 | Pending |
-| LS-01 | Phase 4 | Pending |
-| LS-02 | Phase 4 | Pending |
-| LS-03 | Phase 4 | Pending |
-| LS-04 | Phase 4 | Pending |
+| LS-01 | Phase 4 | Complete |
+| LS-02 | Phase 4 | Complete |
+| LS-03 | Phase 4 | Complete |
+| LS-04 | Phase 4 | Complete |
 | LS-05 | Phase 9 | Pending |
 | INFO-01 | Phase 5 | Pending |
 | INFO-02 | Phase 5 | Pending |

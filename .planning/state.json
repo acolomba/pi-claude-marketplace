@@ -41,7 +41,7 @@
     {
       "number": "4",
       "name": "Marketplace Remove and List",
-      "status": "in_progress"
+      "status": "complete"
     },
     {
       "number": "5",
@@ -76,8 +76,8 @@
   ],
   "next": {
     "command": "$gsd-progress --next",
-    "label": "Advance to the next step",
-    "reason": "Phase 8 of 14 · 50% · executing"
+    "label": "Advance to the next step (verify)",
+    "reason": "Phase 9 of 14 · 57% · ready to verify"
   },
-  "updated_at": "2026-10-18T13:52:09.420Z"
+  "updated_at": "2026-10-18T15:21:41.776Z"
 }

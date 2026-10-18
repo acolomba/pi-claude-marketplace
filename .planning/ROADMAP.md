@@ -61,7 +61,7 @@ path), **url** (https git URL on the loopback stand-in), and **gh**
 - [x] **Phase 3.2: Marketplace Layer Partition** (INSERTED) — The same marketplace may live in both layers, and named marketplace mutations change only their own layer (completed 2026-10-17)
 - [x] **Phase 3.3: Plugin Layer Partition** (INSERTED) — Named plugin mutations act on their own layer, a plugin may be declared in both layers and is installed once, and a plugin's marketplace is declared in the same layer (completed 2026-10-17)
 - [x] **Phase 3.4: Scope and Layer Terminology** (INSERTED) — Messages, reason tokens, docs, and code use scope, base/local layer, and config consistently (completed 2026-10-18)
-- [ ] **Phase 4: Marketplace Remove and List** — `remove`/`rm` with the plugin cascade, and `list`/`ls` across both scopes
+- [x] **Phase 4: Marketplace Remove and List** — `remove`/`rm` with the plugin cascade, and `list`/`ls` across both scopes (completed 2026-10-18)
 - [ ] **Phase 5: Marketplace Info** — `info` source details for every kind, scope fan-out, not-added forms, and a broken manifest
 - [ ] **Phase 6: Marketplace Update and C-10 Fix** — Single and bare `update`, with and without autoupdate, path-source failures, and the C-10 fix written test-first
 - [ ] **Phase 7: Marketplace Autoupdate** — `autoupdate` and `noautoupdate`, by name and for all marketplaces, persisting across sessions
@@ -360,7 +360,7 @@ Plans:
 3. A name the requested scope lacks fails as `marketplace not added`, naming the scope only when the other scope holds the name; a name neither scope holds, without `--scope`, fails with no scope; and a name both scopes hold is removed from the project scope only when `--scope` is absent.
 4. `list` and `ls` show nothing when nothing is added, show every marketplace of both scopes project first with its autoupdate state and last-updated time, and narrow to one scope with `--scope`.
 
-**Plans:** 4/4 plans executed
+**Plans:** 4/4 plans complete
 
 Plans:
 
@@ -474,7 +474,7 @@ Plans:
 | 3.2. Marketplace Layer Partition | 9/9 | Complete    | 2026-10-17 |
 | 3.3. Plugin Layer Partition | 10/10 | Complete    | 2026-10-17 |
 | 3.4. Scope and Layer Terminology | 10/10 | Complete    | 2026-10-18 |
-| 4. Marketplace Remove and List | 4/4 | In Progress | - |
+| 4. Marketplace Remove and List | 4/4 | Complete    | 2026-10-18 |
 | 5. Marketplace Info | 0/TBD | Not started | - |
 | 6. Marketplace Update and C-10 Fix | 0/TBD | Not started | - |
 | 7. Marketplace Autoupdate | 0/TBD | Not started | - |
