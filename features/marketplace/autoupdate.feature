@@ -79,7 +79,7 @@ Feature: Marketplace autoupdate
       | tools | {home}/marketplaces/tools |
     Then the "claude-plugins.json" file of the project scope does not exist
 
-  Scenario: Enabling autoupdate for every marketplace sets it in each configuration that declares the marketplace
+  Scenario: Enabling autoupdate for every marketplace sets it in each config that declares the marketplace
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "extras" is published as a dir source
     Given the marketplace "tools" is added to the project scope

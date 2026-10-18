@@ -92,7 +92,7 @@ Feature: Marketplace remove
       | name  | source                    |
       | tools | {home}/marketplaces/tools |
 
-  Scenario: A marketplace removed from one configuration is still listed in a new session
+  Scenario: A marketplace removed from one layer is still listed in a new session
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" is added to the project scope
     Given the user has run "/claude:plugin marketplace add {home}/marketplaces/tools --scope project --local"

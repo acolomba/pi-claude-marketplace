@@ -102,7 +102,7 @@ Feature: Plugin install
       | demo@fixtures |
     Then the "claude-plugins.json" file of the project scope declares no plugins
 
-  Scenario: A plugin installed with --local from a marketplace the base layer declares stays installed after the base layer removes the marketplace
+  Scenario: A plugin installed with --local from a marketplace the base layer declares stays installed after the user removes the marketplace from the base layer
     Given the user has run "/claude:plugin install demo@fixtures --scope project --local"
     Given the user has run "/claude:plugin marketplace remove fixtures --scope project"
     When the user starts a new pi session

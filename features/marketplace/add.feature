@@ -47,7 +47,7 @@ Feature: Marketplace add
       | name  | source                    |
       | tools | {home}/marketplaces/tools |
 
-  Scenario: Adding a marketplace by a home-relative path keeps the ~ form in the user configuration
+  Scenario: Adding a marketplace by a home-relative path keeps the ~ form in the base config of the user scope
     Given the marketplace "tools" is published as a dir source
     When the user runs "/claude:plugin marketplace add ~/marketplaces/tools"
     Then the result has these fields:
