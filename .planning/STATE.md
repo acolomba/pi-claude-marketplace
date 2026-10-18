@@ -5,11 +5,11 @@ milestone_name: Marketplace Behavioral Tests
 current_phase: 4
 current_phase_name: Marketplace Remove and List
 status: planning
-stopped_at: Phase 03.4 complete, ready to discuss Phase 4
-last_updated: "2026-10-18T11:19:54.503Z"
+stopped_at: Phase 4 context gathered
+last_updated: "2026-10-18T13:18:32.525Z"
 last_activity: 2026-10-18
-last_activity_desc: Phase 03.4 complete, transitioned to Phase 4
-state_head: 28323193eb79162c96355847ca78138a0e64725b
+last_activity_desc: Phase 4 context gathered, ready to plan
+state_head: 306c0634d582b93e2d1560a61237ded9590a04de
 progress:
   total_phases: 14
   completed_phases: 7
@@ -33,8 +33,8 @@ component as a working Pi artifact.
 
 Phase: 4 — Marketplace Remove and List
 Plan: Not started
-Status: Ready to discuss
-Last activity: 2026-10-18 — Phase 03.4 complete, transitioned to Phase 4
+Status: Ready to plan
+Last activity: 2026-10-18 — Phase 4 context gathered, ready to plan
 
 Progress: [█████░░░░░] 50%
 
@@ -181,9 +181,9 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-18T11:19:54.503Z
-**Stopped at:** Phase 03.4 complete, ready to discuss Phase 4
-**Resume file:** None
+**Last session:** 2026-10-18T13:18:29.993Z
+**Stopped at:** Phase 4 context gathered
+**Resume file:** .planning/phases/04-marketplace-remove-and-list/04-CONTEXT.md
 
 **Main merge (2026-10-11, quick task 261011-bsm):** `origin/main` at
 `94160614` (#248, and #250, the mcp-4 milestone released as 0.20.0) is merged
