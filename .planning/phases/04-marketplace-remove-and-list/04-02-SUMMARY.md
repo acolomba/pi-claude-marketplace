@@ -115,6 +115,7 @@ None - plan executed exactly as written.
 
 - The sandbox prevented headless Pi subprocesses from staying open, so focused Cucumber runs were repeated outside the sandbox and passed.
 - The first multi-blocker run showed that a fresh Pi session exposes skills in lexical order; the expected inventory was corrected to that established order and the complete focused suite passed.
+- GSD's plan-subject evaluation route requires a numeric plan scope that this repository's commit policy forbids. The phase-directory task-commit route, bounded by the recorded plan head, resolved exactly the three task commits instead.
 
 ## User Setup Required
 
@@ -132,6 +133,7 @@ None -- no security-relevant surface outside the plan's `<threat_model>` was int
 ## Self-Check: PASSED
 
 - The three task commits descend from the recorded plan head and exist in this worktree.
+- GSD's phase-directory evaluation scope resolved exactly those three task commits; its incompatible plan-subject route reported `no-matching-commits` because the required numeric scope is forbidden here.
 - All seven added scenario titles and the required exact-result/config assertions are present.
 - Focused Cucumber verification passed 48 scenarios and 535 steps; the feature gate also passed.
 - STATE.md and ROADMAP.md have no plan diff.
