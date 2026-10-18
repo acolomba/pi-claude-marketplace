@@ -62,7 +62,7 @@ path), **url** (https git URL on the loopback stand-in), and **gh**
 - [x] **Phase 3.3: Plugin Layer Partition** (INSERTED) — Named plugin mutations act on their own layer, a plugin may be declared in both layers and is installed once, and a plugin's marketplace is declared in the same layer (completed 2026-10-17)
 - [x] **Phase 3.4: Scope and Layer Terminology** (INSERTED) — Messages, reason tokens, docs, and code use scope, base/local layer, and config consistently (completed 2026-10-18)
 - [x] **Phase 4: Marketplace Remove and List** — `remove`/`rm` with the plugin cascade, and `list`/`ls` across both scopes (completed 2026-10-18)
-- [ ] **Phase 5: Marketplace Info** — `info` source details for every kind, scope fan-out, not-added forms, and a broken manifest
+- [x] **Phase 5: Marketplace Info** — `info` source details for every kind, scope fan-out, not-added forms, and a broken manifest (completed 2026-10-18)
 - [ ] **Phase 6: Marketplace Update and C-10 Fix** — Single and bare `update`, with and without autoupdate, path-source failures, and the C-10 fix written test-first
 - [ ] **Phase 7: Marketplace Autoupdate** — `autoupdate` and `noautoupdate`, by name and for all marketplaces, persisting across sessions
 - [ ] **Phase 8: Marketplace Help and Usage Errors** — `marketplace help` and every usage rejection across the marketplace verbs
@@ -385,7 +385,7 @@ Plans:
 2. A name both scopes hold, without `--scope`, shows one block per scope, project first; a name neither scope holds fails as `marketplace not added` with no scope; and `--scope` naming the scope that misses, while the other holds the name, says which scope missed.
 3. Info on a marketplace whose manifest became invalid reports a failed `invalid manifest` row, and info shows the marketplaces a manifest allows cross-marketplace dependencies on.
 
-**Plans:** 3/3 plans executed
+**Plans:** 3/3 plans complete
 
 Plans:
 - [x] 05-01-PLAN.md — Prove and correct project-first mixed-scope info emission.
@@ -480,7 +480,7 @@ Plans:
 | 3.3. Plugin Layer Partition | 10/10 | Complete    | 2026-10-17 |
 | 3.4. Scope and Layer Terminology | 10/10 | Complete    | 2026-10-18 |
 | 4. Marketplace Remove and List | 4/4 | Complete    | 2026-10-18 |
-| 5. Marketplace Info | 3/3 | In Progress | - |
+| 5. Marketplace Info | 3/3 | Complete    | 2026-10-18 |
 | 6. Marketplace Update and C-10 Fix | 0/TBD | Not started | - |
 | 7. Marketplace Autoupdate | 0/TBD | Not started | - |
 | 8. Marketplace Help and Usage Errors | 0/TBD | Not started | - |

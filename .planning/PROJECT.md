@@ -692,6 +692,13 @@ validated and archived in [milestones/json-output-REQUIREMENTS.md](milestones/js
 
 ### Validated
 
+- ✓ `marketplace info` scenarios cover directory and file source details,
+  project-first independent scope fan-out, scoped and unscoped misses, the
+  shipped invalid-manifest failed row, and manifest-order dependency
+  allowances. URL and GitHub examples are fully bound but remain runtime
+  deferred to their loopback phases — marketplace-features Phase 5, 2026-10-18
+  (INFO-01..INFO-06, INFO-08, INFO-09).
+
 - ✓ `marketplace remove`/`rm` and `marketplace list`/`ls` scenarios cover both
   scopes, clean and partial cascades, scope precedence, persistence, filtering,
   ordering, effective autoupdate values, aliases, and complete JSON results;
@@ -1262,6 +1269,7 @@ test.ts` (43 V2 tests, +2 G-21-01 inventory-vs-transition regressions)
 | **D-MF-03 (marketplace-features): mutations are partitioned between a scope's base and local layers** — a command naming a marketplace or plugin acts on the base layer, or the local layer with `--local`, and fails when only the other layer declares the entry; the same marketplace or plugin may be declared in both layers and is cloned or installed once per scope; installing into a layer while the other declares the plugin only adds the declaration, and uninstalling from a layer while the other declares it only drops the declaration; a plugin's marketplace must be declared in the same layer, and a violation is a configuration error on load; plugin and marketplace entries merge field by field, local winning (LAYER-01..06, LAYER-08, user decisions 2026-10-16/17); a named uninstall of a dependency that plugins still need is refused, a recorded divergence from Claude Code, which uninstalls it and reports the dependents | Each layer stays self-consistent so the base layer never depends on per-machine state; Claude Code declares marketplaces per settings file (user, project, local) and removes one declaration per scope, but does not refuse a command whose layer lacks the entry, so the refusals are a project decision | — Pending |
 | **D-MF-04 (marketplace-features): each scope owns its marketplace records and clones** — a project-scope install that uses a user-scope marketplace declares that marketplace in the project config (desired state, the plugin's target layer) and gives the project a real record with its own clone, as if the marketplace had been added to the project scope; the install adds it through the same `marketplace add` code, so leftovers, cleanup, and record shape match an explicit add, and a git source is cloned once from the network (NFR-5 amended); marketplaces adopted for dependencies are treated the same; every marketplace verb then acts per scope (user decision 2026-10-16) | A user-scope remove must never break a project scope; extends D-29. Claude Code keeps one machine-global clone (`~/.claude/plugins/marketplaces/`), so the per-scope clone is a divergence licensed by this decision | — Pending |
 | **D-MF-05 (marketplace-features): unscoped marketplace removal selects project before user** — when both scopes hold the name it changes only the project copy and reports only that selected scope; when only user holds the name it falls back to user; scope before layer means a project-local-only match refuses flagless removal without falling through to the user base layer (user decisions 2026-10-18) | This is an explicit divergence from Claude Code 2.1.296, whose `claude plugin marketplace remove --help` and official command reference said on 2026-10-18 that omitting `--scope` removes the marketplace from every scope. Project-first selection preserves this project's independently owned per-scope records and clones, while scope-before-layer preserves D-MF-03's mutation boundary. | ✓ Good |
+| **D-MF-06 (marketplace-features): marketplace info composes scopes independently in project-first order** — an invalid manifest keeps the shipped failed `plugin-info` row without suppressing a healthy scope; an explicit scope miss reports that requested scope without fallback; `allowCrossMarketplaceDependenciesOn` preserves manifest declaration order (user decisions 2026-10-18) | Claude Code 2.1.296 has no marketplace `info` command, so this Pi-only surface follows the project's established notification grammar and independently owned scope model while retaining upstream source field concepts. | ✓ Good |
 
 ## Evolution
 
@@ -1283,6 +1291,11 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
+
+_Last updated: 2026-10-18 after marketplace-features Phase 5 completed. All
+11 verification truths and INFO-01..INFO-06 / INFO-08 / INFO-09 pass; D-MF-06
+is validated. URL and GitHub rows remain binding-only until Phases 9 and 10.
+Phase 6 (Marketplace Update and C-10 Fix) is next. Prior updates follow._
 
 _Last updated: 2026-10-18 after marketplace-features Phase 4 completed. All
 17 verification truths and RM-01..RM-08 / LS-01..LS-04 pass; D-MF-05 is

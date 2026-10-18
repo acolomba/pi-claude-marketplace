@@ -100,15 +100,15 @@ A scope (user or project) has two layers: shared (`claude-plugins.json`) and loc
 
 ### marketplace info
 
-- [ ] **INFO-01**: Info on a dir or file marketplace shows its absolute path, autoupdate state, and description
-- [ ] **INFO-02**: Info on a url marketplace shows the identity URL and ref
-- [ ] **INFO-03**: Info on a GitHub marketplace shows owner, repo, and ref
-- [ ] **INFO-04**: A name both scopes hold, without `--scope`, shows one block per scope, project first
-- [ ] **INFO-05**: A name neither scope holds fails as `marketplace not added` with no scope
-- [ ] **INFO-06**: `--scope` naming the scope that misses, while the other holds the name, says which scope missed
+- [x] **INFO-01**: Info on a dir or file marketplace shows its absolute path, autoupdate state, and description
+- [x] **INFO-02**: Info on a url marketplace shows the identity URL and ref
+- [x] **INFO-03**: Info on a GitHub marketplace shows owner, repo, and ref
+- [x] **INFO-04**: A name both scopes hold, without `--scope`, shows one block per scope, project first
+- [x] **INFO-05**: A name neither scope holds fails as `marketplace not added` with no scope
+- [x] **INFO-06**: `--scope` naming the scope that misses, while the other holds the name, says which scope missed
 - [ ] **INFO-07**: Info on git marketplaces makes no request to the stand-in
-- [ ] **INFO-08**: Info on a marketplace whose manifest became invalid reports a failed `invalid manifest` row
-- [ ] **INFO-09**: Info shows the marketplaces a manifest allows cross-marketplace dependencies on
+- [x] **INFO-08**: Info on a marketplace whose manifest became invalid reports a failed `invalid manifest` row
+- [x] **INFO-09**: Info shows the marketplaces a manifest allows cross-marketplace dependencies on
 
 ### marketplace update
 
@@ -232,15 +232,15 @@ A scope (user or project) has two layers: shared (`claude-plugins.json`) and loc
 | LS-03 | Phase 4 | Complete |
 | LS-04 | Phase 4 | Complete |
 | LS-05 | Phase 9 | Pending |
-| INFO-01 | Phase 5 | Pending |
-| INFO-02 | Phase 5 | Pending |
-| INFO-03 | Phase 5 | Pending |
-| INFO-04 | Phase 5 | Pending |
-| INFO-05 | Phase 5 | Pending |
-| INFO-06 | Phase 5 | Pending |
+| INFO-01 | Phase 5 | Complete |
+| INFO-02 | Phase 5 | Complete |
+| INFO-03 | Phase 5 | Complete |
+| INFO-04 | Phase 5 | Complete |
+| INFO-05 | Phase 5 | Complete |
+| INFO-06 | Phase 5 | Complete |
 | INFO-07 | Phase 9 | Pending |
-| INFO-08 | Phase 5 | Pending |
-| INFO-09 | Phase 5 | Pending |
+| INFO-08 | Phase 5 | Complete |
+| INFO-09 | Phase 5 | Complete |
 | UPD-01 | Phase 6 | Pending |
 | UPD-02 | Phase 6 | Pending |
 | UPD-03 | Phase 6 | Pending |

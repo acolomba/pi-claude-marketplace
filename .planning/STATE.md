@@ -2,41 +2,41 @@
 gsd_state_version: "1.0"
 milestone: marketplace-features
 milestone_name: Marketplace Behavioral Tests
-current_phase: 5
-current_phase_name: Marketplace Info
+current_phase: 6
+current_phase_name: Marketplace Update and C-10 Fix
 status: ready
-stopped_at: Phase 5 context gathered
-last_updated: "2026-10-18T15:28:04.810Z"
+stopped_at: Phase 5 complete, ready to discuss Phase 6
+last_updated: "2026-10-18T17:44:33.672Z"
 last_activity: 2026-10-18
-last_activity_desc: Phase 04 complete, Phase 5 ready for discussion
-state_head: 49bc6ced6eae2e16bcff5354e4730118867a013a
+last_activity_desc: Phase 5 complete, Phase 6 ready for discussion
+state_head: 93e0e888f2e308d01e7b66a2e0df63325d649775
 progress:
   total_phases: 14
-  completed_phases: 8
-  total_plans: 51
-  completed_plans: 51
-  percent: 57
+  completed_phases: 9
+  total_plans: 54
+  completed_plans: 54
+  percent: 64
 ---
 
 # Project State
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-10-18 after marketplace-features Phase 4)
+See: `.planning/PROJECT.md` (updated 2026-10-18 after marketplace-features Phase 5)
 
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 5 — Marketplace Info
+**Current focus:** Phase 6 — Marketplace Update and C-10 Fix
 
 ## Current Position
 
-Phase: 5 — Marketplace Info
+Phase: 6 — Marketplace Update and C-10 Fix
 Plan: Not started
 Status: Ready to discuss
-Last activity: 2026-10-18 — Phase 04 complete, Phase 5 ready for discussion
+Last activity: 2026-10-18 — Phase 5 complete, Phase 6 ready for discussion
 
-Progress: [██████░░░░] 57%
+Progress: [██████░░░░] 64%
 
 ### mcp-4 closeout
 
@@ -181,9 +181,9 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-18T15:28:01.580Z
-**Stopped at:** Phase 5 context gathered
-**Resume file:** .planning/phases/05-marketplace-info/05-CONTEXT.md
+**Last session:** 2026-10-18T17:44:33.672Z
+**Stopped at:** Phase 5 complete, ready to discuss Phase 6
+**Resume file:** None
 
 **Main merge (2026-10-11, quick task 261011-bsm):** `origin/main` at
 `94160614` (#248, and #250, the mcp-4 milestone released as 0.20.0) is merged
@@ -639,8 +639,11 @@ in the phase deferred items. The milestone remains open for audit and archival.
 - D-MF-05: unscoped marketplace removal selects project before user, falls
   back to a sole user record, and never falls through after selecting a
   project record whose base layer does not declare the marketplace.
+- D-MF-06: marketplace info evaluates both scopes independently in
+  project-first order, keeps the shipped invalid-manifest failed row, and
+  preserves manifest declaration order for allowed dependency marketplaces.
 
 ### Blockers/Concerns
 
-None from Phase 4. Tagged remote source-kind rows remain intentionally deferred
+None from Phase 5. Tagged remote source-kind rows remain intentionally deferred
 to Phases 9 and 10, where their loopback stand-ins are delivered.

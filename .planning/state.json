@@ -46,7 +46,7 @@
     {
       "number": "5",
       "name": "Marketplace Info",
-      "status": "pending"
+      "status": "complete"
     },
     {
       "number": "6",
@@ -75,9 +75,9 @@
     }
   ],
   "next": {
-    "command": "$gsd-discuss-phase 5",
-    "label": "Discuss Phase 5",
-    "reason": "Phase 9 of 14 · 57% · ready for discussion"
+    "command": "$gsd-discuss-phase 6",
+    "label": "Discuss Phase 6",
+    "reason": "Phase 10 of 14 · 64% · ready for discussion"
   },
-  "updated_at": "2026-10-18T15:23:07.568Z"
+  "updated_at": "2026-10-18T17:44:33.672Z"
 }
