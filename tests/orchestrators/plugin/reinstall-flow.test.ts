@@ -2922,7 +2922,7 @@ test("GAP-19: reinstallPlugin updateStateRecord concurrent-removal detection", a
 
 /**
  * Install `hello` from marketplace `mp` in the project scope, then replace
- * both configuration files with the given bytes.
+ * both configs with the given bytes.
  */
 async function seedLocalLayerReinstall(
   cwd: string,

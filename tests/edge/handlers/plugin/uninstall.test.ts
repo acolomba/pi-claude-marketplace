@@ -157,7 +157,7 @@ const USER_UNINSTALLED_DATA_KEPT = {
 
 // LAYER-04: the row of a flagless uninstall that names a plugin only the local
 // layer declares.
-const PROJECT_DECLARED_LOCALLY = {
+const PROJECT_IN_LOCAL_LAYER_ONLY = {
   message:
     "A plugin operation has failed.\n\n● alpha [project]\n  ⊘ demo v1.0.0 (failed) {plugin in local layer only}\n    cause: The plugin demo@alpha is declared only in the local config (claude-plugins.local.json). Run the command again with --local.",
   severity: "error",
@@ -789,7 +789,7 @@ test("refuses a plugin only the local layer declares when the scope-target flag 
   await uninstallHandler("demo@alpha --scope project", ctx, runWithNothingLoaded());
 
   // assert
-  assert.deepStrictEqual(notifications, [PROJECT_DECLARED_LOCALLY]);
+  assert.deepStrictEqual(notifications, [PROJECT_IN_LOCAL_LAYER_ONLY]);
   assert.deepStrictEqual(await readObservedEffects(workspace), BOTH_RECORDS_INTACT);
   verifyBoundary();
 });

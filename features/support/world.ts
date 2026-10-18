@@ -58,7 +58,7 @@ export class ScenarioWorld extends World {
   }
 
   /**
-   * Returns the root directory of `scope`, where its configuration files live:
+   * Returns the root directory of `scope`, where its configs live:
    * the sandbox agent directory for `user`, and `.pi` under the sandbox
    * project for `project`.
    */

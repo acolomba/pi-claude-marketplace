@@ -782,7 +782,7 @@ test("apply.ts exposes the reconcile factory and no composed value", async () =>
 });
 
 describe("applyReconcile", () => {
-  test("WR-05: leaves a scope with neither a state file nor a configuration file untouched and silent", async (t) => {
+  test("WR-05: leaves a scope with neither a state file nor a config untouched and silent", async (t) => {
     // arrange
     const { cwd, project } = await createHermeticScopes(t, "pristine");
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
@@ -1132,7 +1132,7 @@ describe("applyReconcile", () => {
     verifyBoundary();
   });
 
-  test("MIG-01: a first-run configuration write blocked by permissions names the configuration file, not the state file", async (t) => {
+  test("MIG-01: a first-run config write blocked by permissions names the base config, not the state file", async (t) => {
     // arrange
     const { cwd, denyWrites, project } = await createHermeticScopes(t, "migrate-refused");
     const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {});

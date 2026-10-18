@@ -116,7 +116,7 @@ async function compareDeclarations(
 }
 
 Given(
-  "a plugin configuration file in scope {word} and layer {word}, with these plugins:",
+  "a config in scope {word} and layer {word}, with these plugins:",
   async function (this: ScenarioWorld, scope: string, layer: string, table: DataTable) {
     const file = layerConfigPath(this, scope, layer);
     const plugins = readLayerPlugins(table);

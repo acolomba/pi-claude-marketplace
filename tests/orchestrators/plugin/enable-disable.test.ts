@@ -965,12 +965,12 @@ async function scopeBytes(paths: {
   };
 }
 
-const DECLARED_LOCALLY_ROW = [
+const IN_LOCAL_LAYER_ONLY_ROW = [
   "  ⊘ foo (failed) {plugin in local layer only}",
   "    cause: The plugin foo@mp is declared only in the local config (claude-plugins.local.json). Run the command again with --local.",
 ];
 
-const DECLARED_IN_BASE_ROW = [
+const IN_BASE_LAYER_ONLY_ROW = [
   "  ⊘ foo (failed) {plugin in base layer only}",
   "    cause: The plugin foo@mp is declared only in the base config (claude-plugins.json). Run the command again without --local.",
 ];
@@ -981,7 +981,7 @@ for (const { verb, enable, local, layer, row, seed } of [
     enable: true,
     local: false,
     layer: "the local layer",
-    row: DECLARED_LOCALLY_ROW,
+    row: IN_LOCAL_LAYER_ONLY_ROW,
     seed: async (home: string) => {
       const paths = await seedRealDisabledMarketplace(home, {
         marketplaceName: "mp",
@@ -997,7 +997,7 @@ for (const { verb, enable, local, layer, row, seed } of [
     enable: true,
     local: true,
     layer: "the base layer",
-    row: DECLARED_IN_BASE_ROW,
+    row: IN_BASE_LAYER_ONLY_ROW,
     seed: async (home: string) => {
       const paths = await seedRealDisabledMarketplace(home, {
         marketplaceName: "mp",
@@ -1013,7 +1013,7 @@ for (const { verb, enable, local, layer, row, seed } of [
     enable: false,
     local: false,
     layer: "the local layer",
-    row: DECLARED_LOCALLY_ROW,
+    row: IN_LOCAL_LAYER_ONLY_ROW,
     seed: async (home: string) => {
       const paths = await writeUserState(home, {
         marketplaceName: "mp",
@@ -1029,7 +1029,7 @@ for (const { verb, enable, local, layer, row, seed } of [
     enable: false,
     local: true,
     layer: "the base layer",
-    row: DECLARED_IN_BASE_ROW,
+    row: IN_BASE_LAYER_ONLY_ROW,
     seed: async (home: string) => {
       const paths = await writeUserState(home, {
         marketplaceName: "mp",
@@ -1108,7 +1108,7 @@ test("LAYER-04: an idempotent enable of a plugin only the local layer declares i
           "A plugin operation has failed.",
           "",
           "● mp [user]",
-          ...DECLARED_LOCALLY_ROW,
+          ...IN_LOCAL_LAYER_ONLY_ROW,
         ].join("\n"),
         severity: "error",
       },

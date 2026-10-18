@@ -162,7 +162,7 @@ async function recordAndDeclare(
   );
 }
 
-const DECLARED_LOCALLY_REFUSAL = [
+const IN_LOCAL_LAYER_ONLY_REFUSAL = [
   "Some operations have failed.",
   "",
   "⊘ mp [project] (failed)",
@@ -1145,7 +1145,7 @@ const layerRefusalCases = [
     label: "a flip without --local on a marketplace only the local config declares",
     declaringLayer: "local" as const,
     local: false,
-    expectedMessage: DECLARED_LOCALLY_REFUSAL,
+    expectedMessage: IN_LOCAL_LAYER_ONLY_REFUSAL,
   },
   {
     label: "a flip with --local on a marketplace only the base config declares",
@@ -1334,7 +1334,7 @@ for (const { label, userLayer } of unscopedRefusalCases) {
       const projectBefore = await scopeBytes(projectLocations);
       const userBefore = await scopeBytes(userLocations);
       const boundary = notificationBoundary({
-        message: DECLARED_LOCALLY_REFUSAL,
+        message: IN_LOCAL_LAYER_ONLY_REFUSAL,
         severity: "error",
       });
 

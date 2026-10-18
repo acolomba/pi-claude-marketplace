@@ -2240,7 +2240,7 @@ test("DFEN-08: a declared-true entry and a silent entry render identical install
         ],
       });
 
-      // The user states nothing anywhere -- neither configuration file is
+      // The user states nothing anywhere -- neither config is
       // seeded -- because a stated value short-circuits the install's own gate
       // and would collapse the three arms onto one outcome.
       const install = async (plugin: string): Promise<NotifyRecord[]> => {

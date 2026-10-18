@@ -111,7 +111,7 @@ Feature: Plugin install
       | /skill:demo-skill | A skill of demo 1.0.0. |
 
   Scenario: Installing with --local a plugin the base layer declares but has not installed installs it
-    Given a plugin configuration file in scope project and layer base, with these plugins:
+    Given a config in scope project and layer base, with these plugins:
       | marketplace | plugin | enabled |
       | fixtures    | demo   |         |
     When the user runs "/claude:plugin install demo@fixtures --scope project --local"

@@ -42,7 +42,7 @@ Feature: Plugin configuration
       | /skill:demo-skill | A skill of demo 1.0.0. |
 
   Scenario: A plugin whose marketplace no layer declares keeps its dangling reference row
-    Given a plugin configuration file in scope project and layer local, with these plugins:
+    Given a config in scope project and layer local, with these plugins:
       | marketplace | plugin | enabled |
       | fixtures    | demo   |         |
     When the user runs "/claude:plugin pending --scope project"
@@ -58,9 +58,9 @@ Feature: Plugin configuration
       | marketplace name | marketplace scope | marketplace status | marketplace reasons | id            | name | status | reasons            | scope   | leaks | rollback partial |
       | fixtures         | project           | failed             | dangling reference  | demo@fixtures | demo | failed | dangling reference | project |       |                  |
 
-  Scenario: A local layer that declares a plugin without its marketplace is reported as an invalid configuration
+  Scenario: A local layer that declares a plugin without its marketplace is reported as an invalid config
     Given the marketplace "fixtures" is added to the project scope
-    Given a plugin configuration file in scope project and layer local, with these plugins:
+    Given a config in scope project and layer local, with these plugins:
       | marketplace | plugin | enabled |
       | fixtures    | demo   |         |
     When the user runs "/claude:plugin pending --scope project"
@@ -78,7 +78,7 @@ Feature: Plugin configuration
 
   Scenario: A new session does not install a plugin whose local layer lacks its marketplace
     Given the marketplace "fixtures" is added to the project scope
-    Given a plugin configuration file in scope project and layer local, with these plugins:
+    Given a config in scope project and layer local, with these plugins:
       | marketplace | plugin | enabled |
       | fixtures    | demo   |         |
     When the user starts a new pi session
@@ -88,9 +88,9 @@ Feature: Plugin configuration
       | demo@fixtures |
     Then the "claude-plugins.local.json" file of the project scope declares no marketplaces
 
-  Scenario: A base layer that declares a plugin without its marketplace is reported as an invalid configuration
+  Scenario: A base layer that declares a plugin without its marketplace is reported as an invalid config
     Given the user has run "/claude:plugin marketplace add {home}/marketplaces/fixtures --scope project --local"
-    Given a plugin configuration file in scope project and layer base, with these plugins:
+    Given a config in scope project and layer base, with these plugins:
       | marketplace | plugin | enabled |
       | fixtures    | demo   |         |
     When the user runs "/claude:plugin pending --scope project"

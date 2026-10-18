@@ -102,7 +102,7 @@ Feature: Plugin reinstall
       | marketplace name | marketplace scope | id                      | name        | status | reasons    | scope   | cause chain                               | cause truncated | leaks | rollback partial |
       | (reinstall)      | project           | (reinstall)@(reinstall) | (reinstall) | failed | unreadable | project | cannot read the dependencies of app@tools | false           |       |                  |
 
-  Scenario: Reinstalling a dependency declares nothing in the configuration
+  Scenario: Reinstalling a dependency declares nothing in either layer
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins with dependencies:
       | name | version | dependencies |
