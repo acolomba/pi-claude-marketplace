@@ -41,7 +41,7 @@
     {
       "number": "4",
       "name": "Marketplace Remove and List",
-      "status": "pending"
+      "status": "in_progress"
     },
     {
       "number": "5",
@@ -75,9 +75,9 @@
     }
   ],
   "next": {
-    "command": "$gsd-discuss-phase 4",
-    "label": "Discuss Phase 4 context",
-    "reason": "Phase 8 of 14 — context not gathered"
+    "command": "$gsd-progress --next",
+    "label": "Advance to the next step",
+    "reason": "Phase 8 of 14 · 50% · executing"
   },
-  "updated_at": "2026-10-18T11:19:54.503Z"
+  "updated_at": "2026-10-18T13:50:07.703Z"
 }
