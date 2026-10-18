@@ -21,40 +21,40 @@ created: "2026-10-18"
 | **Config file** | `cucumber.json`, `package.json` |
 | **Quick run command** | `npm run test:cucumber -- features/marketplace/update.feature features/marketplace/file-source-update.feature --parallel 1` |
 | **Full suite command** | `npm run check` |
-| **Estimated runtime** | ~30 seconds for focused feedback |
+| **Estimated runtime** | Target under 60 seconds per focused command; measure during execution |
 
 ---
 
 ## Sampling Rate
 
-- **After every task commit:** Run the task's focused Cucumber or paired unit-test command from the map below
+- **During each task:** Run its focused Cucumber/owner commands, then record the normal commit hook result
 - **After every plan wave:** Run `npm run check`
 - **Before `$gsd-verify-work`:** Full suite must be green
-- **Max feedback latency:** 30 seconds for focused checks
+- **Max feedback latency:** Target under 60 seconds per focused command; split selections if measured slower
 
 ---
 
 ## Per-Task Verification Map
 
-The task IDs are provisional until the phase plans are written. The planner must preserve this requirement coverage when assigning final task IDs.
+The final plan set has eleven tasks in four sequential waves. Every task command in its PLAN has an adjacent fails_when description. The first tracer creates and runs the actual C-10 scenario before production edits; startup failure is not the required product red. Other new scenarios are authored before their focused commands run.
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 06-01-01 | 01 | 1 | FIX-01 | — | Exact external manifest path is retained and reread without escaping its owning root | behavioral + unit | `npm run test:cucumber -- features/marketplace/file-source-update.feature --parallel 1 --name "An external manifest is refreshed from its original file"` | ❌ W0 | ⬜ pending |
-| 06-01-02 | 01 | 1 | UPD-01 | — | N/A | behavioral + unit | `npm run test:cucumber -- features/marketplace/update.feature --parallel 1 --name "An unchanged marketplace is up to date"` | ❌ W0 | ⬜ pending |
-| 06-01-03 | 01 | 1 | UPD-02 | — | N/A | behavioral + unit | `npm run test:cucumber -- features/marketplace/update.feature --parallel 1 --name "A changed marketplace refreshes without plugin rows"` | ❌ W0 | ⬜ pending |
-| 06-01-04 | 01 | 2 | UPD-10 | — | Invalid refreshed data cannot replace the last successful baseline or mutate plugins | behavioral + unit | `npm run test:cucumber -- features/marketplace/update.feature --parallel 1 --name "An invalid refreshed manifest leaves installed plugins unchanged"` | ❌ W0 | ⬜ pending |
-| 06-01-05 | 01 | 2 | UPD-14 | — | A missing source fails cleanly and preserves its registration for retry | behavioral + unit | `npm run test:cucumber -- features/marketplace/update.feature --parallel 1 --name "A missing marketplace directory leaves its registration intact"` | ❌ W0 | ⬜ pending |
-| 06-02-01 | 02 | 1 | UPD-03 | — | N/A | behavioral + unit | `npm run test:cucumber -- features/marketplace/update.feature --parallel 1 --name "Autoupdate off preserves installed versions"` | ❌ W0 | ⬜ pending |
-| 06-02-02 | 02 | 1 | UPD-04 | — | N/A | behavioral + unit | `npm run test:cucumber -- features/marketplace/update.feature --parallel 1 --name "Autoupdate exposes the offered version in a new session"` | ❌ W0 | ⬜ pending |
-| 06-02-03 | 02 | 1 | UPD-05 | — | N/A | behavioral + unit | `npm run test:cucumber -- features/marketplace/update.feature --parallel 1 --name "An unchanged autoupdate is up to date"` | ❌ W0 | ⬜ pending |
-| 06-02-04 | 02 | 2 | UPD-06 | — | A refresh cannot install plugins that the user did not request | behavioral + unit | `npm run test:cucumber -- features/marketplace/update.feature --parallel 1 --name "Autoupdate does not install newly offered plugins"` | ❌ W0 | ⬜ pending |
-| 06-02-05 | 02 | 2 | UPD-13 | — | A catalog removal cannot silently uninstall or disable an installed plugin | behavioral + unit | `npm run test:cucumber -- features/marketplace/update.feature --parallel 1 --name "Autoupdate keeps a plugin removed from the catalog"` | ❌ W0 | ⬜ pending |
-| 06-03-01 | 03 | 1 | UPD-07 | — | Scope boundaries and deterministic insertion order are preserved across a bare update | behavioral + unit | `npm run test:cucumber -- features/marketplace/update.feature --parallel 1 --name "A bare update preserves scope and insertion order with adjacent notices"` | ❌ W0 | ⬜ pending |
-| 06-03-02 | 03 | 1 | UPD-08 | — | N/A | behavioral + unit | `npm run test:cucumber -- features/marketplace/update.feature --parallel 1 --name "A bare update with no marketplaces reports an empty result"` | ❌ W0 | ⬜ pending |
-| 06-03-03 | 03 | 1 | UPD-09 | — | A scope miss cannot read or mutate the registration in the other scope | behavioral + unit | `npm run test:cucumber -- features/marketplace/update.feature --parallel 1 --name "An update reports the marketplace missing from the requested scope"` | ❌ W0 | ⬜ pending |
+| 06-01-01 | 01 | 1 | FIX-01 | T-06-01, T-06-02, T-06-03 | Exact source and complete validated baseline commit together | behavioral + unit | `npm run test:cucumber -- features/marketplace/file-source-update.feature --parallel 1 --name '^An external manifest is refreshed from its original file$'` | ❌ W0 | ⬜ pending |
+| 06-01-02 | 01 | 1 | FIX-01 | T-06-03, T-06-05 | Info projects the exact resolved source and leaves state untouched | behavioral + unit | `node --test tests/orchestrators/marketplace/info.test.ts` | ✅ owner; scenarios W0 | ⬜ pending |
+| 06-01-03 | 01 | 1 | FIX-01 | T-06-02, T-06-04 | Failed save/refresh preserves durable state; retry is safe | behavioral + unit | `node --test tests/orchestrators/marketplace/update.test.ts tests/orchestrators/marketplace/add.test.ts tests/transaction/with-state-guard.test.ts` | ✅ owners; scenarios W0 | ⬜ pending |
+| 06-02-01 | 02 | 2 | UPD-01, UPD-02 | T-06-06, T-06-09 | Whole-result structural comparison distinguishes cosmetic and real changes | behavioral + unit | `npm run test:cucumber -- features/marketplace/update.feature --parallel 1 --name '^(An unchanged marketplace is up to date|A changed marketplace refreshes without plugin rows|Whitespace and object key order do not change a marketplace)$'` | ❌ W0 | ⬜ pending |
+| 06-02-02 | 02 | 2 | UPD-01, UPD-02 | T-06-06 | Raw unknown fields and array order survive comparison normalization | behavioral + unit | `node --test tests/domain/manifest.test.ts tests/orchestrators/marketplace/update.test.ts` | ✅ owners; scenarios W0 | ⬜ pending |
+| 06-02-03 | 02 | 2 | UPD-10, UPD-14 | T-06-07, T-06-08 | Invalid/missing sources preserve registration and cannot select a decoy | behavioral + unit | `npm run test:cucumber -- features/marketplace/update.feature features/marketplace/file-source-update.feature --parallel 1 --name '^(An invalid refreshed manifest leaves installed plugins unchanged|A repaired marketplace can be updated again|A missing marketplace directory leaves its registration intact|A missing original manifest does not use a conventional decoy)$'` | ❌ W0 | ⬜ pending |
+| 06-03-01 | 03 | 3 | UPD-03, UPD-04 | T-06-12 | Autoupdate controls versions without holding the marketplace lock over plugin work | behavioral + unit | `npm run test:cucumber -- features/marketplace/update.feature --parallel 1 --name '^(Autoupdate off preserves installed versions|Autoupdate exposes the offered version in a new session|Repeating an autoupdate does not reinstall a plugin)$'` | ❌ W0 | ⬜ pending |
+| 06-03-02 | 03 | 3 | UPD-05, UPD-06, UPD-13 | T-06-10 | New offers stay uninstalled; dropped entries stay installed/enabled | behavioral + unit | `npm run test:cucumber -- features/marketplace/update.feature --parallel 1 --name '^(An unchanged autoupdate is up to date|Autoupdate does not install newly offered plugins|Autoupdate keeps a plugin removed from the catalog)$'` | ❌ W0 | ⬜ pending |
+| 06-03-03 | 03 | 3 | UPD-04, UPD-13 | T-06-11, T-06-12, T-06-13 | Ordinary plugin failure preserves old installation and later ordered results | behavioral + unit | `npm run test:cucumber -- features/marketplace/update.feature --parallel 1 --name '^Autoupdate continues in installed order after a plugin fails$'` | ❌ W0 | ⬜ pending |
+| 06-04-01 | 04 | 4 | UPD-07 | T-06-14, T-06-15 | Every notice is fully compared immediately after its cascade | behavioral + unit | `npm run test:cucumber -- features/marketplace/update.feature --parallel 1 --name '^(A bare update preserves scope and insertion order with adjacent notices|Repeating a bare update is up to date without repeated notices)$'` | ❌ W0 | ⬜ pending |
+| 06-04-02 | 04 | 4 | UPD-07, UPD-08, UPD-09 | T-06-16, T-06-17 | Later scopes continue; empty/missing targets cannot fall back or corrupt names | behavioral + unit | `node --test tests/orchestrators/marketplace/update.test.ts tests/transaction/with-state-guard.test.ts` | ✅ owners; scenarios W0 | ⬜ pending |
 
 Each source edit must also pass its direct paired coverage command. For the update orchestrator, run `npm run test:coverage:direct -- extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts`.
+
+The other changed production pairs are domain/manifest.ts, persistence/state-io.ts, orchestrators/marketplace/add.ts, and orchestrators/marketplace/info.ts under extensions/pi-claude-marketplace/. Each has its normal mirrored owner test and its own isolated direct-coverage command in 06-01-PLAN.md. No cache-source edit is planned. 06-SOURCE-AUDIT.md retains the complete 22-item edge lift: ten explicit truths, five structured concurrency backstops, seven flagged unclassified assumptions.
 
 ---
 
@@ -82,7 +82,7 @@ All phase behaviors have automated verification.
 - [ ] Sampling continuity: no 3 consecutive tasks without automated verify
 - [ ] Wave 0 covers all MISSING references
 - [ ] No watch-mode flags
-- [ ] Feedback latency < 30s
+- [ ] Focused command latency measured; split selections above 60 seconds
 - [ ] `nyquist_compliant: true` set in frontmatter
 
 **Approval:** pending

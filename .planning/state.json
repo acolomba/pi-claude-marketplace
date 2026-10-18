@@ -75,9 +75,9 @@
     }
   ],
   "next": {
-    "command": "$gsd-discuss-phase 6",
-    "label": "Discuss Phase 6",
-    "reason": "Phase 10 of 14 · 64% · ready for discussion"
+    "command": "$gsd-progress",
+    "label": "Show progress",
+    "reason": "Unsure of state — showing progress"
   },
-  "updated_at": "2026-10-18T17:44:33.672Z"
+  "updated_at": "2026-10-18T23:19:17.758Z"
 }

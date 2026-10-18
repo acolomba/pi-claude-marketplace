@@ -455,13 +455,15 @@ None -- no security-relevant surface outside the plan's `<threat_model>` was int
 
 No unverified product fact is used as a locked decision. The legacy-baseline policy is a recommendation for the planner to make explicit within the implementation discretion, not a claim about current behavior. Focused-run duration is a target, not a compatibility guarantee. No package freshness claim is made after the failed registry lookups.
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Legacy local records have no old manifest content.** The schema and real-Pi probe establish this gap. Recommended policy: first successful refresh establishes an additive baseline and reports changed; test it explicitly. If the planner chooses a different compatibility policy, it must not claim to infer historic changes from two current reads. [VERIFIED: state-io.ts:303-320; Research Measurements]
-2. **Comparison before dependency normalization.** The loader transforms malformed dependency declarations. Ensure the plan preserves D-05 for tolerated unknown fields even in transformed entries, without changing resolver isolation behavior. [VERIFIED: domain/manifest.ts:54-94,124-134]
-3. **Verification environment.** Sandbox-only Pi startup fails here; the authorized isolated run succeeds. Record the required execution mode with red/green evidence rather than downgrading the real-Pi requirement. [VERIFIED: Research Measurements]
+These questions were resolved during planning. The choices below are implementation contracts; their runtime verification remains execution work.
 
-No question blocks drafting executable plans. Remote activation and the reviewed todo's cross-repository port remain out of scope. [VERIFIED: phase context:211-219; .planning/todos/pending/2026-10-13-cucumber-rules-trial.md:54-56]
+1. **RESOLVED — Legacy local records have no old manifest content.** The first successful refresh conservatively reports changed and atomically persists the complete parsed comparison baseline. Later identical refreshes report up-to-date, including after a fresh state load or new session. Failed refreshes do not establish or advance the baseline. This explicit compatibility rule avoids claiming to recover historic content from two current reads. Plan evidence: [06-01-PLAN.md](06-01-PLAN.md), Tasks 1 and 3, including legacy, persistence, failure, and idempotency tests. [VERIFIED: state-io.ts:303-320; Research Measurements]
+2. **RESOLVED — Comparison before dependency normalization.** Capture comparison JSON from the complete parsed input before dependency normalization, then validate and retain the existing normalized resolver output. The cached document carries both views; the baseline never becomes an alternate source. Unknown fields in tolerated malformed-dependency entries remain significant without changing resolver isolation. Plan evidence: [06-01-PLAN.md](06-01-PLAN.md), Task 1, and [06-02-PLAN.md](06-02-PLAN.md), Task 2. [VERIFIED: domain/manifest.ts:54-94,124-134]
+3. **RESOLVED — Verification environment.** Execution must obtain an authorized isolated real-Pi run and preserve the actual repository scenario's pre-fix product red and post-fix green evidence. A sandbox startup failure alone is not red evidence and cannot replace the real-Pi regression. Plan evidence: [06-01-PLAN.md](06-01-PLAN.md), Task 1 and its verification/acceptance criteria. [VERIFIED: Research Measurements]
+
+No research question remains unresolved. Remote activation and the reviewed todo's cross-repository port remain out of scope. [VERIFIED: phase context:211-219; .planning/todos/pending/2026-10-13-cucumber-rules-trial.md:54-56]
 
 ## Sources
 
