@@ -1551,7 +1551,7 @@ A plugin operation has failed.
     cause: cannot read the dependencies of other@official: not declared by its marketplace
 ```
 
-The failure names the declarer and a redacted cause. The command removes nothing and emits no reload hint.
+The failure names the declarer and, for a reason this extension writes, why. The command removes nothing and emits no reload hint.
 
 ### Malformed state refuses the sweep or preview
 
