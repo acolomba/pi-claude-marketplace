@@ -1587,7 +1587,7 @@ function refuseOtherLayerDeclaration(
 
   const verdict = pluginLayerVerdict({
     target: selection.current,
-    other: selection.sibling,
+    other: selection.other,
     targetIsLocal: selection.targetIsLocal,
     marketplace: write.marketplace,
     plugin: write.plugin,
@@ -1597,7 +1597,7 @@ function refuseOtherLayerDeclaration(
   }
 
   if (verdict.kind === "both" && !selection.targetIsLocal) {
-    refuseLocalOverride(selection.sibling, write);
+    refuseLocalOverride(selection.other, write);
   }
 }
 
@@ -1611,7 +1611,7 @@ function refuseOtherLayerDeclaration(
  * is not refused.
  */
 function refuseLocalOverride(
-  local: LoadedTargetLayers["sibling"],
+  local: LoadedTargetLayers["other"],
   write: EnabledFlagWriteTarget,
 ): void {
   const localEnabled = ownValue(local.plugins, `${write.plugin}@${write.marketplace}`)?.enabled;
@@ -1988,7 +1988,7 @@ async function writeEnabledFlagBack(
 ): Promise<void> {
   await transaction.writeConfigEntries({
     current: selection.current,
-    sibling: selection.sibling,
+    other: selection.other,
     state,
     marketplace: write.marketplace,
     plugin: write.plugin,
@@ -2397,8 +2397,8 @@ async function runSetEnabledOutcome(
         // LAYER-04: ONE selection, made before anything reads a config path, so
         // the ordinary write-back and the config-truth promotion below cannot
         // drift onto different files. It reads both layers inside the lock --
-        // the WB-01 discipline that sibling reads happen fresh under the lock
-        // the write also holds.
+        // the WB-01 discipline that reads of the other layer happen fresh under
+        // the lock the write also holds.
         const selection = await transaction.loadTargetLayers({
           locations,
           local: opts.local,
@@ -2415,7 +2415,7 @@ async function runSetEnabledOutcome(
 
         // Both layers were parsed ONCE by the selector, and the whole selection
         // travels to the checks and write arms below: the target config steers
-        // every write, the sibling serves the layer verdict and the FIX-03
+        // every write, the other layer serves the layer verdict and the FIX-03
         // check, and no two decisions in this closure rest on different bytes
         // of the same file.
         configBasename = path.basename(selection.targetConfigPath);

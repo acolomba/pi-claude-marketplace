@@ -947,7 +947,7 @@ describe("loadTargetLayers", () => {
         targetConfigPath: locations.baseConfigJsonPath,
         targetIsLocal: false,
         current: { schemaVersion: 1 },
-        sibling: localConfig,
+        other: localConfig,
       });
     });
   });
@@ -972,7 +972,7 @@ describe("loadTargetLayers", () => {
         targetConfigPath: locations.localConfigJsonPath,
         targetIsLocal: true,
         current: { schemaVersion: 1 },
-        sibling: sharedConfig,
+        other: sharedConfig,
       });
     });
   });
@@ -991,7 +991,7 @@ describe("loadTargetLayers", () => {
         targetConfigPath: locations.baseConfigJsonPath,
         targetIsLocal: false,
         current: { schemaVersion: 1 },
-        sibling: { schemaVersion: 1 },
+        other: { schemaVersion: 1 },
       });
     });
   });
@@ -1054,7 +1054,7 @@ describe("undeclarableMarketplaceRefusal", () => {
       const selection = {
         targetIsLocal,
         current: { schemaVersion: 1 },
-        sibling: { schemaVersion: 1, marketplaces: { other: { source: "./other-src" } } },
+        other: { schemaVersion: 1, marketplaces: { other: { source: "./other-src" } } },
       } satisfies Parameters<typeof undeclarableMarketplaceRefusal>[0];
 
       // act
@@ -1076,7 +1076,7 @@ describe("undeclarableMarketplaceRefusal", () => {
       selection: {
         targetIsLocal: false,
         current: { schemaVersion: 1, marketplaces: { mp: { source: "./mp-src" } } },
-        sibling: { schemaVersion: 1 },
+        other: { schemaVersion: 1 },
       },
     },
     {
@@ -1085,7 +1085,7 @@ describe("undeclarableMarketplaceRefusal", () => {
       selection: {
         targetIsLocal: true,
         current: { schemaVersion: 1 },
-        sibling: { schemaVersion: 1, marketplaces: { mp: { source: "./mp-src" } } },
+        other: { schemaVersion: 1, marketplaces: { mp: { source: "./mp-src" } } },
       },
     },
     {
@@ -1094,7 +1094,7 @@ describe("undeclarableMarketplaceRefusal", () => {
       selection: {
         targetIsLocal: false,
         current: { schemaVersion: 1 },
-        sibling: { schemaVersion: 1 },
+        other: { schemaVersion: 1 },
       },
     },
     {
@@ -1103,7 +1103,7 @@ describe("undeclarableMarketplaceRefusal", () => {
       selection: {
         targetIsLocal: false,
         current: { schemaVersion: 1 },
-        sibling: { schemaVersion: 1 },
+        other: { schemaVersion: 1 },
       },
     },
   ] satisfies readonly {
@@ -1130,7 +1130,7 @@ describe("localOnlyMarketplaceRefusal", () => {
     const selection = {
       targetIsLocal: false,
       current: { schemaVersion: 1 },
-      sibling: { schemaVersion: 1, marketplaces: { mp: { source: "./mp-src" } } },
+      other: { schemaVersion: 1, marketplaces: { mp: { source: "./mp-src" } } },
     } satisfies Parameters<typeof localOnlyMarketplaceRefusal>[0];
 
     // act
@@ -1155,7 +1155,7 @@ describe("localOnlyMarketplaceRefusal", () => {
       selection: {
         targetIsLocal: true,
         current: { schemaVersion: 1, marketplaces: { mp: { source: "./mp-src" } } },
-        sibling: { schemaVersion: 1 },
+        other: { schemaVersion: 1 },
       },
     },
     {
@@ -1164,7 +1164,7 @@ describe("localOnlyMarketplaceRefusal", () => {
       selection: {
         targetIsLocal: false,
         current: { schemaVersion: 1, marketplaces: { mp: { source: "./mp-src" } } },
-        sibling: { schemaVersion: 1, marketplaces: { mp: { source: "./mp-src" } } },
+        other: { schemaVersion: 1, marketplaces: { mp: { source: "./mp-src" } } },
       },
     },
     {
@@ -1173,7 +1173,7 @@ describe("localOnlyMarketplaceRefusal", () => {
       selection: {
         targetIsLocal: false,
         current: { schemaVersion: 1, marketplaces: { mp: { source: "./mp-src" } } },
-        sibling: { schemaVersion: 1 },
+        other: { schemaVersion: 1 },
       },
     },
     {
@@ -1182,7 +1182,7 @@ describe("localOnlyMarketplaceRefusal", () => {
       selection: {
         targetIsLocal: false,
         current: { schemaVersion: 1 },
-        sibling: { schemaVersion: 1, marketplaces: { other: { source: "./other-src" } } },
+        other: { schemaVersion: 1, marketplaces: { other: { source: "./other-src" } } },
       },
     },
     {
@@ -1191,7 +1191,7 @@ describe("localOnlyMarketplaceRefusal", () => {
       selection: {
         targetIsLocal: false,
         current: { schemaVersion: 1 },
-        sibling: { schemaVersion: 1, marketplaces: {} },
+        other: { schemaVersion: 1, marketplaces: {} },
       },
     },
   ] satisfies readonly {
@@ -1779,13 +1779,13 @@ describe("writeAdoptingConfigEntries", () => {
     await withTempScopes(async ({ cwd }) => {
       const locations = locationsFor("project", cwd);
       const current: ScopeConfig = { schemaVersion: 1 };
-      const sibling: ScopeConfig = { schemaVersion: 1 };
+      const other: ScopeConfig = { schemaVersion: 1 };
       const state = makeState({ mp: { scope: "project", plugins: {} } });
 
       // act
       await writeAdoptingConfigEntries({
         current,
-        sibling,
+        other,
         state,
         marketplace: "mp",
         plugin: "alpha",
@@ -1801,7 +1801,7 @@ describe("writeAdoptingConfigEntries", () => {
         '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "mp": {\n      "source": "./mp-source"\n    }\n  },\n  "plugins": {\n    "alpha@mp": {\n      "enabled": false\n    }\n  }\n}\n',
       );
       assert.deepStrictEqual(current, { schemaVersion: 1 });
-      assert.deepStrictEqual(sibling, { schemaVersion: 1 });
+      assert.deepStrictEqual(other, { schemaVersion: 1 });
     });
   });
 
@@ -1813,13 +1813,13 @@ describe("writeAdoptingConfigEntries", () => {
         schemaVersion: 1,
         marketplaces: { mp: { source: "./declared", autoupdate: false } },
       };
-      const sibling: ScopeConfig = { schemaVersion: 1 };
+      const other: ScopeConfig = { schemaVersion: 1 };
       const state = makeState({ mp: { scope: "project", plugins: {} } });
 
       // act
       await writeAdoptingConfigEntries({
         current,
-        sibling,
+        other,
         state,
         marketplace: "mp",
         plugin: "alpha",
@@ -1842,7 +1842,7 @@ describe("writeAdoptingConfigEntries", () => {
     await withTempScopes(async ({ cwd }) => {
       const locations = locationsFor("project", cwd);
       const current: ScopeConfig = { schemaVersion: 1 };
-      const sibling: ScopeConfig = {
+      const other: ScopeConfig = {
         schemaVersion: 1,
         marketplaces: { mp: { source: "./sibling", autoupdate: false } },
       };
@@ -1851,7 +1851,7 @@ describe("writeAdoptingConfigEntries", () => {
       // act
       await writeAdoptingConfigEntries({
         current,
-        sibling,
+        other,
         state,
         marketplace: "mp",
         plugin: "alpha",
@@ -1874,7 +1874,7 @@ describe("writeAdoptingConfigEntries", () => {
     await withTempScopes(async ({ cwd }) => {
       const locations = locationsFor("project", cwd);
       const current: ScopeConfig = { schemaVersion: 1 };
-      const sibling: ScopeConfig = {
+      const other: ScopeConfig = {
         schemaVersion: 1,
         marketplaces: { mp: { source: "acme/mp" } },
       };
@@ -1887,7 +1887,7 @@ describe("writeAdoptingConfigEntries", () => {
       // act
       await writeAdoptingConfigEntries({
         current,
-        sibling,
+        other,
         state,
         marketplace: "mp",
         plugin: "alpha",
@@ -1910,7 +1910,7 @@ describe("writeAdoptingConfigEntries", () => {
     await withTempScopes(async ({ cwd }) => {
       const locations = locationsFor("project", cwd);
       const current: ScopeConfig = { schemaVersion: 1 };
-      const sibling: ScopeConfig = {
+      const other: ScopeConfig = {
         schemaVersion: 1,
         marketplaces: { mp: { source: "./sibling" } },
       };
@@ -1918,7 +1918,7 @@ describe("writeAdoptingConfigEntries", () => {
       // act
       await writeAdoptingConfigEntries({
         current,
-        sibling,
+        other,
         state: unknownSourceState(),
         marketplace: "mp",
         plugin: "alpha",
@@ -1948,13 +1948,13 @@ describe("writeAdoptingConfigEntries", () => {
           ? locations.localConfigJsonPath
           : locations.baseConfigJsonPath;
         const current: ScopeConfig = { schemaVersion: 1 };
-        const sibling: ScopeConfig = { schemaVersion: 1 };
+        const other: ScopeConfig = { schemaVersion: 1 };
 
         // act & assert
         await assert.rejects(
           writeAdoptingConfigEntries({
             current,
-            sibling,
+            other,
             state: unknownSourceState(),
             marketplace: "mp",
             plugin: "alpha",
@@ -1977,11 +1977,11 @@ describe("writeAdoptingConfigEntries", () => {
     });
   }
 
-  for (const { behavior, current, sibling, addedMarketplaces, config } of [
+  for (const { behavior, current, other, addedMarketplaces, config } of [
     {
       behavior: "declares each added marketplace beside the root's in the one write",
       current: { schemaVersion: 1 },
-      sibling: { schemaVersion: 1 },
+      other: { schemaVersion: 1 },
       addedMarketplaces: ["tools"],
       config:
         '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "mp": {\n      "source": "./mp-source"\n    },\n    "tools": {\n      "source": "./tools-source"\n    }\n  },\n  "plugins": {\n    "alpha@mp": {}\n  }\n}\n',
@@ -1989,7 +1989,7 @@ describe("writeAdoptingConfigEntries", () => {
     {
       behavior: "declares no added marketplace that either config file declares",
       current: { schemaVersion: 1, marketplaces: { tools: { source: "./declared" } } },
-      sibling: { schemaVersion: 1, marketplaces: { extra: { source: "./sibling" } } },
+      other: { schemaVersion: 1, marketplaces: { extra: { source: "./sibling" } } },
       addedMarketplaces: ["tools", "extra"],
       config:
         '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "tools": {\n      "source": "./declared"\n    },\n    "mp": {\n      "source": "./mp-source"\n    }\n  },\n  "plugins": {\n    "alpha@mp": {}\n  }\n}\n',
@@ -1997,7 +1997,7 @@ describe("writeAdoptingConfigEntries", () => {
     {
       behavior: "declares the root's marketplace once when it is also an added one",
       current: { schemaVersion: 1 },
-      sibling: { schemaVersion: 1 },
+      other: { schemaVersion: 1 },
       addedMarketplaces: ["mp"],
       config:
         '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "mp": {\n      "source": "./mp-source"\n    }\n  },\n  "plugins": {\n    "alpha@mp": {}\n  }\n}\n',
@@ -2005,7 +2005,7 @@ describe("writeAdoptingConfigEntries", () => {
   ] satisfies readonly {
     behavior: string;
     current: ScopeConfig;
-    sibling: ScopeConfig;
+    other: ScopeConfig;
     addedMarketplaces: readonly string[];
     config: string;
   }[]) {
@@ -2022,7 +2022,7 @@ describe("writeAdoptingConfigEntries", () => {
         // act
         await writeAdoptingConfigEntries({
           current,
-          sibling,
+          other,
           state,
           marketplace: "mp",
           plugin: "alpha",

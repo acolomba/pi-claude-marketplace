@@ -21,12 +21,12 @@ function entryFor(plugins: PluginConfigMap, key: string): PluginConfigEntry | un
  */
 export function resolveInstallDeclaredEnabled(args: {
   readonly current: ScopeConfig;
-  readonly sibling: ScopeConfig | undefined;
+  readonly other: ScopeConfig | undefined;
   readonly targetIsLocal: boolean;
   readonly key: string;
 }): boolean | undefined {
-  const siblingPlugins = args.sibling?.plugins;
-  const local = args.targetIsLocal ? args.current.plugins : siblingPlugins;
-  const base = args.targetIsLocal ? siblingPlugins : args.current.plugins;
+  const otherPlugins = args.other?.plugins;
+  const local = args.targetIsLocal ? args.current.plugins : otherPlugins;
+  const base = args.targetIsLocal ? otherPlugins : args.current.plugins;
   return entryFor(local, args.key)?.enabled ?? entryFor(base, args.key)?.enabled;
 }

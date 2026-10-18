@@ -1306,7 +1306,7 @@ interface PromotionArgs {
   readonly orchestrated: boolean;
   readonly config: {
     readonly current: ScopeConfig;
-    readonly sibling: ScopeConfig;
+    readonly other: ScopeConfig;
     readonly targetConfigPath: string;
     readonly targetIsLocal: boolean;
   };
@@ -1420,7 +1420,7 @@ async function declarePromotedPlugin(
 
   await writeAdoptingConfigEntries({
     current: args.config.current,
-    sibling: args.config.sibling,
+    other: args.config.other,
     state: args.state,
     marketplace: args.opts.marketplace,
     plugin: args.opts.plugin,
@@ -1755,7 +1755,7 @@ async function declareInstalledPlugin(args: {
     opts.pinVersionOverride !== undefined ||
     pluginLayerVerdict({
       target: selection.current,
-      other: selection.sibling,
+      other: selection.other,
       targetIsLocal: selection.targetIsLocal,
       marketplace,
       plugin,
@@ -1766,7 +1766,7 @@ async function declareInstalledPlugin(args: {
 
   await writeAdoptingConfigEntries({
     current: selection.current,
-    sibling: selection.sibling,
+    other: selection.other,
     state,
     marketplace,
     plugin,
@@ -1974,7 +1974,7 @@ async function installPluginWithTransaction(
   // orchestrator NEVER falls back to the base file on ENOENT: the base file is
   // NEVER touched on the --local path, and loadConfig's `absent` arm yields an
   // empty starting shape that saveConfig writes back to the local path. The
-  // sibling is the scope's OTHER layer, read fresh inside the lock for the
+  // other layer is the scope's other config, read fresh inside the lock for the
   // FIX-03 check, the DFEN-05 read, and the dependency-marketplace gate --
   // never written, never serialized back.
   //
@@ -2010,11 +2010,11 @@ async function installPluginWithTransaction(
         // LAYER-04: ONE selection, made before anything reads a config path, so
         // the CFG-03 load, the DFEN-05 precedence read and BOTH write arms below
         // address the same physical file. It reads both layers inside the lock
-        // -- the WB-01 discipline that sibling reads happen fresh under the lock
-        // the write also holds.
+        // -- the WB-01 discipline that reads of the other layer happen fresh
+        // under the lock the write also holds.
         //
         // The target is the layer the flag names. `targetIsLocal` still labels
-        // which of `current` and the sibling is the local layer, because
+        // which of `current` and `other` is the local layer, because
         // `resolveInstallDeclaredEnabled` reads the local layer's `enabled`
         // before the shared one's.
         const selection = await loadTargetLayers({
@@ -2037,12 +2037,12 @@ async function installPluginWithTransaction(
 
         // DFEN-05: the TARGET physical config, parsed ONCE by the selector and
         // shared by the precedence gate below and the write-back further down --
-        // as is the sibling, so one operation reads each file once and no two
+        // as is `other`, so one operation reads each file once and no two
         // decisions can rest on different bytes of the same file. Never a merged
         // view -- `config-write-back.ts` is forbidden from importing
         // `config-merge.ts`, and serializing a merged view back would copy the
         // local file's entries into the base file (SPLIT-02).
-        const { targetConfigPath, targetIsLocal, current, sibling } = selection;
+        const { targetConfigPath, targetIsLocal, current, other } = selection;
         configBasename = path.basename(targetConfigPath);
 
         // FIX-03 / LAYER-06: refuse before the promotion and the cascade, so a
@@ -2074,7 +2074,7 @@ async function installPluginWithTransaction(
           state,
           locations,
           orchestrated,
-          config: { current, sibling, targetConfigPath, targetIsLocal },
+          config: { current, other, targetConfigPath, targetIsLocal },
           capture,
           transaction,
           sink: cascadeFailure,
@@ -2178,7 +2178,7 @@ async function installPluginWithTransaction(
         // nothing else.
         const declaredEnabled = resolveInstallDeclaredEnabled({
           current,
-          sibling,
+          other,
           targetIsLocal,
           key: rootKey,
         });
@@ -2268,7 +2268,7 @@ async function installPluginWithTransaction(
         if (opts.notifications?.mode !== "orchestrated") {
           await writeAdoptingConfigEntries({
             current,
-            sibling,
+            other,
             state,
             marketplace,
             plugin,

@@ -593,17 +593,17 @@ function undeclaredMarketplaceSource(
 function targetLayerPaths(
   locations: ScopedLocations,
   local: boolean | undefined,
-): { readonly targetConfigPath: string; readonly siblingConfigPath: string } {
+): { readonly targetConfigPath: string; readonly otherConfigPath: string } {
   if (local === true) {
     return {
       targetConfigPath: locations.localConfigJsonPath,
-      siblingConfigPath: locations.baseConfigJsonPath,
+      otherConfigPath: locations.baseConfigJsonPath,
     };
   }
 
   return {
     targetConfigPath: locations.baseConfigJsonPath,
-    siblingConfigPath: locations.localConfigJsonPath,
+    otherConfigPath: locations.localConfigJsonPath,
   };
 }
 
@@ -622,13 +622,13 @@ export type TargetLayers =
       /** The target layer's parse; an absent file yields the empty shape. */
       readonly current: ScopeConfig;
       /** The other layer's parse; an absent file yields the empty shape. */
-      readonly sibling: ScopeConfig;
+      readonly other: ScopeConfig;
     };
 
 /**
  * LAYER-04 / D-MF-03: load both layers of a scope and mark the one that
  * `--local` targets, the base layer without the flag, whatever layer already
- * declares the plugin. The caller reads the other layer from `sibling` to
+ * declares the plugin. The caller reads the other layer from `other` to
  * refuse a plugin only that layer declares.
  *
  * CFG-03: an invalid target layer returns `unreadable` naming it, and then an
@@ -652,17 +652,17 @@ export async function loadTargetLayers(opts: {
   readonly locations: ScopedLocations;
   readonly local: boolean | undefined;
 }): Promise<TargetLayers> {
-  const { targetConfigPath, siblingConfigPath } = targetLayerPaths(opts.locations, opts.local);
-  const [targetCfg, siblingCfg] = await Promise.all([
+  const { targetConfigPath, otherConfigPath } = targetLayerPaths(opts.locations, opts.local);
+  const [targetCfg, otherCfg] = await Promise.all([
     loadConfig(targetConfigPath),
-    loadConfig(siblingConfigPath),
+    loadConfig(otherConfigPath),
   ]);
   if (targetCfg.status === "invalid") {
     return { kind: "unreadable", filePath: targetCfg.filePath };
   }
 
-  if (siblingCfg.status === "invalid") {
-    return { kind: "unreadable", filePath: siblingCfg.filePath };
+  if (otherCfg.status === "invalid") {
+    return { kind: "unreadable", filePath: otherCfg.filePath };
   }
 
   return {
@@ -670,7 +670,7 @@ export async function loadTargetLayers(opts: {
     targetConfigPath,
     targetIsLocal: opts.local === true,
     current: configOrEmpty(targetCfg),
-    sibling: configOrEmpty(siblingCfg),
+    other: configOrEmpty(otherCfg),
   };
 }
 
@@ -691,16 +691,13 @@ export function configOrEmpty(result: ConfigLoadResult): ScopeConfig {
  * refused.
  */
 export function localOnlyMarketplaceRefusal(
-  selection: Pick<
-    Extract<TargetLayers, { kind: "loaded" }>,
-    "targetIsLocal" | "current" | "sibling"
-  >,
+  selection: Pick<Extract<TargetLayers, { kind: "loaded" }>, "targetIsLocal" | "current" | "other">,
   marketplace: string,
 ): MarketplaceInLocalLayerOnlyError | undefined {
   if (
     selection.targetIsLocal ||
     ownValue(selection.current.marketplaces, marketplace) !== undefined ||
-    ownValue(selection.sibling.marketplaces, marketplace) === undefined
+    ownValue(selection.other.marketplaces, marketplace) === undefined
   ) {
     return undefined;
   }
@@ -717,16 +714,13 @@ export function localOnlyMarketplaceRefusal(
  * because the install that adds it records its source.
  */
 export function undeclarableMarketplaceRefusal(
-  selection: Pick<
-    Extract<TargetLayers, { kind: "loaded" }>,
-    "targetIsLocal" | "current" | "sibling"
-  >,
+  selection: Pick<Extract<TargetLayers, { kind: "loaded" }>, "targetIsLocal" | "current" | "other">,
   state: ExtensionState,
   marketplace: string,
 ): MarketplaceSourceUndeclarableError | undefined {
   if (
     ownValue(state.marketplaces, marketplace) === undefined ||
-    undeclaredMarketplaceSource([selection.current], state, marketplace, selection.sibling).kind !==
+    undeclaredMarketplaceSource([selection.current], state, marketplace, selection.other).kind !==
       "unknown"
   ) {
     return undefined;
@@ -823,7 +817,7 @@ export async function namedPluginLayerRefusal(opts: {
 
   const verdict = pluginLayerVerdict({
     target: selection.current,
-    other: selection.sibling,
+    other: selection.other,
     targetIsLocal: selection.targetIsLocal,
     marketplace: opts.marketplace,
     plugin: opts.plugin,
@@ -902,7 +896,7 @@ async function localLayerCoverage(scope: Scope, cwd: string): Promise<readonly s
       const dependencyKey = `${dependency.name}@${dependency.marketplace}`;
       if (
         !covered.has(dependencyKey) &&
-        ownValue(layers.sibling.plugins, dependencyKey) === undefined
+        ownValue(layers.other.plugins, dependencyKey) === undefined
       ) {
         covered.add(dependencyKey);
         pending.push(dependencyKey);
@@ -959,7 +953,7 @@ function recordsByKey(state: ExtensionState): ReadonlyMap<string, InstalledPlugi
  */
 export async function writeAdoptingConfigEntries(opts: {
   readonly current: ScopeConfig;
-  readonly sibling: ScopeConfig;
+  readonly other: ScopeConfig;
   readonly state: ExtensionState;
   readonly marketplace: string;
   readonly plugin: string;
@@ -969,12 +963,7 @@ export async function writeAdoptingConfigEntries(opts: {
   readonly pluginPatch: Partial<PluginConfigEntry>;
   readonly addedMarketplaces?: readonly string[];
 }): Promise<void> {
-  const own = undeclaredMarketplaceSource(
-    [opts.current],
-    opts.state,
-    opts.marketplace,
-    opts.sibling,
-  );
+  const own = undeclaredMarketplaceSource([opts.current], opts.state, opts.marketplace, opts.other);
   if (own.kind === "unknown") {
     throw new MarketplaceSourceUndeclarableError(
       opts.marketplace,
@@ -984,7 +973,7 @@ export async function writeAdoptingConfigEntries(opts: {
 
   const added = (opts.addedMarketplaces ?? []).flatMap((marketplace) => {
     const declaration = undeclaredMarketplaceSource(
-      [opts.current, opts.sibling],
+      [opts.current, opts.other],
       opts.state,
       marketplace,
     );

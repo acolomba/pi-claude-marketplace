@@ -1891,7 +1891,7 @@ test("OUT-04 / WARN-01 / FSTAT-07: the install-disabled row names the degradatio
 // `seedLocal` puts the declaration in `claude-plugins.local.json`. LAYER-09
 // reads `enabled` field by field, local first, whatever the write target is, so
 // the gate has to read both layers. Every install here is flagless, so it
-// writes the shared layer (LAYER-04). `expectSiblingEntryAfter` pins what the
+// writes the shared layer (LAYER-04). `expectOtherEntryAfter` pins what the
 // shared layer holds afterwards in the local-seeded rows.
 // ───────────────────────────────────────────────────────────────────────────
 
@@ -1907,13 +1907,13 @@ interface DfenPrecedenceCase {
   /** The whole entry the SEEDED file holds after the install. */
   readonly expectEntryAfter: Record<string, unknown>;
   /** The whole entry the OTHER physical file holds after the install, when asserted. */
-  readonly expectSiblingEntryAfter?: Record<string, unknown>;
+  readonly expectOtherEntryAfter?: Record<string, unknown>;
   /**
    * Seed this entry into the file `seedLocal` does NOT name, so the fixture
    * declares the key in BOTH physical files -- the shape that separates a
    * write target chosen by file identity from one chosen by the caller's flag.
    */
-  readonly alsoSeedSiblingEntry?: Record<string, unknown>;
+  readonly alsoSeedOtherEntry?: Record<string, unknown>;
   /**
    * D-103-03: run ONE reconcile pass after the install and assert it drives the
    * record to disabled and drops the artifacts, leaving `expectEntryAfter`
@@ -2019,7 +2019,7 @@ const DFEN_PRECEDENCE_CASES: readonly DfenPrecedenceCase[] = [
     // LAYER-04 / LAYER-05: a flagless install writes the shared layer, so it
     // declares the plugin there with an empty patch and leaves the local
     // entry as seeded.
-    expectSiblingEntryAfter: {},
+    expectOtherEntryAfter: {},
   },
   {
     // Both layers declare the key: shared bare `{}`, local `enabled: true`. The
@@ -2031,12 +2031,12 @@ const DFEN_PRECEDENCE_CASES: readonly DfenPrecedenceCase[] = [
     tmpPrefix: "install-dfen05-both-files-",
     seedLocal: true,
     seededEntry: { enabled: true },
-    alsoSeedSiblingEntry: {},
+    alsoSeedOtherEntry: {},
     manifestDefaultEnabled: false,
     expectRecordEnabled: true,
     expectArtifacts: true,
     expectEntryAfter: { enabled: true },
-    expectSiblingEntryAfter: {},
+    expectOtherEntryAfter: {},
   },
 ];
 
@@ -2061,7 +2061,7 @@ for (const precedence of DFEN_PRECEDENCE_CASES) {
           precedence.seedLocal === true
             ? locations.localConfigJsonPath
             : locations.baseConfigJsonPath;
-        const siblingPath =
+        const otherPath =
           precedence.seedLocal === true
             ? locations.baseConfigJsonPath
             : locations.localConfigJsonPath;
@@ -2072,10 +2072,10 @@ for (const precedence of DFEN_PRECEDENCE_CASES) {
           { schemaVersion: 1, plugins: { "hello@mp": { ...precedence.seededEntry } } },
           locations.scopeRoot,
         );
-        if (precedence.alsoSeedSiblingEntry !== undefined) {
+        if (precedence.alsoSeedOtherEntry !== undefined) {
           await saveConfig(
-            siblingPath,
-            { schemaVersion: 1, plugins: { "hello@mp": { ...precedence.alsoSeedSiblingEntry } } },
+            otherPath,
+            { schemaVersion: 1, plugins: { "hello@mp": { ...precedence.alsoSeedOtherEntry } } },
             locations.scopeRoot,
           );
         }
@@ -2114,13 +2114,13 @@ for (const precedence of DFEN_PRECEDENCE_CASES) {
           assert.deepEqual(cfg.config.plugins?.["hello@mp"], precedence.expectEntryAfter);
         }
 
-        if (precedence.expectSiblingEntryAfter !== undefined) {
-          const siblingCfg = await loadConfig(siblingPath);
-          assert.equal(siblingCfg.status, "valid");
-          if (siblingCfg.status === "valid") {
+        if (precedence.expectOtherEntryAfter !== undefined) {
+          const otherCfg = await loadConfig(otherPath);
+          assert.equal(otherCfg.status, "valid");
+          if (otherCfg.status === "valid") {
             assert.deepEqual(
-              siblingCfg.config.plugins?.["hello@mp"],
-              precedence.expectSiblingEntryAfter,
+              otherCfg.config.plugins?.["hello@mp"],
+              precedence.expectOtherEntryAfter,
             );
           }
         }
