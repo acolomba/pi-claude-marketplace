@@ -1,0 +1,35 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-10-18T11:06:20.540Z",
+  "phase": "03.4",
+  "phase_name": "Scope and Layer Terminology",
+  "phase_dir": ".planning/phases/03.4-scope-and-layer-terminology",
+  "plan": 10,
+  "task": 2,
+  "total_tasks": 2,
+  "status": "paused",
+  "completed_tasks": [
+    {"id": 1, "name": "Phase 3.4 plans 01-10 executed", "status": "done", "commit": "dbcdd8f5"},
+    {"id": 2, "name": "Code review and 12 fixes (REVIEW-FIX)", "status": "done", "commit": "7edb60a1"},
+    {"id": 3, "name": "Verification (human_needed), security (22/22), validation (0 gaps)", "status": "done", "commit": "5921c09a"}
+  ],
+  "remaining_tasks": [
+    {"id": 4, "name": "User decision on browse scope wording (IN-08), apply if changed", "status": "not_started"},
+    {"id": 5, "name": "Mark 03.4-VERIFICATION.md passed with sign-off, mark TERM-01 complete, phase.complete 03.4, commit", "status": "not_started"},
+    {"id": 6, "name": "Phases 4-10 (discuss interactive, plan, execute, verify) then milestone audit/complete/cleanup", "status": "not_started"}
+  ],
+  "blockers": [],
+  "async_jobs": [],
+  "human_actions_pending": [
+    {"action": "Choose the browse scope descriptions: (a) local = 'this machine only, keep it out of git' instead of 'gitignored'; (b) keep fixer wording; (c) own wording", "context": "The extension never writes the .gitignore line, so 'gitignored' claims something it does not do (03.4-VERIFICATION.md)", "blocking": true}
+  ],
+  "decisions": [
+    {"decision": "Terms: scope = user/project; layer = base/local (a level, not a file); config = the file (base config claude-plugins.json, local config claude-plugins.local.json); code says base, never shared", "rationale": "User, 2026-10-17; PROJECT.md 'Terminology: Scope and Layer'", "phase": "03.4"},
+    {"decision": "Fail closed on corrupt data; never skip and continue", "rationale": "User: 'we don't paper over corrupt data' (saved to memory)", "phase": "03.3"},
+    {"decision": "Unreadable dependency cause names the record plus a fixed reason chosen by error class/errno; never parser/repo text", "rationale": "User (D-04) + review IN-10", "phase": "03.4"},
+    {"decision": "No CHANGELOG rename list for tokens (old tokens never shipped)", "rationale": "User", "phase": "03.4"}
+  ],
+  "uncommitted_files": [],
+  "next_action": "Ask the user the IN-08 browse wording question (options in human_actions_pending); then close phase 3.4 and start Phase 4 discuss (interactive).",
+  "context_notes": "Running /gsd-autonomous --interactive from phase 3. Phases 3.1, 3.2, 3.3 closed; 3.4 fully executed and verified except one wording sign-off. Execution pattern: sequential gsd-executor per plan on the main tree, forced dispatch via `query dispatch-isolation --raw --phase <N> --plan <id> --force-isolation none`, root-pin guard script in the session scratchpad (regenerate if missing). LSP diagnostics on .ts are stale; trust tsc."
+}
