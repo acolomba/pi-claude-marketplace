@@ -1,6 +1,6 @@
 ---
 phase: 05-marketplace-info
-plan: 05-01
+plan: "01"
 subsystem: marketplace
 tags: [typescript, cucumber, notifications, marketplace-info]
 
