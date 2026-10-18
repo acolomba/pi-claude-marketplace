@@ -29,7 +29,7 @@ created: "2026-10-18"
 
 ## Sampling Rate
 
-- **After every task commit:** Run the focused Cucumber command, `npm run check:features`, and any directly touched Node test.
+- **After each task, before committing:** Run its exact automated command. Feature tasks run the focused Cucumber command and `npm run check:features`; integration tasks run the existing integration file; the decision-only task runs its row assertion.
 - **After every plan wave:** Run `npm run check` on the combined tree.
 - **Before `$gsd-verify-work`:** Full suite must be green.
 - **Max feedback latency:** 30 seconds for focused behavioral feedback.
@@ -40,20 +40,28 @@ created: "2026-10-18"
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| TBD | TBD | TBD | RM-01–RM-08 | T-04-01 | Removal affects only the selected scope and layer; refusals do not mutate state. | Cucumber | `npm run test:cucumber -- features/marketplace/remove.feature features/marketplace/list.feature` | ✅ | ⬜ pending |
-| TBD | TBD | TBD | LS-01–LS-04 | Listing is complete, ordered, scoped, and read-only. | Cucumber | `npm run test:cucumber -- features/marketplace/remove.feature features/marketplace/list.feature` | ✅ | ⬜ pending |
-| TBD | TBD | TBD | D-04–D-06, D-08 | Partial cascades retain failures, persist successes, preserve exact output ordering, and request reload only after mutation. | integration | `node --test tests/integration/marketplace-layer-remove.test.ts` | ✅ | ⬜ pending |
-| TBD | TBD | TBD | all | T-04-02 | Fixtures remain contained and remote source rows remain excluded until local stand-ins exist. | static + full | `npm run check:features && npm run check` | ✅ | ⬜ pending |
+| 04-01-01 | 01 | 1 | RM-08; D-01–D-03 | T-04-01 | D-MF-05 records the approved selected-scope boundary before pinning it. | document assertion | Exact `node --input-type=module -e` row assertion in 04-01 task 1 | ✅ | ⬜ pending |
+| 04-01-02 | 01 | 1 | RM-01, RM-07 | T-04-01, T-04-02 | Empty removal preserves the unrelated declaration; remote Examples stay excluded. | Cucumber + static | `npm run test:cucumber -- features/marketplace/remove.feature features/marketplace/list.feature`; `npm run check:features` | ✅ | ⬜ pending |
+| 04-01-03 | 01 | 1 | RM-05–RM-08; D-01–D-03 | T-04-01 | Scope precedence and complete misses never alter the other scope. | Cucumber + static | `npm run test:cucumber -- features/marketplace/remove.feature features/marketplace/list.feature`; `npm run check:features` | ✅ | ⬜ pending |
+| 04-02-01 | 02 | 2 | RM-02, RM-07; D-08 | T-04-03 | Full cascade removes only its target plugins and preserves the control. | Cucumber + static | `npm run test:cucumber -- features/marketplace/remove.feature features/marketplace/list.feature`; `npm run check:features` | ✅ | ⬜ pending |
+| 04-02-02 | 02 | 2 | RM-03, RM-04; D-04 | T-04-05 | Clean removal survives a new session; partial failure is not claimed to do so. | Cucumber + static | `npm run test:cucumber -- features/marketplace/remove.feature features/marketplace/list.feature`; `npm run check:features` | ✅ | ⬜ pending |
+| 04-02-03 | 02 | 2 | RM-02; D-05, D-08 | T-04-04 | All preflight blockers are reported before any mutation or reload. | Cucumber + static | `npm run test:cucumber -- features/marketplace/remove.feature features/marketplace/list.feature`; `npm run check:features` | ✅ | ⬜ pending |
+| 04-03-01 | 03 | 1 | LS-01, LS-02; D-07 | T-04-06, T-04-07 | Complete read-only inventory keeps scope identities, insertion order, and effective details. | Cucumber + static | `npm run test:cucumber -- features/marketplace/remove.feature features/marketplace/list.feature`; `npm run check:features` | ✅ | ⬜ pending |
+| 04-03-02 | 03 | 1 | LS-03, LS-04; D-07 | T-04-06, T-04-07 | Scope filters and ls retain complete ordered rows without leaking the other scope. | Cucumber + static | `npm run test:cucumber -- features/marketplace/remove.feature features/marketplace/list.feature`; `npm run check:features` | ✅ | ⬜ pending |
+| 04-04-01 | 04 | 1 | RM-02; D-04, D-06, D-08 | T-04-08, T-04-09, T-04-10 | Mixed partial removal persists successes, retains failures and desired configs, and emits grouped schema-valid JSON. | integration | `node --test tests/integration/marketplace-layer-remove.test.ts` | ✅ | ⬜ pending |
+| 04-04-02 | 04 | 1 | RM-02; D-04, D-06, D-08 | T-04-08, T-04-09, T-04-10 | Failure-only removal leaves the entire footprint unchanged and needs no reload. | integration | `node --test tests/integration/marketplace-layer-remove.test.ts` | ✅ | ⬜ pending |
+| wave-1-gate | 01, 03, 04 | 1 | all wave-1 requirements | T-04-01, T-04-02, T-04-06–T-04-10, T-04-SC | Combined tree respects all wave-1 boundaries and existing regressions. | full gate | `npm run check` | ✅ | ⬜ pending |
+| wave-2-and-phase-gate | 01–04 | 2 | RM-01–RM-08, LS-01–LS-04 | T-04-01–T-04-10, T-04-SC | Combined tree preserves the full removal/list contract and the inherited suite. | full gate | `npm run check` | ✅ | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
-The planner replaces the `TBD` identifiers with final plan task IDs and the exact integration command if it creates a dedicated test file.
+Each PLAN places a fails_when clause immediately after every automated command. Non-zero exit fails every command; test commands also fail on a zero-test or zero-scenario summary. Cucumber active steps must not be pending, skipped, undefined, or ambiguous. Excluded URL/GitHub Examples remain subject to check:features. A pre-scenario Pi exit is an environment failure and requires the same command in an authorized execution environment, not weakened assertions. Record counts, Node version, exit status, and tree identity. The wave-2 result may also satisfy the phase gate only when its build inputs are unchanged, under the local-verification skill.
 
 ---
 
 ## Wave 0 Requirements
 
-Existing infrastructure covers all phase requirements. The framework, source-kind parameter, full-result projection, timestamp token, and session assertions already exist. If a dedicated integration test needs notification capture, keep that helper local to the test file and do not add a production failpoint.
+Existing infrastructure covers all phase requirements. The framework, source-kind parameter, full-result projection, timestamp token, and session assertions already exist. Partial-result integration coverage uses createMachineNotificationBoundary from tests/edge/notification-boundary.ts and its existing schema-validating capture. No new capture helper, production failpoint, package, or Wave 0 scaffold is needed.
 
 ---
 
@@ -65,8 +73,8 @@ All phase behaviors have automated verification.
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verification or Wave 0 dependencies.
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verification.
+- [x] All tasks have `<automated>` verification or Wave 0 dependencies.
+- [x] Sampling continuity: no 3 consecutive tasks without automated verification.
 - [x] Wave 0 covers all MISSING references.
 - [x] No watch-mode flags.
 - [x] Focused feedback latency is under 30 seconds.

@@ -268,12 +268,12 @@ Fixture paths come from the writer: `path.join(root, ".claude-plugin", "marketpl
 
 These are implementation recommendations, not new product decisions. No external package, compliance requirement, or new runtime policy depends on an assumption. [VERIFIED: phase scope in 04-CONTEXT.md:7-9,33-37]
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-- No product decision blocks planning: project-first selection and partial continuation are locked. Confirm the unused stable decision ID when editing the project decision table.
-- Registry currency remains unobserved because DNS failed. The phase needs no installation; keep the locked stack.
-- A portable real-Pi partial-failure fixture remains unproven; integration placement is the current recommendation under A1.
-- The research did not run a complete `npm run check`; execution must run the combined-tree gates. The focused baseline is not a full-tree verdict.
+- **RESOLVED — stable decision ID:** Plan 04-01 task 1 records the approved project-first removal divergence as D-MF-05 in `.planning/PROJECT.md` before behavioral pinning. Project-first selection and partial continuation remain locked.
+- **RESOLVED — registry currency:** Registry currency is irrelevant to this phase because no dependency is installed or upgraded. Keep the installed, lock-resolved stack; the failed DNS lookup does not require a planning decision.
+- **RESOLVED — partial-failure placement:** Plan 04-04 uses the existing integration cascade seam and schema-validating JSON notification boundary. A portable real-Pi partial-failure fixture is not required, and no production failpoint or new capture helper is added.
+- **RESOLVED — full verification:** `npm run check` is an execution gate on the combined tree after each wave and at phase completion, as the plans and 04-VALIDATION.md require. Research did not run that gate; its focused baseline is not a full-tree verdict.
 
 Sources: [VERIFIED: 04-CONTEXT.md:18-37; .planning/PROJECT.md:1253-1256; registry and verification commands, 2026-10-18; .agents/skills/local-verification/rules/gates.md:5-9]
 

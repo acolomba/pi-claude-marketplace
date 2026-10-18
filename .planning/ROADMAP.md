@@ -360,7 +360,19 @@ Plans:
 3. A name the requested scope lacks fails as `marketplace not added`, naming the scope only when the other scope holds the name; a name neither scope holds, without `--scope`, fails with no scope; and a name both scopes hold is removed from the project scope only when `--scope` is absent.
 4. `list` and `ls` show nothing when nothing is added, show every marketplace of both scopes project first with its autoupdate state and last-updated time, and narrow to one scope with `--scope`.
 
-**Plans:** TBD
+**Plans:** 4 plans
+
+Plans:
+
+**Wave 1**
+
+- [ ] 04-01-PLAN.md — Record the approved removal divergence; cover clean removal, rm, scope precedence, and complete missing-target results
+- [ ] 04-03-PLAN.md — Cover complete list/ls inventories, scope filters, insertion order, and effective autoupdate details
+- [ ] 04-04-PLAN.md — Pin partial and failure-only cascade state, result grouping, and reload behavior through the existing JSON boundary
+
+**Wave 2** *(blocked on 04-01 completion)*
+
+- [ ] 04-02-PLAN.md — Cover full cascades, clean new-session persistence, and all-blocker preflight refusal
 
 ### Phase 5: Marketplace Info
 
@@ -462,7 +474,7 @@ Plans:
 | 3.2. Marketplace Layer Partition | 9/9 | Complete    | 2026-10-17 |
 | 3.3. Plugin Layer Partition | 10/10 | Complete    | 2026-10-17 |
 | 3.4. Scope and Layer Terminology | 10/10 | Complete    | 2026-10-18 |
-| 4. Marketplace Remove and List | 0/TBD | Not started | - |
+| 4. Marketplace Remove and List | 0/4 | Planned | - |
 | 5. Marketplace Info | 0/TBD | Not started | - |
 | 6. Marketplace Update and C-10 Fix | 0/TBD | Not started | - |
 | 7. Marketplace Autoupdate | 0/TBD | Not started | - |
