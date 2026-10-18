@@ -4,6 +4,204 @@ Feature: Marketplace remove
   uninstalls the plugins that config declares from it. The scenarios run the
   real extension in a headless Pi and use local marketplaces in place of published ones.
 
+  Scenario Outline: Removing an empty marketplace needs no reload
+    Given the marketplace "tools" is published as a <source kind> source
+    Given the marketplace "extras" is published as a dir source
+    Given the user has run "/claude:plugin marketplace add <source> --scope <scope>"
+    Given the marketplace "extras" is added to the <scope> scope
+    When the user runs "/claude:plugin marketplace remove tools --scope <scope>"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these marketplaces:
+      | name  | scope   | status  |
+      | tools | <scope> | removed |
+    Then the "claude-plugins.json" file of the <scope> scope declares these marketplaces:
+      | name   | source                     |
+      | extras | {home}/marketplaces/extras |
+
+    Examples:
+      | scope   | source kind | source                                                       |
+      | project | dir         | {home}/marketplaces/tools                                    |
+      | project | file        | {home}/marketplaces/tools/.claude-plugin/marketplace.json    |
+      | user    | dir         | {home}/marketplaces/tools                                    |
+      | user    | file        | {home}/marketplaces/tools/.claude-plugin/marketplace.json    |
+
+    @url
+    Examples:
+      | scope   | source kind | source                              |
+      | project | url         | https://{git host}/acme/tools.git   |
+      | user    | url         | https://{git host}/acme/tools.git   |
+
+    @github
+    Examples:
+      | scope   | source kind | source     |
+      | project | github      | acme/tools |
+      | user    | github      | acme/tools |
+
+  Scenario: The rm alias removes a marketplace without a reload
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "extras" is published as a dir source
+    Given the marketplace "tools" is added to the project scope
+    Given the marketplace "extras" is added to the project scope
+    When the user runs "/claude:plugin marketplace rm tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these marketplaces:
+      | name  | scope   | status  |
+      | tools | project | removed |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name   | source                     |
+      | extras | {home}/marketplaces/extras |
+
+  Scenario: An unscoped remove selects the project copy
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "extras" is published as a dir source
+    Given the marketplace "tools" is added to the user scope
+    Given the marketplace "tools" is added to the project scope
+    Given the marketplace "extras" is added to the project scope
+    When the user runs "/claude:plugin marketplace remove tools"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these marketplaces:
+      | name  | scope   | status  |
+      | tools | project | removed |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name   | source                     |
+      | extras | {home}/marketplaces/extras |
+    Then the "claude-plugins.json" file of the user scope declares these marketplaces:
+      | name  | source                    |
+      | tools | {home}/marketplaces/tools |
+
+  Scenario: An unscoped remove selects the only user copy
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "extras" is published as a dir source
+    Given the marketplace "tools" is added to the user scope
+    Given the marketplace "extras" is added to the user scope
+    When the user runs "/claude:plugin marketplace remove tools"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these marketplaces:
+      | name  | scope | status  |
+      | tools | user  | removed |
+    Then the "claude-plugins.json" file of the user scope declares these marketplaces:
+      | name   | source                     |
+      | extras | {home}/marketplaces/extras |
+    Then the "claude-plugins.json" file of the project scope does not exist
+
+  Scenario: An unscoped remove refuses the project local layer before considering user scope
+    Given the marketplace "tools" is published as a dir source
+    Given the user has run "/claude:plugin marketplace add {home}/marketplaces/tools --scope project --local"
+    Given the marketplace "tools" is added to the user scope
+    When the user runs "/claude:plugin marketplace remove tools"
+    Then the result has these fields:
+      | kind         | cascade                      |
+      | severity     | error                        |
+      | needs reload | false                        |
+      | summary      | Some operations have failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id          | name  | status | reasons                         | scope   | cause chain                                                                                                                 | cause truncated | leaks | rollback partial |
+      | tools            | project           | failed             | tools@tools | tools | failed | marketplace in local layer only | project | The marketplace tools is declared only in the local config (claude-plugins.local.json). Run the command again with --local. | false           |       |                  |
+    Then the "claude-plugins.local.json" file of the project scope declares these marketplaces:
+      | name  | source                    |
+      | tools | {home}/marketplaces/tools |
+    Then the "claude-plugins.json" file of the user scope declares these marketplaces:
+      | name  | source                    |
+      | tools | {home}/marketplaces/tools |
+    Then the "claude-plugins.json" file of the project scope does not exist
+
+  Scenario: Removing an unknown marketplace from the project scope reports it not added
+    When the user runs "/claude:plugin marketplace remove tools --scope project"
+    Then the result has these fields:
+      | kind         | marketplace-not-added               |
+      | severity     | error                               |
+      | needs reload | false                               |
+      | summary      | A marketplace operation has failed. |
+      | name         | tools                               |
+      | scope        | project                             |
+      | reasons      | marketplace not added               |
+
+  Scenario: Removing an unknown marketplace from the user scope reports it not added
+    When the user runs "/claude:plugin marketplace remove tools --scope user"
+    Then the result has these fields:
+      | kind         | marketplace-not-added               |
+      | severity     | error                               |
+      | needs reload | false                               |
+      | summary      | A marketplace operation has failed. |
+      | name         | tools                               |
+      | scope        | user                                |
+      | reasons      | marketplace not added               |
+
+  Scenario: Removing a user-only marketplace from project reports the missed scope
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" is added to the user scope
+    When the user runs "/claude:plugin marketplace remove tools --scope project"
+    Then the result has these fields:
+      | kind         | marketplace-not-added                  |
+      | severity     | error                                  |
+      | needs reload | false                                  |
+      | summary      | A marketplace operation has failed.    |
+      | name         | tools                                  |
+      | scope        | project                                |
+      | reasons      | marketplace not added to project scope |
+    Then the "claude-plugins.json" file of the user scope declares these marketplaces:
+      | name  | source                    |
+      | tools | {home}/marketplaces/tools |
+    Then the "claude-plugins.json" file of the project scope does not exist
+
+  Scenario: Removing a project-only marketplace from user reports the missed scope
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" is added to the project scope
+    When the user runs "/claude:plugin marketplace remove tools --scope user"
+    Then the result has these fields:
+      | kind         | marketplace-not-added               |
+      | severity     | error                               |
+      | needs reload | false                               |
+      | summary      | A marketplace operation has failed. |
+      | name         | tools                               |
+      | scope        | user                                |
+      | reasons      | marketplace not added to user scope |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name  | source                    |
+      | tools | {home}/marketplaces/tools |
+    Then the "claude-plugins.json" file of the user scope does not exist
+
+  Scenario: An unscoped remove of an unknown marketplace has no scope
+    When the user runs "/claude:plugin marketplace remove tools"
+    Then the result has these fields:
+      | kind         | marketplace-not-added               |
+      | severity     | error                               |
+      | needs reload | false                               |
+      | summary      | A marketplace operation has failed. |
+      | name         | tools                               |
+      | reasons      | marketplace not added               |
+
+  Scenario: Repeating rm after removal reports the marketplace not added
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "extras" is published as a dir source
+    Given the marketplace "tools" is added to the project scope
+    Given the marketplace "extras" is added to the project scope
+    Given the user has run "/claude:plugin marketplace rm tools --scope project"
+    When the user runs "/claude:plugin marketplace rm tools --scope project"
+    Then the result has these fields:
+      | kind         | marketplace-not-added               |
+      | severity     | error                               |
+      | needs reload | false                               |
+      | summary      | A marketplace operation has failed. |
+      | name         | tools                               |
+      | scope        | project                             |
+      | reasons      | marketplace not added               |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name   | source                     |
+      | extras | {home}/marketplaces/extras |
+
   Scenario: Removing a marketplace with --local clears only its local declaration
     Given the marketplace "base" is published as a dir source
     Given the marketplace "tools" is published as a dir source
