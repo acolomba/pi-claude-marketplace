@@ -2664,7 +2664,7 @@ description: Local development marketplace; experimental plugins.
 
 ### Multi-scope fan-out -- both scopes hold the marketplace name
 
-Triggered by `marketplace info <name>` with NO `--scope` filter when the requested marketplace name is present in BOTH the project scope AND the user scope (Phase 43 / INFO-03). The orchestrator emits a `MarketplaceInfoCascadeMessage` whose `blocks` array carries the per-scope `MarketplaceInfoMessage` payloads in project-first order (matches the existing list-surface row-order policy via MSG-GR-3 / Phase 18's `compareByNameThenScope` project-before-user tie-break). The renderer joins per-block bodies with `\n\n` (one blank line). Each block is byte-identical to what the same payload would produce as a standalone `marketplace-info` render -- the wrapper does not add any per-block decoration. Severity `info`.
+Triggered by `marketplace info <name>` with NO `--scope` filter when the requested marketplace name is present in BOTH the project scope AND the user scope (Phase 43 / INFO-03). The orchestrator emits a `MarketplaceInfoCascadeMessage` whose `blocks` array carries the per-scope `MarketplaceInfoMessage` payloads in project-first order (matches the existing list-surface row-order policy via MSG-GR-3 / Phase 18's `compareByNameThenScope` project-before-user tie-break). The renderer joins per-block bodies with `\n\n` (one blank line). Each block is byte-identical to what the same payload would produce as a standalone `marketplace-info` render -- the wrapper does not add any per-block decoration. If one scope's manifest is invalid, the command instead emits the existing standalone `plugin-info` failed row for that scope and the healthy `marketplace-info` result for the other scope, still in project-first order. Severity `info` when both blocks succeed; mixed results retain each standalone result's severity.
 
 <!-- catalog-state: both-scopes-fan-out -->
 
@@ -2702,16 +2702,16 @@ A marketplace operation has failed.
 ⊘ ghost-mp (failed) {marketplace not added}
 ```
 
-### Failure -- `--scope` mismatch (`{marketplace not added}`)
+### Failure -- `--scope` mismatch (`{marketplace not added to <scope> scope}`)
 
-Surfaced when `marketplace info <name> --scope <wrong-scope>` is invoked against a marketplace present only in the OTHER scope (e.g., requesting `--scope user` when `my-mp` lives only in `project`). The standalone `MarketplaceNotAddedMessage` variant (`kind: "marketplace-not-added"`) distinguishes this from a truly-absent marketplace name and uniquely identifies the scope-mismatch surface. The renderer emits a bare row at column 0 (no marketplace header above it -- the marketplace IS the thing that is not added in the requested scope). The `[user]` bracket is present because the user explicitly asked for a specific scope; the `absent-from-both` state above omits the bracket to avoid misleading the user when the marketplace is in NEITHER scope. Two-block form: the `A marketplace operation has failed.` summary on the host `Error:` label line, then the bare detail row as its own block (GRAM-01 / GRAM-02). Severity `error`; no reload-hint (info surfaces are read-only per SNM-33).
+Surfaced when `marketplace info <name> --scope <wrong-scope>` is invoked against a marketplace present only in the OTHER scope (e.g., requesting `--scope user` when `my-mp` lives only in `project`). The standalone `MarketplaceNotAddedMessage` variant (`kind: "marketplace-not-added"`) distinguishes this from a truly-absent marketplace name and uniquely identifies the scope-mismatch surface. The renderer emits a bare row at column 0 (no marketplace header above it -- the marketplace IS the thing that is not added in the requested scope). The `[user]` bracket and `{marketplace not added to user scope}` reason name the requested scope that missed; requesting the missing project scope correspondingly renders `[project]` and `{marketplace not added to project scope}`. The `absent-from-both` state above omits the bracket and keeps the unqualified reason because the marketplace is in NEITHER scope. Two-block form: the `A marketplace operation has failed.` summary on the host `Error:` label line, then the bare detail row as its own block (GRAM-01 / GRAM-02). Severity `error`; no reload-hint (info surfaces are read-only per SNM-33).
 
 <!-- catalog-state: scope-mismatch-not-added -->
 
 ```text
 A marketplace operation has failed.
 
-⊘ my-mp [user] (failed) {marketplace not added}
+⊘ my-mp [user] (failed) {marketplace not added to user scope}
 ```
 
 ______________________________________________________________________

@@ -134,9 +134,7 @@ export const MARKETPLACE_INFO_FIXTURES: FixtureMap = {
       },
     },
 
-    // Byte form preserved byte-identical (`⊘ my-mp [user] (failed) {marketplace not added}`).
-    // The fixture shape is re-keyed to the TYPE-01 variant; the rendered BYTES
-    // are unchanged.
+    // TYPE-01: the requested scope and other-scope signal select the qualified reason.
     "scope-mismatch-not-added": {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",
@@ -144,6 +142,7 @@ export const MARKETPLACE_INFO_FIXTURES: FixtureMap = {
         kind: "marketplace-not-added",
         name: "my-mp",
         scope: "user",
+        presentInOtherScope: true,
       },
     },
 

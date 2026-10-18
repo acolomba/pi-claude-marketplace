@@ -78,6 +78,28 @@ Feature: Marketplace info
       | name         | tools                               |
       | reasons      | marketplace not added               |
 
+  Scenario: Info reports a missing project scope without falling back
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "tools" is added to the user scope
+    When the user runs "/claude:plugin marketplace info tools --scope project"
+    Then the command reports these results:
+      | kind                  | severity | needs reload | summary                             | name  | scope   | reasons                                |
+      | marketplace-not-added | error    | false        | A marketplace operation has failed. | tools | project | marketplace not added to project scope |
+
+  Scenario: Info reports a missing user scope without falling back
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "tools" is added to the project scope
+    When the user runs "/claude:plugin marketplace info tools --scope user"
+    Then the command reports these results:
+      | kind                  | severity | needs reload | summary                             | name  | scope | reasons                             |
+      | marketplace-not-added | error    | false        | A marketplace operation has failed. | tools | user  | marketplace not added to user scope |
+
   Scenario: Info on a marketplace both scopes hold shows one block per scope, project first
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins:
