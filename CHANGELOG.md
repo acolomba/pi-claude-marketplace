@@ -4,32 +4,32 @@
 
 - When `uninstall`, `marketplace remove`, `update --local`, or `reinstall --local` cannot read a plugin's dependencies, the `{unreadable}` cause no longer shows a manifest's parser error.
 
-- You can now declare a plugin in both `claude-plugins.json` and `claude-plugins.local.json`, and the scope installs it once. With a plugin name, `uninstall`, `enable`, `disable`, `update`, and `reinstall` change only the file you target.
+- You can now declare a plugin in both the base config (`claude-plugins.json`) and the local config (`claude-plugins.local.json`), and the scope installs it once. With a plugin name, `uninstall`, `enable`, `disable`, `update`, and `reinstall` change only the layer you target.
 
-  - Named commands fail with `{plugin in local layer only}` or `{plugin in base layer only}` and change nothing when only the other file declares it.
-  - An `install` into one file only adds the declaration when the other file declares the plugin and it is already installed. The row reads `{already installed in base layer}` or `{already installed in local layer}`.
-  - An `uninstall` from one file keeps a plugin installed while the other file declares it, and drops only that file's declaration. The warning `{still installed in base layer}` or `{still installed in local layer}` says how to uninstall it.
-  - A named `uninstall` of a dependency that no file declares fails with `{dependents remain}` while a plugin of the target file needs it. While only plugins of the other file need it, the command skips it with a warning.
+  - Named commands fail with `{plugin in local layer only}` or `{plugin in base layer only}` and change nothing when only the other layer declares it.
+  - An `install` into one layer only adds the declaration when the other layer declares the plugin and it is already installed. The row reads `{already installed in base layer}` or `{already installed in local layer}`.
+  - An `uninstall` from one layer keeps a plugin installed while the other layer declares it, and drops only that layer's declaration. The warning `{still installed in base layer}` or `{still installed in local layer}` says how to uninstall it.
+  - A named `uninstall` of a dependency that no layer declares fails with `{dependents remain}` while a plugin of the target layer needs it. While only plugins of the other layer need it, the command skips it with a warning.
   - A flagless `enable` or `disable` fails with `{disabled in local layer}` or `{enabled in local layer}` when `claude-plugins.local.json` sets the opposite `enabled` value. Run it again with `--local`.
   - `update` and `reinstall` no longer write plugin declarations. Without a plugin name, `--local` limits them to the plugins that `claude-plugins.local.json` declares and the dependencies those plugins need.
   - Without a plugin name, `update --local` and `reinstall --local` fail with `{unreadable}` and change nothing when they cannot read a local plugin's dependencies.
-  - A plugin entry in `claude-plugins.local.json` now takes the fields it leaves out from `claude-plugins.json`. If your local file declares a plugin that `claude-plugins.json` disables, run `/claude:plugin list` to see whether it is enabled.
+  - A plugin entry in the local config now takes the fields it leaves out from the base config. If your local config declares a plugin that your base config disables, run `/claude:plugin list` to see whether it is enabled.
   - `install --local` also declares the plugin's marketplace in `claude-plugins.local.json`.
-  - A reload stops with `{invalid manifest}` when one file declares a plugin and only the other declares its marketplace. Older `--local` runs of `install`, `enable`, `disable`, `update`, and `reinstall` left files this way. The error says how to fix it.
+  - A reload stops with `{invalid manifest}` when one layer declares a plugin and only the other declares its marketplace. Older `--local` runs of `install`, `enable`, `disable`, `update`, and `reinstall` left configs this way. The error says how to fix it.
 
-- You can now declare a marketplace in both `claude-plugins.json` and `claude-plugins.local.json`. With a name, `marketplace remove`, `autoupdate`, and `noautoupdate` change only the file you target and fail when that file does not declare the marketplace.
+- You can now declare a marketplace in both the base config (`claude-plugins.json`) and the local config (`claude-plugins.local.json`). With a name, `marketplace remove`, `autoupdate`, and `noautoupdate` change only the layer you target and fail when that layer does not declare it.
 
-  - Removing a marketplace from one file uninstalls only the plugins that file declares and the dependencies only those plugins needed. The marketplace stays while the other file declares it.
-  - A remove from one file fails and changes nothing when the other file is not valid, or when a plugin that stays needs a plugin it would uninstall (`{dependents remain}`).
-  - Removing a marketplace from the scope clears its plugin keys from both files. It keeps a dependency another plugin still needs, so the marketplace stays listed.
+  - Removing a marketplace from one layer uninstalls only the plugins that layer declares and the dependencies only those plugins needed. The marketplace stays while the other layer declares it.
+  - A remove from one layer fails and changes nothing when the config of the other layer is not valid. It also fails when a plugin that stays needs a plugin the remove takes (`{dependents remain}`).
+  - Removing a marketplace from the scope clears its plugin keys from both configs. It keeps a dependency another plugin still needs, so the marketplace stays listed.
   - `marketplace remove` fails with `{unreadable}` and changes nothing when it cannot read a plugin's dependencies.
-  - Without a name, `autoupdate` and `noautoupdate` set the value in every file that declares each marketplace, or only in `claude-plugins.local.json` with `--local`.
-  - A marketplace entry in `claude-plugins.local.json` now takes the fields it leaves out from `claude-plugins.json`, so a local entry without `autoupdate` follows the shared setting. If your local file also declares a marketplace, run `marketplace list` to see which `autoupdate` setting applies.
-  - A project-scope install from a user-scope marketplace now adds that marketplace, and those of its dependencies, to the project as `marketplace add --scope project` does. The project's `claude-plugins.json` declares them, and each git marketplace gets its own project clone.
+  - Without a name, `autoupdate` and `noautoupdate` set the value in every config that declares each marketplace, or only in the local config with `--local`.
+  - A local marketplace entry now takes the fields it leaves out from the base config, so one without `autoupdate` follows the base config's setting. If your local config declares a marketplace, run `marketplace list` to see which `autoupdate` setting applies.
+  - A project-scope install from a user-scope marketplace now adds that marketplace, and those of its dependencies, to the project as `marketplace add --scope project` does. The project's base config declares them, and each git marketplace gets its own project clone.
 
-- A marketplace you add or a plugin you install with `--local` now stays out of `claude-plugins.json`. If a reload already copied one there, remove that entry and run `/reload`.
+- A marketplace you add or a plugin you install with `--local` now stays out of the base config (`claude-plugins.json`). If a reload already copied one there, remove that entry and run `/reload`.
 
-  - Installing, enabling, or disabling a plugin into `claude-plugins.json` now fails and suggests `--local` when only `claude-plugins.local.json` declares its marketplace.
+  - Installing, enabling, or disabling a plugin into the base config now fails and suggests `--local` when only the local config declares its marketplace.
   - The completion hint for `--local` and the scope choices of `browse` now call `claude-plugins.local.json` the local config and `claude-plugins.json` the base config.
 
 - GitHub sources clone and fetch from another https git host, such as a mirror, when you set `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL`, a setting that Claude Code lacks.

@@ -31,7 +31,7 @@ Esta extensión instala complementos desde los mercados de complementos de Claud
 
 Los complementos que contienen componentes no compatibles pueden instalarse parcialmente. Un complemento instalado parcialmente puede no funcionar según lo previsto.
 
-El comando `/claude:plugin` gestiona los mercados y complementos de Claude, como `/plugin` de Claude Code. Una configuración de estado deseado en los archivos `[~/].pi/agent/claude-plugins[.local].json` hace que las instalaciones de complementos sean automáticas y repetibles. Puedes compartir estos archivos entre máquinas o miembros del equipo.
+El comando `/claude:plugin` gestiona los mercados y complementos de Claude, como `/plugin` de Claude Code. Las configuraciones de estado deseado en `[~/].pi/agent/claude-plugins[.local].json` hacen que las instalaciones de complementos sean automáticas y repetibles. Puedes compartir estas configuraciones entre máquinas o miembros del equipo.
 
 ## Requisitos previos
 
@@ -130,7 +130,7 @@ Los servidores MCP de los complementos reciben los nombres que les da Claude Cod
 
 Puedes instalar mercados y complementos en el ámbito de usuario o en el ámbito del proyecto. El valor predeterminado es el ámbito de usuario.
 
-El ámbito del proyecto hereda el ámbito de usuario. Así, puedes instalar un complemento desde un mercado de ámbito de usuario en el ámbito del proyecto. La instalación agrega ese mercado al ámbito del proyecto, como lo haría `marketplace add --scope project`, y lo declara en el `claude-plugins.json` del proyecto (o en `claude-plugins.local.json` con `--local`). Para un mercado git, el proyecto obtiene su propio clon. El proyecto conserva entonces el mercado cuando lo eliminas del ámbito de usuario.
+El ámbito del proyecto hereda el ámbito de usuario. Así, puedes instalar un complemento desde un mercado de ámbito de usuario en el ámbito del proyecto. La instalación agrega ese mercado al ámbito del proyecto, como lo haría `marketplace add --scope project`, y lo declara en la configuración base del proyecto (`claude-plugins.json`), o en su configuración local (`claude-plugins.local.json`) con `--local`. Para un mercado git, el proyecto obtiene su propio clon. El proyecto conserva entonces el mercado cuando lo eliminas del ámbito de usuario.
 
 También puedes instalar el mismo complemento en ambos ámbitos, el de usuario y el de proyecto. En ese caso, el complemento del ámbito de usuario tiene prioridad.
 
@@ -152,38 +152,38 @@ Instala un complemento parcialmente disponible. Coloca `--partial` primero para 
 
 ## Archivos de configuración
 
-Cada ámbito almacena su configuración declarativa de mercados y complementos en `claude-plugins.json`, bajo la raíz del ámbito.
+Cada ámbito declara sus mercados y complementos en dos capas: la capa base y la capa local. El archivo de una capa es su configuración. La configuración base, `claude-plugins.json`, está bajo la raíz del ámbito.
 
 | Ámbito    | Ruta del archivo                  |
 | --------- | --------------------------------- |
 | `user`    | `~/.pi/agent/claude-plugins.json` |
 | `project` | `<cwd>/.pi/claude-plugins.json`   |
 
-Estos archivos son el registro definitivo de los mercados y complementos instalados. Pi aplica su contenido al cargar la extensión (`/reload`).
+Las configuraciones de un ámbito son el registro definitivo de sus mercados y complementos instalados. Pi aplica su contenido al cargar la extensión (`/reload`).
 
 Que Pi aplique los componentes de un complemento declarado depende de la clave opcional `enabled` de la entrada y del valor predeterminado de instalación que declara el autor del complemento. Para más información, consulta [Activación de complementos](docs/plugin-enablement.md).
 
-### Archivos de configuración local
+### La configuración local
 
-Cada ámbito también puede tener un archivo `claude-plugins.local.json` junto al archivo base. Los dos archivos son las dos capas del ámbito: `claude-plugins.json` es la capa compartida, y `claude-plugins.local.json` es la capa local.
+La configuración local, `claude-plugins.local.json`, está junto a la configuración base.
 
 | Ámbito    | Ruta del archivo                        |
 | --------- | --------------------------------------- |
 | `user`    | `~/.pi/agent/claude-plugins.local.json` |
 | `project` | `<cwd>/.pi/claude-plugins.local.json`   |
 
-El archivo local anula entradas del archivo base. Puedes declarar un mercado o un complemento en ambos archivos. Su entrada local anula solo los campos que define, y toma los demás campos del archivo base. Por ejemplo, una entrada local de mercado sin `autoupdate` usa el valor de `autoupdate` del archivo base, y una entrada local de complemento sin `enabled` usa el valor de `enabled` del archivo base.
+La configuración local anula entradas de la configuración base. Puedes declarar un mercado o un complemento en ambas capas. Su entrada local anula solo los campos que define, y toma los demás campos de la configuración base. Por ejemplo, una entrada local de mercado sin `autoupdate` usa el valor de `autoupdate` de la configuración base, y una entrada local de complemento sin `enabled` usa el valor de `enabled` de la configuración base.
 
-Un comando que escribe la configuración modifica solo `claude-plugins.json`, o solo `claude-plugins.local.json` con `--local`. Hay dos excepciones:
+Un comando que escribe una declaración modifica solo la configuración base, o solo la configuración local con `--local`. Hay dos excepciones:
 
-- Una eliminación que quita el mercado del ámbito también borra sus claves de complementos de ambos archivos.
-- `marketplace autoupdate` y `marketplace noautoupdate` sin un nombre fijan el valor en cada archivo que declara cada mercado. Con `--local`, modifican solo `claude-plugins.local.json`.
+- Una eliminación que quita el mercado del ámbito también borra sus claves de complementos de ambas configuraciones.
+- `marketplace autoupdate` y `marketplace noautoupdate` sin un nombre fijan el valor en cada configuración que declara cada mercado. Con `--local`, modifican solo la configuración local.
 
-`marketplace remove`, `marketplace autoupdate` y `marketplace noautoupdate` con un nombre fallan cuando el archivo de destino no declara el mercado. Una eliminación desde un archivo desinstala solo los complementos que declara ese archivo, y el mercado se mantiene mientras el otro archivo lo declare. La eliminación falla y no cambia nada cuando el otro archivo no es válido, o cuando un complemento que se queda todavía necesita un complemento que desinstalaría. Las lecturas siempre combinan ambos archivos de configuración. `update` de un mercado sigue actualizando las fuentes en caché y el estado de los complementos instalados.
+`marketplace remove`, `marketplace autoupdate` y `marketplace noautoupdate` con un nombre fallan cuando la capa de destino no declara el mercado. Una eliminación desde una capa desinstala solo los complementos que declara esa capa, y el mercado se mantiene mientras la otra capa lo declare. La eliminación falla y no cambia nada cuando la configuración de la otra capa no es válida, o cuando un complemento que se queda todavía necesita un complemento que desinstalaría. Las lecturas siempre combinan ambas capas. `update` de un mercado sigue actualizando las fuentes en caché y el estado de los complementos instalados.
 
-Los comandos de complementos siguen la misma regla. `uninstall`, `enable`, `disable`, `update` y `reinstall` con un nombre de complemento modifican solo el archivo de destino. Fallan y no cambian nada cuando solo el otro archivo declara el complemento. Un complemento que declaran ambos archivos se instala una sola vez. Así, un `install` en un archivo solo añade la declaración cuando el otro archivo declara el complemento instalado, y un `uninstall` desde un archivo solo quita la declaración de ese archivo. `update` y `reinstall` no escriben ninguna declaración. Un `enable` o `disable` sin `--local` también falla cuando `claude-plugins.local.json` fija el valor contrario de `enabled`, porque gana el valor local.
+Los comandos de complementos siguen la misma regla. `uninstall`, `enable`, `disable`, `update` y `reinstall` con un nombre de complemento modifican solo la capa de destino. Fallan y no cambian nada cuando solo la otra capa declara el complemento. Un complemento que declaran ambas capas se instala una sola vez. Así, un `install` en una capa solo añade la declaración cuando la otra capa declara el complemento instalado, y un `uninstall` desde una capa solo quita la declaración de esa capa. `update` y `reinstall` no escriben ninguna declaración. Un `enable` o `disable` sin `--local` también falla cuando la configuración local fija el valor contrario de `enabled`, porque gana el valor local.
 
-Un archivo que declara un complemento también declara el mercado del complemento. `install --local` añade el mercado a `claude-plugins.local.json` por ti. Cuando un archivo declara un complemento y solo el otro archivo declara su mercado, una recarga se detiene para ese ámbito con `{invalid manifest}`. Para reparar el archivo, ejecuta `marketplace add <source> --scope <scope>` para ese ámbito, con `--local` para `claude-plugins.local.json`. El error muestra este comando. También puedes quitar el complemento del archivo.
+Una capa que declara un complemento también declara el mercado del complemento. `install --local` añade el mercado a la configuración local por ti. Cuando una capa declara un complemento y solo la otra capa declara su mercado, una recarga se detiene para ese ámbito con `{invalid manifest}`. Para reparar la capa, ejecuta `marketplace add <source> --scope <scope>` para ese ámbito, con `--local` para la capa local. El error muestra este comando. También puedes quitar el complemento de la capa.
 
 ```text
 /claude:plugin marketplace add upstash/context7 --local
@@ -193,13 +193,13 @@ Un archivo que declara un complemento también declara el mercado del complement
 
 ### Convención de Gitignore
 
-En el ámbito del proyecto, confirma (`commit`) `claude-plugins.json`. Así, tus colaboradores instalan los mismos mercados y complementos. Mantén `claude-plugins.local.json` fuera del control de versiones. Agrega esta línea al `.gitignore` de tu proyecto:
+En el ámbito del proyecto, confirma (`commit`) la configuración base, `claude-plugins.json`. Así, tus colaboradores instalan los mismos mercados y complementos. Mantén la configuración local, `claude-plugins.local.json`, fuera del control de versiones. Agrega esta línea al `.gitignore` de tu proyecto:
 
 ```text
 .pi/claude-plugins.local.json
 ```
 
-Los archivos de ámbito de usuario se encuentran en tu directorio de inicio. Son personales y nunca se comparten.
+Las configuraciones de ámbito de usuario se encuentran en tu directorio de inicio. Son personales y nunca se comparten.
 
 ## Espejo de GitHub
 
@@ -231,7 +231,7 @@ La configuración tiene estos límites:
   printf 'protocol=https\nhost=git.example.com\nusername=<user>\npassword=<token>\n\n' | git credential approve
   ```
 
-- `list`, `info`, `claude-plugins.json` y los resultados de los comandos siguen mostrando URLs `https://github.com/...`. Cuando falla la descarga de un comando, el error nombra la URL que el comando descargó realmente, así que un valor incorrecto es fácil de ver. `/claude:plugin bootstrap` no muestra esta URL, y los errores de `/reload` no siempre la muestran.
+- `list`, `info`, las configuraciones (`claude-plugins.json` y `claude-plugins.local.json`) y los resultados de los comandos siguen mostrando URLs `https://github.com/...`. Cuando falla la descarga de un comando, el error nombra la URL que el comando descargó realmente, así que un valor incorrecto es fácil de ver. `/claude:plugin bootstrap` no muestra esta URL, y los errores de `/reload` no siempre la muestran.
 
 - Un valor modificado se aplica en la siguiente descarga. No hace falta volver a agregar el mercado.
 
@@ -298,7 +298,7 @@ Actualiza un mercado. Si omites el nombre, el comando actualiza todos los mercad
 /claude:plugin marketplace update
 ```
 
-Elimina un mercado de `claude-plugins.json`, o de `claude-plugins.local.json` con `--local`, y desinstala los complementos de ese mercado que el archivo declara. Una dependencia que otro complemento todavía necesita sigue instalada.
+Elimina un mercado de la configuración base (`claude-plugins.json`), o de la configuración local (`claude-plugins.local.json`) con `--local`, y desinstala los complementos de ese mercado que la capa declara. Una dependencia que otro complemento todavía necesita sigue instalada.
 
 ```text
 /claude:plugin marketplace remove context7-marketplace
@@ -356,7 +356,7 @@ Instala en el ámbito del proyecto en lugar del ámbito de usuario.
 /claude:plugin install context7-plugin@context7-marketplace --scope project
 ```
 
-Un complemento puede declarar los otros complementos que necesita. La instalación también los agrega, en el mismo ámbito y en el mismo archivo de configuración. Para más información, consulta [Resolución de dependencias](docs/dependency-resolution.md).
+Un complemento puede declarar los otros complementos que necesita. La instalación también los agrega, en el mismo ámbito. Para más información, consulta [Resolución de dependencias](docs/dependency-resolution.md).
 
 Actualiza un complemento instalado, todos los complementos instalados de un mercado, o todos los complementos instalados.
 
