@@ -28,7 +28,7 @@ import path from "node:path";
 import { type DataTable, Given, Then } from "@cucumber/cucumber";
 
 import { fieldRecord, flatten, isPlainObject, recordTable } from "../lib/field-rows.ts";
-import { readLayerPlugins, writeLayerPlugins } from "../lib/layer-file.ts";
+import { readLayerPlugins, writeLayerPlugins } from "../lib/layer-config.ts";
 
 import type { ScenarioWorld } from "../support/world.ts";
 
@@ -46,13 +46,13 @@ function configFilePath(world: ScenarioWorld, fileName: string, scope: string): 
 }
 
 // The file of each layer word a scenario names.
-const LAYER_FILES: ReadonlyMap<string, string> = new Map([
+const LAYER_CONFIGS: ReadonlyMap<string, string> = new Map([
   ["shared", "claude-plugins.json"],
   ["local", "claude-plugins.local.json"],
 ]);
 
-function layerFilePath(world: ScenarioWorld, scope: string, layer: string): string {
-  const fileName = LAYER_FILES.get(layer);
+function layerConfigPath(world: ScenarioWorld, scope: string, layer: string): string {
+  const fileName = LAYER_CONFIGS.get(layer);
   if (fileName === undefined) {
     throw new Error(`unknown layer ${layer}; expected shared or local`);
   }
@@ -118,7 +118,7 @@ async function compareDeclarations(
 Given(
   "a plugin configuration file in scope {word} and layer {word}, with these plugins:",
   async function (this: ScenarioWorld, scope: string, layer: string, table: DataTable) {
-    const file = layerFilePath(this, scope, layer);
+    const file = layerConfigPath(this, scope, layer);
     const plugins = readLayerPlugins(table);
     await writeLayerPlugins(file, plugins);
     const { config, content } = await readConfigObject(file);

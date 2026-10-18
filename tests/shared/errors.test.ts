@@ -26,7 +26,7 @@ import {
   InstallMarketplaceAddError,
   InvalidMarketplaceManifestError,
   isErrnoException,
-  LayerFileUnreadableError,
+  LayerConfigUnreadableError,
   ManualRecoveryError,
   manualRecoveryLeaks,
   MarketplaceInBaseLayerOnlyError,
@@ -914,20 +914,20 @@ describe("DependencyDeclarationsUnreadableError", () => {
   });
 });
 
-describe("LayerFileUnreadableError", () => {
+describe("LayerConfigUnreadableError", () => {
   test("names the layer file by its basename and is an invalid manifest", () => {
     // arrange
     const basename = "claude-plugins.local.json";
 
     // act
-    const error = new LayerFileUnreadableError(basename);
+    const error = new LayerConfigUnreadableError(basename);
 
     // assert
     assert.ok(error instanceof InvalidMarketplaceManifestError);
     assert.deepStrictEqual(
       { name: error.name, basename: error.basename, message: error.message },
       {
-        name: "LayerFileUnreadableError",
+        name: "LayerConfigUnreadableError",
         basename: "claude-plugins.local.json",
         message: 'Config file "claude-plugins.local.json" failed schema validation.',
       },

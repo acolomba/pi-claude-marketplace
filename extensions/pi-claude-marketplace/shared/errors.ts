@@ -645,11 +645,11 @@ export class InvalidMarketplaceManifestError extends Error {
  * The message IS the failed row's cause line. It names the file by its
  * basename only, so it carries no path.
  */
-export class LayerFileUnreadableError extends InvalidMarketplaceManifestError {
+export class LayerConfigUnreadableError extends InvalidMarketplaceManifestError {
   readonly basename: string;
   constructor(basename: string) {
     super(`Config file "${basename}" failed schema validation.`);
-    this.name = "LayerFileUnreadableError";
+    this.name = "LayerConfigUnreadableError";
     this.basename = basename;
   }
 }

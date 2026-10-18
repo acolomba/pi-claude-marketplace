@@ -8,7 +8,7 @@ import {
 import {
   DependencyDeclarationsUnreadableError,
   InvalidMarketplaceManifestError,
-  LayerFileUnreadableError,
+  LayerConfigUnreadableError,
   ManualRecoveryError,
   PluginInBaseLayerOnlyError,
   PluginInLocalLayerOnlyError,
@@ -539,7 +539,7 @@ for (const { refusal, reason, note } of [
     note: `${BASE_CAUSE}\n\ncause: ${BASE_CAUSE}`,
   },
   {
-    refusal: new LayerFileUnreadableError("claude-plugins.local.json"),
+    refusal: new LayerConfigUnreadableError("claude-plugins.local.json"),
     reason: "invalid manifest",
     note: `${INVALID_CAUSE}\n\ncause: ${INVALID_CAUSE}`,
   },

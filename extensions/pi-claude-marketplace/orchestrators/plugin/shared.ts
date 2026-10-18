@@ -31,7 +31,7 @@ import {
   DependencyDeclarationsUnreadableError,
   errorMessage,
   isErrnoException,
-  LayerFileUnreadableError,
+  LayerConfigUnreadableError,
   MarketplaceInLocalLayerOnlyError,
   MarketplaceNotFoundError,
   MarketplaceSourceUndeclarableError,
@@ -798,7 +798,7 @@ export function pluginLayerVerdict(args: {
  * and no flag targets the base layer. A plugin that no layer declares, such
  * as a dependency, is not refused.
  *
- * CFG-03: an unreadable layer file returns `LayerFileUnreadableError`, an
+ * CFG-03: an unreadable layer file returns `LayerConfigUnreadableError`, an
  * invalid manifest naming only its basename, because the plugin may be
  * declared there.
  *
@@ -827,8 +827,8 @@ export async function namedPluginLayerRefusal(opts: {
 }
 
 /** CFG-03: an unreadable layer file, named by its basename only. */
-function unreadableLayerError(filePath: string): LayerFileUnreadableError {
-  return new LayerFileUnreadableError(path.basename(filePath));
+function unreadableLayerError(filePath: string): LayerConfigUnreadableError {
+  return new LayerConfigUnreadableError(path.basename(filePath));
 }
 
 /**
@@ -837,7 +837,7 @@ function unreadableLayerError(filePath: string): LayerFileUnreadableError {
  * need. Keeps, in order, the targets whose `<plugin>@<marketplace>` key is
  * covered in their scope. Each scope's layers and state are read once.
  *
- * CFG-03: an unreadable layer throws `LayerFileUnreadableError` naming it,
+ * CFG-03: an unreadable layer throws `LayerConfigUnreadableError` naming it,
  * the local layer first, instead of reading as a layer that declares nothing.
  * D-05-07: a covered plugin whose dependencies cannot be read throws
  * `DependencyDeclarationsUnreadableError` naming it.

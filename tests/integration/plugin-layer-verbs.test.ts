@@ -166,7 +166,7 @@ async function readIfPresent(filePath: string): Promise<string | undefined> {
 }
 
 /** The bytes of both layer files; an absent file reads as undefined. */
-async function layerFiles(scope: LayerScope): Promise<readonly (string | undefined)[]> {
+async function layerConfigs(scope: LayerScope): Promise<readonly (string | undefined)[]> {
   return [
     await readIfPresent(scope.locations.baseConfigJsonPath),
     await readIfPresent(scope.locations.localConfigJsonPath),
@@ -175,7 +175,7 @@ async function layerFiles(scope: LayerScope): Promise<readonly (string | undefin
 
 /** The bytes of both layer files and the state file. */
 async function scopeFiles(scope: LayerScope): Promise<readonly (string | undefined)[]> {
-  return [...(await layerFiles(scope)), await readIfPresent(scope.locations.stateJsonPath)];
+  return [...(await layerConfigs(scope)), await readIfPresent(scope.locations.stateJsonPath)];
 }
 
 /** A verb's target layer, and the other layer the case makes unreadable. */
@@ -302,7 +302,7 @@ for (const { flag, local, unreadable, unreadablePath } of DIRECTIONS) {
 
 /** Both layer files parsed; an absent file reads as undefined. */
 async function declarations(scope: LayerScope): Promise<readonly unknown[]> {
-  const files = await layerFiles(scope);
+  const files = await layerConfigs(scope);
   return files.map((bytes): unknown => (bytes === undefined ? undefined : JSON.parse(bytes)));
 }
 
@@ -317,7 +317,7 @@ function baseDeclaresApp(source: string): readonly unknown[] {
 test("LAYER-08: the load-time backfill's reinstall of a dependency writes no layer file", async (t) => {
   // arrange
   const scope = await installedScope(t, "plugin-layer-backfill-", "app", false);
-  const before = await layerFiles(scope);
+  const before = await layerConfigs(scope);
   const boundary = createNotificationBoundary(0);
 
   // act
@@ -345,7 +345,7 @@ test("LAYER-08: the load-time backfill's reinstall of a dependency writes no lay
     declaresWorkflows: false,
     resourcesChanged: true,
   });
-  assert.deepStrictEqual(await layerFiles(scope), before);
+  assert.deepStrictEqual(await layerConfigs(scope), before);
   assert.deepStrictEqual(await declarations(scope), baseDeclaresApp(scope.source));
   boundary.verifyBoundary();
 });
@@ -354,7 +354,7 @@ test("LAYER-08: a bare update moves a dependency to its new version and writes n
   // arrange
   const scope = await installedScope(t, "plugin-layer-bare-update-", "app", false);
   await publish(scope.source, "1.1.0");
-  const before = await layerFiles(scope);
+  const before = await layerConfigs(scope);
   const boundary = createNotificationBoundary(1);
 
   // act
@@ -379,7 +379,7 @@ test("LAYER-08: a bare update moves a dependency to its new version and writes n
         "/reload to pick up changes",
     },
   ]);
-  assert.deepStrictEqual(await layerFiles(scope), before);
+  assert.deepStrictEqual(await layerConfigs(scope), before);
   assert.deepStrictEqual(await declarations(scope), baseDeclaresApp(scope.source));
   const state = await loadState(scope.locations.extensionRoot);
   assert.deepStrictEqual(

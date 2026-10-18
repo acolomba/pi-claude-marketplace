@@ -85,7 +85,7 @@ import {
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import {
   InvalidGitHubBaseUrlError,
-  LayerFileUnreadableError,
+  LayerConfigUnreadableError,
   PluginInBaseLayerOnlyError,
   PluginInLocalLayerOnlyError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
@@ -3361,7 +3361,7 @@ test("LAYER-04: a named reinstall with --local under a marketplace only the loca
         JSON.stringify({ schemaVersion: 1 }),
         BASE_MARKETPLACE_ONLY,
       );
-      const layersBefore = await layerFiles(locations);
+      const layersBefore = await layerConfigs(locations);
       const { ctx, run } = makeCtx();
 
       // act
@@ -3379,7 +3379,7 @@ test("LAYER-04: a named reinstall with --local under a marketplace only the loca
         outcomes.map((outcome) => outcome.partition),
         ["reinstalled"],
       );
-      assert.deepEqual(await layerFiles(locations), layersBefore);
+      assert.deepEqual(await layerConfigs(locations), layersBefore);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -3389,25 +3389,25 @@ test("LAYER-04: a named reinstall with --local under a marketplace only the loca
 const INVALID_LOCAL_LAYER_CAUSE =
   'Config file "claude-plugins.local.json" failed schema validation.';
 
-interface LayerFile {
+interface LayerConfig {
   readonly bytes: string;
   readonly mtimeMs: number;
 }
 
-async function readLayerFile(filePath: string): Promise<LayerFile | undefined> {
+async function readLayerConfig(filePath: string): Promise<LayerConfig | undefined> {
   return (await pathExists(filePath))
     ? { bytes: await readFile(filePath, "utf8"), mtimeMs: (await stat(filePath)).mtimeMs }
     : undefined;
 }
 
 /** The bytes and mtime of each layer file; an absent file reads as undefined. */
-async function layerFiles(locations: ReturnType<typeof locationsFor>): Promise<{
-  readonly base: LayerFile | undefined;
-  readonly local: LayerFile | undefined;
+async function layerConfigs(locations: ReturnType<typeof locationsFor>): Promise<{
+  readonly base: LayerConfig | undefined;
+  readonly local: LayerConfig | undefined;
 }> {
   return {
-    base: await readLayerFile(locations.baseConfigJsonPath),
-    local: await readLayerFile(locations.localConfigJsonPath),
+    base: await readLayerConfig(locations.baseConfigJsonPath),
+    local: await readLayerConfig(locations.localConfigJsonPath),
   };
 }
 
@@ -3421,7 +3421,7 @@ test("LAYER-04: a bare flagless reinstall whose local layer cannot be read reins
     try {
       // arrange
       const locations = await seedLocalLayerReinstall(cwd, BASE_MARKETPLACE_ONLY, "{ invalid");
-      const layersBefore = await layerFiles(locations);
+      const layersBefore = await layerConfigs(locations);
       const { ctx, run, notifications } = makeCtx();
 
       // act
@@ -3444,7 +3444,7 @@ test("LAYER-04: a bare flagless reinstall whose local layer cannot be read reins
             "● mp [project]\n  ● hello v1.0.0 (reinstalled)\n\nPlugin reinstall: 1 success\n\n/reload to pick up changes",
         },
       ]);
-      assert.deepEqual(await layerFiles(locations), layersBefore);
+      assert.deepEqual(await layerConfigs(locations), layersBefore);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -3461,7 +3461,7 @@ test("LAYER-04: a named reinstall of a plugin the base layer declares leaves bot
         HELLO_DECLARED_LAYER,
         JSON.stringify({ schemaVersion: 1 }),
       );
-      const layersBefore = await layerFiles(locations);
+      const layersBefore = await layerConfigs(locations);
       const { ctx, run, notifications } = makeCtx();
 
       // act
@@ -3479,7 +3479,7 @@ test("LAYER-04: a named reinstall of a plugin the base layer declares leaves bot
         ["reinstalled"],
       );
       assert.deepEqual(notifications, [HELLO_REINSTALLED_ROW]);
-      assert.deepEqual(await layerFiles(locations), layersBefore);
+      assert.deepEqual(await layerConfigs(locations), layersBefore);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -3496,7 +3496,7 @@ test("LAYER-04: a reinstall with --local of a plugin no layer declares writes no
         BASE_MARKETPLACE_ONLY,
         JSON.stringify({ schemaVersion: 1 }),
       );
-      const layersBefore = await layerFiles(locations);
+      const layersBefore = await layerConfigs(locations);
       const { ctx, run, notifications } = makeCtx();
 
       // act
@@ -3513,7 +3513,7 @@ test("LAYER-04: a reinstall with --local of a plugin no layer declares writes no
       // assert
       assert.equal(outcome.partition, "reinstalled");
       assert.deepEqual(notifications, [HELLO_REINSTALLED_ROW]);
-      assert.deepEqual(await layerFiles(locations), layersBefore);
+      assert.deepEqual(await layerConfigs(locations), layersBefore);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -3535,7 +3535,7 @@ test("LAYER-04: the unnamed flagless reinstall the load-time backfill runs on a 
       assert.ok(seededRecord !== undefined);
       seededRecord.provenance = "dependency";
       await saveState(locations.extensionRoot, seededState);
-      const layersBefore = await layerFiles(locations);
+      const layersBefore = await layerConfigs(locations);
       const { ctx, run, notifications } = makeCtx();
 
       // act
@@ -3564,7 +3564,7 @@ test("LAYER-04: the unnamed flagless reinstall the load-time backfill runs on a 
         resourcesChanged: true,
       });
       assert.deepEqual(notifications, []);
-      assert.deepEqual(await layerFiles(locations), layersBefore);
+      assert.deepEqual(await layerConfigs(locations), layersBefore);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -3603,7 +3603,7 @@ test("CFG-03: a named flagless reinstall whose local layer cannot be read is ref
           scope: "project",
           notes: [`${INVALID_LOCAL_LAYER_CAUSE}\n\ncause: ${INVALID_LOCAL_LAYER_CAUSE}`],
           reasons: ["invalid manifest"],
-          cause: new LayerFileUnreadableError("claude-plugins.local.json"),
+          cause: new LayerConfigUnreadableError("claude-plugins.local.json"),
         },
       ]);
       assert.deepEqual(notifications, [

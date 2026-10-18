@@ -5274,25 +5274,25 @@ async function recordedHelloVersion(
   return (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.hello?.version;
 }
 
-interface LayerFile {
+interface LayerConfig {
   readonly bytes: string;
   readonly mtimeMs: number;
 }
 
-async function readLayerFile(filePath: string): Promise<LayerFile | undefined> {
+async function readLayerConfig(filePath: string): Promise<LayerConfig | undefined> {
   return (await pathExists(filePath))
     ? { bytes: await readFile(filePath, "utf8"), mtimeMs: (await stat(filePath)).mtimeMs }
     : undefined;
 }
 
 /** The bytes and mtime of each layer file; an absent file reads as undefined. */
-async function layerFiles(locations: ReturnType<typeof locationsFor>): Promise<{
-  readonly base: LayerFile | undefined;
-  readonly local: LayerFile | undefined;
+async function layerConfigs(locations: ReturnType<typeof locationsFor>): Promise<{
+  readonly base: LayerConfig | undefined;
+  readonly local: LayerConfig | undefined;
 }> {
   return {
-    base: await readLayerFile(locations.baseConfigJsonPath),
-    local: await readLayerFile(locations.localConfigJsonPath),
+    base: await readLayerConfig(locations.baseConfigJsonPath),
+    local: await readLayerConfig(locations.localConfigJsonPath),
   };
 }
 
@@ -5305,7 +5305,7 @@ test("LAYER-04: a changed named update of a plugin the base layer declares leave
         base: JSON.stringify({ schemaVersion: 1, plugins: { "hello@mp": { futureKey: "x" } } }),
         local: JSON.stringify({ schemaVersion: 1, plugins: { "other@mp": {} } }),
       });
-      const layersBefore = await layerFiles(locations);
+      const layersBefore = await layerConfigs(locations);
       const { ctx, run } = makeCtx();
 
       // act
@@ -5319,7 +5319,7 @@ test("LAYER-04: a changed named update of a plugin the base layer declares leave
 
       // assert
       assert.equal(await recordedHelloVersion(locations), "1.0.1");
-      assert.deepEqual(await layerFiles(locations), layersBefore);
+      assert.deepEqual(await layerConfigs(locations), layersBefore);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -5356,7 +5356,7 @@ test("LAYER-08: a named update of a dependency updates it and writes no layer fi
         },
       ]);
       assert.equal(await recordedHelloVersion(locations), "1.0.1");
-      assert.deepEqual(await layerFiles(locations), { base: undefined, local: undefined });
+      assert.deepEqual(await layerConfigs(locations), { base: undefined, local: undefined });
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -5399,7 +5399,7 @@ test("LAYER-04: a bare update writes no layer file for any record", async () => 
     try {
       // arrange
       const locations = await seedTwoPluginUpdate(cwd, HELLO_DECLARED);
-      const layersBefore = await layerFiles(locations);
+      const layersBefore = await layerConfigs(locations);
       const { ctx, run } = makeCtx();
 
       // act
@@ -5407,7 +5407,7 @@ test("LAYER-04: a bare update writes no layer file for any record", async () => 
 
       // assert
       assert.deepEqual(await recordedVersions(locations), { hello: "1.0.1", other: "1.0.1" });
-      assert.deepEqual(await layerFiles(locations), layersBefore);
+      assert.deepEqual(await layerConfigs(locations), layersBefore);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -5688,7 +5688,7 @@ test("LAYER-04: a named update with --local under a marketplace only the local l
     try {
       // arrange
       const locations = await seedLayeredUpdate(cwd, { local: localOnlyMarketplaceBytes(cwd) });
-      const layersBefore = await layerFiles(locations);
+      const layersBefore = await layerConfigs(locations);
       const { ctx, run } = makeCtx();
 
       // act
@@ -5703,7 +5703,7 @@ test("LAYER-04: a named update with --local under a marketplace only the local l
 
       // assert
       assert.equal(await recordedHelloVersion(locations), "1.0.1");
-      assert.deepEqual(await layerFiles(locations), layersBefore);
+      assert.deepEqual(await layerConfigs(locations), layersBefore);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

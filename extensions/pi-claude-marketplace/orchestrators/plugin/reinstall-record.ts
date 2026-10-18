@@ -2,7 +2,7 @@ import {
   composeErrorWithCauseChain,
   DependencyDeclarationsUnreadableError,
   findManualRecoveryError,
-  LayerFileUnreadableError,
+  LayerConfigUnreadableError,
   ManualRecoveryError,
   PluginInBaseLayerOnlyError,
   PluginInLocalLayerOnlyError,
@@ -137,13 +137,13 @@ export function reinstallReasonsFromError(error: unknown): readonly ContentReaso
  * line.
  */
 type LayerRefusal =
-  PluginInLocalLayerOnlyError | PluginInBaseLayerOnlyError | LayerFileUnreadableError;
+  PluginInLocalLayerOnlyError | PluginInBaseLayerOnlyError | LayerConfigUnreadableError;
 
 function isLayerRefusal(error: unknown): error is LayerRefusal {
   return (
     error instanceof PluginInLocalLayerOnlyError ||
     error instanceof PluginInBaseLayerOnlyError ||
-    error instanceof LayerFileUnreadableError
+    error instanceof LayerConfigUnreadableError
   );
 }
 

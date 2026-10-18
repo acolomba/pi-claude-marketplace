@@ -2681,7 +2681,7 @@ const BASE_LAYER_WITH_MARKETPLACE =
 const LAYER_DECLARING_HELLO = '{"schemaVersion":1,"plugins":{"hello@mp":{}}}\n';
 
 /** Write the base and local layer files of the scope as the exact bytes given. */
-async function writeLayerFiles(
+async function writeLayerConfigs(
   locations: ReturnType<typeof locationsFor>,
   layers: { readonly base: string; readonly local: string },
 ): Promise<void> {
@@ -2732,7 +2732,7 @@ for (const { title, local, layers, expectedMessage } of [
         // arrange
         const locations = locationsFor("project", cwd);
         await seedFullPlugin(locations, "mp", "hello", cwd);
-        await writeLayerFiles(locations, layers);
+        await writeLayerConfigs(locations, layers);
         const filesBefore = await readScopeFiles(locations);
         const cascade = mock<typeof cascadeUnstagePlugin>({ exactParams: true, name: "cascade" });
         const { ctx, run, notifications } = makeCtx();
@@ -2768,7 +2768,7 @@ test("CFG-03: a standalone uninstall whose other layer is invalid names that fil
       // arrange
       const locations = locationsFor("project", cwd);
       await seedFullPlugin(locations, "mp", "hello", cwd);
-      await writeLayerFiles(locations, {
+      await writeLayerConfigs(locations, {
         base: LAYER_DECLARING_HELLO,
         local: "{ not valid json",
       });
@@ -2813,7 +2813,7 @@ test("WR-09: an orchestrated uninstall of a plugin only the local layer declares
       // arrange
       const locations = locationsFor("project", cwd);
       await seedFullPlugin(locations, "mp", "hello", cwd);
-      await writeLayerFiles(locations, {
+      await writeLayerConfigs(locations, {
         base: BASE_LAYER_WITH_MARKETPLACE,
         local: LAYER_DECLARING_HELLO,
       });
@@ -2854,7 +2854,7 @@ test("LAYER-04: a plugin that is not installed reports not installed whatever th
       // arrange
       const locations = locationsFor("project", cwd);
       await seedFullPlugin(locations, "mp", "other", cwd);
-      await writeLayerFiles(locations, {
+      await writeLayerConfigs(locations, {
         base: BASE_LAYER_WITH_MARKETPLACE,
         local: LAYER_DECLARING_HELLO,
       });
@@ -2928,7 +2928,7 @@ for (const { title, local, flags, otherLayer, cause, dropFrom } of [
         // arrange
         const locations = locationsFor("project", cwd);
         await seedFullPlugin(locations, "mp", "hello", cwd);
-        await writeLayerFiles(locations, {
+        await writeLayerConfigs(locations, {
           base: LAYER_DECLARING_MP_AND_HELLO,
           local: LAYER_DECLARING_MP_AND_HELLO,
         });
@@ -2980,7 +2980,7 @@ test("WR-02: an uninstall deletes the key from its target layer and never writes
       // arrange: the local layer declares the marketplace but not the plugin.
       const locations = locationsFor("project", cwd);
       await seedFullPlugin(locations, "mp", "hello", cwd);
-      await writeLayerFiles(locations, {
+      await writeLayerConfigs(locations, {
         base: LAYER_DECLARING_MP_AND_HELLO,
         local: BASE_LAYER_WITH_MARKETPLACE,
       });
@@ -6138,7 +6138,7 @@ for (const { title, plugins, layers, local, expected } of [
         // arrange
         const locations = locationsFor("project", cwd);
         await seedDeclaringMarketplace(locations, "mp", plugins, cwd);
-        await writeLayerFiles(locations, layers);
+        await writeLayerConfigs(locations, layers);
         const filesBefore = await readScopeFiles(locations);
         const cascade = mock<typeof cascadeUnstagePlugin>({ exactParams: true, name: "cascade" });
         const { ctx, run, notifications } = makeCtx();
@@ -6182,7 +6182,7 @@ test("LOAD-03: a plugin a layer declares is uninstalled and names the plugins th
         { helper: {}, app: { dependencies: ["helper"] } },
         cwd,
       );
-      await writeLayerFiles(locations, {
+      await writeLayerConfigs(locations, {
         base: '{"schemaVersion":1,"plugins":{"app@mp":{},"helper@mp":{}}}\n',
         local: EMPTY_LAYER,
       });
@@ -6228,7 +6228,7 @@ test("WR-09: an orchestrated uninstall of a dependency a layer needs is not refu
         { helper: { provenance: "dependency" }, app: { dependencies: ["helper"] } },
         cwd,
       );
-      await writeLayerFiles(locations, { base: LAYER_DECLARING_APP, local: EMPTY_LAYER });
+      await writeLayerConfigs(locations, { base: LAYER_DECLARING_APP, local: EMPTY_LAYER });
       const { ctx, run, notifications } = makeCtx();
 
       // act

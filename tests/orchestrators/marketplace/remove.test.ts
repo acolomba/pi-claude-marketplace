@@ -1981,7 +1981,7 @@ test("rethrows a state save failure unchanged when no cascade rewrote an MCP con
 // LAYER-02 / D-MF-03: a named remove changes only its target layer, and the
 // layer gate decides before anything changes.
 
-interface LayerFiles {
+interface LayerConfigs {
   readonly base?: string;
   readonly local?: string;
   readonly source?: unknown;
@@ -2002,7 +2002,7 @@ async function readIfPresent(filePath: string): Promise<string | undefined> {
  * otherwise) with an installed `tool`, with the two config files written as the
  * given raw text (an omitted file is absent).
  */
-async function layerCase(testContext: TestContext, files: LayerFiles): Promise<LayerCase> {
+async function layerCase(testContext: TestContext, files: LayerConfigs): Promise<LayerCase> {
   const { cwd, locations } = await projectCase(testContext);
   await seedMarketplace(locations, {
     cwd,
@@ -2069,7 +2069,7 @@ for (const { title, files, local, expectedMessage } of [
   },
 ] satisfies readonly {
   readonly title: string;
-  readonly files: LayerFiles;
+  readonly files: LayerConfigs;
   readonly local: boolean;
   readonly expectedMessage: string;
 }[]) {
@@ -2358,7 +2358,7 @@ async function removeToolsWith(
 /** A layer case whose `tools` record holds `plugins` instead of the one `tool`. */
 async function dependencyCase(
   testContext: TestContext,
-  files: LayerFiles,
+  files: LayerConfigs,
   plugins: Record<string, PluginRecord>,
 ): Promise<LayerCase> {
   const layer = await layerCase(testContext, files);

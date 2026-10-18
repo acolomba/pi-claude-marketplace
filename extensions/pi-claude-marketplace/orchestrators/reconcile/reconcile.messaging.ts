@@ -118,7 +118,7 @@ export const RECONCILE_APPLIED_CONTEXT = {
 // Load-time layer check: the cause of a layer missing a marketplace.
 // ---------------------------------------------------------------------------
 
-const LAYER_FILES = {
+const LAYER_CONFIGS = {
   base: "claude-plugins.json",
   local: "claude-plugins.local.json",
 } as const;
@@ -138,8 +138,8 @@ export function composeLayerMarketplaceCause(gap: LayerMarketplaceGap, scope: Sc
   const one = gap.keys.length === 1;
   const flags = `${gap.layer === "local" ? " --local" : ""} --scope ${scope}`;
   return (
-    `The ${gap.layer} config (${LAYER_FILES[gap.layer]}) declares ${renderDependentKeys(gap.keys)}, ` +
-    `but only the ${other} config (${LAYER_FILES[other]}) declares ` +
+    `The ${gap.layer} config (${LAYER_CONFIGS[gap.layer]}) declares ${renderDependentKeys(gap.keys)}, ` +
+    `but only the ${other} config (${LAYER_CONFIGS[other]}) declares ` +
     `${one ? "its marketplace" : "their marketplaces"}. ` +
     `Run /claude:plugin marketplace add <source>${flags} with the source the ${other} config declares, ` +
     `or remove ${one ? "the plugin" : "the plugins"} from the ${gap.layer} config.`

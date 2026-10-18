@@ -44,7 +44,7 @@ import { saveState } from "../../../extensions/pi-claude-marketplace/persistence
 import {
   CrossPluginConflictError,
   DependencyDeclarationsUnreadableError,
-  LayerFileUnreadableError,
+  LayerConfigUnreadableError,
   MarketplaceInLocalLayerOnlyError,
   MarketplaceNotFoundError,
   MarketplaceSourceUndeclarableError,
@@ -1508,7 +1508,7 @@ describe("namedPluginLayerRefusal", () => {
         });
 
         // assert
-        assert.ok(refusal instanceof LayerFileUnreadableError);
+        assert.ok(refusal instanceof LayerConfigUnreadableError);
         assert.deepStrictEqual(
           { basename: refusal.basename, message: refusal.message },
           { basename, message: `Config file "${basename}" failed schema validation.` },
@@ -1603,7 +1603,7 @@ describe("keepLocalLayerTargets", () => {
       await assert.rejects(
         keepLocalLayerTargets([{ plugin: "alpha", marketplace: "mp", scope: "project" }], cwd),
         (error: unknown) => {
-          assert.ok(error instanceof LayerFileUnreadableError);
+          assert.ok(error instanceof LayerConfigUnreadableError);
           assert.deepStrictEqual(
             { basename: error.basename, message: error.message },
             {
@@ -1758,7 +1758,7 @@ describe("keepLocalLayerTargets", () => {
       await assert.rejects(
         keepLocalLayerTargets([{ plugin: "alpha", marketplace: "mp", scope: "project" }], cwd),
         (error: unknown) => {
-          assert.ok(error instanceof LayerFileUnreadableError);
+          assert.ok(error instanceof LayerConfigUnreadableError);
           assert.deepStrictEqual(
             { basename: error.basename, message: error.message },
             {
