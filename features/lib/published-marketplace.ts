@@ -15,6 +15,7 @@ import {
   writeInvalidManifest,
   writeMalformedManifest,
   writeMarketplace,
+  writeMarketplaceDescription,
 } from "./path-marketplace.ts";
 
 import type { OfferedPlugin } from "./path-marketplace.ts";
@@ -163,6 +164,22 @@ export async function allowDependenciesOn(
     case "dir":
     case "file":
       await writeDependencyAllowance(published.root, target);
+      return;
+    case "url":
+    case "github":
+      throw noStandIn(published.kind);
+  }
+}
+
+/** Sets the description of the marketplace `published` records. */
+export async function describeMarketplace(
+  published: PublishedMarketplace,
+  description: string,
+): Promise<void> {
+  switch (published.kind) {
+    case "dir":
+    case "file":
+      await writeMarketplaceDescription(published.root, description);
       return;
     case "url":
     case "github":
