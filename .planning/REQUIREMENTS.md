@@ -59,7 +59,7 @@ A scope (user or project) has two layers: shared (`claude-plugins.json`) and loc
 
 ### Terminology (TERM)
 
-- [ ] **TERM-01**: User-visible text (reason tokens, messages, catalog, docs, README) and code identifiers use the PROJECT.md terms consistently: scope (user/project), layer (base/local), and config (the file holding a layer); code says `base`, never `shared`
+- [x] **TERM-01**: User-visible text (reason tokens, messages, catalog, docs, README) and code identifiers use the PROJECT.md terms consistently: scope (user/project), layer (base/local), and config (the file holding a layer); code says `base`, never `shared`
 
 ### marketplace add
 
@@ -203,7 +203,7 @@ A scope (user or project) has two layers: shared (`claude-plugins.json`) and loc
 | LAYER-07 | Phase 3.2 | Complete |
 | LAYER-08 | Phase 3.3 | Complete |
 | LAYER-09 | Phase 3.3 | Complete |
-| TERM-01 | Phase 3.4 | Pending |
+| TERM-01 | Phase 3.4 | Complete |
 | ADD-01 | Phase 3 | Complete |
 | ADD-02 | Phase 3 | Complete |
 | ADD-03 | Phase 3 | Complete |

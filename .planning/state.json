@@ -34,6 +34,11 @@
       "status": "complete"
     },
     {
+      "number": "3.4",
+      "name": "Scope and Layer Terminology",
+      "status": "complete"
+    },
+    {
       "number": "4",
       "name": "Marketplace Remove and List",
       "status": "pending"
@@ -70,9 +75,9 @@
     }
   ],
   "next": {
-    "command": "/gsd-progress --next",
-    "label": "Advance to the next step (verify)",
-    "reason": "Phase 7 of 14 · 43% · ready to verify"
+    "command": "$gsd-discuss-phase 4",
+    "label": "Discuss Phase 4 context",
+    "reason": "Phase 8 of 14 — context not gathered"
   },
-  "updated_at": "2026-10-18T05:06:30.979Z"
+  "updated_at": "2026-10-18T11:19:54.503Z"
 }

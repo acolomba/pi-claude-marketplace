@@ -2,20 +2,20 @@
 gsd_state_version: "1.0"
 milestone: marketplace-features
 milestone_name: Marketplace Behavioral Tests
-current_phase: "03.4"
-current_phase_name: Scope and Layer Terminology
-status: verifying
-stopped_at: Completed 03.4-10-PLAN.md
-last_updated: "2026-10-18T05:06:52.006Z"
-last_activity: 2026-10-17
-last_activity_desc: Phase 03.4 execution started
-state_head: 666f545918f289cfda99ff42acd9548f4eba042c
+current_phase: 4
+current_phase_name: Marketplace Remove and List
+status: planning
+stopped_at: Phase 03.4 complete, ready to discuss Phase 4
+last_updated: "2026-10-18T11:19:54.503Z"
+last_activity: 2026-10-18
+last_activity_desc: Phase 03.4 complete, transitioned to Phase 4
+state_head: 28323193eb79162c96355847ca78138a0e64725b
 progress:
   total_phases: 14
-  completed_phases: 6
+  completed_phases: 7
   total_plans: 47
   completed_plans: 47
-  percent: 43
+  percent: 50
 ---
 
 # Project State
@@ -27,16 +27,16 @@ See: `.planning/PROJECT.md` (updated 2026-10-16 after marketplace-features Phase
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 03.4 — Scope and Layer Terminology
+**Current focus:** Phase 4 — Marketplace Remove and List
 
 ## Current Position
 
-Phase: 03.4 (Scope and Layer Terminology) — EXECUTING
-Plan: 10 of 10
-Status: Phase complete — ready for verification
-Last activity: 2026-10-17 — Phase 03.4 execution started
+Phase: 4 — Marketplace Remove and List
+Plan: Not started
+Status: Ready to discuss
+Last activity: 2026-10-18 — Phase 03.4 complete, transitioned to Phase 4
 
-Progress: [████░░░░░░] 43%
+Progress: [█████░░░░░] 50%
 
 ### mcp-4 closeout
 
@@ -181,8 +181,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-18T05:06:49.359Z
-**Stopped at:** Completed 03.4-10-PLAN.md
+**Last session:** 2026-10-18T11:19:54.503Z
+**Stopped at:** Phase 03.4 complete, ready to discuss Phase 4
 **Resume file:** None
 
 **Main merge (2026-10-11, quick task 261011-bsm):** `origin/main` at
