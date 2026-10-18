@@ -78,6 +78,28 @@ Feature: Marketplace info
       | name         | tools                               |
       | reasons      | marketplace not added               |
 
+  Scenario: Info reports a missing project scope without falling back
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "tools" is added to the user scope
+    When the user runs "/claude:plugin marketplace info tools --scope project"
+    Then the command reports these results:
+      | kind                  | severity | needs reload | summary                             | name  | scope   | reasons                                |
+      | marketplace-not-added | error    | false        | A marketplace operation has failed. | tools | project | marketplace not added to project scope |
+
+  Scenario: Info reports a missing user scope without falling back
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "tools" is added to the project scope
+    When the user runs "/claude:plugin marketplace info tools --scope user"
+    Then the command reports these results:
+      | kind                  | severity | needs reload | summary                             | name  | scope | reasons                             |
+      | marketplace-not-added | error    | false        | A marketplace operation has failed. | tools | user  | marketplace not added to user scope |
+
   Scenario: Info on a marketplace both scopes hold shows one block per scope, project first
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins:
@@ -85,6 +107,7 @@ Feature: Marketplace info
       | demo | 1.0.0   |
     Given the marketplace "tools" is added to the user scope
     Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin marketplace autoupdate tools --scope project"
     When the user runs "/claude:plugin marketplace info tools"
     Then the result has these fields:
       | kind         | marketplace-info-cascade |
@@ -92,7 +115,7 @@ Feature: Marketplace info
       | needs reload | false                    |
     Then the result lists these marketplaces:
       | name  | scope   | details autoupdate | details last updated at | source kind | source abs path           |
-      | tools | project | false              | {scenario time}         | path        | {home}/marketplaces/tools |
+      | tools | project | true               | {scenario time}         | path        | {home}/marketplaces/tools |
       | tools | user    | false              | {scenario time}         | path        | {home}/marketplaces/tools |
 
   Scenario: Info reports an invalid project before a healthy user
