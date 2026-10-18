@@ -1,6 +1,6 @@
 ---
 phase: 05-marketplace-info
-reviewed: 2026-10-18T17:15:43Z
+reviewed: 2026-10-18T17:33:44Z
 depth: standard
 files_reviewed: 10
 files_reviewed_list:
@@ -16,67 +16,44 @@ files_reviewed_list:
   - tests/orchestrators/marketplace/info.test.ts
 findings:
   critical: 0
-  warning: 1
+  warning: 0
   info: 0
-  total: 1
-status: issues_found
+  total: 0
+status: clean
 ---
 
 # Phase 5: Code Review Report
 
-**Reviewed:** 2026-10-18T17:15:43Z
+**Reviewed:** 2026-10-18T17:33:44Z
 **Depth:** standard
 **Files reviewed:** 10
-**Status:** issues_found
-
-## Structural Findings (fallow)
-
-The supplied `FALLOW-normalized.json` reports zero unused exports, zero unused files, six duplicate blocks, and zero cycles. Its normalized items are preserved below. All six are outside the explicit review file list; they are **WARNING — context only**, not Phase 5 fix targets, and are excluded from the frontmatter's actionable finding counts.
-
-| File | Line | Normalized finding | Related file |
-| --- | --- | --- | --- |
-| `extensions/pi-claude-marketplace/persistence/migrate.ts` | 106 | Duplicate block (3 instances) | `extensions/pi-claude-marketplace/persistence/migrate.ts` |
-| `extensions/pi-claude-marketplace/persistence/migrate.ts` | 168 | Duplicate block (2 instances) | `extensions/pi-claude-marketplace/persistence/migrate.ts` |
-| `extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts` | 319 | Duplicate block (2 instances) | `extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts` |
-| `extensions/pi-claude-marketplace/orchestrators/plugin/info.ts` | 2191 | Duplicate block (2 instances) | `extensions/pi-claude-marketplace/orchestrators/plugin/info.ts` |
-| `extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts` | 1125 | Duplicate block (2 instances) | `extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts` |
-| `tests/architecture/catalog-uat/fixtures/plugin-uninstall.ts` | 284 | Duplicate block (2 instances) | `tests/architecture/catalog-uat/fixtures/plugin-uninstall.ts` |
-
-**Disposition:** Preserve these supplied cross-module facts. Any consolidation belongs to a separately scoped review that checks whether the repeated blocks have the same behavior; no source changes are proposed here for these context-only items.
-
-The additional changed-file orientation command, `fallow review --base c842e3a067f6ab28c43c827a3bf88306d0bc5270 --brief --gate all --format json --quiet`, exited 0 with verdict `pass` and no changed-file dead-code, complexity, or duplication findings. This narrower result does not contradict the supplied repository-wide duplicates. The default attribution mode first exited 2 because it could not create its temporary base worktree; `--gate all` completed without that operation.
+**Status:** clean
 
 ## Narrative Findings (AI reviewer)
 
 ### Summary
 
-One warning affects the new behavioral assertion helper: it cannot represent the valid absence of a remote source's optional ref. No production correctness or security defect was confirmed in the scope-ordering change. Mixed success/failure outcomes retain project-first order, healthy scopes survive manifest failures, and the unit assertions compare complete notification sequences and filesystem contents.
+All reviewed files meet quality standards. No issues found.
 
-### Warnings
+This re-review retains the original ten-file scope exactly. It also inspects `features/lib/marketplace-info-fields.ts` and `tests/architecture/marketplace-info-fields.test.ts` as dependencies of the changed info step. The other original files are unchanged from the preceding review; its source and call-chain analysis remains applicable. No structural evidence was supplied for this iteration.
 
-#### WR-01: The info assertion requires a ref for every URL and GitHub source
+### Previous warning resolved
 
-**Classification:** WARNING
-**File:** `/home/acolomba/src/pi-claude-marketplace-cucumber-behavioral-tests/features/step_definitions/marketplace/info.steps.ts:84-86`
-**Related lines:** `27-30`, `78-81`
+The previous **WARNING WR-01** is resolved by commit `8bc4503d98df90938cc0b8c62c5dcd611427cd80` and is not an open finding.
 
-**Issue:** `SOURCE_FIELDS_BY_KIND` includes `source ref` for both remote source kinds. `expectedInfoFields` then requires every applicable field to be nonempty. An unpinned URL or GitHub marketplace legitimately has no `source.ref`: the production projection includes it only when defined, and the existing `url-single-scope-minimal` and `github-single-scope-minimal` catalog fixtures explicitly cover that shape. A table with an empty `source ref` cell throws `the url source requires "source ref"` or `the github source requires "source ref"`; omitting that row also throws. Consequently, this step cannot assert a correct unpinned source result. Current tagged examples all use `#stable`, so they conceal the limitation.
+At `features/lib/marketplace-info-fields.ts:75-85`, blank refs are accepted for URL and GitHub sources and removed from the expected map. The unchanged full-map assertion at `features/step_definitions/marketplace/info.steps.ts:59` therefore checks that an unpinned actual result omits `source.ref`. Nonempty refs remain in the map and are compared exactly. Required path, URL, owner, and repository fields still reject blank cells; a nonempty ref on a path source is still rejected.
 
-**Evidence:** Executing the current `expectedInfoFields` declarations in memory with complete source-field tables rejected blank refs for both kinds and accepted `stable` for both. No source files were changed for the reproduction.
+The new test module has 11 independent cases: absent and present refs for both remote kinds, all four required identity fields, and three incompatible-field cases. Expected maps and errors are specified independently of the parser's output. Each negative case supplies otherwise-valid preceding fields, so it exercises the stated rejection. The extraction keeps the parser directly testable without adding test hooks to production code or weakening the behavioral step's whole-result comparison.
 
-**Fix:** Distinguish required identity fields from optional applicable fields. Require `source url` for URL sources and `source owner`/`source repo` for GitHub sources. Permit a blank `source ref` cell for either kind and remove that expected key so the full-map comparison verifies that the actual payload omits it. Keep rejecting nonempty fields that belong to another source kind. Add tagged unpinned URL/GitHub examples, or focused assertions for the table parser, to cover both absent and present refs without activating remote stand-ins prematurely.
+No new correctness, security, test-reliability, or maintainability defect was confirmed. The existing production scope-ordering change still reports mixed outcomes project-first, and manifest failure in one scope does not suppress the other scope's result.
 
 ### Verification evidence
 
-Reused this session's executor evidence supplied by the orchestrator, under the local-verification skill. Verified that `git diff a3ab38fb9ee2d25f0f9de3fa2b0a026ffc3e14a2 -- . ':(exclude,glob).planning/**'` is empty and the only untracked files before this report were the two planning Fallow artifacts. Runtime remains Node `v26.11.1`; reviewed HEAD is `ca85164ce56d9ab69be5dc14617ea92486c0eaf1`.
+Reused the orchestrator's passing full-gate evidence for `npm run check` at `8bc4503d98df90938cc0b8c62c5dcd611427cd80`, under the local-verification skill. Reviewed HEAD is that exact commit, runtime is Node `v26.11.1`, and `git diff 8bc4503d -- . ':(exclude,glob).planning/**'` is empty. The only untracked files at re-review start were three planning review/fix records. No executable input changed after the gate.
 
-- `npm run check`: passed at `a3ab38fb9ee2d25f0f9de3fa2b0a026ffc3e14a2`, including 146 Cucumber scenarios / 1,537 steps and 280 direct-coverage records.
-- `npm run test:cucumber -- features/marketplace/info.feature`: passed, 10 scenarios / 76 steps.
-- `npm run check:features`: passed.
-- `node --test tests/orchestrators/marketplace/info.test.ts`: passed, 22 tests.
-- `node --test tests/architecture/catalog-uat/catalog-contract.test.ts`: passed, 4 tests / 288 exact catalog states.
+That gate includes static checks, architecture tests (including the extracted parser tests), behavioral tests, integration tests, and direct coverage. Tests were not repeated solely for this review because the verified inputs are unchanged.
 
-The review traced scope collection, manifest error classification, the cross-scope flag, and field-table projection through their consumers. The output-catalog review focused on the marketplace-info contract and the changed documentation; the reused catalog test covers all documented fenced states. Remote Cucumber rows remain intentionally excluded pending their stand-ins, so the passing local scenarios do not establish remote behavioral coverage.
+The review traced the extracted parser through the info step and the shared field projection. The preceding review traced scope collection, manifest error classification, and the cross-scope flag. Output-catalog analysis focuses on the marketplace-info contract; the full gate checks the documented fenced states. Remote Cucumber rows remain intentionally excluded pending their stand-ins; parser coverage does not claim remote end-to-end coverage.
 
 No source files were modified. This report was not committed.
 
