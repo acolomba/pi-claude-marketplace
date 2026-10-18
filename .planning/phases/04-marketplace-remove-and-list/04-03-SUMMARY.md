@@ -139,6 +139,12 @@ None - the scenarios use scenario-local offline fixtures, compare every scoped r
 
 Plan 04-03 is complete and ready for plan 04-04 and the orchestrator's combined-tree `npm run check` wave gate. `STATE.md` and `ROADMAP.md` remain for the orchestrator to update.
 
+## Self-Check: PASSED
+
+- Found `features/marketplace/list.feature` and this summary.
+- Confirmed task commits `a6763fb5` and `533aff58` are ancestors of the final plan head.
+- Found no stub, placeholder, TODO, or FIXME pattern in the plan's changed files.
+
 ---
 *Phase: 04-marketplace-remove-and-list*
 *Completed: 2026-10-18*
