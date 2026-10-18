@@ -4,18 +4,18 @@ milestone: marketplace-features
 milestone_name: Marketplace Behavioral Tests
 current_phase: "03.4"
 current_phase_name: Scope and Layer Terminology
-status: planning
+status: executing
 stopped_at: Phase 03.3 complete, ready to plan Phase 03.4
-last_updated: "2026-10-17T23:47:07.845Z"
+last_updated: "2026-10-18T02:10:59.820Z"
 last_activity: 2026-10-17
-last_activity_desc: Phase 03.3 complete, transitioned to Phase 03.4
-state_head: 59d45d4b12cbbbc3724b38a93ffddafed948dd23
+last_activity_desc: Phase 03.4 execution started
+state_head: 0cefedcc019e7cc869b3cff1618b881ccf35cb19
 progress:
   total_phases: 14
   completed_phases: 6
-  total_plans: 37
-  completed_plans: 37
-  percent: 46
+  total_plans: 47
+  completed_plans: 38
+  percent: 43
 ---
 
 # Project State
@@ -27,16 +27,16 @@ See: `.planning/PROJECT.md` (updated 2026-10-16 after marketplace-features Phase
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 03.3 — Plugin Layer Partition
+**Current focus:** Phase 03.4 — Scope and Layer Terminology
 
 ## Current Position
 
-Phase: 03.4 — Scope and Layer Terminology
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-10-17 — Phase 03.3 complete, transitioned to Phase 03.4
+Phase: 03.4 (Scope and Layer Terminology) — EXECUTING
+Plan: 2 of 10
+Status: Ready to execute
+Last activity: 2026-10-17 — Phase 03.4 execution started
 
-Progress: [█████░░░░░] 46%
+Progress: [████░░░░░░] 43%
 
 ### mcp-4 closeout
 
