@@ -5,16 +5,16 @@ milestone_name: Marketplace Behavioral Tests
 current_phase: "03.4"
 current_phase_name: Scope and Layer Terminology
 status: executing
-stopped_at: Completed 03.4-07-PLAN.md
-last_updated: "2026-10-18T03:55:05.140Z"
+stopped_at: Completed 03.4-08-PLAN.md
+last_updated: "2026-10-18T04:34:45.388Z"
 last_activity: 2026-10-17
 last_activity_desc: Phase 03.4 execution started
-state_head: c21f3fd05c3e883314b67b2698455da8eb10902e
+state_head: d31724bbedc8b0132bc0e9e28b37505d00cc3a5e
 progress:
   total_phases: 14
   completed_phases: 6
   total_plans: 47
-  completed_plans: 44
+  completed_plans: 45
   percent: 43
 ---
 
@@ -32,7 +32,7 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 03.4 (Scope and Layer Terminology) — EXECUTING
-Plan: 8 of 10
+Plan: 9 of 10
 Status: Ready to execute
 Last activity: 2026-10-17 — Phase 03.4 execution started
 
@@ -181,8 +181,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-18T03:55:02.452Z
-**Stopped at:** Completed 03.4-07-PLAN.md
+**Last session:** 2026-10-18T04:34:42.805Z
+**Stopped at:** Completed 03.4-08-PLAN.md
 **Resume file:** None
 
 **Main merge (2026-10-11, quick task 261011-bsm):** `origin/main` at
@@ -327,6 +327,7 @@ archived milestone artifacts.
 | Phase 03.3 P10 | 16min | 2 tasks | 9 files |
 | Phase 03.4 P06 | 19min | 2 tasks | 10 files |
 | Phase 03.4 P07 | 15min | 2 tasks | 15 files |
+| Phase 03.4 P08 | 36min | 3 tasks | 56 files |
 
 ## Decisions
 
@@ -447,6 +448,8 @@ archived milestone artifacts.
 - [Phase 03.3]: [marketplace-features] Plugin layer docs: the READMEs define the two files as the scope's shared and local layers, and the CHANGELOG states the D-11 load error remedy (marketplace add <source> --local) with no automatic repair
 - [Phase 03.4]: IN-02 / D-02: the flag-only layer loader is loadTargetLayers (TargetLayers, arm loaded); seams loadTargetLayers and UninstallTransaction.loadLayerConfig; the other layer's parse is other
 - [Phase 03.4]: D-02: the migration helper that builds the base config's plugin entries is basePluginEntries; production comments say base config/local config and base layer/local layer (D-03)
+- [Phase 03.4]: D-02: test layer helpers, snapshot keys, and layer values say base and local; test data named shared keeps its name
+- [Phase 03.4]: User rule: a layer's file is a config -- LayerConfigUnreadableError, features/lib/layer-config.ts, prose says layer config; plan 10 gates add the layer-file pattern
 
 ### mcp-4 decisions
 
