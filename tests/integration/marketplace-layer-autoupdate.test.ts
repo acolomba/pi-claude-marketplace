@@ -110,13 +110,13 @@ async function scopeSnapshot(locations: ScopedLocations): Promise<readonly unkno
 async function autoupdateReadings(
   scope: ProjectScope,
   name: string,
-): Promise<{ readonly shared: unknown; readonly local: unknown; readonly listed: unknown }> {
-  const shared = await loadConfig(scope.locations.baseConfigJsonPath);
+): Promise<{ readonly base: unknown; readonly local: unknown; readonly listed: unknown }> {
+  const base = await loadConfig(scope.locations.baseConfigJsonPath);
   const local = await loadConfig(scope.locations.localConfigJsonPath);
   const entries = await loadMarketplaceListEntries({ cwd: scope.cwd, scope: "project" });
   const block = entries.find((entry) => entry.record.name === name)?.block;
   return {
-    shared: shared.status === "valid" ? shared.config.marketplaces?.[name]?.autoupdate : undefined,
+    base: base.status === "valid" ? base.config.marketplaces?.[name]?.autoupdate : undefined,
     local: local.status === "valid" ? local.config.marketplaces?.[name]?.autoupdate : undefined,
     listed: block !== undefined && "details" in block ? block.details?.autoupdate : undefined,
   };
@@ -192,14 +192,14 @@ test("D-09: an unnamed flip gives no row to a recorded marketplace no layer decl
 
 const refusalCases = [
   {
-    label: "without --local on a marketplace only the local file declares",
+    label: "without --local on a marketplace only the local config declares",
     addedLocally: true,
     reason: "marketplace in local layer only",
     cause:
       "The marketplace tools is declared only in the local config (claude-plugins.local.json). Run the command again with --local.",
   },
   {
-    label: "with --local on a marketplace only the shared file declares",
+    label: "with --local on a marketplace only the base config declares",
     addedLocally: false,
     reason: "marketplace in base layer only",
     cause:
@@ -275,7 +275,7 @@ test("D-07: the list reads the value both layers carry, then the local override"
     { message: "● tools [project] <autoupdate>\n\nMarketplace autoupdate: 1 success" },
     { message: "● tools [project] <no autoupdate>" },
   ]);
-  assert.deepStrictEqual(afterEnable, { shared: true, local: true, listed: true });
-  assert.deepStrictEqual(afterOverride, { shared: true, local: false, listed: false });
+  assert.deepStrictEqual(afterEnable, { base: true, local: true, listed: true });
+  assert.deepStrictEqual(afterOverride, { base: true, local: false, listed: false });
   boundary.verifyBoundary();
 });

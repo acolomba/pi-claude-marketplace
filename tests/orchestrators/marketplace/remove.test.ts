@@ -871,7 +871,7 @@ test("retains the source clone when a forward-compatible recorded kind is unavai
   notification.verifyInteractions();
 });
 
-test("LAYER-03: drops only the shared layer's declarations while the local layer still declares the marketplace", async (testContext) => {
+test("LAYER-03: drops only the base layer's declarations while the local layer still declares the marketplace", async (testContext) => {
   // arrange
   const { cwd, locations } = await projectCase(testContext);
   await seedMarketplace(locations, {
@@ -943,7 +943,7 @@ test("LAYER-03: drops only the shared layer's declarations while the local layer
   notification.verifyInteractions();
 });
 
-test("leaves a valid unrelated sibling config layer byte-identical", async (testContext) => {
+test("leaves the other layer's valid config byte-identical", async (testContext) => {
   // arrange
   const { cwd, locations } = await projectCase(testContext);
   await seedMarketplace(locations, {
@@ -1982,7 +1982,7 @@ test("rethrows a state save failure unchanged when no cascade rewrote an MCP con
 // layer gate decides before anything changes.
 
 interface LayerFiles {
-  readonly shared?: string;
+  readonly base?: string;
   readonly local?: string;
   readonly source?: unknown;
 }
@@ -2010,8 +2010,8 @@ async function layerCase(testContext: TestContext, files: LayerFiles): Promise<L
     source: files.source ?? pathSource("./tools"),
     plugins: { tool: pluginRecord({ skills: ["tool-skill"] }) },
   });
-  if (files.shared !== undefined) {
-    await writeFile(locations.baseConfigJsonPath, files.shared);
+  if (files.base !== undefined) {
+    await writeFile(locations.baseConfigJsonPath, files.base);
   }
 
   if (files.local !== undefined) {
@@ -2039,9 +2039,9 @@ const LOCAL_FILE_INVALID =
 
 for (const { title, files, local, expectedMessage } of [
   {
-    title: "refuses a shared-file remove of a marketplace only the local file declares",
+    title: "refuses a base-config remove of a marketplace only the local config declares",
     files: {
-      shared: '{"schemaVersion":1,"marketplaces":{"base":{"source":"./base"}}}\n',
+      base: '{"schemaVersion":1,"marketplaces":{"base":{"source":"./base"}}}\n',
       local: TOOLS_DECLARED,
     },
     local: false,
@@ -2049,21 +2049,21 @@ for (const { title, files, local, expectedMessage } of [
       "Some operations have failed.\n\n⊘ tools [project] (failed)\n  ⊘ tools (failed) {marketplace in local layer only}\n    cause: The marketplace tools is declared only in the local config (claude-plugins.local.json). Run the command again with --local.",
   },
   {
-    title: "refuses a local-file remove of a marketplace only the shared file declares",
-    files: { shared: TOOLS_DECLARED },
+    title: "refuses a local-config remove of a marketplace only the base config declares",
+    files: { base: TOOLS_DECLARED },
     local: true,
     expectedMessage:
       "Some operations have failed.\n\n⊘ tools [project] (failed)\n  ⊘ tools (failed) {marketplace in base layer only}\n    cause: The marketplace tools is declared only in the base config (claude-plugins.json). Run the command again without --local.",
   },
   {
     title: "refuses a remove whose target file is silent while the other file is invalid",
-    files: { shared: '{"schemaVersion":1}\n', local: "{ invalid local config" },
+    files: { base: '{"schemaVersion":1}\n', local: "{ invalid local config" },
     local: false,
     expectedMessage: LOCAL_FILE_INVALID,
   },
   {
     title: "refuses a remove whose target file declares it while the other file is invalid",
-    files: { shared: TOOLS_DECLARED, local: "{ invalid local config" },
+    files: { base: TOOLS_DECLARED, local: "{ invalid local config" },
     local: false,
     expectedMessage: LOCAL_FILE_INVALID,
   },
@@ -2122,8 +2122,8 @@ test("WR-09: an orchestrated remove applies no layer rule and writes no config",
     schemaVersion: 3,
     marketplaces: {},
   });
-  const [, sharedBytes, localBytes] = await bytesOnDisk();
-  assert.deepStrictEqual([sharedBytes, localBytes], [undefined, TOOLS_DECLARED]);
+  const [, baseBytes, localBytes] = await bytesOnDisk();
+  assert.deepStrictEqual([baseBytes, localBytes], [undefined, TOOLS_DECLARED]);
   assert.deepStrictEqual(notification.calls, []);
   notification.verifyInteractions();
 });
@@ -2172,7 +2172,7 @@ test("LAYER-03: a layer remove keeps a github marketplace's clone and data direc
   // arrange
   const source = { kind: "github", raw: "owner/repo", owner: "owner", repo: "repo" };
   const { cwd, locations } = await layerCase(testContext, {
-    shared: TOOLS_DECLARED,
+    base: TOOLS_DECLARED,
     local: TOOLS_DECLARED_ONLY,
     source,
   });
@@ -2207,7 +2207,7 @@ test("LAYER-03: a layer remove keeps a github marketplace's clone and data direc
 test("LAYER-03: a plugin key both layers declare stays installed and only the target layer drops it", async (testContext) => {
   // arrange
   const { cwd, locations } = await layerCase(testContext, {
-    shared: TOOLS_DECLARED,
+    base: TOOLS_DECLARED,
     local: TOOLS_DECLARED,
   });
   const notification = notificationBoundary(1);
@@ -2229,8 +2229,7 @@ test("LAYER-03: a plugin key both layers declare stays installed and only the ta
 test("LAYER-03: a recorded marketplace no layer declares is fully removed and both layers' plugin keys are swept", async (testContext) => {
   // arrange
   const { cwd, locations } = await layerCase(testContext, {
-    shared:
-      '{"schemaVersion":1,"marketplaces":{"base":{"source":"./base"}},"plugins":{"tool@tools":{"enabled":true}}}\n',
+    base: '{"schemaVersion":1,"marketplaces":{"base":{"source":"./base"}},"plugins":{"tool@tools":{"enabled":true}}}\n',
     local: '{"schemaVersion":1,"plugins":{"other@tools":{"enabled":false}}}\n',
   });
   const marketplaceData = await locations.marketplaceDataDir("tools");
@@ -2261,10 +2260,10 @@ test("LAYER-03: a recorded marketplace no layer declares is fully removed and bo
 test("MR-7: a layer remove whose plugin fails to unstage writes no config and keeps the plugin", async (testContext) => {
   // arrange
   const { cwd, locations, bytesOnDisk } = await layerCase(testContext, {
-    shared: TOOLS_DECLARED,
+    base: TOOLS_DECLARED,
     local: TOOLS_DECLARED_ONLY,
   });
-  const [, sharedBytes, localBytes] = await bytesOnDisk();
+  const [, baseBytes, localBytes] = await bytesOnDisk();
   const notification = notificationBoundary(1);
 
   // act
@@ -2284,8 +2283,8 @@ test("MR-7: a layer remove whose plugin fails to unstage writes no config and ke
       severity: "error",
     },
   ]);
-  const [, sharedAfter, localAfter] = await bytesOnDisk();
-  assert.deepStrictEqual([sharedAfter, localAfter], [sharedBytes, localBytes]);
+  const [, baseAfter, localAfter] = await bytesOnDisk();
+  assert.deepStrictEqual([baseAfter, localAfter], [baseBytes, localBytes]);
   assert.deepStrictEqual(
     await loadState(locations.extensionRoot),
     toolsState(cwd, pathSource("./tools"), { tool: pluginRecord({ skills: ["tool-skill"] }) }),
@@ -2415,7 +2414,7 @@ for (const { title, plugins, shape, unstaged, remaining, expectedMessage } of [
       name === "lib" || name === "orphan" ? dependencyRecord() : pluginRecord();
     const { cwd, locations } = await dependencyCase(
       testContext,
-      { shared: ALPHA_DECLARED, local: BETA_DECLARED },
+      { base: ALPHA_DECLARED, local: BETA_DECLARED },
       Object.fromEntries(plugins.map((name) => [name, recordFor(name)])),
     );
     const calls: string[] = [];
@@ -2452,7 +2451,7 @@ for (const { holder, title } of [
     // arrange
     const { cwd, bytesOnDisk } = await dependencyCase(
       testContext,
-      { shared: ALPHA_DECLARED, local: BETA_DECLARED },
+      { base: ALPHA_DECLARED, local: BETA_DECLARED },
       { alpha: pluginRecord(), beta: pluginRecord() },
     );
     const expectedBytes = await bytesOnDisk();
@@ -2482,11 +2481,11 @@ for (const { holder, title } of [
 
 test("LAYER-03: a layer remove keeps a dependency record its target file declares while a staying plugin needs it", async (testContext) => {
   // arrange
-  const sharedDeclaresLib =
+  const baseDeclaresLib =
     '{"schemaVersion":1,"marketplaces":{"tools":{"source":"./tools"}},"plugins":{"alpha@tools":{"enabled":true},"lib@tools":{"enabled":true}}}\n';
   const { cwd, locations } = await dependencyCase(
     testContext,
-    { shared: sharedDeclaresLib, local: BETA_DECLARED },
+    { base: baseDeclaresLib, local: BETA_DECLARED },
     { alpha: pluginRecord(), beta: pluginRecord(), lib: dependencyRecord() },
   );
   const calls: string[] = [];
@@ -2522,7 +2521,7 @@ test("LAYER-03: a full remove keeps a dependency another marketplace's plugin ne
   const strayKey = '{"schemaVersion":1,"plugins":{"stray@tools":{"enabled":true}}}\n';
   const { cwd, locations } = await dependencyCase(
     testContext,
-    { shared: ALPHA_DECLARED, local: strayKey, source },
+    { base: ALPHA_DECLARED, local: strayKey, source },
     { alpha: pluginRecord(), lib: dependencyRecord(), orphan: dependencyRecord() },
   );
   const upstream = marketplaceState({
@@ -2601,7 +2600,7 @@ for (const { mode, orchestrated, expectedCalls } of [
     // arrange
     const { cwd, bytesOnDisk } = await dependencyCase(
       testContext,
-      { shared: ALPHA_DECLARED },
+      { base: ALPHA_DECLARED },
       { alpha: pluginRecord(), lib: dependencyRecord() },
     );
     const expectedBytes = await bytesOnDisk();
@@ -2639,7 +2638,7 @@ for (const { mode, orchestrated, expectedCalls } of [
 
 test("D-09: a marketplace holding no dependency record is removed without reading any declaration", async (testContext) => {
   // arrange
-  const { cwd, locations } = await layerCase(testContext, { shared: TOOLS_DECLARED });
+  const { cwd, locations } = await layerCase(testContext, { base: TOOLS_DECLARED });
   const notification = notificationBoundary(1);
 
   // act
@@ -2661,10 +2660,10 @@ test("PRUNE-03: a dependency stays while the plugin that declares it fails to un
   // arrange
   const { cwd, locations, bytesOnDisk } = await dependencyCase(
     testContext,
-    { shared: ALPHA_DECLARED },
+    { base: ALPHA_DECLARED },
     { alpha: pluginRecord(), lib: dependencyRecord() },
   );
-  const [, sharedBytes] = await bytesOnDisk();
+  const [, baseBytes] = await bytesOnDisk();
   const calls: string[] = [];
   const notification = notificationBoundary(1);
 
@@ -2683,7 +2682,7 @@ test("PRUNE-03: a dependency stays while the plugin that declares it fails to un
       severity: "error",
     },
   ]);
-  assert.strictEqual(await readFile(locations.baseConfigJsonPath, "utf8"), sharedBytes);
+  assert.strictEqual(await readFile(locations.baseConfigJsonPath, "utf8"), baseBytes);
   assert.deepStrictEqual(
     await loadState(locations.extensionRoot),
     toolsState(cwd, pathSource("./tools"), { alpha: pluginRecord(), lib: dependencyRecord() }),

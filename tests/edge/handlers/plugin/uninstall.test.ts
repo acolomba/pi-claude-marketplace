@@ -365,7 +365,7 @@ async function seedOrphanedDependency(workspace: HermeticWorkspace): Promise<voi
 }
 
 /**
- * A local layer that declares `demo@alpha` while the shared layer of the same
+ * A local layer that declares `demo@alpha` while the base layer of the same
  * scope stays absent. LAYER-04 makes the scope-target flag decide the outcome:
  * with the flag the uninstall acts on the local layer, and without it the
  * command is refused, because only the layer it does not target declares the

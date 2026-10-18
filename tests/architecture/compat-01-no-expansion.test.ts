@@ -291,9 +291,10 @@ const EXPECTED_REASONS = [
   "components now supported",
   // ANAME-07: a server needs a Claude Code MCP feature pi-mcp-adapter lacks.
   "unsupported mcp",
-  // FIX-03: a shared declaration would name a marketplace only the local file declares.
+  // FIX-03: a declaration in the base layer would name a marketplace only the local
+  // config declares.
   "marketplace in local layer only",
-  // LAYER-02: a `--local` command names a marketplace only the shared file declares.
+  // LAYER-02: a `--local` command names a marketplace only the base config declares.
   "marketplace in base layer only",
   // LAYER-04: a flagless plugin command names a plugin only the local layer declares.
   "plugin in local layer only",

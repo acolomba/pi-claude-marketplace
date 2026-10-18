@@ -2817,7 +2817,7 @@ test("declares a missing config entry for a marketplace and plugin the state alr
 // LAYER-06: the second scope plan repairs the plugin the first plan skipped,
 // but by then a hand edit has removed the first plan's declarations, and the
 // second plan names no source for that plugin's marketplace. A repaired plugin
-// key without its marketplace would make the shared layer fail its next load.
+// key without its marketplace would make the base layer fail its next load.
 test("LAYER-06: writes no repaired plugin key whose marketplace neither the batch nor the file declares", async (t) => {
   // arrange
   const { cwd, project } = await createHermeticScopes(t, "repair-no-marketplace");
@@ -3651,7 +3651,7 @@ test("D-04-07: promotes a disabled dependency the imported settings name and dec
       marketplaces: { "fixture-mp": { source: marketplaceRoot } },
       plugins: { "sample@fixture-mp": {}, "dep@fixture-mp": { enabled: false } },
     }),
-    "and declared the disable in the base file",
+    "and declared the disable in the base config",
   );
   await assert.rejects(stat(skillDir), { code: "ENOENT" }, "and took its skill off disk");
 
@@ -3696,16 +3696,16 @@ test("D-04-07: promotes a disabled dependency the imported settings name and dec
   verifyBoundary();
 });
 
-test("D-04-07: declares a promoted dependency enabled in the local file when the disable verb declared it there", async (t) => {
+test("D-04-07: declares a promoted dependency enabled in the local config when the disable verb declared it there", async (t) => {
   // arrange
   // The first import's cascade records `dep`. `seedDisabledDependencyRecord`
   // then takes it off disk, and the local config file is seeded directly with
   // `{ enabled: false }` for it -- the state a `disable --local` declares in the
-  // local file, whose entry shadows the base entry wholesale (CFG-02). The
+  // local config, whose entry shadows the base entry wholesale (CFG-02). The
   // second import names `dep`: the promotion re-materializes the record, and
   // the post-pass writes the enable path's `{ enabled: true }` to the file
-  // that declares the key (D-103-16), leaving the base file the bare key. A
-  // stamp in the base file alone would leave the merged view disabled and
+  // that declares the key (D-103-16), leaving the base config the bare key. A
+  // stamp in the base config alone would leave the merged view disabled and
   // hand the reload the row asks for a disable to plan.
   const { cwd, project } = await createHermeticScopes(t, "promotes-disabled-dependency-local");
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2);
@@ -3789,7 +3789,7 @@ test("D-04-07: declares a promoted dependency enabled in the local file when the
   assert.strictEqual(
     await readFile(project.localConfigJsonPath, "utf8"),
     configBytes({ marketplaces: {}, plugins: { "dep@fixture-mp": { enabled: false } } }),
-    "and declared the disable in the local file",
+    "and declared the disable in the local config",
   );
   await assert.rejects(stat(skillDir), { code: "ENOENT" }, "and took its skill off disk");
 
@@ -3802,8 +3802,8 @@ test("D-04-07: declares a promoted dependency enabled in the local file when the
 
   // assert
   // The record is enabled again and promoted; the skill is back on
-  // disk; the local file carries the enable path's own declaration and the base
-  // file the bare key; the merged view reads the local entry; and the reload the
+  // disk; the local config carries the enable path's own declaration and the base
+  // config the bare key; the merged view reads the local entry; and the reload the
   // row asks for finds nothing to plan.
   assert.deepStrictEqual(secondResult, expectedSecondResult);
   const stateAfter = await loadState(project.extensionRoot);
@@ -3838,11 +3838,11 @@ test("D-04-07: declares a promoted dependency enabled in the local file when the
   verifyBoundary();
 });
 
-test("D-04-07: keeps the enabled declaration in the base file when the local file declares only other keys", async (t) => {
+test("D-04-07: keeps the enabled declaration in the base config when the local config declares only other keys", async (t) => {
   // arrange
   // A disabled dependency record, its `{ enabled: false }` in the base
-  // file, and a local file that declares a different key. The file that
-  // declares the promoted key takes the stamp (D-103-16); a local file that
+  // config, and a local config that declares a different key. The file that
+  // declares the promoted key takes the stamp (D-103-16); a local config that
   // merely exists does not.
   const { cwd, project } = await createHermeticScopes(t, "reenable-local-other-key");
   const { ctx, verifyBoundary } = createNotificationBoundary(1);

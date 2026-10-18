@@ -549,11 +549,11 @@ for (const { args, tally } of [
       "---\nname: greet\ndescription: Greeting skill.\n---\nSay hello.\n",
     );
     const locations = locationsFor("project", cwd);
-    const sharedBytes =
+    const baseBytes =
       '{ "marketplaces": { "alpha": { "source": "./alpha-src", "autoupdate": false } }, "plugins": { "hello@alpha": { "enabled": true } } }\n';
     const localBytes =
       '{ "marketplaces": { "alpha": { "source": "./alpha-local", "autoupdate": true } }, "plugins": { "keep@alpha": { "enabled": false } } }\n';
-    await writeFile(locations.baseConfigJsonPath, sharedBytes);
+    await writeFile(locations.baseConfigJsonPath, baseBytes);
     await writeFile(locations.localConfigJsonPath, localBytes);
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
       value: cwd,
@@ -596,7 +596,7 @@ for (const { args, tally } of [
         await readFile(locations.baseConfigJsonPath, "utf8"),
         await readFile(locations.localConfigJsonPath, "utf8"),
       ],
-      [sharedBytes, localBytes],
+      [baseBytes, localBytes],
     );
     assert.deepStrictEqual(git.state.calls.fetch.map(describeFetch), [fetchOf(cloneDir)]);
     verifyBoundary();

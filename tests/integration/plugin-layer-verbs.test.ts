@@ -130,7 +130,7 @@ function request(
 }
 
 /**
- * A project scope whose shared layer declares the path marketplace `mp`, and
+ * A project scope whose base layer declares the path marketplace `mp`, and
  * which installs `plugin` into the layer `local` names, then runs `extra`. The
  * setup fails unless every step succeeds.
  */
@@ -306,8 +306,8 @@ async function declarations(scope: LayerScope): Promise<readonly unknown[]> {
   return files.map((bytes): unknown => (bytes === undefined ? undefined : JSON.parse(bytes)));
 }
 
-/** The layers after a flagless install of `app`: the shared layer declares it, never `lib`. */
-function sharedDeclaresApp(source: string): readonly unknown[] {
+/** The layers after a flagless install of `app`: the base layer declares it, never `lib`. */
+function baseDeclaresApp(source: string): readonly unknown[] {
   return [
     { schemaVersion: 1, marketplaces: { mp: { source } }, plugins: { "app@mp": {} } },
     undefined,
@@ -346,7 +346,7 @@ test("LAYER-08: the load-time backfill's reinstall of a dependency writes no lay
     resourcesChanged: true,
   });
   assert.deepStrictEqual(await layerFiles(scope), before);
-  assert.deepStrictEqual(await declarations(scope), sharedDeclaresApp(scope.source));
+  assert.deepStrictEqual(await declarations(scope), baseDeclaresApp(scope.source));
   boundary.verifyBoundary();
 });
 
@@ -380,7 +380,7 @@ test("LAYER-08: a bare update moves a dependency to its new version and writes n
     },
   ]);
   assert.deepStrictEqual(await layerFiles(scope), before);
-  assert.deepStrictEqual(await declarations(scope), sharedDeclaresApp(scope.source));
+  assert.deepStrictEqual(await declarations(scope), baseDeclaresApp(scope.source));
   const state = await loadState(scope.locations.extensionRoot);
   assert.deepStrictEqual(
     Object.entries(state.marketplaces.mp?.plugins ?? {}).map(([name, record]) => [
@@ -405,9 +405,9 @@ async function forgetRecordedSource(scope: LayerScope): Promise<void> {
   await writeFile(scope.locations.stateJsonPath, JSON.stringify(state));
 }
 
-test("LAYER-06: install --local of a plugin the shared layer installed declares the marketplace with the shared layer's source when the record holds none", async (t) => {
+test("LAYER-06: install --local of a plugin the base layer installed declares the marketplace with the base layer's source when the record holds none", async (t) => {
   // arrange
-  const scope = await installedScope(t, "plugin-layer-shared-source-", "alpha", false);
+  const scope = await installedScope(t, "plugin-layer-base-source-", "alpha", false);
   await forgetRecordedSource(scope);
   const boundary = createNotificationBoundary(1);
 

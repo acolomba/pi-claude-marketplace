@@ -192,7 +192,7 @@ async function readIfPresent(filePath: string): Promise<string | undefined> {
   return (await pathExists(filePath)) ? await readFile(filePath, "utf8") : undefined;
 }
 
-test("a shared-layer remove keeps the clone, the data directory, the local file, and the local plugin", async (t) => {
+test("a base-layer remove keeps the clone, the data directory, the local config, and the local plugin", async (t) => {
   // arrange
   const scope = await projectScope(t, "mp-layer-remove-");
   const boundary = createNotificationBoundary(5);
@@ -468,10 +468,10 @@ test("LAYER-03: a full remove that keeps a dependency keeps the url marketplace'
       ["up", ["app"]],
     ],
   );
-  const shared = await loadConfig(scope.locations.baseConfigJsonPath);
-  assert.ok(shared.status === "valid");
+  const base = await loadConfig(scope.locations.baseConfigJsonPath);
+  assert.ok(base.status === "valid");
   assert.deepStrictEqual(
-    planReconcile(mergeScopeConfigs(shared.config, {}), state, "project"),
+    planReconcile(mergeScopeConfigs(base.config, {}), state, "project"),
     emptyReconcilePlan("project"),
   );
   boundary.verifyBoundary();

@@ -402,7 +402,7 @@ export const PLUGIN_UNINSTALL_FIXTURES: FixtureMap = {
       },
     },
 
-    // LAYER-04: a named uninstall without --local acts on the shared layer, so
+    // LAYER-04: a named uninstall without --local acts on the base layer, so
     // a plugin only the local layer declares is refused and nothing changes.
     "uninstall-plugin-in-local-layer-only": {
       pi: piWithBothLoaded(),
@@ -458,7 +458,7 @@ export const PLUGIN_UNINSTALL_FIXTURES: FixtureMap = {
     },
 
     // LAYER-05: both layers declare the plugin, so a flagless uninstall drops
-    // only the shared declaration and keeps the installation. A warning: the
+    // only the base declaration and keeps the installation. A warning: the
     // plugin the user asked to uninstall is still there.
     "uninstall-still-installed-in-other-layer": {
       pi: piWithBothLoaded(),

@@ -77,7 +77,7 @@ export const MARKETPLACE_REMOVE_FIXTURES: FixtureMap = {
       },
     },
 
-    // LAYER-02: a command without --local names a marketplace only the local file declares.
+    // LAYER-02: a command without --local names a marketplace only the local config declares.
     "remove-marketplace-in-local-layer-only": {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",
@@ -107,7 +107,7 @@ export const MARKETPLACE_REMOVE_FIXTURES: FixtureMap = {
       },
     },
 
-    // LAYER-02: a --local command names a marketplace only the shared file declares.
+    // LAYER-02: a --local command names a marketplace only the base config declares.
     "remove-marketplace-in-base-layer-only": {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",

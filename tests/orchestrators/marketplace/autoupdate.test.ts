@@ -139,12 +139,12 @@ async function configSnapshot(filePath: string): Promise<{
 
 async function scopeBytes(locations: ScopedLocations): Promise<{
   readonly state: string | undefined;
-  readonly shared: string | undefined;
+  readonly base: string | undefined;
   readonly local: string | undefined;
 }> {
   return {
     state: await readOptionalBytes(locations.stateJsonPath),
-    shared: await readOptionalBytes(locations.baseConfigJsonPath),
+    base: await readOptionalBytes(locations.baseConfigJsonPath),
     local: await readOptionalBytes(locations.localConfigJsonPath),
   };
 }
@@ -152,7 +152,7 @@ async function scopeBytes(locations: ScopedLocations): Promise<{
 async function recordAndDeclare(
   locations: ScopedLocations,
   cwd: string,
-  layer: "shared" | "local",
+  layer: "base" | "local",
 ): Promise<void> {
   await saveMarketplaces(locations, [marketplaceRecord("mp", locations.scope, cwd)]);
   await writeConfig(
@@ -170,7 +170,7 @@ const DECLARED_LOCALLY_REFUSAL = [
   "    cause: The marketplace mp is declared only in the local config (claude-plugins.local.json). Run the command again with --local.",
 ].join("\n");
 
-const SHARED_FLIP_BYTES =
+const BASE_FLIP_BYTES =
   '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "mp": {\n      "source": "./src",\n      "autoupdate": true\n    }\n  },\n  "plugins": {}\n}\n';
 
 async function withHermeticHome<T>(
@@ -1047,10 +1047,10 @@ test("reports a committed project flip beside the failure when the user scope is
   });
 });
 
-test("D-06: an unnamed flip whose local write fails reports the marketplaces the shared write already flipped", async () => {
+test("D-06: an unnamed flip whose local write fails reports the marketplaces the base write already flipped", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
-    // arrange: the local file is a link, which the config writer refuses to
-    // replace, so the shared write lands and the local write fails.
+    // arrange: the local config is a link, which the config writer refuses to
+    // replace, so the base write lands and the local write fails.
     const locations = locationsFor("project", cwd);
     await saveMarketplaces(locations, [
       marketplaceRecord("extras", "project", cwd),
@@ -1107,11 +1107,11 @@ test("D-06: an unnamed flip whose local write fails reports the marketplaces the
   });
 });
 
-test("LAYER-02: a shared flip writes only the shared entry while the local file also declares it", async () => {
+test("LAYER-02: a base flip writes only the base entry while the local config also declares it", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
     const locations = locationsFor("project", cwd);
-    await recordAndDeclare(locations, cwd, "shared");
+    await recordAndDeclare(locations, cwd, "base");
     await writeConfig(
       locations,
       { schemaVersion: 1, marketplaces: { mp: { source: "./src" } } },
@@ -1132,7 +1132,7 @@ test("LAYER-02: a shared flip writes only the shared entry while the local file 
     });
 
     // assert
-    assert.equal(await readFile(locations.baseConfigJsonPath, "utf8"), SHARED_FLIP_BYTES);
+    assert.equal(await readFile(locations.baseConfigJsonPath, "utf8"), BASE_FLIP_BYTES);
     assert.deepEqual(await configSnapshot(locations.localConfigJsonPath), localBefore);
     assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
     verify(boundary.ctx);
@@ -1142,14 +1142,14 @@ test("LAYER-02: a shared flip writes only the shared entry while the local file 
 
 const layerRefusalCases = [
   {
-    label: "a flip without --local on a marketplace only the local file declares",
+    label: "a flip without --local on a marketplace only the local config declares",
     declaringLayer: "local" as const,
     local: false,
     expectedMessage: DECLARED_LOCALLY_REFUSAL,
   },
   {
-    label: "a flip with --local on a marketplace only the shared file declares",
-    declaringLayer: "shared" as const,
+    label: "a flip with --local on a marketplace only the base config declares",
+    declaringLayer: "base" as const,
     local: true,
     expectedMessage: [
       "Some operations have failed.",
@@ -1289,7 +1289,7 @@ test("D-09: an unscoped flip reports only the scope it changed when the other sc
     const projectLocations = locationsFor("project", cwd);
     const userLocations = locationsFor("user", cwd);
     await recordAndDeclare(projectLocations, cwd, "local");
-    await recordAndDeclare(userLocations, cwd, "shared");
+    await recordAndDeclare(userLocations, cwd, "base");
     const projectBefore = await scopeBytes(projectLocations);
     const userStateBytes = await readFile(userLocations.stateJsonPath, "utf8");
     const boundary = notificationBoundary({ message: "● mp [user] <autoupdate>" });
@@ -1307,7 +1307,7 @@ test("D-09: an unscoped flip reports only the scope it changed when the other sc
     assert.deepEqual(await scopeBytes(projectLocations), projectBefore);
     assert.deepEqual(await scopeBytes(userLocations), {
       state: userStateBytes,
-      shared: SHARED_FLIP_BYTES,
+      base: BASE_FLIP_BYTES,
       local: undefined,
     });
     verify(boundary.ctx);
@@ -1358,8 +1358,8 @@ for (const { label, userLayer } of unscopedRefusalCases) {
 
 const targetLayerIdempotencyCases = [
   {
-    label: "a shared entry without a value as already off",
-    layer: "shared" as const,
+    label: "a base entry without a value as already off",
+    layer: "base" as const,
     entry: { source: "./src" },
   },
   {
@@ -1408,14 +1408,14 @@ for (const { label, layer, entry } of targetLayerIdempotencyCases) {
 
 const unnamedDisableCases = [
   {
-    label: "turns off a marketplace the shared file has on",
+    label: "turns off a marketplace the base config has on",
     entry: { source: "./src", autoupdate: true },
     expectedMessage: "● mp [project] <no autoupdate>\n\nMarketplace noautoupdate: 1 success",
     expectedBytes:
       '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "mp": {\n      "source": "./src",\n      "autoupdate": false\n    }\n  },\n  "plugins": {}\n}\n',
   },
   {
-    label: "reports a shared entry without a value as already off",
+    label: "reports a base entry without a value as already off",
     entry: { source: "./src" },
     expectedMessage:
       "● mp [project] <no autoupdate> {already no autoupdate}\n\nMarketplace noautoupdate: 1 success",
@@ -1453,11 +1453,11 @@ for (const { label, entry, expectedMessage, expectedBytes } of unnamedDisableCas
   });
 }
 
-test("CFG-03: an unnamed --local flip over an invalid local file fails and writes nothing", async () => {
+test("CFG-03: an unnamed --local flip over an invalid local config fails and writes nothing", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
     const locations = locationsFor("project", cwd);
-    await recordAndDeclare(locations, cwd, "shared");
+    await recordAndDeclare(locations, cwd, "base");
     await writeFile(locations.localConfigJsonPath, "{ malformed", "utf8");
     const bytesBefore = await scopeBytes(locations);
     const boundary = notificationBoundary({
@@ -1530,7 +1530,7 @@ test("D-06: an unnamed flip sets the value in every layer that declares each mar
     // assert
     assert.deepEqual(await scopeBytes(locations), {
       state: stateBytes,
-      shared: [
+      base: [
         "{",
         '  "schemaVersion": 1,',
         '  "marketplaces": {',
@@ -1566,7 +1566,7 @@ test("D-06: an unnamed flip sets the value in every layer that declares each mar
   });
 });
 
-const sharedOnUnnamedCases = [
+const baseOnUnnamedCases = [
   {
     label: "writes the explicit value into a local entry that has none",
     localEntry: { source: "./src" },
@@ -1583,8 +1583,8 @@ const sharedOnUnnamedCases = [
   },
 ] as const;
 
-for (const { label, localEntry, expectedMessage, expectedLocal } of sharedOnUnnamedCases) {
-  test(`D-07: an unnamed enable over a shared value that is on ${label}`, async () => {
+for (const { label, localEntry, expectedMessage, expectedLocal } of baseOnUnnamedCases) {
+  test(`D-07: an unnamed enable over a base value that is on ${label}`, async () => {
     await withHermeticHome(async ({ cwd }) => {
       // arrange
       const locations = locationsFor("project", cwd);
@@ -1594,7 +1594,7 @@ for (const { label, localEntry, expectedMessage, expectedLocal } of sharedOnUnna
         marketplaces: { mp: { source: "./src", autoupdate: true } },
       });
       await writeConfig(locations, { schemaVersion: 1, marketplaces: { mp: localEntry } }, true);
-      const sharedBefore = await configSnapshot(locations.baseConfigJsonPath);
+      const baseBefore = await configSnapshot(locations.baseConfigJsonPath);
       const localBytes = await readFile(locations.localConfigJsonPath, "utf8");
       const boundary = notificationBoundary({ message: expectedMessage });
 
@@ -1608,7 +1608,7 @@ for (const { label, localEntry, expectedMessage, expectedLocal } of sharedOnUnna
       });
 
       // assert
-      assert.deepEqual(await configSnapshot(locations.baseConfigJsonPath), sharedBefore);
+      assert.deepEqual(await configSnapshot(locations.baseConfigJsonPath), baseBefore);
       assert.equal(
         await readFile(locations.localConfigJsonPath, "utf8"),
         expectedLocal ?? localBytes,
@@ -1619,7 +1619,7 @@ for (const { label, localEntry, expectedMessage, expectedLocal } of sharedOnUnna
   });
 }
 
-test("D-09: an unnamed --local flip changes only the local file and skips what it does not declare", async () => {
+test("D-09: an unnamed --local flip changes only the local config and skips what it does not declare", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
     const locations = locationsFor("project", cwd);
@@ -1636,7 +1636,7 @@ test("D-09: an unnamed --local flip changes only the local file and skips what i
       { schemaVersion: 1, marketplaces: { mp: { source: "./src" } } },
       true,
     );
-    const sharedBefore = await configSnapshot(locations.baseConfigJsonPath);
+    const baseBefore = await configSnapshot(locations.baseConfigJsonPath);
     const boundary = notificationBoundary({
       message: "● mp [project] <no autoupdate>\n\nMarketplace noautoupdate: 1 success",
     });
@@ -1652,7 +1652,7 @@ test("D-09: an unnamed --local flip changes only the local file and skips what i
     });
 
     // assert
-    assert.deepEqual(await configSnapshot(locations.baseConfigJsonPath), sharedBefore);
+    assert.deepEqual(await configSnapshot(locations.baseConfigJsonPath), baseBefore);
     assert.equal(
       await readFile(locations.localConfigJsonPath, "utf8"),
       '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "mp": {\n      "source": "./src",\n      "autoupdate": false\n    }\n  },\n  "plugins": {}\n}\n',
@@ -1662,11 +1662,11 @@ test("D-09: an unnamed --local flip changes only the local file and skips what i
   });
 });
 
-test("CFG-03: an unnamed flip without --local over an invalid local file fails and writes nothing", async () => {
+test("CFG-03: an unnamed flip without --local over an invalid local config fails and writes nothing", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
     const locations = locationsFor("project", cwd);
-    await recordAndDeclare(locations, cwd, "shared");
+    await recordAndDeclare(locations, cwd, "base");
     await writeFile(locations.localConfigJsonPath, "{ malformed", "utf8");
     const bytesBefore = await scopeBytes(locations);
     const boundary = notificationBoundary({
@@ -1698,13 +1698,13 @@ test("CFG-03: an unnamed flip without --local over an invalid local file fails a
   });
 });
 
-test("D-09: an unnamed --local flip reads only the local file", async () => {
+test("D-09: an unnamed --local flip reads only the local config", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
     const locations = locationsFor("project", cwd);
     await recordAndDeclare(locations, cwd, "local");
     await writeFile(locations.baseConfigJsonPath, "{ malformed", "utf8");
-    const sharedBytes = await readFile(locations.baseConfigJsonPath, "utf8");
+    const baseBytes = await readFile(locations.baseConfigJsonPath, "utf8");
     const boundary = notificationBoundary({
       message: "● mp [project] <autoupdate>\n\nMarketplace autoupdate: 1 success",
     });
@@ -1720,8 +1720,8 @@ test("D-09: an unnamed --local flip reads only the local file", async () => {
     });
 
     // assert
-    assert.equal(await readFile(locations.baseConfigJsonPath, "utf8"), sharedBytes);
-    assert.equal(await readFile(locations.localConfigJsonPath, "utf8"), SHARED_FLIP_BYTES);
+    assert.equal(await readFile(locations.baseConfigJsonPath, "utf8"), baseBytes);
+    assert.equal(await readFile(locations.localConfigJsonPath, "utf8"), BASE_FLIP_BYTES);
     verify(boundary.ctx);
     verify(boundary.ui);
   });
@@ -1731,7 +1731,7 @@ test("D-08-07: reports a marketplace named constructor as not added when no reco
   await withHermeticHome(async ({ cwd }) => {
     // arrange
     const locations = locationsFor("project", cwd);
-    await recordAndDeclare(locations, cwd, "shared");
+    await recordAndDeclare(locations, cwd, "base");
     const bytesBefore = await scopeBytes(locations);
     const boundary = notificationBoundary({
       message:

@@ -429,9 +429,9 @@ function recordedPlugin(
 }
 
 /**
- * FIX-02: `mp-local` is declared only in the local file and records the
+ * FIX-02: `mp-local` is declared only in the local config and records the
  * explicit plugin `lp` and the dependency `dep`; `mp-shared` records the
- * explicit plugins `sp` and `lsp`, and the local file declares `lsp`.
+ * explicit plugins `sp` and `lsp`, and the local config declares `lsp`.
  */
 function localDeclarationState(): ExtensionState {
   return {
@@ -521,13 +521,13 @@ test("LAYER-01: a marketplace both layers declare with its recorded source conve
 });
 
 /**
- * LAYER-09: `formatter@tools` is declared `{ enabled: false }` in the shared
- * layer and `{}` in the local layer, so the merged entry keeps the shared
+ * LAYER-09: `formatter@tools` is declared `{ enabled: false }` in the base
+ * layer and `{}` in the local layer, so the merged entry keeps the base
  * `enabled`.
  */
-function formatterDeclaredDisabledInSharedLayer(recordEnabled: boolean): {
+function formatterDeclaredDisabledInBaseLayer(recordEnabled: boolean): {
   readonly state: ExtensionState;
-  readonly shared: ScopeConfig;
+  readonly base: ScopeConfig;
   readonly local: ScopeConfig;
 } {
   return {
@@ -550,7 +550,7 @@ function formatterDeclaredDisabledInSharedLayer(recordEnabled: boolean): {
         },
       },
     },
-    shared: {
+    base: {
       schemaVersion: 1,
       marketplaces: { tools: { source: "./tools" } },
       plugins: { "formatter@tools": { enabled: false } },
@@ -559,23 +559,23 @@ function formatterDeclaredDisabledInSharedLayer(recordEnabled: boolean): {
   };
 }
 
-test("LAYER-09: a disabled record under a shared false and a local entry without enabled converges to the empty plan", () => {
+test("LAYER-09: a disabled record under a base false and a local entry without enabled converges to the empty plan", () => {
   // arrange
-  const { state, shared, local } = formatterDeclaredDisabledInSharedLayer(false);
+  const { state, base, local } = formatterDeclaredDisabledInBaseLayer(false);
 
   // act
-  const plan = planReconcile(mergeScopeConfigs(shared, local), state, "project");
+  const plan = planReconcile(mergeScopeConfigs(base, local), state, "project");
 
   // assert
   assert.deepStrictEqual(plan, emptyReconcilePlan("project"));
 });
 
-test("LAYER-09: an enabled record under a shared false and a local entry without enabled plans a disable", () => {
+test("LAYER-09: an enabled record under a base false and a local entry without enabled plans a disable", () => {
   // arrange
-  const { state, shared, local } = formatterDeclaredDisabledInSharedLayer(true);
+  const { state, base, local } = formatterDeclaredDisabledInBaseLayer(true);
 
   // act
-  const plan = planReconcile(mergeScopeConfigs(shared, local), state, "project");
+  const plan = planReconcile(mergeScopeConfigs(base, local), state, "project");
 
   // assert
   assert.deepStrictEqual(plan, {

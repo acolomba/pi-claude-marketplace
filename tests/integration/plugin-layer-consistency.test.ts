@@ -7,7 +7,7 @@
 // already installed stay recorded, and no file is repaired. A plugin whose
 // marketplace no layer declares keeps its own dangling reference row, and the
 // rest of the scope still converges. Before the first-run migration writes the
-// shared layer, pending checks the layers the migration would leave (MIG-01).
+// base layer, pending checks the layers the migration would leave (MIG-01).
 
 import assert from "node:assert/strict";
 import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
@@ -144,7 +144,7 @@ function layerError(
   };
 }
 
-test("a local layer that declares a plugin whose marketplace only the shared layer declares stops the reload and changes no file", async (t) => {
+test("a local layer that declares a plugin whose marketplace only the base layer declares stops the reload and changes no file", async (t) => {
   // arrange
   const scope = await layerScope(t, "layer-gap-local-", "project");
   await writeLayer(scope.locations.baseConfigJsonPath, {
@@ -179,9 +179,9 @@ test("a local layer that declares a plugin whose marketplace only the shared lay
   assert.deepStrictEqual(await recordedPlugins(scope.locations), ["other"]);
 });
 
-test("a shared layer that declares a plugin whose marketplace only the local layer declares stops the reload and changes no file", async (t) => {
+test("a base layer that declares a plugin whose marketplace only the local layer declares stops the reload and changes no file", async (t) => {
   // arrange
-  const scope = await layerScope(t, "layer-gap-shared-", "project");
+  const scope = await layerScope(t, "layer-gap-base-", "project");
   await writeLayer(scope.locations.localConfigJsonPath, {
     marketplaces: { mp: { source: scope.source } },
     plugins: { "other@mp": {} },

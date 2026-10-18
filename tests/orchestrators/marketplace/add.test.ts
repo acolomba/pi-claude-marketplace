@@ -3068,13 +3068,13 @@ test("WB-01: standalone add writes the marketplace entry to claude-plugins.json 
       "anthropics/claude-plugins-official",
     );
 
-    // The local file MUST NOT have been touched on the base-target path.
+    // The local config MUST NOT have been touched on the base-target path.
     const localCfg = await loadConfig(locations.localConfigJsonPath);
     assert.equal(localCfg.status, "absent");
   });
 });
 
-test("WB-01: --local routes the write to claude-plugins.local.json and never touches the base file", async () => {
+test("WB-01: --local routes the write to claude-plugins.local.json and never touches the base config", async () => {
   await withTmpScope(async ({ cwd, locations }) => {
     // arrange
     const { ctx, run } = makeCtx();
@@ -3105,7 +3105,7 @@ test("WB-01: --local routes the write to claude-plugins.local.json and never tou
       );
     }
 
-    // The base file MUST be untouched.
+    // The base config MUST be untouched.
     const baseCfg = await loadConfig(locations.baseConfigJsonPath);
     assert.equal(baseCfg.status, "absent");
   });
@@ -3117,8 +3117,8 @@ function declaredMarketplaceBytes(name: string, source: string): string {
 }
 
 for (const { declaredLayer, targetLayer, firstLocal, secondLocal } of [
-  { declaredLayer: "shared", targetLayer: "local", firstLocal: false, secondLocal: true },
-  { declaredLayer: "local", targetLayer: "shared", firstLocal: true, secondLocal: false },
+  { declaredLayer: "base", targetLayer: "local", firstLocal: false, secondLocal: true },
+  { declaredLayer: "local", targetLayer: "base", firstLocal: true, secondLocal: false },
 ]) {
   test(`LAYER-01: declares a path marketplace the ${declaredLayer} layer holds in the ${targetLayer} layer with no clone and no state write`, async () => {
     await withTmpScope(async ({ cwd, locations }) => {
@@ -3328,7 +3328,7 @@ test("LAYER-01: a failed re-declaration write keeps the recorded clone and state
     const cloneEntriesBefore = (await readdir(cloneDir, { recursive: true })).sort();
     const stateBefore = await readFile(locations.stateJsonPath, "utf8");
     const { ctx, run } = makeCtx(0);
-    // A read-only scope root refuses the atomic write of the absent local file.
+    // A read-only scope root refuses the atomic write of the absent local config.
     await chmod(locations.scopeRoot, 0o500);
 
     // act & assert
@@ -3357,7 +3357,7 @@ test("LAYER-01: a failed re-declaration write keeps the recorded clone and state
   });
 });
 
-test("WR-09 / T-56-02-01: orchestrated-mode add SKIPS config write-back (neither base nor local file is created)", async () => {
+test("WR-09 / T-56-02-01: orchestrated-mode add SKIPS config write-back (neither base nor local config is created)", async () => {
   await withTmpScope(async ({ cwd, locations }) => {
     // arrange
     const { ctx, run } = makeCtx();

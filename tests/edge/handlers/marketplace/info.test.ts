@@ -276,11 +276,11 @@ for (const { name, autoupdate } of [
     await seedMarketplace(cwd, "project", "local", "/repo/local");
     await seedMarketplace(cwd, "project", "overlap", "/repo/overlap");
     const locations = locationsFor("project", cwd);
-    const sharedBytes =
+    const baseBytes =
       '{ "marketplaces": { "shared": { "source": "./shared", "autoupdate": true }, "overlap": { "source": "./overlap", "autoupdate": true } } }\n';
     const localBytes =
       '{ "marketplaces": { "local": { "source": "./local", "autoupdate": true }, "overlap": { "source": "./override", "autoupdate": false } } }\n';
-    await writeFile(locations.baseConfigJsonPath, sharedBytes);
+    await writeFile(locations.baseConfigJsonPath, baseBytes);
     await writeFile(locations.localConfigJsonPath, localBytes);
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
       value: cwd,
@@ -300,7 +300,7 @@ for (const { name, autoupdate } of [
         await readFile(locations.baseConfigJsonPath, "utf8"),
         await readFile(locations.localConfigJsonPath, "utf8"),
       ],
-      [sharedBytes, localBytes],
+      [baseBytes, localBytes],
     );
     verifyBoundary();
   });

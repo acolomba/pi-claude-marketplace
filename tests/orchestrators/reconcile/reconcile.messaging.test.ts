@@ -419,7 +419,7 @@ test("the local-layer cause names the plugin and the --local repair in its scope
   );
 });
 
-test("the shared-layer cause names the plugins and the repair without --local in its scope", () => {
+test("the base-layer cause names the plugins and the repair without --local in its scope", () => {
   // act
   const cause = composeLayerMarketplaceCause({ layer: "base", keys: ["a@mp", "b@mp"] }, "user");
 
@@ -441,7 +441,7 @@ test("the local-layer cause with two plugins uses the plural forms", () => {
   );
 });
 
-test("the shared-layer cause with one plugin uses the singular forms", () => {
+test("the base-layer cause with one plugin uses the singular forms", () => {
   // act
   const cause = composeLayerMarketplaceCause({ layer: "base", keys: ["demo@fixtures"] }, "project");
 

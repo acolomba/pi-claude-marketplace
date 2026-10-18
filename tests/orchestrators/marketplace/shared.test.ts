@@ -2275,8 +2275,8 @@ test("marketplaceFailureRows puts the reason and the cause on one failed child o
   ]);
 });
 
-const LOCAL_FILE = "/scope/.pi/claude-plugins.local.json";
-const SHARED_FILE = "/scope/.pi/claude-plugins.json";
+const LOCAL_CONFIG_PATH = "/scope/.pi/claude-plugins.local.json";
+const BASE_CONFIG_PATH = "/scope/.pi/claude-plugins.json";
 
 function declaring(...marketplaces: readonly string[]): ScopeConfig {
   return {
@@ -2297,7 +2297,7 @@ for (const { title, target, other, targetIsLocal, marketplace, expectedVerdict }
   {
     title: "a marketplace only the target layer declares, with the other file silent, as declared",
     target: declaring("tools"),
-    other: { status: "valid", filePath: LOCAL_FILE, config: declaring("extras") },
+    other: { status: "valid", filePath: LOCAL_CONFIG_PATH, config: declaring("extras") },
     targetIsLocal: false,
     marketplace: "tools",
     expectedVerdict: { kind: "declared", other: "silent" },
@@ -2305,7 +2305,7 @@ for (const { title, target, other, targetIsLocal, marketplace, expectedVerdict }
   {
     title: "a marketplace both layers declare as declared by the other layer too",
     target: declaring("tools"),
-    other: { status: "valid", filePath: SHARED_FILE, config: declaring("tools") },
+    other: { status: "valid", filePath: BASE_CONFIG_PATH, config: declaring("tools") },
     targetIsLocal: true,
     marketplace: "tools",
     expectedVerdict: { kind: "declared", other: "declares" },
@@ -2314,7 +2314,7 @@ for (const { title, target, other, targetIsLocal, marketplace, expectedVerdict }
     title:
       "a marketplace the target layer declares beside an invalid other file as possibly declared there",
     target: declaring("tools"),
-    other: { status: "invalid", filePath: LOCAL_FILE, error: "bad json" },
+    other: { status: "invalid", filePath: LOCAL_CONFIG_PATH, error: "bad json" },
     targetIsLocal: false,
     marketplace: "tools",
     expectedVerdict: { kind: "declared", other: "unreadable" },
@@ -2323,7 +2323,7 @@ for (const { title, target, other, targetIsLocal, marketplace, expectedVerdict }
     title:
       "a base-config target whose marketplace only the local config declares as marketplace in local layer only",
     target: declaring("extras"),
-    other: { status: "valid", filePath: LOCAL_FILE, config: declaring("tools") },
+    other: { status: "valid", filePath: LOCAL_CONFIG_PATH, config: declaring("tools") },
     targetIsLocal: false,
     marketplace: "tools",
     expectedVerdict: {
@@ -2336,7 +2336,7 @@ for (const { title, target, other, targetIsLocal, marketplace, expectedVerdict }
     title:
       "a local-config target whose marketplace only the base config declares as marketplace in base layer only",
     target: { schemaVersion: 1 },
-    other: { status: "valid", filePath: SHARED_FILE, config: declaring("tools") },
+    other: { status: "valid", filePath: BASE_CONFIG_PATH, config: declaring("tools") },
     targetIsLocal: true,
     marketplace: "tools",
     expectedVerdict: {
@@ -2356,7 +2356,7 @@ for (const { title, target, other, targetIsLocal, marketplace, expectedVerdict }
   {
     title: "a marketplace neither layer declares, with the other file silent, as undeclared",
     target: declaring("extras"),
-    other: { status: "valid", filePath: LOCAL_FILE, config: declaring("base") },
+    other: { status: "valid", filePath: LOCAL_CONFIG_PATH, config: declaring("base") },
     targetIsLocal: false,
     marketplace: "tools",
     expectedVerdict: { kind: "undeclared" },
@@ -2364,7 +2364,7 @@ for (const { title, target, other, targetIsLocal, marketplace, expectedVerdict }
   {
     title: "a target silent beside an invalid other file as unreadable, naming its basename only",
     target: declaring("extras"),
-    other: { status: "invalid", filePath: SHARED_FILE, error: "bad json" },
+    other: { status: "invalid", filePath: BASE_CONFIG_PATH, error: "bad json" },
     targetIsLocal: true,
     marketplace: "tools",
     expectedVerdict: { kind: "other-unreadable", otherBasename: "claude-plugins.json" },
@@ -2372,7 +2372,7 @@ for (const { title, target, other, targetIsLocal, marketplace, expectedVerdict }
   {
     title: "a marketplace named constructor that no file owns as undeclared",
     target: declaring("extras"),
-    other: { status: "valid", filePath: LOCAL_FILE, config: declaring("base") },
+    other: { status: "valid", filePath: LOCAL_CONFIG_PATH, config: declaring("base") },
     targetIsLocal: false,
     marketplace: "constructor",
     expectedVerdict: { kind: "undeclared" },
@@ -2383,7 +2383,7 @@ for (const { title, target, other, targetIsLocal, marketplace, expectedVerdict }
     target: { schemaVersion: 1, marketplaces: {} },
     other: {
       status: "valid",
-      filePath: LOCAL_FILE,
+      filePath: LOCAL_CONFIG_PATH,
       config: JSON.parse(
         '{ "schemaVersion": 1, "marketplaces": { "__proto__": { "source": "./proto" } } }',
       ) as ScopeConfig,

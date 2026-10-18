@@ -446,7 +446,7 @@ test("MSG-GR-3: a failed configuration block sorts among the plan blocks by name
   verifyBoundary();
 });
 
-test("MIG-01: an absent base configuration plans against the state projection instead of an empty desired state", async (t) => {
+test("MIG-01: an absent base config plans against the state projection instead of an empty desired state", async (t) => {
   // arrange
   const { cwd, project } = await createHermeticScopes(t, "premigration");
   await writeUnder(
@@ -467,7 +467,7 @@ test("MIG-01: an absent base configuration plans against the state projection in
   verifyBoundary();
 });
 
-test("MIG-01 / NFR-5: the pre-migration projection is read-only and never writes the base configuration file", async (t) => {
+test("MIG-01 / NFR-5: the pre-migration projection is read-only and never writes the base config", async (t) => {
   // arrange
   const { cwd, project } = await createHermeticScopes(t, "premigration-readonly");
   const recordedState = stateBytes("mp", "acme/tools", path.join(cwd, "clone"), [
@@ -547,7 +547,7 @@ test("LAYER-06 / MIG-01: before the first-run migration, a local layer missing t
   verifyBoundary();
 });
 
-test("FIX-02: the pending view leaves out what the local file declares, as the load's migration does", async (t) => {
+test("FIX-02: the pending view leaves out what the local config declares, as the load's migration does", async (t) => {
   // arrange
   const { cwd, project } = await createHermeticScopes(t, "premigration-local-declared");
   await writeUnder(

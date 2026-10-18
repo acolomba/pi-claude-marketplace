@@ -219,18 +219,18 @@ test("reports an unrecognised scope value with the list usage block and never li
   verifyBoundary();
 });
 
-test("list --scope project keeps shared, local, and overridden entries with unchanged config bytes", async (t) => {
+test("list --scope project keeps base, local, and overridden entries with unchanged config bytes", async (t) => {
   // arrange
   const { cwd } = await createHermeticScope(t, "merged-config");
   await seedMarketplace(cwd, "project", "shared");
   await seedMarketplace(cwd, "project", "local");
   await seedMarketplace(cwd, "project", "overlap");
   const locations = locationsFor("project", cwd);
-  const sharedBytes =
+  const baseBytes =
     '{ "marketplaces": { "shared": { "source": "./shared", "autoupdate": true }, "overlap": { "source": "./overlap", "autoupdate": true } } }\n';
   const localBytes =
     '{ "marketplaces": { "local": { "source": "./local", "autoupdate": true }, "overlap": { "source": "./override", "autoupdate": false } } }\n';
-  await writeFile(locations.baseConfigJsonPath, sharedBytes);
+  await writeFile(locations.baseConfigJsonPath, baseBytes);
   await writeFile(locations.localConfigJsonPath, localBytes);
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
     value: cwd,
@@ -253,7 +253,7 @@ test("list --scope project keeps shared, local, and overridden entries with unch
       await readFile(locations.baseConfigJsonPath, "utf8"),
       await readFile(locations.localConfigJsonPath, "utf8"),
     ],
-    [sharedBytes, localBytes],
+    [baseBytes, localBytes],
   );
   verifyBoundary();
 });

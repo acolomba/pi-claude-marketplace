@@ -21,7 +21,7 @@
 //
 // D-115-07: every outcome kind the cascade can accumulate is produced here.
 //
-//   invalid-block            unparseable base / local configuration, an
+//   invalid-block            unparseable base / local config, an
 //                            unparseable state file, a held scope lock, a
 //                            refused first-run configuration write, and the
 //                            routing rebuild's own isolated failure
@@ -548,7 +548,7 @@ async function seedLayerScope(
   t: TestContext,
   label: string,
   layers: {
-    readonly shared: (marketplaceRoot: string) => string;
+    readonly base: (marketplaceRoot: string) => string;
     readonly local: (marketplaceRoot: string) => string;
   },
 ): Promise<{ readonly cwd: string; readonly project: ScopedLocations }> {
@@ -556,7 +556,7 @@ async function seedLayerScope(
   const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
     hello: { skill: "clean" },
   });
-  await writeUnder(project.baseConfigJsonPath, layers.shared(marketplaceRoot));
+  await writeUnder(project.baseConfigJsonPath, layers.base(marketplaceRoot));
   await writeUnder(project.localConfigJsonPath, layers.local(marketplaceRoot));
   await seedState(project, {
     schemaVersion: 3,
@@ -798,7 +798,7 @@ describe("applyReconcile", () => {
     verifyBoundary();
   });
 
-  test("CFG-03: reports an unparseable base configuration by basename, skips that scope's apply pass, and removes nothing", async (t) => {
+  test("CFG-03: reports an unparseable base config by basename, skips that scope's apply pass, and removes nothing", async (t) => {
     // arrange
     const { cwd, project } = await createHermeticScopes(t, "invalid-base");
     const seeded: ExtensionState = {
@@ -850,7 +850,7 @@ describe("applyReconcile", () => {
     verifyBoundary();
   });
 
-  test("CFG-03: reports a schema-invalid local configuration alongside an unparseable base one, each on its own row", async (t) => {
+  test("CFG-03: reports a schema-invalid local config alongside an unparseable base one, each on its own row", async (t) => {
     // arrange
     const { cwd, project } = await createHermeticScopes(t, "invalid-both");
     const seeded: ExtensionState = {
@@ -890,7 +890,7 @@ describe("applyReconcile", () => {
     verifyBoundary();
   });
 
-  test("CFG-03: reports a schema-invalid local configuration on its own when the base file is valid", async (t) => {
+  test("CFG-03: reports a schema-invalid local config on its own when the base config is valid", async (t) => {
     // arrange
     const { cwd, project } = await createHermeticScopes(t, "invalid-local");
     await seedState(project, {
@@ -924,13 +924,13 @@ describe("applyReconcile", () => {
     verifyBoundary();
   });
 
-  test("LAYER-06: a local layer that declares a plugin whose marketplace only the shared layer declares stops the reload and writes nothing", async (t) => {
+  test("LAYER-06: a local layer that declares a plugin whose marketplace only the base layer declares stops the reload and writes nothing", async (t) => {
     // arrange
     const { cwd, project } = await seedLayerScope(t, "layer-gap-local", {
-      shared: (root) => configBytes({ marketplaces: { mp: { source: root } } }),
+      base: (root) => configBytes({ marketplaces: { mp: { source: root } } }),
       local: () => configBytes({ plugins: { "hello@mp": {} } }),
     });
-    const sharedBytes = await readFile(project.baseConfigJsonPath, "utf8");
+    const baseBytes = await readFile(project.baseConfigJsonPath, "utf8");
     const localBytes = await readFile(project.localConfigJsonPath, "utf8");
     const stateBytes = await readFile(project.stateJsonPath, "utf8");
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
@@ -953,7 +953,7 @@ describe("applyReconcile", () => {
         severity: "error",
       },
     ]);
-    assert.equal(await readFile(project.baseConfigJsonPath, "utf8"), sharedBytes);
+    assert.equal(await readFile(project.baseConfigJsonPath, "utf8"), baseBytes);
     assert.equal(await readFile(project.localConfigJsonPath, "utf8"), localBytes);
     assert.equal(await readFile(project.stateJsonPath, "utf8"), stateBytes);
     assert.deepStrictEqual(await retryTree(project.scopeRoot), [
@@ -969,7 +969,7 @@ describe("applyReconcile", () => {
   test("LAYER-06: each layer that declares a plugin whose marketplace only the other layer declares reports its own row", async (t) => {
     // arrange
     const { cwd, project } = await seedLayerScope(t, "layer-gap-both", {
-      shared: (root) =>
+      base: (root) =>
         configBytes({ marketplaces: { mp: { source: root } }, plugins: { "lib@other": {} } }),
       local: (root) =>
         configBytes({ marketplaces: { other: { source: root } }, plugins: { "hello@mp": {} } }),
@@ -1007,7 +1007,7 @@ describe("applyReconcile", () => {
   test("LAYER-06: a plugin whose marketplace no layer declares keeps its dangling reference row while the scope still installs", async (t) => {
     // arrange
     const { cwd, project } = await seedLayerScope(t, "layer-gap-dangling", {
-      shared: (root) =>
+      base: (root) =>
         configBytes({ marketplaces: { mp: { source: root } }, plugins: { "hello@mp": {} } }),
       local: () => configBytes({ plugins: { "ghost@nowhere": {} } }),
     });
@@ -2987,7 +2987,7 @@ describe("applyReconcile", () => {
     verifyBoundary();
   });
 
-  test("DFEN-04: a bare declaration under an entry that defaults to disabled installs, unstages, names the cause and the remedy, and stamps the declaring base file", async (t) => {
+  test("DFEN-04: a bare declaration under an entry that defaults to disabled installs, unstages, names the cause and the remedy, and stamps the declaring base config", async (t) => {
     // arrange
     const { cwd, project } = await createHermeticScopes(t, "install-disabled-base");
     const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
@@ -3052,7 +3052,7 @@ describe("applyReconcile", () => {
     verifyBoundary();
   });
 
-  test("DFEN-05: the same declaration made only in the local file stamps the local file and leaves the base file byte-identical", async (t) => {
+  test("DFEN-05: the same declaration made only in the local config stamps the local config and leaves the base config byte-identical", async (t) => {
     // arrange
     const { cwd, project } = await createHermeticScopes(t, "install-disabled-local");
     const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
@@ -7058,7 +7058,7 @@ describe("applyReconcile", () => {
 
   test("AFILE-04: a reload whose uninstall and install both rewrite one commented mcp-adapter.json shows one notice", async (t) => {
     // arrange
-    const { cwd } = await seedCommentedAdapterScope(t, "afile-shared-file", {
+    const { cwd } = await seedCommentedAdapterScope(t, "afile-base-config", {
       trees: { alfa: { mcpServer: true }, bravo: { mcpServer: true } },
       declared: { "bravo@mp": {} },
       recorded: { alfa: { mcpServers: ["alfa-echo"] } },

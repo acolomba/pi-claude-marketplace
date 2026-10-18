@@ -80,7 +80,7 @@ const PROJECT_ALPHA_REMOVED = "● alpha [project] (removed)";
 /** The row a successful user-scope removal renders as. */
 const USER_ALPHA_REMOVED = "● alpha [user] (removed)";
 
-/** The row a `--local` removal of a marketplace only the shared layer declares renders as. */
+/** The row a `--local` removal of a marketplace only the base layer declares renders as. */
 const PROJECT_ALPHA_REFUSED =
   "Some operations have failed.\n\n⊘ alpha [project] (failed)\n  ⊘ alpha (failed) {marketplace in base layer only}\n    cause: The marketplace alpha is declared only in the base config (claude-plugins.json). Run the command again without --local.";
 
@@ -170,7 +170,7 @@ async function seedBothScopes(workspace: HermeticWorkspace): Promise<void> {
 }
 
 /** Write a `claude-plugins.json` that declares the path-source marketplace `name`. */
-async function seedSharedConfigDeclaring(cwd: string, scope: Scope, name: string): Promise<void> {
+async function seedBaseConfigDeclaring(cwd: string, scope: Scope, name: string): Promise<void> {
   const locations = locationsFor(scope, cwd);
   await mkdir(locations.scopeRoot, { recursive: true });
   await writeFile(
@@ -303,7 +303,7 @@ for (const { args, expectedFootprint, expectedNotification, placement } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, "scope-target");
     await seedMarketplace(workspace.cwd, "project", "alpha");
-    await seedSharedConfigDeclaring(workspace.cwd, "project", "alpha");
+    await seedBaseConfigDeclaring(workspace.cwd, "project", "alpha");
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
       reads: 1,
       value: workspace.cwd,

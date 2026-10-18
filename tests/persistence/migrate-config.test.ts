@@ -255,7 +255,7 @@ test("projects JSON-derived prototype-named marketplaces as own config entries",
   ]);
 });
 
-test("FIX-02: leaves out a marketplace the local file declares and every plugin recorded under it, and projects the other marketplace", () => {
+test("FIX-02: leaves out a marketplace the local config declares and every plugin recorded under it, and projects the other marketplace", () => {
   // arrange
   const state = stateRecording({ shared: ["alpha"], personal: ["beta", "gamma"] });
   const local = { marketplaces: { personal: { source: "./personal" } } } satisfies ScopeConfig;
@@ -271,7 +271,7 @@ test("FIX-02: leaves out a marketplace the local file declares and every plugin 
   });
 });
 
-test("FIX-02: leaves out a plugin key the local file declares under a projected marketplace", () => {
+test("FIX-02: leaves out a plugin key the local config declares under a projected marketplace", () => {
   // arrange
   const state = stateRecording({ shared: ["alpha", "beta"] });
   const local = { plugins: { "beta@shared": {} } } satisfies ScopeConfig;
@@ -414,7 +414,7 @@ test("FIX-02: writes only the non-local records on a first load", async (t) => {
   assert.strictEqual(storedLocalBytes, localBytes);
 });
 
-test("FIX-02: writes no base file when the local file declares every record", async (t) => {
+test("FIX-02: writes no base config when the local config declares every record", async (t) => {
   // arrange
   const { locations } = await createCaseLocations(t);
   await writeFile(
@@ -439,7 +439,7 @@ test("FIX-02: writes no base file when the local file declares every record", as
   assert.deepStrictEqual(scopeEntries, ["claude-plugins.local.json"]);
 });
 
-test("FIX-02: declines on an unreadable local file and writes nothing", async (t) => {
+test("FIX-02: declines on an unreadable local config and writes nothing", async (t) => {
   // arrange
   const { locations } = await createCaseLocations(t);
   const localBytes = "{ not json";

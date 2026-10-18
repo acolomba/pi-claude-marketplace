@@ -498,7 +498,8 @@ export const PLUGIN_INSTALL_FIXTURES: FixtureMap = {
       } satisfies NotificationMessage,
     },
 
-    // FIX-03: a shared declaration under a marketplace only the local file declares.
+    // FIX-03: a declaration in the base layer under a marketplace only the local config
+    // declares.
     "failure-marketplace-in-local-layer-only": {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",
@@ -551,7 +552,7 @@ export const PLUGIN_INSTALL_FIXTURES: FixtureMap = {
       },
     },
 
-    // LAYER-05: the shared layer declares and installed the plugin, so an
+    // LAYER-05: the base layer declares and installed the plugin, so an
     // install with --local only adds the local declaration. Nothing is
     // installed, so the row is info with no reload-hint.
     "install-already-installed-in-other-layer": {

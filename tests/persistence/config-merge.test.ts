@@ -159,7 +159,7 @@ const mergeCases = [
     },
   },
   {
-    name: "gives a local marketplace entry without autoupdate the shared autoupdate",
+    name: "gives a local marketplace entry without autoupdate the base autoupdate",
     baseConfig: {
       marketplaces: {
         tools: { source: "./tools", autoupdate: true },
@@ -178,7 +178,7 @@ const mergeCases = [
     },
   },
   {
-    name: "lets the local autoupdate of a marketplace win over the shared one",
+    name: "lets the local autoupdate of a marketplace win over the base one",
     baseConfig: {
       marketplaces: {
         tools: { source: "./tools", autoupdate: true },
@@ -197,7 +197,7 @@ const mergeCases = [
     },
   },
   {
-    name: "lets a local marketplace source spelled another way win over the shared one",
+    name: "lets a local marketplace source spelled another way win over the base one",
     baseConfig: {
       marketplaces: {
         tools: { source: "~/marketplaces/tools", autoupdate: true },
@@ -231,7 +231,7 @@ const mergeCases = [
     ) as MergedConfig,
   },
   {
-    name: "gives a local plugin entry without enabled the shared enabled",
+    name: "gives a local plugin entry without enabled the base enabled",
     baseConfig: {
       plugins: {
         "formatter@tools": { enabled: false },
@@ -250,7 +250,7 @@ const mergeCases = [
     },
   },
   {
-    name: "lets the local enabled of a plugin win over the shared one",
+    name: "lets the local enabled of a plugin win over the base one",
     baseConfig: {
       plugins: {
         "formatter@tools": { enabled: false },
@@ -670,19 +670,19 @@ describe("loadMergedScopeConfig", () => {
 
 const gapCases: readonly GapCase[] = [
   {
-    name: "reports a local plugin whose marketplace only the shared layer declares",
+    name: "reports a local plugin whose marketplace only the base layer declares",
     base: { marketplaces: { mp: { source: "./mp" } } },
     local: { plugins: { "demo@mp": {} } },
     expectedGaps: [{ layer: "local", keys: ["demo@mp"] }],
   },
   {
-    name: "reports a shared plugin whose marketplace only the local layer declares",
+    name: "reports a base-layer plugin whose marketplace only the local layer declares",
     base: { plugins: { "demo@mp": { enabled: true } } },
     local: { marketplaces: { mp: { source: "./mp" } } },
     expectedGaps: [{ layer: "base", keys: ["demo@mp"] }],
   },
   {
-    name: "reports both layers, the shared layer first",
+    name: "reports both layers, the base layer first",
     base: { marketplaces: { a: { source: "./a" } }, plugins: { "one@b": {} } },
     local: { marketplaces: { b: { source: "./b" } }, plugins: { "two@a": {} } },
     expectedGaps: [
