@@ -36,10 +36,11 @@
 // cascade keeps its own entry fallback for that case (D-01-07).
 //
 // The failure arm's `cause.message` IS the rendered cause line. It carries the
-// declarer's `name@marketplace` key and a field path, a fixed phrase, or a
-// path-redacted message -- never an absolute path -- and it is built WITHOUT
-// `{ cause }` chaining, so the renderer's cause-chain walk cannot print the
-// raw underlying message behind it.
+// declarer's `name@marketplace` key and at most a fixed phrase or field path
+// this extension writes. It never carries the text of a manifest that fails to
+// load, because that text comes from repository content (T-05-04). It is built
+// WITHOUT `{ cause }` chaining, so the renderer's cause-chain walk has no raw
+// message to print behind it.
 //
 // A declaration HOLDS its key whatever `version` or `sha` constraint it
 // carries. The closure walk's refusal of a `sha` pin is an install-time rule;
@@ -59,8 +60,6 @@
 
 import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
-import { errorMessage } from "../../shared/errors.ts";
-import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 
 import { readDependencyDeclaration } from "./dependency-declaration-read.ts";
 
@@ -162,11 +161,16 @@ export type ScopeDeclarationDetailResult =
 export type RecordDeclarations =
   { readonly ok: true; readonly declared: readonly AddressedDependency[] } | IndexFailure;
 
-function unreadableDeclarer(key: string, detail: string): IndexFailure {
+/**
+ * The failure that names `key`. `reason` is a fixed phrase or field path this
+ * extension writes, never the text of a thrown error or of a file (T-05-04).
+ */
+function unreadableDeclarer(key: string, reason?: string): IndexFailure {
+  const message = `cannot read the dependencies of ${key}`;
   return {
     ok: false,
     declarer: key,
-    cause: new Error(`cannot read the dependencies of ${key}: ${detail}`),
+    cause: new Error(reason === undefined ? message : `${message}: ${reason}`),
   };
 }
 
@@ -190,8 +194,8 @@ export async function readRecordDeclarations(
   let manifest: Awaited<ReturnType<typeof loadMarketplaceManifest>>;
   try {
     manifest = await (options.loadManifest ?? loadMarketplaceManifest)(marketplace.manifestPath);
-  } catch (err: unknown) {
-    return unreadableDeclarer(key, redactAbsolutePaths(errorMessage(err)));
+  } catch {
+    return unreadableDeclarer(key);
   }
 
   const declared = lookupDeclaredPlugin(manifest, name);

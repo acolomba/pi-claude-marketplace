@@ -395,7 +395,7 @@ describe("evaluateUpdateConstraint", () => {
   for (const { title, cause } of [
     {
       title: "D-05-07: a marketplace manifest load failure",
-      cause: new Error("cannot read the dependencies of app@mp: ENOENT: open 'mp'"),
+      cause: new Error("cannot read the dependencies of app@mp"),
     },
     {
       title: "D-05-07: a declarer its marketplace does not list",

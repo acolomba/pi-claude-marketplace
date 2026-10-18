@@ -230,8 +230,8 @@ Feature: Marketplace remove
       | needs reload | false                        |
       | summary      | Some operations have failed. |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | marketplace status | id          | name  | status | reasons    | scope   | cause chain                                                                                         | cause truncated | leaks | rollback partial |
-      | tools            | project           | failed             | tools@tools | tools | failed | unreadable | project | cannot read the dependencies of lib@tools: marketplace.json schema invalid: /plugins: must be array | false           |       |                  |
+      | marketplace name | marketplace scope | marketplace status | id          | name  | status | reasons    | scope   | cause chain                               | cause truncated | leaks | rollback partial |
+      | tools            | project           | failed             | tools@tools | tools | failed | unreadable | project | cannot read the dependencies of lib@tools | false           |       |                  |
     Then the "claude-plugins.json" file of the project scope declares these marketplaces:
       | name  | source                    |
       | tools | {home}/marketplaces/tools |

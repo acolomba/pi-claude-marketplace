@@ -448,9 +448,9 @@ export async function evaluateUpdateConstraint(
     locations: options.locations,
   });
   if (!walked.ok) {
-    // D-10-05: the walk's own message IS the rendered cause line -- it is
-    // already path-redacted and built without `{ cause }` chaining, so the
-    // renderer's cause-chain walk cannot print a raw path behind it.
+    // D-10-05: the walk's own message IS the rendered cause line -- it
+    // carries no load-error text and no chained `{ cause }`, so the
+    // renderer's cause-chain walk cannot print a path or parser text behind it.
     // Re-wrapping it here would reintroduce exactly that. This is the same
     // fail-closed model the uninstall refusal uses on an unreadable
     // declarer, and differs from it only in outcome: an update is SKIPPED

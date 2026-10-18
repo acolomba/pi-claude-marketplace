@@ -661,8 +661,8 @@ export class LayerFileUnreadableError extends InvalidMarketplaceManifestError {
  * changes nothing, as `uninstall` and `marketplace remove` refuse.
  *
  * The message IS the failed row's cause line. It names the plugin by its
- * `<plugin>@<marketplace>` key and carries detail that is already
- * path-redacted, so no `{ cause }` is chained behind it.
+ * `<plugin>@<marketplace>` key and at most a fixed reason, never the text of a
+ * manifest that failed to load, so no `{ cause }` is chained behind it.
  */
 export class DependencyDeclarationsUnreadableError extends Error {
   readonly declarer: string;

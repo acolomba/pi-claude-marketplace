@@ -177,8 +177,8 @@ Feature: Plugin update
       | tally failures | 1                              |
       | tally warnings | 0                              |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id                | name     | status | reasons    | scope   | cause chain                                                                                         | cause truncated | leaks | rollback partial |
-      | (update)         | project           | (update)@(update) | (update) | failed | unreadable | project | cannot read the dependencies of app@tools: marketplace.json schema invalid: /plugins: must be array | false           |       |                  |
+      | marketplace name | marketplace scope | id                | name     | status | reasons    | scope   | cause chain                               | cause truncated | leaks | rollback partial |
+      | (update)         | project           | (update)@(update) | (update) | failed | unreadable | project | cannot read the dependencies of app@tools | false           |       |                  |
     When the user starts a new pi session
     Then the session offers these skills:
       | command           | description            |

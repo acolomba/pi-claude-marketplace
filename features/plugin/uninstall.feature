@@ -209,3 +209,30 @@ Feature: Plugin uninstall
       | tools            | project           | lib@tools | lib  | uninstalled |         | project | 1.0.0   |
     When the user starts a new pi session
     Then the session offers no skills
+
+  Scenario: Uninstalling a plugin whose dependency declarations cannot be read fails and changes nothing
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib          |
+      | lib  | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install app@tools --scope project"
+    Given the manifest of the marketplace "tools" has become invalid
+    When the user runs "/claude:plugin uninstall app@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade                        |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name | status | reasons    | scope   | version | cause chain                               | cause truncated | leaks | rollback partial |
+      | tools            | project           | app@tools | app  | failed | unreadable | project | 1.0.0   | cannot read the dependencies of lib@tools | false           |       |                  |
+    Then the "claude-plugins.json" file of the project scope declares these plugins:
+      | id        |
+      | app@tools |
+    When the user starts a new pi session
+    Then the session offers these skills:
+      | command          | description           |
+      | /skill:app-skill | A skill of app 1.0.0. |
+      | /skill:lib-skill | A skill of lib 1.0.0. |

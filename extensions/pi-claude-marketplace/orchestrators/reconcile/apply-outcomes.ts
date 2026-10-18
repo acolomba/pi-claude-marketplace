@@ -238,9 +238,9 @@ export interface PluginUninstallFailedOutcome extends PluginOutcomeBase {
    * carriage is live rather than dead.
    *
    * No `redactAbsolutePaths` pass is applied here, on purpose: the refusal's
-   * message is composed from `name@marketplace` keys, field paths and text the
-   * declaration-index leaf already redacted, and it chains no `cause` behind
-   * it, so there is no path left for the depth-5 cause-chain walker to print.
+   * message is composed from `name@marketplace` keys, field paths and fixed
+   * phrases, and it chains no `cause` behind it, so there is no path left for
+   * the depth-5 cause-chain walker to print.
    */
   readonly cause?: UninstallRefusedError;
 }

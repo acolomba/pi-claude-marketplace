@@ -97,8 +97,8 @@ export interface UnsatisfiedDeclaration {
 /**
  * Every unsatisfied declaration in the scope, or the first declarer whose
  * declarations could not be established. The failure arm is the declaration
- * walk's own, forwarded unchanged, so the redacted message it carries reaches
- * the row exactly as the walk built it.
+ * walk's own, forwarded unchanged, so the message it carries reaches the row
+ * exactly as the walk built it.
  */
 export type ScopeSatisfactionVerdict =
   | { readonly ok: true; readonly unsatisfied: readonly UnsatisfiedDeclaration[] }

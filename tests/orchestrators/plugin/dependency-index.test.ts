@@ -460,12 +460,12 @@ const LOAD_FAILURES: readonly LoadFailureCase[] = [
   {
     title: "D-05-07: a missing marketplace manifest ends the walk naming the record",
     thrown: errno("ENOENT"),
-    message: "cannot read the dependencies of app@mp: ENOENT: open 'mp'",
+    message: "cannot read the dependencies of app@mp",
   },
   {
     title: "D-05-07: a malformed marketplace manifest ends the walk naming the record",
     thrown: new InvalidMarketplaceManifestError("bad json", { cause: new SyntaxError("x") }),
-    message: "cannot read the dependencies of app@mp: bad json",
+    message: "cannot read the dependencies of app@mp",
   },
 ];
 
@@ -493,7 +493,7 @@ for (const { title, thrown, message } of LOAD_FAILURES) {
   });
 }
 
-test("T-05-04: the load-failure cause line redacts the absolute path and chains no cause", async () => {
+test("T-05-04: the load-failure cause line names only the record and chains no cause", async () => {
   // arrange
   const mp = mpRecord();
   const loadManifest = manifestLoader({ [mp.manifestPath]: errno("EACCES") });
@@ -511,7 +511,7 @@ test("T-05-04: the load-failure cause line redacts the absolute path and chains 
   assert.equal(walk.ok, false);
   assert.deepStrictEqual(
     walk.ok ? undefined : { message: walk.cause.message, cause: walk.cause.cause },
-    { message: "cannot read the dependencies of app@mp: EACCES: open 'mp'", cause: undefined },
+    { message: "cannot read the dependencies of app@mp", cause: undefined },
   );
 });
 

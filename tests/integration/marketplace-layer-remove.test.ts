@@ -405,7 +405,7 @@ test("D-05-07: a remove whose dependency declarations cannot be read changes not
     ALPHA_WITH_LIB_INSTALLED,
     {
       message:
-        "Some operations have failed.\n\n⊘ mp [project] (failed)\n  ⊘ mp (failed) {unreadable}\n    cause: cannot read the dependencies of lib@mp: marketplace.json schema invalid: /plugins: must be array",
+        "Some operations have failed.\n\n⊘ mp [project] (failed)\n  ⊘ mp (failed) {unreadable}\n    cause: cannot read the dependencies of lib@mp",
       severity: "error",
     },
   ]);
