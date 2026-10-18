@@ -1594,7 +1594,7 @@ for (const { verb, enable, seed } of [
             "",
             "● mp [user]",
             "  ⊘ foo (failed) {unsupported source}",
-            "    cause: The scope records the marketplace mp with no source that claude-plugins.json can declare. Declare the marketplace in claude-plugins.json, then run the command again.",
+            "    cause: The scope records the marketplace mp with no source that the base config (claude-plugins.json) can declare. Declare the marketplace in the base config, then run the command again.",
           ].join("\n"),
           severity: "error",
         },

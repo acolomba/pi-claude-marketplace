@@ -9800,9 +9800,9 @@ test("LAYER-06: an install whose marketplace no source can declare in the target
       // assert
       assert.deepStrictEqual(outcome, {
         status: "failed",
-        error: new MarketplaceSourceUndeclarableError("mp", "claude-plugins.json"),
+        error: new MarketplaceSourceUndeclarableError("mp", "base"),
         cause:
-          "The scope records the marketplace mp with no source that claude-plugins.json can declare. Declare the marketplace in claude-plugins.json, then run the command again.",
+          "The scope records the marketplace mp with no source that the base config (claude-plugins.json) can declare. Declare the marketplace in the base config, then run the command again.",
       });
       assert.deepStrictEqual(notifications, [
         {
@@ -9810,7 +9810,7 @@ test("LAYER-06: an install whose marketplace no source can declare in the target
             "A plugin operation has failed.\n\n" +
             "● mp [project]\n" +
             "  ⊘ hello (failed) {unsupported source}\n" +
-            "    cause: The scope records the marketplace mp with no source that claude-plugins.json can declare. Declare the marketplace in claude-plugins.json, then run the command again.",
+            "    cause: The scope records the marketplace mp with no source that the base config (claude-plugins.json) can declare. Declare the marketplace in the base config, then run the command again.",
           severity: "error",
         },
       ]);

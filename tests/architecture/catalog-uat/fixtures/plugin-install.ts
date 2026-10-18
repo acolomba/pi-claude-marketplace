@@ -542,7 +542,7 @@ export const PLUGIN_INSTALL_FIXTURES: FixtureMap = {
                 name: "helper",
                 reasons: ["unsupported source"],
                 cause: new Error(
-                  "The scope records the marketplace official with no source that claude-plugins.json can declare. Declare the marketplace in claude-plugins.json, then run the command again.",
+                  "The scope records the marketplace official with no source that the base config (claude-plugins.json) can declare. Declare the marketplace in the base config, then run the command again.",
                 ),
               },
             ],

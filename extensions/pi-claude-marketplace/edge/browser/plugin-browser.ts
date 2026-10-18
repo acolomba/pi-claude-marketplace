@@ -450,17 +450,17 @@ export class PluginBrowser {
         value: "project-local",
         label: "Project local (Recommended)",
         description:
-          "Install locally in .pi/claude-plugins.local.json (gitignored, this repo only)",
+          "Install in the local config .pi/claude-plugins.local.json (gitignored, this repo only)",
       },
       {
         value: "project",
         label: "Project",
-        description: "Install in .pi/claude-plugins.json (committed, shared across repo)",
+        description: "Install in the base config .pi/claude-plugins.json (committed for the team)",
       },
       {
         value: "user",
         label: "User (global)",
-        description: "Install globally in ~/.pi/agent/claude-plugins.json (all projects)",
+        description: "Install in the base config ~/.pi/agent/claude-plugins.json (all projects)",
       },
     ];
     const list = new SelectList(items, items.length, this.listTheme());

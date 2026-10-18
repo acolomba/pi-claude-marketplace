@@ -494,7 +494,7 @@ test("TC-3 prepends the global scope flag before a verb's own completable flags"
       label: "--local",
       value: "install --local ",
       description:
-        "Write to claude-plugins.local.json (per-machine override), not the shared claude-plugins.json",
+        "Write to the local config (claude-plugins.local.json), not the base config (claude-plugins.json)",
     },
   ]);
 });
@@ -888,7 +888,7 @@ for (const verb of ["add", "remove", "rm", "autoupdate", "noautoupdate"]) {
     // arrange
     const { resolver, completionCache } = await seedResolver(t, "marketplace-flag");
     const description =
-      "Write to claude-plugins.local.json (per-machine override), not the shared claude-plugins.json";
+      "Write to the local config (claude-plugins.local.json), not the base config (claude-plugins.json)";
 
     // act
     const suggestions = await getArgumentCompletions(

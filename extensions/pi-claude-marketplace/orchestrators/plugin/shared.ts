@@ -736,7 +736,7 @@ export function undeclarableMarketplaceRefusal(
 
   return new MarketplaceSourceUndeclarableError(
     marketplace,
-    selection.targetIsLocal ? "claude-plugins.local.json" : "claude-plugins.json",
+    selection.targetIsLocal ? "local" : "base",
   );
 }
 
@@ -966,6 +966,7 @@ export async function writeAdoptingConfigEntries(opts: {
   readonly marketplace: string;
   readonly plugin: string;
   readonly targetConfigPath: string;
+  readonly targetIsLocal: boolean;
   readonly scopeRoot: string;
   readonly pluginPatch: Partial<PluginConfigEntry>;
   readonly addedMarketplaces?: readonly string[];
@@ -979,7 +980,7 @@ export async function writeAdoptingConfigEntries(opts: {
   if (own.kind === "unknown") {
     throw new MarketplaceSourceUndeclarableError(
       opts.marketplace,
-      path.basename(opts.targetConfigPath),
+      opts.targetIsLocal ? "local" : "base",
     );
   }
 

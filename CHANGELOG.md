@@ -28,6 +28,7 @@
 - A marketplace you add or a plugin you install with `--local` now stays out of `claude-plugins.json`. If a reload already copied one there, remove that entry and run `/reload`.
 
   - Installing, enabling, or disabling a plugin into `claude-plugins.json` now fails and suggests `--local` when only `claude-plugins.local.json` declares its marketplace.
+  - The completion hint for `--local` and the scope choices of `browse` now call `claude-plugins.local.json` the local config and `claude-plugins.json` the base config.
 
 - GitHub sources clone and fetch from another https git host, such as a mirror, when you set `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL`, a setting that Claude Code lacks.
 

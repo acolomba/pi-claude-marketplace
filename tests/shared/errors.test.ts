@@ -936,31 +936,43 @@ describe("LayerFileUnreadableError", () => {
 });
 
 describe("MarketplaceSourceUndeclarableError", () => {
-  test("names the marketplace and the layer file and asks for a declaration in its message", () => {
-    // arrange
-    const marketplace = "mp";
+  for (const { layer, message } of [
+    {
+      layer: "base",
+      message:
+        "The scope records the marketplace mp with no source that the base config (claude-plugins.json) can declare. Declare the marketplace in the base config, then run the command again.",
+    },
+    {
+      layer: "local",
+      message:
+        "The scope records the marketplace mp with no source that the local config (claude-plugins.local.json) can declare. Declare the marketplace in the local config, then run the command again.",
+    },
+  ] as const) {
+    test(`names the marketplace and the ${layer} config and asks for a declaration in its message`, () => {
+      // arrange
+      const marketplace = "mp";
 
-    // act
-    const error = new MarketplaceSourceUndeclarableError(marketplace, "claude-plugins.local.json");
+      // act
+      const error = new MarketplaceSourceUndeclarableError(marketplace, layer);
 
-    // assert
-    assert.ok(error instanceof Error);
-    assert.deepStrictEqual(
-      {
-        name: error.name,
-        marketplace: error.marketplace,
-        layerFile: error.layerFile,
-        message: error.message,
-      },
-      {
-        name: "MarketplaceSourceUndeclarableError",
-        marketplace: "mp",
-        layerFile: "claude-plugins.local.json",
-        message:
-          "The scope records the marketplace mp with no source that claude-plugins.local.json can declare. Declare the marketplace in claude-plugins.local.json, then run the command again.",
-      },
-    );
-  });
+      // assert
+      assert.ok(error instanceof Error);
+      assert.deepStrictEqual(
+        {
+          name: error.name,
+          marketplace: error.marketplace,
+          layer: error.layer,
+          message: error.message,
+        },
+        {
+          name: "MarketplaceSourceUndeclarableError",
+          marketplace: "mp",
+          layer,
+          message,
+        },
+      );
+    });
+  }
 });
 
 describe("PluginInLocalLayerOnlyError", () => {

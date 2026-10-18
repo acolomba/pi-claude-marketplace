@@ -114,7 +114,7 @@ test("completionFlagEntries offers the scope-target flag of a verb that declares
     {
       name: SCOPE_TARGET_FLAG,
       description:
-        "Write to claude-plugins.local.json (per-machine override), not the shared claude-plugins.json",
+        "Write to the local config (claude-plugins.local.json), not the base config (claude-plugins.json)",
     },
   ];
 
@@ -138,7 +138,7 @@ test("completionFlagEntries offers the uninstall preservation and prune flags ah
     {
       name: SCOPE_TARGET_FLAG,
       description:
-        "Write to claude-plugins.local.json (per-machine override), not the shared claude-plugins.json",
+        "Write to the local config (claude-plugins.local.json), not the base config (claude-plugins.json)",
     },
   ];
 

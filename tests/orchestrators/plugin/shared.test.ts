@@ -1045,11 +1045,11 @@ describe("selectDeclaringConfigWriteTarget", () => {
 });
 
 describe("undeclarableMarketplaceRefusal", () => {
-  for (const { targetIsLocal, layerFile } of [
-    { targetIsLocal: true, layerFile: "claude-plugins.local.json" },
-    { targetIsLocal: false, layerFile: "claude-plugins.json" },
-  ]) {
-    test(`refuses a ${layerFile} target when no layer declares the marketplace and its record holds no string source`, () => {
+  for (const { targetIsLocal, layer } of [
+    { targetIsLocal: true, layer: "local" },
+    { targetIsLocal: false, layer: "base" },
+  ] as const) {
+    test(`refuses a ${layer}-layer target when no layer declares the marketplace and its record holds no string source`, () => {
       // arrange
       const selection = {
         targetIsLocal,
@@ -1063,8 +1063,8 @@ describe("undeclarableMarketplaceRefusal", () => {
       // assert
       assert.ok(refusal instanceof MarketplaceSourceUndeclarableError);
       assert.deepStrictEqual(
-        { marketplace: refusal.marketplace, layerFile: refusal.layerFile },
-        { marketplace: "mp", layerFile },
+        { marketplace: refusal.marketplace, layer: refusal.layer },
+        { marketplace: "mp", layer },
       );
     });
   }
@@ -1790,6 +1790,7 @@ describe("writeAdoptingConfigEntries", () => {
         marketplace: "mp",
         plugin: "alpha",
         targetConfigPath: locations.configJsonPath,
+        targetIsLocal: false,
         scopeRoot: locations.scopeRoot,
         pluginPatch: { enabled: false },
       });
@@ -1823,6 +1824,7 @@ describe("writeAdoptingConfigEntries", () => {
         marketplace: "mp",
         plugin: "alpha",
         targetConfigPath: locations.configJsonPath,
+        targetIsLocal: false,
         scopeRoot: locations.scopeRoot,
         pluginPatch: {},
       });
@@ -1854,6 +1856,7 @@ describe("writeAdoptingConfigEntries", () => {
         marketplace: "mp",
         plugin: "alpha",
         targetConfigPath: locations.configLocalJsonPath,
+        targetIsLocal: true,
         scopeRoot: locations.scopeRoot,
         pluginPatch: { enabled: true },
       });
@@ -1889,6 +1892,7 @@ describe("writeAdoptingConfigEntries", () => {
         marketplace: "mp",
         plugin: "alpha",
         targetConfigPath: locations.configLocalJsonPath,
+        targetIsLocal: true,
         scopeRoot: locations.scopeRoot,
         pluginPatch: {},
       });
@@ -1919,6 +1923,7 @@ describe("writeAdoptingConfigEntries", () => {
         marketplace: "mp",
         plugin: "alpha",
         targetConfigPath: locations.configLocalJsonPath,
+        targetIsLocal: true,
         scopeRoot: locations.scopeRoot,
         pluginPatch: {},
       });
@@ -1931,37 +1936,46 @@ describe("writeAdoptingConfigEntries", () => {
     });
   });
 
-  test("LAYER-06: refuses a plugin declaration whose marketplace no source can declare and writes nothing", async () => {
-    // arrange
-    await withTempScopes(async ({ cwd }) => {
-      const locations = locationsFor("project", cwd);
-      const current: ScopeConfig = { schemaVersion: 1 };
-      const sibling: ScopeConfig = { schemaVersion: 1 };
+  for (const { targetIsLocal, layer } of [
+    { targetIsLocal: false, layer: "base" },
+    { targetIsLocal: true, layer: "local" },
+  ] as const) {
+    test(`LAYER-06: refuses a plugin declaration in the ${layer} layer whose marketplace no source can declare and writes nothing`, async () => {
+      // arrange
+      await withTempScopes(async ({ cwd }) => {
+        const locations = locationsFor("project", cwd);
+        const targetConfigPath = targetIsLocal
+          ? locations.configLocalJsonPath
+          : locations.configJsonPath;
+        const current: ScopeConfig = { schemaVersion: 1 };
+        const sibling: ScopeConfig = { schemaVersion: 1 };
 
-      // act & assert
-      await assert.rejects(
-        writeAdoptingConfigEntries({
-          current,
-          sibling,
-          state: unknownSourceState(),
-          marketplace: "mp",
-          plugin: "alpha",
-          targetConfigPath: locations.configJsonPath,
-          scopeRoot: locations.scopeRoot,
-          pluginPatch: {},
-        }),
-        (error: unknown) => {
-          assert.ok(error instanceof MarketplaceSourceUndeclarableError);
-          assert.deepStrictEqual(
-            { marketplace: error.marketplace, layerFile: error.layerFile },
-            { marketplace: "mp", layerFile: "claude-plugins.json" },
-          );
-          return true;
-        },
-      );
-      await assert.rejects(readFile(locations.configJsonPath, "utf8"), { code: "ENOENT" });
+        // act & assert
+        await assert.rejects(
+          writeAdoptingConfigEntries({
+            current,
+            sibling,
+            state: unknownSourceState(),
+            marketplace: "mp",
+            plugin: "alpha",
+            targetConfigPath,
+            targetIsLocal,
+            scopeRoot: locations.scopeRoot,
+            pluginPatch: {},
+          }),
+          (error: unknown) => {
+            assert.ok(error instanceof MarketplaceSourceUndeclarableError);
+            assert.deepStrictEqual(
+              { marketplace: error.marketplace, layer: error.layer },
+              { marketplace: "mp", layer },
+            );
+            return true;
+          },
+        );
+        await assert.rejects(readFile(targetConfigPath, "utf8"), { code: "ENOENT" });
+      });
     });
-  });
+  }
 
   for (const { behavior, current, sibling, addedMarketplaces, config } of [
     {
@@ -2013,6 +2027,7 @@ describe("writeAdoptingConfigEntries", () => {
           marketplace: "mp",
           plugin: "alpha",
           targetConfigPath: locations.configJsonPath,
+          targetIsLocal: false,
           scopeRoot: locations.scopeRoot,
           pluginPatch: {},
           addedMarketplaces,

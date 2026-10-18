@@ -860,7 +860,7 @@ A plugin operation has failed.
 
 ● official [user]
   ⊘ helper (failed) {unsupported source}
-    cause: The scope records the marketplace official with no source that claude-plugins.json can declare. Declare the marketplace in claude-plugins.json, then run the command again.
+    cause: The scope records the marketplace official with no source that the base config (claude-plugins.json) can declare. Declare the marketplace in the base config, then run the command again.
 ```
 
 ### Declared only -- the other layer already installed the plugin (LAYER-05)

@@ -463,7 +463,7 @@ test("LAYER-06: install --local is refused and changes nothing when no layer dec
         "\n" +
         "● mp [project]\n" +
         "  ⊘ alpha (failed) {unsupported source}\n" +
-        "    cause: The scope records the marketplace mp with no source that claude-plugins.local.json can declare. Declare the marketplace in claude-plugins.local.json, then run the command again.",
+        "    cause: The scope records the marketplace mp with no source that the local config (claude-plugins.local.json) can declare. Declare the marketplace in the local config, then run the command again.",
       severity: "error",
     },
   ]);

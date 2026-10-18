@@ -398,6 +398,13 @@ export class MarketplaceInLocalLayerOnlyError extends Error {
   }
 }
 
+// How the undeclarable-source cause names each layer's config: with its file
+// at the first mention, and by the config alone after that.
+const UNDECLARABLE_CONFIG_NAMES = {
+  base: { first: "the base config (claude-plugins.json)", later: "the base config" },
+  local: { first: "the local config (claude-plugins.local.json)", later: "the local config" },
+} as const;
+
 /**
  * LAYER-06 / D-MF-03: the refusal of a command that would declare a plugin in
  * a layer that lacks the plugin's marketplace, when no source is known to
@@ -407,19 +414,20 @@ export class MarketplaceInLocalLayerOnlyError extends Error {
  * declaring a plugin without its marketplace.
  *
  * The message IS the failed row's cause line. It is built from fixed text, a
- * marketplace name that passed `assertSafeName`, and a layer file basename, so
- * it carries no path.
+ * marketplace name that passed `assertSafeName`, and the config of the layer
+ * the refused write targets, so it carries no path.
  */
 export class MarketplaceSourceUndeclarableError extends Error {
   readonly marketplace: string;
-  readonly layerFile: string;
-  constructor(marketplace: string, layerFile: string) {
+  readonly layer: "base" | "local";
+  constructor(marketplace: string, layer: "base" | "local") {
+    const config = UNDECLARABLE_CONFIG_NAMES[layer];
     super(
-      `The scope records the marketplace ${marketplace} with no source that ${layerFile} can declare. Declare the marketplace in ${layerFile}, then run the command again.`,
+      `The scope records the marketplace ${marketplace} with no source that ${config.first} can declare. Declare the marketplace in ${config.later}, then run the command again.`,
     );
     this.name = "MarketplaceSourceUndeclarableError";
     this.marketplace = marketplace;
-    this.layerFile = layerFile;
+    this.layer = layer;
   }
 }
 

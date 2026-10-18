@@ -1993,6 +1993,7 @@ async function writeEnabledFlagBack(
     marketplace: write.marketplace,
     plugin: write.plugin,
     targetConfigPath: selection.targetConfigPath,
+    targetIsLocal: selection.targetIsLocal,
     scopeRoot: write.scopeRoot,
     pluginPatch: { enabled: write.enable },
   });
