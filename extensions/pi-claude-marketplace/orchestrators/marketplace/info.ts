@@ -9,6 +9,9 @@
 // emits one notify per scope in project-first order, so a corrupt manifest
 // in one scope cannot silently hide behind a healthy other-scope render.
 
+import os from "node:os";
+import path from "node:path";
+
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { notify } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
@@ -49,9 +52,10 @@ type MarketplaceRecord = ExtensionState["marketplaces"][string];
  * level but is constrained to a `ParsedSource` at the write paths.
  * Casting to that discriminated union lets the discriminator narrow
  * `kind === "github"` / `kind === "url"` without re-checking `typeof` on
- * each field. `github` and `url` (D-76-09) get dedicated projections;
- * every OTHER kind coerces to the `path` arm with `record.marketplaceRoot`
- * -- surfacing a bare row beats refusing to render (NFR-12).
+ * each field. `github`, `url` (D-76-09), and recorded path sources get
+ * dedicated projections. Every OTHER kind coerces to the `path` arm with
+ * `record.marketplaceRoot` -- surfacing a bare row beats refusing to render
+ * (NFR-12).
  */
 async function buildBlock(
   record: MarketplaceRecord,
@@ -74,6 +78,11 @@ async function buildBlock(
       sourceKind: "url",
       url: src.url,
       ...(src.ref !== undefined && { ref: src.ref }),
+    };
+  } else if (src.kind === "path") {
+    source = {
+      sourceKind: "path",
+      absPath: path.resolve(record.addedFromCwd, src.logical.replace(/^~(?=$|\/)/, os.homedir())),
     };
   } else {
     source = { sourceKind: "path", absPath: record.marketplaceRoot };

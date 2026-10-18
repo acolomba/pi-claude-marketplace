@@ -31,7 +31,7 @@ Feature: Marketplace info
     Examples:
       | source kind | source                                                    | expected source kind | source abs path                 | source url | source owner | source repo | source ref |
       | dir         | {home}/marketplaces/tools                                 | path                 | {home}/marketplaces/tools       |            |              |             |            |
-      | file        | {home}/marketplaces/tools/.claude-plugin/marketplace.json | path                 | {home}/marketplaces/tools       |            |              |             |            |
+      | file        | {home}/marketplaces/tools/.claude-plugin/marketplace.json | path                 | {home}/marketplaces/tools/.claude-plugin/marketplace.json |            |              |             |            |
 
     @url
     Examples:

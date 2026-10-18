@@ -40,7 +40,7 @@ function marketplaceRecord(
     MarketplaceRecord,
     "addedFromCwd" | "manifestPath" | "marketplaceRoot" | "name" | "scope" | "source"
   > &
-    Partial<Pick<MarketplaceRecord, "lastUpdatedAt">>,
+    Partial<Pick<MarketplaceRecord, "lastSuccessfulManifest" | "lastUpdatedAt">>,
 ): MarketplaceRecord {
   return { ...values, plugins: {} };
 }
@@ -560,6 +560,81 @@ test("INFO-01: an explicit project path source renders its minimal block", async
     boundary.verifyAll();
   });
 });
+
+for (const sourceCase of [
+  {
+    title: "directory source",
+    source: (cwd: string): string => path.join(cwd, "sources", "directory"),
+  },
+  {
+    title: "conventional manifest file",
+    source: (cwd: string): string =>
+      path.join(cwd, "sources", "conventional", ".claude-plugin", "marketplace.json"),
+  },
+  {
+    title: "external manifest file",
+    source: (cwd: string): string =>
+      path.join(cwd, "sources", "external", "catalog", "marketplace.json"),
+  },
+  {
+    title: "relative manifest file",
+    source: (): string => "./sources/relative/catalog/marketplace.json",
+  },
+  {
+    title: "tilde manifest file",
+    source: (): string => "~/sources/tilde/catalog/marketplace.json",
+  },
+  {
+    title: "home directory source",
+    source: (): string => "~",
+  },
+] as const) {
+  test(`D-01: marketplace info resolves the original ${sourceCase.title}`, async () => {
+    await withHermeticHome(async ({ cwd, home }) => {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const manifestPath = path.join(locations.extensionRoot, "source-identity.json");
+      await writeMarketplaceJson(manifestPath, "source-identity");
+      const rawSource = sourceCase.source(cwd);
+      const expectedPath =
+        rawSource === "~"
+          ? home
+          : path.resolve(
+              cwd,
+              rawSource.startsWith("~/") ? path.join(home, rawSource.slice(2)) : rawSource,
+            );
+      await saveMarketplace(
+        locations,
+        marketplaceRecord({
+          addedFromCwd: cwd,
+          lastSuccessfulManifest: '{"name":"source-identity","plugins":[]}',
+          manifestPath,
+          marketplaceRoot: path.join(cwd, "managed", "source-identity"),
+          name: "source-identity",
+          scope: "project",
+          source: pathSource(rawSource),
+        }),
+      );
+      const before = await snapshotEnvironment(home, cwd);
+      const boundary = notificationBoundary({
+        message: `● source-identity [project] <no autoupdate>\npath: ${expectedPath}`,
+      });
+
+      // act
+      await getMarketplaceInfo({
+        ctx: boundary.ctx,
+        run: boundary.run,
+        name: "source-identity",
+        scope: "project",
+        cwd,
+      });
+
+      // assert
+      assert.deepStrictEqual(await snapshotEnvironment(home, cwd), before);
+      boundary.verifyAll();
+    });
+  });
+}
 
 test("INFO-01: a user path source renders description independently of source kind", async () => {
   await withHermeticHome(async ({ cwd, home }) => {

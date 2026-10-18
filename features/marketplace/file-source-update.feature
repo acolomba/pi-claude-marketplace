@@ -27,7 +27,7 @@ Feature: Marketplace file source update
       | details autoupdate      | false                                    |
       | details last updated at | {scenario time}                          |
       | source kind             | path                                     |
-      | source abs path         | {home}/marketplaces/tools                 |
+      | source abs path         | {home}/marketplaces/tools/catalog/marketplace.json |
       | source url              |                                          |
       | source owner            |                                          |
       | source repo             |                                          |
@@ -35,3 +35,22 @@ Feature: Marketplace file source update
       | description             | Refreshed tools with a longer description |
       | severity                | info                                     |
       | needs reload            | false                                    |
+
+  Scenario: A conventional manifest keeps its file identity
+    Given the marketplace "tools" is published as a file source
+    Given the marketplace "tools" is added to the project scope
+    When the user runs "/claude:plugin marketplace info tools --scope project"
+    Then the marketplace info result has these fields:
+      | kind                    | marketplace-info                                         |
+      | name                    | tools                                                    |
+      | scope                   | project                                                  |
+      | details autoupdate      | false                                                    |
+      | details last updated at | {scenario time}                                          |
+      | source kind             | path                                                     |
+      | source abs path         | {home}/marketplaces/tools/.claude-plugin/marketplace.json |
+      | source url              |                                                          |
+      | source owner            |                                                          |
+      | source repo             |                                                          |
+      | source ref              |                                                          |
+      | severity                | info                                                     |
+      | needs reload            | false                                                    |
