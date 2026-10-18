@@ -315,14 +315,14 @@ Plans:
 3. Code says `base` and `local` everywhere a layer is meant, never `shared`: `configJsonPath` becomes `baseConfigJsonPath` and `configLocalJsonPath` becomes `localConfigJsonPath`, error classes and identifiers follow, and comments match, with no behavior change. Carried from the Phase 3.3 review (IN-02): the flag-only layer selector and the uninstall seam that now loads both layers are renamed to match what they do (`selectDeclaringConfigWriteTarget` / `DeclaringConfigWriteTarget`, `UninstallTransaction.loadTargetConfig`) (TERM-01).
 4. The `{unreadable}` cause for unreadable dependency declarations names the record without the parser's detail, for `uninstall`, `marketplace remove`, and the nameless `update --local` / `reinstall --local` (Phase 3.3 security note).
 
-**Plans:** 1/10 plans executed
+**Plans:** 2/10 plans executed
 
 Plans:
 **Wave 1**
 - [x] 03.4-01-PLAN.md — Tracer: the plugin refusal pair renamed end to end (tokens, classes, cause lines, schema, catalog, scenarios, the existing CHANGELOG entry) (TERM-01)
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 03.4-02-PLAN.md — The marketplace refusal pair and the two base-layer no-op tokens; the uninstall's other layer is base or local (TERM-01)
+- [x] 03.4-02-PLAN.md — The marketplace refusal pair and the two base-layer no-op tokens; the uninstall's other layer is base or local (TERM-01)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 03.4-03-PLAN.md — The remaining cause lines and descriptions name the base and local configs; the layer gap is base or local (TERM-01)
