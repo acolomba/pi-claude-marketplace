@@ -534,6 +534,48 @@ test("PluginBrowser :: available plugin offers Install -> Scope screen -> User (
   });
 });
 
+test("PluginBrowser :: scope screen names the config each choice installs into", async () => {
+  // arrange
+  const browser = makeBrowser(
+    () => undefined,
+    () => undefined,
+  );
+  browser.handleInput(ENTER);
+  await flush();
+  browser.handleInput(DOWN);
+  browser.handleInput(ENTER);
+
+  // act
+  browser.handleInput(ENTER);
+
+  // assert
+  assert.deepStrictEqual(
+    rendered(browser, 200)
+      .split("\n")
+      .slice(2, 5)
+      .map((line) =>
+        line
+          .replace("→", "")
+          .trim()
+          .split(/\s{2,}/),
+      ),
+    [
+      [
+        "Project local (Recommended)",
+        "Install in the local config (.pi/claude-plugins.local.json, gitignored, this repo only)",
+      ],
+      [
+        "Project",
+        "Install in the base config (.pi/claude-plugins.json, for all collaborators on this repo)",
+      ],
+      [
+        "User (global)",
+        "Install in the user scope's base config (~/.pi/agent/claude-plugins.json, all projects)",
+      ],
+    ],
+  );
+});
+
 test("PluginBrowser :: scope screen esc returns to actions screen", async () => {
   const browser = makeBrowser(
     () => undefined,
