@@ -81,9 +81,9 @@ A scope (user or project) has two layers: shared (`claude-plugins.json`) and loc
 ### marketplace remove / rm
 
 - [x] **RM-01**: Removing a marketplace with no installed plugins drops it, with no reload needed (dir, url)
-- [ ] **RM-02**: Removing a marketplace uninstalls every plugin installed from it, one `uninstalled` row each, and needs a reload
-- [ ] **RM-03**: After that cascade, a new session offers none of the plugin's skills and `plugin list` no longer lists it
-- [ ] **RM-04**: A removed marketplace stays removed in a new session
+- [x] **RM-02**: Removing a marketplace uninstalls every plugin installed from it, one `uninstalled` row each, and needs a reload
+- [x] **RM-03**: After that cascade, a new session offers none of the plugin's skills and `plugin list` no longer lists it
+- [x] **RM-04**: A removed marketplace stays removed in a new session
 - [x] **RM-05**: Removing a name the requested scope lacks fails as `marketplace not added`, or `marketplace not added to <scope> scope` when the other scope holds it
 - [x] **RM-06**: Removing a name neither scope holds, without `--scope`, fails as `marketplace not added` with no scope
 - [x] **RM-07**: `rm` behaves as `remove`
@@ -219,9 +219,9 @@ A scope (user or project) has two layers: shared (`claude-plugins.json`) and loc
 | ADD-13 | Phase 3 | Complete |
 | ADD-14 | Phase 3 | Complete |
 | RM-01 | Phase 4 | Complete |
-| RM-02 | Phase 4 | Pending |
-| RM-03 | Phase 4 | Pending |
-| RM-04 | Phase 4 | Pending |
+| RM-02 | Phase 4 | Complete |
+| RM-03 | Phase 4 | Complete |
+| RM-04 | Phase 4 | Complete |
 | RM-05 | Phase 4 | Complete |
 | RM-06 | Phase 4 | Complete |
 | RM-07 | Phase 4 | Complete |

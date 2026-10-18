@@ -57,6 +57,107 @@ Feature: Marketplace remove
       | name   | source                     |
       | extras | {home}/marketplaces/extras |
 
+  Scenario: Removing a marketplace uninstalls every plugin in installation order
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins:
+      | name  | version |
+      | zebra | 1.0.0   |
+      | amber | 1.0.0   |
+      | elm   | 1.0.0   |
+    Given the marketplace "extras" is published as a dir source
+    Given the marketplace "extras" offers these plugins:
+      | name     | version |
+      | sentinel | 1.0.0   |
+    Given the marketplace "tools" is added to the project scope
+    Given the marketplace "extras" is added to the project scope
+    Given the user has run "/claude:plugin install zebra@tools --scope project"
+    Given the user has run "/claude:plugin install amber@tools --scope project"
+    Given the user has run "/claude:plugin install elm@tools --scope project"
+    Given the user has run "/claude:plugin install sentinel@extras --scope project"
+    When the user runs "/claude:plugin marketplace remove tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id          | name  | status      | reasons | scope   |
+      | tools            | project           | removed            | zebra@tools | zebra | uninstalled |         | project |
+      | tools            | project           | removed            | amber@tools | amber | uninstalled |         | project |
+      | tools            | project           | removed            | elm@tools   | elm   | uninstalled |         | project |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name   | source                     |
+      | extras | {home}/marketplaces/extras |
+    Then the "claude-plugins.json" file of the project scope declares these plugins:
+      | id              |
+      | sentinel@extras |
+
+  Scenario: The rm alias uninstalls its only plugin and needs a reload
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install demo@tools --scope project"
+    When the user runs "/claude:plugin marketplace rm tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id         | name | status      | reasons | scope   |
+      | tools            | project           | removed            | demo@tools | demo | uninstalled |         | project |
+    Then the "claude-plugins.json" file of the project scope declares no marketplaces
+    Then the "claude-plugins.json" file of the project scope declares no plugins
+
+  Scenario: A new session offers none of the removed plugins' skills
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins:
+      | name  | version |
+      | zebra | 1.0.0   |
+      | amber | 1.0.0   |
+      | elm   | 1.0.0   |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install zebra@tools --scope project"
+    Given the user has run "/claude:plugin install amber@tools --scope project"
+    Given the user has run "/claude:plugin install elm@tools --scope project"
+    Given the user has run "/claude:plugin marketplace remove tools --scope project"
+    When the user starts a new pi session
+    Then the session offers no skills
+
+  Scenario: A new session lists none of the removed plugins
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins:
+      | name  | version |
+      | zebra | 1.0.0   |
+      | amber | 1.0.0   |
+      | elm   | 1.0.0   |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install zebra@tools --scope project"
+    Given the user has run "/claude:plugin install amber@tools --scope project"
+    Given the user has run "/claude:plugin install elm@tools --scope project"
+    Given the user has run "/claude:plugin marketplace remove tools --scope project"
+    Given the user has started a new pi session
+    When the user runs "/claude:plugin list"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists no marketplaces
+
+  Scenario: A removed base-layer marketplace stays absent in a new session
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin marketplace remove tools --scope project"
+    Given the user has started a new pi session
+    When the user runs "/claude:plugin marketplace list"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists no marketplaces
+    Then the "claude-plugins.json" file of the project scope declares no marketplaces
+    Then the "claude-plugins.local.json" file of the project scope does not exist
+
   Scenario: An unscoped remove selects the project copy
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "extras" is published as a dir source
@@ -411,6 +512,56 @@ Feature: Marketplace remove
       | command            | description             |
       | /skill:alpha-skill | A skill of alpha 1.0.0. |
       | /skill:beta-skill  | A skill of beta 1.0.0.  |
+
+  Scenario: A refused remove reports every blocking plugin without removing any
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name         | version | dependencies |
+      | zebra        | 1.0.0   |              |
+      | amber        | 1.0.0   |              |
+      | elm          | 1.0.0   |              |
+      | keeper-zebra | 1.0.0   | zebra        |
+      | keeper-amber | 1.0.0   | amber        |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin marketplace add {home}/marketplaces/tools --scope project --local"
+    Given the user has run "/claude:plugin install zebra@tools --scope project"
+    Given the user has run "/claude:plugin install amber@tools --scope project"
+    Given the user has run "/claude:plugin install elm@tools --scope project"
+    Given the user has run "/claude:plugin install keeper-zebra@tools --scope project --local"
+    Given the user has run "/claude:plugin install keeper-amber@tools --scope project --local"
+    When the user runs "/claude:plugin marketplace remove tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade                      |
+      | severity     | error                        |
+      | needs reload | false                        |
+      | summary      | Some operations have failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id          | name  | status | reasons           | scope   | cause chain                                                                  | cause truncated | leaks | rollback partial |
+      | tools            | project           | failed             | zebra@tools | zebra | failed | dependents remain | project | Uninstall keeper-zebra@tools first, then remove the marketplace tools again. | false           |       |                  |
+      | tools            | project           | failed             | amber@tools | amber | failed | dependents remain | project | Uninstall keeper-amber@tools first, then remove the marketplace tools again. | false           |       |                  |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name  | source                    |
+      | tools | {home}/marketplaces/tools |
+    Then the "claude-plugins.json" file of the project scope declares these plugins:
+      | id          |
+      | zebra@tools |
+      | amber@tools |
+      | elm@tools   |
+    Then the "claude-plugins.local.json" file of the project scope declares these marketplaces:
+      | name  | source                    |
+      | tools | {home}/marketplaces/tools |
+    Then the "claude-plugins.local.json" file of the project scope declares these plugins:
+      | id                 |
+      | keeper-zebra@tools |
+      | keeper-amber@tools |
+    When the user starts a new pi session
+    Then the session offers these skills:
+      | command                   | description                    |
+      | /skill:amber-skill        | A skill of amber 1.0.0.        |
+      | /skill:elm-skill          | A skill of elm 1.0.0.          |
+      | /skill:keeper-amber-skill | A skill of keeper-amber 1.0.0. |
+      | /skill:keeper-zebra-skill | A skill of keeper-zebra 1.0.0. |
+      | /skill:zebra-skill        | A skill of zebra 1.0.0.        |
 
   Scenario: Removing a marketplace whose dependency declarations cannot be read fails and changes nothing
     Given the marketplace "tools" is published as a dir source
