@@ -5,11 +5,11 @@ milestone_name: Marketplace Behavioral Tests
 current_phase: 5
 current_phase_name: Marketplace Info
 status: ready
-stopped_at: Phase 04 complete, ready to discuss Phase 5
-last_updated: "2026-10-18T15:23:07.568Z"
+stopped_at: Phase 5 context gathered
+last_updated: "2026-10-18T15:28:04.810Z"
 last_activity: 2026-10-18
 last_activity_desc: Phase 04 complete, Phase 5 ready for discussion
-state_head: 79bab2db59b3b14552986fb492737569aac627c6
+state_head: 49bc6ced6eae2e16bcff5354e4730118867a013a
 progress:
   total_phases: 14
   completed_phases: 8
@@ -181,9 +181,9 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-18T15:23:07.568Z
-**Stopped at:** Phase 04 complete, ready to discuss Phase 5
-**Resume file:** None
+**Last session:** 2026-10-18T15:28:01.580Z
+**Stopped at:** Phase 5 context gathered
+**Resume file:** .planning/phases/05-marketplace-info/05-CONTEXT.md
 
 **Main merge (2026-10-11, quick task 261011-bsm):** `origin/main` at
 `94160614` (#248, and #250, the mcp-4 milestone released as 0.20.0) is merged
