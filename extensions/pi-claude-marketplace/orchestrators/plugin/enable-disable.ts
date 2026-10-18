@@ -39,13 +39,13 @@
 // ledger via `loadMarketplaceManifest` -- the cached PI-2 read, never the
 // network.
 //
-// --local file isolation: when `opts.local === true`,
+// --local config isolation: when `opts.local === true`,
 // `targetConfigPath = locations.localConfigJsonPath` UNCONDITIONALLY -- the
-// orchestrator NEVER falls back to the base file on ENOENT (`loadConfig`'s
+// orchestrator NEVER falls back to the base config on ENOENT (`loadConfig`'s
 // absent arm yields an empty starting shape that `saveConfig` writes back to
-// the local file, creating it fresh).
+// the local config, creating it fresh).
 //
-// LAYER-04 / D-MF-03: the flag alone picks the layer -- the shared layer
+// LAYER-04 / D-MF-03: the flag alone picks the layer -- the base layer
 // without `--local`, the local layer with it. A standalone call whose plugin
 // only the other layer declares is refused and changes nothing
 // (`refuseOtherLayerDeclaration`). Both layers are read INSIDE the lock -- see
@@ -232,7 +232,7 @@ export interface EnableDisableSubject {
 /**
  * D-54-01 options bundle for `setPluginEnabled`. Mirrors
  * `UninstallPluginOptions` + `enable: boolean` + an opt-in `local?: boolean`
- * for the per-machine override file.
+ * that targets the local config.
  */
 export interface EnableDisablePluginOptions {
   readonly ctx: NotificationContext;
@@ -250,8 +250,9 @@ export interface EnableDisablePluginOptions {
   /** When undefined, resolves the scope via project-then-user precedence (CMP-5). */
   readonly scope?: Scope;
   /**
-   * When true, target `claude-plugins.local.json` instead of
-   * `claude-plugins.json`. The base file is NEVER touched on the --local path.
+   * When true, target the local config (`claude-plugins.local.json`) instead
+   * of the base config (`claude-plugins.json`). The base config is NEVER
+   * touched on the --local path.
    */
   readonly local?: boolean;
   /**
@@ -1363,7 +1364,7 @@ function assertFailedPhasesHasError(
  * row asks for a `disable B` to plan (`plan.ts::classifyDeclaredPlugin`
  * reads the config truth). `overwriteDisabledMemberEntries` overwrites the
  * entry in every layer that holds it, whatever flag the caller typed for the
- * root, so a shared-layer entry is found even under `--local`. Called only
+ * root, so a base-layer entry is found even under `--local`. Called only
  * once BOTH the members' ledger AND the root's own branch have succeeded,
  * alongside the root's own `writeEnabledFlagBack` -- a config write is not
  * undone by `runPhases`, so patching it any earlier would leave the file
@@ -1574,7 +1575,7 @@ async function readEnabledDependents(args: {
  * and is acted on (LAYER-08). An orchestrated call reads its input from the
  * configuration and is never refused (WR-09).
  *
- * When both layers declare the plugin and the command targets the shared
+ * When both layers declare the plugin and the command targets the base
  * layer, the local layer's own `enabled` is checked too (`refuseLocalOverride`).
  */
 function refuseOtherLayerDeclaration(
@@ -1602,12 +1603,12 @@ function refuseOtherLayerDeclaration(
 }
 
 /**
- * LAYER-04 / D-MF-03: refuse a write to the shared layer that the local
+ * LAYER-04 / D-MF-03: refuse a write to the base layer that the local
  * layer's opposite `enabled` overrides. The local value wins the field merge,
  * so the next load would undo the write. Claude Code refuses the same write as
  * governed by another settings file. The refusal applies even when the record
  * already matches the request, because the write still loses at the next load.
- * A local entry that sets no `enabled` leaves the shared value in force, so it
+ * A local entry that sets no `enabled` leaves the base value in force, so it
  * is not refused.
  */
 function refuseLocalOverride(
@@ -1638,9 +1639,10 @@ function refuseLocalOverride(
  * would write: an idempotent call that writes no flag (`idempotentWritesFlag`)
  * is not refused and keeps its `(skipped)` row.
  *
- * - FIX-03 / D-MF-02: the flag would land in `claude-plugins.json` while only
- *   `claude-plugins.local.json` declares the marketplace, so a teammate who
- *   reads the shared file cannot resolve it.
+ * - FIX-03 / D-MF-02: the flag would land in the base config
+ *   (`claude-plugins.json`) while only the local config
+ *   (`claude-plugins.local.json`) declares the marketplace, so a teammate who
+ *   reads the base config cannot resolve it.
  * - LAYER-06 / D-MF-03: the target layer lacks the marketplace and no source
  *   is known to declare it there with.
  */
@@ -2363,8 +2365,9 @@ async function runSetEnabledOutcome(
   const { scope, locations } = resolution;
   // T-53-02-02: the CFG-03 abort row carries the basename of the layer that
   // could not be read, and the row is rendered after the lock closes, so the
-  // basename escapes the closure through this `let`. It starts at the shared
-  // layer, the target the no-flag call selects, so the type stays definite.
+  // basename escapes the closure through this `let`. It starts at the base
+  // layer's basename, the target the no-flag call selects, so the type stays
+  // definite.
   let configBasename = path.basename(locations.baseConfigJsonPath);
   // EDEP-01: the enable cascade's classified member rows, threaded out of the
   // locked closure below for the standalone renderer. Stays empty for
@@ -2533,9 +2536,9 @@ async function runSetEnabledOutcome(
         // RECON-03: the write-back is SKIPPED in orchestrated mode. A
         // reconcile-driven call derives the desired state FROM the merged
         // config (base + local), so the declaration already exists by
-        // construction -- possibly ONLY in `claude-plugins.local.json`, the
-        // per-machine override. Writing it back here would copy the local
-        // override's `enabled` flag into the shared BASE file and clobber a
+        // construction -- possibly ONLY in the local config
+        // (`claude-plugins.local.json`). Writing it back here would copy the
+        // local override's `enabled` flag into the base config and clobber a
         // user-authored base declaration. The config is the reconcile's INPUT;
         // only standalone commands author declarations. This arm is reached
         // only by `disable` or an orchestrated enable -- the standalone,

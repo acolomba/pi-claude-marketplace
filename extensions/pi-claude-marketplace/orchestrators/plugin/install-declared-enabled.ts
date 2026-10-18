@@ -14,7 +14,7 @@ function entryFor(plugins: PluginConfigMap, key: string): PluginConfigEntry | un
  * across the scope's two layers.
  *
  * The merge reads `enabled` field by field, so this read does too: the local
- * entry's `enabled` wins when it is set, and the shared entry's applies
+ * entry's `enabled` wins when it is set, and the base entry's applies
  * otherwise. The raw tri-state is preserved (`undefined` when neither layer
  * sets it) so the install flow, not this selector, decides when a plugin
  * declaration may supply the effective default.

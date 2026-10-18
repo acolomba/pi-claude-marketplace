@@ -680,15 +680,16 @@ export function configOrEmpty(result: ConfigLoadResult): ScopeConfig {
 }
 
 /**
- * FIX-03 / D-MF-02: a shared declaration may not name a marketplace that only
- * the local file declares, because a teammate who reads the shared file cannot
- * resolve it. Returns the refusal when the write targets the base file, the
- * base file does not declare `marketplace`, and the local file does.
+ * FIX-03 / D-MF-02: a declaration in the base layer may not name a marketplace
+ * that only the local config declares, because a teammate who reads the base
+ * config cannot resolve it. Returns the refusal when the write targets the
+ * base config, the base config does not declare `marketplace`, and the local
+ * config does.
  *
- * It reads only the target scope's own two files. A marketplace neither file
- * declares (one a project install adds from the user scope, CMP-3) and one
- * both files declare (a shared declaration with a personal override) are never
- * refused.
+ * It reads only the target scope's own two configs. A marketplace neither
+ * config declares (one a project install adds from the user scope, CMP-3) and
+ * one both configs declare (a declaration in the base layer with a personal
+ * override) are never refused.
  */
 export function localOnlyMarketplaceRefusal(
   selection: Pick<Extract<TargetLayers, { kind: "loaded" }>, "targetIsLocal" | "current" | "other">,
@@ -794,7 +795,7 @@ export function pluginLayerVerdict(args: {
 /**
  * LAYER-04 / D-MF-03: the refusal a named update or reinstall meets when the
  * plugin is declared only in the other layer. `--local` targets the local layer
- * and no flag targets the shared layer. A plugin that no layer declares, such
+ * and no flag targets the base layer. A plugin that no layer declares, such
  * as a dependency, is not refused.
  *
  * CFG-03: an unreadable layer file returns `LayerFileUnreadableError`, an
@@ -856,8 +857,8 @@ export async function keepLocalLayerTargets<
 /**
  * The scope-qualified keys a `--local` form covers in one scope: every key the
  * local layer declares, then each dependency those plugins need, walked
- * through installed plugins that no layer declares. A plugin the shared layer
- * declares ends the walk, so a dependency that only shared-layer plugins need
+ * through installed plugins that no layer declares. A plugin the base layer
+ * declares ends the walk, so a dependency that only base-layer plugins need
  * is not covered. This is the walk the LAYER-08 uninstall rule makes, read in
  * the other direction.
  *
@@ -930,8 +931,8 @@ function recordsByKey(state: ExtensionState): ReadonlyMap<string, InstalledPlugi
  * not already declare the owning marketplace, declare the marketplace in the
  * SAME batched patch. A layer that declares a plugin also declares its
  * marketplace (D-MF-03), so `install --local` under a marketplace only the
- * shared layer declares leaves a self-consistent local layer, and a later
- * `marketplace remove` from the shared layer keeps the plugin. The source is
+ * base layer declares leaves a self-consistent local layer, and a later
+ * `marketplace remove` from the base layer keeps the plugin. The source is
  * the state record's `source.raw`, the value `samePlannedSource` matches, or
  * the other layer's declared source when the record holds no string one.
  *

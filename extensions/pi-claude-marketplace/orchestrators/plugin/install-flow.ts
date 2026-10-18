@@ -196,8 +196,9 @@ export interface InstallPluginOptions {
    */
   readonly pinVersionOverride?: string;
   /**
-   * WB-01 / WB-02: when true, target `claude-plugins.local.json` instead
-   * of `claude-plugins.json`. The base file is NEVER touched on the
+   * WB-01 / WB-02: when true, target the local config
+   * (`claude-plugins.local.json`) instead of the base config
+   * (`claude-plugins.json`). The base config is NEVER touched on the
    * --local path; loadConfig's `absent` arm yields an empty starting
    * shape that saveConfig writes back to the local path.
    *
@@ -211,10 +212,10 @@ export interface InstallPluginOptions {
    * `PlannedPluginInstall.configSource`, the merge provenance the planner
    * records, so BOTH the DFEN-05 precedence read and the DFEN-04 /
    * D-102-04 stamp address the physical file the declaration actually lives
-   * in. Getting the read wrong is silent: reading only the base file for a
-   * locally-declared plugin reports `enabled` absent even when the local
-   * entry says `enabled: true`, installing the plugin disabled against the
-   * user's explicit word.
+   * in. Getting the read wrong is silent: reading only the base config for a
+   * plugin the local config declares reports `enabled` absent even when the
+   * local entry says `enabled: true`, installing the plugin disabled against
+   * the user's explicit word.
    */
   readonly local?: boolean;
   /**
@@ -1437,7 +1438,7 @@ async function declarePromotedPlugin(
  * whose key the target-scope config ALREADY declares with `enabled: false`
  * -- exactly what `disable <dep>` writes -- is patched to `true`.
  * `overwriteDisabledMemberEntries` overwrites the entry in every layer that
- * holds it, whatever flag the caller typed for the root, so a shared-layer
+ * holds it, whatever flag the caller typed for the root, so a base-layer
  * entry is found even under `--local`. A member the config does not mention at
  * all stays untouched (D-04-02: the config names only what the user asked for
  * by name). Called only when the install's own root write-back also runs
@@ -1842,7 +1843,7 @@ function declaredRowOutcome(args: {
  * rather than a runtime `undefined`.
  *
  * - `"invalid-config"` -- WB-01 / CFG-03 / T-56-03-04: the targeted config
- *   file (or, on the flagless path, the local file) could not be read.
+ *   (or, on the flagless path, the local config) could not be read.
  *   `configBasename`, set by the closure as a side effect for the same
  *   reason `enable-disable.ts` keeps its own copy of that `let` (T-53-02-02),
  *   carries the file name for the failed row composed after the lock closes.
@@ -1971,9 +1972,9 @@ async function installPluginWithTransaction(
 
   // WB-01: target-path selection happens ONCE, and both write arms below read
   // that one decision, so they cannot drift onto different files. The
-  // orchestrator NEVER falls back to the base file on ENOENT: the base file is
-  // NEVER touched on the --local path, and loadConfig's `absent` arm yields an
-  // empty starting shape that saveConfig writes back to the local path. The
+  // orchestrator NEVER falls back to the base config on ENOENT: the base config
+  // is NEVER touched on the --local path, and loadConfig's `absent` arm yields
+  // an empty starting shape that saveConfig writes back to the local path. The
   // other layer is the scope's other config, read fresh inside the lock for the
   // FIX-03 check, the DFEN-05 read, and the dependency-marketplace gate --
   // never written, never serialized back.
@@ -1983,8 +1984,9 @@ async function installPluginWithTransaction(
   //
   // T-53-02-02: the CFG-03 abort row carries the basename of the layer that
   // could not be read, and that row renders after the lock closes, so the
-  // basename escapes the closure through this `let`. It starts at the shared
-  // layer, the target the no-flag call selects, so the type stays definite.
+  // basename escapes the closure through this `let`. It starts at the base
+  // layer's basename, the target the no-flag call selects, so the type stays
+  // definite.
   let configBasename = path.basename(locations.baseConfigJsonPath);
   const orchestrated = opts.notifications?.mode === "orchestrated";
   // The requested plugin's key: the cascade's root, the write-target selection
@@ -2016,7 +2018,7 @@ async function installPluginWithTransaction(
         // The target is the layer the flag names. `targetIsLocal` still labels
         // which of `current` and `other` is the local layer, because
         // `resolveInstallDeclaredEnabled` reads the local layer's `enabled`
-        // before the shared one's.
+        // before the base layer's.
         const selection = await loadTargetLayers({
           locations,
           local: opts.local,
@@ -2041,7 +2043,7 @@ async function installPluginWithTransaction(
         // decisions can rest on different bytes of the same file. Never a merged
         // view -- `config-write-back.ts` is forbidden from importing
         // `config-merge.ts`, and serializing a merged view back would copy the
-        // local file's entries into the base file (SPLIT-02).
+        // local config's entries into the base config (SPLIT-02).
         const { targetConfigPath, targetIsLocal, current, other } = selection;
         configBasename = path.basename(targetConfigPath);
 

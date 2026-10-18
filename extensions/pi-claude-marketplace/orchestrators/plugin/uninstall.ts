@@ -221,8 +221,9 @@ export interface UninstallPluginOptions {
    */
   readonly notifications?: UninstallPluginNotifications;
   /**
-   * WB-01 / WB-02: when true, target `claude-plugins.local.json` instead
-   * of `claude-plugins.json`. The base file is NEVER touched on the
+   * WB-01 / WB-02: when true, target the local config
+   * (`claude-plugins.local.json`) instead of the base config
+   * (`claude-plugins.json`). The base config is NEVER touched on the
    * --local path; loadConfig's `absent` arm yields an empty starting
    * shape that saveConfig writes back to the local path.
    */
@@ -327,8 +328,8 @@ interface UninstallLayerPaths {
 
 /**
  * WB-01: the target layer is chosen by the flag alone, once, before the lock,
- * so the command never falls back to the shared file when the local one is
- * absent.
+ * so the command never falls back to the base config when the local config
+ * is absent.
  */
 function uninstallLayerPaths(
   locations: Pick<ScopedLocations, "baseConfigJsonPath" | "localConfigJsonPath">,
