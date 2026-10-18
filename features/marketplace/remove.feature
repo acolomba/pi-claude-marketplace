@@ -4,6 +4,59 @@ Feature: Marketplace remove
   uninstalls the plugins that config declares from it. The scenarios run the
   real extension in a headless Pi and use local marketplaces in place of published ones.
 
+  Scenario Outline: Removing an empty marketplace needs no reload
+    Given the marketplace "tools" is published as a <source kind> source
+    Given the marketplace "extras" is published as a dir source
+    Given the user has run "/claude:plugin marketplace add <source> --scope <scope>"
+    Given the marketplace "extras" is added to the <scope> scope
+    When the user runs "/claude:plugin marketplace remove tools --scope <scope>"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these marketplaces:
+      | name  | scope   | status  |
+      | tools | <scope> | removed |
+    Then the "claude-plugins.json" file of the <scope> scope declares these marketplaces:
+      | name   | source                     |
+      | extras | {home}/marketplaces/extras |
+
+    Examples:
+      | scope   | source kind | source                                                       |
+      | project | dir         | {home}/marketplaces/tools                                    |
+      | project | file        | {home}/marketplaces/tools/.claude-plugin/marketplace.json    |
+      | user    | dir         | {home}/marketplaces/tools                                    |
+      | user    | file        | {home}/marketplaces/tools/.claude-plugin/marketplace.json    |
+
+    @url
+    Examples:
+      | scope   | source kind | source                              |
+      | project | url         | https://{git host}/acme/tools.git   |
+      | user    | url         | https://{git host}/acme/tools.git   |
+
+    @github
+    Examples:
+      | scope   | source kind | source     |
+      | project | github      | acme/tools |
+      | user    | github      | acme/tools |
+
+  Scenario: The rm alias removes a marketplace without a reload
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "extras" is published as a dir source
+    Given the marketplace "tools" is added to the project scope
+    Given the marketplace "extras" is added to the project scope
+    When the user runs "/claude:plugin marketplace rm tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these marketplaces:
+      | name  | scope   | status  |
+      | tools | project | removed |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name   | source                     |
+      | extras | {home}/marketplaces/extras |
+
   Scenario: Removing a marketplace with --local clears only its local declaration
     Given the marketplace "base" is published as a dir source
     Given the marketplace "tools" is published as a dir source
