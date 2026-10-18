@@ -1,6 +1,6 @@
 Feature: Plugin configuration
 
-  Each scope has a shared layer and a local layer, and a new session loads what
+  Each scope has a base layer and a local layer, and a new session loads what
   the two layers declare once merged. The scenarios run the real extension in a
   headless Pi and use a local marketplace in place of a published one.
 
@@ -10,7 +10,7 @@ Feature: Plugin configuration
       | name | version |
       | demo | 1.0.0   |
 
-  Scenario: A plugin the shared layer disables stays disabled when the local layer declares it too
+  Scenario: A plugin the base layer disables stays disabled when the local layer declares it too
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
     Given the user has run "/claude:plugin disable demo@fixtures --scope project"
@@ -24,7 +24,7 @@ Feature: Plugin configuration
       | id            |
       | demo@fixtures |
 
-  Scenario: A plugin the local layer enables is enabled although the shared layer disables it
+  Scenario: A plugin the local layer enables is enabled although the base layer disables it
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
     Given the user has run "/claude:plugin disable demo@fixtures --scope project"
@@ -88,9 +88,9 @@ Feature: Plugin configuration
       | demo@fixtures |
     Then the "claude-plugins.local.json" file of the project scope declares no marketplaces
 
-  Scenario: A shared layer that declares a plugin without its marketplace is reported as an invalid configuration
+  Scenario: A base layer that declares a plugin without its marketplace is reported as an invalid configuration
     Given the user has run "/claude:plugin marketplace add {home}/marketplaces/fixtures --scope project --local"
-    Given a plugin configuration file in scope project and layer shared, with these plugins:
+    Given a plugin configuration file in scope project and layer base, with these plugins:
       | marketplace | plugin | enabled |
       | fixtures    | demo   |         |
     When the user runs "/claude:plugin pending --scope project"

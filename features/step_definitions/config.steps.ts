@@ -1,6 +1,6 @@
 /**
- * @fileoverview Steps about the layer configs a user owns in a scope: the base
- * config `claude-plugins.json` and the local config `claude-plugins.local.json`.
+ * @fileoverview Steps about the configs a user owns in a scope: the base config
+ * `claude-plugins.json` and the local config `claude-plugins.local.json`.
  *
  * One setup step writes the `plugins` member of one layer config, to model a
  * hand edit or a version-control update. It keeps the config's other members.
@@ -15,7 +15,7 @@
  * pass on an empty or an absent map, because the configuration schema reads an
  * absent map as no declarations (CFG-01). `declares no plugins` is how a
  * scenario shows that a refused command wrote no plugin declaration to either
- * file (FIX-03). `does not exist` is the step that asserts a file is absent:
+ * config (FIX-03). `does not exist` is the step that asserts a file is absent:
  * after a load, a missing `claude-plugins.json` means the first-run migration
  * declined to write it (FIX-02, MIG-01).
  */
@@ -39,7 +39,7 @@ const CONFIG_FILES: ReadonlySet<string> = new Set([
 
 function configFilePath(world: ScenarioWorld, fileName: string, scope: string): string {
   if (!CONFIG_FILES.has(fileName)) {
-    throw new Error(`${fileName} is not a configuration file of a scope`);
+    throw new Error(`${fileName} is not a config of a scope`);
   }
 
   return path.join(world.scopeRoot(scope), fileName);
@@ -47,14 +47,14 @@ function configFilePath(world: ScenarioWorld, fileName: string, scope: string): 
 
 // The file of each layer word a scenario names.
 const LAYER_CONFIGS: ReadonlyMap<string, string> = new Map([
-  ["shared", "claude-plugins.json"],
+  ["base", "claude-plugins.json"],
   ["local", "claude-plugins.local.json"],
 ]);
 
 function layerConfigPath(world: ScenarioWorld, scope: string, layer: string): string {
   const fileName = LAYER_CONFIGS.get(layer);
   if (fileName === undefined) {
-    throw new Error(`unknown layer ${layer}; expected shared or local`);
+    throw new Error(`unknown layer ${layer}; expected base or local`);
   }
 
   return path.join(world.scopeRoot(scope), fileName);

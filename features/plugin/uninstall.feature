@@ -116,7 +116,7 @@ Feature: Plugin uninstall
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
 
-  Scenario: Uninstalling without --local a plugin both layers declare keeps it installed and drops only the shared declaration
+  Scenario: Uninstalling without --local a plugin both layers declare keeps it installed and drops only the declaration in the base layer
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
     Given the user has run "/claude:plugin install demo@fixtures --scope project --local"
     When the user runs "/claude:plugin uninstall demo@fixtures --scope project"
@@ -137,7 +137,7 @@ Feature: Plugin uninstall
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
 
-  Scenario: Uninstalling a dependency that a plugin of the shared layer needs fails as dependents remain
+  Scenario: Uninstalling a dependency that a plugin of the base layer needs fails as dependents remain
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins with dependencies:
       | name | version | dependencies |
@@ -163,7 +163,7 @@ Feature: Plugin uninstall
       | /skill:app-skill | A skill of app 1.0.0. |
       | /skill:lib-skill | A skill of lib 1.0.0. |
 
-  Scenario: Uninstalling with --local a dependency that only a plugin of the shared layer needs uninstalls nothing
+  Scenario: Uninstalling with --local a dependency that only a plugin of the base layer needs uninstalls nothing
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins with dependencies:
       | name | version | dependencies |

@@ -85,7 +85,7 @@ Feature: Plugin install
     Then the "claude-plugins.local.json" file of the project scope declares no plugins
     Then the project scope has no installed plugins
 
-  Scenario: Installing with --local from a marketplace only the shared layer declares also declares the marketplace in the local layer
+  Scenario: Installing with --local from a marketplace only the base layer declares also declares the marketplace in the local layer
     When the user runs "/claude:plugin install demo@fixtures --scope project --local"
     Then the result has these fields:
       | kind         | cascade |
@@ -102,7 +102,7 @@ Feature: Plugin install
       | demo@fixtures |
     Then the "claude-plugins.json" file of the project scope declares no plugins
 
-  Scenario: A plugin installed with --local from a marketplace the shared layer declares stays installed after the shared layer removes the marketplace
+  Scenario: A plugin installed with --local from a marketplace the base layer declares stays installed after the base layer removes the marketplace
     Given the user has run "/claude:plugin install demo@fixtures --scope project --local"
     Given the user has run "/claude:plugin marketplace remove fixtures --scope project"
     When the user starts a new pi session
@@ -110,8 +110,8 @@ Feature: Plugin install
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
 
-  Scenario: Installing with --local a plugin the shared layer declares but has not installed installs it
-    Given a plugin configuration file in scope project and layer shared, with these plugins:
+  Scenario: Installing with --local a plugin the base layer declares but has not installed installs it
+    Given a plugin configuration file in scope project and layer base, with these plugins:
       | marketplace | plugin | enabled |
       | fixtures    | demo   |         |
     When the user runs "/claude:plugin install demo@fixtures --scope project --local"
@@ -132,7 +132,7 @@ Feature: Plugin install
       | id            |
       | demo@fixtures |
 
-  Scenario: Installing with --local a plugin the shared layer declares adds the local declaration and installs nothing
+  Scenario: Installing with --local a plugin the base layer declares adds the local declaration and installs nothing
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
     When the user runs "/claude:plugin install demo@fixtures --scope project --local"
     Then the result has these fields:
@@ -152,7 +152,7 @@ Feature: Plugin install
       | id            |
       | demo@fixtures |
 
-  Scenario: Installing without --local a plugin installed with --local adds the shared declaration and installs nothing
+  Scenario: Installing without --local a plugin installed with --local adds the declaration in the base layer and installs nothing
     Given the user has run "/claude:plugin install demo@fixtures --scope project --local"
     When the user runs "/claude:plugin install demo@fixtures --scope project"
     Then the result has these fields:

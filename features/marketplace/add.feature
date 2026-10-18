@@ -94,7 +94,7 @@ Feature: Marketplace add
       | source kind | source     |
       | github      | acme/tools |
 
-  Scenario: Adding a marketplace with --local declares it only in the local configuration
+  Scenario: Adding a marketplace with --local declares it only in the local layer
     Given the marketplace "extras" is published as a dir source
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "extras" is added to the project scope
@@ -113,7 +113,7 @@ Feature: Marketplace add
       | name  | source                    |
       | tools | {home}/marketplaces/tools |
 
-  Scenario Outline: Adding with --local a marketplace that the shared configuration declares also declares it in the local configuration
+  Scenario Outline: Adding with --local a marketplace that the base layer declares also declares it in the local layer
     Given the marketplace "tools" is published as a <source kind> source
     Given the marketplace "tools" is added to the project scope
     When the user runs "/claude:plugin marketplace add <source> --scope project --local"
@@ -146,7 +146,7 @@ Feature: Marketplace add
       | source kind | source     |
       | github      | acme/tools |
 
-  Scenario: Adding without --local a marketplace that the local configuration declares also declares it in the shared configuration
+  Scenario: Adding without --local a marketplace that the local layer declares also declares it in the base layer
     Given the marketplace "tools" is published as a dir source
     Given the user has run "/claude:plugin marketplace add {home}/marketplaces/tools --scope project --local"
     When the user runs "/claude:plugin marketplace add {home}/marketplaces/tools --scope project"
@@ -164,7 +164,7 @@ Feature: Marketplace add
       | name  | source                    |
       | tools | {home}/marketplaces/tools |
 
-  Scenario: A marketplace added with --local to a scope with no shared configuration stays out of it in a new session
+  Scenario: A marketplace added with --local to a scope with no base config stays out of it in a new session
     Given the marketplace "tools" is published as a dir source
     Given the user has run "/claude:plugin marketplace add {home}/marketplaces/tools --scope project --local"
     When the user starts a new pi session
@@ -233,7 +233,7 @@ Feature: Marketplace add
       | url         | https://{git host}/acme/tools.git | https://{git host}/acme/tools.git      |
       | url         | https://{git host}/acme/tools.git | https://{git host}/acme/tools-copy.git |
 
-  Scenario: Adding with --local a marketplace that the local configuration declares fails as a duplicate name
+  Scenario: Adding with --local a marketplace that the local layer declares fails as a duplicate name
     Given the marketplace "tools" is published as a dir source
     Given the user has run "/claude:plugin marketplace add {home}/marketplaces/tools --scope project --local"
     When the user runs "/claude:plugin marketplace add {home}/marketplaces/tools --scope project --local"
@@ -250,7 +250,7 @@ Feature: Marketplace add
       | tools | {home}/marketplaces/tools |
     Then the "claude-plugins.json" file of the project scope does not exist
 
-  Scenario: Adding with --local another spelling of a marketplace that the shared configuration declares fails as a duplicate name
+  Scenario: Adding with --local another spelling of a marketplace that the base layer declares fails as a duplicate name
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" is added to the project scope
     When the user runs "/claude:plugin marketplace add ~/marketplaces/tools --scope project --local"

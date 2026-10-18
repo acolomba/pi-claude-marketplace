@@ -1,7 +1,7 @@
 Feature: Marketplace remove
 
-  Removing a marketplace drops its declaration from one configuration file of a
-  scope and uninstalls the plugins that file declares from it. The scenarios run the
+  Removing a marketplace drops its declaration from one config of a scope and
+  uninstalls the plugins that config declares from it. The scenarios run the
   real extension in a headless Pi and use local marketplaces in place of published ones.
 
   Scenario: Removing a marketplace with --local clears only its local declaration
@@ -75,7 +75,7 @@ Feature: Marketplace remove
       | tools | {home}/marketplaces/tools |
     Then the "claude-plugins.local.json" file of the project scope does not exist
 
-  Scenario: Removing a marketplace from the shared configuration keeps its declaration in the local configuration
+  Scenario: Removing a marketplace from the base layer keeps its declaration in the local layer
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" is added to the project scope
     Given the user has run "/claude:plugin marketplace add {home}/marketplaces/tools --scope project --local"
@@ -111,7 +111,7 @@ Feature: Marketplace remove
       | name  | scope   | details autoupdate | details last updated at |
       | tools | project | false              | {scenario time}         |
 
-  Scenario: Removing a marketplace from the shared configuration uninstalls only the plugins that configuration declares
+  Scenario: Removing a marketplace from the base layer uninstalls only the plugins that layer declares
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins:
       | name  | version |
@@ -138,7 +138,7 @@ Feature: Marketplace remove
       | id         |
       | beta@tools |
 
-  Scenario: Removing a marketplace from the shared configuration uninstalls the dependencies of the plugins it removes
+  Scenario: Removing a marketplace from the base layer uninstalls the dependencies of the plugins it removes
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins with dependencies:
       | name  | version | dependencies |
@@ -163,7 +163,7 @@ Feature: Marketplace remove
       | id         |
       | beta@tools |
 
-  Scenario: Removing a marketplace from the shared configuration keeps a dependency that a plugin of the local configuration still needs
+  Scenario: Removing a marketplace from the base layer keeps a dependency that a plugin of the local layer still needs
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins with dependencies:
       | name  | version | dependencies |
@@ -186,7 +186,7 @@ Feature: Marketplace remove
       | id         |
       | beta@tools |
 
-  Scenario: Removing a marketplace from the shared configuration fails while a plugin of the local configuration still needs one of its plugins
+  Scenario: Removing a marketplace from the base layer fails while a plugin of the local layer still needs one of its plugins
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins with dependencies:
       | name  | version | dependencies |

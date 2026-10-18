@@ -1,10 +1,10 @@
 Feature: Marketplace autoupdate
 
   Autoupdate turns automatic updates on and off for an added marketplace, and a
-  scope's two configuration files combine the setting. The scenarios run the real
+  scope's two layers combine the setting. The scenarios run the real
   extension in a headless Pi and use local marketplaces in place of published ones.
 
-  Scenario: A local declaration without autoupdate takes the setting from the shared declaration
+  Scenario: A local declaration without autoupdate takes the setting from the declaration in the base layer
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" is added to the project scope
     Given the user has run "/claude:plugin marketplace autoupdate tools --scope project"
@@ -59,7 +59,7 @@ Feature: Marketplace autoupdate
       | tools | {home}/marketplaces/tools |
     Then the "claude-plugins.local.json" file of the project scope does not exist
 
-  Scenario: Enabling autoupdate without a scope changes only the scopes whose shared configuration declares the marketplace
+  Scenario: Enabling autoupdate without a scope changes only the scopes whose base layer declares the marketplace
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" is added to the user scope
     Given the user has run "/claude:plugin marketplace add {home}/marketplaces/tools --scope project --local"
@@ -106,7 +106,7 @@ Feature: Marketplace autoupdate
       | name  | source                    | autoupdate |
       | tools | {home}/marketplaces/tools | true       |
 
-  Scenario: Disabling autoupdate with --local writes the setting to the local configuration only
+  Scenario: Disabling autoupdate with --local writes the setting to the local config only
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" is added to the project scope
     Given the user has run "/claude:plugin marketplace add {home}/marketplaces/tools --scope project --local"
@@ -126,7 +126,7 @@ Feature: Marketplace autoupdate
       | name  | source                    | autoupdate |
       | tools | {home}/marketplaces/tools | true       |
 
-  Scenario: A local autoupdate setting overrides the shared one in the marketplace list
+  Scenario: A local autoupdate setting overrides the base-layer setting in the marketplace list
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" is added to the project scope
     Given the user has run "/claude:plugin marketplace add {home}/marketplaces/tools --scope project --local"
@@ -145,7 +145,7 @@ Feature: Marketplace autoupdate
       | name  | scope   | details autoupdate | details last updated at |
       | tools | project | false              | {scenario time}         |
 
-  Scenario: Enabling autoupdate in the shared configuration reports already autoupdate while the local configuration keeps it off
+  Scenario: Enabling autoupdate in the base layer reports already autoupdate while the local layer keeps it off
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" is added to the project scope
     Given the user has run "/claude:plugin marketplace add {home}/marketplaces/tools --scope project --local"
@@ -163,7 +163,7 @@ Feature: Marketplace autoupdate
       | name  | source                    | autoupdate |
       | tools | {home}/marketplaces/tools | false      |
 
-  Scenario: Disabling autoupdate for every marketplace with --local changes only the local configuration
+  Scenario: Disabling autoupdate for every marketplace with --local changes only the local config
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "extras" is published as a dir source
     Given the marketplace "tools" is added to the project scope
