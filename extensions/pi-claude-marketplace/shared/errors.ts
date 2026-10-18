@@ -473,7 +473,7 @@ export class PluginInLocalLayerOnlyError extends Error {
 
 /**
  * LAYER-04 / D-MF-03: the refusal of a named plugin command with `--local`
- * when only the shared layer declares the plugin.
+ * when only the base layer declares the plugin.
  *
  * The message IS the failed row's cause line. It is built from fixed text and
  * names that passed `assertSafeName`, so it carries no path.

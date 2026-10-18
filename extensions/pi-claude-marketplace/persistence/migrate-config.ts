@@ -60,8 +60,8 @@ import type { ParsedSource } from "../domain/source.ts";
  *   - `"local-invalid"` -- claude-plugins.json is absent and
  *     claude-plugins.local.json cannot be read, so which records are
  *     personal is unknown. The migration writes nothing rather than copy
- *     every local declaration into the shared file (FIX-02). The same read
- *     pass aborts the plan on that local file (CFG-03), and the next load
+ *     every local declaration into the base config (FIX-02). The same read
+ *     pass aborts the plan on that local config (CFG-03), and the next load
  *     after a repair migrates.
  *
  * Cutting `error` along the discriminant means the type system rejects
@@ -102,11 +102,11 @@ export type MigrateFirstRunResult =
  *
  * No I/O. Every state marketplace and every plugin (including
  * `compatibility.installable === false`) appears in the output, except what
- * `local` declares (FIX-02): a marketplace the local file declares is left
+ * `local` declares (FIX-02): a marketplace the local config declares is left
  * out with every plugin recorded under it, and so is a plugin key the local
- * file declares. The local file stays the only record of what is personal.
- * The migration runs only while claude-plugins.json is absent, so a
- * marketplace the local file declares is declared only there. Plugin
+ * config declares. The local config stays the only record of what is
+ * personal. The migration runs only while claude-plugins.json is absent, so a
+ * marketplace the local config declares is declared only there. Plugin
  * entries are flat-keyed `${pluginName}@${mpName}` (D-01) so the same
  * plugin name across two marketplaces does not collide. Each plugin entry
  * body is `{}` per D-04 (defaults applied at consume time).
@@ -173,7 +173,7 @@ export function buildConfigFromState(
     }
 
     marketplaceEntries.push([mpName, entry]);
-    pluginEntries.push(...sharedPluginEntries(mpName, Object.keys(mp.plugins), local));
+    pluginEntries.push(...basePluginEntries(mpName, Object.keys(mp.plugins), local));
   }
 
   const marketplaces = Object.fromEntries(marketplaceEntries);
@@ -181,9 +181,10 @@ export function buildConfigFromState(
   return { schemaVersion: 1, marketplaces, plugins };
 }
 
-// Soft-degraded entries (compatibility.installable === false) appear too;
-// only a plugin key the local file declares is left out (FIX-02).
-function sharedPluginEntries(
+// The base config's plugin entries for one marketplace. Soft-degraded entries
+// (compatibility.installable === false) appear too; only a plugin key the
+// local config declares is left out (FIX-02).
+function basePluginEntries(
   mpName: string,
   pluginNames: readonly string[],
   local: ScopeConfig,

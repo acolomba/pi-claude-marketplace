@@ -1138,9 +1138,9 @@ async function executeScopedPlan(
  * Target: import does NOT support `--local` (per RESEARCH project structure;
  * the flag is per-command and not on the import surface), so the batch
  * targets `locations.baseConfigJsonPath`. The one exception is a re-enabled
- * promotion whose key the local file declares: its `{ enabled: true }` goes
- * to the local file (`stampReenabledWhereLocalDeclares`) and the batch keeps
- * the bare key.
+ * promotion whose key the local config declares: its `{ enabled: true }` goes
+ * to the local config (`stampReenabledWhereLocalDeclares`) and the batch
+ * keeps the bare key.
  *
  * Source: verbatim `rawSource` from `scopePlan.marketplacesToEnsure` keyed by
  * marketplace name, preserving the `samePlannedSource` contract.
@@ -1212,18 +1212,17 @@ async function writeBatchedConfigForScope(
 }
 
 /**
- * D-04-07 / D-103-16: the enable path writes `{ enabled: true }` to the file
+ * D-04-07 / D-103-16: the enable path writes `{ enabled: true }` to the config
  * that declares the key, and the disable verb's `{ enabled: false }` may live
- * in the local file, whose explicit `enabled` wins over the base entry's
- * (LAYER-09) -- a stamp in the base file alone would leave the merged view
- * disabled. So a
- * re-enabled entry the local file declares is stamped there, through the
- * single-entry writer (which adds no `marketplaces` key to a file that
- * declares none), and its base patch drops to the bare key so the base
- * declaration still exists. The local file is re-read per stamp so each write
- * sees the one before it; an absent, invalid, or non-declaring local file
- * leaves the base patch as built. Runs under the scope lock, before the base
- * batch is written.
+ * in the local config, whose explicit `enabled` wins over the base entry's
+ * (LAYER-09) -- a stamp in the base config alone would leave the merged view
+ * disabled. So a re-enabled entry the local config declares is stamped there,
+ * through the single-entry writer (which adds no `marketplaces` key to a
+ * config that declares none), and its base patch drops to the bare key so the
+ * base declaration still exists. The local config is re-read per stamp so each
+ * write sees the one before it; an absent, invalid, or non-declaring local
+ * config leaves the base patch as built. Runs under the scope lock, before
+ * the base batch is written.
  */
 async function stampReenabledWhereLocalDeclares(
   locations: ScopedLocations,

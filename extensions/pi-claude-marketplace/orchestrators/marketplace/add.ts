@@ -219,9 +219,9 @@ export interface AddMarketplaceOptions {
    */
   readonly notifications?: AddMarketplaceNotifications;
   /**
-   * WB-01: when true, target
-   * `claude-plugins.local.json` instead of `claude-plugins.json`. The base
-   * file is NEVER touched on the --local path; loadConfig's `absent` arm
+   * WB-01: when true, target the local config (`claude-plugins.local.json`)
+   * instead of the base config (`claude-plugins.json`). The base config is
+   * NEVER touched on the --local path; loadConfig's `absent` arm
    * yields an empty starting shape that saveConfig writes back to the local
    * path.
    */
@@ -582,7 +582,7 @@ async function runAddInGuard(args: {
   const source = parseAddableSource(opts.rawSource);
 
   // WB-01: target-path selection happens ONCE before the lock so
-  // the orchestrator NEVER falls back to the base file on ENOENT.
+  // the orchestrator NEVER falls back to the base config on ENOENT.
   const targetConfigPath =
     opts.local === true ? locations.localConfigJsonPath : locations.baseConfigJsonPath;
   const configBasename = path.basename(targetConfigPath);

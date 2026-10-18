@@ -227,9 +227,9 @@ export interface RemoveMarketplaceOptions {
    */
   readonly notifications?: RemoveMarketplaceNotifications;
   /**
-   * WB-01: when true, target `claude-plugins.local.json` instead of
-   * `claude-plugins.json`. The base file is NEVER touched on the
-   * --local path.
+   * WB-01: when true, target the local config (`claude-plugins.local.json`)
+   * instead of the base config (`claude-plugins.json`). The base config is
+   * NEVER touched on the --local path.
    */
   readonly local?: boolean;
   /**
@@ -478,7 +478,7 @@ type ExtensionPluginRow =
  * absent. Both contradict the RECON-05 byte/mtime-stability discipline.
  *
  * An `absent` or `invalid` layer is left untouched (never rewritten): the
- * sibling layer being invalid is NOT a CFG-03 abort (that is scoped to the
+ * other layer being invalid is NOT a CFG-03 abort (that is scoped to the
  * target layer in `runRemoveLockBody`).
  */
 async function cascadeRemoveFromLayer(
@@ -535,7 +535,7 @@ async function commitFullRemove(args: {
   // Cross-layer sweep: both `claude-plugins.json` and
   // `claude-plugins.local.json` are inside the NFR-10 sanctioned write set.
   // A `--local` install by a prior version may have left the plugin key in
-  // the sibling layer; cleaning only the target layer leaves it as a
+  // the other layer; cleaning only the target layer leaves it as a
   // perpetual dangling-reference. Each layer is loaded fresh and swept
   // independently (WR-02 no-op guard per file, NFR-1 atomic save per file).
   await cascadeRemoveFromLayer(locations.baseConfigJsonPath, locations.scopeRoot, marketplace);
@@ -1255,7 +1255,7 @@ async function runRemoveOutcome(
   const { locations } = resolved;
 
   // WB-01: target-path selection happens ONCE before the lock so
-  // the orchestrator NEVER falls back to the base file on ENOENT.
+  // the orchestrator NEVER falls back to the base config on ENOENT.
   const targetConfigPath =
     opts.local === true ? locations.localConfigJsonPath : locations.baseConfigJsonPath;
   const configBasename = path.basename(targetConfigPath);

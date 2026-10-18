@@ -272,7 +272,7 @@ export type Reason =
   | "still installed in base layer"
   | "still installed in local layer"
   // LAYER-04 / D-MF-03: an enable or disable without `--local` targets the
-  // shared layer, and the local layer sets `enabled` to the opposite value.
+  // base layer, and the local layer sets `enabled` to the opposite value.
   // The local value wins the field merge, so the write would be undone at the
   // next load. The refusal rides a `failed` row, and the remedy, running the
   // command again with `--local`, rides the cause line.

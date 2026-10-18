@@ -146,7 +146,7 @@ function invalidConfigBlocks(
  * marketplace only the other layer declares. It runs on the readable layers
  * only, after `invalidConfigBlocks` found none.
  *
- * MIG-01 (DIFF-01): when the shared layer is absent, the load's first-run
+ * MIG-01 (DIFF-01): when the base config is absent, the load's first-run
  * migration writes it from state before its own check, so this check reads
  * the same `buildConfigFromState` projection the planner reads
  * (`mergedViewForPlanning`). Pending then reports the error the next load
@@ -197,7 +197,7 @@ function narrowStateLoadFailReason(err: unknown): ContentReason {
  * merged view READ-ONLY instead: plan against the PURE
  * `buildConfigFromState` projection merged with the local arm -- no write,
  * no migration side effect (NFR-5 read-surface discipline). The projection
- * leaves out what the local file declares, as the migration does (FIX-02),
+ * leaves out what the local config declares, as the migration does (FIX-02),
  * so pending and the load plan the same view. A pristine
  * scope (empty state) projects an empty config, so the empty-advisory
  * behavior is unchanged; an invalid base/local arm never reaches this

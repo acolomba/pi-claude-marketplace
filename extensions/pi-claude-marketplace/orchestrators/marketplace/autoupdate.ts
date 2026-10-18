@@ -124,9 +124,9 @@ export interface AutoupdateOptions {
   /** Project-scope cwd (ignored for user scope). */
   readonly cwd: string;
   /**
-   * WB-01: when true, target
-   * `claude-plugins.local.json` instead of `claude-plugins.json`. The base
-   * file is NEVER touched on the --local path.
+   * WB-01: when true, target the local config (`claude-plugins.local.json`)
+   * instead of the base config (`claude-plugins.json`). The base config is
+   * NEVER touched on the --local path.
    */
   readonly local?: boolean;
   /**
@@ -290,7 +290,7 @@ async function loadFlipLayer(filePath: string, local: boolean): Promise<FlipLaye
 
 /**
  * Whether a layer's own `autoupdate` value already matches the request. An
- * absent value in the shared layer reads as off (MAU-4). An absent value in
+ * absent value in the base layer reads as off (MAU-4). An absent value in
  * the local layer is no value at all, so a flip always writes it, which is how
  * a per-machine override comes to exist.
  */
@@ -460,8 +460,8 @@ async function planEveryFlip(
  * leaves every file's bytes and mtime unchanged (RECON-05).
  *
  * WR-09 / T-56-02-01: orchestrated mode writes nothing, so a reconcile-driven
- * flip never copies a `claude-plugins.local.json` override into the shared
- * file.
+ * flip never copies an override in the local config
+ * (`claude-plugins.local.json`) into the base config.
  */
 async function flipOneScope(opts: AutoupdateOptions, scope: Scope): Promise<FlipPlan> {
   const locations = locationsFor(scope, opts.cwd);
