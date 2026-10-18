@@ -823,7 +823,7 @@ async function runLockedReinstall(
     });
 
     // LAYER-04 / D-MF-03: a reinstall changes the installation and its record,
-    // never a layer file, so a dependency it reinstalls stays undeclared.
+    // never a layer config, so a dependency it reinstalls stays undeclared.
     await tx.save();
   } catch (err) {
     throw errorWithManualRecovery(err, await transaction.rollbackReinstalledPlugin(replacement));
@@ -892,7 +892,7 @@ async function runLockedReinstall(
 
 /**
  * LAYER-04 / D-MF-03: refuse a named reinstall of a plugin only the other
- * layer declares, or one whose layer file cannot be read (CFG-03). It runs
+ * layer declares, or one whose layer config cannot be read (CFG-03). It runs
  * before anything is resolved or replaced, so the rollback path is never
  * reached and the locked closure leaves without a save (NFR-3).
  */

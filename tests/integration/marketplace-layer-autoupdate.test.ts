@@ -106,7 +106,7 @@ async function scopeSnapshot(locations: ScopedLocations): Promise<readonly unkno
   ];
 }
 
-/** The `autoupdate` value each layer file gives `name`, and the list's merged value. */
+/** The `autoupdate` value each layer config gives `name`, and the list's merged value. */
 async function autoupdateReadings(
   scope: ProjectScope,
   name: string,

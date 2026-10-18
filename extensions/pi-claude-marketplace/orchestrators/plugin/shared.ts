@@ -798,11 +798,11 @@ export function pluginLayerVerdict(args: {
  * and no flag targets the base layer. A plugin that no layer declares, such
  * as a dependency, is not refused.
  *
- * CFG-03: an unreadable layer file returns `LayerConfigUnreadableError`, an
+ * CFG-03: an unreadable layer config returns `LayerConfigUnreadableError`, an
  * invalid manifest naming only its basename, because the plugin may be
  * declared there.
  *
- * NFR-5: it reads only the scope's two layer files, so a caller can run it
+ * NFR-5: it reads only the scope's two layer configs, so a caller can run it
  * before any credential, clone, or tag listing.
  */
 export async function namedPluginLayerRefusal(opts: {
@@ -826,7 +826,7 @@ export async function namedPluginLayerRefusal(opts: {
   return verdict.kind === "other-only" ? verdict.refusal : undefined;
 }
 
-/** CFG-03: an unreadable layer file, named by its basename only. */
+/** CFG-03: an unreadable layer config, named by its basename only. */
 function unreadableLayerError(filePath: string): LayerConfigUnreadableError {
   return new LayerConfigUnreadableError(path.basename(filePath));
 }
@@ -1011,7 +1011,7 @@ export async function overwriteDisabledMemberEntries(args: {
   const layers = [args.locations.baseConfigJsonPath, args.locations.localConfigJsonPath];
   for (const configPath of layers) {
     for (const key of args.keys) {
-      // eslint-disable-next-line no-await-in-loop -- per-key read-modify-write of one layer file
+      // eslint-disable-next-line no-await-in-loop -- per-key read-modify-write of one layer config
       await overwriteDisabledEntry(configPath, args.locations.scopeRoot, key);
     }
   }

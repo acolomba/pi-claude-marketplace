@@ -103,7 +103,7 @@ function buildInvalidConfigBlock(scope: Scope, filePath: string): MarketplaceRow
 }
 
 /**
- * LAYER-06: a layer file's block with one failed row that carries the cause,
+ * LAYER-06: a layer config's block with one failed row that carries the cause,
  * because only a plugin row can carry one. The block itself has no status, so
  * it groups the row and the tally counts the one error once. The row is named
  * by the file's BASENAME (T-53-02-02).
@@ -131,7 +131,7 @@ function buildLayerGapBlock(
   };
 }
 
-/** CFG-03: one failed block per invalid layer file of a scope. */
+/** CFG-03: one failed block per invalid layer config of a scope. */
 function invalidConfigBlocks(
   scope: Scope,
   outcome: ScopeLoadOutcome,
@@ -292,7 +292,7 @@ export async function pendingReconcile(opts: PendingReconcileOptions): Promise<v
     }
 
     // LAYER-06: a layer that declares a plugin without its marketplace stops
-    // the scope as an invalid layer file does, so nothing is planned for it.
+    // the scope as an invalid layer config does, so nothing is planned for it.
     const gapBlocks = layerMarketplaceGapBlocks(scope, loc, outcome, state);
     if (gapBlocks.length > 0) {
       invalidBlocks.push(...gapBlocks);

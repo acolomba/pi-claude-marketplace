@@ -146,7 +146,7 @@ function declaredConfig(result: ConfigLoadResult): ScopeConfig {
 
 /**
  * LAYER-06 / D-MF-03: one outcome per layer that declares a plugin whose
- * marketplace only the other layer declares. Like an invalid layer file, it
+ * marketplace only the other layer declares. Like an invalid layer config, it
  * stops the scope's reload; the plugins the scope installed keep loading from
  * state, and no file is repaired.
  */

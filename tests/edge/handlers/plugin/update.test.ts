@@ -50,7 +50,7 @@
 // exact argument list against it. Delegation is observed instead as the
 // footprint the workflow left in the hermetic tree -- both scopes' install
 // records, both scopes' base and override config layers, and the generated
-// agent files -- compared as ONE whole value. No update writes a layer file
+// agent files -- compared as ONE whole value. No update writes a layer config
 // (LAYER-04), so a layer in the footprint is one the case seeded. The delegating cases deliberately
 // do NOT assert the notification body: that value belongs to
 // tests/orchestrators/plugin/update-flow.test.ts, and re-deriving it here would

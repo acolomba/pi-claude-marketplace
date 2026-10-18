@@ -542,7 +542,7 @@ async function seedState(locations: ScopedLocations, state: ExtensionState): Pro
 
 /**
  * A project scope that records the path marketplace `mp` offering `hello`,
- * with the two layer files written as given.
+ * with the two layer configs written as given.
  */
 async function seedLayerScope(
   t: TestContext,

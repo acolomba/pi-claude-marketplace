@@ -3,7 +3,7 @@
 // The same-layer marketplace rule on load (LAYER-06), through the real read
 // pass, apply, and pending, with real layer and state files. A layer that
 // declares a plugin whose marketplace only the other layer declares stops its
-// scope's reload as an invalid layer file does (CFG-03): the plugins the scope
+// scope's reload as an invalid layer config does (CFG-03): the plugins the scope
 // already installed stay recorded, and no file is repaired. A plugin whose
 // marketplace no layer declares keeps its own dangling reference row, and the
 // rest of the scope still converges. Before the first-run migration writes the
@@ -72,7 +72,7 @@ async function layerScope(t: TestContext, prefix: string, scope: Scope): Promise
   return { cwd, locations: locationsFor(scope, cwd), source };
 }
 
-/** Writes one layer file as a hand edit would. */
+/** Writes one layer config as a hand edit would. */
 async function writeLayer(
   filePath: string,
   declaration: {
@@ -122,7 +122,7 @@ async function treeBytes(root: string): Promise<readonly (readonly [string, stri
 
 /**
  * The reload cascade, or with the `Reconcile pending` label the pending diff, of
- * a scope whose one layer file is invalid for the given cause: one failed row
+ * a scope whose one layer config is invalid for the given cause: one failed row
  * under the file's block.
  */
 function layerError(

@@ -934,7 +934,7 @@ test("CFG-03: an invalid local layer aborts a flagless enable and changes nothin
 // LAYER-04: a named enable or disable acts on the layer its flag names
 // ──────────────────────────────────────────────────────────────────────────
 
-/** Declare `foo@mp` and its marketplace in one layer file of the user scope. */
+/** Declare `foo@mp` and its marketplace in one layer config of the user scope. */
 async function declareFooIn(file: string, mpRoot: string, entry: object): Promise<void> {
   await writeFile(
     file,
@@ -952,7 +952,7 @@ async function bytesOrAbsent(file: string): Promise<string | undefined> {
   return (await fileExists(file)) ? readFile(file, "utf8") : undefined;
 }
 
-/** The bytes of both layer files and of state.json, to prove a refusal changed nothing. */
+/** The bytes of both layer configs and of state.json, to prove a refusal changed nothing. */
 async function scopeBytes(paths: {
   readonly baseConfigPath: string;
   readonly localConfigPath: string;

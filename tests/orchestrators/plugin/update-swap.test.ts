@@ -1010,7 +1010,7 @@ const DIRECT_UPDATED_OUTCOME = {
   declaresWorkflows: false,
 } as const;
 
-test("LAYER-04: a direct swap writes no layer file", async () => {
+test("LAYER-04: a direct swap writes no layer config", async () => {
   await withHermeticHome(async () => {
     // arrange
     const cwd = await mkdtemp(path.join(tmpdir(), "update-swap-no-layer-"));

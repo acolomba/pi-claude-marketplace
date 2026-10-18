@@ -1,9 +1,9 @@
 /**
- * @fileoverview Steps about the layer files a user owns in a scope: the shared
- * layer `claude-plugins.json` and the local layer `claude-plugins.local.json`.
+ * @fileoverview Steps about the layer configs a user owns in a scope: the base
+ * config `claude-plugins.json` and the local config `claude-plugins.local.json`.
  *
- * One setup step writes the `plugins` member of one layer file, to model a
- * hand edit or a version-control update. It keeps the file's other members.
+ * One setup step writes the `plugins` member of one layer config, to model a
+ * hand edit or a version-control update. It keeps the config's other members.
  * Every other step only reads, so this module writes nothing else and deletes
  * nothing.
  *

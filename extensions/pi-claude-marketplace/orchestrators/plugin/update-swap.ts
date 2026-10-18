@@ -845,7 +845,7 @@ async function refreshHooksCacheAfterUpdate(
  * is a truthful "we touched this record" stamp.
  *
  * LAYER-04 / D-MF-03: finalize changes the installation record only. An update
- * never writes a layer file, so a dependency it updates stays undeclared.
+ * never writes a layer config, so a dependency it updates stays undeclared.
  */
 async function finalizeUpdateRecord(
   args: ThreePhaseArgs,

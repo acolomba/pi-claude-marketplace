@@ -5182,7 +5182,7 @@ async function seedLayeredUpdate(
   return locations;
 }
 
-/** The bytes of both layer files and of `state.json`, with the state mtime. */
+/** The bytes of both layer configs and of `state.json`, with the state mtime. */
 async function updateFileSnapshot(locations: ReturnType<typeof locationsFor>): Promise<{
   readonly base: string | undefined;
   readonly local: string | undefined;
@@ -5285,7 +5285,7 @@ async function readLayerConfig(filePath: string): Promise<LayerConfig | undefine
     : undefined;
 }
 
-/** The bytes and mtime of each layer file; an absent file reads as undefined. */
+/** The bytes and mtime of each layer config; an absent file reads as undefined. */
 async function layerConfigs(locations: ReturnType<typeof locationsFor>): Promise<{
   readonly base: LayerConfig | undefined;
   readonly local: LayerConfig | undefined;
@@ -5296,7 +5296,7 @@ async function layerConfigs(locations: ReturnType<typeof locationsFor>): Promise
   };
 }
 
-test("LAYER-04: a changed named update of a plugin the base layer declares leaves both layer files unchanged", async () => {
+test("LAYER-04: a changed named update of a plugin the base layer declares leaves both layer configs unchanged", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-declared-layers-");
     try {
@@ -5326,7 +5326,7 @@ test("LAYER-04: a changed named update of a plugin the base layer declares leave
   });
 });
 
-test("LAYER-08: a named update of a dependency updates it and writes no layer file", async () => {
+test("LAYER-08: a named update of a dependency updates it and writes no layer config", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-dependency-");
     try {
@@ -5393,7 +5393,7 @@ async function recordedVersions(
   return { hello: plugins?.hello?.version, other: plugins?.other?.version };
 }
 
-test("LAYER-04: a bare update writes no layer file for any record", async () => {
+test("LAYER-04: a bare update writes no layer config for any record", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-bare-no-layer-");
     try {
@@ -5682,7 +5682,7 @@ test("LAYER-08: a named update of a plugin no layer declares, under a marketplac
   });
 });
 
-test("LAYER-04: a named update with --local under a marketplace only the local layer declares updates the plugin and writes no layer file", async () => {
+test("LAYER-04: a named update with --local under a marketplace only the local layer declares updates the plugin and writes no layer config", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-local-mp-flag-");
     try {

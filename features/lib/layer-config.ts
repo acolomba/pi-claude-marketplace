@@ -1,9 +1,9 @@
 /**
  * @fileoverview Reads the plugin table of the one setup step that writes a
- * layer file, and writes that file's `plugins` member.
+ * layer config, and writes that config's `plugins` member.
  *
- * The step models a hand edit or a version-control update of one layer file of
- * a scope. It owns only the `plugins` member: every other member, such as the
+ * The step models a hand edit or a version-control update of one layer config
+ * of a scope. It owns only the `plugins` member: every other member, such as the
  * `marketplaces` member a `marketplace add` wrote, stays as it is.
  */
 
@@ -15,7 +15,7 @@ import { isPlainObject } from "./field-rows.ts";
 
 import type { DataTable } from "@cucumber/cucumber";
 
-/** One plugin declaration of a layer file, under its `<plugin>@<marketplace>` key. */
+/** One plugin declaration of a layer config, under its `<plugin>@<marketplace>` key. */
 export interface LayerPlugin {
   readonly key: string;
   readonly entry: { readonly enabled?: boolean };
@@ -53,7 +53,7 @@ export function readLayerPlugins(table: DataTable): LayerPlugin[] {
   });
 }
 
-// The layer file as a JSON object, or a new file's first member when it does
+// The layer config as a JSON object, or a new file's first member when it does
 // not exist yet.
 async function readLayerObject(filePath: string): Promise<object> {
   if (!existsSync(filePath)) {
@@ -70,7 +70,7 @@ async function readLayerObject(filePath: string): Promise<object> {
 }
 
 /**
- * Replaces the `plugins` member of the layer file at `filePath` with exactly
+ * Replaces the `plugins` member of the layer config at `filePath` with exactly
  * `plugins`, keeping every other member, and creates the file and its
  * directory when they do not exist.
  */

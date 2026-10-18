@@ -1149,7 +1149,7 @@ async function runPluginUpdate(args: ThreePhaseArgs): Promise<UpdateRunOutcome> 
  * `<plugin>@<marketplace>` invocation form (OUT-04); the `@<marketplace>` and
  * bare forms and the autoupdate cascade name no plugin.
  *
- * NFR-5: the check reads only the two layer files, and it runs before the
+ * NFR-5: the check reads only the two layer configs, and it runs before the
  * preflight. So a refused update builds no credentials, lists no tags, and
  * clones nothing. An up-to-date plugin is refused too, because knowing that a
  * git-source plugin is up to date needs the network.

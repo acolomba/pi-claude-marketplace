@@ -543,7 +543,7 @@ export interface InvalidBlockOutcome {
 /**
  * LAYER-06 / D-MF-03: a layer that declares a plugin whose marketplace only the
  * other layer declares, from the per-scope read pass. It stops the scope's
- * reload as an invalid layer file does. `basename` is the layer file's
+ * reload as an invalid layer config does. `basename` is the layer config's
  * BASENAME (T-55-02-01), and `cause` names the plugins and the repair. The
  * projection renders the file as a block header with no status and one failed
  * row under it, so the tally counts the one error once, as `pending` does.

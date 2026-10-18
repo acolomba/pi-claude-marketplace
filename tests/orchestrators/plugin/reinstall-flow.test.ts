@@ -2941,7 +2941,7 @@ async function seedLocalLayerReinstall(
   return locations;
 }
 
-/** The bytes of both layer files, of `state.json` with its mtime, and of the staged skill. */
+/** The bytes of both layer configs, of `state.json` with its mtime, and of the staged skill. */
 async function reinstallFileSnapshot(
   cwd: string,
   locations: ReturnType<typeof locationsFor>,
@@ -3351,7 +3351,7 @@ test("LAYER-08: a named reinstall of a plugin no layer declares, under a marketp
   });
 });
 
-test("LAYER-04: a named reinstall with --local under a marketplace only the local layer declares reinstalls the plugin and writes no layer file", async () => {
+test("LAYER-04: a named reinstall with --local under a marketplace only the local layer declares reinstalls the plugin and writes no layer config", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-local-mp-flag-"));
     try {
@@ -3400,7 +3400,7 @@ async function readLayerConfig(filePath: string): Promise<LayerConfig | undefine
     : undefined;
 }
 
-/** The bytes and mtime of each layer file; an absent file reads as undefined. */
+/** The bytes and mtime of each layer config; an absent file reads as undefined. */
 async function layerConfigs(locations: ReturnType<typeof locationsFor>): Promise<{
   readonly base: LayerConfig | undefined;
   readonly local: LayerConfig | undefined;
@@ -3451,7 +3451,7 @@ test("LAYER-04: a bare flagless reinstall whose local layer cannot be read reins
   });
 });
 
-test("LAYER-04: a named reinstall of a plugin the base layer declares leaves both layer files unchanged", async () => {
+test("LAYER-04: a named reinstall of a plugin the base layer declares leaves both layer configs unchanged", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-declared-layers-"));
     try {
@@ -3486,7 +3486,7 @@ test("LAYER-04: a named reinstall of a plugin the base layer declares leaves bot
   });
 });
 
-test("LAYER-04: a reinstall with --local of a plugin no layer declares writes no layer file", async () => {
+test("LAYER-04: a reinstall with --local of a plugin no layer declares writes no layer config", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-local-no-layer-"));
     try {
@@ -3520,7 +3520,7 @@ test("LAYER-04: a reinstall with --local of a plugin no layer declares writes no
   });
 });
 
-test("LAYER-04: the unnamed flagless reinstall the load-time backfill runs on a dependency writes no layer file", async () => {
+test("LAYER-04: the unnamed flagless reinstall the load-time backfill runs on a dependency writes no layer config", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-backfill-dependency-"));
     try {

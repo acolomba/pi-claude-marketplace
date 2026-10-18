@@ -152,7 +152,7 @@ interface FlipLayer {
 
 /**
  * What one scope's flip decides: the names it changes, the names already set,
- * and, per layer file, the names whose entry it writes.
+ * and, per layer config, the names whose entry it writes.
  */
 interface FlipPlan {
   readonly changed: readonly string[];
@@ -339,7 +339,7 @@ function planFlip(
 }
 
 /**
- * One batched write per layer file (NFR-3). The patch carries `autoupdate`
+ * One batched write per layer config (NFR-3). The patch carries `autoupdate`
  * only, so only an entry the layer already declares is changed. A failed write
  * leaves the earlier files written; `FlipWriteFailure` names the marketplaces
  * whose every write had landed, so the flip reports them beside the failure.
@@ -348,7 +348,7 @@ async function writeFlipPlan(plan: FlipPlan, scopeRoot: string, enable: boolean)
   const written = new Set<FlipLayer>();
   for (const [layer, names] of plan.writes) {
     try {
-      // eslint-disable-next-line no-await-in-loop -- at most two layer files, written one after the other
+      // eslint-disable-next-line no-await-in-loop -- at most two layer configs, written one after the other
       await writeBatchedConfigEntries(layer.config, layer.filePath, scopeRoot, {
         marketplaces: Object.fromEntries(names.map((name) => [name, { autoupdate: enable }])),
       });

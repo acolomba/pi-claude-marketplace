@@ -319,7 +319,7 @@ async function readDeclarers(args: {
   return { snapshot: result, dependents: findDependents(args.key, result.index) };
 }
 
-/** The layer files a named uninstall reads: its target and, standalone, the other one. */
+/** The layer configs a named uninstall reads: its target and, standalone, the other one. */
 interface UninstallLayerPaths {
   readonly target: string;
   /** Undefined under orchestration, which applies no layer rule (WR-09). */
@@ -1352,7 +1352,7 @@ async function runUninstallOutcome(
   const layerPaths = uninstallLayerPaths(locations, local, orchestrated);
 
   let alreadyGone = false;
-  // WB-01 / CFG-03: the basename of an invalid layer file; surfaced post-guard
+  // WB-01 / CFG-03: the basename of an invalid layer config; surfaced post-guard
   // as a basename-only cause (T-56-03-04 information-disclosure mitigation).
   let invalidConfigBasename: string | undefined;
   // Lifted from inside the guard closure so the post-guard success path can

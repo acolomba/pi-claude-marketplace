@@ -849,7 +849,7 @@ A plugin operation has failed.
 
 ### Failure -- no source can declare the marketplace in the target layer (LAYER-06)
 
-A layer that declares a plugin also declares the plugin's marketplace, so an install writes the marketplace into the target layer when that layer lacks it. The source comes from the scope's record of the marketplace. When the record holds no source this version can write, such as a source kind from a newer version, the other layer's declaration supplies it. When neither is available, the install is refused before anything is written, because the target layer would declare the plugin without its marketplace. The `cause:` line names the layer file to declare the marketplace in.
+A layer that declares a plugin also declares the plugin's marketplace, so an install writes the marketplace into the target layer when that layer lacks it. The source comes from the scope's record of the marketplace. When the record holds no source this version can write, such as a source kind from a newer version, the other layer's declaration supplies it. When neither is available, the install is refused before anything is written, because the target layer would declare the plugin without its marketplace. The `cause:` line names the layer config to declare the marketplace in.
 
 `enable` and `disable` render the same row when they would write. A reload and an import are never refused. Severity `error`; no reload-hint (nothing landed).
 
@@ -1299,7 +1299,7 @@ A plugin operation has failed.
 
 A named uninstall acts on the base layer, or on the local layer with `--local`. It reads both layers. When only the local layer declares the plugin, an uninstall without `--local` is refused before anything changes. The `cause:` line names the local config (`claude-plugins.local.json`) and the remedy: run the command again with `--local`.
 
-`enable`, `disable`, `update <plugin>@<marketplace>`, and `reinstall <plugin>@<marketplace>` render the same row under their own labels, without the version. A refused named `update` does not look for a new version first, because that check can need the network, so an up-to-date plugin is refused too. A reload, an import, and the `update` and `reinstall` forms that name no plugin are never refused. When either layer file cannot be read, each of these named verbs is refused with the `{invalid manifest}` row instead, and its `cause:` line names that file by its basename: `Config file "claude-plugins.local.json" failed schema validation.` Severity `error`; no reload-hint (nothing changed).
+`enable`, `disable`, `update <plugin>@<marketplace>`, and `reinstall <plugin>@<marketplace>` render the same row under their own labels, without the version. A refused named `update` does not look for a new version first, because that check can need the network, so an up-to-date plugin is refused too. A reload, an import, and the `update` and `reinstall` forms that name no plugin are never refused. When either layer config cannot be read, each of these named verbs is refused with the `{invalid manifest}` row instead, and its `cause:` line names that file by its basename: `Config file "claude-plugins.local.json" failed schema validation.` Severity `error`; no reload-hint (nothing changed).
 
 <!-- catalog-state: uninstall-plugin-in-local-layer-only -->
 
@@ -1635,7 +1635,7 @@ ______________________________________________________________________
 
 Multi-plugin cascade. One marketplace header per affected marketplace; plugin rows indent two spaces underneath.
 
-A reinstall changes the installation and its record only. It writes no declaration to either layer, so a reinstalled dependency stays undeclared (LAYER-04 / D-MF-03). A named `reinstall <plugin>@<marketplace>` acts on the base layer, or on the local layer with `--local`. It refuses a plugin that only the other layer declares, and a layer file it cannot read, with the rows of the `uninstall-plugin-in-local-layer-only` state under `/claude:plugin uninstall`. The forms that name no plugin cover the plugins of both layers. With `--local`, they cover the plugins the local layer declares and the dependencies those plugins need, but not a dependency that only base-layer plugins need. When they cannot read the dependencies of one of those plugins, they change nothing and fail with one `{unreadable}` row whose cause names that plugin.
+A reinstall changes the installation and its record only. It writes no declaration to either layer, so a reinstalled dependency stays undeclared (LAYER-04 / D-MF-03). A named `reinstall <plugin>@<marketplace>` acts on the base layer, or on the local layer with `--local`. It refuses a plugin that only the other layer declares, and a layer config it cannot read, with the rows of the `uninstall-plugin-in-local-layer-only` state under `/claude:plugin uninstall`. The forms that name no plugin cover the plugins of both layers. With `--local`, they cover the plugins the local layer declares and the dependencies those plugins need, but not a dependency that only base-layer plugins need. When they cannot read the dependencies of one of those plugins, they change nothing and fail with one `{unreadable}` row whose cause names that plugin.
 
 ### Single marketplace, all reinstalled
 
@@ -1868,7 +1868,7 @@ ______________________________________________________________________
 
 Multi-plugin cascade. Same shape as `reinstall` with version-arrow rows (`v<from> → v<to>`) per D-15-04 / Phase 16 `composeVersionArrow`.
 
-An update changes the installation and its record only. It writes no declaration to either layer, so an updated dependency stays undeclared (LAYER-04 / D-MF-03). A named `update <plugin>@<marketplace>` acts on the base layer, or on the local layer with `--local`. It refuses a plugin that only the other layer declares, and a layer file it cannot read, with the rows of the `uninstall-plugin-in-local-layer-only` state under `/claude:plugin uninstall`, before it looks for a new version. The forms that name no plugin cover the plugins of both layers. With `--local`, they cover the plugins the local layer declares and the dependencies those plugins need, but not a dependency that only base-layer plugins need. When they cannot read the dependencies of one of those plugins, they change nothing and fail with one `{unreadable}` row whose cause names that plugin.
+An update changes the installation and its record only. It writes no declaration to either layer, so an updated dependency stays undeclared (LAYER-04 / D-MF-03). A named `update <plugin>@<marketplace>` acts on the base layer, or on the local layer with `--local`. It refuses a plugin that only the other layer declares, and a layer config it cannot read, with the rows of the `uninstall-plugin-in-local-layer-only` state under `/claude:plugin uninstall`, before it looks for a new version. The forms that name no plugin cover the plugins of both layers. With `--local`, they cover the plugins the local layer declares and the dependencies those plugins need, but not a dependency that only base-layer plugins need. When they cannot read the dependencies of one of those plugins, they change nothing and fail with one `{unreadable}` row whose cause names that plugin.
 
 ### Single marketplace, mixed
 
@@ -3390,7 +3390,7 @@ A marketplace operation has failed.
 
 ### A layer declares a plugin without its marketplace (LAYER-06)
 
-The layer error the next reload stops on (see `reload-layer-marketplace-undeclared` under `reconcile-applied-cascade`), so `pending` shows it before the reload. The pending diff plans nothing for the scope. The layer file heads its block with no status, and one failed row under it carries the `{invalid manifest}` reason and the cause, so the tally counts the one error once. Before the first-run migration writes `claude-plugins.json` from state (MIG-01), the check reads the shared layer that the migration would write, as the reload does.
+The layer error the next reload stops on (see `reload-layer-marketplace-undeclared` under `reconcile-applied-cascade`), so `pending` shows it before the reload. The pending diff plans nothing for the scope. The layer config heads its block with no status, and one failed row under it carries the `{invalid manifest}` reason and the cause, so the tally counts the one error once. Before the first-run migration writes `claude-plugins.json` from state (MIG-01), the check reads the shared layer that the migration would write, as the reload does.
 
 <!-- catalog-state: pending-layer-marketplace-undeclared -->
 
@@ -3479,7 +3479,7 @@ OUT-03/D-04: both the mp-level failed row and its synthetic failed child are cou
 
 ### A layer declares a plugin without its marketplace (LAYER-06 / D-MF-03)
 
-A layer that declares a plugin must also declare the plugin's marketplace. When the other layer of the scope declares that marketplace and this layer does not, the reload stops for the scope as it does for an invalid layer file (CFG-03). The row names the layer file, and the `cause:` line names the plugins and the repair: add the marketplace to the same layer, or remove the plugin from it. The repair command names the scope with `--scope`, because `marketplace add` adds to the user scope when the flag is absent. A shared layer missing a marketplace that only the local layer declares renders the same row for `claude-plugins.json`, with the repair `marketplace add <source> --scope <scope>` without `--local`. The plugins the scope already installed stay installed and keep loading, and no file is changed. A plugin whose marketplace no layer declares keeps its own `{dangling reference}` row instead. The layer file heads its block with no status, and one failed row under it carries the `{invalid manifest}` reason and the cause, so the tally counts the one error once, as `pending` does.
+A layer that declares a plugin must also declare the plugin's marketplace. When the other layer of the scope declares that marketplace and this layer does not, the reload stops for the scope as it does for an invalid layer config (CFG-03). The row names the layer config, and the `cause:` line names the plugins and the repair: add the marketplace to the same layer, or remove the plugin from it. The repair command names the scope with `--scope`, because `marketplace add` adds to the user scope when the flag is absent. A shared layer missing a marketplace that only the local layer declares renders the same row for `claude-plugins.json`, with the repair `marketplace add <source> --scope <scope>` without `--local`. The plugins the scope already installed stay installed and keep loading, and no file is changed. A plugin whose marketplace no layer declares keeps its own `{dangling reference}` row instead. The layer config heads its block with no status, and one failed row under it carries the `{invalid manifest}` reason and the cause, so the tally counts the one error once, as `pending` does.
 
 <!-- catalog-state: reload-layer-marketplace-undeclared -->
 
@@ -4248,7 +4248,7 @@ A plugin operation has failed.
   ⊘ foo-plugin (failed) {invalid manifest}
 ```
 
-Triggered when either layer file of the scope (`claude-plugins.json` or `claude-plugins.local.json`) fails CFG-03 validation (0-byte, malformed JSON, or schema-invalid), because a named enable reads both layers (LAYER-04). The orchestrator aborts BEFORE entering the cascade -- state.json mtime is UNCHANGED. The `cause:` summary cites that file's basename (the file basename only, never the absolute path; T-53-02-02 information-disclosure mitigation reused from Phase 53). Severity `error`; no reload-hint.
+Triggered when either layer config of the scope (`claude-plugins.json` or `claude-plugins.local.json`) fails CFG-03 validation (0-byte, malformed JSON, or schema-invalid), because a named enable reads both layers (LAYER-04). The orchestrator aborts BEFORE entering the cascade -- state.json mtime is UNCHANGED. The `cause:` summary cites that file's basename (the file basename only, never the absolute path; T-53-02-02 information-disclosure mitigation reused from Phase 53). Severity `error`; no reload-hint.
 
 ______________________________________________________________________
 
@@ -4350,7 +4350,7 @@ A plugin operation has failed.
   ⊘ foo-plugin (failed) {invalid manifest}
 ```
 
-Triggered when either layer file of the scope fails CFG-03 validation, because a named disable reads both layers (LAYER-04). The orchestrator aborts BEFORE entering the cascade -- state.json mtime is UNCHANGED. The `cause:` summary cites that file's basename (basename only; T-53-02-02 mitigation). Severity `error`.
+Triggered when either layer config of the scope fails CFG-03 validation, because a named disable reads both layers (LAYER-04). The orchestrator aborts BEFORE entering the cascade -- state.json mtime is UNCHANGED. The `cause:` summary cites that file's basename (basename only; T-53-02-02 mitigation). Severity `error`.
 
 ______________________________________________________________________
 

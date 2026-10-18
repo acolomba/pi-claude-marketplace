@@ -2,10 +2,10 @@
 //
 // The named plugin verbs across a scope's two layers, through the real
 // install, uninstall, enable and disable, update, and reinstall operations,
-// both layer files, the state file, and the scope lock. A path marketplace
+// both layer configs, the state file, and the scope lock. A path marketplace
 // keeps every case offline. A named verb acts on one layer and reads both, so
 // a layer it cannot read stops it before anything changes (LAYER-04, CFG-03).
-// Update and reinstall write no layer file, so a dependency that the load-time
+// Update and reinstall write no layer config, so a dependency that the load-time
 // backfill reinstalls or a bare update moves stays undeclared (LAYER-08). A
 // layer that gets a plugin declaration also gets its marketplace's, from the
 // other layer's source when the scope's record holds none (LAYER-06).
@@ -165,7 +165,7 @@ async function readIfPresent(filePath: string): Promise<string | undefined> {
   return (await pathExists(filePath)) ? await readFile(filePath, "utf8") : undefined;
 }
 
-/** The bytes of both layer files; an absent file reads as undefined. */
+/** The bytes of both layer configs; an absent file reads as undefined. */
 async function layerConfigs(scope: LayerScope): Promise<readonly (string | undefined)[]> {
   return [
     await readIfPresent(scope.locations.baseConfigJsonPath),
@@ -173,7 +173,7 @@ async function layerConfigs(scope: LayerScope): Promise<readonly (string | undef
   ];
 }
 
-/** The bytes of both layer files and the state file. */
+/** The bytes of both layer configs and the state file. */
 async function scopeFiles(scope: LayerScope): Promise<readonly (string | undefined)[]> {
   return [...(await layerConfigs(scope)), await readIfPresent(scope.locations.stateJsonPath)];
 }
@@ -264,7 +264,7 @@ const NAMED_VERBS: readonly NamedVerb[] = [
   },
 ];
 
-/** The one row a named verb renders when a layer file cannot be read (CFG-03). */
+/** The one row a named verb renders when a layer config cannot be read (CFG-03). */
 function invalidLayerRow(
   plugin: string,
   basename: string,
@@ -300,7 +300,7 @@ for (const { flag, local, unreadable, unreadablePath } of DIRECTIONS) {
   }
 }
 
-/** Both layer files parsed; an absent file reads as undefined. */
+/** Both layer configs parsed; an absent file reads as undefined. */
 async function declarations(scope: LayerScope): Promise<readonly unknown[]> {
   const files = await layerConfigs(scope);
   return files.map((bytes): unknown => (bytes === undefined ? undefined : JSON.parse(bytes)));
@@ -314,7 +314,7 @@ function baseDeclaresApp(source: string): readonly unknown[] {
   ];
 }
 
-test("LAYER-08: the load-time backfill's reinstall of a dependency writes no layer file", async (t) => {
+test("LAYER-08: the load-time backfill's reinstall of a dependency writes no layer config", async (t) => {
   // arrange
   const scope = await installedScope(t, "plugin-layer-backfill-", "app", false);
   const before = await layerConfigs(scope);
@@ -350,7 +350,7 @@ test("LAYER-08: the load-time backfill's reinstall of a dependency writes no lay
   boundary.verifyBoundary();
 });
 
-test("LAYER-08: a bare update moves a dependency to its new version and writes no layer file", async (t) => {
+test("LAYER-08: a bare update moves a dependency to its new version and writes no layer config", async (t) => {
   // arrange
   const scope = await installedScope(t, "plugin-layer-bare-update-", "app", false);
   await publish(scope.source, "1.1.0");

@@ -635,7 +635,7 @@ export class InvalidMarketplaceManifestError extends Error {
 }
 
 /**
- * CFG-03 / LAYER-04: a layer file that a named plugin command must read could
+ * CFG-03 / LAYER-04: a layer config that a named plugin command must read could
  * not be read: an EACCES, a truncated mid-save file, or a schema violation. It
  * is an invalid manifest, so every narrowing that maps one to
  * `{invalid manifest}` keeps doing so. Its own class lets a caller tell this

@@ -43,7 +43,7 @@
 // exact argument list against it. That exact-argument gap is this owner's
 // recorded scope. Delegation is observed instead as the minimal on-disk effect a
 // reinstall leaves: which skill directories each scope root carries afterwards,
-// and each layer file, which no reinstall writes (LAYER-04). Each seeded plugin
+// and each layer config, which no reinstall writes (LAYER-04). Each seeded plugin
 // owns a DIFFERENTLY NAMED skill directory and each scope a different
 // marketplace, so a command that reached the wrong form, the wrong marketplace,
 // or the wrong scope materialises the wrong name rather than merely

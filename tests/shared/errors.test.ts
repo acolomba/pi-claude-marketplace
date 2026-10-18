@@ -915,7 +915,7 @@ describe("DependencyDeclarationsUnreadableError", () => {
 });
 
 describe("LayerConfigUnreadableError", () => {
-  test("names the layer file by its basename and is an invalid manifest", () => {
+  test("names the layer config by its basename and is an invalid manifest", () => {
     // arrange
     const basename = "claude-plugins.local.json";
 

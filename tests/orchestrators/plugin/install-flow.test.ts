@@ -9128,7 +9128,7 @@ function countLedgerRuns(transactionControl: InstallTransactionControl): { count
   return runs;
 }
 
-/** LAYER-05: both layer files and the state document, read as bytes. */
+/** LAYER-05: both layer configs and the state document, read as bytes. */
 async function projectScopeBytes(cwd: string): Promise<{
   readonly base: string | undefined;
   readonly local: string | undefined;

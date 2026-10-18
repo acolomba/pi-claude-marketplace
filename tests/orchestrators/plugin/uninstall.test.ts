@@ -2680,7 +2680,7 @@ const BASE_LAYER_WITH_MARKETPLACE =
   '{"schemaVersion":1,"marketplaces":{"mp":{"source":"./src"}}}\n';
 const LAYER_DECLARING_HELLO = '{"schemaVersion":1,"plugins":{"hello@mp":{}}}\n';
 
-/** Write the base and local layer files of the scope as the exact bytes given. */
+/** Write the base and local layer configs of the scope as the exact bytes given. */
 async function writeLayerConfigs(
   locations: ReturnType<typeof locationsFor>,
   layers: { readonly base: string; readonly local: string },
@@ -2690,7 +2690,7 @@ async function writeLayerConfigs(
   await writeFile(locations.localConfigJsonPath, layers.local, "utf8");
 }
 
-/** The bytes of both layer files and of `state.json`, with the state file's mtime. */
+/** The bytes of both layer configs and of `state.json`, with the state file's mtime. */
 async function readScopeFiles(locations: ReturnType<typeof locationsFor>): Promise<{
   readonly base: string;
   readonly local: string;
