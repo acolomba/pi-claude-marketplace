@@ -140,8 +140,8 @@ Feature: Plugin install
       | severity     | info    |
       | needs reload | false   |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id            | name | status  | reasons                           | scope   | version |
-      | fixtures         | project           | demo@fixtures | demo | skipped | already installed in shared layer | project | 1.0.0   |
+      | marketplace name | marketplace scope | id            | name | status  | reasons                         | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | skipped | already installed in base layer | project | 1.0.0   |
     Then the "claude-plugins.local.json" file of the project scope declares these plugins:
       | id            |
       | demo@fixtures |

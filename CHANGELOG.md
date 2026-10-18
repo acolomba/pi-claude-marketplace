@@ -5,8 +5,8 @@
 - You can now declare a plugin in both `claude-plugins.json` and `claude-plugins.local.json`, and the scope installs it once. With a plugin name, `uninstall`, `enable`, `disable`, `update`, and `reinstall` change only the file you target.
 
   - Named commands fail with `{plugin in local layer only}` or `{plugin in base layer only}` and change nothing when only the other file declares it.
-  - An `install` into one file only adds the declaration when the other file declares the plugin and it is already installed. The row reads `{already installed in shared layer}` or `{already installed in local layer}`.
-  - An `uninstall` from one file keeps a plugin installed while the other file declares it, and drops only that file's declaration. The warning `{still installed in shared layer}` or `{still installed in local layer}` says how to uninstall it.
+  - An `install` into one file only adds the declaration when the other file declares the plugin and it is already installed. The row reads `{already installed in base layer}` or `{already installed in local layer}`.
+  - An `uninstall` from one file keeps a plugin installed while the other file declares it, and drops only that file's declaration. The warning `{still installed in base layer}` or `{still installed in local layer}` says how to uninstall it.
   - A named `uninstall` of a dependency that no file declares fails with `{dependents remain}` while a plugin of the target file needs it. While only plugins of the other file need it, the command skips it with a warning.
   - A flagless `enable` or `disable` fails with `{disabled in local layer}` or `{enabled in local layer}` when `claude-plugins.local.json` sets the opposite `enabled` value. Run it again with `--local`.
   - `update` and `reinstall` no longer write plugin declarations. Without a plugin name, `--local` limits them to the plugins that `claude-plugins.local.json` declares and the dependencies those plugins need.

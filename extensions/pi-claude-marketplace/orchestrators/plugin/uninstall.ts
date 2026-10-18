@@ -385,7 +385,7 @@ async function readUninstallLayers(
 function checkOtherLayerDeclaration(
   layers: Extract<UninstallLayers, { kind: "readable" }>,
   args: { readonly local: boolean; readonly marketplace: string; readonly plugin: string },
-): "shared" | "local" | undefined {
+): "base" | "local" | undefined {
   if (layers.other === undefined) {
     return undefined;
   }
@@ -405,7 +405,7 @@ function checkOtherLayerDeclaration(
     return undefined;
   }
 
-  return args.local ? "shared" : "local";
+  return args.local ? "base" : "local";
 }
 
 /**
@@ -495,7 +495,7 @@ function checkDependencyNeeders(
   return composeNeededElsewhereRow({
     ...args,
     needers: needers.other,
-    otherLayer: args.local ? "shared" : "local",
+    otherLayer: args.local ? "base" : "local",
   });
 }
 

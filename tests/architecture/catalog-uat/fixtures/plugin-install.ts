@@ -568,7 +568,7 @@ export const PLUGIN_INSTALL_FIXTURES: FixtureMap = {
                 needsReload: false,
                 name: "helper",
                 version: "1.0.0",
-                reasons: ["already installed in shared layer"],
+                reasons: ["already installed in base layer"],
               },
             ],
           },

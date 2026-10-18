@@ -300,10 +300,10 @@ const EXPECTED_REASONS = [
   // LAYER-04: a `--local` plugin command names a plugin only the base layer declares.
   "plugin in base layer only",
   // LAYER-05: an install adds a declaration of a plugin the other layer installed.
-  "already installed in shared layer",
+  "already installed in base layer",
   "already installed in local layer",
   // LAYER-05: an uninstall keeps a plugin the other layer still declares.
-  "still installed in shared layer",
+  "still installed in base layer",
   "still installed in local layer",
   // LAYER-04: a flagless enable or disable the local layer overrides is refused.
   "disabled in local layer",

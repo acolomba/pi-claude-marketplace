@@ -9145,7 +9145,7 @@ for (const direction of [
     title:
       "an install with --local of a plugin the shared layer installed declares it in the local layer and installs nothing",
     installedLocal: false,
-    reason: "already installed in shared layer",
+    reason: "already installed in base layer",
     after: (before: Awaited<ReturnType<typeof projectScopeBytes>>) => ({
       ...before,
       local: LAYER_DECLARING_HELLO,
@@ -9249,7 +9249,7 @@ test("LAYER-05: a disabled plugin the shared layer installed takes the same no-o
           notifications: [
             {
               message:
-                "● mp [project]\n  ⊘ hello v0.0.1 (skipped) {already installed in shared layer}",
+                "● mp [project]\n  ⊘ hello v0.0.1 (skipped) {already installed in base layer}",
             },
           ],
           files: { ...before, local: LAYER_DECLARING_HELLO },

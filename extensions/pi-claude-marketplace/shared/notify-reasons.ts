@@ -48,7 +48,7 @@ const IDEMPOTENT_REASONS = [
   "already disabled",
   // LAYER-05: the target layer gained the declaration of a plugin the scope
   // had already installed.
-  "already installed in shared layer",
+  "already installed in base layer",
   "already installed in local layer",
 ] as const;
 type IdempotentReason = (typeof IDEMPOTENT_REASONS)[number];
@@ -421,7 +421,7 @@ type CommandPrivateReason =
   // declares the plugin, so the uninstall dropped only the target layer's
   // declaration. It rides a `skipped` row at warning, because the plugin the
   // user asked to uninstall stays installed.
-  | "still installed in shared layer"
+  | "still installed in base layer"
   | "still installed in local layer"
   // LAYER-04 / D-MF-03: enable's and disable's refusal markers, owned by
   // `orchestrators/plugin/enable-disable.ts`. A command without `--local`

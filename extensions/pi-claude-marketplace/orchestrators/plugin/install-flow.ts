@@ -1776,7 +1776,7 @@ async function declareInstalledPlugin(args: {
     kind: "declared",
     record,
     reason: selection.targetIsLocal
-      ? "already installed in shared layer"
+      ? "already installed in base layer"
       : "already installed in local layer",
   };
 }
@@ -1794,7 +1794,7 @@ function declaredRowOutcome(args: {
   readonly scope: Scope;
   readonly plugin: string;
   readonly record: PluginInstallRecord;
-  readonly reason: "already installed in shared layer" | "already installed in local layer";
+  readonly reason: "already installed in base layer" | "already installed in local layer";
 }): InstallPluginOutcome {
   const { record } = args;
   const reasons: ContentReason[] = [args.reason];
@@ -1884,7 +1884,7 @@ type InstallTransactionOutcome =
   | {
       kind: "declared";
       record: PluginInstallRecord;
-      reason: "already installed in shared layer" | "already installed in local layer";
+      reason: "already installed in base layer" | "already installed in local layer";
     }
   | { kind: "promoted"; promotion: PromotionOutcome }
   | {

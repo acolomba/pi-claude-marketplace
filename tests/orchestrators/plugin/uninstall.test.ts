@@ -2692,13 +2692,13 @@ async function writeLayerFiles(
 
 /** The bytes of both layer files and of `state.json`, with the state file's mtime. */
 async function readScopeFiles(locations: ReturnType<typeof locationsFor>): Promise<{
-  readonly shared: string;
+  readonly base: string;
   readonly local: string;
   readonly state: string;
   readonly stateMtime: number;
 }> {
   return {
-    shared: await readFile(locations.configJsonPath, "utf8"),
+    base: await readFile(locations.configJsonPath, "utf8"),
     local: await readFile(locations.configLocalJsonPath, "utf8"),
     state: await readFile(locations.stateJsonPath, "utf8"),
     stateMtime: (await stat(locations.stateJsonPath)).mtimeMs,
@@ -2900,7 +2900,7 @@ for (const { title, local, flags, otherLayer, cause, dropFrom } of [
     title: "a --local uninstall of a plugin both layers declare drops only the local declaration",
     local: true,
     flags: {},
-    otherLayer: "shared",
+    otherLayer: "base",
     cause: "Run the command again without --local to uninstall it.",
     dropFrom: "local",
   },
@@ -2910,13 +2910,13 @@ for (const { title, local, flags, otherLayer, cause, dropFrom } of [
     flags: {},
     otherLayer: "local",
     cause: "Run the command again with --local to uninstall it.",
-    dropFrom: "shared",
+    dropFrom: "base",
   },
   {
     title: "--prune and --keep-data change nothing when the other layer still declares the plugin",
     local: true,
     flags: { prune: true, keepData: true },
-    otherLayer: "shared",
+    otherLayer: "base",
     cause: "Run the command again without --local to uninstall it.",
     dropFrom: "local",
   },

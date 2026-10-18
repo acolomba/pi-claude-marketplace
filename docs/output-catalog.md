@@ -865,13 +865,13 @@ A plugin operation has failed.
 
 ### Declared only -- the other layer already installed the plugin (LAYER-05)
 
-Both layers of a scope may declare the same plugin, and the scope installs it once. An install into one layer of a plugin that the other layer declares and the scope has installed adds the declaration to the target layer and installs nothing. When the target layer does not declare the plugin's marketplace, the install declares it there too (LAYER-06). An install with `--local` renders `{already installed in shared layer}`; a flagless install renders the mirror token `{already installed in local layer}`. A plugin that the other layer declares but the scope has not installed is installed as usual. An install with a version pin keeps the `{already installed}` failure. Severity `info`, because the plugin is now declared where the user asked; no reload-hint (nothing was installed).
+Both layers of a scope may declare the same plugin, and the scope installs it once. An install into one layer of a plugin that the other layer declares and the scope has installed adds the declaration to the target layer and installs nothing. When the target layer does not declare the plugin's marketplace, the install declares it there too (LAYER-06). An install with `--local` renders `{already installed in base layer}`; a flagless install renders the mirror token `{already installed in local layer}`. A plugin that the other layer declares but the scope has not installed is installed as usual. An install with a version pin keeps the `{already installed}` failure. Severity `info`, because the plugin is now declared where the user asked; no reload-hint (nothing was installed).
 
 <!-- catalog-state: install-already-installed-in-other-layer -->
 
 ```text
 ● official [user]
-  ⊘ helper v1.0.0 (skipped) {already installed in shared layer}
+  ⊘ helper v1.0.0 (skipped) {already installed in base layer}
 ```
 
 ### Failure -- a name a DISABLED plugin still owns (ENBL-18)
@@ -1327,7 +1327,7 @@ A plugin operation has failed.
 
 ### Kept installed -- the other layer still declares the plugin (LAYER-05)
 
-Both layers of a scope may declare the same plugin, and the scope installs it once. An uninstall from one layer then removes only that layer's declaration and keeps the installation, because the other layer still declares the plugin. The row is `(skipped)` with `{still installed in local layer}`, and the `cause:` line says to repeat the command with `--local` to uninstall the plugin. An uninstall with `--local` renders the mirror row: `{still installed in shared layer}`, with the cause `Run the command again without --local to uninstall it.` `--keep-data` and `--prune` change nothing here. Severity `warning`, because the plugin that the user asked to uninstall is still installed; no reload-hint (nothing left the disk).
+Both layers of a scope may declare the same plugin, and the scope installs it once. An uninstall from one layer then removes only that layer's declaration and keeps the installation, because the other layer still declares the plugin. The row is `(skipped)` with `{still installed in local layer}`, and the `cause:` line says to repeat the command with `--local` to uninstall the plugin. An uninstall with `--local` renders the mirror row: `{still installed in base layer}`, with the cause `Run the command again without --local to uninstall it.` `--keep-data` and `--prune` change nothing here. Severity `warning`, because the plugin that the user asked to uninstall is still installed; no reload-hint (nothing left the disk).
 
 <!-- catalog-state: uninstall-still-installed-in-other-layer -->
 

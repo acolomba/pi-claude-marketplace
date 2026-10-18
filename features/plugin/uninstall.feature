@@ -105,8 +105,8 @@ Feature: Plugin uninstall
       | needs reload | false                               |
       | summary      | A plugin operation needs attention. |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id            | name | status  | reasons                         | scope   | version | cause chain                                            | cause truncated | leaks | rollback partial |
-      | fixtures         | project           | demo@fixtures | demo | skipped | still installed in shared layer | project | 1.0.0   | Run the command again without --local to uninstall it. | false           |       |                  |
+      | marketplace name | marketplace scope | id            | name | status  | reasons                       | scope   | version | cause chain                                            | cause truncated | leaks | rollback partial |
+      | fixtures         | project           | demo@fixtures | demo | skipped | still installed in base layer | project | 1.0.0   | Run the command again without --local to uninstall it. | false           |       |                  |
     Then the "claude-plugins.local.json" file of the project scope declares no plugins
     Then the "claude-plugins.json" file of the project scope declares these plugins:
       | id            |

@@ -151,9 +151,9 @@ const EXPECTED_REASONS = [
   "marketplace in base layer only",
   "plugin in local layer only",
   "plugin in base layer only",
-  "already installed in shared layer",
+  "already installed in base layer",
   "already installed in local layer",
-  "still installed in shared layer",
+  "still installed in base layer",
   "still installed in local layer",
   "disabled in local layer",
   "enabled in local layer",
@@ -407,7 +407,7 @@ void updateSkippedMessage;
 const uninstallSkippedMessage = {
   status: "skipped",
   name: "alpha",
-  reasons: ["still installed in shared layer"],
+  reasons: ["still installed in base layer"],
   cause: new Error("Run the command again without --local to uninstall it."),
 } satisfies PluginUninstallSkippedMessage;
 void uninstallSkippedMessage;

@@ -205,16 +205,16 @@ export function composeUninstalledRow(args: {
 export function composeKeptInstalledRow(args: {
   readonly plugin: string;
   readonly version?: string | undefined;
-  readonly otherLayer: "shared" | "local";
+  readonly otherLayer: "base" | "local";
 }): PluginUninstallSkippedMessage {
-  const shared = args.otherLayer === "shared";
+  const base = args.otherLayer === "base";
   return {
     status: "skipped",
     name: args.plugin,
     ...(args.version !== undefined && { version: args.version }),
-    reasons: [shared ? "still installed in shared layer" : "still installed in local layer"],
+    reasons: [base ? "still installed in base layer" : "still installed in local layer"],
     cause: new Error(
-      shared
+      base
         ? "Run the command again without --local to uninstall it."
         : "Run the command again with --local to uninstall it.",
     ),
@@ -250,10 +250,10 @@ export function composeNeededElsewhereRow(args: {
   readonly marketplace: string;
   readonly version?: string | undefined;
   readonly needers: readonly string[];
-  readonly otherLayer: "shared" | "local";
+  readonly otherLayer: "base" | "local";
 }): PluginUninstallSkippedMessage {
   const layer =
-    args.otherLayer === "shared"
+    args.otherLayer === "base"
       ? "The shared layer (claude-plugins.json)"
       : "The local layer (claude-plugins.local.json)";
   const verb = args.needers.length === 1 ? "needs" : "need";

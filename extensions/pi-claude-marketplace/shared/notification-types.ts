@@ -263,13 +263,13 @@ export type Reason =
   // LAYER-05 / D-MF-03: an install into one layer of a plugin the other layer
   // declares and the scope already installed. The install adds the declaration
   // to the target layer and installs nothing; the token names the other layer.
-  | "already installed in shared layer"
+  | "already installed in base layer"
   | "already installed in local layer"
   // LAYER-05 / D-MF-03: an uninstall from one layer of a plugin the other layer
   // still declares. The uninstall drops the target layer's declaration and
   // uninstalls nothing; the token names the other layer, and the remedy rides
   // the cause line.
-  | "still installed in shared layer"
+  | "still installed in base layer"
   | "still installed in local layer"
   // LAYER-04 / D-MF-03: an enable or disable without `--local` targets the
   // shared layer, and the local layer sets `enabled` to the opposite value.

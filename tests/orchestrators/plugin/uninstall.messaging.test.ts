@@ -366,8 +366,8 @@ test("LOAD-03: composeUninstalledRow omits the version slot when the removed rec
 
 for (const { otherLayer, reason, hint } of [
   {
-    otherLayer: "shared",
-    reason: "still installed in shared layer",
+    otherLayer: "base",
+    reason: "still installed in base layer",
     hint: "Run the command again without --local to uninstall it.",
   },
   {
@@ -398,13 +398,13 @@ for (const { otherLayer, reason, hint } of [
 
 test("LAYER-05: composeKeptInstalledRow omits the version slot when the record carried none", () => {
   // act
-  const row = composeKeptInstalledRow({ plugin: "demo", otherLayer: "shared" });
+  const row = composeKeptInstalledRow({ plugin: "demo", otherLayer: "base" });
 
   // assert
   assert.deepStrictEqual(row, {
     status: "skipped",
     name: "demo",
-    reasons: ["still installed in shared layer"],
+    reasons: ["still installed in base layer"],
     cause: new Error("Run the command again without --local to uninstall it."),
     severity: "warning",
     needsReload: false,
@@ -444,7 +444,7 @@ for (const { title, needers, expected } of [
 for (const { title, otherLayer, needers, version, expected } of [
   {
     title: "names the one needer the shared layer declares",
-    otherLayer: "shared",
+    otherLayer: "base",
     needers: ["app@tools"],
     version: "1.0.0",
     expected: {
@@ -477,7 +477,7 @@ for (const { title, otherLayer, needers, version, expected } of [
   },
   {
     title: "counts the one needer whose key could forge the sentence",
-    otherLayer: "shared",
+    otherLayer: "base",
     needers: ['app@tools", which x@y'],
     version: "1.0.0",
     expected: {

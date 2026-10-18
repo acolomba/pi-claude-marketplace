@@ -420,7 +420,7 @@ test("LAYER-06: install --local of a plugin the shared layer installed declares 
 
   // assert
   assert.deepStrictEqual(boundary.notifications, [
-    { message: "● mp [project]\n  ⊘ alpha v1.0.0 (skipped) {already installed in shared layer}" },
+    { message: "● mp [project]\n  ⊘ alpha v1.0.0 (skipped) {already installed in base layer}" },
   ]);
   assert.deepStrictEqual(await declarations(scope), [
     {
