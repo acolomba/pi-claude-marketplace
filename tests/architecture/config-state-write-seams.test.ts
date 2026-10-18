@@ -36,7 +36,7 @@ const EXTENSION_ROOT = path.join(REPO_ROOT, EXTENSION_ROOT_REL);
  *
  * Forbidden call patterns (regex on the source text):
  *   - `atomicWriteJson(<...>stateJsonPath, ...)`         outside ALLOWED_STATE_JSON_WRITERS
- *   - `atomicWriteJson(<...>baseConfigJsonPath, ...)`        outside ALLOWED_CONFIG_JSON_WRITERS
+ *   - `atomicWriteJson(<...>baseConfigJsonPath, ...)`    outside ALLOWED_CONFIG_JSON_WRITERS
  *   - `atomicWriteJson(<...>localConfigJsonPath, ...)`   outside ALLOWED_CONFIG_JSON_WRITERS
  *
  * The `<...>` matches an optional `<identifier>.` prefix (e.g.
@@ -107,8 +107,8 @@ async function* walkTsFiles(dir: string): AsyncGenerator<string> {
 //   - `\b` word-boundary on the right prevents accidental matches on
 //     `stateJsonPathLegacy` or similar suffixed identifiers.
 const FORBIDDEN_STATE_JSON_PATTERN = /atomicWriteJson\(\s*(?:\w+\.)?stateJsonPath\b/;
-const FORBIDDEN_CONFIG_JSON_PATTERN = /atomicWriteJson\(\s*(?:\w+\.)?baseConfigJsonPath\b/;
-const FORBIDDEN_CONFIG_LOCAL_JSON_PATTERN = /atomicWriteJson\(\s*(?:\w+\.)?localConfigJsonPath\b/;
+const FORBIDDEN_BASE_CONFIG_JSON_PATTERN = /atomicWriteJson\(\s*(?:\w+\.)?baseConfigJsonPath\b/;
+const FORBIDDEN_LOCAL_CONFIG_JSON_PATTERN = /atomicWriteJson\(\s*(?:\w+\.)?localConfigJsonPath\b/;
 
 test("SPLIT-02: only saveConfig writes claude-plugins.json / claude-plugins.local.json", async () => {
   // arrange
@@ -129,12 +129,12 @@ test("SPLIT-02: only saveConfig writes claude-plugins.json / claude-plugins.loca
     }
 
     const source = await readFile(file, "utf8");
-    if (FORBIDDEN_CONFIG_JSON_PATTERN.test(source)) {
-      offenders.push(`${rel} matches ${String(FORBIDDEN_CONFIG_JSON_PATTERN)}`);
+    if (FORBIDDEN_BASE_CONFIG_JSON_PATTERN.test(source)) {
+      offenders.push(`${rel} matches ${String(FORBIDDEN_BASE_CONFIG_JSON_PATTERN)}`);
     }
 
-    if (FORBIDDEN_CONFIG_LOCAL_JSON_PATTERN.test(source)) {
-      offenders.push(`${rel} matches ${String(FORBIDDEN_CONFIG_LOCAL_JSON_PATTERN)}`);
+    if (FORBIDDEN_LOCAL_CONFIG_JSON_PATTERN.test(source)) {
+      offenders.push(`${rel} matches ${String(FORBIDDEN_LOCAL_CONFIG_JSON_PATTERN)}`);
     }
   }
 

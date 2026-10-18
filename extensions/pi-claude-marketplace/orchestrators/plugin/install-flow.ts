@@ -1717,9 +1717,9 @@ function standaloneMarketplaceRefusal(
     return undefined;
   }
 
-  const locally = localOnlyMarketplaceRefusal(selection, opts.marketplace);
-  if (locally !== undefined) {
-    return { kind: "refused", refusal: locally, reason: "marketplace in local layer only" };
+  const localOnly = localOnlyMarketplaceRefusal(selection, opts.marketplace);
+  if (localOnly !== undefined) {
+    return { kind: "refused", refusal: localOnly, reason: "marketplace in local layer only" };
   }
 
   const undeclarable = undeclarableMarketplaceRefusal(selection, state, opts.marketplace);
