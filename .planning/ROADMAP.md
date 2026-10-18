@@ -315,7 +315,7 @@ Plans:
 3. Code says `base` and `local` everywhere a layer is meant, never `shared`: `configJsonPath` becomes `baseConfigJsonPath` and `configLocalJsonPath` becomes `localConfigJsonPath`, error classes and identifiers follow, and comments match, with no behavior change. Carried from the Phase 3.3 review (IN-02): the flag-only layer selector and the uninstall seam that now loads both layers are renamed to match what they do (`selectDeclaringConfigWriteTarget` / `DeclaringConfigWriteTarget`, `UninstallTransaction.loadTargetConfig`) (TERM-01).
 4. The `{unreadable}` cause for unreadable dependency declarations names the record without the parser's detail, for `uninstall`, `marketplace remove`, and the nameless `update --local` / `reinstall --local` (Phase 3.3 security note).
 
-**Plans:** 4/10 plans executed
+**Plans:** 5/10 plans executed
 
 Plans:
 **Wave 1**
@@ -331,7 +331,7 @@ Plans:
 - [x] 03.4-04-PLAN.md — Test-first: the `{unreadable}` dependency cause drops the text of a manifest that fails to load and keeps the fixed reasons, on every surface; the catalog, guide, and CHANGELOG follow (TERM-01, SC4)
 
 **Wave 5** *(blocked on Wave 4 completion)*
-- [ ] 03.4-05-PLAN.md — One scripted word-boundary replace: `baseConfigJsonPath` / `localConfigJsonPath`, then typecheck and the leftover grep, with the write-seam gate kept armed (TERM-01)
+- [x] 03.4-05-PLAN.md — One scripted word-boundary replace: `baseConfigJsonPath` / `localConfigJsonPath`, then typecheck and the leftover grep, with the write-seam gate kept armed (TERM-01)
 
 **Wave 6** *(blocked on Wave 5 completion)*
 - [ ] 03.4-06-PLAN.md — IN-02: the flag-only layer loader, its result type, and both seams renamed; the other layer is `other`, not `sibling` (TERM-01)
