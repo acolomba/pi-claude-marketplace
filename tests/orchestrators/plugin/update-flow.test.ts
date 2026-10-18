@@ -5115,7 +5115,7 @@ test("TR-04 retry: partial-success-state-converges-to-new-version", async () => 
   });
 });
 
-test("RECON-05: an up-to-date named update leaves the shared layer unchanged", async () => {
+test("RECON-05: an up-to-date named update leaves the base layer unchanged", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-uptodate-layer-");
     try {
@@ -5160,7 +5160,7 @@ test("RECON-05: an up-to-date named update leaves the shared layer unchanged", a
  */
 async function seedLayeredUpdate(
   cwd: string,
-  layers: { readonly shared?: string; readonly local?: string },
+  layers: { readonly base?: string; readonly local?: string },
   offeredVersion = "1.0.1",
 ): Promise<ReturnType<typeof locationsFor>> {
   const locations = locationsFor("project", cwd);
@@ -5171,8 +5171,8 @@ async function seedLayeredUpdate(
     manifestPlugins: { hello: { version: offeredVersion, hasSkill: true } },
     installedVersions: { hello: "1.0.0" },
   });
-  if (layers.shared !== undefined) {
-    await writeFile(locations.baseConfigJsonPath, layers.shared, "utf8");
+  if (layers.base !== undefined) {
+    await writeFile(locations.baseConfigJsonPath, layers.base, "utf8");
   }
 
   if (layers.local !== undefined) {
@@ -5184,7 +5184,7 @@ async function seedLayeredUpdate(
 
 /** The bytes of both layer files and of `state.json`, with the state mtime. */
 async function updateFileSnapshot(locations: ReturnType<typeof locationsFor>): Promise<{
-  readonly shared: string | undefined;
+  readonly base: string | undefined;
   readonly local: string | undefined;
   readonly state: string;
   readonly stateMtimeMs: number;
@@ -5192,7 +5192,7 @@ async function updateFileSnapshot(locations: ReturnType<typeof locationsFor>): P
   const readIfPresent = async (filePath: string): Promise<string | undefined> =>
     (await pathExists(filePath)) ? readFile(filePath, "utf8") : undefined;
   return {
-    shared: await readIfPresent(locations.baseConfigJsonPath),
+    base: await readIfPresent(locations.baseConfigJsonPath),
     local: await readIfPresent(locations.localConfigJsonPath),
     state: await readFile(locations.stateJsonPath, "utf8"),
     stateMtimeMs: (await stat(locations.stateJsonPath)).mtimeMs,
@@ -5229,8 +5229,8 @@ for (const { direction, layers, local, reason, cause } of [
       "The plugin hello@mp is declared only in the local config (claude-plugins.local.json). Run the command again with --local.",
   },
   {
-    direction: "with --local a plugin only the shared layer declares",
-    layers: { shared: HELLO_DECLARED },
+    direction: "with --local a plugin only the base layer declares",
+    layers: { base: HELLO_DECLARED },
     local: true,
     reason: "plugin in base layer only",
     cause:
@@ -5287,22 +5287,22 @@ async function readLayerFile(filePath: string): Promise<LayerFile | undefined> {
 
 /** The bytes and mtime of each layer file; an absent file reads as undefined. */
 async function layerFiles(locations: ReturnType<typeof locationsFor>): Promise<{
-  readonly shared: LayerFile | undefined;
+  readonly base: LayerFile | undefined;
   readonly local: LayerFile | undefined;
 }> {
   return {
-    shared: await readLayerFile(locations.baseConfigJsonPath),
+    base: await readLayerFile(locations.baseConfigJsonPath),
     local: await readLayerFile(locations.localConfigJsonPath),
   };
 }
 
-test("LAYER-04: a changed named update of a plugin the shared layer declares leaves both layer files unchanged", async () => {
+test("LAYER-04: a changed named update of a plugin the base layer declares leaves both layer files unchanged", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-declared-layers-");
     try {
       // arrange
       const locations = await seedLayeredUpdate(cwd, {
-        shared: JSON.stringify({ schemaVersion: 1, plugins: { "hello@mp": { futureKey: "x" } } }),
+        base: JSON.stringify({ schemaVersion: 1, plugins: { "hello@mp": { futureKey: "x" } } }),
         local: JSON.stringify({ schemaVersion: 1, plugins: { "other@mp": {} } }),
       });
       const layersBefore = await layerFiles(locations);
@@ -5356,7 +5356,7 @@ test("LAYER-08: a named update of a dependency updates it and writes no layer fi
         },
       ]);
       assert.equal(await recordedHelloVersion(locations), "1.0.1");
-      assert.deepEqual(await layerFiles(locations), { shared: undefined, local: undefined });
+      assert.deepEqual(await layerFiles(locations), { base: undefined, local: undefined });
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -5580,7 +5580,7 @@ for (const { form, target, rowName, blockName } of [
   });
 }
 
-test("FIX-03: a bare update under a marketplace only the local file declares updates and writes no declaration", async () => {
+test("FIX-03: a bare update under a marketplace only the local config declares updates and writes no declaration", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-local-mp-");
     try {
@@ -6931,8 +6931,8 @@ test("D-99-05a counter-case: an unsupported kind LOST under an unchanged version
 
 for (const { layer, layers, local, basename } of [
   {
-    layer: "shared",
-    layers: { shared: "{ not json " },
+    layer: "base",
+    layers: { base: "{ not json " },
     local: false,
     basename: "claude-plugins.json",
   },
@@ -7905,7 +7905,7 @@ for (const { direction, file, local, reason, cause } of [
       "The plugin gp@mp is declared only in the local config (claude-plugins.local.json). Run the command again with --local.",
   },
   {
-    direction: "with --local a plugin only the shared layer declares",
+    direction: "with --local a plugin only the base layer declares",
     file: "baseConfigJsonPath",
     local: true,
     reason: "plugin in base layer only",

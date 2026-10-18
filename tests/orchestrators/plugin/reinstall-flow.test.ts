@@ -2946,14 +2946,14 @@ async function reinstallFileSnapshot(
   cwd: string,
   locations: ReturnType<typeof locationsFor>,
 ): Promise<{
-  readonly shared: string;
+  readonly base: string;
   readonly local: string;
   readonly state: string;
   readonly stateMtimeMs: number;
   readonly skill: string;
 }> {
   return {
-    shared: await readFile(locations.baseConfigJsonPath, "utf8"),
+    base: await readFile(locations.baseConfigJsonPath, "utf8"),
     local: await readFile(locations.localConfigJsonPath, "utf8"),
     state: await readFile(locations.stateJsonPath, "utf8"),
     stateMtimeMs: (await stat(locations.stateJsonPath)).mtimeMs,
@@ -2976,7 +2976,7 @@ function refusingReinstallTransaction(calls: string[]): ReinstallTransaction {
   };
 }
 
-const SHARED_MARKETPLACE_ONLY = JSON.stringify({
+const BASE_MARKETPLACE_ONLY = JSON.stringify({
   schemaVersion: 1,
   marketplaces: { mp: { source: "./mp-src" } },
 });
@@ -2986,10 +2986,10 @@ const HELLO_DECLARED_LAYER = JSON.stringify({
   plugins: { "hello@mp": {} },
 });
 
-for (const { direction, shared, local, flag, refusal, reason, cause } of [
+for (const { direction, base, local, flag, refusal, reason, cause } of [
   {
     direction: "without --local a plugin only the local layer declares",
-    shared: SHARED_MARKETPLACE_ONLY,
+    base: BASE_MARKETPLACE_ONLY,
     local: HELLO_DECLARED_LAYER,
     flag: false,
     refusal: new PluginInLocalLayerOnlyError("hello", "mp"),
@@ -2998,9 +2998,9 @@ for (const { direction, shared, local, flag, refusal, reason, cause } of [
       "The plugin hello@mp is declared only in the local config (claude-plugins.local.json). Run the command again with --local.",
   },
   {
-    direction: "with --local a plugin only the shared layer declares",
-    shared: HELLO_DECLARED_LAYER,
-    local: SHARED_MARKETPLACE_ONLY,
+    direction: "with --local a plugin only the base layer declares",
+    base: HELLO_DECLARED_LAYER,
+    local: BASE_MARKETPLACE_ONLY,
     flag: true,
     refusal: new PluginInBaseLayerOnlyError("hello", "mp"),
     reason: "plugin in base layer only",
@@ -3013,7 +3013,7 @@ for (const { direction, shared, local, flag, refusal, reason, cause } of [
       const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-layer-refusal-"));
       try {
         // arrange
-        const locations = await seedLocalLayerReinstall(cwd, shared, local);
+        const locations = await seedLocalLayerReinstall(cwd, base, local);
         const filesBefore = await reinstallFileSnapshot(cwd, locations);
         const transactionCalls: string[] = [];
         const reinstall = createReinstallPlugin(
@@ -3165,7 +3165,7 @@ for (const { form, target, blockName } of [
         // arrange
         const locations = await seedTwoPluginReinstall(cwd, "{ invalid");
         const stateBytes = await readFile(locations.stateJsonPath, "utf8");
-        const sharedBytes = await readFile(locations.baseConfigJsonPath, "utf8");
+        const baseBytes = await readFile(locations.baseConfigJsonPath, "utf8");
         const { ctx, run, notifications } = makeCtx();
 
         // act
@@ -3195,7 +3195,7 @@ for (const { form, target, blockName } of [
           },
         ]);
         assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
-        assert.equal(await readFile(locations.baseConfigJsonPath, "utf8"), sharedBytes);
+        assert.equal(await readFile(locations.baseConfigJsonPath, "utf8"), baseBytes);
       } finally {
         await rm(cwd, { recursive: true, force: true });
       }
@@ -3281,7 +3281,7 @@ for (const { form, target, blockName } of [
   });
 }
 
-test("FIX-03: a bare reinstall under a marketplace only the local file declares writes no declaration", async () => {
+test("FIX-03: a bare reinstall under a marketplace only the local config declares writes no declaration", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-local-mp-"));
     try {
@@ -3324,7 +3324,7 @@ test("LAYER-08: a named reinstall of a plugin no layer declares, under a marketp
       await seedLocalLayerReinstall(
         cwd,
         JSON.stringify({ schemaVersion: 1 }),
-        SHARED_MARKETPLACE_ONLY,
+        BASE_MARKETPLACE_ONLY,
       );
       const { ctx, run, notifications } = makeCtx();
 
@@ -3359,7 +3359,7 @@ test("LAYER-04: a named reinstall with --local under a marketplace only the loca
       const locations = await seedLocalLayerReinstall(
         cwd,
         JSON.stringify({ schemaVersion: 1 }),
-        SHARED_MARKETPLACE_ONLY,
+        BASE_MARKETPLACE_ONLY,
       );
       const layersBefore = await layerFiles(locations);
       const { ctx, run } = makeCtx();
@@ -3402,11 +3402,11 @@ async function readLayerFile(filePath: string): Promise<LayerFile | undefined> {
 
 /** The bytes and mtime of each layer file; an absent file reads as undefined. */
 async function layerFiles(locations: ReturnType<typeof locationsFor>): Promise<{
-  readonly shared: LayerFile | undefined;
+  readonly base: LayerFile | undefined;
   readonly local: LayerFile | undefined;
 }> {
   return {
-    shared: await readLayerFile(locations.baseConfigJsonPath),
+    base: await readLayerFile(locations.baseConfigJsonPath),
     local: await readLayerFile(locations.localConfigJsonPath),
   };
 }
@@ -3420,7 +3420,7 @@ test("LAYER-04: a bare flagless reinstall whose local layer cannot be read reins
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-bare-local-invalid-"));
     try {
       // arrange
-      const locations = await seedLocalLayerReinstall(cwd, SHARED_MARKETPLACE_ONLY, "{ invalid");
+      const locations = await seedLocalLayerReinstall(cwd, BASE_MARKETPLACE_ONLY, "{ invalid");
       const layersBefore = await layerFiles(locations);
       const { ctx, run, notifications } = makeCtx();
 
@@ -3451,7 +3451,7 @@ test("LAYER-04: a bare flagless reinstall whose local layer cannot be read reins
   });
 });
 
-test("LAYER-04: a named reinstall of a plugin the shared layer declares leaves both layer files unchanged", async () => {
+test("LAYER-04: a named reinstall of a plugin the base layer declares leaves both layer files unchanged", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-declared-layers-"));
     try {
@@ -3493,7 +3493,7 @@ test("LAYER-04: a reinstall with --local of a plugin no layer declares writes no
       // arrange
       const locations = await seedLocalLayerReinstall(
         cwd,
-        SHARED_MARKETPLACE_ONLY,
+        BASE_MARKETPLACE_ONLY,
         JSON.stringify({ schemaVersion: 1 }),
       );
       const layersBefore = await layerFiles(locations);
@@ -3527,7 +3527,7 @@ test("LAYER-04: the unnamed flagless reinstall the load-time backfill runs on a 
       // arrange
       const locations = await seedLocalLayerReinstall(
         cwd,
-        SHARED_MARKETPLACE_ONLY,
+        BASE_MARKETPLACE_ONLY,
         JSON.stringify({ schemaVersion: 1 }),
       );
       const seededState = await loadState(locations.extensionRoot);
@@ -5372,7 +5372,7 @@ test("WR-04: a clean reinstall omits the degraded-kinds field entirely", async (
 // touches, and asserts the arm's observable consequence.
 // ───────────────────────────────────────────────────────────────────────────
 
-test("LAYER-04: a reinstall over an unreadable shared layer reinstalls, renders only its row, and leaves the layer unchanged", async () => {
+test("LAYER-04: a reinstall over an unreadable base layer reinstalls, renders only its row, and leaves the layer unchanged", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-shared-invalid-"));
     try {
@@ -6969,10 +6969,10 @@ test("LAYER-04: a local single reinstall over an unreadable local layer renders 
   });
 });
 
-const SHARED_ONLY_CAUSE =
+const BASE_ONLY_CAUSE =
   "The plugin hello@mp is declared only in the base config (claude-plugins.json). Run the command again without --local.";
 
-test("LAYER-04: the plugin form of reinstall with --local refuses a plugin only the shared layer declares", async () => {
+test("LAYER-04: the plugin form of reinstall with --local refuses a plugin only the base layer declares", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-named-local-"));
     try {
@@ -7004,7 +7004,7 @@ test("LAYER-04: the plugin form of reinstall with --local refuses a plugin only 
           name: "hello",
           marketplace: "mp",
           scope: "project",
-          notes: [`${SHARED_ONLY_CAUSE}\n\ncause: ${SHARED_ONLY_CAUSE}`],
+          notes: [`${BASE_ONLY_CAUSE}\n\ncause: ${BASE_ONLY_CAUSE}`],
           reasons: ["plugin in base layer only"],
           cause: new PluginInBaseLayerOnlyError("hello", "mp"),
         },
@@ -8910,7 +8910,7 @@ test("retry proof: reinstall: a concurrently removed record unwinds before any s
   });
 });
 
-test("retry proof: reinstall: an unreadable shared layer is left unchanged by a reinstall and its retry", async () => {
+test("retry proof: reinstall: an unreadable base layer is left unchanged by a reinstall and its retry", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-retry-shared-invalid-"));
     try {

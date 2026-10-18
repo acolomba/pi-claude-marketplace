@@ -255,8 +255,8 @@ async function writeUserState(
   },
 ): Promise<{
   statePath: string;
-  configPath: string;
-  configLocalPath: string;
+  baseConfigPath: string;
+  localConfigPath: string;
   scopeRoot: string;
   mpRoot: string;
 }> {
@@ -268,8 +268,8 @@ async function writeUserState(
   const extRoot = path.join(scopeRoot, "pi-claude-marketplace");
   await mkdir(extRoot, { recursive: true });
   const statePath = path.join(extRoot, "state.json");
-  const configPath = path.join(scopeRoot, "claude-plugins.json");
-  const configLocalPath = path.join(scopeRoot, "claude-plugins.local.json");
+  const baseConfigPath = path.join(scopeRoot, "claude-plugins.json");
+  const localConfigPath = path.join(scopeRoot, "claude-plugins.local.json");
   let resources: {
     skills: string[];
     prompts: string[];
@@ -362,11 +362,11 @@ async function writeUserState(
     },
   };
   await writeFile(statePath, JSON.stringify(state, null, 2), "utf8");
-  return { statePath, configPath, configLocalPath, scopeRoot, mpRoot };
+  return { statePath, baseConfigPath, localConfigPath, scopeRoot, mpRoot };
 }
 
-async function readConfig(configPath: string): Promise<unknown> {
-  const raw = await readFile(configPath, "utf8");
+async function readConfig(filePath: string): Promise<unknown> {
+  const raw = await readFile(filePath, "utf8");
   return JSON.parse(raw);
 }
 
@@ -389,7 +389,7 @@ function rejectUnknown(reason: unknown): Promise<never> {
 /**
  * The MERGED view of the user scope, which is the only view that proves a
  * config write happened: a local entry's explicit `enabled` wins over the base
- * entry's (LAYER-09), so an `enabled` written into the base file under it
+ * entry's (LAYER-09), so an `enabled` written into the base config under it
  * changes no effective value even though the file on disk visibly gained it.
  */
 async function readMergedUserPluginEntry(
@@ -486,8 +486,8 @@ async function seedRealDisabledMarketplace(
   },
 ): Promise<{
   statePath: string;
-  configPath: string;
-  configLocalPath: string;
+  baseConfigPath: string;
+  localConfigPath: string;
   mpRoot: string;
   manifestPath: string;
 }> {
@@ -636,8 +636,8 @@ async function seedRealDisabledMarketplace(
   await writeFile(statePath, JSON.stringify(state, null, 2), "utf8");
   return {
     statePath,
-    configPath: path.join(scopeRoot, "claude-plugins.json"),
-    configLocalPath: path.join(scopeRoot, "claude-plugins.local.json"),
+    baseConfigPath: path.join(scopeRoot, "claude-plugins.json"),
+    localConfigPath: path.join(scopeRoot, "claude-plugins.local.json"),
     mpRoot,
     manifestPath,
   };
@@ -650,7 +650,7 @@ async function seedRealDisabledMarketplace(
 test("ENBL-01: disable writes enabled:false to claude-plugins.json (base)", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
-    const { configPath } = await writeUserState(home, {
+    const { baseConfigPath } = await writeUserState(home, {
       marketplaceName: "mp",
       pluginName: "foo",
       disabled: false,
@@ -666,7 +666,7 @@ test("ENBL-01: disable writes enabled:false to claude-plugins.json (base)", asyn
       enable: false,
       scope: "user",
     });
-    const cfg = await readConfig(configPath);
+    const cfg = await readConfig(baseConfigPath);
     const plugins = (cfg as { plugins?: Record<string, { enabled?: boolean }> }).plugins ?? {};
     // assert
     assert.equal(plugins["foo@mp"]?.enabled, false, "config entry should carry enabled:false");
@@ -677,14 +677,14 @@ test("ENBL-01: enable --local writes enabled:true to claude-plugins.local.json (
   await withHermeticHome(async ({ cwd, home }) => {
     // Reset state to populated (so disable is a fresh transition).
     // arrange
-    const { configPath, configLocalPath } = await writeUserState(home, {
+    const { baseConfigPath, localConfigPath } = await writeUserState(home, {
       marketplaceName: "mp",
       pluginName: "foo",
       disabled: false,
     });
 
     // Verify base does NOT exist at start.
-    const baseExistsPre = await fileExists(configPath);
+    const baseExistsPre = await fileExists(baseConfigPath);
     const { ctx } = makeCtx(cwd);
     // act
     await setPluginEnabled({
@@ -698,15 +698,15 @@ test("ENBL-01: enable --local writes enabled:true to claude-plugins.local.json (
       local: true,
     });
 
-    // Base file should still not exist.
-    const baseExistsPost = await fileExists(configPath);
+    // Base config should still not exist.
+    const baseExistsPost = await fileExists(baseConfigPath);
     // assert
-    assert.equal(baseExistsPost, baseExistsPre, "base file mtime/existence must be unchanged");
+    assert.equal(baseExistsPost, baseExistsPre, "base config mtime/existence must be unchanged");
 
-    // Local file should exist with enabled:false.
-    const cfg = await readConfig(configLocalPath);
+    // Local config should exist with enabled:false.
+    const cfg = await readConfig(localConfigPath);
     const plugins = (cfg as { plugins?: Record<string, { enabled?: boolean }> }).plugins ?? {};
-    assert.equal(plugins["foo@mp"]?.enabled, false, "--local file should carry enabled:false");
+    assert.equal(plugins["foo@mp"]?.enabled, false, "--local config should carry enabled:false");
   });
 });
 
@@ -714,17 +714,17 @@ test("ENBL-01: enable with --local of a plugin the local layer declares writes t
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
     const scopeRoot = path.join(home, ".pi", "agent");
-    const configPath = path.join(scopeRoot, "claude-plugins.json");
-    const configLocalPath = path.join(scopeRoot, "claude-plugins.local.json");
+    const baseConfigPath = path.join(scopeRoot, "claude-plugins.json");
+    const localConfigPath = path.join(scopeRoot, "claude-plugins.local.json");
     await seedRealDisabledMarketplace(home, {
       marketplaceName: "mp",
       pluginName: "foo",
       version: "1.2.3",
     });
-    // The declaration lives ONLY in the local file, matching the disabled
-    // record. The base file does not exist.
+    // The declaration lives ONLY in the local config, matching the disabled
+    // record. The base config does not exist.
     await writeFile(
-      configLocalPath,
+      localConfigPath,
       JSON.stringify({
         schemaVersion: 1,
         marketplaces: { mp: { source: path.join(home, "mp-src") } },
@@ -748,15 +748,15 @@ test("ENBL-01: enable with --local of a plugin the local layer declares writes t
 
     // The flip landed in the local layer, as the whole entry -- an added or
     // removed key fails here rather than passing on a loose field probe.
-    const localCfg = (await readConfig(configLocalPath)) as {
+    const localCfg = (await readConfig(localConfigPath)) as {
       plugins?: Record<string, unknown>;
     };
     // assert
     assert.deepEqual(localCfg.plugins?.["foo@mp"], { enabled: true });
-    // The shared layer was not touched. It did not exist and still does not.
-    assert.equal(await fileExists(configPath), false, "base file must stay absent");
+    // The base layer was not touched. It did not exist and still does not.
+    assert.equal(await fileExists(baseConfigPath), false, "base config must stay absent");
 
-    // A flip written to the shared layer would leave the merged view reading
+    // A flip written to the base layer would leave the merged view reading
     // `enabled: false` from the local entry, whose explicit value wins, so a
     // physical-file check alone cannot tell that write from a correct one.
     assert.deepEqual(await readMergedUserPluginEntry(cwd, "foo@mp"), {
@@ -773,22 +773,22 @@ test("ENBL-01: enable with --local of a plugin the local layer declares writes t
   });
 });
 
-test("WB-01: a flagless enable of a plugin the shared layer declares writes the shared layer, local absent", async () => {
+test("WB-01: a flagless enable of a plugin the base layer declares writes the base layer, local absent", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
     const scopeRoot = path.join(home, ".pi", "agent");
-    const configPath = path.join(scopeRoot, "claude-plugins.json");
-    const configLocalPath = path.join(scopeRoot, "claude-plugins.local.json");
+    const baseConfigPath = path.join(scopeRoot, "claude-plugins.json");
+    const localConfigPath = path.join(scopeRoot, "claude-plugins.local.json");
     await seedRealDisabledMarketplace(home, {
       marketplaceName: "mp",
       pluginName: "foo",
       version: "1.2.3",
     });
-    // The mirror of the local-layer case above: the flag names the shared
+    // The mirror of the local-layer case above: the flag names the base
     // layer, which declares the plugin. An inverted selector would pass the
     // local-layer case and fail here.
     await writeFile(
-      configPath,
+      baseConfigPath,
       JSON.stringify({
         schemaVersion: 1,
         marketplaces: { mp: { source: path.join(home, "mp-src") } },
@@ -809,10 +809,10 @@ test("WB-01: a flagless enable of a plugin the shared layer declares writes the 
       scope: "user",
     });
 
-    const baseCfg = (await readConfig(configPath)) as { plugins?: Record<string, unknown> };
+    const baseCfg = (await readConfig(baseConfigPath)) as { plugins?: Record<string, unknown> };
     // assert
     assert.deepEqual(baseCfg.plugins?.["foo@mp"], { enabled: true });
-    assert.equal(await fileExists(configLocalPath), false, "local file must stay absent");
+    assert.equal(await fileExists(localConfigPath), false, "local config must stay absent");
     assert.deepEqual(await readMergedUserPluginEntry(cwd, "foo@mp"), {
       source: "base",
       declaredEnabled: true,
@@ -824,8 +824,8 @@ test("LAYER-04: enable with --local of a plugin both layers declare writes only 
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
     const scopeRoot = path.join(home, ".pi", "agent");
-    const configPath = path.join(scopeRoot, "claude-plugins.json");
-    const configLocalPath = path.join(scopeRoot, "claude-plugins.local.json");
+    const baseConfigPath = path.join(scopeRoot, "claude-plugins.json");
+    const localConfigPath = path.join(scopeRoot, "claude-plugins.local.json");
     await seedRealDisabledMarketplace(home, {
       marketplaceName: "mp",
       pluginName: "foo",
@@ -836,8 +836,8 @@ test("LAYER-04: enable with --local of a plugin both layers declare writes only 
       marketplaces: { mp: { source: path.join(home, "mp-src") } },
       plugins: { "foo@mp": { enabled: false } },
     });
-    await writeFile(configPath, baseBytes, "utf8");
-    await declareFooIn(configLocalPath, path.join(home, "mp-src"), {});
+    await writeFile(baseConfigPath, baseBytes, "utf8");
+    await declareFooIn(localConfigPath, path.join(home, "mp-src"), {});
 
     const { ctx } = makeCtx(cwd);
     // act
@@ -852,14 +852,14 @@ test("LAYER-04: enable with --local of a plugin both layers declare writes only 
       local: true,
     });
 
-    // A per-machine override over a shared declaration is the purpose of the
-    // local layer, so `--local` writes the local layer and leaves the shared
-    // declaration as it was.
-    const localCfg = (await readConfig(configLocalPath)) as { plugins?: Record<string, unknown> };
+    // A per-machine override over a declaration in the base layer is the
+    // purpose of the local layer, so `--local` writes the local layer and leaves
+    // the base declaration as it was.
+    const localCfg = (await readConfig(localConfigPath)) as { plugins?: Record<string, unknown> };
     // assert
     assert.deepEqual(localCfg.plugins?.["foo@mp"], { enabled: true });
     // The base declaration keeps its pre-call value, byte for byte.
-    assert.equal(await readFile(configPath, "utf8"), baseBytes);
+    assert.equal(await readFile(baseConfigPath, "utf8"), baseBytes);
     // And the local `enabled` now wins over it (LAYER-09).
     assert.deepEqual(await readMergedUserPluginEntry(cwd, "foo@mp"), {
       source: "local",
@@ -872,8 +872,8 @@ test("CFG-03: an invalid local layer aborts a flagless enable and changes nothin
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
     const scopeRoot = path.join(home, ".pi", "agent");
-    const configPath = path.join(scopeRoot, "claude-plugins.json");
-    const configLocalPath = path.join(scopeRoot, "claude-plugins.local.json");
+    const baseConfigPath = path.join(scopeRoot, "claude-plugins.json");
+    const localConfigPath = path.join(scopeRoot, "claude-plugins.local.json");
     const statePath = path.join(scopeRoot, "pi-claude-marketplace", "state.json");
     await seedRealDisabledMarketplace(home, {
       marketplaceName: "mp",
@@ -885,13 +885,13 @@ test("CFG-03: an invalid local layer aborts a flagless enable and changes nothin
       marketplaces: { mp: { source: path.join(home, "mp-src") } },
       plugins: { "foo@mp": { enabled: false } },
     });
-    await writeFile(configPath, baseBytes, "utf8");
+    await writeFile(baseConfigPath, baseBytes, "utf8");
     // The local layer cannot be read (a truncated mid-save write; an EACCES or
     // a schema violation arrive through the same `invalid` arm), so whether it
     // declares `foo@mp` is unknowable. A flagless enable must refuse a plugin
     // only that layer declares, so it stops instead of reading the layer as
     // empty.
-    await writeFile(configLocalPath, '{"plugins": {"foo@mp": {"enabled": fal', "utf8");
+    await writeFile(localConfigPath, '{"plugins": {"foo@mp": {"enabled": fal', "utf8");
     const statePre = await readFile(statePath, "utf8");
     const mtimePre = (await stat(statePath)).mtimeMs;
 
@@ -915,16 +915,16 @@ test("CFG-03: an invalid local layer aborts a flagless enable and changes nothin
     assert.match(
       notifications[0]!.message,
       /claude-plugins\.local\.json/,
-      "the abort must name the unreadable local file",
+      "the abort must name the unreadable local config",
     );
     assert.ok(
-      !notifications[0]!.message.includes(configLocalPath),
+      !notifications[0]!.message.includes(localConfigPath),
       "absolute path must not be leaked (T-54-02-02)",
     );
 
-    // Nothing was written anywhere: the base file keeps its bytes and the
+    // Nothing was written anywhere: the base config keeps its bytes and the
     // no-save abort discipline holds for state.json.
-    assert.equal(await readFile(configPath, "utf8"), baseBytes);
+    assert.equal(await readFile(baseConfigPath, "utf8"), baseBytes);
     assert.equal(await readFile(statePath, "utf8"), statePre);
     assert.equal((await stat(statePath)).mtimeMs, mtimePre);
   });
@@ -954,13 +954,13 @@ async function bytesOrAbsent(file: string): Promise<string | undefined> {
 
 /** The bytes of both layer files and of state.json, to prove a refusal changed nothing. */
 async function scopeBytes(paths: {
-  readonly configPath: string;
-  readonly configLocalPath: string;
+  readonly baseConfigPath: string;
+  readonly localConfigPath: string;
   readonly statePath: string;
-}): Promise<Record<"shared" | "local" | "state", string | undefined>> {
+}): Promise<Record<"base" | "local" | "state", string | undefined>> {
   return {
-    shared: await bytesOrAbsent(paths.configPath),
-    local: await bytesOrAbsent(paths.configLocalPath),
+    base: await bytesOrAbsent(paths.baseConfigPath),
+    local: await bytesOrAbsent(paths.localConfigPath),
     state: await bytesOrAbsent(paths.statePath),
   };
 }
@@ -970,7 +970,7 @@ const DECLARED_LOCALLY_ROW = [
   "    cause: The plugin foo@mp is declared only in the local config (claude-plugins.local.json). Run the command again with --local.",
 ];
 
-const DECLARED_IN_SHARED_ROW = [
+const DECLARED_IN_BASE_ROW = [
   "  ⊘ foo (failed) {plugin in base layer only}",
   "    cause: The plugin foo@mp is declared only in the base config (claude-plugins.json). Run the command again without --local.",
 ];
@@ -988,7 +988,7 @@ for (const { verb, enable, local, layer, row, seed } of [
         pluginName: "foo",
         version: "1.2.3",
       });
-      await declareFooIn(paths.configLocalPath, paths.mpRoot, { enabled: false });
+      await declareFooIn(paths.localConfigPath, paths.mpRoot, { enabled: false });
       return paths;
     },
   },
@@ -996,15 +996,15 @@ for (const { verb, enable, local, layer, row, seed } of [
     verb: "enable",
     enable: true,
     local: true,
-    layer: "the shared layer",
-    row: DECLARED_IN_SHARED_ROW,
+    layer: "the base layer",
+    row: DECLARED_IN_BASE_ROW,
     seed: async (home: string) => {
       const paths = await seedRealDisabledMarketplace(home, {
         marketplaceName: "mp",
         pluginName: "foo",
         version: "1.2.3",
       });
-      await declareFooIn(paths.configPath, paths.mpRoot, { enabled: false });
+      await declareFooIn(paths.baseConfigPath, paths.mpRoot, { enabled: false });
       return paths;
     },
   },
@@ -1020,7 +1020,7 @@ for (const { verb, enable, local, layer, row, seed } of [
         pluginName: "foo",
         disabled: false,
       });
-      await declareFooIn(paths.configLocalPath, paths.mpRoot, {});
+      await declareFooIn(paths.localConfigPath, paths.mpRoot, {});
       return paths;
     },
   },
@@ -1028,15 +1028,15 @@ for (const { verb, enable, local, layer, row, seed } of [
     verb: "disable",
     enable: false,
     local: true,
-    layer: "the shared layer",
-    row: DECLARED_IN_SHARED_ROW,
+    layer: "the base layer",
+    row: DECLARED_IN_BASE_ROW,
     seed: async (home: string) => {
       const paths = await writeUserState(home, {
         marketplaceName: "mp",
         pluginName: "foo",
         disabled: false,
       });
-      await declareFooIn(paths.configPath, paths.mpRoot, {});
+      await declareFooIn(paths.baseConfigPath, paths.mpRoot, {});
       return paths;
     },
   },
@@ -1086,7 +1086,7 @@ test("LAYER-04: an idempotent enable of a plugin only the local layer declares i
       pluginName: "foo",
       disabled: false,
     });
-    await declareFooIn(paths.configLocalPath, paths.mpRoot, {});
+    await declareFooIn(paths.localConfigPath, paths.mpRoot, {});
     const bytesBefore = await scopeBytes(paths);
     const { ctx, notifications } = makeCtx(cwd);
 
@@ -1125,7 +1125,7 @@ test("WR-09: an orchestrated enable of a plugin only the local layer declares is
       pluginName: "foo",
       version: "1.2.3",
     });
-    await declareFooIn(paths.configLocalPath, paths.mpRoot, { enabled: true });
+    await declareFooIn(paths.localConfigPath, paths.mpRoot, { enabled: true });
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
@@ -1160,14 +1160,14 @@ const ENABLED_IN_LOCAL_ROW = [
   "    cause: Run the command again with --local to disable it.",
 ];
 
-/** Seed `foo@mp` in user state, declared in the shared layer and with `localEntry` in the local layer. */
+/** Seed `foo@mp` in user state, declared in the base layer and with `localEntry` in the local layer. */
 async function seedBothLayers(
   home: string,
   record: { readonly disabled: boolean },
   localEntry: object,
 ): Promise<{
-  readonly configPath: string;
-  readonly configLocalPath: string;
+  readonly baseConfigPath: string;
+  readonly localConfigPath: string;
   readonly statePath: string;
 }> {
   const paths = record.disabled
@@ -1177,8 +1177,8 @@ async function seedBothLayers(
         version: "1.2.3",
       })
     : await writeUserState(home, { marketplaceName: "mp", pluginName: "foo", disabled: false });
-  await declareFooIn(paths.configPath, paths.mpRoot, {});
-  await declareFooIn(paths.configLocalPath, paths.mpRoot, localEntry);
+  await declareFooIn(paths.baseConfigPath, paths.mpRoot, {});
+  await declareFooIn(paths.localConfigPath, paths.mpRoot, localEntry);
   return paths;
 }
 
@@ -1245,7 +1245,7 @@ test("LAYER-04: a flagless enable is not refused by a local entry that sets no e
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
     const paths = await seedBothLayers(home, { disabled: true }, {});
-    const localBefore = await readFile(paths.configLocalPath, "utf8");
+    const localBefore = await readFile(paths.localConfigPath, "utf8");
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
@@ -1260,19 +1260,19 @@ test("LAYER-04: a flagless enable is not refused by a local entry that sets no e
     });
 
     // assert
-    const shared = (await readConfig(paths.configPath)) as { plugins?: Record<string, unknown> };
+    const base = (await readConfig(paths.baseConfigPath)) as { plugins?: Record<string, unknown> };
     assert.deepStrictEqual(
       {
         notifications,
-        sharedEntry: shared.plugins?.["foo@mp"],
-        local: await readFile(paths.configLocalPath, "utf8"),
+        baseEntry: base.plugins?.["foo@mp"],
+        local: await readFile(paths.localConfigPath, "utf8"),
         merged: await readMergedUserPluginEntry(cwd, "foo@mp"),
       },
       {
         notifications: [
           { message: "● mp [user]\n  ● foo v1.2.3 (installed)\n\n/reload to pick up changes" },
         ],
-        sharedEntry: { enabled: true },
+        baseEntry: { enabled: true },
         local: localBefore,
         merged: { source: "local", declaredEnabled: true },
       },
@@ -1307,7 +1307,7 @@ test("WR-09: an orchestrated enable of a plugin the local layer disables is not 
 test("LAYER-04: enable with --local of a plugin no layer declares writes the local layer", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
-    const { configPath, configLocalPath, mpRoot } = await seedRealDisabledMarketplace(home, {
+    const { baseConfigPath, localConfigPath, mpRoot } = await seedRealDisabledMarketplace(home, {
       marketplaceName: "mp",
       pluginName: "foo",
       version: "1.2.3",
@@ -1327,28 +1327,28 @@ test("LAYER-04: enable with --local of a plugin no layer declares writes the loc
     });
 
     // assert
-    assert.deepStrictEqual(await readConfig(configLocalPath), {
+    assert.deepStrictEqual(await readConfig(localConfigPath), {
       schemaVersion: 1,
       marketplaces: { mp: { source: mpRoot } },
       plugins: { "foo@mp": { enabled: true } },
     });
-    assert.equal(await fileExists(configPath), false);
+    assert.equal(await fileExists(baseConfigPath), false);
   });
 });
 
-test("LAYER-06: enable with --local of a plugin no layer declares under a marketplace only the shared layer declares writes the marketplace and the flag into the local layer", async () => {
+test("LAYER-06: enable with --local of a plugin no layer declares under a marketplace only the base layer declares writes the marketplace and the flag into the local layer", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
-    const { configPath, configLocalPath, mpRoot } = await seedRealDisabledMarketplace(home, {
+    const { baseConfigPath, localConfigPath, mpRoot } = await seedRealDisabledMarketplace(home, {
       marketplaceName: "mp",
       pluginName: "foo",
       version: "1.2.3",
     });
-    const sharedBytes = JSON.stringify({
+    const baseBytes = JSON.stringify({
       schemaVersion: 1,
       marketplaces: { mp: { source: mpRoot, autoupdate: true } },
     });
-    await writeFile(configPath, sharedBytes, "utf8");
+    await writeFile(baseConfigPath, baseBytes, "utf8");
     const { ctx } = makeCtx(cwd);
 
     // act
@@ -1366,11 +1366,11 @@ test("LAYER-06: enable with --local of a plugin no layer declares under a market
     // assert
     assert.deepStrictEqual(
       {
-        shared: await readFile(configPath, "utf8"),
-        local: await readConfig(configLocalPath),
+        base: await readFile(baseConfigPath, "utf8"),
+        local: await readConfig(localConfigPath),
       },
       {
-        shared: sharedBytes,
+        base: baseBytes,
         local: {
           schemaVersion: 1,
           marketplaces: { mp: { source: mpRoot } },
@@ -1389,7 +1389,7 @@ test("LAYER-04: a plugin that is not installed reports not installed whatever la
       pluginName: "other-plugin",
       disabled: false,
     });
-    await declareFooIn(paths.configLocalPath, paths.mpRoot, {});
+    await declareFooIn(paths.localConfigPath, paths.mpRoot, {});
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
@@ -1418,7 +1418,7 @@ test("LAYER-04: a plugin that is not installed reports not installed whatever la
   });
 });
 
-test("CFG-03: an invalid shared layer aborts an enable with --local and changes nothing", async () => {
+test("CFG-03: an invalid base layer aborts an enable with --local and changes nothing", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
     const paths = await seedRealDisabledMarketplace(home, {
@@ -1426,7 +1426,7 @@ test("CFG-03: an invalid shared layer aborts an enable with --local and changes 
       pluginName: "foo",
       version: "1.2.3",
     });
-    await writeFile(paths.configPath, "{", "utf8");
+    await writeFile(paths.baseConfigPath, "{", "utf8");
     const bytesBefore = await scopeBytes(paths);
     const { ctx, notifications } = makeCtx(cwd);
 
@@ -1460,13 +1460,13 @@ test("CFG-03: an invalid shared layer aborts an enable with --local and changes 
 });
 
 // ──────────────────────────────────────────────────────────────────────────
-// FIX-03: no shared declaration under a marketplace only the local file declares
+// FIX-03: no base declaration under a marketplace only the local config declares
 // ──────────────────────────────────────────────────────────────────────────
 
-/** Declare marketplace `mp` in the local file only, and return the bytes written. */
-async function writeLocalOnlyMarketplace(configLocalPath: string, mpRoot: string): Promise<string> {
+/** Declare marketplace `mp` in the local config only, and return the bytes written. */
+async function writeLocalOnlyMarketplace(localConfigPath: string, mpRoot: string): Promise<string> {
   const localBytes = JSON.stringify({ schemaVersion: 1, marketplaces: { mp: { source: mpRoot } } });
-  await writeFile(configLocalPath, localBytes, "utf8");
+  await writeFile(localConfigPath, localBytes, "utf8");
   return localBytes;
 }
 
@@ -1488,11 +1488,11 @@ for (const { verb, enable, seed } of [
       writeUserState(home, { marketplaceName: "mp", pluginName: "foo", disabled: false }),
   },
 ]) {
-  test(`FIX-03: a flagless ${verb} under a marketplace only the local file declares is refused and writes nothing`, async () => {
+  test(`FIX-03: a flagless ${verb} under a marketplace only the local config declares is refused and writes nothing`, async () => {
     await withHermeticHome(async ({ cwd, home }) => {
       // arrange
-      const { statePath, configPath, configLocalPath, mpRoot } = await seed(home);
-      const localBytes = await writeLocalOnlyMarketplace(configLocalPath, mpRoot);
+      const { statePath, baseConfigPath, localConfigPath, mpRoot } = await seed(home);
+      const localBytes = await writeLocalOnlyMarketplace(localConfigPath, mpRoot);
       const stateBytes = await readFile(statePath, "utf8");
       const mtimeBefore = (await stat(statePath)).mtimeMs;
       const { transaction, calls } = countingTransaction();
@@ -1529,8 +1529,8 @@ for (const { verb, enable, seed } of [
       assert.deepEqual(calls, { cascadeUnstage: 0, save: 0 });
       assert.equal(await readFile(statePath, "utf8"), stateBytes);
       assert.equal((await stat(statePath)).mtimeMs, mtimeBefore);
-      assert.equal(await fileExists(configPath), false);
-      assert.equal(await readFile(configLocalPath, "utf8"), localBytes);
+      assert.equal(await fileExists(baseConfigPath), false);
+      assert.equal(await readFile(localConfigPath, "utf8"), localBytes);
     });
   });
 }
@@ -1565,7 +1565,7 @@ for (const { verb, enable, seed } of [
   test(`LAYER-06: ${verb} is refused and writes nothing when no source can declare the marketplace in the target layer`, async () => {
     await withHermeticHome(async ({ cwd, home }) => {
       // arrange
-      const { statePath, configPath, configLocalPath } = await seed(home);
+      const { statePath, baseConfigPath, localConfigPath } = await seed(home);
       await forgetRecordedSource(statePath);
       const stateBytes = await readFile(statePath, "utf8");
       const { transaction, calls } = countingTransaction();
@@ -1601,21 +1601,21 @@ for (const { verb, enable, seed } of [
       ]);
       assert.deepEqual(calls, { cascadeUnstage: 0, save: 0 });
       assert.equal(await readFile(statePath, "utf8"), stateBytes);
-      assert.equal(await fileExists(configPath), false);
-      assert.equal(await fileExists(configLocalPath), false);
+      assert.equal(await fileExists(baseConfigPath), false);
+      assert.equal(await fileExists(localConfigPath), false);
     });
   });
 }
 
-test("FIX-03: enable --local under a marketplace only the local file declares writes the local entry", async () => {
+test("FIX-03: enable --local under a marketplace only the local config declares writes the local entry", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
-    const { configPath, configLocalPath, mpRoot } = await seedRealDisabledMarketplace(home, {
+    const { baseConfigPath, localConfigPath, mpRoot } = await seedRealDisabledMarketplace(home, {
       marketplaceName: "mp",
       pluginName: "foo",
       version: "1.2.3",
     });
-    await writeLocalOnlyMarketplace(configLocalPath, mpRoot);
+    await writeLocalOnlyMarketplace(localConfigPath, mpRoot);
     const { ctx } = makeCtx(cwd);
 
     // act
@@ -1631,24 +1631,24 @@ test("FIX-03: enable --local under a marketplace only the local file declares wr
     });
 
     // assert
-    assert.deepEqual(await readConfig(configLocalPath), {
+    assert.deepEqual(await readConfig(localConfigPath), {
       schemaVersion: 1,
       marketplaces: { mp: { source: mpRoot } },
       plugins: { "foo@mp": { enabled: true } },
     });
-    assert.equal(await fileExists(configPath), false);
+    assert.equal(await fileExists(baseConfigPath), false);
   });
 });
 
-test("FIX-03: an orchestrated enable under a marketplace only the local file declares is not refused", async () => {
+test("FIX-03: an orchestrated enable under a marketplace only the local config declares is not refused", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
-    const { configLocalPath, mpRoot } = await seedRealDisabledMarketplace(home, {
+    const { localConfigPath, mpRoot } = await seedRealDisabledMarketplace(home, {
       marketplaceName: "mp",
       pluginName: "foo",
       version: "1.2.3",
     });
-    await writeLocalOnlyMarketplace(configLocalPath, mpRoot);
+    await writeLocalOnlyMarketplace(localConfigPath, mpRoot);
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
@@ -1672,12 +1672,12 @@ test("FIX-03: an orchestrated enable under a marketplace only the local file dec
 test("FIX-03: a plugin that is not installed under a local-only marketplace reports not installed", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
-    const { configLocalPath, mpRoot } = await writeUserState(home, {
+    const { localConfigPath, mpRoot } = await writeUserState(home, {
       marketplaceName: "mp",
       pluginName: "other-plugin",
       disabled: false,
     });
-    await writeLocalOnlyMarketplace(configLocalPath, mpRoot);
+    await writeLocalOnlyMarketplace(localConfigPath, mpRoot);
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
@@ -1710,15 +1710,15 @@ for (const { verb, enable, disabled } of [
   { verb: "enable", enable: true, disabled: false },
   { verb: "disable", enable: false, disabled: true },
 ]) {
-  test(`FIX-03: an idempotent ${verb} under a marketplace only the local file declares is skipped and writes nothing`, async () => {
+  test(`FIX-03: an idempotent ${verb} under a marketplace only the local config declares is skipped and writes nothing`, async () => {
     await withHermeticHome(async ({ cwd, home }) => {
       // arrange
-      const { statePath, configPath, configLocalPath, mpRoot } = await writeUserState(home, {
+      const { statePath, baseConfigPath, localConfigPath, mpRoot } = await writeUserState(home, {
         marketplaceName: "mp",
         pluginName: "foo",
         disabled,
       });
-      const localBytes = await writeLocalOnlyMarketplace(configLocalPath, mpRoot);
+      const localBytes = await writeLocalOnlyMarketplace(localConfigPath, mpRoot);
       const stateBytes = await readFile(statePath, "utf8");
       const { ctx, notifications } = makeCtx(cwd);
 
@@ -1738,26 +1738,26 @@ for (const { verb, enable, disabled } of [
         { message: ["● mp [user]", `  ⊘ foo (skipped) {already ${verb}d}`].join("\n") },
       ]);
       assert.equal(await readFile(statePath, "utf8"), stateBytes);
-      assert.equal(await fileExists(configPath), false);
-      assert.equal(await readFile(configLocalPath, "utf8"), localBytes);
+      assert.equal(await fileExists(baseConfigPath), false);
+      assert.equal(await readFile(localConfigPath, "utf8"), localBytes);
     });
   });
 }
 
-test("FIX-03: an idempotent enable that would rewrite the shared flag under a local-only marketplace is refused", async () => {
+test("FIX-03: an idempotent enable that would rewrite the base flag under a local-only marketplace is refused", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
-    const { statePath, configPath, configLocalPath, mpRoot } = await writeUserState(home, {
+    const { statePath, baseConfigPath, localConfigPath, mpRoot } = await writeUserState(home, {
       marketplaceName: "mp",
       pluginName: "foo",
       disabled: false,
     });
-    await writeLocalOnlyMarketplace(configLocalPath, mpRoot);
+    await writeLocalOnlyMarketplace(localConfigPath, mpRoot);
     const baseBytes = JSON.stringify({
       schemaVersion: 1,
       plugins: { "foo@mp": { enabled: false } },
     });
-    await writeFile(configPath, baseBytes, "utf8");
+    await writeFile(baseConfigPath, baseBytes, "utf8");
     const stateBytes = await readFile(statePath, "utf8");
     const { ctx, notifications } = makeCtx(cwd);
 
@@ -1786,7 +1786,7 @@ test("FIX-03: an idempotent enable that would rewrite the shared flag under a lo
       },
     ]);
     assert.equal(await readFile(statePath, "utf8"), stateBytes);
-    assert.equal(await readFile(configPath, "utf8"), baseBytes);
+    assert.equal(await readFile(baseConfigPath, "utf8"), baseBytes);
   });
 });
 
@@ -1974,7 +1974,7 @@ test("ENBL-13 / ENBL-18: disable of a hooks-only plugin removes hooks.json but r
 test("CR-01: fresh enable succeeds end-to-end against a real on-disk marketplace (single lock, catalog enable-fresh byte form, state re-populated)", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
-    const { statePath, configPath } = await seedRealDisabledMarketplace(home, {
+    const { statePath, baseConfigPath } = await seedRealDisabledMarketplace(home, {
       marketplaceName: "claude-plugins-official",
       pluginName: "foo-plugin",
       version: "1.2.3",
@@ -2040,7 +2040,7 @@ test("CR-01: fresh enable succeeds end-to-end against a real on-disk marketplace
     );
 
     // Config write-back: enabled:true recorded (ENBL-01).
-    const cfg = await readConfig(configPath);
+    const cfg = await readConfig(baseConfigPath);
     const plugins = (cfg as { plugins?: Record<string, { enabled?: boolean }> }).plugins ?? {};
     assert.equal(
       plugins["foo-plugin@claude-plugins-official"]?.enabled,
@@ -2053,7 +2053,7 @@ test("CR-01: fresh enable succeeds end-to-end against a real on-disk marketplace
 test("publishes a freshly enabled hook only to the supplied runtime after durable save", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
-    const { configPath, statePath } = await seedRealDisabledMarketplace(home, {
+    const { baseConfigPath, statePath } = await seedRealDisabledMarketplace(home, {
       configSeed: { file: "base", entry: { enabled: false } },
       hooksJson: {
         PreToolUse: [{ hooks: [{ command: "echo enabled", type: "command" }], matcher: "" }],
@@ -2067,7 +2067,7 @@ test("publishes a freshly enabled hook only to the supplied runtime after durabl
     const setPluginEnabledForOwner = createEnableOperation(
       createHooksRouting(ownerRuntime, { readHooksJson }),
     );
-    const configBefore = await readFile(configPath, "utf8");
+    const configBefore = await readFile(baseConfigPath, "utf8");
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
@@ -2091,7 +2091,7 @@ test("publishes a freshly enabled hook only to the supplied runtime after durabl
       true,
     );
     assert.notEqual(await readFile(statePath, "utf8"), "");
-    assert.strictEqual(await readFile(configPath, "utf8"), configBefore);
+    assert.strictEqual(await readFile(baseConfigPath, "utf8"), configBefore);
     assert.deepStrictEqual(
       ownerRuntime.getRoutingBucket("PreToolUse").map((entry) => ({
         command: entry.handlerDecl.command,
@@ -2112,7 +2112,7 @@ for (const { failure, label } of [
   test(`keeps a committed enable successful when post-save route publication fails (${label})`, async () => {
     await withHermeticHome(async ({ cwd, home }) => {
       // arrange
-      const { configPath, statePath } = await seedRealDisabledMarketplace(home, {
+      const { baseConfigPath, statePath } = await seedRealDisabledMarketplace(home, {
         configSeed: { file: "base", entry: { enabled: false } },
         hooksJson: {
           PreToolUse: [{ hooks: [{ command: "echo enabled", type: "command" }], matcher: "" }],
@@ -2129,7 +2129,7 @@ for (const { failure, label } of [
           await rejectUnknown(failure);
         },
       };
-      const configBefore = await readFile(configPath, "utf8");
+      const configBefore = await readFile(baseConfigPath, "utf8");
       const { ctx, notifications } = makeCtx(cwd);
 
       // act
@@ -2153,7 +2153,7 @@ for (const { failure, label } of [
         true,
       );
       assert.notEqual(await readFile(statePath, "utf8"), "");
-      assert.strictEqual(await readFile(configPath, "utf8"), configBefore);
+      assert.strictEqual(await readFile(baseConfigPath, "utf8"), configBefore);
       assert.deepStrictEqual(runtime.getRoutingBucket("PreToolUse"), []);
     });
   });
@@ -3649,7 +3649,7 @@ test("ENBL-07 / ENBL-04 byte-lock: disable on an already-disabled PARTIAL render
 test("WR-03: enable on state-enabled plugin with config enabled:false lands the config-side truth (promotion, state untouched)", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
-    const { statePath, configPath } = await writeUserState(home, {
+    const { statePath, baseConfigPath } = await writeUserState(home, {
       marketplaceName: "mp",
       pluginName: "foo",
       disabled: false,
@@ -3659,7 +3659,7 @@ test("WR-03: enable on state-enabled plugin with config enabled:false lands the 
     // state-side-only idempotency gate would skip here and the next
     // reconcile would DISABLE the plugin the user just explicitly enabled.
     await writeFile(
-      configPath,
+      baseConfigPath,
       JSON.stringify({
         schemaVersion: 1,
         marketplaces: { mp: { source: "/tmp/dummy-mp" } },
@@ -3680,7 +3680,7 @@ test("WR-03: enable on state-enabled plugin with config enabled:false lands the 
       scope: "user",
     });
     // The config-side truth landed: enabled flipped to true.
-    const cfg = (await readConfig(configPath)) as {
+    const cfg = (await readConfig(baseConfigPath)) as {
       plugins?: Record<string, { enabled?: boolean }>;
     };
     // assert
@@ -3697,7 +3697,7 @@ test("WR-03: enable on state-enabled plugin with config enabled:false lands the 
 test("WR-03: the config-truth promotion with --local writes the local layer and moves the merged view", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
-    const { statePath, configPath, configLocalPath } = await writeUserState(home, {
+    const { statePath, baseConfigPath, localConfigPath } = await writeUserState(home, {
       marketplaceName: "mp",
       pluginName: "foo",
       disabled: false,
@@ -3708,7 +3708,7 @@ test("WR-03: the config-truth promotion with --local writes the local layer and 
     // write sites, the arm that stops a config/state divergence from letting
     // the next reconcile invert the user's command.
     await writeFile(
-      configLocalPath,
+      localConfigPath,
       JSON.stringify({
         schemaVersion: 1,
         marketplaces: { mp: { source: "/tmp/dummy-mp" } },
@@ -3731,10 +3731,10 @@ test("WR-03: the config-truth promotion with --local writes the local layer and 
       local: true,
     });
 
-    const localCfg = (await readConfig(configLocalPath)) as { plugins?: Record<string, unknown> };
+    const localCfg = (await readConfig(localConfigPath)) as { plugins?: Record<string, unknown> };
     // assert
     assert.deepEqual(localCfg.plugins?.["foo@mp"], { enabled: true });
-    assert.equal(await fileExists(configPath), false, "base file must stay absent");
+    assert.equal(await fileExists(baseConfigPath), false, "base config must stay absent");
     assert.deepEqual(await readMergedUserPluginEntry(cwd, "foo@mp"), {
       source: "local",
       declaredEnabled: true,
@@ -3756,13 +3756,13 @@ test("WR-03: the config-truth promotion with --local writes the local layer and 
 test("CFG-03 / WR-01: invalid config aborts and state.json is byte- and mtime-unchanged (path.basename containment, T-54-02-02)", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
-    const { statePath, configPath } = await writeUserState(home, {
+    const { statePath, baseConfigPath } = await writeUserState(home, {
       marketplaceName: "mp",
       pluginName: "foo",
       disabled: false,
     });
     // 0-byte file -> CFG-03 invalid (JSON parse failure).
-    await writeFile(configPath, "", "utf8");
+    await writeFile(baseConfigPath, "", "utf8");
     const statePre = await readFile(statePath, "utf8");
     const mtimePre = (await stat(statePath)).mtimeMs;
     const { ctx, notifications } = makeCtx(cwd);
@@ -3782,7 +3782,7 @@ test("CFG-03 / WR-01: invalid config aborts and state.json is byte- and mtime-un
     assert.match(notifications[0]!.message, /\(failed\) \{invalid manifest\}/);
     // Information-disclosure: the absolute path must NOT appear.
     assert.ok(
-      !notifications[0]!.message.includes(configPath),
+      !notifications[0]!.message.includes(baseConfigPath),
       "absolute path must not be leaked (T-54-02-02)",
     );
     // The cause should mention the basename only.
@@ -4170,21 +4170,21 @@ test("RECON-03 enable-disable standalone-default mode -- omitted notifications o
 // UAT-05: merged-view membership gate for the adopted-marketplace declaration
 // ──────────────────────────────────────────────────────────────────────────
 
-test("LAYER-06: a --local enable flip under a marketplace only the shared layer declares also declares it in the local layer; the shared autoupdate survives the merge", async () => {
+test("LAYER-06: a --local enable flip under a marketplace only the base layer declares also declares it in the local layer; the base autoupdate survives the merge", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
-    const { configPath, configLocalPath, mpRoot } = await writeUserState(home, {
+    const { baseConfigPath, localConfigPath, mpRoot } = await writeUserState(home, {
       marketplaceName: "mp",
       pluginName: "foo",
       disabled: false,
     });
-    // The shared layer declares the marketplace with autoupdate: true; the
+    // The base layer declares the marketplace with autoupdate: true; the
     // local layer carries an explicit enabled:false for the plugin so the
     // WR-03 promotion arm fires a config write against the --local target. A
     // layer that declares a plugin also declares its marketplace, so the flip
     // declares it in the local layer from the recorded source.
     await writeFile(
-      configPath,
+      baseConfigPath,
       JSON.stringify({
         schemaVersion: 1,
         marketplaces: { mp: { source: "/tmp/dummy-mp", autoupdate: true } },
@@ -4192,7 +4192,7 @@ test("LAYER-06: a --local enable flip under a marketplace only the shared layer 
       "utf8",
     );
     await writeFile(
-      configLocalPath,
+      localConfigPath,
       JSON.stringify({
         schemaVersion: 1,
         plugins: { "foo@mp": { enabled: false } },
@@ -4214,19 +4214,19 @@ test("LAYER-06: a --local enable flip under a marketplace only the shared layer 
     });
 
     // assert
-    assert.deepStrictEqual(await readConfig(configLocalPath), {
+    assert.deepStrictEqual(await readConfig(localConfigPath), {
       schemaVersion: 1,
       marketplaces: { mp: { source: mpRoot } },
       plugins: { "foo@mp": { enabled: true } },
     });
 
-    // The merged view's autoupdate (from the shared layer) survives the flip.
+    // The merged view's autoupdate (from the base layer) survives the flip.
     const { mergeScopeConfigs } =
       await import("../../../extensions/pi-claude-marketplace/persistence/config-merge.ts");
     const { loadConfig } =
       await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
-    const baseLoaded = await loadConfig(configPath);
-    const localLoaded = await loadConfig(configLocalPath);
+    const baseLoaded = await loadConfig(baseConfigPath);
+    const localLoaded = await loadConfig(localConfigPath);
     assert.equal(baseLoaded.status, "valid");
     assert.equal(localLoaded.status, "valid");
     if (baseLoaded.status !== "valid" || localLoaded.status !== "valid") {
@@ -4590,7 +4590,7 @@ test("T1 / PR #51: orchestrated mode enable-success returns { status: 'enabled',
 test("orchestrated enable returns every live degradation and companion signal without writing config", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
-    const { configPath, statePath } = await seedRealDisabledMarketplace(home, {
+    const { baseConfigPath, statePath } = await seedRealDisabledMarketplace(home, {
       hooksJson: {
         PreToolUse: [
           {
@@ -4638,7 +4638,7 @@ test("orchestrated enable returns every live degradation and companion signal wi
       version: "1.2.3",
     });
     assert.deepStrictEqual(notifications, []);
-    assert.equal(await fileExists(configPath), false);
+    assert.equal(await fileExists(baseConfigPath), false);
     assert.notStrictEqual(await readFile(statePath, "utf8"), beforeState);
   });
 });
@@ -4687,12 +4687,12 @@ test("standalone enable renders the exact orphan-rewake byte form", async () => 
 test("orchestrated invalid local config returns an exact typed failure and leaves state unchanged", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
-    const { configLocalPath, statePath } = await writeUserState(home, {
+    const { localConfigPath, statePath } = await writeUserState(home, {
       disabled: false,
       marketplaceName: "mp",
       pluginName: "foo",
     });
-    await writeFile(configLocalPath, "{ invalid", "utf8");
+    await writeFile(localConfigPath, "{ invalid", "utf8");
     const beforeState = await readFile(statePath, "utf8");
     const expectedError = new Error(
       'Config file "claude-plugins.local.json" failed schema validation.',
@@ -4945,7 +4945,7 @@ test("a held project lock returns lock-held in orchestrated mode and succeeds af
 test("a config-write failure leaves the state bytes unchanged and a standalone retry succeeds", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
-    const { configPath, statePath, mpRoot } = await writeUserState(home, {
+    const { baseConfigPath, statePath, mpRoot } = await writeUserState(home, {
       disabled: false,
       marketplaceName: "mp",
       pluginName: "foo",
@@ -5051,7 +5051,7 @@ test("a config-write failure leaves the state bytes unchanged and a standalone r
         message: "● mp [user]\n  ◍ foo v1.2.3 (disabled)\n\n/reload to pick up changes",
       },
     ]);
-    assert.deepStrictEqual(await readConfig(configPath), {
+    assert.deepStrictEqual(await readConfig(baseConfigPath), {
       marketplaces: { mp: { source: mpRoot } },
       plugins: { "foo@mp": { enabled: false } },
       schemaVersion: 1,
@@ -5595,7 +5595,7 @@ test("standalone enable exposes ordered rollback partials and retries without du
 test("DFEN-07 / D-103-10 / D-103-11: an explicit enable of a BASE-declared plugin survives reload, update and reinstall", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
-    const { configPath, manifestPath, mpRoot } = await seedRealDisabledMarketplace(home, {
+    const { baseConfigPath, manifestPath, mpRoot } = await seedRealDisabledMarketplace(home, {
       configSeed: { entry: { enabled: false }, file: "base" },
       defaultEnabled: false,
       marketplaceName: "mp",
@@ -5638,7 +5638,7 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable of a BASE-declared plugi
       scope: "user",
     });
     const afterEnable = await observe();
-    const declaringConfig = await readConfig(configPath);
+    const declaringConfig = await readConfig(baseConfigPath);
     await applyReconcile({
       ctx: firstReload.ctx,
       run: runWithNothingLoaded(),
@@ -5727,16 +5727,14 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable of a BASE-declared plugi
 test("DFEN-07 / D-103-10 / D-103-11: an explicit enable with --local of a plugin the local layer declares survives reload, update and reinstall", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
-    const { configLocalPath, configPath, manifestPath, mpRoot } = await seedRealDisabledMarketplace(
-      home,
-      {
+    const { localConfigPath, baseConfigPath, manifestPath, mpRoot } =
+      await seedRealDisabledMarketplace(home, {
         configSeed: { entry: { enabled: false }, file: "local" },
         defaultEnabled: false,
         marketplaceName: "mp",
         pluginName: "foo",
         version: "1.0.0",
-      },
-    );
+      });
     const locations = locationsFor("user", cwd);
     const observe = async (): Promise<{
       enabled: boolean | undefined;
@@ -5774,8 +5772,8 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable with --local of a plugin
       local: true,
     });
     const afterEnable = await observe();
-    const declaringConfig = await readConfig(configLocalPath);
-    const baseExistsAfterEnable = await fileExists(configPath);
+    const declaringConfig = await readConfig(localConfigPath);
+    const baseExistsAfterEnable = await fileExists(baseConfigPath);
     await applyReconcile({
       ctx: firstReload.ctx,
       run: runWithNothingLoaded(),
@@ -5785,7 +5783,7 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable with --local of a plugin
       hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     });
     const afterFirstReload = await observe();
-    const baseExistsAfterReload = await fileExists(configPath);
+    const baseExistsAfterReload = await fileExists(baseConfigPath);
     await writeFile(
       manifestPath,
       JSON.stringify({
@@ -5808,7 +5806,7 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable with --local of a plugin
       local: true,
     });
     const afterUpdate = await observe();
-    const baseExistsAfterUpdate = await fileExists(configPath);
+    const baseExistsAfterUpdate = await fileExists(baseConfigPath);
     await createReinstallPlugin()({
       ctx: reinstallContext.ctx,
       cwd,
@@ -5818,7 +5816,7 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable with --local of a plugin
       scope: "user",
     });
     const afterReinstall = await observe();
-    const baseExistsAfterReinstall = await fileExists(configPath);
+    const baseExistsAfterReinstall = await fileExists(baseConfigPath);
     await applyReconcile({
       ctx: secondReload.ctx,
       run: runWithNothingLoaded(),
@@ -5851,7 +5849,7 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable with --local of a plugin
     assert.equal(baseExistsAfterEnable, false);
     assert.deepStrictEqual(firstReload.notifications, []);
     assert.deepStrictEqual(afterFirstReload, afterEnable);
-    // FIX-02: the local file declares every record, so the reload writes no
+    // FIX-02: the local config declares every record, so the reload writes no
     // base config.
     assert.equal(baseExistsAfterReload, false);
     assert.deepStrictEqual(afterUpdate, {
@@ -5860,7 +5858,7 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable with --local of a plugin
       skills: ["foo-s1"],
       version: "2.0.0",
     });
-    // D-MF-03: the local file declares the plugin, so neither the update with
+    // D-MF-03: the local config declares the plugin, so neither the update with
     // --local nor the flagless reinstall writes a base config.
     assert.equal(baseExistsAfterUpdate, false);
     assert.deepStrictEqual(afterReinstall, afterUpdate);
@@ -5949,7 +5947,12 @@ async function writeEdepPluginRoot(
 async function seedEnableCascadeFixture(
   home: string,
   opts: { readonly declareDependency: boolean; readonly dependencyEnabled?: boolean },
-): Promise<{ statePath: string; configPath: string; configLocalPath: string; scopeRoot: string }> {
+): Promise<{
+  statePath: string;
+  baseConfigPath: string;
+  localConfigPath: string;
+  scopeRoot: string;
+}> {
   const scopeRoot = path.join(home, ".pi", "agent");
   const extRoot = path.join(scopeRoot, "pi-claude-marketplace");
   await mkdir(extRoot, { recursive: true });
@@ -6025,8 +6028,8 @@ async function seedEnableCascadeFixture(
   await writeFile(statePath, JSON.stringify(state, null, 2), "utf8");
   return {
     statePath,
-    configPath: path.join(scopeRoot, "claude-plugins.json"),
-    configLocalPath: path.join(scopeRoot, "claude-plugins.local.json"),
+    baseConfigPath: path.join(scopeRoot, "claude-plugins.json"),
+    localConfigPath: path.join(scopeRoot, "claude-plugins.local.json"),
     scopeRoot,
   };
 }
@@ -6038,7 +6041,7 @@ interface EdepStateShape {
 test("EDEP-01 / EDEP-03: enabling a plugin turns on its one disabled dependency and reports both rows", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
-    const { statePath, configPath, configLocalPath } = await seedEnableCascadeFixture(home, {
+    const { statePath, baseConfigPath, localConfigPath } = await seedEnableCascadeFixture(home, {
       declareDependency: true,
       dependencyEnabled: false,
     });
@@ -6075,8 +6078,8 @@ test("EDEP-01 / EDEP-03: enabling a plugin turns on its one disabled dependency 
 
     // D-04-02: only the plugin the user named reaches the config write --
     // neither config file gains a key for the cascade member.
-    assert.equal(await fileExists(configLocalPath), false);
-    const cfg = (await readConfig(configPath)) as { plugins?: Record<string, unknown> };
+    assert.equal(await fileExists(localConfigPath), false);
+    const cfg = (await readConfig(baseConfigPath)) as { plugins?: Record<string, unknown> };
     assert.deepEqual(Object.keys(cfg.plugins ?? {}), ["helper@official"]);
   });
 });
@@ -6307,7 +6310,7 @@ async function seedEdepGraph(
     readonly dependencyDisabled?: true;
   }[],
   opts: { readonly scope?: "user" | "project"; readonly cwd?: string } = {},
-): Promise<{ statePath: string; configPath: string; scopeRoot: string; mpRoot: string }> {
+): Promise<{ statePath: string; baseConfigPath: string; scopeRoot: string; mpRoot: string }> {
   const scope = opts.scope ?? "user";
   const scopeRoot =
     scope === "user"
@@ -6363,7 +6366,12 @@ async function seedEdepGraph(
     },
   };
   await writeFile(statePath, JSON.stringify(state, null, 2), "utf8");
-  return { statePath, configPath: path.join(scopeRoot, "claude-plugins.json"), scopeRoot, mpRoot };
+  return {
+    statePath,
+    baseConfigPath: path.join(scopeRoot, "claude-plugins.json"),
+    scopeRoot,
+    mpRoot,
+  };
 }
 
 test("EDEP-01: depth-2 transitivity enables the whole chain in dependency-first order", async () => {
@@ -6699,16 +6707,16 @@ test("EDEP-01: row order follows the canonical comparator even when the root is 
 test("CR-01: a re-enabled member's config entry saying enabled: false is overwritten to true", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
-    const { configPath } = await seedEdepGraph(home, [
+    const { baseConfigPath } = await seedEdepGraph(home, [
       { name: "a", version: "1.0.0", dependencies: [{ name: "b" }], enabled: false },
       { name: "b", version: "1.0.0", enabled: false },
     ]);
     // The exact hazard: `disable b` (after `disable a`, per EDEP-02's mandated
     // order) writes `{ enabled: false }` for `b` into the config. `enable a`
     // must overwrite it, not leave it for the next reload to plan a disable.
-    await mkdir(path.dirname(configPath), { recursive: true });
+    await mkdir(path.dirname(baseConfigPath), { recursive: true });
     await writeFile(
-      configPath,
+      baseConfigPath,
       JSON.stringify({ schemaVersion: 1, plugins: { "b@official": { enabled: false } } }),
       "utf8",
     );
@@ -6729,26 +6737,26 @@ test("CR-01: a re-enabled member's config entry saying enabled: false is overwri
     const stateAfter = await loadState(locationsFor("user", cwd).extensionRoot);
     assert.equal(stateAfter.marketplaces.official?.plugins.a?.enabled, true);
     assert.equal(stateAfter.marketplaces.official?.plugins.b?.enabled, true);
-    const cfg = (await readConfig(configPath)) as { plugins?: Record<string, unknown> };
+    const cfg = (await readConfig(baseConfigPath)) as { plugins?: Record<string, unknown> };
     assert.deepEqual(cfg.plugins?.["b@official"], { enabled: true });
     const merged = (await loadMergedScopeConfig(locationsFor("user", cwd))).merged;
     assert.deepEqual(planReconcile(merged, stateAfter, "user"), emptyReconcilePlan("user"));
   });
 });
 
-test("CR-06: enable a --local overwrites a base-file stale entry for a re-enabled member", async () => {
+test("CR-06: enable a --local overwrites a base-config stale entry for a re-enabled member", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
-    // arrange: "b"'s stale `enabled: false` entry lives in the BASE file --
+    // arrange: "b"'s stale `enabled: false` entry lives in the base config --
     // the flagless `disable b` shape -- while `enable a --local` targets the
-    // LOCAL file for "a"'s own write. The member's file must still be found
+    // local config for "a"'s own write. The member's file must still be found
     // by declaration, not by the root's own `--local` flag.
-    const { configPath } = await seedEdepGraph(home, [
+    const { baseConfigPath } = await seedEdepGraph(home, [
       { name: "a", version: "1.0.0", dependencies: [{ name: "b" }], enabled: false },
       { name: "b", version: "1.0.0", enabled: false },
     ]);
-    await mkdir(path.dirname(configPath), { recursive: true });
+    await mkdir(path.dirname(baseConfigPath), { recursive: true });
     await writeFile(
-      configPath,
+      baseConfigPath,
       JSON.stringify({ schemaVersion: 1, plugins: { "b@official": { enabled: false } } }),
       "utf8",
     );
@@ -6770,7 +6778,7 @@ test("CR-06: enable a --local overwrites a base-file stale entry for a re-enable
     const stateAfter = await loadState(locationsFor("user", cwd).extensionRoot);
     assert.equal(stateAfter.marketplaces.official?.plugins.a?.enabled, true);
     assert.equal(stateAfter.marketplaces.official?.plugins.b?.enabled, true);
-    const baseCfg = (await readConfig(configPath)) as { plugins?: Record<string, unknown> };
+    const baseCfg = (await readConfig(baseConfigPath)) as { plugins?: Record<string, unknown> };
     assert.deepEqual(baseCfg.plugins?.["b@official"], { enabled: true });
     const localCfg = (await readConfig(locationsFor("user", cwd).localConfigJsonPath)) as {
       plugins?: Record<string, unknown>;
@@ -6784,7 +6792,7 @@ test("CR-06: enable a --local overwrites a base-file stale entry for a re-enable
 test("CR-01: a member with NO config entry stays untouched", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
-    const { statePath, configPath } = await seedEdepGraph(home, [
+    const { statePath, baseConfigPath } = await seedEdepGraph(home, [
       { name: "a", version: "1.0.0", dependencies: [{ name: "b" }], enabled: false },
       { name: "b", version: "1.0.0", enabled: false },
     ]);
@@ -6804,7 +6812,7 @@ test("CR-01: a member with NO config entry stays untouched", async () => {
     // assert: the root "a" is what the user named, so it gets its own
     // config entry (pre-existing D-04-07 promotion behavior) -- but D-04-02
     // still holds for the dependency "b", which the config never mentions.
-    const cfg = (await readConfig(configPath)) as { plugins?: Record<string, unknown> };
+    const cfg = (await readConfig(baseConfigPath)) as { plugins?: Record<string, unknown> };
     assert.deepEqual(cfg.plugins, { "a@official": { enabled: true } });
     const state = JSON.parse(await readFile(statePath, "utf8")) as EdepStateShape;
     assert.equal(state.marketplaces.official!.plugins.b!.enabled, true);
@@ -6814,16 +6822,16 @@ test("CR-01: a member with NO config entry stays untouched", async () => {
 test("EDEP-01: an idempotent root still enables a disabled dependency and reports both rows", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
-    const { statePath, configPath } = await seedEdepGraph(home, [
+    const { statePath, baseConfigPath } = await seedEdepGraph(home, [
       { name: "a", version: "1.0.0", dependencies: [{ name: "b" }], enabled: true },
       { name: "b", version: "1.0.0", enabled: false },
     ]);
     // The config ALREADY declares `a` enabled, so the idempotent arm returns
     // `{ kind: "idempotent" }` rather than `{ kind: "fresh" }` -- the branch
     // this test exists to prove still forces a save for the cascade.
-    await mkdir(path.dirname(configPath), { recursive: true });
+    await mkdir(path.dirname(baseConfigPath), { recursive: true });
     await writeFile(
-      configPath,
+      baseConfigPath,
       JSON.stringify({ schemaVersion: 1, plugins: { "a@official": { enabled: true } } }),
       "utf8",
     );
@@ -6861,13 +6869,13 @@ test("EDEP-01: an idempotent root still enables a disabled dependency and report
 test("CR-01: a re-enabled member's config entry is overwritten even when the root is idempotent", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
-    const { configPath, mpRoot } = await seedEdepGraph(home, [
+    const { baseConfigPath, mpRoot } = await seedEdepGraph(home, [
       { name: "a", version: "1.0.0", dependencies: [{ name: "b" }], enabled: true },
       { name: "b", version: "1.0.0", enabled: false },
     ]);
-    await mkdir(path.dirname(configPath), { recursive: true });
+    await mkdir(path.dirname(baseConfigPath), { recursive: true });
     await writeFile(
-      configPath,
+      baseConfigPath,
       JSON.stringify({
         schemaVersion: 1,
         marketplaces: { official: { source: mpRoot } },
@@ -6892,7 +6900,7 @@ test("CR-01: a re-enabled member's config entry is overwritten even when the roo
     // overwritten -- CR-01 does not depend on the root itself changing state.
     const stateAfter = await loadState(locationsFor("user", cwd).extensionRoot);
     assert.equal(stateAfter.marketplaces.official?.plugins.b?.enabled, true);
-    const cfg = (await readConfig(configPath)) as { plugins?: Record<string, unknown> };
+    const cfg = (await readConfig(baseConfigPath)) as { plugins?: Record<string, unknown> };
     assert.deepEqual(cfg.plugins?.["b@official"], { enabled: true });
     const merged = (await loadMergedScopeConfig(locationsFor("user", cwd))).merged;
     assert.deepEqual(planReconcile(merged, stateAfter, "user"), emptyReconcilePlan("user"));
@@ -6905,7 +6913,7 @@ test("EDEP-01: a member ledger failure unwinds every member even when the root i
     // members materialize through their OWN ledger (runEnableCascadeMembers),
     // not the merged root ledger (runEnableCascadeWithRoot) -- a member
     // failure here unwinds only the OTHER members, never the root.
-    const { statePath, configPath } = await seedEdepGraph(home, [
+    const { statePath, baseConfigPath } = await seedEdepGraph(home, [
       {
         name: "a",
         version: "1.0.0",
@@ -6915,9 +6923,9 @@ test("EDEP-01: a member ledger failure unwinds every member even when the root i
       { name: "b", version: "1.0.0", enabled: false },
       { name: "c", version: "1.0.0", enabled: false },
     ]);
-    await mkdir(path.dirname(configPath), { recursive: true });
+    await mkdir(path.dirname(baseConfigPath), { recursive: true });
     await writeFile(
-      configPath,
+      baseConfigPath,
       JSON.stringify({ schemaVersion: 1, plugins: { "a@official": { enabled: true } } }),
       "utf8",
     );
@@ -6967,7 +6975,7 @@ test("EDEP-01: a rollback partial on the idempotent-root path threads into the f
     // unstage only partially completes when "c"'s ledger fails, exercising
     // the idempotent path's own rollbackPartials threading (WR-01) -- the
     // fresh-root path already has its own dedicated CR-05 coverage.
-    const { statePath, configPath } = await seedEdepGraph(home, [
+    const { statePath, baseConfigPath } = await seedEdepGraph(home, [
       {
         name: "a",
         version: "1.0.0",
@@ -6977,9 +6985,9 @@ test("EDEP-01: a rollback partial on the idempotent-root path threads into the f
       { name: "b", version: "1.0.0", enabled: false },
       { name: "c", version: "1.0.0", enabled: false },
     ]);
-    await mkdir(path.dirname(configPath), { recursive: true });
+    await mkdir(path.dirname(baseConfigPath), { recursive: true });
     await writeFile(
-      configPath,
+      baseConfigPath,
       JSON.stringify({ schemaVersion: 1, plugins: { "a@official": { enabled: true } } }),
       "utf8",
     );

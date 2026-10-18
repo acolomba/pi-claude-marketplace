@@ -2676,17 +2676,17 @@ test("CFG-03 orchestrated invalid config returns a typed result without notifica
 // LAYER-04 / D-MF-03: a named uninstall acts on its target layer only
 // ──────────────────────────────────────────────────────────────────────────
 
-const SHARED_LAYER_WITH_MARKETPLACE =
+const BASE_LAYER_WITH_MARKETPLACE =
   '{"schemaVersion":1,"marketplaces":{"mp":{"source":"./src"}}}\n';
 const LAYER_DECLARING_HELLO = '{"schemaVersion":1,"plugins":{"hello@mp":{}}}\n';
 
-/** Write the shared and local layer files of the scope as the exact bytes given. */
+/** Write the base and local layer files of the scope as the exact bytes given. */
 async function writeLayerFiles(
   locations: ReturnType<typeof locationsFor>,
-  layers: { readonly shared: string; readonly local: string },
+  layers: { readonly base: string; readonly local: string },
 ): Promise<void> {
   await mkdir(locations.scopeRoot, { recursive: true });
-  await writeFile(locations.baseConfigJsonPath, layers.shared, "utf8");
+  await writeFile(locations.baseConfigJsonPath, layers.base, "utf8");
   await writeFile(locations.localConfigJsonPath, layers.local, "utf8");
 }
 
@@ -2709,16 +2709,16 @@ for (const { title, local, layers, expectedMessage } of [
   {
     title: "a flagless uninstall of a plugin only the local layer declares",
     local: false,
-    layers: { shared: SHARED_LAYER_WITH_MARKETPLACE, local: LAYER_DECLARING_HELLO },
+    layers: { base: BASE_LAYER_WITH_MARKETPLACE, local: LAYER_DECLARING_HELLO },
     expectedMessage:
       "A plugin operation has failed.\n\n● mp [project]\n" +
       "  ⊘ hello v0.0.1 (failed) {plugin in local layer only}\n" +
       "    cause: The plugin hello@mp is declared only in the local config (claude-plugins.local.json). Run the command again with --local.",
   },
   {
-    title: "a --local uninstall of a plugin only the shared layer declares",
+    title: "a --local uninstall of a plugin only the base layer declares",
     local: true,
-    layers: { shared: LAYER_DECLARING_HELLO, local: '{"schemaVersion":1}\n' },
+    layers: { base: LAYER_DECLARING_HELLO, local: '{"schemaVersion":1}\n' },
     expectedMessage:
       "A plugin operation has failed.\n\n● mp [project]\n" +
       "  ⊘ hello v0.0.1 (failed) {plugin in base layer only}\n" +
@@ -2769,7 +2769,7 @@ test("CFG-03: a standalone uninstall whose other layer is invalid names that fil
       const locations = locationsFor("project", cwd);
       await seedFullPlugin(locations, "mp", "hello", cwd);
       await writeLayerFiles(locations, {
-        shared: LAYER_DECLARING_HELLO,
+        base: LAYER_DECLARING_HELLO,
         local: "{ not valid json",
       });
       const filesBefore = await readScopeFiles(locations);
@@ -2814,7 +2814,7 @@ test("WR-09: an orchestrated uninstall of a plugin only the local layer declares
       const locations = locationsFor("project", cwd);
       await seedFullPlugin(locations, "mp", "hello", cwd);
       await writeLayerFiles(locations, {
-        shared: SHARED_LAYER_WITH_MARKETPLACE,
+        base: BASE_LAYER_WITH_MARKETPLACE,
         local: LAYER_DECLARING_HELLO,
       });
       const { ctx, run, notifications } = makeCtx();
@@ -2855,7 +2855,7 @@ test("LAYER-04: a plugin that is not installed reports not installed whatever th
       const locations = locationsFor("project", cwd);
       await seedFullPlugin(locations, "mp", "other", cwd);
       await writeLayerFiles(locations, {
-        shared: SHARED_LAYER_WITH_MARKETPLACE,
+        base: BASE_LAYER_WITH_MARKETPLACE,
         local: LAYER_DECLARING_HELLO,
       });
       const filesBefore = await readScopeFiles(locations);
@@ -2905,7 +2905,7 @@ for (const { title, local, flags, otherLayer, cause, dropFrom } of [
     dropFrom: "local",
   },
   {
-    title: "a flagless uninstall of a plugin both layers declare drops only the shared declaration",
+    title: "a flagless uninstall of a plugin both layers declare drops only the base declaration",
     local: false,
     flags: {},
     otherLayer: "local",
@@ -2929,7 +2929,7 @@ for (const { title, local, flags, otherLayer, cause, dropFrom } of [
         const locations = locationsFor("project", cwd);
         await seedFullPlugin(locations, "mp", "hello", cwd);
         await writeLayerFiles(locations, {
-          shared: LAYER_DECLARING_MP_AND_HELLO,
+          base: LAYER_DECLARING_MP_AND_HELLO,
           local: LAYER_DECLARING_MP_AND_HELLO,
         });
         const filesBefore = await readScopeFiles(locations);
@@ -2981,8 +2981,8 @@ test("WR-02: an uninstall deletes the key from its target layer and never writes
       const locations = locationsFor("project", cwd);
       await seedFullPlugin(locations, "mp", "hello", cwd);
       await writeLayerFiles(locations, {
-        shared: LAYER_DECLARING_MP_AND_HELLO,
-        local: SHARED_LAYER_WITH_MARKETPLACE,
+        base: LAYER_DECLARING_MP_AND_HELLO,
+        local: BASE_LAYER_WITH_MARKETPLACE,
       });
       const localMtime = (await stat(locations.localConfigJsonPath)).mtimeMs;
       const { ctx, run, notifications } = makeCtx();
@@ -3001,7 +3001,7 @@ test("WR-02: an uninstall deletes the key from its target layer and never writes
       assert.deepStrictEqual(
         {
           notifications,
-          shared: await readFile(locations.baseConfigJsonPath, "utf8"),
+          base: await readFile(locations.baseConfigJsonPath, "utf8"),
           local: await readFile(locations.localConfigJsonPath, "utf8"),
           localMtime: (await stat(locations.localConfigJsonPath)).mtimeMs,
         },
@@ -3015,8 +3015,8 @@ test("WR-02: an uninstall deletes the key from its target layer and never writes
               severity: "warning",
             },
           ],
-          shared: LAYER_DECLARING_MP_ONLY,
-          local: SHARED_LAYER_WITH_MARKETPLACE,
+          base: LAYER_DECLARING_MP_ONLY,
+          local: BASE_LAYER_WITH_MARKETPLACE,
           localMtime,
         },
       );
@@ -6064,7 +6064,7 @@ for (const { title, plugins, layers, local, expected } of [
   {
     title: "a dependency a plugin of the target layer needs is refused",
     plugins: { helper: { provenance: "dependency" }, app: { dependencies: ["helper"] } },
-    layers: { shared: LAYER_DECLARING_APP, local: EMPTY_LAYER },
+    layers: { base: LAYER_DECLARING_APP, local: EMPTY_LAYER },
     local: false,
     expected: {
       message:
@@ -6077,7 +6077,7 @@ for (const { title, plugins, layers, local, expected } of [
   {
     title: "a dependency a plugin of both layers needs is refused",
     plugins: { helper: { provenance: "dependency" }, app: { dependencies: ["helper"] } },
-    layers: { shared: LAYER_DECLARING_APP, local: LAYER_DECLARING_APP },
+    layers: { base: LAYER_DECLARING_APP, local: LAYER_DECLARING_APP },
     local: true,
     expected: {
       message:
@@ -6094,7 +6094,7 @@ for (const { title, plugins, layers, local, expected } of [
       mid: { provenance: "dependency", dependencies: ["helper"] },
       app: { dependencies: ["mid"] },
     },
-    layers: { shared: EMPTY_LAYER, local: LAYER_DECLARING_APP },
+    layers: { base: EMPTY_LAYER, local: LAYER_DECLARING_APP },
     local: true,
     expected: {
       message:
@@ -6105,9 +6105,9 @@ for (const { title, plugins, layers, local, expected } of [
     },
   },
   {
-    title: "a --local uninstall of a dependency only the shared layer needs is skipped",
+    title: "a --local uninstall of a dependency only the base layer needs is skipped",
     plugins: { helper: { provenance: "dependency" }, app: { dependencies: ["helper"] } },
-    layers: { shared: LAYER_DECLARING_APP, local: EMPTY_LAYER },
+    layers: { base: LAYER_DECLARING_APP, local: EMPTY_LAYER },
     local: true,
     expected: {
       message:
@@ -6120,7 +6120,7 @@ for (const { title, plugins, layers, local, expected } of [
   {
     title: "a flagless uninstall of a dependency only the local layer needs is skipped",
     plugins: { helper: { provenance: "dependency" }, app: { dependencies: ["helper"] } },
-    layers: { shared: EMPTY_LAYER, local: LAYER_DECLARING_APP },
+    layers: { base: EMPTY_LAYER, local: LAYER_DECLARING_APP },
     local: false,
     expected: {
       message:
@@ -6183,7 +6183,7 @@ test("LOAD-03: a plugin a layer declares is uninstalled and names the plugins th
         cwd,
       );
       await writeLayerFiles(locations, {
-        shared: '{"schemaVersion":1,"plugins":{"app@mp":{},"helper@mp":{}}}\n',
+        base: '{"schemaVersion":1,"plugins":{"app@mp":{},"helper@mp":{}}}\n',
         local: EMPTY_LAYER,
       });
       const { ctx, run, notifications } = makeCtx();
@@ -6228,7 +6228,7 @@ test("WR-09: an orchestrated uninstall of a dependency a layer needs is not refu
         { helper: { provenance: "dependency" }, app: { dependencies: ["helper"] } },
         cwd,
       );
-      await writeLayerFiles(locations, { shared: LAYER_DECLARING_APP, local: EMPTY_LAYER });
+      await writeLayerFiles(locations, { base: LAYER_DECLARING_APP, local: EMPTY_LAYER });
       const { ctx, run, notifications } = makeCtx();
 
       // act

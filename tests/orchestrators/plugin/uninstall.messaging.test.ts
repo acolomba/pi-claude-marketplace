@@ -443,7 +443,7 @@ for (const { title, needers, expected } of [
 
 for (const { title, otherLayer, needers, version, expected } of [
   {
-    title: "names the one needer the shared layer declares",
+    title: "names the one needer the base layer declares",
     otherLayer: "base",
     needers: ["app@tools"],
     version: "1.0.0",

@@ -523,7 +523,7 @@ test("composes ordinary, typed, errno, and manual-recovery failures", () => {
 
 const LOCAL_CAUSE =
   "The plugin hello@mp is declared only in the local config (claude-plugins.local.json). Run the command again with --local.";
-const SHARED_CAUSE =
+const BASE_CAUSE =
   "The plugin hello@mp is declared only in the base config (claude-plugins.json). Run the command again without --local.";
 const INVALID_CAUSE = 'Config file "claude-plugins.local.json" failed schema validation.';
 
@@ -536,7 +536,7 @@ for (const { refusal, reason, note } of [
   {
     refusal: new PluginInBaseLayerOnlyError("hello", "mp"),
     reason: "plugin in base layer only",
-    note: `${SHARED_CAUSE}\n\ncause: ${SHARED_CAUSE}`,
+    note: `${BASE_CAUSE}\n\ncause: ${BASE_CAUSE}`,
   },
   {
     refusal: new LayerFileUnreadableError("claude-plugins.local.json"),

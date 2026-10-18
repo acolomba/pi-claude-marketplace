@@ -346,7 +346,7 @@ test("flips autoupdate on when the marketplace is added but autoupdate is off", 
   verifyBoundary();
 });
 
-test("LAYER-01: declares a marketplace only the local layer holds in the shared layer without a clone", async (t) => {
+test("LAYER-01: declares a marketplace only the local layer holds in the base layer without a clone", async (t) => {
   // arrange
   const { cwd, locations } = await createHermeticUserScope(t, "local-only");
   await seedAddedMarketplace(locations, cwd, false, locations.localConfigJsonPath);

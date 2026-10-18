@@ -928,7 +928,7 @@ describe("collectInstallReachableMarketplaces", () => {
 });
 
 describe("loadTargetLayers", () => {
-  test("targets the shared layer without --local even when only the local layer declares the plugin", async () => {
+  test("targets the base layer without --local even when only the local layer declares the plugin", async () => {
     // arrange
     await withTempScopes(async ({ cwd }) => {
       const locations = locationsFor("project", cwd);
@@ -952,16 +952,16 @@ describe("loadTargetLayers", () => {
     });
   });
 
-  test("targets the local layer with --local even when only the shared layer declares the plugin", async () => {
+  test("targets the local layer with --local even when only the base layer declares the plugin", async () => {
     // arrange
     await withTempScopes(async ({ cwd }) => {
       const locations = locationsFor("project", cwd);
-      const sharedConfig: ScopeConfig = {
+      const baseConfig: ScopeConfig = {
         schemaVersion: 1,
         marketplaces: { mp: { source: "./mp" } },
         plugins: { "alpha@mp": {} },
       };
-      await writeConfig(locations.baseConfigJsonPath, sharedConfig);
+      await writeConfig(locations.baseConfigJsonPath, baseConfig);
 
       // act
       const target = await loadTargetLayers({ locations, local: true });
@@ -972,7 +972,7 @@ describe("loadTargetLayers", () => {
         targetConfigPath: locations.localConfigJsonPath,
         targetIsLocal: true,
         current: { schemaVersion: 1 },
-        other: sharedConfig,
+        other: baseConfig,
       });
     });
   });
@@ -999,8 +999,8 @@ describe("loadTargetLayers", () => {
   for (const { invalid, file, local, layer } of [
     { invalid: "local", file: "localConfigJsonPath", local: undefined, layer: "the other layer" },
     { invalid: "local", file: "localConfigJsonPath", local: true, layer: "the target layer" },
-    { invalid: "shared", file: "baseConfigJsonPath", local: false, layer: "the target layer" },
-    { invalid: "shared", file: "baseConfigJsonPath", local: true, layer: "the other layer" },
+    { invalid: "base", file: "baseConfigJsonPath", local: false, layer: "the target layer" },
+    { invalid: "base", file: "baseConfigJsonPath", local: true, layer: "the other layer" },
   ] satisfies readonly {
     invalid: string;
     file: "baseConfigJsonPath" | "localConfigJsonPath";
@@ -1125,7 +1125,7 @@ describe("undeclarableMarketplaceRefusal", () => {
 });
 
 describe("localOnlyMarketplaceRefusal", () => {
-  test("refuses a base-file target when only the local file declares the marketplace", () => {
+  test("refuses a base-config target when only the local config declares the marketplace", () => {
     // arrange
     const selection = {
       targetIsLocal: false,
@@ -1150,7 +1150,7 @@ describe("localOnlyMarketplaceRefusal", () => {
 
   for (const { layout, marketplace, selection } of [
     {
-      layout: "a local-file target",
+      layout: "a local-config target",
       marketplace: "mp",
       selection: {
         targetIsLocal: true,
@@ -1168,7 +1168,7 @@ describe("localOnlyMarketplaceRefusal", () => {
       },
     },
     {
-      layout: "a marketplace only the base file declares",
+      layout: "a marketplace only the base config declares",
       marketplace: "mp",
       selection: {
         targetIsLocal: false,
@@ -1352,38 +1352,38 @@ describe("pluginLayerVerdict", () => {
 });
 
 describe("namedPluginLayerRefusal", () => {
-  for (const { layout, local, shared, localFile } of [
+  for (const { layout, local, baseConfig, localConfig } of [
     {
       layout: "the target layer declares the plugin",
       local: false,
-      shared: '{"schemaVersion":1,"plugins":{"demo@mp":{}}}',
-      localFile: undefined,
+      baseConfig: '{"schemaVersion":1,"plugins":{"demo@mp":{}}}',
+      localConfig: undefined,
     },
     {
       layout: "both layers declare the plugin",
       local: true,
-      shared: '{"schemaVersion":1,"plugins":{"demo@mp":{}}}',
-      localFile: '{"schemaVersion":1,"plugins":{"demo@mp":{"enabled":false}}}',
+      baseConfig: '{"schemaVersion":1,"plugins":{"demo@mp":{}}}',
+      localConfig: '{"schemaVersion":1,"plugins":{"demo@mp":{"enabled":false}}}',
     },
     {
       layout: "no layer declares the plugin",
       local: true,
-      shared: undefined,
-      localFile: undefined,
+      baseConfig: undefined,
+      localConfig: undefined,
     },
   ] satisfies readonly {
     layout: string;
     local: boolean;
-    shared: string | undefined;
-    localFile: string | undefined;
+    baseConfig: string | undefined;
+    localConfig: string | undefined;
   }[]) {
     test(`LAYER-04: does not refuse when ${layout} (local ${local})`, async () => {
       // arrange
       await withTempScopes(async ({ cwd }) => {
         const locations = locationsFor("project", cwd);
         await mkdir(path.dirname(locations.baseConfigJsonPath), { recursive: true });
-        await writeOptionalFile(locations.baseConfigJsonPath, shared);
-        await writeOptionalFile(locations.localConfigJsonPath, localFile);
+        await writeOptionalFile(locations.baseConfigJsonPath, baseConfig);
+        await writeOptionalFile(locations.localConfigJsonPath, localConfig);
 
         // act
         const refusal = await namedPluginLayerRefusal({
@@ -1682,7 +1682,7 @@ describe("keepLocalLayerTargets", () => {
     });
   });
 
-  test("LAYER-04: keeps no dependency past a plugin the shared layer declares", async () => {
+  test("LAYER-04: keeps no dependency past a plugin the base layer declares", async () => {
     // arrange
     await withTempScopes(async ({ cwd, root }) => {
       const locations = locationsFor("project", cwd);
@@ -1747,7 +1747,7 @@ describe("keepLocalLayerTargets", () => {
     });
   });
 
-  test("CFG-03: an unreadable shared layer is an invalid manifest naming claude-plugins.json", async () => {
+  test("CFG-03: an unreadable base layer is an invalid manifest naming claude-plugins.json", async () => {
     // arrange
     await withTempScopes(async ({ cwd }) => {
       const locations = locationsFor("project", cwd);
@@ -2045,40 +2045,40 @@ describe("overwriteDisabledMemberEntries", () => {
   const enabledB =
     '{\n  "schemaVersion": 1,\n  "plugins": {\n    "b@mp": {\n      "enabled": true\n    }\n  }\n}\n';
 
-  for (const { layout, shared, local, expectedShared, expectedLocal } of [
+  for (const { layout, base, local, expectedBase, expectedLocal } of [
     {
-      layout: "the shared layer",
-      shared: disabledB,
+      layout: "the base layer",
+      base: disabledB,
       local: undefined,
-      expectedShared: enabledB,
+      expectedBase: enabledB,
       expectedLocal: undefined,
     },
     {
       layout: "the local layer",
-      shared: undefined,
+      base: undefined,
       local: disabledB,
-      expectedShared: undefined,
+      expectedBase: undefined,
       expectedLocal: enabledB,
     },
     {
       layout: "both layers",
-      shared: disabledB,
+      base: disabledB,
       local: disabledB,
-      expectedShared: enabledB,
+      expectedBase: enabledB,
       expectedLocal: enabledB,
     },
     {
-      layout: "the shared layer beside an invalid local layer",
-      shared: disabledB,
+      layout: "the base layer beside an invalid local layer",
+      base: disabledB,
       local: "{",
-      expectedShared: enabledB,
+      expectedBase: enabledB,
       expectedLocal: "{",
     },
   ] satisfies readonly {
     layout: string;
-    shared: string | undefined;
+    base: string | undefined;
     local: string | undefined;
-    expectedShared: string | undefined;
+    expectedBase: string | undefined;
     expectedLocal: string | undefined;
   }[]) {
     test(`CR-06: overwrites a member disabled in ${layout} where it is disabled`, async () => {
@@ -2086,7 +2086,7 @@ describe("overwriteDisabledMemberEntries", () => {
       await withTempScopes(async ({ cwd }) => {
         const locations = locationsFor("project", cwd);
         await mkdir(locations.scopeRoot, { recursive: true });
-        await writeOptionalFile(locations.baseConfigJsonPath, shared);
+        await writeOptionalFile(locations.baseConfigJsonPath, base);
         await writeOptionalFile(locations.localConfigJsonPath, local);
 
         // act
@@ -2098,10 +2098,10 @@ describe("overwriteDisabledMemberEntries", () => {
         // assert
         assert.deepStrictEqual(
           {
-            shared: await readOptionalFile(locations.baseConfigJsonPath),
+            base: await readOptionalFile(locations.baseConfigJsonPath),
             local: await readOptionalFile(locations.localConfigJsonPath),
           },
-          { shared: expectedShared, local: expectedLocal },
+          { base: expectedBase, local: expectedLocal },
         );
       });
     });
@@ -2121,10 +2121,10 @@ describe("overwriteDisabledMemberEntries", () => {
       // assert
       assert.deepStrictEqual(
         {
-          shared: await readOptionalFile(locations.baseConfigJsonPath),
+          base: await readOptionalFile(locations.baseConfigJsonPath),
           local: await readOptionalFile(locations.localConfigJsonPath),
         },
-        { shared: undefined, local: undefined },
+        { base: undefined, local: undefined },
       );
     });
   });

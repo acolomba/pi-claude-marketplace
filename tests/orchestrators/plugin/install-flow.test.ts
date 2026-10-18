@@ -1891,14 +1891,14 @@ test("OUT-04 / WARN-01 / FSTAT-07: the install-disabled row names the degradatio
 // `seedLocal` puts the declaration in `claude-plugins.local.json`. LAYER-09
 // reads `enabled` field by field, local first, whatever the write target is, so
 // the gate has to read both layers. Every install here is flagless, so it
-// writes the shared layer (LAYER-04). `expectOtherEntryAfter` pins what the
-// shared layer holds afterwards in the local-seeded rows.
+// writes the base layer (LAYER-04). `expectOtherEntryAfter` pins what the
+// base layer holds afterwards in the local-seeded rows.
 // ───────────────────────────────────────────────────────────────────────────
 
 interface DfenPrecedenceCase {
   readonly label: string;
   readonly tmpPrefix: string;
-  /** Seed the declaration into `claude-plugins.local.json` instead of the base file. */
+  /** Seed the declaration into `claude-plugins.local.json` instead of the base config. */
   readonly seedLocal?: boolean;
   readonly seededEntry: Record<string, unknown>;
   readonly manifestDefaultEnabled: boolean;
@@ -2002,13 +2002,13 @@ const DFEN_PRECEDENCE_CASES: readonly DfenPrecedenceCase[] = [
     expectEntryAfter: { enabled: true },
   },
   {
-    // CFG-02: the declaration lives in the LOCAL file and sets `enabled`, so
+    // CFG-02: the declaration lives in the local config and sets `enabled`, so
     // the user HAS stated an opinion and the manifest never gets to answer --
-    // reading only the base file would report the key absent, install the
+    // reading only the base config would report the key absent, install the
     // plugin disabled against that opinion, and stamp an `enabled: false` the
     // user never typed.
     label:
-      "CFG-02 / LAYER-05: an `enabled: true` in the local layer wins, and a flagless install declares the plugin in the shared layer",
+      "CFG-02 / LAYER-05: an `enabled: true` in the local layer wins, and a flagless install declares the plugin in the base layer",
     tmpPrefix: "install-dfen05-local-true-wins-",
     seedLocal: true,
     seededEntry: { enabled: true },
@@ -2016,14 +2016,14 @@ const DFEN_PRECEDENCE_CASES: readonly DfenPrecedenceCase[] = [
     expectRecordEnabled: true,
     expectArtifacts: true,
     expectEntryAfter: { enabled: true },
-    // LAYER-04 / LAYER-05: a flagless install writes the shared layer, so it
+    // LAYER-04 / LAYER-05: a flagless install writes the base layer, so it
     // declares the plugin there with an empty patch and leaves the local
     // entry as seeded.
     expectOtherEntryAfter: {},
   },
   {
-    // Both layers declare the key: shared bare `{}`, local `enabled: true`. The
-    // flagless install targets the shared layer; the local `enabled` wins in
+    // Both layers declare the key: base bare `{}`, local `enabled: true`. The
+    // flagless install targets the base layer; the local `enabled` wins in
     // the field-by-field read (LAYER-09), the verdict never fires, and the
     // plugin installs ENABLED with both entries left exactly as seeded.
     label:
@@ -2373,7 +2373,7 @@ test("DFEN-06 / CFG-02: an install with --local of a plugin the local layer decl
       const { loadMergedScopeConfig } =
         await import("../../../extensions/pi-claude-marketplace/persistence/config-merge.ts");
 
-      // The declaration lives ONLY in the local file, and it is bare: the user
+      // The declaration lives ONLY in the local config, and it is bare: the user
       // named the plugin without stating an opinion about enablement, which is
       // the one shape the manifest's `defaultEnabled` gets to answer.
       await saveConfig(
@@ -2408,7 +2408,7 @@ test("DFEN-06 / CFG-02: an install with --local of a plugin the local layer decl
         assert.deepEqual(localCfg.config.plugins?.["hello@mp"], { enabled: false });
       }
 
-      // The base file gained nothing -- and was never created, so the `absent`
+      // The base config gained nothing -- and was never created, so the `absent`
       // arm is the correct outcome rather than a `valid` file with no key.
       const baseCfg = await loadConfig(locations.baseConfigJsonPath);
       const basePlugins = baseCfg.status === "valid" ? baseCfg.config.plugins : undefined;
@@ -2496,8 +2496,8 @@ test("DFEN-06 / CFG-02: the reload after an install with --local of a plugin the
       const { merged } = await loadMergedScopeConfig(locations);
       assert.deepEqual(planReconcile(merged, after, "project"), emptyReconcilePlan("project"));
 
-      // The install declares the marketplace in the local file too (CR-02), so
-      // the local file declares every record and the reload writes no base
+      // The install declares the marketplace in the local config too (CR-02), so
+      // the local config declares every record and the reload writes no base
       // config (FIX-02, UAT-01).
       await assert.rejects(readFile(locations.baseConfigJsonPath, "utf8"), { code: "ENOENT" });
     } finally {
@@ -6065,7 +6065,7 @@ test("LAYER-07 / D-04-02: a project install declares the dependency marketplace 
   });
 });
 
-test("LAYER-07 / WB-01: a --local project install declares the dependency marketplace it added in the local file", async () => {
+test("LAYER-07 / WB-01: a --local project install declares the dependency marketplace it added in the local config", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-declare-dep-mp-local-"));
     try {
@@ -6102,7 +6102,7 @@ test("LAYER-07 / WB-01: a --local project install declares the dependency market
   });
 });
 
-test("LAYER-07 / UAT-05: a --local project install declares no dependency marketplace the base file declares", async () => {
+test("LAYER-07 / UAT-05: a --local project install declares no dependency marketplace the base config declares", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-declare-dep-mp-base-"));
     try {
@@ -7830,7 +7830,7 @@ test("WB-01: standalone install writes the plugin entry to claude-plugins.json",
         assert.deepEqual(cfg.config.plugins?.["hello@mp"], {});
       }
 
-      // Local file MUST NOT be touched on the base-target path.
+      // Local config MUST NOT be touched on the base-target path.
       assert.equal((await loadConfig(locations.localConfigJsonPath)).status, "absent");
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -8494,14 +8494,14 @@ test("D-04-07: installing a disabled dependency by name promotes it, re-material
   });
 });
 
-test("D-04-07: a --local promotion of a disabled dependency writes the enable path's own declaration to the local file", async () => {
+test("D-04-07: a --local promotion of a disabled dependency writes the enable path's own declaration to the local config", async () => {
   await withHermeticHome(async ({ hooksRouting, installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-d0407-disabled-local-"));
     try {
       // arrange: `disableSeededDependency` disables orchestrated (RECON-03
-      // skips the config write-back), so the shared layer's `{ enabled: false }`
+      // skips the config write-back), so the base layer's `{ enabled: false }`
       // for the dependency is seeded directly here. A bare local key would
-      // leave the shared `false` in force (LAYER-09); the promotion enables it
+      // leave the base `false` in force (LAYER-09); the promotion enables it
       // on purpose and says so in the layer it writes, which also declares the
       // plugin's marketplace (LAYER-06).
       const locations = locationsFor("project", cwd);
@@ -8629,14 +8629,14 @@ test("CR-01: the install cascade's re-enable arm overwrites a stale config enabl
   });
 });
 
-test("CR-06: install hello --local overwrites a base-file stale entry for a re-enabled member", async () => {
+test("CR-06: install hello --local overwrites a base-config stale entry for a re-enabled member", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-cr06-reenable-local-"));
     try {
       // arrange: identical seed to CR-01's own case, except the SECOND
       // install (the one that re-enables "some-other-plugin") passes
       // `local: true`. "some-other-plugin"'s stale `enabled: false` entry
-      // still lives in the BASE file -- nothing about its own declaring file
+      // still lives in the base config -- nothing about its own declaring file
       // changes -- so the member write must find it by declaration, not by
       // the root's own `--local` flag.
       await seedPathMarketplaceWithPlugin({
@@ -8893,7 +8893,7 @@ test("RESV-01 / D-01-32: a dependency declared only in the plugin's own manifest
   });
 });
 
-test("WB-01: --local routes the write to claude-plugins.local.json; base file untouched", async () => {
+test("WB-01: --local routes the write to claude-plugins.local.json; base config untouched", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-wb01-local-"));
     try {
@@ -8970,7 +8970,7 @@ test("WR-09 / T-56-03-01: orchestrated-mode install SKIPS write-back (neither fi
 // WB-01 / LAYER-04 -- the flag alone picks the layer the install stamps.
 // ───────────────────────────────────────────────────────────────────────────
 
-test("WB-01 / LAYER-04: a flagless install of a plugin no layer declares stamps the shared layer, local not created", async () => {
+test("WB-01 / LAYER-04: a flagless install of a plugin no layer declares stamps the base layer, local not created", async () => {
   // The majority path -- the shape every fresh `/claude:plugin install` has.
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-wb01-undeclared-"));
@@ -9011,10 +9011,10 @@ test("WB-01 / LAYER-04: a flagless install of a plugin no layer declares stamps 
   });
 });
 
-test("WB-01 / LAYER-05: an install with --local of a plugin only the shared layer declares, not yet installed, declares it in the local layer", async () => {
+test("WB-01 / LAYER-05: an install with --local of a plugin only the base layer declares, not yet installed, declares it in the local layer", async () => {
   // The flag names the layer the install writes. The plugin is not installed,
   // so the install materializes it and declares it in the local layer, leaving
-  // the shared declaration as it was.
+  // the base declaration as it was.
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-wb01-flag-wins-"));
     try {
@@ -9071,7 +9071,7 @@ test("WB-01 / LAYER-05: an install with --local of a plugin only the shared laye
 // the plugin only adds the declaration.
 // ───────────────────────────────────────────────────────────────────────────
 
-const SHARED_LAYER_DECLARING_MP =
+const BASE_LAYER_DECLARING_MP =
   '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "mp": {\n      "source": "./mp-src"\n    }\n  }\n}\n';
 
 const LAYER_DECLARING_HELLO =
@@ -9079,7 +9079,7 @@ const LAYER_DECLARING_HELLO =
 
 /**
  * LAYER-05: `hello` installed by name into one layer of the project scope.
- * The shared layer declares the marketplace beforehand, so a flagless install
+ * The base layer declares the marketplace beforehand, so a flagless install
  * under it is never the FIX-03 refusal.
  */
 async function seedInstalledInOneLayer(
@@ -9100,7 +9100,7 @@ async function seedInstalledInOneLayer(
     skills: [{ sourceName: "tool" }],
     ...(seed.landsDisabled === true && { entryDefaultEnabled: false }),
   });
-  await writeFile(locations.baseConfigJsonPath, SHARED_LAYER_DECLARING_MP);
+  await writeFile(locations.baseConfigJsonPath, BASE_LAYER_DECLARING_MP);
   const { ctx, run, notifications } = makeCtx();
   const outcome = await installPlugin({
     ctx,
@@ -9130,7 +9130,7 @@ function countLedgerRuns(transactionControl: InstallTransactionControl): { count
 
 /** LAYER-05: both layer files and the state document, read as bytes. */
 async function projectScopeBytes(cwd: string): Promise<{
-  readonly shared: string | undefined;
+  readonly base: string | undefined;
   readonly local: string | undefined;
   readonly state: string;
   readonly stateMtimeMs: number;
@@ -9139,7 +9139,7 @@ async function projectScopeBytes(cwd: string): Promise<{
   const optional = async (file: string): Promise<string | undefined> =>
     (await pathExists(file)) ? readFile(file, "utf8") : undefined;
   return {
-    shared: await optional(locations.baseConfigJsonPath),
+    base: await optional(locations.baseConfigJsonPath),
     local: await optional(locations.localConfigJsonPath),
     state: await readFile(locations.stateJsonPath, "utf8"),
     stateMtimeMs: (await stat(locations.stateJsonPath)).mtimeMs,
@@ -9149,7 +9149,7 @@ async function projectScopeBytes(cwd: string): Promise<{
 for (const direction of [
   {
     title:
-      "an install with --local of a plugin the shared layer installed declares it in the local layer and installs nothing",
+      "an install with --local of a plugin the base layer installed declares it in the local layer and installs nothing",
     installedLocal: false,
     reason: "already installed in base layer",
     after: (before: Awaited<ReturnType<typeof projectScopeBytes>>) => ({
@@ -9159,12 +9159,12 @@ for (const direction of [
   },
   {
     title:
-      "a flagless install of a plugin the local layer installed declares it in the shared layer and installs nothing",
+      "a flagless install of a plugin the local layer installed declares it in the base layer and installs nothing",
     installedLocal: true,
     reason: "already installed in local layer",
     after: (before: Awaited<ReturnType<typeof projectScopeBytes>>) => ({
       ...before,
-      shared: LAYER_DECLARING_HELLO,
+      base: LAYER_DECLARING_HELLO,
     }),
   },
 ]) {
@@ -9223,11 +9223,11 @@ for (const direction of [
   });
 }
 
-test("LAYER-05: a disabled plugin the shared layer installed takes the same no-op and stays disabled", async () => {
+test("LAYER-05: a disabled plugin the base layer installed takes the same no-op and stays disabled", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-layer05-disabled-"));
     try {
-      // arrange: the plugin's own declaration lands it disabled, so the shared
+      // arrange: the plugin's own declaration lands it disabled, so the base
       // layer holds `enabled: false` and the record is disabled.
       const { ctx, run, notifications } = await seedInstalledInOneLayer(cwd, installPlugin, {
         local: false,
@@ -9247,7 +9247,7 @@ test("LAYER-05: a disabled plugin the shared layer installed takes the same no-o
       });
 
       // assert: the local layer declares the plugin without `enabled`, so the
-      // shared `enabled: false` still decides (LAYER-09), and the disabled
+      // base `enabled: false` still decides (LAYER-09), and the disabled
       // record is untouched.
       assert.deepStrictEqual(
         { notifications, files: await projectScopeBytes(cwd) },
@@ -9350,7 +9350,7 @@ test("LAYER-05 / D-04-07: a dependency record the other layer declares is promot
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-layer05-dependency-"));
     try {
-      // arrange: a hand edit declares the dependency in the shared layer.
+      // arrange: a hand edit declares the dependency in the base layer.
       const locations = locationsFor("project", cwd);
       const { ctx, run, notifications } = await seedDependencyInstalled(cwd, installPlugin);
       await writeFile(
@@ -9398,11 +9398,11 @@ for (const arm of [
   { configSource: "local" as const, tmpPrefix: "install-wb01-orch-local-" },
   { configSource: "base" as const, tmpPrefix: "install-wb01-orch-base-" },
 ]) {
-  test(`WB-01 / UAT-05: the orchestrated stamp targets the ${arm.configSource} file, unchanged`, async () => {
+  test(`WB-01 / UAT-05: the orchestrated stamp targets the ${arm.configSource} config, unchanged`, async () => {
     // The reconcile apply path passes `local: op.configSource === "local"`, and
     // the argument that this arm cannot move is airtight: a "local" source sets
     // the flag, and a "base" source implies the key is ABSENT from the local
-    // file, because a local entry would have made the merged source "local"
+    // config, because a local entry would have made the merged source "local"
     // (CFG-02). There is no third case. An argument is not a test, though, and
     // this is the arm a future change to `configSource` could break silently.
     //
@@ -9598,14 +9598,14 @@ test("CFG-03: an invalid local layer aborts a flagless install and changes nothi
       assert.match(
         note.message,
         /claude-plugins\.local\.json/,
-        "the abort must name the unreadable local file",
+        "the abort must name the unreadable local config",
       );
       assert.ok(
         !note.message.includes(locations.localConfigJsonPath),
         `MUST NOT leak the absolute path, got: ${note.message}`,
       );
 
-      // Nothing was written anywhere: no base file was created, no state
+      // Nothing was written anywhere: no base config was created, no state
       // mutation, and the no-save abort discipline holds byte for byte.
       const { loadConfig } =
         await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
@@ -9620,7 +9620,7 @@ test("CFG-03: an invalid local layer aborts a flagless install and changes nothi
   });
 });
 
-/** FIX-03: declare the seeded `mp` in the local file only, as `marketplace add --local` does. */
+/** FIX-03: declare the seeded `mp` in the local config only, as `marketplace add --local` does. */
 async function declareMarketplaceLocally(localConfigJsonPath: string): Promise<string> {
   const localBytes =
     '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "mp": {\n      "source": "./mp-src"\n    }\n  }\n}\n';
@@ -9629,7 +9629,7 @@ async function declareMarketplaceLocally(localConfigJsonPath: string): Promise<s
   return localBytes;
 }
 
-test("FIX-03: a flagless install under a marketplace only the local file declares is refused and writes nothing", async () => {
+test("FIX-03: a flagless install under a marketplace only the local config declares is refused and writes nothing", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-fix03-refused-"));
     try {
@@ -9726,7 +9726,7 @@ test("FIX-03: installing a recorded dependency by name under a local-only market
   });
 });
 
-test("FIX-03: install --local under a marketplace only the local file declares installs and declares the plugin locally", async () => {
+test("FIX-03: install --local under a marketplace only the local config declares installs and declares the plugin locally", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-fix03-local-"));
     try {
@@ -9875,7 +9875,7 @@ test("FIX-03: an orchestrated install under a local-only marketplace is not refu
   });
 });
 
-test("CFG-03: an invalid shared layer aborts an install with --local and changes nothing", async () => {
+test("CFG-03: an invalid base layer aborts an install with --local and changes nothing", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-cfg03-shared-"));
     try {
@@ -9888,7 +9888,7 @@ test("CFG-03: an invalid shared layer aborts an install with --local and changes
         skills: [{ sourceName: "tool" }],
       });
 
-      // The shared layer declares the marketplace and is schema-invalid on an
+      // The base layer declares the marketplace and is schema-invalid on an
       // unrelated entry, so what it declares is unknowable. An install into the
       // local layer stops instead of reading it as a layer that declares
       // nothing.
@@ -9934,11 +9934,11 @@ test("CFG-03: an invalid shared layer aborts an install with --local and changes
       ]);
       assert.deepStrictEqual(
         {
-          shared: await readFile(locations.baseConfigJsonPath, "utf8"),
+          base: await readFile(locations.baseConfigJsonPath, "utf8"),
           local: await readFile(locations.localConfigJsonPath, "utf8"),
           state: await readFile(statePath, "utf8"),
         },
-        { shared: baseBytes, local: localBytes, state: stateBytes },
+        { base: baseBytes, local: localBytes, state: stateBytes },
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -9950,7 +9950,7 @@ test("CFG-03: an invalid shared layer aborts an install with --local and changes
 // UAT-05: merged-view membership gate for the adopted-marketplace declaration
 // ──────────────────────────────────────────────────────────────────────────
 
-test("LAYER-06: an install with --local under a marketplace only the shared layer declares also declares it in the local layer; the shared autoupdate survives the merge", async () => {
+test("LAYER-06: an install with --local under a marketplace only the base layer declares also declares it in the local layer; the base autoupdate survives the merge", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-uat05-local-"));
     try {
@@ -9962,10 +9962,10 @@ test("LAYER-06: an install with --local under a marketplace only the shared laye
         pluginName: "hello",
       });
 
-      // The shared layer declares the marketplace with autoupdate: true. A
+      // The base layer declares the marketplace with autoupdate: true. A
       // layer that declares a plugin also declares its marketplace, so the
       // --local install declares it in the local layer from the recorded
-      // source, and the merge keeps the shared autoupdate.
+      // source, and the merge keeps the base autoupdate.
       const { saveConfig } =
         await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
       await saveConfig(
@@ -10023,7 +10023,7 @@ test("LAYER-06: an install with --local under a marketplace only the shared laye
   });
 });
 
-test("UAT-05 / CR-02: --local install with marketplace declared NOWHERE declares it in the SAME local file; reconcile stays convergent", async () => {
+test("UAT-05 / CR-02: --local install with marketplace declared NOWHERE declares it in the SAME local config; reconcile stays convergent", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-uat05-nowhere-"));
     try {
@@ -10134,7 +10134,7 @@ test("UAT-05: base-targeted install with marketplace already in base leaves the 
         autoupdate: true,
       });
 
-      // Local file untouched.
+      // Local config untouched.
       assert.equal((await loadConfig(locations.localConfigJsonPath)).status, "absent");
     } finally {
       await rm(cwd, { recursive: true, force: true });

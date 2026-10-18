@@ -24,14 +24,14 @@ const CASES: readonly DeclaredEnabledCase[] = [
     expected: true,
   },
   {
-    title: "returns the shared false under a local entry without enabled",
+    title: "returns the base false under a local entry without enabled",
     current: { schemaVersion: 1, plugins: { [KEY]: {} } },
     other: { schemaVersion: 1, plugins: { [KEY]: { enabled: false } } },
     targetIsLocal: true,
     expected: false,
   },
   {
-    title: "returns the shared true under a local entry without enabled",
+    title: "returns the base true under a local entry without enabled",
     current: { schemaVersion: 1, plugins: { [KEY]: { enabled: true } } },
     other: { schemaVersion: 1, plugins: { [KEY]: {} } },
     targetIsLocal: false,
