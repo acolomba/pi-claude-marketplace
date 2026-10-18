@@ -226,8 +226,8 @@ Feature: Plugin uninstall
       | needs reload | false                          |
       | summary      | A plugin operation has failed. |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id        | name | status | reasons    | scope   | version | cause chain                               | cause truncated | leaks | rollback partial |
-      | tools            | project           | app@tools | app  | failed | unreadable | project | 1.0.0   | cannot read the dependencies of lib@tools | false           |       |                  |
+      | marketplace name | marketplace scope | id        | name | status | reasons    | scope   | version | cause chain                                                                    | cause truncated | leaks | rollback partial |
+      | tools            | project           | app@tools | app  | failed | unreadable | project | 1.0.0   | cannot read the dependencies of lib@tools: its marketplace manifest is invalid | false           |       |                  |
     Then the "claude-plugins.json" file of the project scope declares these plugins:
       | id        |
       | app@tools |

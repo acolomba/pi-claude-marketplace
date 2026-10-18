@@ -99,8 +99,8 @@ Feature: Plugin reinstall
       | tally failures | 1                              |
       | tally warnings | 0                              |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id                      | name        | status | reasons    | scope   | cause chain                               | cause truncated | leaks | rollback partial |
-      | (reinstall)      | project           | (reinstall)@(reinstall) | (reinstall) | failed | unreadable | project | cannot read the dependencies of app@tools | false           |       |                  |
+      | marketplace name | marketplace scope | id                      | name        | status | reasons    | scope   | cause chain                                                                    | cause truncated | leaks | rollback partial |
+      | (reinstall)      | project           | (reinstall)@(reinstall) | (reinstall) | failed | unreadable | project | cannot read the dependencies of app@tools: its marketplace manifest is invalid | false           |       |                  |
 
   Scenario: Reinstalling a dependency declares nothing in either layer
     Given the marketplace "tools" is published as a dir source

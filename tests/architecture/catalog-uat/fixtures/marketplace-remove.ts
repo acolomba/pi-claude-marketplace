@@ -157,7 +157,9 @@ export const MARKETPLACE_REMOVE_FIXTURES: FixtureMap = {
                 needsReload: false,
                 name: "tools",
                 reasons: ["unreadable"],
-                cause: new Error("cannot read the dependencies of lib@tools"),
+                cause: new Error(
+                  "cannot read the dependencies of lib@tools: its marketplace manifest is invalid",
+                ),
               },
             ],
           },
