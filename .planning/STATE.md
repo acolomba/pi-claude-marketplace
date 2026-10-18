@@ -4,12 +4,12 @@ milestone: marketplace-features
 milestone_name: Marketplace Behavioral Tests
 current_phase: 5
 current_phase_name: Marketplace Info
-status: verifying
-stopped_at: Phase 04 complete, ready to verify Phase 5
-last_updated: "2026-10-18T15:21:41.697Z"
+status: ready
+stopped_at: Phase 04 complete, ready to discuss Phase 5
+last_updated: "2026-10-18T15:23:07.568Z"
 last_activity: 2026-10-18
-last_activity_desc: Phase 04 complete, transitioned to Phase 5
-state_head: 1216a80aa3189895ff5fd4a83a70672ccaf841f0
+last_activity_desc: Phase 04 complete, Phase 5 ready for discussion
+state_head: 79bab2db59b3b14552986fb492737569aac627c6
 progress:
   total_phases: 14
   completed_phases: 8
@@ -22,19 +22,19 @@ progress:
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-10-16 after marketplace-features Phase 3)
+See: `.planning/PROJECT.md` (updated 2026-10-18 after marketplace-features Phase 4)
 
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 04 — Marketplace Remove and List
+**Current focus:** Phase 5 — Marketplace Info
 
 ## Current Position
 
 Phase: 5 — Marketplace Info
-Plan: 3
-Status: Phase complete — ready for verification
-Last activity: 2026-10-18 — Phase 04 complete, transitioned to Phase 5
+Plan: Not started
+Status: Ready to discuss
+Last activity: 2026-10-18 — Phase 04 complete, Phase 5 ready for discussion
 
 Progress: [██████░░░░] 57%
 
@@ -181,9 +181,9 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-18T13:18:29.993Z
-**Stopped at:** Phase 04 complete, ready to verify Phase 5
-**Resume file:** .planning/phases/04-marketplace-remove-and-list/04-CONTEXT.md
+**Last session:** 2026-10-18T15:23:07.568Z
+**Stopped at:** Phase 04 complete, ready to discuss Phase 5
+**Resume file:** None
 
 **Main merge (2026-10-11, quick task 261011-bsm):** `origin/main` at
 `94160614` (#248, and #250, the mcp-4 milestone released as 0.20.0) is merged
@@ -633,3 +633,14 @@ in the phase deferred items. The milestone remains open for audit and archival.
 - Phase 3.1 inserted after Phase 3: Local Declaration Leak Fix: a --local marketplace leaks into claude-plugins.json on the first-run migration (FIX-02), found in Phase 3 discussion
 - Phase 3.2 inserted after Phase 3.1: Marketplace Layer Partition (LAYER-01..03, D-MF-03)
 - Phase 3.3 inserted after Phase 3.2: Plugin Layer Partition (LAYER-04..06, D-MF-03)
+
+### Recent Decisions
+
+- D-MF-05: unscoped marketplace removal selects project before user, falls
+  back to a sole user record, and never falls through after selecting a
+  project record whose base layer does not declare the marketplace.
+
+### Blockers/Concerns
+
+None from Phase 4. Tagged remote source-kind rows remain intentionally deferred
+to Phases 9 and 10, where their loopback stand-ins are delivered.

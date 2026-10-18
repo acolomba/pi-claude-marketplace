@@ -75,9 +75,9 @@
     }
   ],
   "next": {
-    "command": "$gsd-progress --next",
-    "label": "Advance to the next step (verify)",
-    "reason": "Phase 9 of 14 · 57% · ready to verify"
+    "command": "$gsd-discuss-phase 5",
+    "label": "Discuss Phase 5",
+    "reason": "Phase 9 of 14 · 57% · ready for discussion"
   },
-  "updated_at": "2026-10-18T15:21:41.776Z"
+  "updated_at": "2026-10-18T15:23:07.568Z"
 }
