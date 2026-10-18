@@ -118,6 +118,19 @@ export async function writeDependencyAllowance(root: string, target: string): Pr
   await writeFile(manifestPath(root), JSON.stringify(manifest));
 }
 
+/** Sets the optional marketplace description without changing other fields. */
+export async function writeMarketplaceDescription(
+  root: string,
+  description: string,
+): Promise<void> {
+  const manifest = JSON.parse(await readFile(manifestPath(root), "utf8")) as Record<
+    string,
+    unknown
+  >;
+  manifest.description = description;
+  await writeFile(manifestPath(root), JSON.stringify(manifest));
+}
+
 /**
  * Rewrites the manifest of the marketplace `name` under `root` as valid JSON
  * that breaks the manifest schema: `plugins` is a string. Valid JSON keeps the

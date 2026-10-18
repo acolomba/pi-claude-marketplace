@@ -4,23 +4,44 @@ Feature: Marketplace info
   The scenarios run the real extension in a headless Pi, read its JSON results,
   and use local marketplaces in place of published ones.
 
-  Scenario: Info on a directory marketplace shows its absolute path and the default autoupdate state
-    Given the marketplace "tools" is published as a dir source
+  Scenario Outline: Info shows the source identity and description
+    Given the marketplace "tools" is published as a <source kind> source
     Given the marketplace "tools" offers these plugins:
       | name | version |
       | demo | 1.0.0   |
-    Given the user has run "/claude:plugin marketplace add ~/marketplaces/tools --scope project"
+    Given the marketplace "tools" has the description "Tools for formatting"
+    Given the user has run "/claude:plugin marketplace add <source> --scope project"
     When the user runs "/claude:plugin marketplace info tools --scope project"
-    Then the result has these fields:
+    Then the marketplace info result has these fields:
       | kind                    | marketplace-info          |
       | name                    | tools                     |
       | scope                   | project                   |
       | details autoupdate      | false                     |
       | details last updated at | {scenario time}           |
-      | source kind             | path                      |
-      | source abs path         | {home}/marketplaces/tools |
+      | source kind             | <expected source kind>    |
+      | source abs path         | <source abs path>         |
+      | source url              | <source url>              |
+      | source owner            | <source owner>            |
+      | source repo             | <source repo>             |
+      | source ref              | <source ref>              |
+      | description             | Tools for formatting      |
       | severity                | info                      |
       | needs reload            | false                     |
+
+    Examples:
+      | source kind | source                                                    | expected source kind | source abs path                 | source url | source owner | source repo | source ref |
+      | dir         | {home}/marketplaces/tools                                 | path                 | {home}/marketplaces/tools       |            |              |             |            |
+      | file        | {home}/marketplaces/tools/.claude-plugin/marketplace.json | path                 | {home}/marketplaces/tools       |            |              |             |            |
+
+    @url
+    Examples:
+      | source kind | source                                   | expected source kind | source abs path | source url                      | source owner | source repo | source ref |
+      | url         | https://{git host}/acme/tools.git#stable | url                  |                 | https://{git host}/acme/tools   |              |             | stable     |
+
+    @github
+    Examples:
+      | source kind | source            | expected source kind | source abs path | source url | source owner | source repo | source ref |
+      | github      | acme/tools#stable | github               |                 |            | acme         | tools       | stable     |
 
   Scenario: Info on a marketplace neither scope holds fails as not added
     When the user runs "/claude:plugin marketplace info tools"

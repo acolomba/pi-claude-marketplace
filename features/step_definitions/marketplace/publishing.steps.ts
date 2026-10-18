@@ -21,6 +21,7 @@ import {
 import { runCommand } from "../../lib/pi-commands.ts";
 import {
   allowDependenciesOn,
+  describeMarketplace,
   invalidateManifest,
   publishMarketplace,
   requireFreeRoot,
@@ -67,6 +68,13 @@ Given(
   "the marketplace {string} offers these plugins with dependencies:",
   async function (this: ScenarioWorld, name: string, table: DataTable) {
     await offer(this, name, readOfferedPluginsWithDependencies(table));
+  },
+);
+
+Given(
+  "the marketplace {string} has the description {string}",
+  async function (this: ScenarioWorld, name: string, description: string) {
+    await describeMarketplace(this.requirePublished(name), description);
   },
 );
 
