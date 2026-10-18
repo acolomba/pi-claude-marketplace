@@ -5,10 +5,9 @@
 // `refreshGitHubClone`. The grep-gate test in
 // `tests/orchestrators/marketplace/info.test.ts` enforces this
 // structurally. IL-2: exactly one `notify()` call per invocation on the
-// all-success / all-not-added paths. The partial-failure path
-// intentionally emits one notify per failed scope (in addition to the
-// success cascade) so a corrupt manifest in one scope cannot silently
-// hide behind a healthy other-scope render.
+// all-success / all-not-added paths. The partial-failure path intentionally
+// emits one notify per scope in project-first order, so a corrupt manifest
+// in one scope cannot silently hide behind a healthy other-scope render.
 
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { notify } from "../../shared/notification-dispatch.ts";
@@ -177,15 +176,29 @@ export async function getMarketplaceInfo(opts: GetMarketplaceInfoOptions): Promi
 
   // Try each candidate independently so a manifest failure on one scope
   // does not poison the fan-out -- the other scope still renders.
-  const blocks: MarketplaceInfoMessage[] = [];
-  const failures: NotificationMessage[] = [];
+  const outcomes: NotificationMessage[] = [];
   for (const f of found) {
     try {
       // eslint-disable-next-line no-await-in-loop -- at most two scopes, one manifest block each
-      blocks.push(await buildBlock(f.record, f.autoupdate));
+      outcomes.push(await buildBlock(f.record, f.autoupdate));
     } catch (err) {
-      failures.push(buildManifestFailureMessage(f.record, narrowProbeError(err), f.autoupdate));
+      outcomes.push(buildManifestFailureMessage(f.record, narrowProbeError(err), f.autoupdate));
     }
+  }
+
+  // A partial or complete failure emits one result per candidate in the same
+  // project-first order as collection. Keeping success and failure in one
+  // outcome list prevents either kind from jumping ahead of the other.
+  if (
+    !outcomes.every(
+      (outcome): outcome is MarketplaceInfoMessage => outcome.kind === "marketplace-info",
+    )
+  ) {
+    for (const outcome of outcomes) {
+      notify(opts.ctx, opts.run, outcome);
+    }
+
+    return;
   }
 
   // Single success -> emit the bare block (matches the prior single-
@@ -193,18 +206,10 @@ export async function getMarketplaceInfo(opts: GetMarketplaceInfoOptions): Promi
   // fan-out cascade (project-first per the iteration order above).
   // The destructure proves the non-empty tuple shape that the cascade
   // type requires.
-  const [first, ...remaining] = blocks;
+  const [first, ...remaining] = outcomes;
   if (first !== undefined && remaining.length === 0) {
     notify(opts.ctx, opts.run, first);
   } else if (first !== undefined) {
     notify(opts.ctx, opts.run, { kind: "marketplace-info-cascade", blocks: [first, ...remaining] });
-  }
-
-  // Surface each failed scope as its own notify call. This intentionally
-  // breaks IL-2's single-notify rule on the partial-failure path so a
-  // corrupt manifest in one scope cannot silently hide behind a healthy
-  // other-scope render. Callers wanting strict IL-2 must pass `--scope`.
-  for (const failure of failures) {
-    notify(opts.ctx, opts.run, failure);
   }
 }

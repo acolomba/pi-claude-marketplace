@@ -82,9 +82,11 @@ function notificationBoundary(expectation?: NotificationExpectation): {
 
 function multiNotificationBoundary(expectations: readonly NotificationExpectation[]): {
   readonly ctx: ExtensionContext;
+  readonly notifications: readonly NotificationExpectation[];
   readonly run: NotificationRun;
   verifyAll(): void;
 } {
+  const notifications: NotificationExpectation[] = [];
   const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
   const ui = mock<ExtensionContext["ui"]>({ exactParams: true, name: "extension UI" });
   when(() => ctx.mode)
@@ -93,20 +95,16 @@ function multiNotificationBoundary(expectations: readonly NotificationExpectatio
   when(() => ctx.ui)
     .thenReturn(ui)
     .times(expectations.length);
-  for (const expectation of expectations) {
-    if (expectation.severity === undefined) {
-      when(() => {
-        ui.notify(expectation.message);
-      }).thenReturn(undefined);
-    } else {
-      when(() => {
-        ui.notify(expectation.message, expectation.severity);
-      }).thenReturn(undefined);
-    }
-  }
+  // eslint-disable-next-line @typescript-eslint/unbound-method -- strong-mock records method arguments through the method reference
+  when(() => ui.notify)
+    .thenReturn((message: string, severity?: "error" | "info" | "warning") => {
+      notifications.push(severity === undefined ? { message } : { message, severity });
+    })
+    .times(expectations.length);
 
   return {
     ctx,
+    notifications,
     run: runWithNothingLoaded(),
     verifyAll(): void {
       verify(ctx);
@@ -1000,6 +998,151 @@ test("implicit scope emits a healthy project block before a failed user block", 
     });
 
     // assert
+    assert.deepStrictEqual(boundary.notifications, [
+      {
+        message: "● mixed-mp [project] <no autoupdate>\npath: /repo/path/mixed-mp",
+      },
+      {
+        message: [
+          "A plugin operation has failed.",
+          "",
+          "● mixed-mp [user] <no autoupdate>",
+          "  ⊘ mixed-mp (failed) {source missing}",
+          "    components: not resolved",
+        ].join("\n"),
+        severity: "error",
+      },
+    ]);
+    assert.deepStrictEqual(await snapshotEnvironment(home, cwd), before);
+    boundary.verifyAll();
+  });
+});
+
+test("implicit scope emits a failed project block before a healthy user block", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const projectLocations = locationsFor("project", cwd);
+    const userLocations = locationsFor("user", cwd);
+    const projectManifestPath = path.join(projectLocations.extensionRoot, "mixed.json");
+    const userManifestPath = path.join(userLocations.extensionRoot, "mixed.json");
+    await saveMarketplace(
+      projectLocations,
+      marketplaceRecord({
+        addedFromCwd: cwd,
+        manifestPath: projectManifestPath,
+        marketplaceRoot: "/repo/path/mixed-mp",
+        name: "mixed-mp",
+        scope: "project",
+        source: pathSource("/repo/path/mixed-mp"),
+      }),
+    );
+    await writeMarketplaceJson(userManifestPath, "mixed-mp");
+    await saveMarketplace(
+      userLocations,
+      marketplaceRecord({
+        addedFromCwd: cwd,
+        manifestPath: userManifestPath,
+        marketplaceRoot: "/home/user/marketplaces/mixed-mp",
+        name: "mixed-mp",
+        scope: "user",
+        source: pathSource("/home/user/marketplaces/mixed-mp"),
+      }),
+    );
+    const before = await snapshotEnvironment(home, cwd);
+    const expectedNotifications: readonly NotificationExpectation[] = [
+      {
+        message: [
+          "A plugin operation has failed.",
+          "",
+          "● mixed-mp [project] <no autoupdate>",
+          "  ⊘ mixed-mp (failed) {source missing}",
+          "    components: not resolved",
+        ].join("\n"),
+        severity: "error",
+      },
+      {
+        message: "● mixed-mp [user] <no autoupdate>\npath: /home/user/marketplaces/mixed-mp",
+      },
+    ];
+    const boundary = multiNotificationBoundary(expectedNotifications);
+
+    // act
+    await getMarketplaceInfo({
+      ctx: boundary.ctx,
+      run: boundary.run,
+      name: "mixed-mp",
+      cwd,
+    });
+
+    // assert
+    assert.deepStrictEqual(boundary.notifications, expectedNotifications);
+    assert.deepStrictEqual(await snapshotEnvironment(home, cwd), before);
+    boundary.verifyAll();
+  });
+});
+
+test("implicit scope emits failed project and user blocks in scope order", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const projectLocations = locationsFor("project", cwd);
+    const userLocations = locationsFor("user", cwd);
+    await saveMarketplace(
+      projectLocations,
+      marketplaceRecord({
+        addedFromCwd: cwd,
+        manifestPath: path.join(projectLocations.extensionRoot, "mixed.json"),
+        marketplaceRoot: "/repo/path/mixed-mp",
+        name: "mixed-mp",
+        scope: "project",
+        source: pathSource("/repo/path/mixed-mp"),
+      }),
+    );
+    await saveMarketplace(
+      userLocations,
+      marketplaceRecord({
+        addedFromCwd: cwd,
+        manifestPath: path.join(userLocations.extensionRoot, "mixed.json"),
+        marketplaceRoot: "/home/user/marketplaces/mixed-mp",
+        name: "mixed-mp",
+        scope: "user",
+        source: pathSource("/home/user/marketplaces/mixed-mp"),
+      }),
+    );
+    const before = await snapshotEnvironment(home, cwd);
+    const expectedNotifications: readonly NotificationExpectation[] = [
+      {
+        message: [
+          "A plugin operation has failed.",
+          "",
+          "● mixed-mp [project] <no autoupdate>",
+          "  ⊘ mixed-mp (failed) {source missing}",
+          "    components: not resolved",
+        ].join("\n"),
+        severity: "error",
+      },
+      {
+        message: [
+          "A plugin operation has failed.",
+          "",
+          "● mixed-mp [user] <no autoupdate>",
+          "  ⊘ mixed-mp (failed) {source missing}",
+          "    components: not resolved",
+        ].join("\n"),
+        severity: "error",
+      },
+    ];
+    const boundary = multiNotificationBoundary(expectedNotifications);
+
+    // act
+    await getMarketplaceInfo({
+      ctx: boundary.ctx,
+      run: boundary.run,
+      name: "mixed-mp",
+      cwd,
+    });
+
+    // assert
+    assert.deepStrictEqual(boundary.notifications, expectedNotifications);
     assert.deepStrictEqual(await snapshotEnvironment(home, cwd), before);
     boundary.verifyAll();
   });
