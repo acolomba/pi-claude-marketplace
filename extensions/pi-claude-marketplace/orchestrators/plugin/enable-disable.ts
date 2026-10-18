@@ -1959,7 +1959,7 @@ interface EnabledFlagWriteTarget {
   readonly plugin: string;
   readonly enable: boolean;
   readonly orchestrated: boolean;
-  readonly scopeRoot: string;
+  readonly locations: ScopedLocations;
 }
 
 /** LAYER-04: the loaded arm, both layers' parses with the target marked. */
@@ -1994,9 +1994,8 @@ async function writeEnabledFlagBack(
     state,
     marketplace: write.marketplace,
     plugin: write.plugin,
-    targetConfigPath: selection.targetConfigPath,
+    locations: write.locations,
     targetIsLocal: selection.targetIsLocal,
-    scopeRoot: write.scopeRoot,
     pluginPatch: { enabled: write.enable },
   });
 }
@@ -2385,7 +2384,7 @@ async function runSetEnabledOutcome(
     plugin,
     enable,
     orchestrated,
-    scopeRoot: locations.scopeRoot,
+    locations,
   };
 
   try {

@@ -1308,7 +1308,6 @@ interface PromotionArgs {
   readonly config: {
     readonly current: ScopeConfig;
     readonly other: ScopeConfig;
-    readonly targetConfigPath: string;
     readonly targetIsLocal: boolean;
   };
   readonly capture: InstallFailureCapture;
@@ -1425,9 +1424,8 @@ async function declarePromotedPlugin(
     state: args.state,
     marketplace: args.opts.marketplace,
     plugin: args.opts.plugin,
-    targetConfigPath: args.config.targetConfigPath,
+    locations: args.locations,
     targetIsLocal: args.config.targetIsLocal,
-    scopeRoot: args.locations.scopeRoot,
     pluginPatch,
   });
 }
@@ -1771,9 +1769,8 @@ async function declareInstalledPlugin(args: {
     state,
     marketplace,
     plugin,
-    targetConfigPath: selection.targetConfigPath,
+    locations: args.locations,
     targetIsLocal: selection.targetIsLocal,
-    scopeRoot: args.locations.scopeRoot,
     pluginPatch: {},
   });
   return {
@@ -2076,7 +2073,7 @@ async function installPluginWithTransaction(
           state,
           locations,
           orchestrated,
-          config: { current, other, targetConfigPath, targetIsLocal },
+          config: { current, other, targetIsLocal },
           capture,
           transaction,
           sink: cascadeFailure,
@@ -2274,9 +2271,8 @@ async function installPluginWithTransaction(
             state,
             marketplace,
             plugin,
-            targetConfigPath,
+            locations,
             targetIsLocal,
-            scopeRoot: locations.scopeRoot,
             // DFEN-04: the plugin key alone unless the install actually landed
             // disabled, in which case the declaration carries it through.
             // D-04-02: no dependency plugin gets a key -- the config names only

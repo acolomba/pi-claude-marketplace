@@ -951,6 +951,9 @@ function recordsByKey(state: ExtensionState): ReadonlyMap<string, InstalledPlugi
  * caller's install added to the scope, such as a dependency's. Each one is
  * declared in the same patch unless either layer already declares it, so the
  * desired state names every marketplace the scope now owns.
+ *
+ * `targetIsLocal` alone names the target layer: the config path written and
+ * the layer a refusal names both come from it, so the two cannot disagree.
  */
 export async function writeAdoptingConfigEntries(opts: {
   readonly current: ScopeConfig;
@@ -958,9 +961,8 @@ export async function writeAdoptingConfigEntries(opts: {
   readonly state: ExtensionState;
   readonly marketplace: string;
   readonly plugin: string;
-  readonly targetConfigPath: string;
+  readonly locations: ScopedLocations;
   readonly targetIsLocal: boolean;
-  readonly scopeRoot: string;
   readonly pluginPatch: Partial<PluginConfigEntry>;
   readonly addedMarketplaces?: readonly string[];
 }): Promise<void> {
@@ -985,7 +987,8 @@ export async function writeAdoptingConfigEntries(opts: {
   const adopted =
     own.kind === "source" ? [[opts.marketplace, { source: own.source }] as const, ...added] : added;
 
-  await writeBatchedConfigEntries(opts.current, opts.targetConfigPath, opts.scopeRoot, {
+  const { targetConfigPath } = targetLayerPaths(opts.locations, opts.targetIsLocal);
+  await writeBatchedConfigEntries(opts.current, targetConfigPath, opts.locations.scopeRoot, {
     marketplaces: Object.fromEntries(adopted),
     plugins: { [`${opts.plugin}@${opts.marketplace}`]: opts.pluginPatch },
   });

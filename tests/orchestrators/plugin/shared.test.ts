@@ -1789,9 +1789,8 @@ describe("writeAdoptingConfigEntries", () => {
         state,
         marketplace: "mp",
         plugin: "alpha",
-        targetConfigPath: locations.baseConfigJsonPath,
+        locations,
         targetIsLocal: false,
-        scopeRoot: locations.scopeRoot,
         pluginPatch: { enabled: false },
       });
 
@@ -1823,9 +1822,8 @@ describe("writeAdoptingConfigEntries", () => {
         state,
         marketplace: "mp",
         plugin: "alpha",
-        targetConfigPath: locations.baseConfigJsonPath,
+        locations,
         targetIsLocal: false,
-        scopeRoot: locations.scopeRoot,
         pluginPatch: {},
       });
 
@@ -1855,9 +1853,8 @@ describe("writeAdoptingConfigEntries", () => {
         state,
         marketplace: "mp",
         plugin: "alpha",
-        targetConfigPath: locations.localConfigJsonPath,
+        locations,
         targetIsLocal: true,
-        scopeRoot: locations.scopeRoot,
         pluginPatch: { enabled: true },
       });
 
@@ -1891,9 +1888,8 @@ describe("writeAdoptingConfigEntries", () => {
         state,
         marketplace: "mp",
         plugin: "alpha",
-        targetConfigPath: locations.localConfigJsonPath,
+        locations,
         targetIsLocal: true,
-        scopeRoot: locations.scopeRoot,
         pluginPatch: {},
       });
 
@@ -1922,9 +1918,8 @@ describe("writeAdoptingConfigEntries", () => {
         state: unknownSourceState(),
         marketplace: "mp",
         plugin: "alpha",
-        targetConfigPath: locations.localConfigJsonPath,
+        locations,
         targetIsLocal: true,
-        scopeRoot: locations.scopeRoot,
         pluginPatch: {},
       });
 
@@ -1958,9 +1953,8 @@ describe("writeAdoptingConfigEntries", () => {
             state: unknownSourceState(),
             marketplace: "mp",
             plugin: "alpha",
-            targetConfigPath,
+            locations,
             targetIsLocal,
-            scopeRoot: locations.scopeRoot,
             pluginPatch: {},
           }),
           (error: unknown) => {
@@ -2026,9 +2020,8 @@ describe("writeAdoptingConfigEntries", () => {
           state,
           marketplace: "mp",
           plugin: "alpha",
-          targetConfigPath: locations.baseConfigJsonPath,
+          locations,
           targetIsLocal: false,
-          scopeRoot: locations.scopeRoot,
           pluginPatch: {},
           addedMarketplaces,
         });
