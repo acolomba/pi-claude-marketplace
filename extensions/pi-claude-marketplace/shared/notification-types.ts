@@ -238,19 +238,18 @@ export type Reason =
   // rides the row, and each server with its blocking feature rides the info
   // breakdown.
   | "unsupported mcp"
-  // FIX-03 / D-MF-02: the command would write a plugin declaration into
-  // `claude-plugins.json` while only `claude-plugins.local.json` declares the
-  // plugin's marketplace, so a teammate who reads the shared file could not
-  // resolve it. The refusal rides a `failed` row, and the remedy, running the
-  // command again with `--local`, rides the cause line. `dangling reference`
-  // cannot carry it: there the merged configuration lacks the marketplace, and
-  // here it declares it, in the per-machine file only.
-  | "marketplace declared locally"
+  // FIX-03 / D-MF-02: the command would write a plugin declaration into the
+  // base layer while only the local layer declares the plugin's marketplace,
+  // so a teammate who reads the base config could not resolve it. The refusal
+  // rides a `failed` row, and the remedy, running the command again with
+  // `--local`, rides the cause line. `dangling reference` cannot carry it:
+  // there the merged configuration lacks the marketplace, and here it declares
+  // it, in the per-machine local layer only.
+  | "marketplace in local layer only"
   // LAYER-02 / D-MF-03: a command run with `--local` names a marketplace that
-  // only `claude-plugins.json` declares. The refusal rides a `failed` row, and
-  // the remedy, running the command again without `--local`, rides the cause
-  // line.
-  | "marketplace declared in shared config"
+  // only the base layer declares. The refusal rides a `failed` row, and the
+  // remedy, running the command again without `--local`, rides the cause line.
+  | "marketplace in base layer only"
   // LAYER-04 / D-MF-03: a named plugin command without `--local` targets the
   // base layer, and only the local layer declares the plugin. The refusal
   // rides a `failed` row, and the remedy, running the command again with

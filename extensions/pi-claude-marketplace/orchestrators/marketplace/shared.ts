@@ -44,8 +44,8 @@ import {
   errorMessage,
   InvalidMarketplaceManifestError,
   isErrnoException,
-  MarketplaceDeclaredInSharedConfigError,
-  MarketplaceDeclaredLocallyError,
+  MarketplaceInBaseLayerOnlyError,
+  MarketplaceInLocalLayerOnlyError,
   MarketplaceNotFoundError,
   PluginShapeError,
 } from "../../shared/errors.ts";
@@ -1007,8 +1007,8 @@ export type MarketplaceLayerVerdict =
   | { readonly kind: "declared"; readonly other: "declares" | "silent" | "unreadable" }
   | {
       readonly kind: "refused";
-      readonly reason: "marketplace declared locally" | "marketplace declared in shared config";
-      readonly refusal: MarketplaceDeclaredLocallyError | MarketplaceDeclaredInSharedConfigError;
+      readonly reason: "marketplace in local layer only" | "marketplace in base layer only";
+      readonly refusal: MarketplaceInLocalLayerOnlyError | MarketplaceInBaseLayerOnlyError;
     }
   | { readonly kind: "undeclared" }
   | { readonly kind: "other-unreadable"; readonly otherBasename: string };
@@ -1050,12 +1050,12 @@ export function marketplaceLayerVerdict(args: {
   return args.targetIsLocal
     ? {
         kind: "refused",
-        reason: "marketplace declared in shared config",
-        refusal: new MarketplaceDeclaredInSharedConfigError(args.marketplace),
+        reason: "marketplace in base layer only",
+        refusal: new MarketplaceInBaseLayerOnlyError(args.marketplace),
       }
     : {
         kind: "refused",
-        reason: "marketplace declared locally",
-        refusal: new MarketplaceDeclaredLocallyError(args.marketplace),
+        reason: "marketplace in local layer only",
+        refusal: new MarketplaceInLocalLayerOnlyError(args.marketplace),
       };
 }

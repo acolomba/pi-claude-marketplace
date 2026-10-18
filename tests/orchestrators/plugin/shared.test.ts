@@ -45,7 +45,7 @@ import {
   CrossPluginConflictError,
   DependencyDeclarationsUnreadableError,
   LayerFileUnreadableError,
-  MarketplaceDeclaredLocallyError,
+  MarketplaceInLocalLayerOnlyError,
   MarketplaceNotFoundError,
   MarketplaceSourceUndeclarableError,
   PluginInBaseLayerOnlyError,
@@ -1137,13 +1137,13 @@ describe("localOnlyMarketplaceRefusal", () => {
     const refusal = localOnlyMarketplaceRefusal(selection, "mp");
 
     // assert
-    assert.ok(refusal instanceof MarketplaceDeclaredLocallyError);
+    assert.ok(refusal instanceof MarketplaceInLocalLayerOnlyError);
     assert.deepStrictEqual(
       { marketplace: refusal.marketplace, message: refusal.message },
       {
         marketplace: "mp",
         message:
-          "The marketplace mp is declared only in claude-plugins.local.json. Run the command again with --local.",
+          "The marketplace mp is declared only in the local config (claude-plugins.local.json). Run the command again with --local.",
       },
     );
   });

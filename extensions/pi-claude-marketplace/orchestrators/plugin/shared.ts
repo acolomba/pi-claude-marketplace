@@ -32,7 +32,7 @@ import {
   errorMessage,
   isErrnoException,
   LayerFileUnreadableError,
-  MarketplaceDeclaredLocallyError,
+  MarketplaceInLocalLayerOnlyError,
   MarketplaceNotFoundError,
   MarketplaceSourceUndeclarableError,
   PluginInBaseLayerOnlyError,
@@ -698,7 +698,7 @@ export function localOnlyMarketplaceRefusal(
     "targetIsLocal" | "current" | "sibling"
   >,
   marketplace: string,
-): MarketplaceDeclaredLocallyError | undefined {
+): MarketplaceInLocalLayerOnlyError | undefined {
   if (
     selection.targetIsLocal ||
     ownValue(selection.current.marketplaces, marketplace) !== undefined ||
@@ -707,7 +707,7 @@ export function localOnlyMarketplaceRefusal(
     return undefined;
   }
 
-  return new MarketplaceDeclaredLocallyError(marketplace);
+  return new MarketplaceInLocalLayerOnlyError(marketplace);
 }
 
 /**

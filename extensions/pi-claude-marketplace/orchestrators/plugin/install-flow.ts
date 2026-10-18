@@ -19,7 +19,7 @@ import {
   appendLeaks,
   errorMessage,
   rethrowInvalidGitHubBaseUrl,
-  type MarketplaceDeclaredLocallyError,
+  type MarketplaceInLocalLayerOnlyError,
   type MarketplaceSourceUndeclarableError,
 } from "../../shared/errors.ts";
 import { cleanupStaging, createRemovalOps } from "../../shared/fs-utils.ts";
@@ -1718,7 +1718,7 @@ function standaloneMarketplaceRefusal(
 
   const locally = localOnlyMarketplaceRefusal(selection, opts.marketplace);
   if (locally !== undefined) {
-    return { kind: "refused", refusal: locally, reason: "marketplace declared locally" };
+    return { kind: "refused", refusal: locally, reason: "marketplace in local layer only" };
   }
 
   const undeclarable = undeclarableMarketplaceRefusal(selection, state, opts.marketplace);
@@ -1878,8 +1878,8 @@ type InstallTransactionOutcome =
   | { kind: "marketplace-absent" }
   | {
       kind: "refused";
-      refusal: MarketplaceDeclaredLocallyError | MarketplaceSourceUndeclarableError;
-      reason: "marketplace declared locally" | "unsupported source";
+      refusal: MarketplaceInLocalLayerOnlyError | MarketplaceSourceUndeclarableError;
+      reason: "marketplace in local layer only" | "unsupported source";
     }
   | {
       kind: "declared";

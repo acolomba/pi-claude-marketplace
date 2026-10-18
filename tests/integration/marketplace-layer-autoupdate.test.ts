@@ -194,16 +194,16 @@ const refusalCases = [
   {
     label: "without --local on a marketplace only the local file declares",
     addedLocally: true,
-    reason: "marketplace declared locally",
+    reason: "marketplace in local layer only",
     cause:
-      "The marketplace tools is declared only in claude-plugins.local.json. Run the command again with --local.",
+      "The marketplace tools is declared only in the local config (claude-plugins.local.json). Run the command again with --local.",
   },
   {
     label: "with --local on a marketplace only the shared file declares",
     addedLocally: false,
-    reason: "marketplace declared in shared config",
+    reason: "marketplace in base layer only",
     cause:
-      "The marketplace tools is declared only in claude-plugins.json. Run the command again without --local.",
+      "The marketplace tools is declared only in the base config (claude-plugins.json). Run the command again without --local.",
   },
 ] as const;
 

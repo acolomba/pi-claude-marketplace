@@ -55,7 +55,7 @@ import {
   DependencyCascadeError,
   InvalidGitHubBaseUrlError,
   InvalidMarketplaceManifestError,
-  MarketplaceDeclaredLocallyError,
+  MarketplaceInLocalLayerOnlyError,
   MarketplaceSourceUndeclarableError,
   PluginShapeError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
@@ -9652,17 +9652,17 @@ test("FIX-03: a flagless install under a marketplace only the local file declare
       // assert
       assert.deepStrictEqual(outcome, {
         status: "failed",
-        error: new MarketplaceDeclaredLocallyError("mp"),
+        error: new MarketplaceInLocalLayerOnlyError("mp"),
         cause:
-          "The marketplace mp is declared only in claude-plugins.local.json. Run the command again with --local.",
+          "The marketplace mp is declared only in the local config (claude-plugins.local.json). Run the command again with --local.",
       });
       assert.deepStrictEqual(notifications, [
         {
           message:
             "A plugin operation has failed.\n\n" +
             "● mp [project]\n" +
-            "  ⊘ hello (failed) {marketplace declared locally}\n" +
-            "    cause: The marketplace mp is declared only in claude-plugins.local.json. Run the command again with --local.",
+            "  ⊘ hello (failed) {marketplace in local layer only}\n" +
+            "    cause: The marketplace mp is declared only in the local config (claude-plugins.local.json). Run the command again with --local.",
           severity: "error",
         },
       ]);
@@ -9703,8 +9703,8 @@ test("FIX-03: installing a recorded dependency by name under a local-only market
           message:
             "A plugin operation has failed.\n\n" +
             "● mp [project]\n" +
-            "  ⊘ some-other-plugin (failed) {marketplace declared locally}\n" +
-            "    cause: The marketplace mp is declared only in claude-plugins.local.json. Run the command again with --local.",
+            "  ⊘ some-other-plugin (failed) {marketplace in local layer only}\n" +
+            "    cause: The marketplace mp is declared only in the local config (claude-plugins.local.json). Run the command again with --local.",
           severity: "error",
         },
       ]);

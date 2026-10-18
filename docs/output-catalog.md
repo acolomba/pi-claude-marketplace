@@ -831,20 +831,20 @@ A marketplace operation has failed.
 ⊘ mp [project] (failed) {marketplace not added to project scope}
 ```
 
-### Failure -- marketplace declared only in the local file (FIX-03 / D-MF-02)
+### Failure -- the marketplace is declared only in the local layer (FIX-03 / D-MF-02)
 
-A standalone install without `--local` writes the plugin's declaration into `claude-plugins.json`. If only `claude-plugins.local.json` declares the plugin's marketplace, a teammate who reads the shared file cannot resolve that declaration. Thus the command is refused before anything is written. The `cause:` line carries the remedy.
+A standalone install without `--local` writes the plugin's declaration into `claude-plugins.json`. If only `claude-plugins.local.json` declares the plugin's marketplace, a teammate who reads the base config cannot resolve that declaration. Thus the command is refused before anything is written. The `cause:` line carries the remedy.
 
 `enable` and `disable` render the same row. `update` and `reinstall` write no declaration, so they never meet this rule. A reload and an import are never refused. An `enable` or `disable` that writes nothing keeps its `(skipped) {already enabled}` or `(skipped) {already disabled}` row. Severity `error`; no reload-hint (nothing landed).
 
-<!-- catalog-state: failure-marketplace-declared-locally -->
+<!-- catalog-state: failure-marketplace-in-local-layer-only -->
 
 ```text
 A plugin operation has failed.
 
 ● official [user]
-  ⊘ helper (failed) {marketplace declared locally}
-    cause: The marketplace official is declared only in claude-plugins.local.json. Run the command again with --local.
+  ⊘ helper (failed) {marketplace in local layer only}
+    cause: The marketplace official is declared only in the local config (claude-plugins.local.json). Run the command again with --local.
 ```
 
 ### Failure -- no source can declare the marketplace in the target layer (LAYER-06)
@@ -3771,32 +3771,32 @@ A marketplace operation has failed.
 ⊘ ghost-mp (failed) {marketplace not added}
 ```
 
-### Failure -- the marketplace is declared only in the local file (LAYER-02 / D-MF-03)
+### Failure -- the marketplace is declared only in the local layer (LAYER-02 / D-MF-03)
 
 A named command without `--local` acts only on `claude-plugins.json`. When only `claude-plugins.local.json` declares the marketplace, the command is refused before anything changes. A marketplace row carries no cause (SNM-10), so one failed child row under it carries the reason and the `cause:` line, which names the remedy: run the command again with `--local`. `marketplace autoupdate` and `marketplace noautoupdate` render the same row. Severity `error`; no reload-hint.
 
-<!-- catalog-state: remove-marketplace-declared-locally -->
+<!-- catalog-state: remove-marketplace-in-local-layer-only -->
 
 ```text
 Some operations have failed.
 
 ⊘ tools [project] (failed)
-  ⊘ tools (failed) {marketplace declared locally}
-    cause: The marketplace tools is declared only in claude-plugins.local.json. Run the command again with --local.
+  ⊘ tools (failed) {marketplace in local layer only}
+    cause: The marketplace tools is declared only in the local config (claude-plugins.local.json). Run the command again with --local.
 ```
 
-### Failure -- the marketplace is declared only in the shared file (LAYER-02 / D-MF-03)
+### Failure -- the marketplace is declared only in the base layer (LAYER-02 / D-MF-03)
 
 A named command with `--local` acts only on `claude-plugins.local.json`. When only `claude-plugins.json` declares the marketplace, the command is refused before anything changes. As above, one failed child row carries the reason and the `cause:` line, which names the remedy: run the command again without `--local`. `marketplace autoupdate --local` and `marketplace noautoupdate --local` render the same row. Severity `error`; no reload-hint.
 
-<!-- catalog-state: remove-marketplace-declared-in-shared-config -->
+<!-- catalog-state: remove-marketplace-in-base-layer-only -->
 
 ```text
 Some operations have failed.
 
 ⊘ tools [project] (failed)
-  ⊘ tools (failed) {marketplace declared in shared config}
-    cause: The marketplace tools is declared only in claude-plugins.json. Run the command again without --local.
+  ⊘ tools (failed) {marketplace in base layer only}
+    cause: The marketplace tools is declared only in the base config (claude-plugins.json). Run the command again without --local.
 ```
 
 ### Failure -- a plugin that stays still needs a plugin the remove would uninstall (LAYER-03)
@@ -4436,7 +4436,7 @@ Changed and already-correct rows both count as successful plural outcomes.
 
 ### Config files
 
-A named flip changes only its target file: `claude-plugins.json`, or `claude-plugins.local.json` with `--local` (LAYER-02). When only the other file declares the marketplace, the flip is refused before anything changes, with the `{marketplace declared locally}` or `{marketplace declared in shared config}` rows documented under [`## /claude:plugin marketplace remove <name>`](#claudeplugin-marketplace-remove-name). A flip row reports the outcome in the target file, so `{already autoupdate}` means that file already has the value. `marketplace list` and `marketplace info` show the value that the two files merge to, where a local entry's `autoupdate` wins over the shared one (D-07). A flip without a name changes every file that declares each marketplace, or only `claude-plugins.local.json` with `--local`.
+A named flip changes only its target file: `claude-plugins.json`, or `claude-plugins.local.json` with `--local` (LAYER-02). When only the other file declares the marketplace, the flip is refused before anything changes, with the `{marketplace in local layer only}` or `{marketplace in base layer only}` rows documented under [`## /claude:plugin marketplace remove <name>`](#claudeplugin-marketplace-remove-name). A flip row reports the outcome in the target file, so `{already autoupdate}` means that file already has the value. `marketplace list` and `marketplace info` show the value that the two files merge to, where a local entry's `autoupdate` wins over the shared one (D-07). A flip without a name changes every file that declares each marketplace, or only `claude-plugins.local.json` with `--local`.
 
 A flip that fails after it has written something reports both in one emission: the rows of the marketplaces it flipped in an earlier scope, or in an earlier file of the same scope, then the failed header with its failed child. A marketplace whose files were only partly written gets no row of its own; the failed row covers it. The failed child carries `{lock held}` for a held state lock, `{invalid manifest}` for an invalid config file, `{permission denied}` when the file system refuses a write, and `{unreadable}` for any other failure, such as a config file the writer refuses to replace.
 

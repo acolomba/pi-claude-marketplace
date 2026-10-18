@@ -499,7 +499,7 @@ export const PLUGIN_INSTALL_FIXTURES: FixtureMap = {
     },
 
     // FIX-03: a shared declaration under a marketplace only the local file declares.
-    "failure-marketplace-declared-locally": {
+    "failure-marketplace-in-local-layer-only": {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",
       message: {
@@ -513,9 +513,9 @@ export const PLUGIN_INSTALL_FIXTURES: FixtureMap = {
                 severity: "error",
                 needsReload: false,
                 name: "helper",
-                reasons: ["marketplace declared locally"],
+                reasons: ["marketplace in local layer only"],
                 cause: new Error(
-                  "The marketplace official is declared only in claude-plugins.local.json. Run the command again with --local.",
+                  "The marketplace official is declared only in the local config (claude-plugins.local.json). Run the command again with --local.",
                 ),
               },
             ],

@@ -1658,7 +1658,7 @@ function refuseMarketplaceDeclarationWrite(args: {
 
   const refusal = localOnlyMarketplaceRefusal(selection, write.marketplace);
   if (refusal !== undefined) {
-    throw new EnableRefusedError("marketplace declared locally", refusal.message);
+    throw new EnableRefusedError("marketplace in local layer only", refusal.message);
   }
 
   const undeclarable = undeclarableMarketplaceRefusal(selection, args.state, write.marketplace);

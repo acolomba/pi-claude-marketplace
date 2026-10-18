@@ -29,8 +29,8 @@ import {
   LayerFileUnreadableError,
   ManualRecoveryError,
   manualRecoveryLeaks,
-  MarketplaceDeclaredInSharedConfigError,
-  MarketplaceDeclaredLocallyError,
+  MarketplaceInBaseLayerOnlyError,
+  MarketplaceInLocalLayerOnlyError,
   MarketplaceDuplicateNameError,
   MarketplaceNotFoundError,
   MarketplaceSourceUndeclarableError,
@@ -848,45 +848,45 @@ describe("MarketplaceNotFoundError", () => {
   });
 });
 
-describe("MarketplaceDeclaredLocallyError", () => {
+describe("MarketplaceInLocalLayerOnlyError", () => {
   test("names the marketplace and suggests --local in its message", () => {
     // arrange
     const marketplace = "mp";
 
     // act
-    const error = new MarketplaceDeclaredLocallyError(marketplace);
+    const error = new MarketplaceInLocalLayerOnlyError(marketplace);
 
     // assert
     assert.ok(error instanceof Error);
     assert.deepStrictEqual(
       { name: error.name, marketplace: error.marketplace, message: error.message },
       {
-        name: "MarketplaceDeclaredLocallyError",
+        name: "MarketplaceInLocalLayerOnlyError",
         marketplace: "mp",
         message:
-          "The marketplace mp is declared only in claude-plugins.local.json. Run the command again with --local.",
+          "The marketplace mp is declared only in the local config (claude-plugins.local.json). Run the command again with --local.",
       },
     );
   });
 });
 
-describe("MarketplaceDeclaredInSharedConfigError", () => {
+describe("MarketplaceInBaseLayerOnlyError", () => {
   test("names the marketplace and suggests dropping --local in its message", () => {
     // arrange
     const marketplace = "mp";
 
     // act
-    const error = new MarketplaceDeclaredInSharedConfigError(marketplace);
+    const error = new MarketplaceInBaseLayerOnlyError(marketplace);
 
     // assert
     assert.ok(error instanceof Error);
     assert.deepStrictEqual(
       { name: error.name, marketplace: error.marketplace, message: error.message },
       {
-        name: "MarketplaceDeclaredInSharedConfigError",
+        name: "MarketplaceInBaseLayerOnlyError",
         marketplace: "mp",
         message:
-          "The marketplace mp is declared only in claude-plugins.json. Run the command again without --local.",
+          "The marketplace mp is declared only in the base config (claude-plugins.json). Run the command again without --local.",
       },
     );
   });

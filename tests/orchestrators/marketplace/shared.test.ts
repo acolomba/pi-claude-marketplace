@@ -30,8 +30,8 @@ import { McpConfigFileError } from "../../../extensions/pi-claude-marketplace/sh
 import {
   CrossOriginChallengeError,
   InvalidMarketplaceManifestError,
-  MarketplaceDeclaredInSharedConfigError,
-  MarketplaceDeclaredLocallyError,
+  MarketplaceInBaseLayerOnlyError,
+  MarketplaceInLocalLayerOnlyError,
   MarketplaceNotFoundError,
   PluginShapeError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
@@ -2321,28 +2321,28 @@ for (const { title, target, other, targetIsLocal, marketplace, expectedVerdict }
   },
   {
     title:
-      "a shared-file target whose marketplace only the local file declares as declared locally",
+      "a base-config target whose marketplace only the local config declares as marketplace in local layer only",
     target: declaring("extras"),
     other: { status: "valid", filePath: LOCAL_FILE, config: declaring("tools") },
     targetIsLocal: false,
     marketplace: "tools",
     expectedVerdict: {
       kind: "refused",
-      reason: "marketplace declared locally",
-      refusal: new MarketplaceDeclaredLocallyError("tools"),
+      reason: "marketplace in local layer only",
+      refusal: new MarketplaceInLocalLayerOnlyError("tools"),
     },
   },
   {
     title:
-      "a local-file target whose marketplace only the shared file declares as declared in shared config",
+      "a local-config target whose marketplace only the base config declares as marketplace in base layer only",
     target: { schemaVersion: 1 },
     other: { status: "valid", filePath: SHARED_FILE, config: declaring("tools") },
     targetIsLocal: true,
     marketplace: "tools",
     expectedVerdict: {
       kind: "refused",
-      reason: "marketplace declared in shared config",
-      refusal: new MarketplaceDeclaredInSharedConfigError("tools"),
+      reason: "marketplace in base layer only",
+      refusal: new MarketplaceInBaseLayerOnlyError("tools"),
     },
   },
   {
@@ -2378,7 +2378,8 @@ for (const { title, target, other, targetIsLocal, marketplace, expectedVerdict }
     expectedVerdict: { kind: "undeclared" },
   },
   {
-    title: "a marketplace named __proto__ that only the local file owns as declared locally",
+    title:
+      "a marketplace named __proto__ that only the local config owns as marketplace in local layer only",
     target: { schemaVersion: 1, marketplaces: {} },
     other: {
       status: "valid",
@@ -2391,8 +2392,8 @@ for (const { title, target, other, targetIsLocal, marketplace, expectedVerdict }
     marketplace: "__proto__",
     expectedVerdict: {
       kind: "refused",
-      reason: "marketplace declared locally",
-      refusal: new MarketplaceDeclaredLocallyError("__proto__"),
+      reason: "marketplace in local layer only",
+      refusal: new MarketplaceInLocalLayerOnlyError("__proto__"),
     },
   },
 ] satisfies readonly {

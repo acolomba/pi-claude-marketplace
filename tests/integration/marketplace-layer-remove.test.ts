@@ -285,7 +285,7 @@ test("a refused remove changes no state, config, clone, or staged artifact", asy
     installed("beta"),
     {
       message:
-        "Some operations have failed.\n\n⊘ mp [project] (failed)\n  ⊘ mp (failed) {marketplace declared locally}\n    cause: The marketplace mp is declared only in claude-plugins.local.json. Run the command again with --local.",
+        "Some operations have failed.\n\n⊘ mp [project] (failed)\n  ⊘ mp (failed) {marketplace in local layer only}\n    cause: The marketplace mp is declared only in the local config (claude-plugins.local.json). Run the command again with --local.",
       severity: "error",
     },
   ]);

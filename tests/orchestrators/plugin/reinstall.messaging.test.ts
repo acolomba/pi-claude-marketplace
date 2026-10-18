@@ -9,7 +9,7 @@ import {
   renderReinstallPartitionAndNotify,
   reinstalledRowFromOutcome,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts";
-import { MarketplaceDeclaredLocallyError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import { MarketplaceInLocalLayerOnlyError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { type Severity } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
@@ -510,8 +510,8 @@ test("FIX-03: a failed reinstall that carries a cause renders its cause line", (
       "A plugin operation has failed.",
       "",
       "● mp [project]",
-      "  ⊘ hello (failed) {marketplace declared locally}",
-      "    cause: The marketplace mp is declared only in claude-plugins.local.json. Run the command again with --local.",
+      "  ⊘ hello (failed) {marketplace in local layer only}",
+      "    cause: The marketplace mp is declared only in the local config (claude-plugins.local.json). Run the command again with --local.",
     ].join("\n"),
     severity: "error",
   });
@@ -522,8 +522,8 @@ test("FIX-03: a failed reinstall that carries a cause renders its cause line", (
       marketplace: "mp",
       scope: "project",
       notes: ["refused"],
-      reasons: ["marketplace declared locally"],
-      cause: new MarketplaceDeclaredLocallyError("mp"),
+      reasons: ["marketplace in local layer only"],
+      cause: new MarketplaceInLocalLayerOnlyError("mp"),
     },
   ];
 

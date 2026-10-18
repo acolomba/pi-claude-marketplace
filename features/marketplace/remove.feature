@@ -41,7 +41,7 @@ Feature: Marketplace remove
     Then the "claude-plugins.json" file of the project scope does not exist
     Then the "claude-plugins.local.json" file of the project scope declares no marketplaces
 
-  Scenario: Removing without --local a marketplace added with --local fails as marketplace declared locally
+  Scenario: Removing without --local a marketplace added with --local fails as marketplace in local layer only
     Given the marketplace "tools" is published as a dir source
     Given the user has run "/claude:plugin marketplace add {home}/marketplaces/tools --scope project --local"
     When the user runs "/claude:plugin marketplace remove tools --scope project"
@@ -51,14 +51,14 @@ Feature: Marketplace remove
       | needs reload | false                        |
       | summary      | Some operations have failed. |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | marketplace status | id          | name  | status | reasons                      | scope   | cause chain                                                                                              | cause truncated | leaks | rollback partial |
-      | tools            | project           | failed             | tools@tools | tools | failed | marketplace declared locally | project | The marketplace tools is declared only in claude-plugins.local.json. Run the command again with --local. | false           |       |                  |
+      | marketplace name | marketplace scope | marketplace status | id          | name  | status | reasons                         | scope   | cause chain                                                                                                                 | cause truncated | leaks | rollback partial |
+      | tools            | project           | failed             | tools@tools | tools | failed | marketplace in local layer only | project | The marketplace tools is declared only in the local config (claude-plugins.local.json). Run the command again with --local. | false           |       |                  |
     Then the "claude-plugins.local.json" file of the project scope declares these marketplaces:
       | name  | source                    |
       | tools | {home}/marketplaces/tools |
     Then the "claude-plugins.json" file of the project scope does not exist
 
-  Scenario: Removing with --local a marketplace only the shared configuration declares fails as marketplace declared in shared config
+  Scenario: Removing with --local a marketplace only the base layer declares fails as marketplace in base layer only
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" is added to the project scope
     When the user runs "/claude:plugin marketplace remove tools --scope project --local"
@@ -68,8 +68,8 @@ Feature: Marketplace remove
       | needs reload | false                        |
       | summary      | Some operations have failed. |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | marketplace status | id          | name  | status | reasons                               | scope   | cause chain                                                                                           | cause truncated | leaks | rollback partial |
-      | tools            | project           | failed             | tools@tools | tools | failed | marketplace declared in shared config | project | The marketplace tools is declared only in claude-plugins.json. Run the command again without --local. | false           |       |                  |
+      | marketplace name | marketplace scope | marketplace status | id          | name  | status | reasons                        | scope   | cause chain                                                                                                             | cause truncated | leaks | rollback partial |
+      | tools            | project           | failed             | tools@tools | tools | failed | marketplace in base layer only | project | The marketplace tools is declared only in the base config (claude-plugins.json). Run the command again without --local. | false           |       |                  |
     Then the "claude-plugins.json" file of the project scope declares these marketplaces:
       | name  | source                    |
       | tools | {home}/marketplaces/tools |
@@ -203,7 +203,7 @@ Feature: Marketplace remove
       | needs reload | false                        |
       | summary      | Some operations have failed. |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | marketplace status | id          | name  | status | reasons           | scope   | cause chain                                                         | cause truncated | leaks | rollback partial |
+      | marketplace name | marketplace scope | marketplace status | id          | name  | status | reasons           | scope   | cause chain                                                          | cause truncated | leaks | rollback partial |
       | tools            | project           | failed             | alpha@tools | alpha | failed | dependents remain | project | Uninstall beta@tools first, then remove the marketplace tools again. | false           |       |                  |
     Then the "claude-plugins.json" file of the project scope declares these plugins:
       | id          |

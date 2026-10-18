@@ -2046,14 +2046,14 @@ for (const { title, files, local, expectedMessage } of [
     },
     local: false,
     expectedMessage:
-      "Some operations have failed.\n\n⊘ tools [project] (failed)\n  ⊘ tools (failed) {marketplace declared locally}\n    cause: The marketplace tools is declared only in claude-plugins.local.json. Run the command again with --local.",
+      "Some operations have failed.\n\n⊘ tools [project] (failed)\n  ⊘ tools (failed) {marketplace in local layer only}\n    cause: The marketplace tools is declared only in the local config (claude-plugins.local.json). Run the command again with --local.",
   },
   {
     title: "refuses a local-file remove of a marketplace only the shared file declares",
     files: { shared: TOOLS_DECLARED },
     local: true,
     expectedMessage:
-      "Some operations have failed.\n\n⊘ tools [project] (failed)\n  ⊘ tools (failed) {marketplace declared in shared config}\n    cause: The marketplace tools is declared only in claude-plugins.json. Run the command again without --local.",
+      "Some operations have failed.\n\n⊘ tools [project] (failed)\n  ⊘ tools (failed) {marketplace in base layer only}\n    cause: The marketplace tools is declared only in the base config (claude-plugins.json). Run the command again without --local.",
   },
   {
     title: "refuses a remove whose target file is silent while the other file is invalid",

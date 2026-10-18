@@ -82,7 +82,7 @@ const USER_ALPHA_REMOVED = "● alpha [user] (removed)";
 
 /** The row a `--local` removal of a marketplace only the shared layer declares renders as. */
 const PROJECT_ALPHA_REFUSED =
-  "Some operations have failed.\n\n⊘ alpha [project] (failed)\n  ⊘ alpha (failed) {marketplace declared in shared config}\n    cause: The marketplace alpha is declared only in claude-plugins.json. Run the command again without --local.";
+  "Some operations have failed.\n\n⊘ alpha [project] (failed)\n  ⊘ alpha (failed) {marketplace in base layer only}\n    cause: The marketplace alpha is declared only in the base config (claude-plugins.json). Run the command again without --local.";
 
 /** Marketplace names recorded per scope, the effect a removal is observed by. */
 interface MarketplaceFootprint {

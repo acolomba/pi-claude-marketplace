@@ -78,7 +78,7 @@ export const MARKETPLACE_REMOVE_FIXTURES: FixtureMap = {
     },
 
     // LAYER-02: a command without --local names a marketplace only the local file declares.
-    "remove-marketplace-declared-locally": {
+    "remove-marketplace-in-local-layer-only": {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",
       message: {
@@ -96,9 +96,9 @@ export const MARKETPLACE_REMOVE_FIXTURES: FixtureMap = {
                 severity: "error",
                 needsReload: false,
                 name: "tools",
-                reasons: ["marketplace declared locally"],
+                reasons: ["marketplace in local layer only"],
                 cause: new Error(
-                  "The marketplace tools is declared only in claude-plugins.local.json. Run the command again with --local.",
+                  "The marketplace tools is declared only in the local config (claude-plugins.local.json). Run the command again with --local.",
                 ),
               },
             ],
@@ -108,7 +108,7 @@ export const MARKETPLACE_REMOVE_FIXTURES: FixtureMap = {
     },
 
     // LAYER-02: a --local command names a marketplace only the shared file declares.
-    "remove-marketplace-declared-in-shared-config": {
+    "remove-marketplace-in-base-layer-only": {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",
       message: {
@@ -126,9 +126,9 @@ export const MARKETPLACE_REMOVE_FIXTURES: FixtureMap = {
                 severity: "error",
                 needsReload: false,
                 name: "tools",
-                reasons: ["marketplace declared in shared config"],
+                reasons: ["marketplace in base layer only"],
                 cause: new Error(
-                  "The marketplace tools is declared only in claude-plugins.json. Run the command again without --local.",
+                  "The marketplace tools is declared only in the base config (claude-plugins.json). Run the command again without --local.",
                 ),
               },
             ],

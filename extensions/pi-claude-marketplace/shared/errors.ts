@@ -376,8 +376,8 @@ export class MarketplaceNotFoundError extends Error {
 
 /**
  * FIX-03 / D-MF-02: the refusal of a command that would write a plugin
- * declaration into `claude-plugins.json` while only `claude-plugins.local.json`
- * declares the plugin's marketplace.
+ * declaration into the base config (`claude-plugins.json`) while only the local
+ * layer declares the plugin's marketplace.
  *
  * The message IS the failed row's cause line. It is built from fixed text and a
  * marketplace name that passed `assertSafeName`, so it carries no path. One
@@ -387,13 +387,13 @@ export class MarketplaceNotFoundError extends Error {
  * cannot import `orchestrators/plugin/shared.ts`, which already imports
  * `orchestrators/marketplace/shared.ts`.
  */
-export class MarketplaceDeclaredLocallyError extends Error {
+export class MarketplaceInLocalLayerOnlyError extends Error {
   readonly marketplace: string;
   constructor(marketplace: string) {
     super(
-      `The marketplace ${marketplace} is declared only in claude-plugins.local.json. Run the command again with --local.`,
+      `The marketplace ${marketplace} is declared only in the local config (claude-plugins.local.json). Run the command again with --local.`,
     );
-    this.name = "MarketplaceDeclaredLocallyError";
+    this.name = "MarketplaceInLocalLayerOnlyError";
     this.marketplace = marketplace;
   }
 }
@@ -425,19 +425,19 @@ export class MarketplaceSourceUndeclarableError extends Error {
 
 /**
  * LAYER-02 / D-MF-03: the refusal of a `--local` command that names a
- * marketplace only `claude-plugins.json` declares. A named command changes
- * only its target layer, so it cannot act on a declaration in the other one.
+ * marketplace only the base layer declares. A named command changes only its
+ * target layer, so it cannot act on a declaration in the other one.
  *
  * The message IS the failed row's cause line. It is built from fixed text and a
  * marketplace name that passed `assertSafeName`, so it carries no path.
  */
-export class MarketplaceDeclaredInSharedConfigError extends Error {
+export class MarketplaceInBaseLayerOnlyError extends Error {
   readonly marketplace: string;
   constructor(marketplace: string) {
     super(
-      `The marketplace ${marketplace} is declared only in claude-plugins.json. Run the command again without --local.`,
+      `The marketplace ${marketplace} is declared only in the base config (claude-plugins.json). Run the command again without --local.`,
     );
-    this.name = "MarketplaceDeclaredInSharedConfigError";
+    this.name = "MarketplaceInBaseLayerOnlyError";
     this.marketplace = marketplace;
   }
 }

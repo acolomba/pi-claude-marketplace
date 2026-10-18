@@ -166,8 +166,8 @@ const DECLARED_LOCALLY_REFUSAL = [
   "Some operations have failed.",
   "",
   "⊘ mp [project] (failed)",
-  "  ⊘ mp (failed) {marketplace declared locally}",
-  "    cause: The marketplace mp is declared only in claude-plugins.local.json. Run the command again with --local.",
+  "  ⊘ mp (failed) {marketplace in local layer only}",
+  "    cause: The marketplace mp is declared only in the local config (claude-plugins.local.json). Run the command again with --local.",
 ].join("\n");
 
 const SHARED_FLIP_BYTES =
@@ -1155,8 +1155,8 @@ const layerRefusalCases = [
       "Some operations have failed.",
       "",
       "⊘ mp [project] (failed)",
-      "  ⊘ mp (failed) {marketplace declared in shared config}",
-      "    cause: The marketplace mp is declared only in claude-plugins.json. Run the command again without --local.",
+      "  ⊘ mp (failed) {marketplace in base layer only}",
+      "    cause: The marketplace mp is declared only in the base config (claude-plugins.json). Run the command again without --local.",
     ].join("\n"),
   },
 ] as const;

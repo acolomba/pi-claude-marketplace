@@ -160,10 +160,10 @@ export type FailureReason =
   // FIX-03: the operation was refused before anything was written. Install,
   // enable, disable, update, and reinstall all refuse with it, so it lives in
   // the shared failure group rather than as a command-private reason.
-  | "marketplace declared locally"
+  | "marketplace in local layer only"
   // LAYER-02: the mirror refusal of the same layer rule, shared by
   // `marketplace remove`, `autoupdate`, and `noautoupdate`.
-  | "marketplace declared in shared config"
+  | "marketplace in base layer only"
   // LAYER-04: a named plugin command refuses when its target layer does not
   // declare the plugin and the other layer does. Uninstall, enable, disable,
   // update, and reinstall share both refusals.
