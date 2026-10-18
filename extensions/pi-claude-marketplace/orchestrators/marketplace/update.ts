@@ -96,8 +96,9 @@
 //  (detached HEAD) checkout directly. NO `pull`.
 
 import path from "node:path";
+import { isDeepStrictEqual } from "node:util";
 
-import { loadMarketplaceManifest } from "../../domain/manifest.ts";
+import { loadMarketplaceManifestDocument } from "../../domain/manifest.ts";
 import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
@@ -146,6 +147,7 @@ import {
 } from "./update.messaging.ts";
 
 import type { DeviceFlowHttp } from "../../domain/github-auth.ts";
+import type { MarketplaceManifestDocument } from "../../domain/manifest.ts";
 import type { ParsedSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
@@ -322,41 +324,15 @@ interface RefreshOneArgs {
 }
 
 /**
- * UXG-05 change-detection seam. Reads the persisted, schema-validated
- * `MarketplaceManifest` and returns a comparison key (the `JSON.stringify` of
- * the validated parsed content). Used to compare the manifest content PRE vs
- * POST refresh so the no-op vs changed decision (autoupdate-OFF and
- * autoupdate-ON alike) can distinguish a genuine change (`updated`) from a
- * no-op (`skipped {up-to-date}`).
- *
- * WR-01: `loadMarketplaceManifest` returns the RAW `JSON.parse` value -- it
- * runs `MARKETPLACE_VALIDATOR.Check()` but NEVER `.Parse()`/`.Clean()`. So the
- * comparison key is `JSON.stringify` of the schema-validated-but-raw parsed
- * manifest: its key order mirrors the source file and it retains any
- * unknown/extra fields. Any content delta -- including reordered keys or
- * changed extra fields -- reads as "changed", the conservative direction. Do
- * NOT "optimize" `loadMarketplaceManifest` into `.Parse()`: that would rewrite
- * the key order and could silently flip the no-op classification.
- *
- * Compares ONLY post-validation parsed content (T-27-05 mitigation): a tampered
- * manifest that fails the schema throws inside `loadMarketplaceManifest` and
- * routes to the `(failed)` path, never to the no-op `(skipped)` decision.
- *
- * WR-02: returns `undefined` ONLY for a genuine "no manifest yet" (ENOENT) PRE
- * read; a `undefined` PRE key compared against a defined POST key reads as
- * "changed", the safe default. Any OTHER PRE-read failure (EACCES, malformed
- * JSON, schema-invalid) is re-thrown so it propagates to `refreshRecord`'s
- * try/catch and routes to the existing `(failed)` path -- the same routing
- * `validateManifestAtRoot` already uses for POST-read failures. This removes
- * the silent always-`(updated)` failure mode for a corrupt/unreadable
- * pre-existing manifest.
+ * Reads the pre-fetch comparison for a git record without a saved baseline.
+ * A missing manifest establishes a changed baseline after a valid fetch.
+ * Other read or validation errors fail the refresh.
  */
 async function manifestContentKey(
   record: ExtensionState["marketplaces"][string],
 ): Promise<string | undefined> {
   try {
-    const parsed = await loadMarketplaceManifest(record.manifestPath);
-    return JSON.stringify(parsed);
+    return (await loadMarketplaceManifestDocument(record.manifestPath)).comparisonJson;
   } catch (err) {
     // WR-02: only ENOENT (no manifest yet) maps to the changed-safe default.
     // Mirrors the errno-narrowing idiom `reasonsFromCascadeError` already uses
@@ -378,17 +354,12 @@ async function refreshRecord(
   const source = record.source as ParsedSource;
   let cloneAdvanced = false;
   try {
-    // UXG-05: capture the PRE-refresh validated-manifest content key BEFORE the
-    // refresh re-validates and re-persists. Read off the currently persisted
-    // `record.manifestPath` (the manifest as the user last saw it). NOT keyed on
-    // `record.lastUpdatedAt` -- it is stamped to `now` every refresh
-    // regardless of content.
-    // WR-01: this read lives INSIDE the try so a non-ENOENT PRE-read failure
-    // (manifestContentKey re-throws per WR-02) is wrapped as MarketplaceUpdateError
-    // exactly like a POST-read failure -- same `(failed)` routing, same cause
-    // chain. Do NOT hoist it back outside the try (that bypasses the wrapper and
-    // surfaces a bare, mislabeled reason).
-    const preKey = await manifestContentKey(record);
+    // A local legacy record has no historical content to compare. Its first
+    // successful refresh establishes the baseline and reports a change.
+    const preKey =
+      record.lastSuccessfulManifest ??
+      (source.kind === "path" ? undefined : await manifestContentKey(record));
+    let document: MarketplaceManifestDocument;
     if (source.kind === "github") {
       const cloneDir = await locations.sourceCloneDir(name);
       // AUTH-02 / D-79-05: buildGitHubAuth binds github.com with the GitHub
@@ -417,7 +388,7 @@ async function refreshRecord(
         },
         auth,
       );
-      await validateManifestAtRoot(record, cloneDir);
+      document = await validateManifestAtRoot(record, cloneDir);
     } else if (source.kind === "url") {
       const cloneDir = await locations.sourceCloneDir(name);
       const { ctx, credentialOps, deviceFlowHttp } = args;
@@ -433,24 +404,20 @@ async function refreshRecord(
           cloneAdvanced = true;
         },
       });
-      await validateManifestAtRoot(record, cloneDir);
+      document = await validateManifestAtRoot(record, cloneDir);
     } else if (source.kind === "path") {
-      await validateManifestAtRoot(record, record.marketplaceRoot);
+      document = await loadMarketplaceManifestDocument(record.manifestPath);
     } else {
       throw new Error(
         `Cannot update marketplace "${name}": unsupported source kind "${source.kind}"`,
       );
     }
 
-    // UXG-05: capture the POST-refresh validated-manifest content key AFTER the
-    // refresh re-validates (and `validateManifestAtRoot` repoints
-    // `record.manifestPath` if the root moved). Whole-manifest equality of the
-    // parsed/validated content -- source-kind-uniform (a path source whose local
-    // marketplace.json is unchanged compares equal; a github source whose clone
-    // advanced but yielded byte-identical manifest content also compares equal).
-    const postKey = await manifestContentKey(record);
-    const changed = preKey !== postKey;
+    const changed =
+      preKey === undefined ||
+      !isDeepStrictEqual(JSON.parse(preKey), JSON.parse(document.comparisonJson));
 
+    record.lastSuccessfulManifest = document.comparisonJson;
     // lastUpdatedAt is stamped on EVERY refresh (used elsewhere); it is
     // deliberately NOT the change signal.
     record.lastUpdatedAt = new Date().toISOString();
@@ -471,8 +438,8 @@ interface RefreshSnapshot {
   readonly autoupdate: boolean;
   readonly plugins: readonly string[];
   /**
-   * UXG-05: true when the refresh changed the validated marketplace.json
-   * content; false when the manifest content was byte-identical pre/post
+   * UXG-05: true when the refresh changed the complete parsed manifest
+   * content; false when it equals the last successful baseline
    * (the no-op case). Drives the autoupdate-OFF `updated` vs `skipped
    * {up-to-date}` emission. Source-kind-uniform (path + github).
    */
@@ -850,23 +817,15 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
 }
 
 /**
- * MU-4 / MU-5: re-read and re-validate the marketplace.json at the
- * given root. Throws on read or validation failure -- the caller wraps
- * as `MarketplaceUpdateError`.
- *
- * WR-03: for path sources the caller already passes
- * `record.marketplaceRoot`, and for github sources
- * `cloneDir === record.marketplaceRoot` after `add`, so the
- * `record.manifestPath` / `record.marketplaceRoot` writes are gated on a
- * real change. This keeps the function's purpose (validate) clear and lets
- * a "did anything change?" optimization rely on identity.
+ * Validates a managed clone's manifest and repairs its recorded root and path.
+ * Local sources retain their own recorded manifest path.
  */
 async function validateManifestAtRoot(
   record: ExtensionState["marketplaces"][string],
   marketplaceRoot: string,
-): Promise<void> {
+): Promise<MarketplaceManifestDocument> {
   const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
-  await loadMarketplaceManifest(manifestPath);
+  const document = await loadMarketplaceManifestDocument(manifestPath);
 
   if (record.manifestPath !== manifestPath) {
     record.manifestPath = manifestPath;
@@ -875,4 +834,6 @@ async function validateManifestAtRoot(
   if (record.marketplaceRoot !== marketplaceRoot) {
     record.marketplaceRoot = marketplaceRoot;
   }
+
+  return document;
 }

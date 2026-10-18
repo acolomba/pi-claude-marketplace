@@ -1,0 +1,37 @@
+Feature: Marketplace file source update
+
+  A file source keeps the manifest the user added when the marketplace updates.
+  The scenarios run the real extension in a headless Pi against local files.
+
+  Scenario: An external manifest is refreshed from its original file
+    Given the marketplace "tools" is published as an external manifest
+    Given the marketplace "tools" has the description "Original tools"
+    Given the marketplace "tools" is added to the project scope
+    Given the marketplace "tools" update source contains this manifest:
+      """
+      {"name":"tools","owner":{"name":"features"},"plugins":[],"description":"Refreshed tools with a longer description"}
+      """
+    When the user runs "/claude:plugin marketplace update tools --scope project"
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | marketplace status |
+      | tools            | project           | updated            |
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    When the user runs "/claude:plugin marketplace info tools --scope project"
+    Then the marketplace info result has these fields:
+      | kind                    | marketplace-info                         |
+      | name                    | tools                                    |
+      | scope                   | project                                  |
+      | details autoupdate      | false                                    |
+      | details last updated at | {scenario time}                          |
+      | source kind             | path                                     |
+      | source abs path         | {home}/marketplaces/tools                 |
+      | source url              |                                          |
+      | source owner            |                                          |
+      | source repo             |                                          |
+      | source ref              |                                          |
+      | description             | Refreshed tools with a longer description |
+      | severity                | info                                     |
+      | needs reload            | false                                    |

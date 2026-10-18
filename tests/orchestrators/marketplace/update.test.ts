@@ -55,6 +55,19 @@ import type { NotificationContext } from "../../../extensions/pi-claude-marketpl
 import type { NotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 
+const VALID_MANIFEST_JSON = JSON.stringify({
+  name: "valid-marketplace",
+  owner: { name: "Phase 4 Tests" },
+  plugins: [
+    {
+      name: "hello",
+      source: "./plugins/hello",
+      description: "Hello plugin (test fixture)",
+      version: "1.0.0",
+    },
+  ],
+});
+
 function createUpdateSinglePlugin(): PluginUpdateFn {
   return createPluginUpdateOperations(
     createHooksRouting(createHooksRuntime(), { readHooksJson }),
@@ -229,6 +242,7 @@ async function seedGithubMarketplace(opts: {
   autoupdate?: boolean;
   plugins?: Record<string, ExtensionState["marketplaces"][string]["plugins"][string]>;
   fixture?: "valid-marketplace" | "invalid-manifest";
+  legacy?: boolean;
 }): Promise<{ cloneDir: string }> {
   const locations = locationsFor("project", opts.cwd);
   await mkdir(locations.extensionRoot, { recursive: true });
@@ -249,6 +263,7 @@ async function seedGithubMarketplace(opts: {
         manifestPath: path.join(cloneDir, ".claude-plugin", "marketplace.json"),
         marketplaceRoot: cloneDir,
         plugins: opts.plugins ?? {},
+        ...(opts.legacy === true ? {} : { lastSuccessfulManifest: VALID_MANIFEST_JSON }),
         ...(opts.autoupdate !== undefined && { autoupdate: opts.autoupdate }),
       },
     },
@@ -1193,6 +1208,7 @@ test("UXG-05: path-source refresh whose local manifest is UNCHANGED renders the 
           manifestPath: path.join(localMpDir, ".claude-plugin", "marketplace.json"),
           marketplaceRoot: localMpDir,
           plugins: {},
+          lastSuccessfulManifest: VALID_MANIFEST_JSON,
         },
       },
     });
@@ -1557,7 +1573,12 @@ test("WR-02: corrupt pre-existing manifest routes to (failed), never a silent no
     // try (WR-01), so the throw wraps as MarketplaceUpdateError exactly like a
     // POST-read failure. Guards against a regression back to
     // `catch { return undefined; }` (the pre-WR-02 silent-(updated) bug).
-    const { cloneDir } = await seedGithubMarketplace({ cwd, name: "corrupt", ref: "main" });
+    const { cloneDir } = await seedGithubMarketplace({
+      cwd,
+      name: "corrupt",
+      ref: "main",
+      legacy: true,
+    });
     await writeFile(
       path.join(cloneDir, ".claude-plugin", "marketplace.json"),
       "{ not valid json",
@@ -1617,6 +1638,7 @@ async function seedPathMarketplace(opts: {
   scope?: Scope;
   autoupdate?: boolean;
   plugins?: Record<string, ExtensionState["marketplaces"][string]["plugins"][string]>;
+  legacy?: boolean;
 }): Promise<void> {
   const scope = opts.scope ?? "project";
   const locations = locationsFor(scope, opts.cwd);
@@ -1632,6 +1654,7 @@ async function seedPathMarketplace(opts: {
         manifestPath: path.join(opts.marketplaceRoot, ".claude-plugin", "marketplace.json"),
         marketplaceRoot: opts.marketplaceRoot,
         plugins: opts.plugins ?? {},
+        ...(opts.legacy === true ? {} : { lastSuccessfulManifest: VALID_MANIFEST_JSON }),
         ...(opts.autoupdate !== undefined && { autoupdate: opts.autoupdate }),
       },
     },
@@ -2697,6 +2720,7 @@ test("drops a changed target after persistence and before its plugin cascade", a
     }
 
     record.manifestPath = path.join(cloneDir, ".claude-plugin", "before-update.json");
+    record.lastSuccessfulManifest = '{"name":"valid-marketplace","plugins":[]}';
     await saveState(locations.extensionRoot, state);
     const pluginCachePath = await locations.pluginCacheFile("official");
     let rebuildCount = 0;
@@ -2758,6 +2782,7 @@ test("drops a changed target after persistence and before its plugin cascade", a
           marketplaceRoot: cloneDir,
           plugins: { alpha: makePluginRecord() },
           lastUpdatedAt: now.toISOString(),
+          lastSuccessfulManifest: VALID_MANIFEST_JSON,
         },
       },
     };
@@ -3213,6 +3238,7 @@ test("updateAllMarketplaces forwards optional Device Flow and plugin cascade por
           marketplaceRoot,
           plugins: { alpha: makePluginRecord() },
           lastUpdatedAt: now.toISOString(),
+          lastSuccessfulManifest: VALID_MANIFEST_JSON,
         },
       },
     });
@@ -3234,27 +3260,28 @@ test("all-target update drops changed rows in project-before-user order and isol
     const marketplaceRecord = (
       name: string,
       scope: Scope,
-      storedManifestPath: string,
+      baseline: string,
     ): ExtensionState["marketplaces"][string] => ({
       name,
       scope,
       source: pathSource(marketplaceRoot),
       addedFromCwd: cwd,
-      manifestPath: storedManifestPath,
+      manifestPath,
       marketplaceRoot,
       plugins: {},
+      lastSuccessfulManifest: baseline,
     });
     await saveState(projectLocations.extensionRoot, {
       schemaVersion: 1,
       marketplaces: {
-        alpha: marketplaceRecord("alpha", "project", path.join(marketplaceRoot, "alpha-before")),
-        beta: marketplaceRecord("beta", "project", manifestPath),
+        alpha: marketplaceRecord("alpha", "project", '{"name":"valid-marketplace","plugins":[]}'),
+        beta: marketplaceRecord("beta", "project", VALID_MANIFEST_JSON),
       },
     });
     await saveState(userLocations.extensionRoot, {
       schemaVersion: 1,
       marketplaces: {
-        alpha: marketplaceRecord("alpha", "user", path.join(marketplaceRoot, "user-before")),
+        alpha: marketplaceRecord("alpha", "user", '{"name":"valid-marketplace","plugins":[]}'),
       },
     });
     const { ctx, run, notifications } = makeCtx();
@@ -3338,11 +3365,11 @@ test("all-target update drops changed rows in project-before-user order and isol
       schemaVersion: 3,
       marketplaces: {
         alpha: {
-          ...marketplaceRecord("alpha", "project", manifestPath),
+          ...marketplaceRecord("alpha", "project", VALID_MANIFEST_JSON),
           lastUpdatedAt: now.toISOString(),
         },
         beta: {
-          ...marketplaceRecord("beta", "project", manifestPath),
+          ...marketplaceRecord("beta", "project", VALID_MANIFEST_JSON),
           lastUpdatedAt: now.toISOString(),
         },
       },
@@ -3351,7 +3378,7 @@ test("all-target update drops changed rows in project-before-user order and isol
       schemaVersion: 3,
       marketplaces: {
         alpha: {
-          ...marketplaceRecord("alpha", "user", manifestPath),
+          ...marketplaceRecord("alpha", "user", VALID_MANIFEST_JSON),
           lastUpdatedAt: now.toISOString(),
         },
       },
@@ -4071,7 +4098,7 @@ test("silently retains a failed changed-target cache cleanup and preserves later
       throw new Error("the cache failure fixture has no target marketplace");
     }
 
-    record.manifestPath = path.join(marketplaceRoot, ".claude-plugin", "before-update.json");
+    record.lastSuccessfulManifest = '{"name":"valid-marketplace","plugins":[]}';
     await saveState(locations.extensionRoot, state);
     const configBytes = await readFile(locations.baseConfigJsonPath, "utf8").catch(() => undefined);
     const pluginCachePath = await locations.pluginCacheFile("cache-mp");
@@ -4119,6 +4146,7 @@ test("silently retains a failed changed-target cache cleanup and preserves later
           marketplaceRoot,
           plugins: {},
           lastUpdatedAt: now.toISOString(),
+          lastSuccessfulManifest: VALID_MANIFEST_JSON,
         },
       },
     };

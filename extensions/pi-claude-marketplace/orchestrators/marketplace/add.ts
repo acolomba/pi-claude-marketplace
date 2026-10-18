@@ -55,7 +55,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { networkCloneUrl, originMatchesSource } from "../../domain/clone-key.ts";
-import { loadMarketplaceManifest } from "../../domain/manifest.ts";
+import { loadMarketplaceManifestDocument } from "../../domain/manifest.ts";
 import { isReservedRecordKey } from "../../domain/name.ts";
 import { parsePluginSource, samePlannedSource } from "../../domain/source.ts";
 import { loadConfig } from "../../persistence/config-io.ts";
@@ -339,8 +339,11 @@ async function newMarketplaceName(
   manifestPath: string,
   marketplaces: ExtensionState["marketplaces"],
   scope: Scope,
-): Promise<string> {
-  const { name } = await loadMarketplaceManifest(manifestPath);
+): Promise<{ name: string; comparisonJson: string }> {
+  const {
+    manifest: { name },
+    comparisonJson,
+  } = await loadMarketplaceManifestDocument(manifestPath);
   if (isReservedRecordKey(name)) {
     throw new InvalidMarketplaceManifestError(
       `marketplace.json schema invalid: name "${name}" is reserved`,
@@ -351,7 +354,7 @@ async function newMarketplaceName(
     throw new MarketplaceDuplicateNameError(name, scope);
   }
 
-  return name;
+  return { name, comparisonJson };
 }
 
 /**
@@ -1076,7 +1079,11 @@ async function addGitClonedInGuard(args: {
 
     // 3-4. Read + validate manifest; MA-8: duplicate name in this scope.
     const manifestPath = path.join(stagingDir, ".claude-plugin", "marketplace.json");
-    const derivedName = await newMarketplaceName(manifestPath, state.marketplaces, locations.scope);
+    const { name: derivedName, comparisonJson } = await newMarketplaceName(
+      manifestPath,
+      state.marketplaces,
+      locations.scope,
+    );
 
     // 5. MA-6/MA-12/MA-13: recognize-remove-rename on the final destination.
     // A leftover is the extension's own when it carries the ownership marker
@@ -1116,6 +1123,7 @@ async function addGitClonedInGuard(args: {
       manifestPath: path.join(finalDir, ".claude-plugin", "marketplace.json"),
       marketplaceRoot: finalDir,
       lastUpdatedAt: new Date().toISOString(),
+      lastSuccessfulManifest: comparisonJson,
       plugins: {},
     });
     return derivedName;
@@ -1199,7 +1207,7 @@ async function addPathInGuard(args: {
   // directory. Expand "~" and "~/..." against os.homedir() before
   // probing on disk. The stored `source.raw` keeps the verbatim "~"
   // form (SP-7); only the on-disk lookup is rewritten.
-  const onDiskPath = expandTildePath(source.logical);
+  const onDiskPath = path.resolve(cwd, expandTildePath(source.logical));
   const probe = await stat(onDiskPath);
   let manifestPath: string;
   let marketplaceRoot: string;
@@ -1223,7 +1231,11 @@ async function addPathInGuard(args: {
   }
 
   // Read + validate manifest; MA-8: duplicate name in scope.
-  const derivedName = await newMarketplaceName(manifestPath, state.marketplaces, locations.scope);
+  const { name: derivedName, comparisonJson } = await newMarketplaceName(
+    manifestPath,
+    state.marketplaces,
+    locations.scope,
+  );
 
   // MA-4: source already preserves the user-typed `~` verbatim
   // (ParsedSource.raw) via pathSource() factory. We store the parsed
@@ -1236,6 +1248,7 @@ async function addPathInGuard(args: {
     manifestPath,
     marketplaceRoot,
     lastUpdatedAt: new Date().toISOString(),
+    lastSuccessfulManifest: comparisonJson,
     plugins: {},
   });
   return derivedName;

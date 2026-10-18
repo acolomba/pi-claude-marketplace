@@ -23,7 +23,9 @@ import {
   allowDependenciesOn,
   describeMarketplace,
   invalidateManifest,
+  publishExternalMarketplace,
   publishMarketplace,
+  republishMarketplace,
   requireFreeRoot,
 } from "../../lib/published-marketplace.ts";
 
@@ -37,11 +39,7 @@ async function offer(
   name: string,
   plugins: readonly OfferedPlugin[],
 ): Promise<void> {
-  const { kind } = world.requirePublished(name);
-  world.recordPublished(
-    name,
-    await publishMarketplace(world.marketplacesRoot, name, kind, plugins),
-  );
+  await republishMarketplace(world.requirePublished(name), name, plugins);
 }
 
 Given(
@@ -54,6 +52,16 @@ Given(
     const root = await requireFreeRoot(this.marketplacesRoot, name, kind);
     this.onRelease(() => rm(root, { recursive: true, force: true }));
     this.recordPublished(name, await publishMarketplace(this.marketplacesRoot, name, kind, []));
+  },
+);
+
+Given(
+  "the marketplace {string} is published as an external manifest",
+  async function (this: ScenarioWorld, name: string) {
+    assert.strictEqual(this.publishedMarketplace(name), undefined);
+    const root = await requireFreeRoot(this.marketplacesRoot, name, "file");
+    this.onRelease(() => rm(root, { recursive: true, force: true }));
+    this.recordPublished(name, await publishExternalMarketplace(this.marketplacesRoot, name));
   },
 );
 
