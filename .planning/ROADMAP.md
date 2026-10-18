@@ -315,7 +315,7 @@ Plans:
 3. Code says `base` and `local` everywhere a layer is meant, never `shared`: `configJsonPath` becomes `baseConfigJsonPath` and `configLocalJsonPath` becomes `localConfigJsonPath`, error classes and identifiers follow, and comments match, with no behavior change. Carried from the Phase 3.3 review (IN-02): the flag-only layer selector and the uninstall seam that now loads both layers are renamed to match what they do (`selectDeclaringConfigWriteTarget` / `DeclaringConfigWriteTarget`, `UninstallTransaction.loadTargetConfig`) (TERM-01).
 4. The `{unreadable}` cause for unreadable dependency declarations names the record without the parser's detail, for `uninstall`, `marketplace remove`, and the nameless `update --local` / `reinstall --local` (Phase 3.3 security note).
 
-**Plans:** 8/10 plans executed
+**Plans:** 9/10 plans executed
 
 Plans:
 **Wave 1**
@@ -343,7 +343,7 @@ Plans:
 - [x] 03.4-08-PLAN.md — Test identifiers, helpers, titles, and comments say base and local, with unchanged test counts (TERM-01)
 
 **Wave 9** *(blocked on Wave 8 completion)*
-- [ ] 03.4-09-PLAN.md — Feature titles, descriptions, the step's layer word, and the cucumber rule say base and local; cucumber review (TERM-01)
+- [x] 03.4-09-PLAN.md — Feature titles, descriptions, the step's layer word, and the cucumber rule say base and local; cucumber review (TERM-01)
 
 **Wave 10** *(blocked on Wave 9 completion)*
 - [ ] 03.4-10-PLAN.md — READMEs, guides, catalog prose, and CHANGELOG; whole-tree leftover gates; `npm run check` and the fallow audit against `1c3fc6c9` (TERM-01)
