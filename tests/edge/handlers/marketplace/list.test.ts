@@ -222,12 +222,12 @@ test("reports an unrecognised scope value with the list usage block and never li
 test("list --scope project keeps base, local, and overridden entries with unchanged config bytes", async (t) => {
   // arrange
   const { cwd } = await createHermeticScope(t, "merged-config");
-  await seedMarketplace(cwd, "project", "shared");
+  await seedMarketplace(cwd, "project", "base");
   await seedMarketplace(cwd, "project", "local");
   await seedMarketplace(cwd, "project", "overlap");
   const locations = locationsFor("project", cwd);
   const baseBytes =
-    '{ "marketplaces": { "shared": { "source": "./shared", "autoupdate": true }, "overlap": { "source": "./overlap", "autoupdate": true } } }\n';
+    '{ "marketplaces": { "base": { "source": "./base", "autoupdate": true }, "overlap": { "source": "./overlap", "autoupdate": true } } }\n';
   const localBytes =
     '{ "marketplaces": { "local": { "source": "./local", "autoupdate": true }, "overlap": { "source": "./override", "autoupdate": false } } }\n';
   await writeFile(locations.baseConfigJsonPath, baseBytes);
@@ -245,7 +245,7 @@ test("list --scope project keeps base, local, and overridden entries with unchan
   assert.deepStrictEqual(notifications, [
     {
       message:
-        "● shared [project] <autoupdate>\n\n● local [project] <autoupdate>\n\n● overlap [project]\n\nMarketplace list: 3 successes",
+        "● base [project] <autoupdate>\n\n● local [project] <autoupdate>\n\n● overlap [project]\n\nMarketplace list: 3 successes",
     },
   ]);
   assert.deepStrictEqual(

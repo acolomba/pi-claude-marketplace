@@ -257,7 +257,7 @@ test("projects JSON-derived prototype-named marketplaces as own config entries",
 
 test("FIX-02: leaves out a marketplace the local config declares and every plugin recorded under it, and projects the other marketplace", () => {
   // arrange
-  const state = stateRecording({ shared: ["alpha"], personal: ["beta", "gamma"] });
+  const state = stateRecording({ base: ["alpha"], personal: ["beta", "gamma"] });
   const local = { marketplaces: { personal: { source: "./personal" } } } satisfies ScopeConfig;
 
   // act
@@ -266,15 +266,15 @@ test("FIX-02: leaves out a marketplace the local config declares and every plugi
   // assert
   assert.deepStrictEqual(config, {
     schemaVersion: 1,
-    marketplaces: { shared: { source: "./shared" } },
-    plugins: { "alpha@shared": {} },
+    marketplaces: { base: { source: "./base" } },
+    plugins: { "alpha@base": {} },
   });
 });
 
 test("FIX-02: leaves out a plugin key the local config declares under a projected marketplace", () => {
   // arrange
-  const state = stateRecording({ shared: ["alpha", "beta"] });
-  const local = { plugins: { "beta@shared": {} } } satisfies ScopeConfig;
+  const state = stateRecording({ base: ["alpha", "beta"] });
+  const local = { plugins: { "beta@base": {} } } satisfies ScopeConfig;
 
   // act
   const config = buildConfigFromState(state, local);
@@ -282,8 +282,8 @@ test("FIX-02: leaves out a plugin key the local config declares under a projecte
   // assert
   assert.deepStrictEqual(config, {
     schemaVersion: 1,
-    marketplaces: { shared: { source: "./shared" } },
-    plugins: { "alpha@shared": {} },
+    marketplaces: { base: { source: "./base" } },
+    plugins: { "alpha@base": {} },
   });
 });
 
@@ -395,9 +395,9 @@ test("FIX-02: writes only the non-local records on a first load", async (t) => {
   const { locations } = await createCaseLocations(t);
   const localBytes = '{"schemaVersion":1,"marketplaces":{"personal":{"source":"./personal"}}}\n';
   await writeFile(locations.localConfigJsonPath, localBytes);
-  const state = stateRecording({ shared: ["alpha"], personal: ["beta", "gamma"] });
+  const state = stateRecording({ base: ["alpha"], personal: ["beta", "gamma"] });
   const expectedBytes =
-    '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "shared": {\n      "source": "./shared"\n    }\n  },\n  "plugins": {\n    "alpha@shared": {}\n  }\n}\n';
+    '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "base": {\n      "source": "./base"\n    }\n  },\n  "plugins": {\n    "alpha@base": {}\n  }\n}\n';
 
   // act
   const migration = await migrateFirstRunConfig(locations, state);
@@ -419,9 +419,9 @@ test("FIX-02: writes no base config when the local config declares every record"
   const { locations } = await createCaseLocations(t);
   await writeFile(
     locations.localConfigJsonPath,
-    '{"schemaVersion":1,"marketplaces":{"shared":{"source":"./shared"},"personal":{"source":"./personal"}}}\n',
+    '{"schemaVersion":1,"marketplaces":{"base":{"source":"./base"},"personal":{"source":"./personal"}}}\n',
   );
-  const state = stateRecording({ shared: ["alpha"], personal: ["beta"] });
+  const state = stateRecording({ base: ["alpha"], personal: ["beta"] });
   const expectedMigration = {
     migrated: false,
     reason: "empty-state",

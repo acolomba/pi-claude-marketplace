@@ -430,8 +430,8 @@ function recordedPlugin(
 
 /**
  * FIX-02: `mp-local` is declared only in the local config and records the
- * explicit plugin `lp` and the dependency `dep`; `mp-shared` records the
- * explicit plugins `sp` and `lsp`, and the local config declares `lsp`.
+ * explicit plugin `lp` and the dependency `dep`; `mp-base` records the
+ * explicit plugins `bp` and `lbp`, and the local config declares `lbp`.
  */
 function localDeclarationState(): ExtensionState {
   return {
@@ -449,16 +449,16 @@ function localDeclarationState(): ExtensionState {
           dep: recordedPlugin("mp-local", "dep", "dependency"),
         },
       },
-      "mp-shared": {
-        name: "mp-shared",
+      "mp-base": {
+        name: "mp-base",
         scope: "project",
-        source: pathSource("./mp-shared"),
+        source: pathSource("./mp-base"),
         addedFromCwd: "/workspace",
-        manifestPath: "/marketplaces/mp-shared/.claude-plugin/marketplace.json",
-        marketplaceRoot: "/marketplaces/mp-shared",
+        manifestPath: "/marketplaces/mp-base/.claude-plugin/marketplace.json",
+        marketplaceRoot: "/marketplaces/mp-base",
         plugins: {
-          sp: recordedPlugin("mp-shared", "sp", "explicit"),
-          lsp: recordedPlugin("mp-shared", "lsp", "explicit"),
+          bp: recordedPlugin("mp-base", "bp", "explicit"),
+          lbp: recordedPlugin("mp-base", "lbp", "explicit"),
         },
       },
     },
@@ -471,7 +471,7 @@ test("FIX-02: the migration leaves out local declarations and the merged view co
   const local = {
     schemaVersion: 1,
     marketplaces: { "mp-local": { source: "./mp-local" } },
-    plugins: { "lp@mp-local": {}, "lsp@mp-shared": {} },
+    plugins: { "lp@mp-local": {}, "lbp@mp-base": {} },
   } satisfies ScopeConfig;
 
   // act
@@ -481,8 +481,8 @@ test("FIX-02: the migration leaves out local declarations and the merged view co
   // assert
   assert.deepStrictEqual(projection, {
     schemaVersion: 1,
-    marketplaces: { "mp-shared": { source: "./mp-shared" } },
-    plugins: { "sp@mp-shared": {} },
+    marketplaces: { "mp-base": { source: "./mp-base" } },
+    plugins: { "bp@mp-base": {} },
   });
   assert.deepStrictEqual(plan, emptyReconcilePlan("project"));
 });
