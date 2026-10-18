@@ -4,17 +4,17 @@ milestone: marketplace-features
 milestone_name: Marketplace Behavioral Tests
 current_phase: "03.4"
 current_phase_name: Scope and Layer Terminology
-status: executing
-stopped_at: Completed 03.4-09-PLAN.md
-last_updated: "2026-10-18T04:45:57.466Z"
+status: verifying
+stopped_at: Completed 03.4-10-PLAN.md
+last_updated: "2026-10-18T05:06:52.006Z"
 last_activity: 2026-10-17
 last_activity_desc: Phase 03.4 execution started
-state_head: 477d728db599ba0952beec7df2b3aaf2e607f861
+state_head: 666f545918f289cfda99ff42acd9548f4eba042c
 progress:
   total_phases: 14
   completed_phases: 6
   total_plans: 47
-  completed_plans: 46
+  completed_plans: 47
   percent: 43
 ---
 
@@ -33,7 +33,7 @@ component as a working Pi artifact.
 
 Phase: 03.4 (Scope and Layer Terminology) — EXECUTING
 Plan: 10 of 10
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-10-17 — Phase 03.4 execution started
 
 Progress: [████░░░░░░] 43%
@@ -181,8 +181,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-18T04:45:54.752Z
-**Stopped at:** Completed 03.4-09-PLAN.md
+**Last session:** 2026-10-18T05:06:49.359Z
+**Stopped at:** Completed 03.4-10-PLAN.md
 **Resume file:** None
 
 **Main merge (2026-10-11, quick task 261011-bsm):** `origin/main` at
@@ -328,6 +328,7 @@ archived milestone artifacts.
 | Phase 03.4 P06 | 19min | 2 tasks | 10 files |
 | Phase 03.4 P07 | 15min | 2 tasks | 15 files |
 | Phase 03.4 P08 | 36min | 3 tasks | 56 files |
+| Phase 03.4 P10 | 40min | 2 tasks | 20 files |
 
 ## Decisions
 
@@ -450,6 +451,8 @@ archived milestone artifacts.
 - [Phase 03.4]: D-02: the migration helper that builds the base config's plugin entries is basePluginEntries; production comments say base config/local config and base layer/local layer (D-03)
 - [Phase 03.4]: D-02: test layer helpers, snapshot keys, and layer values say base and local; test data named shared keeps its name
 - [Phase 03.4]: User rule: a layer's file is a config -- LayerConfigUnreadableError, features/lib/layer-config.ts, prose says layer config; plan 10 gates add the layer-file pattern
+- [Phase 03.4]: D-03: prose says layer for a level and config for a file; configuration stays only for a scope's effective configuration
+- [Phase 03.4]: D-03: the writing step is now 'a config in scope <scope> and layer <layer>, with these plugins:'
 
 ### mcp-4 decisions
 
