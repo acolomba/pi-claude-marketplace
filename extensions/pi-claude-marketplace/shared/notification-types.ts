@@ -278,8 +278,9 @@ export type Reason =
   // command again with `--local`, rides the cause line.
   | "disabled in local layer"
   | "enabled in local layer"
-  // UPD-11: the git host answered a marketplace refresh with an HTTP status
-  // other than the 401/403 auth challenge, so the host was reached and it
+  // UPD-11 / ADD-10: the git host answered a marketplace refresh or add clone
+  // with an HTTP status other than the 401/403 auth challenge (and, for add,
+  // the 404/410 `source missing` answers), so the host was reached and it
   // refused. `network unreachable` stays for connection failures. A token
   // cannot interpolate, so the status and the URL ride the row's cause line.
   | "network error";

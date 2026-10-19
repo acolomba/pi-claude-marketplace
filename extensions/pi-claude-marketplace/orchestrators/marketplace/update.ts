@@ -113,8 +113,11 @@ import {
   errorMessage,
   rethrowInvalidGitHubBaseUrl,
 } from "../../shared/errors.ts";
-import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
-import { gitHubWireUrl } from "../../shared/github-base-url.ts";
+import {
+  classifyGitTransportFailure,
+  hostHttpFailureFrame,
+  hostHttpStatus,
+} from "../../shared/git-failure-classifiers.ts";
 import { notifyMcpConfigNotices } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import { type PluginFailedMessage } from "../../shared/notification-types.ts";
@@ -447,8 +450,7 @@ async function refreshRecord(
 /**
  * UPD-11: the first frame of a refresh failure's cause line. When the git host
  * answered with an HTTP status, the frame names the status and the URL the
- * fetch sent, because a reason token cannot carry either. The fetch already
- * went out, so the GitHub base override is valid when the URL is rebuilt.
+ * fetch sent (see `hostHttpFailureFrame`).
  */
 function refreshFailureMessage(
   name: string,
@@ -456,32 +458,14 @@ function refreshFailureMessage(
   remoteUrl: string | undefined,
   cloneAdvanced: boolean,
 ): string {
-  const status = hostHttpStatus(err);
-  if (status !== undefined && remoteUrl !== undefined) {
-    return `${status} on ${gitHubWireUrl(remoteUrl)}`;
+  const frame = remoteUrl === undefined ? undefined : hostHttpFailureFrame(err, remoteUrl);
+  if (frame !== undefined) {
+    return frame;
   }
 
   return cloneAdvanced
     ? `Marketplace "${name}" clone advanced but manifest could not be persisted.`
     : `Failed to update marketplace "${name}".`;
-}
-
-/**
- * UPD-11: the HTTP status of an isomorphic-git `HttpError` that the shared
- * transport classifier leaves unclassified, so the 401/403 auth challenge stays
- * `authentication required`. Returns undefined for any other error.
- */
-function hostHttpStatus(err: unknown): number | undefined {
-  if (!(err instanceof Error) || (err as NodeJS.ErrnoException).code !== "HttpError") {
-    return undefined;
-  }
-
-  const statusCode = (err as { data?: { statusCode?: unknown } }).data?.statusCode;
-  if (typeof statusCode !== "number" || classifyGitTransportFailure(err) !== undefined) {
-    return undefined;
-  }
-
-  return statusCode;
 }
 
 interface RefreshSnapshot {

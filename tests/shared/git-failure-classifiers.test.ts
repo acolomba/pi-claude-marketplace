@@ -5,6 +5,8 @@ import { CrossOriginChallengeError } from "../../extensions/pi-claude-marketplac
 import {
   classifyGitSourceAccessFailure,
   classifyGitTransportFailure,
+  hostHttpFailureFrame,
+  hostHttpStatus,
 } from "../../extensions/pi-claude-marketplace/shared/git-failure-classifiers.ts";
 
 for (const { title, createFailure } of [
@@ -239,19 +241,17 @@ for (const { title, createFailure } of [
 }
 
 // `classifyGitSourceAccessFailure` extends the transport ladder above with the
-// repository-absence and transient-HTTP arms `marketplace add` needs. Its cases
+// repository-absence and host-HTTP arms `marketplace add` needs. Its cases
 // live here because both classifiers are exports of the same module.
 
 for (const { statusCode, expectedReason } of [
   { statusCode: 404, expectedReason: "source missing" },
   { statusCode: 410, expectedReason: "source missing" },
-  { statusCode: 408, expectedReason: "network unreachable" },
-  { statusCode: 429, expectedReason: "network unreachable" },
-  { statusCode: 500, expectedReason: "network unreachable" },
-  { statusCode: 503, expectedReason: "network unreachable" },
-  { statusCode: 599, expectedReason: "network unreachable" },
-  { statusCode: 418, expectedReason: undefined },
-  { statusCode: 600, expectedReason: undefined },
+  { statusCode: 408, expectedReason: "network error" },
+  { statusCode: 429, expectedReason: "network error" },
+  { statusCode: 500, expectedReason: "network error" },
+  { statusCode: 503, expectedReason: "network error" },
+  { statusCode: 418, expectedReason: "network error" },
 ] as const) {
   test(`classifies source-access HTTP ${statusCode} as ${expectedReason ?? "unclassified"}`, () => {
     // arrange
@@ -307,3 +307,70 @@ for (const { title, createFailure, expectedReason } of [
     assert.strictEqual(reason, expectedReason);
   });
 }
+
+for (const { title, createFailure, expectedStatus } of [
+  {
+    title: "reads the status of a host HTTP answer",
+    createFailure: () =>
+      Object.assign(new Error("HTTP Error: 502"), { code: "HttpError", data: { statusCode: 502 } }),
+    expectedStatus: 502,
+  },
+  {
+    title: "leaves the 401/403 auth challenge to the transport ladder",
+    createFailure: () =>
+      Object.assign(new Error("HTTP Error: 403"), { code: "HttpError", data: { statusCode: 403 } }),
+    expectedStatus: undefined,
+  },
+  {
+    title: "reads no status from an HTTP error that carries none",
+    createFailure: () =>
+      Object.assign(new Error("HTTP Error"), { code: "HttpError", data: { statusCode: "500" } }),
+    expectedStatus: undefined,
+  },
+  {
+    title: "reads no status from a connection failure",
+    createFailure: () => Object.assign(new Error("getaddrinfo"), { code: "ENOTFOUND" }),
+    expectedStatus: undefined,
+  },
+  {
+    title: "reads no status from a thrown non-Error",
+    createFailure: () => ({ code: "HttpError", data: { statusCode: 500 } }),
+    expectedStatus: undefined,
+  },
+] as const) {
+  test(title, () => {
+    // arrange
+    const failure = createFailure();
+
+    // act
+    const status = hostHttpStatus(failure);
+
+    // assert
+    assert.strictEqual(status, expectedStatus);
+  });
+}
+
+test("frames a host HTTP answer as its status on the fetched URL", () => {
+  // arrange
+  const failure = Object.assign(new Error("HTTP Error: 500"), {
+    code: "HttpError",
+    data: { statusCode: 500 },
+  });
+
+  // act
+  const frame = hostHttpFailureFrame(failure, "https://git.example.com/acme/mp.git");
+
+  // assert
+  assert.strictEqual(frame, "500 on https://git.example.com/acme/mp.git");
+});
+
+test("frames nothing for a failure without a host HTTP status", () => {
+  // arrange
+  const failure = Object.assign(new Error("connect ECONNREFUSED"), { code: "ECONNREFUSED" });
+
+  // act
+  const frame = hostHttpFailureFrame(failure, "https://git.example.com/acme/mp.git");
+
+  // assert
+  assert.strictEqual(frame, undefined);
+});

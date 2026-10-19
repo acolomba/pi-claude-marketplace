@@ -246,5 +246,39 @@ export const MARKETPLACE_ADD_FIXTURES: FixtureMap = {
         ],
       },
     },
+
+    // ADD-10: the git host answered the clone with an HTTP status outside the
+    // 401/403 auth challenge and the 404/410 absence answers, so the synthetic
+    // child carries `{network error}`. The first frame of the cause line names
+    // the status and the URL the clone fetched, as on `update-host-http-error`.
+    "add-host-http-error": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        label: "Marketplace add",
+        cardinality: "single",
+        marketplaces: [
+          {
+            name: "https://git.example.com/acme/flaky-mp",
+            scope: "user",
+            status: "failed",
+            severity: "error",
+            needsReload: false,
+            plugins: [
+              {
+                status: "failed",
+                name: "https://git.example.com/acme/flaky-mp",
+                reasons: ["network error"],
+                cause: new Error("503 on https://git.example.com/acme/flaky-mp", {
+                  cause: new Error("HTTP Error: 503 Service Unavailable"),
+                }),
+                severity: "error",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
   },
 };

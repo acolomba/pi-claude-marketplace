@@ -2570,6 +2570,20 @@ Some operations have failed.
     cause: HTTP Error: 401 Unauthorized
 ```
 
+### Failure -- git host HTTP error (ADD-10)
+
+Triggered when a github or url `marketplace add` clones and the git host answers with an HTTP status other than the 401/403 auth challenge and the 404/410 repository-absence answers (ADD-09 keeps those as `{source missing}`): a 5xx, a 408, a 429, or any other status. The reason is `{network error}`, because the host was reached and refused. `{network unreachable}` stays for connection failures, meaning the network errno codes. The first frame of the cause line names the status and the URL the clone fetched, as `{status} on {url}`, with URL credentials redacted, and the transport's own message follows. This is the same frame `marketplace update` renders (`update-host-http-error`). The reason and the cause ride a synthetic-child failed row, as in `add-authentication-required`. Pre-name failure: the subject is the user-typed source. Severity `error`; no reload-hint.
+
+<!-- catalog-state: add-host-http-error -->
+
+```text
+Some operations have failed.
+
+⊘ https://git.example.com/acme/flaky-mp [user] (failed)
+  ⊘ https://git.example.com/acme/flaky-mp (failed) {network error}
+    cause: 503 on https://git.example.com/acme/flaky-mp -> HTTP Error: 503 Service Unavailable
+```
+
 ______________________________________________________________________
 
 ## `/claude:plugin marketplace info <name>`

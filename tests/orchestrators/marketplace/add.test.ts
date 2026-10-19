@@ -3863,11 +3863,9 @@ test("D-76-09: a missing repository HttpError renders (failed) {source missing} 
   });
 });
 
-for (const { statusCode, reason } of [
-  { statusCode: 429, reason: "network unreachable" },
-  { statusCode: 500, reason: "network unreachable" },
-]) {
-  test(`D-76-09: a transient HTTP ${statusCode} clone failure renders (failed) {${reason}}`, async () => {
+for (const statusCode of [408, 429, 500, 503]) {
+  test(`ADD-10: a clone the host answers with HTTP ${statusCode} renders {network error} with the status on the fetched URL`, async (t) => {
+    await createHermeticEnvironment(t, "mp-add-host-http-home-");
     await withTmpScope(async ({ cwd }) => {
       // arrange
       const { ctx, run, notifications } = makeCtx();
@@ -3890,14 +3888,76 @@ for (const { statusCode, reason } of [
       assert.deepStrictEqual(notifications, [
         {
           message:
-            "A marketplace operation has failed.\n\n" +
-            `⊘ https://gitlab.example.com/team/flaky-mp [project] (failed) {${reason}}`,
+            "Some operations have failed.\n\n" +
+            "⊘ https://gitlab.example.com/team/flaky-mp [project] (failed)\n" +
+            "  ⊘ https://gitlab.example.com/team/flaky-mp (failed) {network error}\n" +
+            `    cause: ${statusCode} on https://gitlab.example.com/team/flaky-mp -> HTTP Error: ${statusCode}`,
           severity: "error",
         },
       ]);
     });
   });
 }
+
+test("ADD-10: a GitHub clone the host answers with HTTP 502 names the github.com wire URL", async (t) => {
+  await createHermeticEnvironment(t, "mp-add-host-http-github-home-");
+  await withTmpScope(async ({ cwd }) => {
+    // arrange
+    const { ctx, run, notifications } = makeCtx();
+    const { gitOps } = createGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+      cloneThrows: httpError(502),
+    });
+
+    // act
+    await addMarketplace({ ctx, run, scope: "project", cwd, rawSource: "acme/mp", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "Some operations have failed.\n\n" +
+          "⊘ acme/mp [project] (failed)\n" +
+          "  ⊘ acme/mp (failed) {network error}\n" +
+          "    cause: 502 on https://github.com/acme/mp.git -> HTTP Error: 502",
+        severity: "error",
+      },
+    ]);
+  });
+});
+
+test("ADD-10 orchestrated mode -- a host HTTP 500 returns the network-error outcome without notifying", async (t) => {
+  await createHermeticEnvironment(t, "mp-add-host-http-orchestrated-home-");
+  await withTmpScope(async ({ cwd }) => {
+    // arrange
+    const { ctx, run, notifications } = makeCtx(0);
+    const cloneThrows = httpError(500);
+    const { gitOps } = createGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+      cloneThrows,
+    });
+
+    // act
+    const outcome = await addMarketplace({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource: "https://gitlab.example.com/team/flaky-mp",
+      gitOps,
+      notifications: { mode: "orchestrated" },
+    });
+
+    // assert
+    assert.deepStrictEqual(outcome, {
+      status: "failed",
+      reason: "network error",
+      error: cloneThrows,
+      cause: "HTTP Error: 500",
+    });
+    assert.deepStrictEqual(notifications, []);
+  });
+});
 
 test("D-76-09 orchestrated mode -- a gone repository returns the source-missing outcome without notifying", async () => {
   await withTmpScope(async ({ cwd }) => {

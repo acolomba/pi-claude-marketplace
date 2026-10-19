@@ -82,7 +82,10 @@ import {
   pathExists,
   type RemovalOps,
 } from "../../shared/fs-utils.ts";
-import { classifyGitSourceAccessFailure } from "../../shared/git-failure-classifiers.ts";
+import {
+  classifyGitSourceAccessFailure,
+  hostHttpFailureFrame,
+} from "../../shared/git-failure-classifiers.ts";
 import { composeLeftoverRemovalAdvisories } from "../../shared/notification-summary.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import { type PluginFailedMessage, type Reason } from "../../shared/notification-types.ts";
@@ -150,7 +153,7 @@ export type AddMarketplaceNotifications =
  * `failed` collapses every classified precondition failure
  * (`classifyAddError` recognized: duplicate name / stale clone / permission
  * denied / unreadable / invalid manifest / unsupported source / source
- * missing / network unreachable)
+ * missing / network unreachable / network error)
  * plus the catastrophic
  * fallback ("unparseable" -- chosen because every recognised add precondition
  * yields a typed error, so a non-enumerated throw is by construction an
@@ -321,7 +324,7 @@ export function classifyAddError(rawErr: unknown): ContentReason | undefined {
 
     // GAUTH-02 / D-76-09: delegate git clone errors to the source-access
     // classifier. It includes the shared auth/network ladder and adds
-    // repository-missing plus transient HTTP statuses for this source-access
+    // repository-missing and host HTTP statuses for this source-access
     // boundary. The opt-in layer keeps other callers' fallthrough semantics
     // unchanged. The clone catch only cleans staging and rethrows, so this
     // boundary must classify the error before Pi renders a raw exception.
@@ -745,14 +748,19 @@ function removalAdvisories(err: unknown): readonly string[] | undefined {
  * synthetic failed child row whose cause line ends with the fetched URL, the
  * same shape `marketplace update` renders for a failed refresh. A failure the
  * override did not rewrite keeps the bare row.
+ *
+ * ADD-10 / UPD-11: a `network error` takes the same child row, and its cause
+ * line opens with the `{status} on {url}` frame (`hostFrame`), as on update.
  */
 function failedAddRow(
   subject: string,
   scope: Scope,
   reason: ContentReason,
   error: Error,
+  hostFrame: string | undefined,
 ): MarketplaceRows<PluginFailedMessage> {
-  if (!hasFetchedUrlCause(error)) {
+  const cause = hostFrame === undefined ? error : new Error(hostFrame, { cause: error });
+  if (hostFrame === undefined && !hasFetchedUrlCause(error)) {
     // D-03: a failed marketplace add -> error.
     return {
       name: subject,
@@ -768,12 +776,34 @@ function failedAddRow(
     status: "failed",
     name: subject,
     reasons: [reason],
-    cause: error,
+    cause,
     // D-03/D-06: a failed marketplace add -> error, no reload.
     severity: "error",
     needsReload: false,
   };
   return { name: subject, scope, status: "failed", severity: "error", plugins: [fetchedRow] };
+}
+
+/**
+ * ADD-10: the `{status} on {url}` frame of a clone the git host answered with
+ * an HTTP status, for a `network error` row. An unsupported source never
+ * parsed, and a path source never clones, so neither has a frame.
+ */
+function hostErrorFrame(
+  err: unknown,
+  rawSource: string,
+  reason: ContentReason,
+): string | undefined {
+  if (reason === "unsupported source") {
+    return undefined;
+  }
+
+  const source = parseAddableSource(rawSource);
+  const frame =
+    source.kind === "path"
+      ? undefined
+      : hostHttpFailureFrame(unwrapAddError(err), networkCloneUrl(source));
+  return reason === "network error" ? frame : undefined;
 }
 
 /**
@@ -829,7 +859,13 @@ function handleAddFailure(
     // `(failed)` header with a failed child row (see `failedAddRow`), renders via
     // the central renderMpHeader seam; ADD_CONTEXT carries the add vocabulary.
     const failedRows: Single<MarketplaceRows<PluginFailedMessage>> = [
-      failedAddRow(addSubjectName(err, opts.rawSource), opts.scope, reason, wrapped),
+      failedAddRow(
+        addSubjectName(err, opts.rawSource),
+        opts.scope,
+        reason,
+        wrapped,
+        hostErrorFrame(err, opts.rawSource, reason),
+      ),
     ];
     const advisories = removalAdvisories(err);
     notifyWithContext(opts.ctx, opts.run, ADD_CONTEXT, failedRows, undefined, "single", {
