@@ -561,48 +561,51 @@ test("INFO-01: an explicit project path source renders its minimal block", async
   });
 });
 
-for (const sourceCase of [
+for (const { title, source, expectedPath } of [
   {
     title: "directory source",
     source: (cwd: string): string => path.join(cwd, "sources", "directory"),
+    expectedPath: (cwd: string): string => path.join(cwd, "sources", "directory"),
   },
   {
     title: "conventional manifest file",
     source: (cwd: string): string =>
+      path.join(cwd, "sources", "conventional", ".claude-plugin", "marketplace.json"),
+    expectedPath: (cwd: string): string =>
       path.join(cwd, "sources", "conventional", ".claude-plugin", "marketplace.json"),
   },
   {
     title: "external manifest file",
     source: (cwd: string): string =>
       path.join(cwd, "sources", "external", "catalog", "marketplace.json"),
+    expectedPath: (cwd: string): string =>
+      path.join(cwd, "sources", "external", "catalog", "marketplace.json"),
   },
   {
     title: "relative manifest file",
     source: (): string => "./sources/relative/catalog/marketplace.json",
+    expectedPath: (cwd: string): string =>
+      path.join(cwd, "sources", "relative", "catalog", "marketplace.json"),
   },
   {
     title: "tilde manifest file",
     source: (): string => "~/sources/tilde/catalog/marketplace.json",
+    expectedPath: (_cwd: string, home: string): string =>
+      path.join(home, "sources", "tilde", "catalog", "marketplace.json"),
   },
   {
     title: "home directory source",
     source: (): string => "~",
+    expectedPath: (_cwd: string, home: string): string => home,
   },
 ] as const) {
-  test(`D-01: marketplace info resolves the original ${sourceCase.title}`, async () => {
+  test(`D-01: marketplace info resolves the original ${title}`, async () => {
     await withHermeticHome(async ({ cwd, home }) => {
       // arrange
       const locations = locationsFor("project", cwd);
       const manifestPath = path.join(locations.extensionRoot, "source-identity.json");
       await writeMarketplaceJson(manifestPath, "source-identity");
-      const rawSource = sourceCase.source(cwd);
-      const expectedPath =
-        rawSource === "~"
-          ? home
-          : path.resolve(
-              cwd,
-              rawSource.startsWith("~/") ? path.join(home, rawSource.slice(2)) : rawSource,
-            );
+      const rawSource = source(cwd);
       await saveMarketplace(
         locations,
         marketplaceRecord({
@@ -617,7 +620,7 @@ for (const sourceCase of [
       );
       const before = await snapshotEnvironment(home, cwd);
       const boundary = notificationBoundary({
-        message: `● source-identity [project] <no autoupdate>\npath: ${expectedPath}`,
+        message: `● source-identity [project] <no autoupdate>\npath: ${expectedPath(cwd, home)}`,
       });
 
       // act
