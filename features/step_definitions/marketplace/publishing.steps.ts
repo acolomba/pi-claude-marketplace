@@ -27,6 +27,7 @@ import {
   publishMarketplace,
   republishMarketplace,
   requireFreeRoot,
+  rewritePublishedManifest,
 } from "../../lib/published-marketplace.ts";
 
 import type { OfferedPlugin } from "../../lib/path-marketplace.ts";
@@ -83,6 +84,13 @@ Given(
   "the marketplace {string} has the description {string}",
   async function (this: ScenarioWorld, name: string, description: string) {
     await describeMarketplace(this.requirePublished(name), description);
+  },
+);
+
+Given(
+  "the marketplace {string} publishes this manifest:",
+  async function (this: ScenarioWorld, name: string, text: string) {
+    await rewritePublishedManifest(this.requirePublished(name), text);
   },
 );
 

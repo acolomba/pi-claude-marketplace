@@ -304,9 +304,15 @@ Feature: Marketplace update
 
   Scenario Outline: Whitespace and object key order do not change a marketplace
     Given the marketplace "tools" is published as a <source kind> source
-    Given the marketplace "tools" has the "<rewrite>" comparison baseline
+    Given the marketplace "tools" publishes this manifest:
+      """
+      <published manifest>
+      """
     Given the marketplace "tools" is added to the project scope
-    Given the marketplace "tools" update source has the "<rewrite>" cosmetic rewrite
+    Given the marketplace "tools" update source contains this manifest:
+      """
+      <refreshed manifest>
+      """
     When the user runs "/claude:plugin marketplace update"
     Then the result has these fields:
       | kind                | cascade            |
@@ -321,29 +327,35 @@ Feature: Marketplace update
       | tools            | project           | skipped            | up-to-date          |
 
     Examples:
-      | source kind | rewrite       |
-      | dir         | formatting    |
-      | dir         | top-level keys |
-      | dir         | nested keys   |
-      | file        | formatting    |
-      | file        | top-level keys |
-      | file        | nested keys   |
+      | source kind | published manifest                                                                        | refreshed manifest                                                                              |
+      | dir         | {"name":"tools","owner":{"name":"features"},"plugins":[]}                                 | {\n  "name": "tools",\n  "owner": { "name": "features" },\n  "plugins": []\n}\n                 |
+      | dir         | {"name":"tools","owner":{"name":"features"},"plugins":[]}                                 | { "plugins": [], "owner": {"name":"features"}, "name":"tools" }\n                               |
+      | dir         | {"name":"tools","owner":{"name":"features","email":"features@example.test"},"plugins":[]} | { "name":"tools", "owner":{"email":"features@example.test","name":"features"}, "plugins":[] }\n |
+      | file        | {"name":"tools","owner":{"name":"features"},"plugins":[]}                                 | {\n  "name": "tools",\n  "owner": { "name": "features" },\n  "plugins": []\n}\n                 |
+      | file        | {"name":"tools","owner":{"name":"features"},"plugins":[]}                                 | { "plugins": [], "owner": {"name":"features"}, "name":"tools" }\n                               |
+      | file        | {"name":"tools","owner":{"name":"features","email":"features@example.test"},"plugins":[]} | { "name":"tools", "owner":{"email":"features@example.test","name":"features"}, "plugins":[] }\n |
 
     @url
     Examples:
-      | source kind | rewrite    |
-      | url         | formatting |
+      | source kind | published manifest                                        | refreshed manifest                                                              |
+      | url         | {"name":"tools","owner":{"name":"features"},"plugins":[]} | {\n  "name": "tools",\n  "owner": { "name": "features" },\n  "plugins": []\n}\n |
 
     @github
     Examples:
-      | source kind | rewrite    |
-      | github      | formatting |
+      | source kind | published manifest                                        | refreshed manifest                                                              |
+      | github      | {"name":"tools","owner":{"name":"features"},"plugins":[]} | {\n  "name": "tools",\n  "owner": { "name": "features" },\n  "plugins": []\n}\n |
 
   Scenario Outline: An unknown manifest field changes the marketplace
-    Given the marketplace "tools" is published as a dir source
-    Given the marketplace "tools" has the "<change>" comparison baseline
+    Given the marketplace "tools" is published as a <source kind> source
+    Given the marketplace "tools" publishes this manifest:
+      """
+      <published manifest>
+      """
     Given the marketplace "tools" is added to the project scope
-    Given the marketplace "tools" update source has the "<change>" semantic rewrite
+    Given the marketplace "tools" update source contains this manifest:
+      """
+      <refreshed manifest>
+      """
     When the user runs "/claude:plugin marketplace update"
     Then the result has these fields:
       | kind                | cascade            |
@@ -358,16 +370,22 @@ Feature: Marketplace update
       | tools            | project           | updated            |
 
     Examples:
-      | change                |
-      | unknown field added   |
-      | unknown field changed |
-      | unknown field removed |
+      | source kind | published manifest                                                                                                 | refreshed manifest                                                                               |
+      | dir         | {"name":"tools","owner":{"name":"features"},"plugins":[]}                                                          | { "name":"tools", "owner":{"name":"features"}, "plugins":[], "vendor":{"revision":1} }\n         |
+      | dir         | {"name":"tools","owner":{"name":"features"},"plugins":[],"vendor":{"revision":1}}                                  | { "name":"tools", "owner":{"name":"features"}, "plugins":[], "vendor":{"revision":2} }\n         |
+      | dir         | {"name":"tools","owner":{"name":"features"},"plugins":[{"name":"demo","source":"./demo","vendor":{"revision":1}}]} | { "name":"tools", "owner":{"name":"features"}, "plugins":[{"name":"demo","source":"./demo"}] }\n |
 
   Scenario Outline: Reordering a manifest array changes the marketplace
-    Given the marketplace "tools" is published as a dir source
-    Given the marketplace "tools" has the "<array>" comparison baseline
+    Given the marketplace "tools" is published as a <source kind> source
+    Given the marketplace "tools" publishes this manifest:
+      """
+      <published manifest>
+      """
     Given the marketplace "tools" is added to the project scope
-    Given the marketplace "tools" update source has the "<array>" semantic rewrite
+    Given the marketplace "tools" update source contains this manifest:
+      """
+      <refreshed manifest>
+      """
     When the user runs "/claude:plugin marketplace update"
     Then the result has these fields:
       | kind                | cascade            |
@@ -382,16 +400,22 @@ Feature: Marketplace update
       | tools            | project           | updated            |
 
     Examples:
-      | array                     |
-      | plugin order              |
-      | allowed marketplace order |
-      | unknown array order       |
+      | source kind | published manifest                                                                                   | refreshed manifest                                                                                           |
+      | dir         | {"name":"tools","plugins":[{"name":"zebra","source":"./zebra"},{"name":"alpha","source":"./alpha"}]} | { "name":"tools", "plugins":[ {"name":"alpha","source":"./alpha"}, {"name":"zebra","source":"./zebra"} ] }\n |
+      | dir         | {"name":"tools","plugins":[],"allowCrossMarketplaceDependenciesOn":["zebra","alpha"]}                | { "name":"tools", "plugins":[], "allowCrossMarketplaceDependenciesOn":["alpha", "zebra"] }\n                 |
+      | dir         | {"name":"tools","plugins":[],"vendor":{"sequence":["zebra","alpha"]}}                                | { "name":"tools", "plugins":[], "vendor":{"sequence":["alpha", "zebra"]} }\n                                 |
 
   Scenario: An isolated dependency entry retains its comparison fields
     Given the marketplace "tools" is published as a dir source
-    Given the marketplace "tools" has the "isolated dependency fields" comparison baseline
+    Given the marketplace "tools" publishes this manifest:
+      """
+      {"name":"tools","plugins":[{"name":"broken","source":"./broken","dependencies":["library@~1.0.0"],"vendor":{"revision":1}}]}
+      """
     Given the marketplace "tools" is added to the project scope
-    Given the marketplace "tools" update source has the "isolated dependency fields" semantic rewrite
+    Given the marketplace "tools" update source contains this manifest:
+      """
+      { "name":"tools", "plugins":[{"name":"broken","source":"./broken","dependencies":["library@~1.0.0"],"vendor":{"revision":2}}] }
+      """
     When the user runs "/claude:plugin marketplace update"
     Then the result has these fields:
       | kind                | cascade            |
