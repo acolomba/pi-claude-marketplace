@@ -4029,6 +4029,20 @@ Some operations have failed.
   ⊘ official (failed) {invalid manifest}
 ```
 
+### Marketplace update failed (git host HTTP error)
+
+Triggered when `marketplace update <name>` fetches a github or url marketplace and the git host answers with an HTTP status other than the 401/403 auth challenge: a 5xx, a 404, or any other status (UPD-11). The reason is `{network error}`, because the host was reached and refused. `{network unreachable}` stays for connection failures, meaning the network errno codes. The first frame of the cause line names the status and the URL the refresh fetched, as `{status} on {url}`, with URL credentials redacted, and the transport's own message follows. The reason rides the synthetic child, as in `update-path-invalid-manifest`. Severity `error`; no reload-hint.
+
+<!-- catalog-state: update-host-http-error -->
+
+```text
+Some operations have failed.
+
+⊘ official [user] (failed)
+  ⊘ official (failed) {network error}
+    cause: 404 on https://git.example.com/acme/official.git -> HTTP Error: 404 Not Found
+```
+
 ### Failure -- marketplace not added, explicit scope (SC#1 / ATTR-06 / D-48-C)
 
 Triggered when `marketplace update <name> --scope <scope>` names a marketplace that is NOT added in the requested scope (or is present only in the OTHER scope). SC#1 cross-op convergence: the marketplace-form update now joins `install` / `uninstall` / `reinstall` / `update` (plugin form) / `marketplace remove` / `autoupdate` in routing the marketplace-absent precondition to the SAME standalone `MarketplaceNotAddedMessage` variant -- replacing the former raw `MarketplaceNotFoundError` escape past the orchestrator boundary (the last residual Class-C instance). A single pre-guard `loadState` existence read (NFR-5: network-free) blocks the miss BEFORE it reaches `snapshotAfterRefresh`'s `withStateGuard` throw; the `[scope]` bracket carries the REQUESTED scope (SCOPE-01). Genuine refresh failures (clone/manifest/lock) are untouched -- only `MarketplaceNotFoundError` reroutes here; everything else keeps its `(failed)` cascade (`mp-failure-network` / `update-path-invalid-manifest`). Two-block form: the `A marketplace operation has failed.` summary on the host `Error:` label line, then the bare column-0 detail row as its own block (GRAM-01 / GRAM-02). No cause-chain trailer. Severity `error`; no reload-hint.

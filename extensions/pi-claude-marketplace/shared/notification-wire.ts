@@ -156,6 +156,7 @@ const REASONS = {
   "still installed in local layer": true,
   "disabled in local layer": true,
   "enabled in local layer": true,
+  "network error": true,
 } as const satisfies Record<Reason, true>;
 
 const SEVERITIES = {

@@ -126,6 +126,8 @@ export type FailureReason =
   | "permission denied"
   | "source missing"
   | "network unreachable"
+  // UPD-11: the git host answered with an HTTP status other than 401/403.
+  | "network error"
   // D-76-08: HTTP auth challenge (401/403) on a marketplace clone. A distinct
   // failure-class member -- truthful attribution keeps it out of `network
   // unreachable`.

@@ -309,6 +309,8 @@ const EXPECTED_REASONS = [
   // LAYER-04: a flagless enable or disable the local layer overrides is refused.
   "disabled in local layer",
   "enabled in local layer",
+  // UPD-11: an update's git host answered with an HTTP status other than 401/403.
+  "network error",
 ] as const;
 
 const EXPECTED_STATUS_TOKENS = [

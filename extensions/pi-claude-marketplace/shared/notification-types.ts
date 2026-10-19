@@ -277,7 +277,12 @@ export type Reason =
   // next load. The refusal rides a `failed` row, and the remedy, running the
   // command again with `--local`, rides the cause line.
   | "disabled in local layer"
-  | "enabled in local layer";
+  | "enabled in local layer"
+  // UPD-11: the git host answered a marketplace refresh with an HTTP status
+  // other than the 401/403 auth challenge, so the host was reached and it
+  // refused. `network unreachable` stays for connection failures. A token
+  // cannot interpolate, so the status and the URL ride the row's cause line.
+  | "network error";
 
 /** Reasons that describe a content row rather than marketplace absence. */
 export type ContentReason = Exclude<
