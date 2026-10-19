@@ -7,7 +7,7 @@
  */
 
 import assert from "node:assert/strict";
-import { rm, stat } from "node:fs/promises";
+import { rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import {
@@ -241,6 +241,33 @@ export async function invalidateManifest(
     case "dir":
     case "file":
       await MANIFEST_WRITERS[problem](published.manifestPath, name);
+      return;
+    case "url":
+    case "github":
+      throw noStandIn(published.kind);
+  }
+}
+
+/**
+ * Adds a file nobody may read to the skill of the published plugin `plugin`.
+ * Pi reads the plugin's manifest and dependencies as usual, then fails to
+ * copy the skill when it stages the update.
+ */
+export async function publishUnreadableSkillFile(
+  published: PublishedMarketplace,
+  plugin: string,
+): Promise<void> {
+  switch (published.kind) {
+    case "dir":
+    case "file":
+      await writeFile(
+        ownedTarget(
+          published,
+          path.join(published.root, "plugins", plugin, "skills", `${plugin}-skill`, "notes.md"),
+        ),
+        "Unreadable.\n",
+        { mode: 0o000 },
+      );
       return;
     case "url":
     case "github":

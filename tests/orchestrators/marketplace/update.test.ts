@@ -2174,6 +2174,72 @@ test("autoupdate off never invokes a plugin update", async () => {
   });
 });
 
+test("autoupdate continues in installed order after an ordinary plugin failure", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const zeta = makePluginRecord();
+    const alpha = { ...makePluginRecord(), version: "1.0.0" };
+    await seedGithubMarketplace({
+      cwd,
+      name: "ordered",
+      ref: "main",
+      autoupdate: true,
+      plugins: { zeta, alpha },
+    });
+    const locations = locationsFor("project", cwd);
+    const before = await loadState(locations.extensionRoot);
+    const calls: string[] = [];
+    const { ctx, run, notifications } = makeCtx();
+    const { gitOps } = createGitOps({
+      remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000010" },
+    });
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      name: "ordered",
+      scope: "project",
+      cwd,
+      gitOps,
+      pluginUpdate: (plugin) => {
+        calls.push(plugin);
+        if (plugin === "zeta") {
+          return Promise.reject(new Error("zeta update failed"));
+        }
+
+        return Promise.resolve({
+          partition: "updated",
+          name: plugin,
+          fromVersion: "1.0.0",
+          toVersion: "1.1.0",
+          stagedAgentNames: [],
+          stagedMcpServerNames: [],
+          declaresAgents: false,
+          declaresMcp: false,
+          constraint: undefined,
+          declaresWorkflows: false,
+        });
+      },
+    });
+
+    // assert
+    assert.deepStrictEqual(calls, ["zeta", "alpha"]);
+    const first = notifications[0];
+    assert.ok(first !== undefined);
+    assert.strictEqual(first.severity, "error");
+    assert.ok(
+      first.message.indexOf("⊘ zeta (failed)") <
+        first.message.indexOf("● alpha v1.0.0 → v1.1.0 (updated)"),
+    );
+    assert.deepStrictEqual(
+      (await loadState(locations.extensionRoot)).marketplaces.ordered?.plugins,
+      before.marketplaces.ordered?.plugins,
+    );
+  });
+});
+
 // ─── LIFE-06 / D-98-13: the manifest-absent skip on the autoupdate cascade ────
 //
 // The skip has ONE origin -- the shared update preflight, which stamps

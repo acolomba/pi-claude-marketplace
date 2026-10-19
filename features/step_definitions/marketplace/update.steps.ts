@@ -10,6 +10,7 @@ import { runCommand } from "../../lib/pi-commands.ts";
 import {
   invalidateManifest,
   publishConventionalDecoy,
+  publishUnreadableSkillFile,
   removePublishedSource,
   rewritePublishedManifest,
 } from "../../lib/published-marketplace.ts";
@@ -199,6 +200,13 @@ Given(
   "the published source of the marketplace {string} is removed",
   async function (this: ScenarioWorld, name: string) {
     await removePublishedSource(this.requirePublished(name));
+  },
+);
+
+Given(
+  "the published plugin {string} of the marketplace {string} has an unreadable skill file",
+  async function (this: ScenarioWorld, plugin: string, name: string) {
+    await publishUnreadableSkillFile(this.requirePublished(name), plugin);
   },
 );
 
