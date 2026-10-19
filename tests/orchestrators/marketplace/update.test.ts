@@ -2057,6 +2057,74 @@ test("autoupdate calls each installed plugin in record order", async () => {
   });
 });
 
+test("autoupdate ignores a newly declared plugin that has no installed record", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const marketplaceRoot = await mkdtemp(path.join(tmpdir(), "mp-new-offer-"));
+    try {
+      const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
+      const baseline = JSON.stringify({
+        name: "offers",
+        plugins: [{ name: "existing", source: "./existing", version: "1.0.0" }],
+      });
+      const refreshed = JSON.stringify({
+        name: "offers",
+        plugins: [
+          { name: "existing", source: "./existing", version: "1.0.0" },
+          { name: "new", source: "./new", version: "1.0.0" },
+        ],
+      });
+      await mkdir(path.dirname(manifestPath), { recursive: true });
+      await writeFile(manifestPath, refreshed, "utf8");
+      const installed = makePluginRecord();
+      await seedPathMarketplace({
+        cwd,
+        name: "offers",
+        marketplaceRoot,
+        autoupdate: true,
+        plugins: { existing: installed },
+        lastSuccessfulManifest: baseline,
+      });
+      const calls: string[] = [];
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await updateMarketplace({
+        completionCache: createCompletionCache(),
+        ctx,
+        run,
+        name: "offers",
+        scope: "project",
+        cwd,
+        pluginUpdate: (plugin) => {
+          calls.push(plugin);
+          return Promise.resolve({
+            partition: "unchanged",
+            name: plugin,
+            fromVersion: installed.version,
+            toVersion: installed.version,
+            declaresAgents: false,
+            declaresMcp: false,
+            constraint: undefined,
+            declaresWorkflows: false,
+          });
+        },
+      });
+
+      // assert
+      assert.deepStrictEqual(calls, ["existing"]);
+      assert.deepStrictEqual(
+        await readPluginRecord(locationsFor("project", cwd).extensionRoot, "offers", "existing"),
+        installed,
+      );
+      assert.match(notifications[0]?.message ?? "", /^● offers \[project\] \(updated\)/);
+      assert.match(notifications[0]?.message ?? "", /^ {2}⊘ existing \(skipped\) \{up-to-date\}$/m);
+    } finally {
+      await rm(marketplaceRoot, { recursive: true, force: true });
+    }
+  });
+});
+
 test("autoupdate off never invokes a plugin update", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
@@ -2171,6 +2239,7 @@ test("LIFE-06: cascade mapper carries a preflight `not in manifest` skip through
 
     const first = notifications[0];
     assert.ok(first !== undefined);
+    assert.strictEqual(first.severity, "warning");
     assert.match(first.message, /^ {2}⊘ hello \(skipped\) \{not in manifest\}$/m);
 
     // A skipped plugin is a fixed point for the cascade: nothing is written, so
@@ -2553,6 +2622,9 @@ test("UXG-05 (UAT Test-3 gap) + RH-1 + SNM-33 / D-22-01: autoupdate-ON cascade a
       plugins: { p: makePluginRecord() },
     });
     const { ctx, run, notifications } = makeCtx();
+    const locations = locationsFor("project", cwd);
+    const before = await readPluginRecord(locations.extensionRoot, "noupd", "p");
+    assert.ok(before !== undefined);
     // The mock git ops advance the ref but do NOT rewrite the seeded
     // `valid-marketplace` fixture, so the refresh re-validates byte-identical
     // manifest content -> snapshot.changed === false.
@@ -2592,6 +2664,7 @@ test("UXG-05 (UAT Test-3 gap) + RH-1 + SNM-33 / D-22-01: autoupdate-ON cascade a
     assert.ok(first !== undefined);
     assert.equal(first.message, "● noupd [project] (skipped) {up-to-date}");
     assert.equal(first.severity, undefined);
+    assert.deepStrictEqual(await readPluginRecord(locations.extensionRoot, "noupd", "p"), before);
     // SNM-33 / D-22-01 (G-MIL-06): no plugin row carries a state-change token
     // (plugins:[]), and a marketplace record is not a Pi-visible resource, so
     // the trailer is suppressed -- shouldEmitReloadHint is plugin-row-driven.
