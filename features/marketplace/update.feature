@@ -125,3 +125,69 @@ Feature: Marketplace update
     Examples:
       | source kind | rewrite    |
       | github      | formatting |
+
+  Scenario Outline: An unknown manifest field changes the marketplace
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" has the "<change>" comparison baseline
+    Given the marketplace "tools" is added to the project scope
+    Given the marketplace "tools" update source has the "<change>" semantic rewrite
+    When the user runs "/claude:plugin marketplace update"
+    Then the result has these fields:
+      | kind                | cascade            |
+      | severity            | info               |
+      | needs reload        | false              |
+      | tally label         | Marketplace update |
+      | tally failures      | 0                  |
+      | tally warnings      | 0                  |
+      | tally success count | 1                  |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | marketplace status |
+      | tools            | project           | updated            |
+
+    Examples:
+      | change                |
+      | unknown field added   |
+      | unknown field changed |
+      | unknown field removed |
+
+  Scenario Outline: Reordering a manifest array changes the marketplace
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" has the "<array>" comparison baseline
+    Given the marketplace "tools" is added to the project scope
+    Given the marketplace "tools" update source has the "<array>" semantic rewrite
+    When the user runs "/claude:plugin marketplace update"
+    Then the result has these fields:
+      | kind                | cascade            |
+      | severity            | info               |
+      | needs reload        | false              |
+      | tally label         | Marketplace update |
+      | tally failures      | 0                  |
+      | tally warnings      | 0                  |
+      | tally success count | 1                  |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | marketplace status |
+      | tools            | project           | updated            |
+
+    Examples:
+      | array                     |
+      | plugin order              |
+      | allowed marketplace order |
+      | unknown array order       |
+
+  Scenario: An isolated dependency entry retains its comparison fields
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" has the "isolated dependency fields" comparison baseline
+    Given the marketplace "tools" is added to the project scope
+    Given the marketplace "tools" update source has the "isolated dependency fields" semantic rewrite
+    When the user runs "/claude:plugin marketplace update"
+    Then the result has these fields:
+      | kind                | cascade            |
+      | severity            | info               |
+      | needs reload        | false              |
+      | tally label         | Marketplace update |
+      | tally failures      | 0                  |
+      | tally warnings      | 0                  |
+      | tally success count | 1                  |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | marketplace status |
+      | tools            | project           | updated            |

@@ -257,6 +257,31 @@ describe("loadMarketplaceManifest", () => {
     assert.strictEqual(cachedDocument, document);
   });
 
+  test("retains changed comparison fields from an isolated dependency entry", async (t) => {
+    // arrange
+    const manifestPath = await manifestFileWith(
+      t,
+      '{"name":"marketplace","plugins":[{"name":"broken","source":"./broken","dependencies":["foo@~1.0.0"],"vendor":{"revision":1}}]}',
+    );
+
+    // act
+    const initial = await loadMarketplaceManifestDocument(manifestPath);
+    const refreshedText =
+      '{ "name":"marketplace", "plugins":[{"name":"broken","source":"./broken","dependencies":["foo@~1.0.0"],"vendor":{"revision":2}}] }\n';
+    await writeFile(manifestPath, refreshedText, "utf8");
+    const refreshed = await loadMarketplaceManifestDocument(manifestPath);
+    const persisted = await readFile(manifestPath, "utf8");
+
+    // assert
+    assert.deepStrictEqual(refreshed.manifest, initial.manifest);
+    assert.notStrictEqual(refreshed.comparisonJson, initial.comparisonJson);
+    assert.strictEqual(
+      refreshed.comparisonJson,
+      '{"name":"marketplace","plugins":[{"name":"broken","source":"./broken","dependencies":["foo@~1.0.0"],"vendor":{"revision":2}}]}',
+    );
+    assert.strictEqual(persisted, refreshedText);
+  });
+
   test("shares cached validation errors between both document views", async (t) => {
     // arrange
     const manifestPath = await manifestFileWith(t, '{"name":"marketplace"}');

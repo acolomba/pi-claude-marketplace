@@ -1643,6 +1643,7 @@ async function seedPathMarketplace(opts: {
   autoupdate?: boolean;
   plugins?: Record<string, ExtensionState["marketplaces"][string]["plugins"][string]>;
   legacy?: boolean;
+  lastSuccessfulManifest?: string;
 }): Promise<void> {
   const scope = opts.scope ?? "project";
   const locations = locationsFor(scope, opts.cwd);
@@ -1658,7 +1659,9 @@ async function seedPathMarketplace(opts: {
         manifestPath: path.join(opts.marketplaceRoot, ".claude-plugin", "marketplace.json"),
         marketplaceRoot: opts.marketplaceRoot,
         plugins: opts.plugins ?? {},
-        ...(opts.legacy === true ? {} : { lastSuccessfulManifest: VALID_MANIFEST_JSON }),
+        ...(opts.legacy === true
+          ? {}
+          : { lastSuccessfulManifest: opts.lastSuccessfulManifest ?? VALID_MANIFEST_JSON }),
         ...(opts.autoupdate !== undefined && { autoupdate: opts.autoupdate }),
       },
     },
@@ -2787,6 +2790,61 @@ test("semantic comparison uses the saved baseline before reading changed source 
       changedManifest,
     );
     assert.deepStrictEqual(git.calls, []);
+  });
+});
+
+test("semantic comparison includes unknown fields and array order", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    for (const { baseline, refreshed, title } of [
+      {
+        title: "a changed nested unknown field",
+        baseline: '{"name":"marketplace","plugins":[],"vendor":{"settings":{"revision":1}}}',
+        refreshed: '{ "name":"marketplace", "plugins":[], "vendor":{"settings":{"revision":2}} }\n',
+      },
+      {
+        title: "reordered plugins",
+        baseline:
+          '{"name":"marketplace","plugins":[{"name":"zebra","source":"./zebra"},{"name":"alpha","source":"./alpha"}]}',
+        refreshed:
+          '{ "name":"marketplace", "plugins":[{"name":"alpha","source":"./alpha"},{"name":"zebra","source":"./zebra"}] }\n',
+      },
+      {
+        title: "a reordered unknown array",
+        baseline: '{"name":"marketplace","plugins":[],"vendor":{"sequence":["zebra","alpha"]}}',
+        refreshed:
+          '{ "name":"marketplace", "plugins":[], "vendor":{"sequence":["alpha", "zebra"]} }\n',
+      },
+    ]) {
+      // arrange
+      const marketplaceRoot = path.join(cwd, title.replaceAll(" ", "-"));
+      const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
+      await mkdir(path.dirname(manifestPath), { recursive: true });
+      await writeFile(manifestPath, refreshed, "utf8");
+      await seedPathMarketplace({
+        cwd,
+        name: title,
+        marketplaceRoot,
+        lastSuccessfulManifest: baseline,
+      });
+      const { ctx, run, notifications } = makeCtx();
+      const git = makeForbiddenGitOps();
+
+      // act
+      await updateMarketplace({
+        completionCache: createCompletionCache(),
+        ctx,
+        run,
+        name: title,
+        scope: "project",
+        cwd,
+        gitOps: git.gitOps,
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [{ message: `● ${title} [project] (updated)` }]);
+      assert.strictEqual(await readFile(manifestPath, "utf8"), refreshed);
+      assert.deepStrictEqual(git.calls, []);
+    }
   });
 });
 
