@@ -1934,11 +1934,18 @@ test("a pre-persistence manifest failure leaves cache rows intact and calls zero
   });
 });
 
-for (const { invalidBody, problem } of [
-  { problem: "malformed JSON", invalidBody: '{"name":"valid-marketplace","plugins":[' },
+for (const { invalidBody, problem, failure } of [
+  {
+    problem: "malformed JSON",
+    invalidBody: '{"name":"valid-marketplace","plugins":[',
+    failure:
+      'Some operations have failed.\n\n⊘ malformed-JSON [project] (failed)\n  ⊘ malformed-JSON (failed) {invalid manifest}\n    cause: Failed to update marketplace "malformed-JSON". -> marketplace.json is not valid JSON: SyntaxError: Unexpected end of JSON input -> Unexpected end of JSON input',
+  },
   {
     problem: "an invalid schema",
     invalidBody: '{"name":"valid-marketplace","plugins":"not-an-array"}',
+    failure:
+      'Some operations have failed.\n\n⊘ an-invalid-schema [project] (failed)\n  ⊘ an-invalid-schema (failed) {invalid manifest}\n    cause: Failed to update marketplace "an-invalid-schema". -> marketplace.json schema invalid: /plugins: must be array',
   },
 ]) {
   test(`${problem} keeps durable update state until a repaired retry succeeds`, async () => {
@@ -1990,7 +1997,7 @@ for (const { invalidBody, problem } of [
         pluginUpdate,
       });
       const stateAfterFailure = await loadState(locations.extensionRoot);
-      assert.deepStrictEqual(cascadeCalls, []);
+      const callsAfterFailure = [...cascadeCalls];
       const repairedManifest = JSON.stringify({
         ...(JSON.parse(VALID_MANIFEST_JSON) as Record<string, unknown>),
         description: "Valid after a failed update",
@@ -2012,8 +2019,8 @@ for (const { invalidBody, problem } of [
       const stateAfterRepair = await loadState(locations.extensionRoot);
 
       // assert
-      assert.strictEqual(failed.notifications[0]?.severity, "error");
-      assert.match(failed.notifications[0]?.message ?? "", /\{invalid manifest\}/);
+      assert.deepStrictEqual(failed.notifications, [{ message: failure, severity: "error" }]);
+      assert.deepStrictEqual(callsAfterFailure, []);
       assert.deepStrictEqual(stateAfterFailure, beforeState);
       assert.strictEqual(await readFile(locations.baseConfigJsonPath, "utf8"), beforeConfig);
       assert.deepStrictEqual(cascadeCalls, ["hello"]);
@@ -2068,8 +2075,12 @@ test("a missing local source keeps its registration, baseline, config, and plugi
     });
 
     // assert
-    assert.strictEqual(notifications[0]?.severity, "error");
-    assert.match(notifications[0]?.message ?? "", /\{source missing\}/);
+    assert.deepStrictEqual(notifications, [
+      {
+        message: `Some operations have failed.\n\n⊘ missing-source [project] (failed)\n  ⊘ missing-source (failed) {source missing}\n    cause: Failed to update marketplace "missing-source". -> ENOENT: no such file or directory, open '${path.join(marketplaceRoot, ".claude-plugin", "marketplace.json")}'`,
+        severity: "error",
+      },
+    ]);
     assert.deepStrictEqual(await loadState(locations.extensionRoot), beforeState);
     assert.strictEqual(await readFile(locations.baseConfigJsonPath, "utf8"), beforeConfig);
     assert.deepStrictEqual(cascadeCalls, []);
@@ -3964,6 +3975,7 @@ test("a failed state save retains the baseline and retries without cascading ear
       },
     });
     const stateAfterFailure = await loadState(locations.extensionRoot);
+    const callsAfterFailure = [...cascadeCalls];
     const retried = makeCtx();
     const retryGit = makeForbiddenGitOps();
     await updateMarketplace({
@@ -3984,6 +3996,7 @@ test("a failed state save retains the baseline and retries without cascading ear
     assert.deepStrictEqual(cascadeCalls, [
       { marketplace: "save-retry", plugin: "hello", scope: "project" },
     ]);
+    assert.deepStrictEqual(callsAfterFailure, []);
     assert.strictEqual(failed.notifications.length, 1);
     assert.strictEqual(failed.notifications[0]?.severity, "error");
     assert.deepStrictEqual(retried.notifications, [
