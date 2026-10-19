@@ -36,6 +36,18 @@ import type { TestContext } from "node:test";
 
 type MarketplaceRecord = ExtensionState["marketplaces"][string];
 const BOOTSTRAP_REMOTE = "https://github.com/anthropics/claude-plugins-official.git";
+const BOOTSTRAP_MANIFEST_JSON = JSON.stringify({
+  name: "claude-plugins-official",
+  owner: { name: "Quick 260516-02r Tests" },
+  plugins: [
+    {
+      name: "stub",
+      source: "./plugins/stub",
+      description: "Stub plugin for bootstrap fixture",
+      version: "1.0.0",
+    },
+  ],
+});
 
 function fixtureClaudePluginsOfficial(): string {
   return path.join(
@@ -209,6 +221,7 @@ test("adds the canonical marketplace and enables autoupdate on a clean user scop
     marketplaces: {
       "claude-plugins-official": {
         ...addedMarketplaceRecord(cwd, marketplaceRoot),
+        lastSuccessfulManifest: BOOTSTRAP_MANIFEST_JSON,
         lastUpdatedAt: "2026-02-03T04:05:06.000Z",
       },
     },
@@ -436,6 +449,7 @@ test("preserves the committed add when the real autoupdate child rejects its con
     marketplaces: {
       "claude-plugins-official": {
         ...addedMarketplaceRecord(cwd, marketplaceRoot),
+        lastSuccessfulManifest: BOOTSTRAP_MANIFEST_JSON,
         lastUpdatedAt: "2026-02-03T04:05:06.000Z",
       },
     },
