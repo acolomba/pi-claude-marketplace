@@ -51,7 +51,7 @@
     {
       "number": "6",
       "name": "Marketplace Update and C-10 Fix",
-      "status": "in_progress"
+      "status": "complete"
     },
     {
       "number": "7",
@@ -76,8 +76,8 @@
   ],
   "next": {
     "command": "/gsd-progress --next",
-    "label": "Advance to the next step",
-    "reason": "Phase 10 of 14 · 64% · executing"
+    "label": "Advance to the next step (verify)",
+    "reason": "Phase 11 of 14 · 71% · ready to verify"
   },
-  "updated_at": "2026-10-19T07:36:58.055Z"
+  "updated_at": "2026-10-19T08:03:46.431Z"
 }
