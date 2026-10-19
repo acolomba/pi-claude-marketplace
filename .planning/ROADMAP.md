@@ -406,14 +406,14 @@ Plans:
 4. A path marketplace whose manifest became invalid fails with an `invalid manifest` row, and one whose directory vanished fails as `source missing`.
 5. A marketplace added from a `marketplace.json` outside `.claude-plugin/` updates by re-reading that file, and `info` shows its path; the scenario failed on the code before the fix.
 
-**Plans:** 1/4 plans executed
+**Plans:** 2/4 plans executed
 
 Plans:
 **Wave 1**
 - [x] 06-01-PLAN.md — External-file red/green tracer, durable semantic baseline, and exact info source
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 06-02-PLAN.md — Semantic equality and invalid/missing-source recovery scenarios
+- [x] 06-02-PLAN.md — Semantic equality and invalid/missing-source recovery scenarios
 
 **Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 06-03-PLAN.md — Installed-plugin version, membership, order, and failure cascades
@@ -494,7 +494,7 @@ Plans:
 | 3.4. Scope and Layer Terminology | 10/10 | Complete    | 2026-10-18 |
 | 4. Marketplace Remove and List | 4/4 | Complete    | 2026-10-18 |
 | 5. Marketplace Info | 3/3 | Complete    | 2026-10-18 |
-| 6. Marketplace Update and C-10 Fix | 1/4 | In Progress | - |
+| 6. Marketplace Update and C-10 Fix | 2/4 | In Progress | - |
 | 7. Marketplace Autoupdate | 0/TBD | Not started | - |
 | 8. Marketplace Help and Usage Errors | 0/TBD | Not started | - |
 | 9. URL Source Kind and HTTPS Git Stand-In | 0/TBD | Not started | - |

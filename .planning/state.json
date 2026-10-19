@@ -51,7 +51,7 @@
     {
       "number": "6",
       "name": "Marketplace Update and C-10 Fix",
-      "status": "pending"
+      "status": "in_progress"
     },
     {
       "number": "7",
@@ -79,5 +79,5 @@
     "label": "Advance to the next step",
     "reason": "Phase 10 of 14 · 64% · executing"
   },
-  "updated_at": "2026-10-18T23:21:54.155Z"
+  "updated_at": "2026-10-19T01:15:00.824Z"
 }

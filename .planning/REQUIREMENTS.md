@@ -112,8 +112,8 @@ A scope (user or project) has two layers: shared (`claude-plugins.json`) and loc
 
 ### marketplace update
 
-- [ ] **UPD-01**: Updating a marketplace whose manifest did not change skips it as `up-to-date` (dir, url, gh)
-- [ ] **UPD-02**: Updating a marketplace whose manifest changed reports it `updated`, with no plugin rows when autoupdate is off (dir, url, gh)
+- [x] **UPD-01**: Updating a marketplace whose manifest did not change skips it as `up-to-date` (dir, url, gh)
+- [x] **UPD-02**: Updating a marketplace whose manifest changed reports it `updated`, with no plugin rows when autoupdate is off (dir, url, gh)
 - [ ] **UPD-03**: With autoupdate off, installed plugins keep their version after a marketplace update
 - [ ] **UPD-04**: With autoupdate on, the update moves installed plugins to the offered version, and a new session offers the new version
 - [ ] **UPD-05**: With autoupdate on and nothing changed, the marketplace is skipped as `up-to-date`
@@ -121,11 +121,11 @@ A scope (user or project) has two layers: shared (`claude-plugins.json`) and loc
 - [ ] **UPD-07**: A bare `update` refreshes every marketplace of both scopes, one result per marketplace, project first
 - [ ] **UPD-08**: A bare `update` with nothing added reports no marketplaces
 - [ ] **UPD-09**: Updating a name the scope lacks fails as `marketplace not added`, with and without `--scope`
-- [ ] **UPD-10**: A path marketplace whose manifest became invalid fails with an `invalid manifest` row
+- [x] **UPD-10**: A path marketplace whose manifest became invalid fails with an `invalid manifest` row
 - [ ] **UPD-11**: A git marketplace whose host answers 5xx, 404, or drops the connection fails as `network unreachable`
 - [ ] **UPD-12**: A git marketplace whose host now answers 401 fails as `authentication required`, with the cause line naming `git credential approve` for that host (url, gh)
 - [ ] **UPD-13**: With autoupdate on, an installed plugin the refreshed manifest dropped is skipped as `not in manifest`, with warning severity
-- [ ] **UPD-14**: A path marketplace whose directory vanished fails as `source missing`
+- [x] **UPD-14**: A path marketplace whose directory vanished fails as `source missing`
 
 ### marketplace autoupdate / noautoupdate
 
@@ -241,8 +241,8 @@ A scope (user or project) has two layers: shared (`claude-plugins.json`) and loc
 | INFO-07 | Phase 9 | Pending |
 | INFO-08 | Phase 5 | Complete |
 | INFO-09 | Phase 5 | Complete |
-| UPD-01 | Phase 6 | Pending |
-| UPD-02 | Phase 6 | Pending |
+| UPD-01 | Phase 6 | Complete |
+| UPD-02 | Phase 6 | Complete |
 | UPD-03 | Phase 6 | Pending |
 | UPD-04 | Phase 6 | Pending |
 | UPD-05 | Phase 6 | Pending |
@@ -250,11 +250,11 @@ A scope (user or project) has two layers: shared (`claude-plugins.json`) and loc
 | UPD-07 | Phase 6 | Pending |
 | UPD-08 | Phase 6 | Pending |
 | UPD-09 | Phase 6 | Pending |
-| UPD-10 | Phase 6 | Pending |
+| UPD-10 | Phase 6 | Complete |
 | UPD-11 | Phase 9 | Pending |
 | UPD-12 | Phase 10 | Pending |
 | UPD-13 | Phase 6 | Pending |
-| UPD-14 | Phase 6 | Pending |
+| UPD-14 | Phase 6 | Complete |
 | AU-01 | Phase 7 | Pending |
 | AU-02 | Phase 7 | Pending |
 | AU-03 | Phase 7 | Pending |

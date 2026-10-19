@@ -5,16 +5,16 @@ milestone_name: Marketplace Behavioral Tests
 current_phase: 06
 current_phase_name: Marketplace Update and C-10 Fix
 status: executing
-stopped_at: Phase 6 context gathered
-last_updated: "2026-10-18T23:21:54.062Z"
+stopped_at: Completed 06-02-PLAN.md
+last_updated: "2026-10-19T01:15:35.904Z"
 last_activity: 2026-10-18
 last_activity_desc: Phase 06 execution started
-state_head: ca298016dd09764b121c341ba58524fcd2419511
+state_head: c6867a275066d4adfa3b39b8918c3c9569f40c5b
 progress:
   total_phases: 14
   completed_phases: 9
   total_plans: 58
-  completed_plans: 54
+  completed_plans: 56
   percent: 64
 ---
 
@@ -32,8 +32,8 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 06 (Marketplace Update and C-10 Fix) — EXECUTING
-Plan: 1 of 4
-Status: Executing Phase 06
+Plan: 2 of 4
+Status: Ready to execute
 Last activity: 2026-10-18 — Phase 06 execution started
 
 Progress: [██████░░░░] 64%
@@ -181,9 +181,9 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-18T22:43:16.935Z
-**Stopped at:** Phase 6 context gathered
-**Resume file:** .planning/phases/06-marketplace-update-and-c-10-fix/06-CONTEXT.md
+**Last session:** 2026-10-19T01:15:11.438Z
+**Stopped at:** Completed 06-02-PLAN.md
+**Resume file:** None
 
 **Main merge (2026-10-11, quick task 261011-bsm):** `origin/main` at
 `94160614` (#248, and #250, the mcp-4 milestone released as 0.20.0) is merged
@@ -329,6 +329,7 @@ archived milestone artifacts.
 | Phase 03.4 P07 | 15min | 2 tasks | 15 files |
 | Phase 03.4 P08 | 36min | 3 tasks | 56 files |
 | Phase 03.4 P10 | 40min | 2 tasks | 20 files |
+| Phase 06 P02 | 50 min | 3 tasks | 6 files |
 
 ## Decisions
 
@@ -453,6 +454,9 @@ archived milestone artifacts.
 - [Phase 03.4]: User rule: a layer's file is a config -- LayerConfigUnreadableError, features/lib/layer-config.ts, prose says layer config; plan 10 gates add the layer-file pattern
 - [Phase 03.4]: D-03: prose says layer for a level and config for a file; configuration stays only for a scope's effective configuration
 - [Phase 03.4]: D-03: the writing step is now 'a config in scope <scope> and layer <layer>, with these plugins:'
+- [Phase 06]: Use bare marketplace update for one-record behavioral checks because only the plural result includes the required tally. — The named form omits tally fields.
+- [Phase 06]: Derive destructive fixture targets from PublishedMarketplace and reject filesystem-root or out-of-root targets. — Missing-source scenarios must not accept arbitrary deletion paths.
+- [Phase 06]: Assert the prior failed refresh inside Given for repair scenarios. — The action under test remains after all setup and runs in the same Pi process.
 
 ### mcp-4 decisions
 

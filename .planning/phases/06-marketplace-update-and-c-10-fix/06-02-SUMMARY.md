@@ -149,13 +149,13 @@ Each task was committed atomically:
 - `UPD-10 / unclassified / unresolved`: Malformed JSON, invalid schema, and repair cover the stated contract; the probe's additional unspecified edge remains flagged.
 - `UPD-14 / unclassified / unresolved`: Owned-directory loss and retained registration cover the stated contract; the probe's unspecified edge remains flagged.
 
-## Verification
+## Checks run
 
 - Task 1 focused Cucumber command passed: 10 scenarios and 84 steps.
 - Task 2 focused Cucumber command passed: 7 scenarios and 63 steps.
 - Task 3 focused Cucumber command passed: 7 scenarios and 89 steps.
 - Marketplace manifest and update owner suites passed.
-- Direct coverage for `domain/manifest.ts` and `orchestrators/marketplace/update.ts` passed at 100%.
+- Direct coverage for `extensions/pi-claude-marketplace/domain/manifest.ts` and `extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts` passed at 100%.
 - `npm run check:features` passed with remote update examples bound and excluded by their source-kind tags.
 - Required Fallow audits passed with no findings before every task commit.
 - Full `npm run check` passed, including 173 scenarios, 1,802 steps, and 280 direct-coverage records.
