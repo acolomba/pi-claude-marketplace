@@ -6,7 +6,8 @@
  * `support/pi-process.ts` resets before every scenario. Whatever a step or
  * hook creates registers its release here, and the world runs those releases
  * in reverse order when the scenario ends. A passing scenario also fails
- * there when a row array of its last results went uncompared.
+ * there when a row array or an MCP config notice of its last results went
+ * uncompared.
  */
 
 import assert from "node:assert/strict";
@@ -40,6 +41,10 @@ export class ScenarioWorld extends World {
   // `<kind> <field>`. The steps that state a result's fields hide them, so a
   // row step must read them and then call `markRowsCompared()`.
   uncomparedRows: readonly string[] = [];
+  // The MCP config notice results of `results` that no step has compared yet,
+  // by kind. Only `the command reports these results:` states their fields,
+  // and it calls `markNoticesCompared()`.
+  uncomparedNotices: readonly string[] = [];
   // Cucumber builds the world before any `Before()` hook, so the
   // `{scenario time}` window opens before any setup command runs (D-05).
   readonly startedAt = Date.now();
@@ -116,6 +121,14 @@ export class ScenarioWorld extends World {
     this.uncomparedRows = [];
   }
 
+  /**
+   * Records that a step compared the fields of every result of the last
+   * command, MCP config notices included.
+   */
+  markNoticesCompared(): void {
+    this.uncomparedNotices = [];
+  }
+
   /** Records how this scenario published the marketplace `name`. */
   recordPublished(name: string, published: PublishedMarketplace): void {
     this.published.set(name, published);
@@ -171,8 +184,14 @@ setWorldConstructor(ScenarioWorld);
 
 After(async function (this: ScenarioWorld, { result }: ITestCaseHookParameter): Promise<void> {
   const uncompared = this.uncomparedRows;
+  const uncomparedNotices = this.uncomparedNotices;
   await this.release();
   if (result?.status === Status.PASSED) {
     assert.deepStrictEqual(uncompared, [], "no step compared these rows of the last results");
+    assert.deepStrictEqual(
+      uncomparedNotices,
+      [],
+      "no step compared these MCP config notices of the last results",
+    );
   }
 });

@@ -109,8 +109,16 @@ When("the user runs {string}", async function (this: ScenarioWorld, command: str
     [],
     "no step compared these rows of the previous results",
   );
+  assert.deepStrictEqual(
+    this.uncomparedNotices,
+    [],
+    "no step compared these MCP config notices of the previous results",
+  );
   this.results = await runCommandPayloads(this.pi, expandTokens(command, this.tokens));
   this.uncomparedRows = rowArrays(this.results);
+  this.uncomparedNotices = this.results
+    .map((result) => result.kind)
+    .filter((kind) => kind === "mcp-config-notices");
 });
 
 Then("the result has these fields:", function (this: ScenarioWorld, table: DataTable) {
@@ -159,12 +167,14 @@ Then("the command reports these results:", function (this: ScenarioWorld, table:
   const [stated = []] = table.raw();
   const records = this.allResults().map((result) => envelopeFields(result, this.tokens));
   assert.deepStrictEqual(recordTable(stated, records), table.raw());
+  this.markNoticesCompared();
 });
 
 // D-02: the marketplace and plugin rows of every result, in emission order.
 // Every result must be a cascade, so no row goes unseen, or an MCP config
 // notice, which has no rows: its notices are envelope fields, which
-// `the command reports these results:` compares.
+// `the command reports these results:` compares. A scenario that leaves a
+// notice to this step alone fails when it ends.
 Then(
   "the results list these marketplaces and plugins:",
   function (this: ScenarioWorld, table: DataTable) {
