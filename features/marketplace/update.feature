@@ -108,6 +108,134 @@ Feature: Marketplace update
       | theta            | user              | true                           | tasks@theta | tasks | installed | requires pi-mcp-adapter | user    | 1.10.0  |
       | zeta             | project           | true                           | notes@zeta  | notes | installed | requires pi-mcp-adapter | project | 1.10.0  |
 
+  Scenario: A bare update continues after a marketplace fails
+    Given the marketplace "zeta" is published as a dir source
+    Given the marketplace "alpha" is published as a dir source
+    Given the marketplace "beta" is published as a dir source
+    Given the marketplace "zeta" is added to the project scope
+    Given the marketplace "alpha" is added to the project scope
+    Given the marketplace "beta" is added to the user scope
+    Given the manifest of the marketplace "zeta" to update breaks the manifest schema
+    When the user runs "/claude:plugin marketplace update"
+    Then the command reports these results:
+      | kind    | severity | needs reload | summary                      | tally label        | tally failures | tally warnings | tally success count |
+      | cascade | error    | false        | Some operations have failed. | Marketplace update | 2              | 0              |                     |
+      | cascade | info     | false        |                              | Marketplace update | 0              | 0              | 1                   |
+      | cascade | info     | false        |                              | Marketplace update | 0              | 0              | 1                   |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | marketplace status | marketplace reasons | id        | name | status | reasons          | scope   | leaks | rollback partial | cause chain                                                                                    | cause truncated |
+      | zeta             | project           | failed             |                     | zeta@zeta | zeta | failed | invalid manifest | project |       |                  | Failed to update marketplace "zeta"., marketplace.json schema invalid: /plugins: must be array | false           |
+      | alpha            | project           | skipped            | up-to-date          |           |      |        |                  |         |       |                  |                                                                                                |                 |
+      | beta             | user              | skipped            | up-to-date          |           |      |        |                  |         |       |                  |                                                                                                |                 |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name  | source                    |
+      | zeta  | {home}/marketplaces/zeta  |
+      | alpha | {home}/marketplaces/alpha |
+
+  Scenario Outline: A bare update refreshes the only populated scope
+    Given the marketplace "tools" is published as a <source kind> source
+    Given the marketplace "tools" is added to the <scope> scope
+    Given the marketplace "tools" update source contains this manifest:
+      """
+      {"name":"tools","owner":{"name":"features"},"plugins":[],"description":"Updated tools"}
+      """
+    When the user runs "/claude:plugin marketplace update"
+    Then the result has these fields:
+      | kind                | cascade            |
+      | severity            | info               |
+      | needs reload        | false              |
+      | tally label         | Marketplace update |
+      | tally failures      | 0                  |
+      | tally warnings      | 0                  |
+      | tally success count | 1                  |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | marketplace status |
+      | tools            | <scope>           | updated            |
+
+    Examples:
+      | source kind | scope   |
+      | dir         | project |
+      | file        | user    |
+
+    @url
+    Examples:
+      | source kind | scope   |
+      | url         | project |
+
+    @github
+    Examples:
+      | source kind | scope |
+      | github      | user  |
+
+  Scenario: A bare update with no marketplaces reports an empty result
+    When the user runs "/claude:plugin marketplace update"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists no marketplaces
+    Then the "claude-plugins.json" file of the project scope does not exist
+    Then the "claude-plugins.json" file of the user scope does not exist
+
+  Scenario: Repeating an empty bare update leaves it empty
+    Given the user has run "/claude:plugin marketplace update"
+    When the user runs "/claude:plugin marketplace update"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists no marketplaces
+    Then the "claude-plugins.json" file of the project scope does not exist
+    Then the "claude-plugins.json" file of the user scope does not exist
+    When the user runs "/claude:plugin marketplace list"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists no marketplaces
+
+  Scenario Outline: An update reports the marketplace missing from the requested scope
+    Given the marketplace "<added marketplace>" is published as a dir source
+    Given the marketplace "<added marketplace>" is added to the <added scope> scope
+    When the user runs "/claude:plugin marketplace update tools --scope <requested scope>"
+    Then the result has these fields:
+      | kind         | marketplace-not-added               |
+      | severity     | error                               |
+      | needs reload | false                               |
+      | summary      | A marketplace operation has failed. |
+      | name         | tools                               |
+      | scope        | <requested scope>                   |
+      | reasons      | <reasons>                           |
+
+    Examples:
+      | added marketplace | added scope | requested scope | reasons                                |
+      | other             | project     | project         | marketplace not added                  |
+      | other             | user        | user            | marketplace not added                  |
+      | tools             | user        | project         | marketplace not added to project scope |
+      | tools             | project     | user            | marketplace not added to user scope    |
+
+  Scenario: An update without a scope reports a marketplace missing from both scopes
+    Given the marketplace "other" is published as a dir source
+    Given the marketplace "other" is added to the project scope
+    When the user runs "/claude:plugin marketplace update tools"
+    Then the result has these fields:
+      | kind         | marketplace-not-added               |
+      | severity     | error                               |
+      | needs reload | false                               |
+      | summary      | A marketplace operation has failed. |
+      | name         | tools                               |
+      | reasons      | marketplace not added               |
+
+  Scenario: A missing marketplace name preserves its Unicode spelling
+    When the user runs "/claude:plugin marketplace update 工具"
+    Then the result has these fields:
+      | kind         | marketplace-not-added               |
+      | severity     | error                               |
+      | needs reload | false                               |
+      | summary      | A marketplace operation has failed. |
+      | name         | 工具                                |
+      | reasons      | marketplace not added               |
+
   Scenario Outline: An unchanged marketplace is up to date
     Given the marketplace "tools" is published as a <source kind> source
     Given the marketplace "tools" is added to the project scope

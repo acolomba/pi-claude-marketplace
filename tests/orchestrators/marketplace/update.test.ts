@@ -3008,81 +3008,139 @@ test("AFILE-04: a no-op marketplace update over a commented mcp-adapter.json sen
   });
 });
 
+const BARE_ORIGIN = {
+  kind: "command",
+  commandId: "marketplace update",
+  invocationId: "bare-run",
+} as const;
+
+const STALE_BASELINE = '{"name":"valid-marketplace","plugins":[]}';
+
+/** A JSON-mode context and run that capture every payload in emission order. */
+function bareUpdateRun(): {
+  capture: ReturnType<typeof createJsonCapture>;
+  ctx: NotificationContext;
+  run: NotificationRun;
+} {
+  const capture = createJsonCapture();
+  const ctx: NotificationContext = {
+    mode: "json",
+    get ui() {
+      return capture.ui;
+    },
+  };
+  const run = openNotificationRun(
+    { getAllTools: () => [], getCommands: () => [], appendEntry: capture.entrySink.appendEntry },
+    BARE_ORIGIN,
+  );
+  return { capture, ctx, run };
+}
+
+/** A path-source record whose source is `marketplaceRoot`, last refreshed as `baseline`. */
+function bareRecord(
+  cwd: string,
+  name: string,
+  scope: Scope,
+  baseline: string,
+  plugins: ExtensionState["marketplaces"][string]["plugins"] = {},
+  marketplaceRoot = fixtureMarketplaceDir("valid-marketplace"),
+): ExtensionState["marketplaces"][string] {
+  return {
+    name,
+    scope,
+    source: pathSource(marketplaceRoot),
+    addedFromCwd: cwd,
+    manifestPath: path.join(marketplaceRoot, ".claude-plugin", "marketplace.json"),
+    marketplaceRoot,
+    plugins,
+    lastSuccessfulManifest: baseline,
+  };
+}
+
+/** Saves `marketplaces`, in insertion order, as the state of each scope. */
+async function seedScopes(
+  cwd: string,
+  marketplaces: Readonly<Record<Scope, ExtensionState["marketplaces"]>>,
+): Promise<void> {
+  for (const scope of ["project", "user"] as const) {
+    const { extensionRoot } = locationsFor(scope, cwd);
+    await mkdir(extensionRoot, { recursive: true });
+    await saveState(extensionRoot, { schemaVersion: 1, marketplaces: marketplaces[scope] });
+  }
+}
+
+/** Turns autoupdate on for the marketplace `name` of `scope`. */
+async function enableAutoupdate(cwd: string, scope: Scope, name: string): Promise<void> {
+  const locations = locationsFor(scope, cwd);
+  await saveConfig(
+    locations.baseConfigJsonPath,
+    {
+      schemaVersion: 1,
+      marketplaces: {
+        [name]: { source: fixtureMarketplaceDir("valid-marketplace"), autoupdate: true },
+      },
+    },
+    locations.scopeRoot,
+  );
+}
+
+/** One captured bare-update payload. */
+function bareEntry(payload: Readonly<Record<string, unknown>>): {
+  customType: string;
+  payload: Readonly<Record<string, unknown>>;
+} {
+  return {
+    customType: "claude-plugin",
+    payload: { schemaVersion: 1, origin: BARE_ORIGIN, ...payload },
+  };
+}
+
+/** The captured `(skipped) {up-to-date}` result of the marketplace `name`. */
+function upToDateEntry(name: string, scope: Scope): ReturnType<typeof bareEntry> {
+  return bareEntry({
+    kind: "cascade",
+    severity: "info",
+    needsReload: false,
+    tally: { label: "Marketplace update", failures: 0, warnings: 0, success: { count: 1 } },
+    marketplaces: [{ name, scope, status: "skipped", reasons: ["up-to-date"], plugins: [] }],
+  });
+}
+
+function unchangedOutcome(plugin: string): PluginUpdateOutcome {
+  return {
+    partition: "unchanged",
+    name: plugin,
+    fromVersion: "0.0.1",
+    toVersion: "0.0.1",
+    declaresAgents: false,
+    declaresMcp: false,
+    constraint: undefined,
+    declaresWorkflows: false,
+  };
+}
+
 test("a bare update emits each cascade's MCP notices before the next marketplace, project scope first", async (testContext) => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange -- reverse-lexical insertion in both scopes, so a sort would
     // reorder them; zeta and theta change and cascade, alpha and beta do not.
     const now = new Date("2026-10-19T09:00:00.000Z");
     testContext.mock.timers.enable({ apis: ["Date"], now });
-    const projectLocations = locationsFor("project", cwd);
-    const userLocations = locationsFor("user", cwd);
-    const marketplaceRoot = fixtureMarketplaceDir("valid-marketplace");
-    const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
-    const record = (
-      name: string,
-      scope: Scope,
-      baseline: string,
-      plugins: ExtensionState["marketplaces"][string]["plugins"],
-    ): ExtensionState["marketplaces"][string] => ({
-      name,
-      scope,
-      source: pathSource(marketplaceRoot),
-      addedFromCwd: cwd,
-      manifestPath,
-      marketplaceRoot,
-      plugins,
-      lastSuccessfulManifest: baseline,
-    });
-    const staleBaseline = '{"name":"valid-marketplace","plugins":[]}';
-    await mkdir(projectLocations.extensionRoot, { recursive: true });
-    await mkdir(userLocations.extensionRoot, { recursive: true });
-    await saveState(projectLocations.extensionRoot, {
-      schemaVersion: 1,
-      marketplaces: {
-        zeta: record("zeta", "project", staleBaseline, {
+    await seedScopes(cwd, {
+      project: {
+        zeta: bareRecord(cwd, "zeta", "project", STALE_BASELINE, {
           notes: makePluginRecord(),
           broken: makePluginRecord(),
         }),
-        alpha: record("alpha", "project", VALID_MANIFEST_JSON, {}),
+        alpha: bareRecord(cwd, "alpha", "project", VALID_MANIFEST_JSON),
+      },
+      user: {
+        theta: bareRecord(cwd, "theta", "user", STALE_BASELINE, { tasks: makePluginRecord() }),
+        beta: bareRecord(cwd, "beta", "user", VALID_MANIFEST_JSON),
       },
     });
-    await saveState(userLocations.extensionRoot, {
-      schemaVersion: 1,
-      marketplaces: {
-        theta: record("theta", "user", staleBaseline, { tasks: makePluginRecord() }),
-        beta: record("beta", "user", VALID_MANIFEST_JSON, {}),
-      },
-    });
-    for (const [locations, name] of [
-      [projectLocations, "zeta"],
-      [userLocations, "theta"],
-    ] as const) {
-      await saveConfig(
-        locations.baseConfigJsonPath,
-        {
-          schemaVersion: 1,
-          marketplaces: { [name]: { source: marketplaceRoot, autoupdate: true } },
-        },
-        locations.scopeRoot,
-      );
-    }
-
-    const capture = createJsonCapture();
-    const origin = {
-      kind: "command",
-      commandId: "marketplace update",
-      invocationId: "bare-run",
-    } as const;
-    const ctx = {
-      mode: "json",
-      get ui() {
-        return capture.ui;
-      },
-    };
-    const run = openNotificationRun(
-      { getAllTools: () => [], getCommands: () => [], appendEntry: capture.entrySink.appendEntry },
-      origin,
-    );
+    await enableAutoupdate(cwd, "project", "zeta");
+    await enableAutoupdate(cwd, "user", "theta");
+    const { capture, ctx, run } = bareUpdateRun();
     const git = makeForbiddenGitOps();
     const calls: string[] = [];
     const notice = (scope: Scope, file: "mcp-adapter.json" | "mcp.json") =>
@@ -3128,19 +3186,6 @@ test("a bare update emits each cascade's MCP notices before the next marketplace
     });
 
     // assert
-    const tally = { label: "Marketplace update", failures: 0, warnings: 0 };
-    const skipped = (name: string, scope: Scope) => ({
-      customType: "claude-plugin",
-      payload: {
-        schemaVersion: 1,
-        origin,
-        kind: "cascade",
-        severity: "info",
-        needsReload: false,
-        tally: { ...tally, success: { count: 1 } },
-        marketplaces: [{ name, scope, status: "skipped", reasons: ["up-to-date"], plugins: [] }],
-      },
-    });
     const updatedRow = (name: string, marketplace: string, scope: Scope) => ({
       name,
       id: `${name}@${marketplace}`,
@@ -3150,72 +3195,58 @@ test("a bare update emits each cascade's MCP notices before the next marketplace
       to: "0.0.2",
       reasons: [],
     });
-    const notices = (...items: ReturnType<typeof notice>[]) => ({
-      customType: "claude-plugin",
-      payload: {
-        schemaVersion: 1,
-        origin,
+    const notices = (...items: Array<ReturnType<typeof notice>>) =>
+      bareEntry({
         kind: "mcp-config-notices",
         severity: "warning",
         needsReload: false,
         notices: items,
-      },
-    });
+      });
     assert.deepStrictEqual(capture.entries, [
-      {
-        customType: "claude-plugin",
-        payload: {
-          schemaVersion: 1,
-          origin,
-          kind: "cascade",
-          severity: "error",
-          needsReload: true,
-          summary: "A plugin operation has failed.",
-          tally: { ...tally, failures: 1, success: { count: 2 } },
-          marketplaces: [
-            {
-              name: "zeta",
-              scope: "project",
-              status: "updated",
-              plugins: [
-                updatedRow("notes", "zeta", "project"),
-                {
-                  name: "broken",
-                  id: "broken@zeta",
-                  scope: "project",
-                  status: "failed",
-                  reasons: ["permission denied"],
-                  leaks: [],
-                  rollbackPartial: [],
-                },
-              ],
-            },
-          ],
-        },
-      },
+      bareEntry({
+        kind: "cascade",
+        severity: "error",
+        needsReload: true,
+        summary: "A plugin operation has failed.",
+        tally: { label: "Marketplace update", failures: 1, warnings: 0, success: { count: 2 } },
+        marketplaces: [
+          {
+            name: "zeta",
+            scope: "project",
+            status: "updated",
+            plugins: [
+              updatedRow("notes", "zeta", "project"),
+              {
+                name: "broken",
+                id: "broken@zeta",
+                scope: "project",
+                status: "failed",
+                reasons: ["permission denied"],
+                leaks: [],
+                rollbackPartial: [],
+              },
+            ],
+          },
+        ],
+      }),
       notices(notice("project", "mcp-adapter.json"), notice("project", "mcp.json")),
-      skipped("alpha", "project"),
-      {
-        customType: "claude-plugin",
-        payload: {
-          schemaVersion: 1,
-          origin,
-          kind: "cascade",
-          severity: "info",
-          needsReload: true,
-          tally: { ...tally, success: { count: 2 } },
-          marketplaces: [
-            {
-              name: "theta",
-              scope: "user",
-              status: "updated",
-              plugins: [updatedRow("tasks", "theta", "user")],
-            },
-          ],
-        },
-      },
+      upToDateEntry("alpha", "project"),
+      bareEntry({
+        kind: "cascade",
+        severity: "info",
+        needsReload: true,
+        tally: { label: "Marketplace update", failures: 0, warnings: 0, success: { count: 2 } },
+        marketplaces: [
+          {
+            name: "theta",
+            scope: "user",
+            status: "updated",
+            plugins: [updatedRow("tasks", "theta", "user")],
+          },
+        ],
+      }),
       notices(notice("user", "mcp-adapter.json")),
-      skipped("beta", "user"),
+      upToDateEntry("beta", "user"),
     ]);
     capture.assertValid();
     assert.deepStrictEqual(git.calls, []);
@@ -3224,35 +3255,272 @@ test("a bare update emits each cascade's MCP notices before the next marketplace
       "broken@zeta [project]",
       "tasks@theta [user]",
     ]);
-    assert.deepStrictEqual(await loadState(projectLocations.extensionRoot), {
+    const refreshed = (record: ExtensionState["marketplaces"][string]) => ({
+      ...record,
+      lastSuccessfulManifest: VALID_MANIFEST_JSON,
+      lastUpdatedAt: now.toISOString(),
+    });
+    assert.deepStrictEqual(await loadState(locationsFor("project", cwd).extensionRoot), {
       schemaVersion: 3,
       marketplaces: {
-        zeta: {
-          ...record("zeta", "project", VALID_MANIFEST_JSON, {
+        zeta: refreshed(
+          bareRecord(cwd, "zeta", "project", STALE_BASELINE, {
             notes: makePluginRecord(),
             broken: makePluginRecord(),
           }),
-          lastUpdatedAt: now.toISOString(),
-        },
-        alpha: {
-          ...record("alpha", "project", VALID_MANIFEST_JSON, {}),
-          lastUpdatedAt: now.toISOString(),
-        },
+        ),
+        alpha: refreshed(bareRecord(cwd, "alpha", "project", VALID_MANIFEST_JSON)),
       },
     });
-    assert.deepStrictEqual(await loadState(userLocations.extensionRoot), {
+    assert.deepStrictEqual(await loadState(locationsFor("user", cwd).extensionRoot), {
       schemaVersion: 3,
       marketplaces: {
-        theta: {
-          ...record("theta", "user", VALID_MANIFEST_JSON, { tasks: makePluginRecord() }),
-          lastUpdatedAt: now.toISOString(),
-        },
-        beta: {
-          ...record("beta", "user", VALID_MANIFEST_JSON, {}),
+        theta: refreshed(
+          bareRecord(cwd, "theta", "user", STALE_BASELINE, { tasks: makePluginRecord() }),
+        ),
+        beta: refreshed(bareRecord(cwd, "beta", "user", VALID_MANIFEST_JSON)),
+      },
+    });
+  });
+});
+
+test("a bare update keeps a failed marketplace registered and refreshes every later target", async (testContext) => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange -- the first project marketplace has a schema-invalid manifest.
+    const now = new Date("2026-10-19T09:30:00.000Z");
+    testContext.mock.timers.enable({ apis: ["Date"], now });
+    const brokenRoot = path.join(cwd, "zeta-marketplace");
+    await mkdir(path.join(brokenRoot, ".claude-plugin"), { recursive: true });
+    await writeFile(
+      path.join(brokenRoot, ".claude-plugin", "marketplace.json"),
+      JSON.stringify({ name: "zeta", owner: { name: "tests" }, plugins: "nope" }),
+    );
+    const zeta = bareRecord(cwd, "zeta", "project", VALID_MANIFEST_JSON, {}, brokenRoot);
+    await seedScopes(cwd, {
+      project: { zeta, alpha: bareRecord(cwd, "alpha", "project", VALID_MANIFEST_JSON) },
+      user: { beta: bareRecord(cwd, "beta", "user", VALID_MANIFEST_JSON) },
+    });
+    const { capture, ctx, run } = bareUpdateRun();
+    const git = makeForbiddenGitOps();
+
+    // act
+    await updateAllMarketplaces({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      cwd,
+      gitOps: git.gitOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(capture.entries, [
+      bareEntry({
+        kind: "cascade",
+        severity: "error",
+        needsReload: false,
+        summary: "Some operations have failed.",
+        tally: { label: "Marketplace update", failures: 2, warnings: 0 },
+        marketplaces: [
+          {
+            name: "zeta",
+            scope: "project",
+            status: "failed",
+            plugins: [
+              {
+                name: "zeta",
+                id: "zeta@zeta",
+                scope: "project",
+                status: "failed",
+                reasons: ["invalid manifest"],
+                cause: {
+                  causeChain: [
+                    'Failed to update marketplace "zeta".',
+                    "marketplace.json schema invalid: /plugins: must be array",
+                  ],
+                  truncated: false,
+                },
+                leaks: [],
+                rollbackPartial: [],
+              },
+            ],
+          },
+        ],
+      }),
+      upToDateEntry("alpha", "project"),
+      upToDateEntry("beta", "user"),
+    ]);
+    capture.assertValid();
+    assert.deepStrictEqual(git.calls, []);
+    assert.deepStrictEqual(await loadState(locationsFor("project", cwd).extensionRoot), {
+      schemaVersion: 3,
+      marketplaces: {
+        zeta,
+        alpha: {
+          ...bareRecord(cwd, "alpha", "project", VALID_MANIFEST_JSON),
           lastUpdatedAt: now.toISOString(),
         },
       },
     });
+    assert.deepStrictEqual(await loadState(locationsFor("user", cwd).extensionRoot), {
+      schemaVersion: 3,
+      marketplaces: {
+        beta: {
+          ...bareRecord(cwd, "beta", "user", VALID_MANIFEST_JSON),
+          lastUpdatedAt: now.toISOString(),
+        },
+      },
+    });
+  });
+});
+
+test("repeated bare updates with no marketplaces emit the same empty result and record nothing", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const first = bareUpdateRun();
+    const second = bareUpdateRun();
+    const git = makeForbiddenGitOps();
+
+    // act
+    for (const { ctx, run } of [first, second]) {
+      await updateAllMarketplaces({
+        completionCache: createCompletionCache(),
+        ctx,
+        run,
+        cwd,
+        gitOps: git.gitOps,
+      });
+    }
+
+    // assert
+    const empty = [
+      bareEntry({ kind: "cascade", severity: "info", needsReload: false, marketplaces: [] }),
+    ];
+    assert.deepStrictEqual(first.capture.entries, empty);
+    assert.deepStrictEqual(second.capture.entries, empty);
+    first.capture.assertValid();
+    second.capture.assertValid();
+    assert.deepStrictEqual(git.calls, []);
+    assert.deepStrictEqual(
+      await Promise.all(
+        (["project", "user"] as const).map(async (scope) =>
+          pathExists(locationsFor(scope, cwd).extensionRoot),
+        ),
+      ),
+      [false, false],
+    );
+  });
+});
+
+test("a bare update skips a marketplace removed after target selection and refreshes the rest", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange -- zeta's cascade removes alpha after both were selected, as a
+    // concurrent `marketplace remove` would.
+    await seedScopes(cwd, {
+      project: {
+        zeta: bareRecord(cwd, "zeta", "project", VALID_MANIFEST_JSON, {
+          notes: makePluginRecord(),
+        }),
+        alpha: bareRecord(cwd, "alpha", "project", VALID_MANIFEST_JSON),
+      },
+      user: { beta: bareRecord(cwd, "beta", "user", VALID_MANIFEST_JSON) },
+    });
+    await enableAutoupdate(cwd, "project", "zeta");
+    const projectRoot = locationsFor("project", cwd).extensionRoot;
+    const { capture, ctx, run } = bareUpdateRun();
+    const git = makeForbiddenGitOps();
+    const pluginUpdate: PluginUpdateFn = async (plugin) => {
+      const state = await loadState(projectRoot);
+      Reflect.deleteProperty(state.marketplaces, "alpha");
+      await saveState(projectRoot, state);
+      return unchangedOutcome(plugin);
+    };
+
+    // act
+    await updateAllMarketplaces({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      cwd,
+      gitOps: git.gitOps,
+      pluginUpdate,
+    });
+
+    // assert
+    assert.deepStrictEqual(capture.entries, [
+      upToDateEntry("zeta", "project"),
+      upToDateEntry("beta", "user"),
+    ]);
+    capture.assertValid();
+    assert.deepStrictEqual(git.calls, []);
+    assert.deepStrictEqual(Object.keys((await loadState(projectRoot)).marketplaces), ["zeta"]);
+  });
+});
+
+test("a marketplace added after target selection waits for the next bare update", async (testContext) => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange -- zeta's cascade adds late after the targets were selected, as
+    // a concurrent `marketplace add` would.
+    const now = new Date("2026-10-19T10:00:00.000Z");
+    testContext.mock.timers.enable({ apis: ["Date"], now });
+    await seedScopes(cwd, {
+      project: {
+        zeta: bareRecord(cwd, "zeta", "project", VALID_MANIFEST_JSON, {
+          notes: makePluginRecord(),
+        }),
+        alpha: bareRecord(cwd, "alpha", "project", VALID_MANIFEST_JSON),
+      },
+      user: {},
+    });
+    await enableAutoupdate(cwd, "project", "zeta");
+    const projectRoot = locationsFor("project", cwd).extensionRoot;
+    const late = bareRecord(cwd, "late", "project", VALID_MANIFEST_JSON);
+    let added = false;
+    const pluginUpdate: PluginUpdateFn = async (plugin) => {
+      if (!added) {
+        added = true;
+        const state = await loadState(projectRoot);
+        state.marketplaces.late = late;
+        await saveState(projectRoot, state);
+      }
+
+      return unchangedOutcome(plugin);
+    };
+
+    const first = bareUpdateRun();
+    const second = bareUpdateRun();
+
+    // act
+    await updateAllMarketplaces({
+      completionCache: createCompletionCache(),
+      ctx: first.ctx,
+      run: first.run,
+      cwd,
+      gitOps: makeForbiddenGitOps().gitOps,
+      pluginUpdate,
+    });
+    const afterFirst = await loadState(projectRoot);
+    await updateAllMarketplaces({
+      completionCache: createCompletionCache(),
+      ctx: second.ctx,
+      run: second.run,
+      cwd,
+      gitOps: makeForbiddenGitOps().gitOps,
+      pluginUpdate,
+    });
+
+    // assert
+    assert.deepStrictEqual(first.capture.entries, [
+      upToDateEntry("zeta", "project"),
+      upToDateEntry("alpha", "project"),
+    ]);
+    assert.deepStrictEqual(afterFirst.marketplaces.late, late);
+    assert.deepStrictEqual(second.capture.entries, [
+      upToDateEntry("zeta", "project"),
+      upToDateEntry("alpha", "project"),
+      upToDateEntry("late", "project"),
+    ]);
+    first.capture.assertValid();
+    second.capture.assertValid();
   });
 });
 
