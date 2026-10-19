@@ -122,7 +122,7 @@ A scope (user or project) has two layers: shared (`claude-plugins.json`) and loc
 - [x] **UPD-08**: A bare `update` with nothing added reports no marketplaces
 - [x] **UPD-09**: Updating a name the scope lacks fails as `marketplace not added`, with and without `--scope`
 - [x] **UPD-10**: A path marketplace whose manifest became invalid fails with an `invalid manifest` row
-- [ ] **UPD-11**: A git marketplace whose host answers 5xx, 404, or drops the connection fails as `network unreachable`
+- [ ] **UPD-11**: A git marketplace whose host answers 5xx or 404 fails as `network error`, with a cause line that names the HTTP status and the fetched URL; one whose connection drops fails as `network unreachable`
 - [ ] **UPD-12**: A git marketplace whose host now answers 401 fails as `authentication required`, with the cause line naming `git credential approve` for that host (url, gh)
 - [x] **UPD-13**: With autoupdate on, an installed plugin the refreshed manifest dropped is skipped as `not in manifest`, with warning severity
 - [x] **UPD-14**: A path marketplace whose directory vanished fails as `source missing`

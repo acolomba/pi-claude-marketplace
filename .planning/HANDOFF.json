@@ -14,15 +14,13 @@
     {"id": 3, "name": "Code review --fix: 14 of 15 Critical/Warning findings fixed", "status": "done", "commit": "204e0d88"}
   ],
   "remaining_tasks": [
-    {"id": 4, "name": "Decide WR-02 (legacy path-record repair) and fix it", "status": "not_started"},
-    {"id": 5, "name": "Decide the reason for a failed state save during marketplace update and fix it", "status": "not_started"},
+    {"id": 4, "name": "Decide WR-02 (legacy path-record repair) and fix it", "status": "done", "commit": "04d1b35d"},
+    {"id": 5, "name": "Decide the reason for a failed state save during marketplace update and fix it", "status": "done", "commit": "31ee314d"},
     {"id": 6, "name": "Discuss Phase 7 (Marketplace Autoupdate)", "status": "not_started"}
   ],
   "blockers": [],
   "async_jobs": [],
   "human_actions_pending": [
-    {"action": "Decide WR-02: repair legacy path records once at state load, or give add/info/update one shared resolver from source.logical + addedFromCwd that update writes back; also whether update switches a decoy-repointed record back to the original external file, and what info shows until then", "context": "06-REVIEW-FIX.md skipped WR-02 as needing a decision; 06-SECURITY.md lists it as a residual gap beside T-06-01", "blocking": false},
-    {"action": "Decide the reason a failed state save reports during marketplace update (today {network unreachable})", "context": "Found while fixing WR-13; the owner test checks only severity and count until decided", "blocking": false},
     {"action": "Review the user-visible wording of MarketplaceBaselineUnreadableError (WR-01, commit 25bbb025)", "context": "New cause line: The saved manifest of marketplace \"<name>\" in state.json is unreadable.", "blocking": false},
     {"action": "Confirm WR-03 (commit b3b6ed0d) reversing the earlier ENOENT-only narrowing in manifestContentKey", "context": "Pre-fetch read failures now mean no comparison; the fetched manifest is still validated, so it fails closed", "blocking": false}
   ],
@@ -32,6 +30,6 @@
     {"decision": "Phase 06 marked complete after verifier passed 5/5 with review findings advisory", "rationale": "Review findings did not invalidate any requirement; 14 then fixed", "phase": "06"}
   ],
   "uncommitted_files": [],
-  "next_action": "Ask the operator the two open decisions (WR-02 and the failed-save reason); implement through /gsd-quick or a gap plan, then /gsd-discuss-phase 7.",
+  "next_action": "Review the two pending human actions (WR-01 wording, WR-03 reversal), then /gsd-discuss-phase 7.",
   "context_notes": "Full npm run check passed at 48ada852 (208 scenarios, 2,258 steps, 280 direct-coverage records, Node v26.11.1). Disposition ledger: 14 fixed, WR-02 skipped, IN-01..IN-04 open (out of fix scope). Nothing pushed. Phase 7 has no directory or plans yet."
 }

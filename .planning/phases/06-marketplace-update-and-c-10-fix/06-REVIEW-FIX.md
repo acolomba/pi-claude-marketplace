@@ -4,9 +4,9 @@ fixed_at: 2026-10-19T09:02:28Z
 review_path: .planning/phases/06-marketplace-update-and-c-10-fix/06-REVIEW.md
 iteration: 1
 findings_in_scope: 15
-fixed: 14
-skipped: 1
-status: partial
+fixed: 15
+skipped: 0
+status: all_fixed
 ---
 
 # Phase 6: Code Review Fix Report
@@ -18,8 +18,8 @@ status: partial
 **Summary:**
 
 - Findings in scope: 15 (CR-01, WR-01 through WR-14)
-- Fixed: 14
-- Skipped: 1 (WR-02, needs a decision)
+- Fixed: 15
+- Skipped: 0
 
 ## Verification location
 
@@ -53,6 +53,12 @@ Focused checks run on the final tree:
 **Files modified:** `extensions/pi-claude-marketplace/shared/errors.ts`, `extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts`, `tests/shared/errors.test.ts`, `tests/orchestrators/marketplace/update.test.ts`
 **Commit:** 25bbb025
 **Applied fix:** Fail closed, as the project rule decides. A new `MarketplaceBaselineUnreadableError` is thrown when the saved baseline does not parse. The parse runs before any source read or fetch. `reasonsFromCascadeError` maps it to `{unreadable}`, and the record stays unchanged. There are red-first unit cases for the path, github, and url kinds, with forbidden git ops that prove no fetch. Status: fixed, requires human verification. The cause line wording, "The saved manifest of marketplace "x" in state.json is unreadable.", is user-visible. Recovery still needs `marketplace remove` plus `add`, or a hand edit.
+
+### WR-02: A path-source refresh reads `record.manifestPath` as stored, and legacy records are never repaired
+
+**Files modified:** `extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts`, `tests/orchestrators/marketplace/shared.test.ts`, `extensions/pi-claude-marketplace/orchestrators/marketplace/info.ts`, `tests/orchestrators/marketplace/info.test.ts`, `extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts`, `extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts`, `tests/orchestrators/marketplace/update.test.ts`
+**Commit:** 04d1b35d
+**Applied fix:** Operator decision, 2026-10-19. Git clones and local path sources are treated alike, because a marketplace is a directory on disk. `add`, `info`, and `update` locate the manifest through one helper, `recordedManifestPath`. `info` shows the recorded manifest file of a file source and the recorded root of a directory source (D-01), and no longer resolves `source.logical` against `addedFromCwd`. Those two fields are provenance only. Legacy records are not supported, so no repair or migration was written, and the clone-path repair in `update` was removed with its legacy-only unit case. This also resolves IN-02.
 
 ### WR-03: A legacy git record with an invalid on-disk manifest still cannot recover
 
@@ -118,7 +124,7 @@ Focused checks run on the final tree:
 
 **Files modified:** `tests/orchestrators/marketplace/update.test.ts`
 **Commit:** 372c66d1
-**Applied fix:** The invalid-manifest rows and the missing-source case now compare the whole `{ message, severity }` arrays. The invalid-manifest and failed-save cases capture `callsAfterFailure` and assert it in the assert phase. Partly done: the failed-save case keeps its severity and count check. Its whole notification reports `{network unreachable}` for an injected state-save failure. That is a false transport reason of the same ATTR-10 class, and pinning it in a test would lock in a known-wrong reason. Choosing the right reason for a save failure is a user-visible decision, so it was left open (see the follow-up below).
+**Applied fix:** The invalid-manifest rows and the missing-source case now compare the whole `{ message, severity }` arrays. The invalid-manifest and failed-save cases capture `callsAfterFailure` and assert it in the assert phase. The failed-save case now also compares the whole notification (commit 31ee314d).
 
 ### WR-14: (out-of-phase) An integration test edits the baseline in `state.json` to keep its old expectation
 
@@ -128,15 +134,11 @@ Focused checks run on the final tree:
 
 ## Skipped Issues
 
-### WR-02: A path-source refresh reads `record.manifestPath` as stored, and legacy records are never repaired
-
-**File:** `extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts:409`
-**Reason:** Needs a decision. Should legacy path records be repaired once at state load or migration? Or should `add`, `info`, and `update` share one path resolver that derives the manifest from `source.logical` and `addedFromCwd` on every refresh, and writes it back? And for a record the C-10 bug already repointed to the conventional decoy, should `update` switch back to the original external file, and what should `info` show until then? No recorded decision covers these user-visible choices, so per project rule 6 this was not decided here.
-**Original issue:** `info` derives the manifest from `source.logical` resolved against `addedFromCwd`, while `update` reads `record.manifestPath` as stored. Relative legacy records then resolve against `process.cwd()`, and records repointed by the C-10 bug keep reading the decoy, so `info` and `update` can name different files.
+None.
 
 ## Follow-ups found while fixing
 
-- A state-save failure during `marketplace update` renders `{network unreachable}` (found in WR-13). This is the same false-reason class as WR-01. It needs a decision on which closed-set reason a local save failure should carry.
+- Resolved (operator decision, 2026-10-19, commits ea3bfed1 and 31ee314d): A state-save failure during `marketplace update` rendered `{network unreachable}` (found in WR-13). A local state-save failure now renders a failed row with no reason and prints its cause chain. Errno codes are not mapped on the save path, because only a refresh failure is classified. A held state lock renders `{lock held}`, as autoupdate does. ENOENT/ENOTDIR as `{source missing}`, and the transport classifications, stay on the refresh-read path. `{network unreachable}` is kept for connection failures. An HTTP answer from the git host other than 401/403 renders the new reason `{network error}`, and the first frame of the cause line names the status and the URL. The fallback reason was removed, so a failure no rule classifies carries no reason. UPD-11 and Phase 9's success criterion 3 now expect `{network error}` with the status and URL.
 
 ---
 
