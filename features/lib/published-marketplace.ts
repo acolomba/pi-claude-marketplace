@@ -184,7 +184,9 @@ function ownedTarget(published: PublishedMarketplace, target: string): string {
   const relative = path.relative(root, resolved);
   if (
     root === path.parse(root).root ||
-    (relative !== "" && (relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)))
+    relative === ".." ||
+    relative.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(relative)
   ) {
     throw new Error(`refusing to change ${resolved} outside the published root ${root}`);
   }
