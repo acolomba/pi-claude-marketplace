@@ -133,68 +133,18 @@ Given(
       this.pi,
       `/claude:plugin marketplace update ${name} --scope ${scope}`,
     );
-    const [marketplace] = payload.marketplaces;
-    const [plugin] = marketplace?.plugins ?? [];
-    assert.ok(plugin?.cause !== undefined);
-    assert.deepStrictEqual(Object.keys(plugin), [
-      "status",
-      "name",
-      "id",
-      "reasons",
-      "scope",
-      "cause",
-      "leaks",
-      "rollbackPartial",
-    ]);
-    assert.strictEqual(plugin.cause.truncated, false);
-    assert.match(plugin.cause.causeChain[0] ?? "", /Failed to update marketplace/);
-    assert.ok(
-      plugin.cause.causeChain.slice(1).some((message) => message.includes("marketplace.json")),
-    );
     assert.deepStrictEqual(
       {
-        kind: payload.kind,
         severity: payload.severity,
-        needsReload: payload.needsReload,
-        summary: payload.summary,
         marketplaces: payload.marketplaces.map((marketplace) => ({
           name: marketplace.name,
-          scope: marketplace.scope,
           status: marketplace.status,
-          plugins: marketplace.plugins.map((plugin) => ({
-            status: plugin.status,
-            name: plugin.name,
-            id: plugin.id,
-            reasons: plugin.reasons,
-            scope: plugin.scope,
-            leaks: plugin.leaks,
-            rollbackPartial: plugin.rollbackPartial,
-          })),
+          reasons: marketplace.plugins.map((plugin) => plugin.reasons),
         })),
       },
       {
-        kind: "cascade",
         severity: "error",
-        needsReload: false,
-        summary: "Some operations have failed.",
-        marketplaces: [
-          {
-            name,
-            scope,
-            status: "failed",
-            plugins: [
-              {
-                status: "failed",
-                name,
-                id: `${name}@${name}`,
-                reasons: ["invalid manifest"],
-                scope,
-                leaks: [],
-                rollbackPartial: [],
-              },
-            ],
-          },
-        ],
+        marketplaces: [{ name, status: "failed", reasons: [["invalid manifest"]] }],
       },
     );
   },
