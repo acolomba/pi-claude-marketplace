@@ -35,13 +35,13 @@ Feature: Marketplace update
     Given the mcp-adapter.json file of the project scope holds a comment
     When the user runs "/claude:plugin marketplace update"
     Then the command reports these results:
-      | kind               | severity | needs reload | tally label        | tally failures | tally warnings | tally success count | notices                                                                  |
-      | cascade            | info     | true         | Marketplace update | 0              | 0              | 2                   |                                                                          |
+      | kind               | severity | needs reload | tally label        | tally failures | tally warnings | tally success count | notices                                                                   |
+      | cascade            | info     | true         | Marketplace update | 0              | 0              | 2                   |                                                                           |
       | mcp-config-notices | warning  | false        |                    |                |                |                     | [{"kind":"comments-dropped","scope":"project","file":"mcp-adapter.json"}] |
-      | cascade            | info     | false        | Marketplace update | 0              | 0              | 1                   |                                                                          |
-      | cascade            | info     | true         | Marketplace update | 0              | 0              | 2                   |                                                                          |
+      | cascade            | info     | false        | Marketplace update | 0              | 0              | 1                   |                                                                           |
+      | cascade            | info     | true         | Marketplace update | 0              | 0              | 2                   |                                                                           |
       | mcp-config-notices | warning  | false        |                    |                |                |                     | [{"kind":"comments-dropped","scope":"user","file":"mcp-adapter.json"}]    |
-      | cascade            | info     | false        | Marketplace update | 0              | 0              | 1                   |                                                                          |
+      | cascade            | info     | false        | Marketplace update | 0              | 0              | 1                   |                                                                           |
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | marketplace status | marketplace reasons | id          | name  | status  | reasons                 | scope   | from  | to     |
       | zeta             | project           | updated            |                     | notes@zeta  | notes | updated | requires pi-mcp-adapter | project | 1.0.0 | 1.10.0 |
@@ -789,9 +789,9 @@ Feature: Marketplace update
     Given the marketplace "tools" has the description "A catalog that no longer offers demo"
     When the user runs "/claude:plugin marketplace update tools --scope project"
     Then the result has these fields:
-      | kind         | cascade                            |
-      | severity     | warning                            |
-      | needs reload | false                              |
+      | kind         | cascade                             |
+      | severity     | warning                             |
+      | needs reload | false                               |
       | summary      | A plugin operation needs attention. |
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | marketplace status | id         | name | status  | reasons         | scope   |
@@ -865,12 +865,12 @@ Feature: Marketplace update
       | tally warnings      | 0           |
       | tally success count | 2           |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | marketplace details autoupdate | id          | name  | status    | reasons | scope   | version |
-      | tools            | project           | true                           | alpha@tools | alpha | installed |         | project | 1.10.0  |
+      | marketplace name | marketplace scope | marketplace details autoupdate | id          | name  | status     | reasons | scope   | version |
+      | tools            | project           | true                           | alpha@tools | alpha | installed  |         | project | 1.10.0  |
       | tools            | project           | true                           | zeta@tools  | zeta  | upgradable |         | project | 1.0.0   |
     When the user starts a new pi session
     Then the session offers these skills:
-      | command            | description             |
+      | command            | description              |
       | /skill:alpha-skill | A skill of alpha 1.10.0. |
       | /skill:zeta-skill  | A skill of zeta 1.0.0.   |
 
@@ -922,10 +922,10 @@ Feature: Marketplace update
       | /skill:demo-skill | A skill of demo 1.0.0. |
 
     Examples:
-      | source kind | scope   | manifest problem           | source                                                    | cause chain                                                                                                                                                                                                                                                                                |
+      | source kind | scope   | manifest problem           | source                                                    | cause chain                                                                                                                                                                                                                                                    |
       | dir         | project | is not valid json          | {home}/marketplaces/tools                                 | Failed to update marketplace "tools"., marketplace.json is not valid JSON: SyntaxError: Expected ',' or '}' after property value in JSON at position 56 (line 1 column 57), Expected ',' or '}' after property value in JSON at position 56 (line 1 column 57) |
-      | file        | project | breaks the manifest schema | {home}/marketplaces/tools/.claude-plugin/marketplace.json | Failed to update marketplace "tools"., marketplace.json schema invalid: /plugins: must be array                                                                                                                                                                                          |
-      | dir         | user    | breaks the manifest schema | {home}/marketplaces/tools                                 | Failed to update marketplace "tools"., marketplace.json schema invalid: /plugins: must be array                                                                                                                                                                                          |
+      | file        | project | breaks the manifest schema | {home}/marketplaces/tools/.claude-plugin/marketplace.json | Failed to update marketplace "tools"., marketplace.json schema invalid: /plugins: must be array                                                                                                                                                                |
+      | dir         | user    | breaks the manifest schema | {home}/marketplaces/tools                                 | Failed to update marketplace "tools"., marketplace.json schema invalid: /plugins: must be array                                                                                                                                                                |
       | file        | user    | is not valid json          | {home}/marketplaces/tools/.claude-plugin/marketplace.json | Failed to update marketplace "tools"., marketplace.json is not valid JSON: SyntaxError: Expected ',' or '}' after property value in JSON at position 56 (line 1 column 57), Expected ',' or '}' after property value in JSON at position 56 (line 1 column 57) |
 
   Scenario Outline: A repaired marketplace can be updated again
@@ -976,7 +976,7 @@ Feature: Marketplace update
       | tally failures | 2                            |
       | tally warnings | 0                            |
     Then the results list these marketplaces and plugins:
-      | marketplace name | marketplace scope | marketplace status | id          | name  | status | reasons        | scope   | leaks | rollback partial | cause chain                                                                                                                                                | cause truncated |
+      | marketplace name | marketplace scope | marketplace status | id          | name  | status | reasons        | scope   | leaks | rollback partial | cause chain                                                                                                                                | cause truncated |
       | tools            | project           | failed             | tools@tools | tools | failed | source missing | project |       |                  | Failed to update marketplace "tools"., ENOENT: no such file or directory, open '{home}/marketplaces/tools/.claude-plugin/marketplace.json' | false           |
     Then the "claude-plugins.json" file of the project scope declares these marketplaces:
       | name  | source                            |

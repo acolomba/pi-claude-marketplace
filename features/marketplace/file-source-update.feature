@@ -21,39 +21,39 @@ Feature: Marketplace file source update
       | needs reload | false   |
     When the user runs "/claude:plugin marketplace info tools --scope project"
     Then the marketplace info result has these fields:
-      | kind                    | marketplace-info                         |
-      | name                    | tools                                    |
-      | scope                   | project                                  |
-      | details autoupdate      | false                                    |
-      | details last updated at | {scenario time}                          |
-      | source kind             | path                                     |
+      | kind                    | marketplace-info                                   |
+      | name                    | tools                                              |
+      | scope                   | project                                            |
+      | details autoupdate      | false                                              |
+      | details last updated at | {scenario time}                                    |
+      | source kind             | path                                               |
       | source abs path         | {home}/marketplaces/tools/catalog/marketplace.json |
-      | source url              |                                          |
-      | source owner            |                                          |
-      | source repo             |                                          |
-      | source ref              |                                          |
-      | description             | Refreshed tools with a longer description |
-      | severity                | info                                     |
-      | needs reload            | false                                    |
+      | source url              |                                                    |
+      | source owner            |                                                    |
+      | source repo             |                                                    |
+      | source ref              |                                                    |
+      | description             | Refreshed tools with a longer description          |
+      | severity                | info                                               |
+      | needs reload            | false                                              |
 
   Scenario: A conventional manifest keeps its file identity
     Given the marketplace "tools" is published as a file source
     Given the marketplace "tools" is added to the project scope
     When the user runs "/claude:plugin marketplace info tools --scope project"
     Then the marketplace info result has these fields:
-      | kind                    | marketplace-info                                         |
-      | name                    | tools                                                    |
-      | scope                   | project                                                  |
-      | details autoupdate      | false                                                    |
-      | details last updated at | {scenario time}                                          |
-      | source kind             | path                                                     |
+      | kind                    | marketplace-info                                          |
+      | name                    | tools                                                     |
+      | scope                   | project                                                   |
+      | details autoupdate      | false                                                     |
+      | details last updated at | {scenario time}                                           |
+      | source kind             | path                                                      |
       | source abs path         | {home}/marketplaces/tools/.claude-plugin/marketplace.json |
-      | source url              |                                                          |
-      | source owner            |                                                          |
-      | source repo             |                                                          |
-      | source ref              |                                                          |
-      | severity                | info                                                     |
-      | needs reload            | false                                                    |
+      | source url              |                                                           |
+      | source owner            |                                                           |
+      | source repo             |                                                           |
+      | source ref              |                                                           |
+      | severity                | info                                                      |
+      | needs reload            | false                                                     |
 
   Scenario: A repeated external manifest update is up to date
     Given the marketplace "tools" is published as an external manifest
@@ -103,8 +103,8 @@ Feature: Marketplace file source update
       | tally failures | 2                            |
       | tally warnings | 0                            |
     Then the results list these marketplaces and plugins:
-      | marketplace name | marketplace scope | marketplace status | id          | name  | status | reasons        | scope   | leaks | rollback partial | cause chain                                                                                                                                          | cause truncated |
+      | marketplace name | marketplace scope | marketplace status | id          | name  | status | reasons        | scope   | leaks | rollback partial | cause chain                                                                                                                         | cause truncated |
       | tools            | project           | failed             | tools@tools | tools | failed | source missing | project |       |                  | Failed to update marketplace "tools"., ENOENT: no such file or directory, open '{home}/marketplaces/tools/catalog/marketplace.json' | false           |
     Then the "claude-plugins.json" file of the project scope declares these marketplaces:
-      | name  | source                                            |
+      | name  | source                                             |
       | tools | {home}/marketplaces/tools/catalog/marketplace.json |
