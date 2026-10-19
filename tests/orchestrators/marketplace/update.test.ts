@@ -2114,11 +2114,12 @@ test("autoupdate ignores a newly declared plugin that has no installed record", 
       // assert
       assert.deepStrictEqual(calls, ["existing"]);
       assert.deepStrictEqual(
-        await readPluginRecord(locationsFor("project", cwd).extensionRoot, "offers", "existing"),
-        installed,
+        (await loadState(locationsFor("project", cwd).extensionRoot)).marketplaces.offers?.plugins,
+        { existing: installed },
       );
-      assert.match(notifications[0]?.message ?? "", /^● offers \[project\] \(updated\)/);
-      assert.match(notifications[0]?.message ?? "", /^ {2}⊘ existing \(skipped\) \{up-to-date\}$/m);
+      assert.deepStrictEqual(notifications, [
+        { message: "● offers [project] (updated)\n  ⊘ existing (skipped) {up-to-date}" },
+      ]);
     } finally {
       await rm(marketplaceRoot, { recursive: true, force: true });
     }
