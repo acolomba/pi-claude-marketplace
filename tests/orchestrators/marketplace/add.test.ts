@@ -76,6 +76,19 @@ import type { NotificationRun } from "../../../extensions/pi-claude-marketplace/
 
 type FailedAddOutcome = Extract<AddMarketplaceOutcome, { status: "failed" }>;
 
+const VALID_MANIFEST_JSON = JSON.stringify({
+  name: "valid-marketplace",
+  owner: { name: "Phase 4 Tests" },
+  plugins: [
+    {
+      name: "hello",
+      source: "./plugins/hello",
+      description: "Hello plugin (test fixture)",
+      version: "1.0.0",
+    },
+  ],
+});
+
 void ({
   status: "failed",
   reason: "duplicate name",
@@ -1704,7 +1717,20 @@ test("NFR-5: path-source add never calls gitOps", async () => {
 
       // State updated; success notification emitted.
       const persisted = await loadState(locations.extensionRoot);
-      assert.ok("valid-marketplace" in persisted.marketplaces);
+      const record = persisted.marketplaces["valid-marketplace"];
+      assert.ok(record);
+      const { lastUpdatedAt, ...stableRecord } = record;
+      assert.deepStrictEqual(stableRecord, {
+        name: "valid-marketplace",
+        scope: "project",
+        source: { kind: "path", raw: localMpDir, logical: localMpDir },
+        addedFromCwd: cwd,
+        manifestPath: path.join(localMpDir, ".claude-plugin", "marketplace.json"),
+        marketplaceRoot: localMpDir,
+        plugins: {},
+        lastSuccessfulManifest: VALID_MANIFEST_JSON,
+      });
+      assert.match(lastUpdatedAt ?? "", /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
       const note = notifications[0];
       assert.ok(note);
       // SNM-33 / D-22-01: a path-source add emits the same `(added)` shape
@@ -1821,6 +1847,44 @@ test("MA-3: path source accepts a direct path to marketplace.json (not just the 
     }
   });
 });
+
+for (const manifestDirectory of [".claude-plugin", "catalog"]) {
+  test(`resolves a relative ${manifestDirectory} file against the supplied working directory`, async () => {
+    await withTmpScope(async ({ cwd, locations }) => {
+      // arrange
+      const marketplaceRoot = path.join(cwd, "local");
+      const manifestPath = path.join(marketplaceRoot, manifestDirectory, "marketplace.json");
+      await mkdir(path.dirname(manifestPath), { recursive: true });
+      const comparisonJson = '{"name":"tools","plugins":[],"vendor":{"enabled":true}}';
+      await writeFile(manifestPath, comparisonJson);
+      const rawSource = `./local/${manifestDirectory}/marketplace.json`;
+      const { ctx, run, notifications } = makeCtx();
+      const gitOps = mock<GitOps>({ name: "unused git operations" });
+
+      // act
+      await addMarketplace({ ctx, run, scope: "project", cwd, rawSource, gitOps });
+      const persisted = await loadState(locations.extensionRoot);
+
+      // assert
+      const record = persisted.marketplaces.tools;
+      assert.ok(record);
+      const { lastUpdatedAt, ...stableRecord } = record;
+      assert.deepStrictEqual(stableRecord, {
+        name: "tools",
+        scope: "project",
+        source: { kind: "path", raw: rawSource, logical: rawSource },
+        addedFromCwd: cwd,
+        manifestPath,
+        marketplaceRoot,
+        plugins: {},
+        lastSuccessfulManifest: comparisonJson,
+      });
+      assert.match(lastUpdatedAt ?? "", /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+      assert.deepStrictEqual(notifications, [{ message: "● tools [project] (added)" }]);
+      verify(gitOps);
+    });
+  });
+}
 
 test("MA-4: tilde paths are preserved verbatim in stored source.raw", async () => {
   // We don't actually resolve the tilde to a real homedir -- just verify
@@ -1956,6 +2020,7 @@ test("D-03-INV :: add invalidates marketplace-names cache for the new scope", as
             manifestPath: path.join(sourceRoot, ".claude-plugin", "marketplace.json"),
             marketplaceRoot: sourceRoot,
             plugins: {},
+            lastSuccessfulManifest: VALID_MANIFEST_JSON,
           },
         },
       },

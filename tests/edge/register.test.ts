@@ -2017,13 +2017,14 @@ describe("registerClaudePluginCommand", () => {
       await rm(sourceTree, { force: true, recursive: true });
     });
     await mkdir(path.join(sourceTree, ".claude-plugin"), { recursive: true });
+    const manifestJson = JSON.stringify({
+      name: "claude-plugins-official",
+      owner: { name: "registration owner" },
+      plugins: [],
+    });
     await writeFile(
       path.join(sourceTree, ".claude-plugin", "marketplace.json"),
-      JSON.stringify({
-        name: "claude-plugins-official",
-        owner: { name: "registration owner" },
-        plugins: [],
-      }),
+      manifestJson,
       "utf8",
     );
     const userLocations = locationsFor("user", cwd);
@@ -2096,6 +2097,7 @@ describe("registerClaudePluginCommand", () => {
       marketplaces: {
         "claude-plugins-official": {
           addedFromCwd: cwd,
+          lastSuccessfulManifest: manifestJson,
           lastUpdatedAt: "2026-02-03T04:05:06.000Z",
           manifestPath: path.join(marketplaceRoot, ".claude-plugin", "marketplace.json"),
           marketplaceRoot,
@@ -2350,15 +2352,6 @@ test("rebuilds completion rows through the cache that owns a successful register
     "utf8",
   );
   await seedProjectMarketplaces(cwd, [marketplace, unrelated]);
-  const extensionRoot = path.join(cwd, ".pi", "pi-claude-marketplace");
-  const state = await loadState(extensionRoot);
-  const record = state.marketplaces[marketplace];
-  if (record === undefined) {
-    throw new Error("the registered update fixture has no target marketplace");
-  }
-
-  record.manifestPath = path.join(sourceRoot, ".claude-plugin", "before-update.json");
-  await saveState(extensionRoot, state);
   const resolver = makeLocationsResolver(cwd);
   const cachePath = await resolver.pluginCachePath("project", marketplace);
   const unrelatedCachePath = await resolver.pluginCachePath("project", unrelated);

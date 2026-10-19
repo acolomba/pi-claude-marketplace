@@ -10,7 +10,7 @@
  * what the plugin declares.
  */
 
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import type { DataTable } from "@cucumber/cucumber";
@@ -57,10 +57,6 @@ export function readOfferedPluginsWithDependencies(table: DataTable): OfferedPlu
   });
 }
 
-function manifestPath(root: string): string {
-  return path.join(root, ".claude-plugin", "marketplace.json");
-}
-
 async function writePlugin(root: string, plugin: OfferedPlugin): Promise<void> {
   const pluginRoot = path.join(root, "plugins", plugin.name);
   const skillDir = path.join(pluginRoot, "skills", `${plugin.name}-skill`);
@@ -97,60 +93,75 @@ export async function writeMarketplace(
   root: string,
   name: string,
   plugins: readonly OfferedPlugin[],
+  manifestFile: string,
 ): Promise<void> {
   await Promise.all(plugins.map((plugin) => writePlugin(root, plugin)));
-  await mkdir(path.join(root, ".claude-plugin"), { recursive: true });
-  await writeFile(manifestPath(root), manifestText(name, plugins));
+  await writeManifestText(manifestFile, manifestText(name, plugins));
+}
+
+/** Writes a manifest with a different byte length so the cache observes every rewrite. */
+export async function writeManifestText(manifestFile: string, text: string): Promise<void> {
+  let previousSize: number | undefined;
+  try {
+    previousSize = (await stat(manifestFile)).size;
+  } catch (error: unknown) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      throw error;
+    }
+  }
+
+  await mkdir(path.dirname(manifestFile), { recursive: true });
+  await writeFile(manifestFile, Buffer.byteLength(text) === previousSize ? `${text}\n` : text);
 }
 
 /**
  * Adds `target` to the `allowCrossMarketplaceDependenciesOn` list of the
- * manifest under `root`, so its plugins may depend on plugins of `target`.
+ * manifest, so its plugins may depend on plugins of `target`.
  */
-export async function writeDependencyAllowance(root: string, target: string): Promise<void> {
-  const manifest = JSON.parse(await readFile(manifestPath(root), "utf8")) as {
+export async function writeDependencyAllowance(
+  manifestFile: string,
+  target: string,
+): Promise<void> {
+  const manifest = JSON.parse(await readFile(manifestFile, "utf8")) as {
     allowCrossMarketplaceDependenciesOn?: string[];
   };
   manifest.allowCrossMarketplaceDependenciesOn = [
     ...(manifest.allowCrossMarketplaceDependenciesOn ?? []),
     target,
   ];
-  await writeFile(manifestPath(root), JSON.stringify(manifest));
+  await writeManifestText(manifestFile, JSON.stringify(manifest));
 }
 
 /** Sets the optional marketplace description without changing other fields. */
 export async function writeMarketplaceDescription(
-  root: string,
+  manifestFile: string,
   description: string,
 ): Promise<void> {
-  const manifest = JSON.parse(await readFile(manifestPath(root), "utf8")) as Record<
-    string,
-    unknown
-  >;
+  const manifest = JSON.parse(await readFile(manifestFile, "utf8")) as Record<string, unknown>;
   manifest.description = description;
-  await writeFile(manifestPath(root), JSON.stringify(manifest));
+  await writeManifestText(manifestFile, JSON.stringify(manifest));
 }
 
 /**
- * Rewrites the manifest of the marketplace `name` under `root` as valid JSON
+ * Rewrites the manifest of the marketplace `name` as valid JSON
  * that breaks the manifest schema: `plugins` is a string. Valid JSON keeps the
  * failure text the extension's own, and the new size defeats a manifest cache
  * keyed by modification time and size.
  */
-export async function writeInvalidManifest(root: string, name: string): Promise<void> {
-  await writeFile(
-    manifestPath(root),
+export async function writeInvalidManifest(manifestFile: string, name: string): Promise<void> {
+  await writeManifestText(
+    manifestFile,
     JSON.stringify({ name, owner: { name: "features" }, plugins: "nope" }),
   );
 }
 
 /**
- * Rewrites the manifest of the marketplace `name` under `root` as JSON that
+ * Rewrites the manifest of the marketplace `name` as JSON that
  * does not parse: the manifest with no plugins, short of its last character.
  * The manifest cache keys on modification time and size, remembers a failed
  * parse, and outlives a new session, so this text has a size of its own,
  * one byte less than the valid manifest.
  */
-export async function writeMalformedManifest(root: string, name: string): Promise<void> {
-  await writeFile(manifestPath(root), manifestText(name, []).slice(0, -1));
+export async function writeMalformedManifest(manifestFile: string, name: string): Promise<void> {
+  await writeManifestText(manifestFile, manifestText(name, []).slice(0, -1));
 }

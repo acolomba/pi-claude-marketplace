@@ -31,7 +31,10 @@ import { registerClaudePluginCommand } from "../../extensions/pi-claude-marketpl
 import { createPluginUpdateOperations } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts";
 import { createApplyReconcile } from "../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
-import { loadState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import {
+  loadState,
+  saveState,
+} from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { openNotificationRun } from "../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import { makeCtx, makeMockPi } from "../e2e/_helpers.ts";
@@ -262,6 +265,15 @@ test("D-08-07: a plugin named constructor updates, and removing its marketplace 
     await run(`marketplace add ${marketplaceRoot} --scope project`);
     await run("install constructor@mp --scope project");
     await seedMarketplace(cwd, "mp", ["constructor", "hello"], "1.1.0");
+    const locations = locationsFor("project", cwd);
+    const state = await loadState(locations.extensionRoot);
+    const marketplace = state.marketplaces.mp;
+    assert.ok(marketplace);
+    marketplace.lastSuccessfulManifest = await readFile(
+      path.join(marketplaceRoot, ".claude-plugin", "marketplace.json"),
+      "utf8",
+    );
+    await saveState(locations.extensionRoot, state);
 
     // act
     const updated = await run("update constructor@mp");

@@ -14,6 +14,7 @@ import {
   writeDependencyAllowance,
   writeInvalidManifest,
   writeMalformedManifest,
+  writeManifestText,
   writeMarketplace,
   writeMarketplaceDescription,
 } from "./path-marketplace.ts";
@@ -32,7 +33,7 @@ const SOURCE_KINDS: readonly SourceKind[] = ["dir", "file", "url", "github"];
 export type ManifestProblem = "malformed" | "schema-invalid";
 
 const MANIFEST_WRITERS: Readonly<
-  Record<ManifestProblem, (root: string, name: string) => Promise<void>>
+  Record<ManifestProblem, (manifestFile: string, name: string) => Promise<void>>
 > = {
   malformed: writeMalformedManifest,
   "schema-invalid": writeInvalidManifest,
@@ -46,6 +47,7 @@ export interface PublishedMarketplace {
   readonly kind: SourceKind;
   readonly root: string;
   readonly source: string;
+  readonly manifestPath: string;
 }
 
 /** Returns the source kind `text` names, throwing on any other text. */
@@ -118,16 +120,61 @@ export async function publishMarketplaceIn(
   plugins: readonly OfferedPlugin[],
 ): Promise<PublishedMarketplace> {
   const root = path.join(marketplacesRoot, directory);
+  const manifestPath = path.join(root, ".claude-plugin", "marketplace.json");
   switch (kind) {
     case "dir":
-      await writeMarketplace(root, name, plugins);
-      return { kind, root, source: root };
+      await writeMarketplace(root, name, plugins, manifestPath);
+      return { kind, root, source: root, manifestPath };
     case "file":
-      await writeMarketplace(root, name, plugins);
-      return { kind, root, source: path.join(root, ".claude-plugin", "marketplace.json") };
+      await writeMarketplace(root, name, plugins, manifestPath);
+      return { kind, root, source: manifestPath, manifestPath };
     case "url":
     case "github":
       throw noStandIn(kind);
+  }
+}
+
+/** Publishes a file source outside the conventional manifest directory. */
+export async function publishExternalMarketplace(
+  marketplacesRoot: string,
+  name: string,
+): Promise<PublishedMarketplace> {
+  const root = path.join(marketplacesRoot, name);
+  const manifestPath = path.join(root, "catalog", "marketplace.json");
+  await writeMarketplace(root, name, [], manifestPath);
+  return { kind: "file", root, source: manifestPath, manifestPath };
+}
+
+/** Publishes new offers at the recorded source without moving its manifest. */
+export async function republishMarketplace(
+  published: PublishedMarketplace,
+  name: string,
+  plugins: readonly OfferedPlugin[],
+): Promise<void> {
+  switch (published.kind) {
+    case "dir":
+    case "file":
+      await writeMarketplace(published.root, name, plugins, published.manifestPath);
+      return;
+    case "url":
+    case "github":
+      throw noStandIn(published.kind);
+  }
+}
+
+/** Rewrites the exact published manifest with the supplied JSON text. */
+export async function rewritePublishedManifest(
+  published: PublishedMarketplace,
+  text: string,
+): Promise<void> {
+  switch (published.kind) {
+    case "dir":
+    case "file":
+      await writeManifestText(published.manifestPath, text);
+      return;
+    case "url":
+    case "github":
+      throw noStandIn(published.kind);
   }
 }
 
@@ -144,7 +191,7 @@ export async function invalidateManifest(
   switch (published.kind) {
     case "dir":
     case "file":
-      await MANIFEST_WRITERS[problem](published.root, name);
+      await MANIFEST_WRITERS[problem](published.manifestPath, name);
       return;
     case "url":
     case "github":
@@ -163,7 +210,7 @@ export async function allowDependenciesOn(
   switch (published.kind) {
     case "dir":
     case "file":
-      await writeDependencyAllowance(published.root, target);
+      await writeDependencyAllowance(published.manifestPath, target);
       return;
     case "url":
     case "github":
@@ -179,7 +226,7 @@ export async function describeMarketplace(
   switch (published.kind) {
     case "dir":
     case "file":
-      await writeMarketplaceDescription(published.root, description);
+      await writeMarketplaceDescription(published.manifestPath, description);
       return;
     case "url":
     case "github":

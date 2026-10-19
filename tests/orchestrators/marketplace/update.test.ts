@@ -15,6 +15,7 @@ import {
   pathSource,
 } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import { computeHashVersion } from "../../../extensions/pi-claude-marketplace/domain/version.ts";
+import { getMarketplaceInfo } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/info.ts";
 import {
   updateAllMarketplaces,
   updateMarketplace,
@@ -51,9 +52,25 @@ import type {
 } from "../../../extensions/pi-claude-marketplace/orchestrators/types.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { GitCredentials } from "../../../extensions/pi-claude-marketplace/platform/git.ts";
-import type { NotificationContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type {
+  ExtensionContext,
+  NotificationContext,
+} from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { NotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
+
+const VALID_MANIFEST_JSON = JSON.stringify({
+  name: "valid-marketplace",
+  owner: { name: "Phase 4 Tests" },
+  plugins: [
+    {
+      name: "hello",
+      source: "./plugins/hello",
+      description: "Hello plugin (test fixture)",
+      version: "1.0.0",
+    },
+  ],
+});
 
 function createUpdateSinglePlugin(): PluginUpdateFn {
   return createPluginUpdateOperations(
@@ -229,6 +246,7 @@ async function seedGithubMarketplace(opts: {
   autoupdate?: boolean;
   plugins?: Record<string, ExtensionState["marketplaces"][string]["plugins"][string]>;
   fixture?: "valid-marketplace" | "invalid-manifest";
+  legacy?: boolean;
 }): Promise<{ cloneDir: string }> {
   const locations = locationsFor("project", opts.cwd);
   await mkdir(locations.extensionRoot, { recursive: true });
@@ -249,6 +267,7 @@ async function seedGithubMarketplace(opts: {
         manifestPath: path.join(cloneDir, ".claude-plugin", "marketplace.json"),
         marketplaceRoot: cloneDir,
         plugins: opts.plugins ?? {},
+        ...(opts.legacy === true ? {} : { lastSuccessfulManifest: VALID_MANIFEST_JSON }),
         ...(opts.autoupdate !== undefined && { autoupdate: opts.autoupdate }),
       },
     },
@@ -1193,6 +1212,7 @@ test("UXG-05: path-source refresh whose local manifest is UNCHANGED renders the 
           manifestPath: path.join(localMpDir, ".claude-plugin", "marketplace.json"),
           marketplaceRoot: localMpDir,
           plugins: {},
+          lastSuccessfulManifest: VALID_MANIFEST_JSON,
         },
       },
     });
@@ -1557,7 +1577,12 @@ test("WR-02: corrupt pre-existing manifest routes to (failed), never a silent no
     // try (WR-01), so the throw wraps as MarketplaceUpdateError exactly like a
     // POST-read failure. Guards against a regression back to
     // `catch { return undefined; }` (the pre-WR-02 silent-(updated) bug).
-    const { cloneDir } = await seedGithubMarketplace({ cwd, name: "corrupt", ref: "main" });
+    const { cloneDir } = await seedGithubMarketplace({
+      cwd,
+      name: "corrupt",
+      ref: "main",
+      legacy: true,
+    });
     await writeFile(
       path.join(cloneDir, ".claude-plugin", "marketplace.json"),
       "{ not valid json",
@@ -1617,6 +1642,7 @@ async function seedPathMarketplace(opts: {
   scope?: Scope;
   autoupdate?: boolean;
   plugins?: Record<string, ExtensionState["marketplaces"][string]["plugins"][string]>;
+  legacy?: boolean;
 }): Promise<void> {
   const scope = opts.scope ?? "project";
   const locations = locationsFor(scope, opts.cwd);
@@ -1632,6 +1658,7 @@ async function seedPathMarketplace(opts: {
         manifestPath: path.join(opts.marketplaceRoot, ".claude-plugin", "marketplace.json"),
         marketplaceRoot: opts.marketplaceRoot,
         plugins: opts.plugins ?? {},
+        ...(opts.legacy === true ? {} : { lastSuccessfulManifest: VALID_MANIFEST_JSON }),
         ...(opts.autoupdate !== undefined && { autoupdate: opts.autoupdate }),
       },
     },
@@ -2671,6 +2698,176 @@ test("NFR-5: path-source update calls zero gitOps methods", async () => {
   });
 });
 
+test("a legacy local baseline is established once and survives a fresh state load", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const marketplaceRoot = path.join(cwd, "legacy-marketplace");
+    await cp(fixtureMarketplaceDir("valid-marketplace"), marketplaceRoot, { recursive: true });
+    const installed = makePluginRecord();
+    await seedPathMarketplace({
+      cwd,
+      name: "legacy-local",
+      marketplaceRoot,
+      plugins: { hello: installed },
+      legacy: true,
+    });
+    const locations = locationsFor("project", cwd);
+    const beforeInfo = await loadState(locations.extensionRoot);
+    const info = makeCtx();
+
+    // act
+    await getMarketplaceInfo({
+      ctx: info.ctx as ExtensionContext,
+      run: info.run,
+      name: "legacy-local",
+      scope: "project",
+      cwd,
+    });
+    const afterInfo = await loadState(locations.extensionRoot);
+    const first = makeCtx();
+    const firstGit = makeForbiddenGitOps();
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx: first.ctx,
+      run: first.run,
+      name: "legacy-local",
+      scope: "project",
+      cwd,
+      gitOps: firstGit.gitOps,
+    });
+    const afterFirst = await loadState(locations.extensionRoot);
+    const second = makeCtx();
+    const secondGit = makeForbiddenGitOps();
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx: second.ctx,
+      run: second.run,
+      name: "legacy-local",
+      scope: "project",
+      cwd,
+      gitOps: secondGit.gitOps,
+    });
+    const afterSecond = await loadState(locations.extensionRoot);
+
+    // assert
+    assert.deepStrictEqual(afterInfo, beforeInfo);
+    assert.deepStrictEqual(info.notifications, [
+      { message: `● legacy-local [project] <no autoupdate>\npath: ${marketplaceRoot}` },
+    ]);
+    assert.deepStrictEqual(first.notifications, [
+      { message: "● legacy-local [project] (updated)" },
+    ]);
+    assert.deepStrictEqual(second.notifications, [
+      { message: "● legacy-local [project] (skipped) {up-to-date}" },
+    ]);
+    assert.strictEqual(
+      afterFirst.marketplaces["legacy-local"]?.lastSuccessfulManifest,
+      VALID_MANIFEST_JSON,
+    );
+    assert.strictEqual(
+      afterSecond.marketplaces["legacy-local"]?.lastSuccessfulManifest,
+      VALID_MANIFEST_JSON,
+    );
+    assert.deepStrictEqual(afterSecond.marketplaces["legacy-local"]?.plugins, {
+      hello: installed,
+    });
+    assert.deepStrictEqual(firstGit.calls, []);
+    assert.deepStrictEqual(secondGit.calls, []);
+  });
+});
+
+test("a failed state save retains the baseline and retries without cascading early", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const marketplaceRoot = path.join(cwd, "save-retry-marketplace");
+    await cp(fixtureMarketplaceDir("valid-marketplace"), marketplaceRoot, { recursive: true });
+    const installed = makePluginRecord();
+    await seedPathMarketplace({
+      cwd,
+      name: "save-retry",
+      marketplaceRoot,
+      autoupdate: true,
+      plugins: { hello: installed },
+    });
+    const locations = locationsFor("project", cwd);
+    const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
+    const changedManifest = JSON.stringify({
+      ...(JSON.parse(VALID_MANIFEST_JSON) as Record<string, unknown>),
+      description: "Changed before the failed save",
+    });
+    await writeFile(manifestPath, changedManifest, "utf8");
+    const beforeState = await loadState(locations.extensionRoot);
+    const configBytes = await readFile(locations.baseConfigJsonPath, "utf8");
+    const cascadeCalls: Array<{ marketplace: string; plugin: string; scope: Scope }> = [];
+    const pluginUpdate: PluginUpdateFn = (plugin, marketplace, scope) => {
+      cascadeCalls.push({ marketplace, plugin, scope });
+      return Promise.resolve({
+        partition: "unchanged",
+        name: plugin,
+        fromVersion: installed.version,
+        toVersion: installed.version,
+        declaresAgents: false,
+        declaresMcp: false,
+        constraint: undefined,
+        declaresWorkflows: false,
+      });
+    };
+
+    const failed = makeCtx();
+    const failedGit = makeForbiddenGitOps();
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx: failed.ctx,
+      run: failed.run,
+      name: "save-retry",
+      scope: "project",
+      cwd,
+      gitOps: failedGit.gitOps,
+      pluginUpdate,
+      stateTransaction: {
+        saveState: (): Promise<never> => Promise.reject(new Error("state save failed")),
+      },
+    });
+    const stateAfterFailure = await loadState(locations.extensionRoot);
+    const retried = makeCtx();
+    const retryGit = makeForbiddenGitOps();
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx: retried.ctx,
+      run: retried.run,
+      name: "save-retry",
+      scope: "project",
+      cwd,
+      gitOps: retryGit.gitOps,
+      pluginUpdate,
+    });
+    const stateAfterRetry = await loadState(locations.extensionRoot);
+
+    // assert
+    assert.deepStrictEqual(stateAfterFailure, beforeState);
+    assert.strictEqual(await readFile(locations.baseConfigJsonPath, "utf8"), configBytes);
+    assert.deepStrictEqual(cascadeCalls, [
+      { marketplace: "save-retry", plugin: "hello", scope: "project" },
+    ]);
+    assert.strictEqual(failed.notifications.length, 1);
+    assert.strictEqual(failed.notifications[0]?.severity, "error");
+    assert.deepStrictEqual(retried.notifications, [
+      { message: "● save-retry [project] (updated)\n  ⊘ hello (skipped) {up-to-date}" },
+    ]);
+    assert.strictEqual(
+      stateAfterRetry.marketplaces["save-retry"]?.lastSuccessfulManifest,
+      changedManifest,
+    );
+    assert.deepStrictEqual(stateAfterRetry.marketplaces["save-retry"]?.plugins, {
+      hello: installed,
+    });
+    assert.deepStrictEqual(failedGit.calls, []);
+    assert.deepStrictEqual(retryGit.calls, []);
+  });
+});
+
 test("drops a changed target after persistence and before its plugin cascade", async (testContext) => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
@@ -2697,6 +2894,7 @@ test("drops a changed target after persistence and before its plugin cascade", a
     }
 
     record.manifestPath = path.join(cloneDir, ".claude-plugin", "before-update.json");
+    record.lastSuccessfulManifest = '{"name":"valid-marketplace","plugins":[]}';
     await saveState(locations.extensionRoot, state);
     const pluginCachePath = await locations.pluginCacheFile("official");
     let rebuildCount = 0;
@@ -2758,6 +2956,7 @@ test("drops a changed target after persistence and before its plugin cascade", a
           marketplaceRoot: cloneDir,
           plugins: { alpha: makePluginRecord() },
           lastUpdatedAt: now.toISOString(),
+          lastSuccessfulManifest: VALID_MANIFEST_JSON,
         },
       },
     };
@@ -3213,6 +3412,7 @@ test("updateAllMarketplaces forwards optional Device Flow and plugin cascade por
           marketplaceRoot,
           plugins: { alpha: makePluginRecord() },
           lastUpdatedAt: now.toISOString(),
+          lastSuccessfulManifest: VALID_MANIFEST_JSON,
         },
       },
     });
@@ -3234,27 +3434,28 @@ test("all-target update drops changed rows in project-before-user order and isol
     const marketplaceRecord = (
       name: string,
       scope: Scope,
-      storedManifestPath: string,
+      baseline: string,
     ): ExtensionState["marketplaces"][string] => ({
       name,
       scope,
       source: pathSource(marketplaceRoot),
       addedFromCwd: cwd,
-      manifestPath: storedManifestPath,
+      manifestPath,
       marketplaceRoot,
       plugins: {},
+      lastSuccessfulManifest: baseline,
     });
     await saveState(projectLocations.extensionRoot, {
       schemaVersion: 1,
       marketplaces: {
-        alpha: marketplaceRecord("alpha", "project", path.join(marketplaceRoot, "alpha-before")),
-        beta: marketplaceRecord("beta", "project", manifestPath),
+        alpha: marketplaceRecord("alpha", "project", '{"name":"valid-marketplace","plugins":[]}'),
+        beta: marketplaceRecord("beta", "project", VALID_MANIFEST_JSON),
       },
     });
     await saveState(userLocations.extensionRoot, {
       schemaVersion: 1,
       marketplaces: {
-        alpha: marketplaceRecord("alpha", "user", path.join(marketplaceRoot, "user-before")),
+        alpha: marketplaceRecord("alpha", "user", '{"name":"valid-marketplace","plugins":[]}'),
       },
     });
     const { ctx, run, notifications } = makeCtx();
@@ -3338,11 +3539,11 @@ test("all-target update drops changed rows in project-before-user order and isol
       schemaVersion: 3,
       marketplaces: {
         alpha: {
-          ...marketplaceRecord("alpha", "project", manifestPath),
+          ...marketplaceRecord("alpha", "project", VALID_MANIFEST_JSON),
           lastUpdatedAt: now.toISOString(),
         },
         beta: {
-          ...marketplaceRecord("beta", "project", manifestPath),
+          ...marketplaceRecord("beta", "project", VALID_MANIFEST_JSON),
           lastUpdatedAt: now.toISOString(),
         },
       },
@@ -3351,7 +3552,7 @@ test("all-target update drops changed rows in project-before-user order and isol
       schemaVersion: 3,
       marketplaces: {
         alpha: {
-          ...marketplaceRecord("alpha", "user", manifestPath),
+          ...marketplaceRecord("alpha", "user", VALID_MANIFEST_JSON),
           lastUpdatedAt: now.toISOString(),
         },
       },
@@ -4071,7 +4272,7 @@ test("silently retains a failed changed-target cache cleanup and preserves later
       throw new Error("the cache failure fixture has no target marketplace");
     }
 
-    record.manifestPath = path.join(marketplaceRoot, ".claude-plugin", "before-update.json");
+    record.lastSuccessfulManifest = '{"name":"valid-marketplace","plugins":[]}';
     await saveState(locations.extensionRoot, state);
     const configBytes = await readFile(locations.baseConfigJsonPath, "utf8").catch(() => undefined);
     const pluginCachePath = await locations.pluginCacheFile("cache-mp");
@@ -4119,6 +4320,7 @@ test("silently retains a failed changed-target cache cleanup and preserves later
           marketplaceRoot,
           plugins: {},
           lastUpdatedAt: now.toISOString(),
+          lastSuccessfulManifest: VALID_MANIFEST_JSON,
         },
       },
     };

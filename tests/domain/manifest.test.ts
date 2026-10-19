@@ -6,6 +6,7 @@ import { describe, test } from "node:test";
 
 import {
   loadMarketplaceManifest,
+  loadMarketplaceManifestDocument,
   type MarketplaceManifest,
 } from "../../extensions/pi-claude-marketplace/domain/manifest.ts";
 import { InvalidMarketplaceManifestError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
@@ -225,11 +226,13 @@ describe("loadMarketplaceManifest", () => {
     t.after(() => rm(directory, { force: true, recursive: true }));
     const manifestPath = path.join(directory, "marketplace.json");
     const raw =
-      '{"name":"marketplace","plugins":[{"name":"broken","source":"./broken","dependencies":["foo@~1.0.0"]},{"dependencies":[42]},{"name":"healthy","source":"./healthy","dependencies":[{"name":"foo","version":"~1.0.0"}]}]}';
+      '{"name":"marketplace","plugins":[{"name":"broken","source":"./broken","dependencies":["foo@~1.0.0"],"vendor":{"revision":1}},{"dependencies":[42],"vendor":"unnamed"},{"name":"healthy","source":"./healthy","dependencies":[{"name":"foo","version":"~1.0.0"}]}]}';
     await writeFile(manifestPath, raw);
 
     // act
     const manifest = await loadMarketplaceManifest(manifestPath);
+    const document = await loadMarketplaceManifestDocument(manifestPath);
+    const cachedDocument = await loadMarketplaceManifestDocument(manifestPath);
     const persisted = await readFile(manifestPath, "utf8");
 
     // assert
@@ -249,6 +252,30 @@ describe("loadMarketplaceManifest", () => {
       ],
     });
     assert.strictEqual(persisted, raw);
+    assert.strictEqual(document.comparisonJson, raw);
+    assert.strictEqual(document.manifest, manifest);
+    assert.strictEqual(cachedDocument, document);
+  });
+
+  test("shares cached validation errors between both document views", async (t) => {
+    // arrange
+    const manifestPath = await manifestFileWith(t, '{"name":"marketplace"}');
+
+    // act
+    const resolverError = await loadMarketplaceManifest(manifestPath).catch(
+      (error: unknown) => error,
+    );
+    const documentError = await loadMarketplaceManifestDocument(manifestPath).catch(
+      (error: unknown) => error,
+    );
+
+    // assert
+    assert.ok(resolverError instanceof InvalidMarketplaceManifestError);
+    assert.strictEqual(
+      resolverError.message,
+      "marketplace.json schema invalid: <root>: must have required properties plugins",
+    );
+    assert.strictEqual(documentError, resolverError);
   });
 
   test("preserves a SyntaxError cause for malformed JSON", async (t) => {

@@ -312,6 +312,8 @@ const MARKETPLACE_RECORD_SCHEMA = Type.Object({
   manifestPath: Type.String(),
   marketplaceRoot: Type.String(),
   lastUpdatedAt: Type.Optional(Type.String()),
+  // Comparison metadata from the last successful add or refresh, never a source.
+  lastSuccessfulManifest: Type.Optional(Type.String()),
   // SPLIT-01 / D-12: `autoupdate` field REMOVED from MARKETPLACE_RECORD_SCHEMA.
   // It lives in CONFIG_SCHEMA (per-marketplace config entry) now. Legacy
   // state.json that still has the field loads cleanly via typebox's lenient

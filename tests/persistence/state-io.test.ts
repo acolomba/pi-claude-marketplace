@@ -275,6 +275,70 @@ for (const { name, state, expectedState } of [
   });
 }
 
+for (const baseline of [undefined, '{"name":"catalog","plugins":[],"vendor":{"enabled":true}}']) {
+  test(`round-trips a marketplace with ${baseline === undefined ? "no" : "a complete"} comparison baseline`, async (t) => {
+    // arrange
+    const extensionRoot = await createExtensionRoot(t, "state-io-manifest-baseline-");
+    const state: ExtensionState = {
+      schemaVersion: 3,
+      marketplaces: {
+        catalog: {
+          name: "catalog",
+          scope: "project",
+          source: { kind: "path", raw: "./catalog", logical: "./catalog" },
+          addedFromCwd: "/work",
+          manifestPath: "/work/catalog/.claude-plugin/marketplace.json",
+          marketplaceRoot: "/work/catalog",
+          plugins: {},
+          ...(baseline === undefined ? {} : { lastSuccessfulManifest: baseline }),
+        },
+      },
+    };
+
+    // act
+    await saveState(extensionRoot, state);
+    const reloaded = await loadState(extensionRoot);
+
+    // assert
+    assert.deepStrictEqual(reloaded, state);
+    assert.deepStrictEqual(
+      JSON.parse(await readFile(path.join(extensionRoot, "state.json"), "utf8")),
+      state,
+    );
+  });
+}
+
+test("rejects a non-string marketplace comparison baseline without changing stored bytes", async (t) => {
+  // arrange
+  const extensionRoot = await createExtensionRoot(t, "state-io-invalid-baseline-");
+  const stateJsonPath = path.join(extensionRoot, "state.json");
+  const storedBytes = JSON.stringify({
+    schemaVersion: 3,
+    marketplaces: {
+      catalog: {
+        name: "catalog",
+        scope: "project",
+        source: { kind: "path", raw: "./catalog", logical: "./catalog" },
+        addedFromCwd: "/work",
+        manifestPath: "/work/catalog/.claude-plugin/marketplace.json",
+        marketplaceRoot: "/work/catalog",
+        plugins: {},
+        lastSuccessfulManifest: 42,
+      },
+    },
+  });
+  await writeFile(stateJsonPath, storedBytes);
+
+  // act & assert
+  await assert.rejects(
+    loadState(extensionRoot),
+    new Error(
+      `state.json at ${stateJsonPath} failed schema validation: /marketplaces/catalog/lastSuccessfulManifest: must be string`,
+    ),
+  );
+  assert.strictEqual(await readFile(stateJsonPath, "utf8"), storedBytes);
+});
+
 test("a nonpersisting legacy load leaves bytes intact while the default persists", async (t) => {
   const extensionRoot = await createExtensionRoot(t, "state-io-preview-");
   const stateJsonPath = path.join(extensionRoot, "state.json");
