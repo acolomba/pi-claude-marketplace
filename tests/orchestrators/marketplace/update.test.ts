@@ -1444,10 +1444,7 @@ test("CR-05 / MU-5: pre-fetch failure (gitOps.fetch throws) does NOT append 'Ret
 test("MU-5: clone advances + manifest re-validation fails -- 'Retry the command.' retry hint", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
-    // Seed with a VALID manifest so the PRE-read content key resolves cleanly
-    // (WR-02: a malformed PRE manifest would now route to (failed) BEFORE the
-    // clone advances, which is a DIFFERENT diagnostic than this test asserts).
-    // The clone-advanced + POST-revalidation-fails path under test is reached
+    // Seed with a VALID manifest and its saved baseline. The clone-advanced + POST-revalidation-fails path under test is reached
     // by overwriting the manifest with INVALID content in the checkout override
     // (mirrors the UXG-05 "changed" test's checkout-rewrite pattern).
     const { cloneDir } = await seedGithubMarketplace({ cwd, name: "broken" });
@@ -1575,15 +1572,10 @@ test("MU-5: url-source clone advances + manifest re-validation fails -- 'clone a
 test("WR-02: corrupt pre-existing manifest routes to (failed), never a silent no-op (UAT Test-3 robustness fold-in)", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
-    // Seed a valid clone, then overwrite the persisted PRE manifest with
-    // malformed JSON so manifestContentKey's PRE read throws a non-ENOENT
-    // SyntaxError. WR-02 narrows that catch so only ENOENT (no manifest yet)
-    // maps to the changed-safe default; a corrupt pre-existing manifest must
-    // re-throw and route to (failed) -- NOT silently read as a missing PRE key
-    // ("changed") and render (updated). The PRE read sits INSIDE refreshRecord's
-    // try (WR-01), so the throw wraps as MarketplaceUpdateError exactly like a
-    // POST-read failure. Guards against a regression back to
-    // `catch { return undefined; }` (the pre-WR-02 silent-(updated) bug).
+    // Seed a valid clone, then overwrite the manifest with malformed JSON that
+    // the fetch does not repair. The corrupt pre-fetch manifest gives no
+    // comparison, and the fetched manifest still fails validation, so the
+    // refresh routes to (failed) -- never a silent (updated) or up-to-date.
     const { cloneDir } = await seedGithubMarketplace({
       cwd,
       name: "corrupt",
@@ -1620,6 +1612,50 @@ test("WR-02: corrupt pre-existing manifest routes to (failed), never a silent no
     assert.match(first.message, /^⊘ corrupt \[project\] \(failed\)/m);
     assert.doesNotMatch(first.message, /\(updated\)/);
     assert.doesNotMatch(first.message, /\(skipped\) \{up-to-date\}/);
+  });
+});
+
+test("a legacy git record with a corrupt on-disk manifest recovers once the fetch repairs it", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const { cloneDir } = await seedGithubMarketplace({
+      cwd,
+      name: "corrupt",
+      ref: "main",
+      legacy: true,
+    });
+    const manifestPath = path.join(cloneDir, ".claude-plugin", "marketplace.json");
+    await writeFile(manifestPath, "{ not valid json", "utf8");
+    const git = createGitOps({
+      remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000123" },
+    });
+    const gitOps: GitOps = {
+      ...git.gitOps,
+      async fetch(fetchOptions): Promise<void> {
+        await git.gitOps.fetch(fetchOptions);
+        await writeFile(manifestPath, VALID_MANIFEST_JSON, "utf8");
+      },
+    };
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      name: "corrupt",
+      scope: "project",
+      cwd,
+      gitOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [{ message: "● corrupt [project] (updated)" }]);
+    assert.strictEqual(
+      (await loadState(locationsFor("project", cwd).extensionRoot)).marketplaces.corrupt
+        ?.lastSuccessfulManifest,
+      VALID_MANIFEST_JSON,
+    );
   });
 });
 

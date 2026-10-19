@@ -326,24 +326,18 @@ interface RefreshOneArgs {
 
 /**
  * Reads the pre-fetch comparison for a git record without a saved baseline.
- * A missing manifest establishes a changed baseline after a valid fetch.
- * Other read or validation errors fail the refresh.
+ * A manifest that is missing, unreadable, or invalid gives no comparison, so
+ * the refresh counts as changed once the fetched manifest validates. D-07: a
+ * later update can succeed once the source is fixed.
  */
 async function manifestContentKey(
   record: ExtensionState["marketplaces"][string],
 ): Promise<string | undefined> {
   try {
     return (await loadMarketplaceManifestDocument(record.manifestPath)).comparisonJson;
-  } catch (err) {
-    // WR-02: only ENOENT (no manifest yet) maps to the changed-safe default.
-    // Mirrors the errno-narrowing idiom `reasonsFromCascadeError` already uses
-    // (gates on `(err as NodeJS.ErrnoException).code`). All other failures
-    // propagate to `(failed)`.
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-      return undefined;
-    }
-
-    throw err;
+  } catch {
+    // The fetched manifest is still validated, so an invalid one fails there.
+    return undefined;
   }
 }
 
