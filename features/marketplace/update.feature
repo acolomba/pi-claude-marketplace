@@ -108,8 +108,8 @@ Feature: Marketplace update
       | theta            | user              | true                           | tasks@theta | tasks | installed | requires pi-mcp-adapter | user    | 1.10.0  |
       | zeta             | project           | true                           | notes@zeta  | notes | installed | requires pi-mcp-adapter | project | 1.10.0  |
 
-  Scenario: A bare update continues after a marketplace fails
-    Given the marketplace "zeta" is published as a dir source
+  Scenario Outline: A bare update continues after a marketplace fails
+    Given the marketplace "zeta" is published as a <source kind> source
     Given the marketplace "alpha" is published as a dir source
     Given the marketplace "beta" is published as a dir source
     Given the marketplace "zeta" is added to the project scope
@@ -123,14 +123,29 @@ Feature: Marketplace update
       | cascade | info     | false        |                              | Marketplace update | 0              | 0              | 1                   |
       | cascade | info     | false        |                              | Marketplace update | 0              | 0              | 1                   |
     Then the results list these marketplaces and plugins:
-      | marketplace name | marketplace scope | marketplace status | marketplace reasons | id        | name | status | reasons          | scope   | leaks | rollback partial | cause chain                                                                                    | cause truncated |
-      | zeta             | project           | failed             |                     | zeta@zeta | zeta | failed | invalid manifest | project |       |                  | Failed to update marketplace "zeta"., marketplace.json schema invalid: /plugins: must be array | false           |
-      | alpha            | project           | skipped            | up-to-date          |           |      |        |                  |         |       |                  |                                                                                                |                 |
-      | beta             | user              | skipped            | up-to-date          |           |      |        |                  |         |       |                  |                                                                                                |                 |
+      | marketplace name | marketplace scope | marketplace status | marketplace reasons | id        | name | status | reasons          | scope   | leaks | rollback partial | cause chain   | cause truncated |
+      | zeta             | project           | failed             |                     | zeta@zeta | zeta | failed | invalid manifest | project |       |                  | <cause chain> | false           |
+      | alpha            | project           | skipped            | up-to-date          |           |      |        |                  |         |       |                  |               |                 |
+      | beta             | user              | skipped            | up-to-date          |           |      |        |                  |         |       |                  |               |                 |
     Then the "claude-plugins.json" file of the project scope declares these marketplaces:
       | name  | source                    |
-      | zeta  | {home}/marketplaces/zeta  |
+      | zeta  | <source>                  |
       | alpha | {home}/marketplaces/alpha |
+
+    Examples:
+      | source kind | source                                                   | cause chain                                                                                    |
+      | dir         | {home}/marketplaces/zeta                                 | Failed to update marketplace "zeta"., marketplace.json schema invalid: /plugins: must be array |
+      | file        | {home}/marketplaces/zeta/.claude-plugin/marketplace.json | Failed to update marketplace "zeta"., marketplace.json schema invalid: /plugins: must be array |
+
+    @url
+    Examples:
+      | source kind | source                           | cause chain                                                                                                                      |
+      | url         | https://{git host}/acme/zeta.git | Marketplace "zeta" clone advanced but manifest could not be persisted., marketplace.json schema invalid: /plugins: must be array |
+
+    @github
+    Examples:
+      | source kind | source    | cause chain                                                                                                                      |
+      | github      | acme/zeta | Marketplace "zeta" clone advanced but manifest could not be persisted., marketplace.json schema invalid: /plugins: must be array |
 
   Scenario Outline: A bare update refreshes the only populated scope
     Given the marketplace "tools" is published as a <source kind> source
@@ -374,6 +389,19 @@ Feature: Marketplace update
       | dir         | {"name":"tools","owner":{"name":"features"},"plugins":[]}                                                          | { "name":"tools", "owner":{"name":"features"}, "plugins":[], "vendor":{"revision":1} }\n         |
       | dir         | {"name":"tools","owner":{"name":"features"},"plugins":[],"vendor":{"revision":1}}                                  | { "name":"tools", "owner":{"name":"features"}, "plugins":[], "vendor":{"revision":2} }\n         |
       | dir         | {"name":"tools","owner":{"name":"features"},"plugins":[{"name":"demo","source":"./demo","vendor":{"revision":1}}]} | { "name":"tools", "owner":{"name":"features"}, "plugins":[{"name":"demo","source":"./demo"}] }\n |
+      | file        | {"name":"tools","owner":{"name":"features"},"plugins":[]}                                                          | { "name":"tools", "owner":{"name":"features"}, "plugins":[], "vendor":{"revision":1} }\n         |
+      | file        | {"name":"tools","owner":{"name":"features"},"plugins":[],"vendor":{"revision":1}}                                  | { "name":"tools", "owner":{"name":"features"}, "plugins":[], "vendor":{"revision":2} }\n         |
+      | file        | {"name":"tools","owner":{"name":"features"},"plugins":[{"name":"demo","source":"./demo","vendor":{"revision":1}}]} | { "name":"tools", "owner":{"name":"features"}, "plugins":[{"name":"demo","source":"./demo"}] }\n |
+
+    @url
+    Examples:
+      | source kind | published manifest                                        | refreshed manifest                                                                       |
+      | url         | {"name":"tools","owner":{"name":"features"},"plugins":[]} | { "name":"tools", "owner":{"name":"features"}, "plugins":[], "vendor":{"revision":1} }\n |
+
+    @github
+    Examples:
+      | source kind | published manifest                                        | refreshed manifest                                                                       |
+      | github      | {"name":"tools","owner":{"name":"features"},"plugins":[]} | { "name":"tools", "owner":{"name":"features"}, "plugins":[], "vendor":{"revision":1} }\n |
 
   Scenario Outline: Reordering a manifest array changes the marketplace
     Given the marketplace "tools" is published as a <source kind> source
@@ -404,9 +432,22 @@ Feature: Marketplace update
       | dir         | {"name":"tools","plugins":[{"name":"zebra","source":"./zebra"},{"name":"alpha","source":"./alpha"}]} | { "name":"tools", "plugins":[ {"name":"alpha","source":"./alpha"}, {"name":"zebra","source":"./zebra"} ] }\n |
       | dir         | {"name":"tools","plugins":[],"allowCrossMarketplaceDependenciesOn":["zebra","alpha"]}                | { "name":"tools", "plugins":[], "allowCrossMarketplaceDependenciesOn":["alpha", "zebra"] }\n                 |
       | dir         | {"name":"tools","plugins":[],"vendor":{"sequence":["zebra","alpha"]}}                                | { "name":"tools", "plugins":[], "vendor":{"sequence":["alpha", "zebra"]} }\n                                 |
+      | file        | {"name":"tools","plugins":[{"name":"zebra","source":"./zebra"},{"name":"alpha","source":"./alpha"}]} | { "name":"tools", "plugins":[ {"name":"alpha","source":"./alpha"}, {"name":"zebra","source":"./zebra"} ] }\n |
+      | file        | {"name":"tools","plugins":[],"allowCrossMarketplaceDependenciesOn":["zebra","alpha"]}                | { "name":"tools", "plugins":[], "allowCrossMarketplaceDependenciesOn":["alpha", "zebra"] }\n                 |
+      | file        | {"name":"tools","plugins":[],"vendor":{"sequence":["zebra","alpha"]}}                                | { "name":"tools", "plugins":[], "vendor":{"sequence":["alpha", "zebra"]} }\n                                 |
 
-  Scenario: An isolated dependency entry retains its comparison fields
-    Given the marketplace "tools" is published as a dir source
+    @url
+    Examples:
+      | source kind | published manifest                                                                                   | refreshed manifest                                                                                           |
+      | url         | {"name":"tools","plugins":[{"name":"zebra","source":"./zebra"},{"name":"alpha","source":"./alpha"}]} | { "name":"tools", "plugins":[ {"name":"alpha","source":"./alpha"}, {"name":"zebra","source":"./zebra"} ] }\n |
+
+    @github
+    Examples:
+      | source kind | published manifest                                                                                   | refreshed manifest                                                                                           |
+      | github      | {"name":"tools","plugins":[{"name":"zebra","source":"./zebra"},{"name":"alpha","source":"./alpha"}]} | { "name":"tools", "plugins":[ {"name":"alpha","source":"./alpha"}, {"name":"zebra","source":"./zebra"} ] }\n |
+
+  Scenario Outline: An isolated dependency entry retains its comparison fields
+    Given the marketplace "tools" is published as a <source kind> source
     Given the marketplace "tools" publishes this manifest:
       """
       {"name":"tools","plugins":[{"name":"broken","source":"./broken","dependencies":["library@~1.0.0"],"vendor":{"revision":1}}]}
@@ -428,6 +469,21 @@ Feature: Marketplace update
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | marketplace status |
       | tools            | project           | updated            |
+
+    Examples:
+      | source kind |
+      | dir         |
+      | file        |
+
+    @url
+    Examples:
+      | source kind |
+      | url         |
+
+    @github
+    Examples:
+      | source kind |
+      | github      |
 
   Scenario Outline: Autoupdate off preserves installed versions
     Given the marketplace "tools" is published as a <source kind> source
@@ -872,8 +928,8 @@ Feature: Marketplace update
       | dir         | user    | breaks the manifest schema | {home}/marketplaces/tools                                 | Failed to update marketplace "tools"., marketplace.json schema invalid: /plugins: must be array                                                                                                                                                                                          |
       | file        | user    | is not valid json          | {home}/marketplaces/tools/.claude-plugin/marketplace.json | Failed to update marketplace "tools"., marketplace.json is not valid JSON: SyntaxError: Expected ',' or '}' after property value in JSON at position 56 (line 1 column 57), Expected ',' or '}' after property value in JSON at position 56 (line 1 column 57) |
 
-  Scenario: A repaired marketplace can be updated again
-    Given the marketplace "tools" is published as a dir source
+  Scenario Outline: A repaired marketplace can be updated again
+    Given the marketplace "tools" is published as a <source kind> source
     Given the marketplace "tools" is added to the project scope
     Given the manifest of the marketplace "tools" to update is not valid json
     Given updating the marketplace "tools" in the project scope has failed as invalid manifest
@@ -890,6 +946,21 @@ Feature: Marketplace update
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | marketplace status |
       | tools            | project           | updated            |
+
+    Examples:
+      | source kind |
+      | dir         |
+      | file        |
+
+    @url
+    Examples:
+      | source kind |
+      | url         |
+
+    @github
+    Examples:
+      | source kind |
+      | github      |
 
   Scenario: A missing marketplace directory leaves its registration intact
     Given the marketplace "tools" is published as a dir source
