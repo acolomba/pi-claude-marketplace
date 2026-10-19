@@ -22,3 +22,106 @@ Feature: Marketplace update
       | alpha            | project           | skipped            | up-to-date          |
       | gamma            | project           | skipped            | up-to-date          |
       | beta             | user              | skipped            | up-to-date          |
+
+  Scenario Outline: An unchanged marketplace is up to date
+    Given the marketplace "tools" is published as a <source kind> source
+    Given the marketplace "tools" is added to the project scope
+    When the user runs "/claude:plugin marketplace update"
+    Then the result has these fields:
+      | kind                | cascade            |
+      | severity            | info               |
+      | needs reload        | false              |
+      | tally label         | Marketplace update |
+      | tally failures      | 0                  |
+      | tally warnings      | 0                  |
+      | tally success count | 1                  |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | marketplace status | marketplace reasons |
+      | tools            | project           | skipped            | up-to-date          |
+
+    Examples:
+      | source kind |
+      | dir         |
+      | file        |
+
+    @url
+    Examples:
+      | source kind |
+      | url         |
+
+    @github
+    Examples:
+      | source kind |
+      | github      |
+
+  Scenario Outline: A changed marketplace refreshes without plugin rows
+    Given the marketplace "tools" is published as a <source kind> source
+    Given the marketplace "tools" is added to the project scope
+    Given the marketplace "tools" update source contains this manifest:
+      """
+      {"name":"tools","owner":{"name":"features"},"plugins":[],"description":"Updated tools"}
+      """
+    When the user runs "/claude:plugin marketplace update"
+    Then the result has these fields:
+      | kind                | cascade            |
+      | severity            | info               |
+      | needs reload        | false              |
+      | tally label         | Marketplace update |
+      | tally failures      | 0                  |
+      | tally warnings      | 0                  |
+      | tally success count | 1                  |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | marketplace status |
+      | tools            | project           | updated            |
+
+    Examples:
+      | source kind |
+      | dir         |
+      | file        |
+
+    @url
+    Examples:
+      | source kind |
+      | url         |
+
+    @github
+    Examples:
+      | source kind |
+      | github      |
+
+  Scenario Outline: Whitespace and object key order do not change a marketplace
+    Given the marketplace "tools" is published as a <source kind> source
+    Given the marketplace "tools" has the "<rewrite>" comparison baseline
+    Given the marketplace "tools" is added to the project scope
+    Given the marketplace "tools" update source has the "<rewrite>" cosmetic rewrite
+    When the user runs "/claude:plugin marketplace update"
+    Then the result has these fields:
+      | kind                | cascade            |
+      | severity            | info               |
+      | needs reload        | false              |
+      | tally label         | Marketplace update |
+      | tally failures      | 0                  |
+      | tally warnings      | 0                  |
+      | tally success count | 1                  |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | marketplace status | marketplace reasons |
+      | tools            | project           | skipped            | up-to-date          |
+
+    Examples:
+      | source kind | rewrite       |
+      | dir         | formatting    |
+      | dir         | top-level keys |
+      | dir         | nested keys   |
+      | file        | formatting    |
+      | file        | top-level keys |
+      | file        | nested keys   |
+
+    @url
+    Examples:
+      | source kind | rewrite    |
+      | url         | formatting |
+
+    @github
+    Examples:
+      | source kind | rewrite    |
+      | github      | formatting |

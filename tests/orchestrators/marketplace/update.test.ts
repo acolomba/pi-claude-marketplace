@@ -2698,6 +2698,98 @@ test("NFR-5: path-source update calls zero gitOps methods", async () => {
   });
 });
 
+test("semantic comparison ignores object key order", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const marketplaceRoot = path.join(cwd, "key-order-marketplace");
+    await cp(fixtureMarketplaceDir("valid-marketplace"), marketplaceRoot, { recursive: true });
+    await seedPathMarketplace({ cwd, name: "key-order", marketplaceRoot });
+    const parsed = JSON.parse(VALID_MANIFEST_JSON) as {
+      name: string;
+      owner: { name: string };
+      plugins: readonly Record<string, unknown>[];
+    };
+    const [plugin] = parsed.plugins;
+    assert.ok(plugin !== undefined);
+    const reorderedPlugin = {
+      version: plugin.version,
+      description: plugin.description,
+      source: plugin.source,
+      name: plugin.name,
+    };
+    const reordered = JSON.stringify({
+      plugins: [reorderedPlugin],
+      owner: parsed.owner,
+      name: parsed.name,
+    });
+    assert.notStrictEqual(reordered, VALID_MANIFEST_JSON);
+    await writeFile(
+      path.join(marketplaceRoot, ".claude-plugin", "marketplace.json"),
+      `${reordered}\n`,
+      "utf8",
+    );
+    const { ctx, run, notifications } = makeCtx();
+    const git = makeForbiddenGitOps();
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      name: "key-order",
+      scope: "project",
+      cwd,
+      gitOps: git.gitOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      { message: "● key-order [project] (skipped) {up-to-date}" },
+    ]);
+    assert.deepStrictEqual(git.calls, []);
+  });
+});
+
+test("semantic comparison uses the saved baseline before reading changed source content", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const marketplaceRoot = path.join(cwd, "changed-marketplace");
+    await cp(fixtureMarketplaceDir("valid-marketplace"), marketplaceRoot, { recursive: true });
+    await seedPathMarketplace({ cwd, name: "changed", marketplaceRoot });
+    const changedManifest = JSON.stringify({
+      ...(JSON.parse(VALID_MANIFEST_JSON) as Record<string, unknown>),
+      description: "A changed marketplace",
+    });
+    await writeFile(
+      path.join(marketplaceRoot, ".claude-plugin", "marketplace.json"),
+      changedManifest,
+      "utf8",
+    );
+    const { ctx, run, notifications } = makeCtx();
+    const git = makeForbiddenGitOps();
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      name: "changed",
+      scope: "project",
+      cwd,
+      gitOps: git.gitOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [{ message: "● changed [project] (updated)" }]);
+    assert.strictEqual(
+      (await loadState(locationsFor("project", cwd).extensionRoot)).marketplaces.changed
+        ?.lastSuccessfulManifest,
+      changedManifest,
+    );
+    assert.deepStrictEqual(git.calls, []);
+  });
+});
+
 test("a legacy local baseline is established once and survives a fresh state load", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
