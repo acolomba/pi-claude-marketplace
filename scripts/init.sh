@@ -23,6 +23,7 @@ npm install
 # skills
 npx --yes skills@latest add blader/humanizer -a universal claude-code -y
 npx --yes skills@latest add AminBlg/SimpleEnglish -a universal claude-code -y
+npx --yes skills@latest add humanlayer/skills --skill show-me -a universal claude-code -y
 
 # gsd
 npx --yes @opengsd/gsd-core@latest --install --local --claude --codex --force-statusline
