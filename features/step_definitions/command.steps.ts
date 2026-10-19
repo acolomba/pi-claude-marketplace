@@ -162,15 +162,21 @@ Then("the command reports these results:", function (this: ScenarioWorld, table:
 });
 
 // D-02: the marketplace and plugin rows of every result, in emission order.
-// Every result must be a cascade, so no row goes unseen.
+// Every result must be a cascade, so no row goes unseen, or an MCP config
+// notice, which has no rows: its notices are envelope fields, which
+// `the command reports these results:` compares.
 Then(
   "the results list these marketplaces and plugins:",
   function (this: ScenarioWorld, table: DataTable) {
     const [stated = []] = table.raw();
     const records = this.allResults().flatMap((result) => {
+      if (result.kind === "mcp-config-notices") {
+        return [];
+      }
+
       if (result.kind !== "cascade") {
         assert.fail(
-          `expected every result to be a cascade, got ${result.kind}: ${JSON.stringify(result)}`,
+          `expected every result to be a cascade or an MCP config notice, got ${result.kind}: ${JSON.stringify(result)}`,
         );
       }
 

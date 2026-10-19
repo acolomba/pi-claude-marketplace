@@ -3008,6 +3008,254 @@ test("AFILE-04: a no-op marketplace update over a commented mcp-adapter.json sen
   });
 });
 
+test("a bare update emits each cascade's MCP notices before the next marketplace, project scope first", async (testContext) => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange -- reverse-lexical insertion in both scopes, so a sort would
+    // reorder them; zeta and theta change and cascade, alpha and beta do not.
+    const now = new Date("2026-10-19T09:00:00.000Z");
+    testContext.mock.timers.enable({ apis: ["Date"], now });
+    const projectLocations = locationsFor("project", cwd);
+    const userLocations = locationsFor("user", cwd);
+    const marketplaceRoot = fixtureMarketplaceDir("valid-marketplace");
+    const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
+    const record = (
+      name: string,
+      scope: Scope,
+      baseline: string,
+      plugins: ExtensionState["marketplaces"][string]["plugins"],
+    ): ExtensionState["marketplaces"][string] => ({
+      name,
+      scope,
+      source: pathSource(marketplaceRoot),
+      addedFromCwd: cwd,
+      manifestPath,
+      marketplaceRoot,
+      plugins,
+      lastSuccessfulManifest: baseline,
+    });
+    const staleBaseline = '{"name":"valid-marketplace","plugins":[]}';
+    await mkdir(projectLocations.extensionRoot, { recursive: true });
+    await mkdir(userLocations.extensionRoot, { recursive: true });
+    await saveState(projectLocations.extensionRoot, {
+      schemaVersion: 1,
+      marketplaces: {
+        zeta: record("zeta", "project", staleBaseline, {
+          notes: makePluginRecord(),
+          broken: makePluginRecord(),
+        }),
+        alpha: record("alpha", "project", VALID_MANIFEST_JSON, {}),
+      },
+    });
+    await saveState(userLocations.extensionRoot, {
+      schemaVersion: 1,
+      marketplaces: {
+        theta: record("theta", "user", staleBaseline, { tasks: makePluginRecord() }),
+        beta: record("beta", "user", VALID_MANIFEST_JSON, {}),
+      },
+    });
+    for (const [locations, name] of [
+      [projectLocations, "zeta"],
+      [userLocations, "theta"],
+    ] as const) {
+      await saveConfig(
+        locations.baseConfigJsonPath,
+        {
+          schemaVersion: 1,
+          marketplaces: { [name]: { source: marketplaceRoot, autoupdate: true } },
+        },
+        locations.scopeRoot,
+      );
+    }
+
+    const capture = createJsonCapture();
+    const origin = {
+      kind: "command",
+      commandId: "marketplace update",
+      invocationId: "bare-run",
+    } as const;
+    const ctx = {
+      mode: "json",
+      get ui() {
+        return capture.ui;
+      },
+    };
+    const run = openNotificationRun(
+      { getAllTools: () => [], getCommands: () => [], appendEntry: capture.entrySink.appendEntry },
+      origin,
+    );
+    const git = makeForbiddenGitOps();
+    const calls: string[] = [];
+    const notice = (scope: Scope, file: "mcp-adapter.json" | "mcp.json") =>
+      ({ kind: "comments-dropped", scope, file }) as const;
+    const pluginUpdate: PluginUpdateFn = (plugin, marketplace, scope) => {
+      calls.push(`${plugin}@${marketplace} [${scope}]`);
+      if (plugin === "broken") {
+        return Promise.resolve({
+          partition: "failed",
+          name: plugin,
+          notes: ["plugin update failed after its MCP commit"],
+          reasons: ["permission denied"],
+          declaresAgents: false,
+          declaresMcp: false,
+          declaresWorkflows: false,
+          mcpConfigNotices: [notice(scope, "mcp.json")],
+        });
+      }
+
+      return Promise.resolve({
+        partition: "updated",
+        name: plugin,
+        fromVersion: "0.0.1",
+        toVersion: "0.0.2",
+        stagedAgentNames: [],
+        stagedMcpServerNames: [],
+        declaresAgents: false,
+        declaresMcp: false,
+        constraint: undefined,
+        declaresWorkflows: false,
+        mcpConfigNotices: [notice(scope, "mcp-adapter.json")],
+      });
+    };
+
+    // act
+    await updateAllMarketplaces({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      cwd,
+      gitOps: git.gitOps,
+      pluginUpdate,
+    });
+
+    // assert
+    const tally = { label: "Marketplace update", failures: 0, warnings: 0 };
+    const skipped = (name: string, scope: Scope) => ({
+      customType: "claude-plugin",
+      payload: {
+        schemaVersion: 1,
+        origin,
+        kind: "cascade",
+        severity: "info",
+        needsReload: false,
+        tally: { ...tally, success: { count: 1 } },
+        marketplaces: [{ name, scope, status: "skipped", reasons: ["up-to-date"], plugins: [] }],
+      },
+    });
+    const updatedRow = (name: string, marketplace: string, scope: Scope) => ({
+      name,
+      id: `${name}@${marketplace}`,
+      scope,
+      status: "updated",
+      from: "0.0.1",
+      to: "0.0.2",
+      reasons: [],
+    });
+    const notices = (...items: ReturnType<typeof notice>[]) => ({
+      customType: "claude-plugin",
+      payload: {
+        schemaVersion: 1,
+        origin,
+        kind: "mcp-config-notices",
+        severity: "warning",
+        needsReload: false,
+        notices: items,
+      },
+    });
+    assert.deepStrictEqual(capture.entries, [
+      {
+        customType: "claude-plugin",
+        payload: {
+          schemaVersion: 1,
+          origin,
+          kind: "cascade",
+          severity: "error",
+          needsReload: true,
+          summary: "A plugin operation has failed.",
+          tally: { ...tally, failures: 1, success: { count: 2 } },
+          marketplaces: [
+            {
+              name: "zeta",
+              scope: "project",
+              status: "updated",
+              plugins: [
+                updatedRow("notes", "zeta", "project"),
+                {
+                  name: "broken",
+                  id: "broken@zeta",
+                  scope: "project",
+                  status: "failed",
+                  reasons: ["permission denied"],
+                  leaks: [],
+                  rollbackPartial: [],
+                },
+              ],
+            },
+          ],
+        },
+      },
+      notices(notice("project", "mcp-adapter.json"), notice("project", "mcp.json")),
+      skipped("alpha", "project"),
+      {
+        customType: "claude-plugin",
+        payload: {
+          schemaVersion: 1,
+          origin,
+          kind: "cascade",
+          severity: "info",
+          needsReload: true,
+          tally: { ...tally, success: { count: 2 } },
+          marketplaces: [
+            {
+              name: "theta",
+              scope: "user",
+              status: "updated",
+              plugins: [updatedRow("tasks", "theta", "user")],
+            },
+          ],
+        },
+      },
+      notices(notice("user", "mcp-adapter.json")),
+      skipped("beta", "user"),
+    ]);
+    capture.assertValid();
+    assert.deepStrictEqual(git.calls, []);
+    assert.deepStrictEqual(calls, [
+      "notes@zeta [project]",
+      "broken@zeta [project]",
+      "tasks@theta [user]",
+    ]);
+    assert.deepStrictEqual(await loadState(projectLocations.extensionRoot), {
+      schemaVersion: 3,
+      marketplaces: {
+        zeta: {
+          ...record("zeta", "project", VALID_MANIFEST_JSON, {
+            notes: makePluginRecord(),
+            broken: makePluginRecord(),
+          }),
+          lastUpdatedAt: now.toISOString(),
+        },
+        alpha: {
+          ...record("alpha", "project", VALID_MANIFEST_JSON, {}),
+          lastUpdatedAt: now.toISOString(),
+        },
+      },
+    });
+    assert.deepStrictEqual(await loadState(userLocations.extensionRoot), {
+      schemaVersion: 3,
+      marketplaces: {
+        theta: {
+          ...record("theta", "user", VALID_MANIFEST_JSON, { tasks: makePluginRecord() }),
+          lastUpdatedAt: now.toISOString(),
+        },
+        beta: {
+          ...record("beta", "user", VALID_MANIFEST_JSON, {}),
+          lastUpdatedAt: now.toISOString(),
+        },
+      },
+    });
+  });
+});
+
 test("NFR-5: path-source update calls zero gitOps methods", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange

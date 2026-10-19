@@ -276,6 +276,25 @@ export async function publishUnreadableSkillFile(
 }
 
 /**
+ * Returns the path of `file` inside the published plugin `plugin`, refusing a
+ * path outside the publication.
+ */
+export function publishedPluginFile(
+  published: PublishedMarketplace,
+  plugin: string,
+  file: string,
+): string {
+  switch (published.kind) {
+    case "dir":
+    case "file":
+      return ownedTarget(published, path.join(published.root, "plugins", plugin, file));
+    case "url":
+    case "github":
+      throw noStandIn(published.kind);
+  }
+}
+
+/**
  * Lets the plugins of the marketplace `published` records depend on plugins of
  * the marketplace `target`.
  */

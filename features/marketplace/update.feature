@@ -4,24 +4,109 @@ Feature: Marketplace update
   The scenarios run the real extension in a headless Pi and use local
   marketplaces in place of published ones.
 
-  Scenario: A bare update reports one result per marketplace of both scopes, project first
+  Scenario: A bare update preserves scope and insertion order with adjacent notices
+    Given the marketplace "theta" is published as a dir source
     Given the marketplace "beta" is published as a dir source
+    Given the marketplace "zeta" is published as a dir source
     Given the marketplace "alpha" is published as a dir source
-    Given the marketplace "gamma" is published as a dir source
+    Given the marketplace "theta" offers these plugins:
+      | name  | version |
+      | tasks | 1.0.0   |
+    Given the marketplace "zeta" offers these plugins:
+      | name  | version |
+      | notes | 1.0.0   |
+    Given the marketplace "theta" is added to the user scope
     Given the marketplace "beta" is added to the user scope
+    Given the marketplace "zeta" is added to the project scope
     Given the marketplace "alpha" is added to the project scope
-    Given the marketplace "gamma" is added to the project scope
+    Given the user has run "/claude:plugin install notes@zeta --scope project"
+    Given the user has run "/claude:plugin install tasks@theta --scope user"
+    Given the user has run "/claude:plugin marketplace autoupdate zeta --scope project"
+    Given the user has run "/claude:plugin marketplace autoupdate theta --scope user"
+    Given the marketplace "theta" offers these plugins:
+      | name  | version |
+      | tasks | 1.10.0  |
+    Given the marketplace "zeta" offers these plugins:
+      | name  | version |
+      | notes | 1.10.0  |
+    Given the published plugin "tasks" of the marketplace "theta" declares the mcp server "tasks-server"
+    Given the published plugin "notes" of the marketplace "zeta" declares the mcp server "notes-server"
+    Given the mcp-adapter.json file of the user scope holds a comment
+    Given the mcp-adapter.json file of the project scope holds a comment
+    When the user runs "/claude:plugin marketplace update"
+    Then the command reports these results:
+      | kind               | severity | needs reload | tally label        | tally failures | tally warnings | tally success count | notices                                                                  |
+      | cascade            | info     | true         | Marketplace update | 0              | 0              | 2                   |                                                                          |
+      | mcp-config-notices | warning  | false        |                    |                |                |                     | [{"kind":"comments-dropped","scope":"project","file":"mcp-adapter.json"}] |
+      | cascade            | info     | false        | Marketplace update | 0              | 0              | 1                   |                                                                          |
+      | cascade            | info     | true         | Marketplace update | 0              | 0              | 2                   |                                                                          |
+      | mcp-config-notices | warning  | false        |                    |                |                |                     | [{"kind":"comments-dropped","scope":"user","file":"mcp-adapter.json"}]    |
+      | cascade            | info     | false        | Marketplace update | 0              | 0              | 1                   |                                                                          |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | marketplace status | marketplace reasons | id          | name  | status  | reasons                 | scope   | from  | to     |
+      | zeta             | project           | updated            |                     | notes@zeta  | notes | updated | requires pi-mcp-adapter | project | 1.0.0 | 1.10.0 |
+      | alpha            | project           | skipped            | up-to-date          |             |       |         |                         |         |       |        |
+      | theta            | user              | updated            |                     | tasks@theta | tasks | updated | requires pi-mcp-adapter | user    | 1.0.0 | 1.10.0 |
+      | beta             | user              | skipped            | up-to-date          |             |       |         |                         |         |       |        |
+
+  Scenario: Repeating a bare update is up to date without repeated notices
+    Given the marketplace "theta" is published as a dir source
+    Given the marketplace "beta" is published as a dir source
+    Given the marketplace "zeta" is published as a dir source
+    Given the marketplace "alpha" is published as a dir source
+    Given the marketplace "theta" offers these plugins:
+      | name  | version |
+      | tasks | 1.0.0   |
+    Given the marketplace "zeta" offers these plugins:
+      | name  | version |
+      | notes | 1.0.0   |
+    Given the marketplace "theta" is added to the user scope
+    Given the marketplace "beta" is added to the user scope
+    Given the marketplace "zeta" is added to the project scope
+    Given the marketplace "alpha" is added to the project scope
+    Given the user has run "/claude:plugin install notes@zeta --scope project"
+    Given the user has run "/claude:plugin install tasks@theta --scope user"
+    Given the user has run "/claude:plugin marketplace autoupdate zeta --scope project"
+    Given the user has run "/claude:plugin marketplace autoupdate theta --scope user"
+    Given the marketplace "theta" offers these plugins:
+      | name  | version |
+      | tasks | 1.10.0  |
+    Given the marketplace "zeta" offers these plugins:
+      | name  | version |
+      | notes | 1.10.0  |
+    Given the published plugin "tasks" of the marketplace "theta" declares the mcp server "tasks-server"
+    Given the published plugin "notes" of the marketplace "zeta" declares the mcp server "notes-server"
+    Given the mcp-adapter.json file of the user scope holds a comment
+    Given the mcp-adapter.json file of the project scope holds a comment
+    Given the user has updated every marketplace
     When the user runs "/claude:plugin marketplace update"
     Then the command reports these results:
       | kind    | severity | needs reload | tally label        | tally failures | tally warnings | tally success count |
       | cascade | info     | false        | Marketplace update | 0              | 0              | 1                   |
       | cascade | info     | false        | Marketplace update | 0              | 0              | 1                   |
       | cascade | info     | false        | Marketplace update | 0              | 0              | 1                   |
+      | cascade | info     | false        | Marketplace update | 0              | 0              | 1                   |
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | marketplace status | marketplace reasons |
+      | zeta             | project           | skipped            | up-to-date          |
       | alpha            | project           | skipped            | up-to-date          |
-      | gamma            | project           | skipped            | up-to-date          |
+      | theta            | user              | skipped            | up-to-date          |
       | beta             | user              | skipped            | up-to-date          |
+    When the user runs "/claude:plugin list"
+    Then the result has these fields:
+      | kind                | cascade     |
+      | severity            | info        |
+      | needs reload        | false       |
+      | tally label         | Plugin list |
+      | tally failures      | 0           |
+      | tally warnings      | 0           |
+      | tally success count | 2           |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace details autoupdate | id          | name  | status    | reasons                 | scope   | version |
+      | alpha            | project           |                                |             |       |           |                         |         |         |
+      | beta             | user              |                                |             |       |           |                         |         |         |
+      | theta            | user              | true                           | tasks@theta | tasks | installed | requires pi-mcp-adapter | user    | 1.10.0  |
+      | zeta             | project           | true                           | notes@zeta  | notes | installed | requires pi-mcp-adapter | project | 1.10.0  |
 
   Scenario Outline: An unchanged marketplace is up to date
     Given the marketplace "tools" is published as a <source kind> source

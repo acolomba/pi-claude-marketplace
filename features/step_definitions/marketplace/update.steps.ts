@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 
 import { Given } from "@cucumber/cucumber";
 
-import { runCommand } from "../../lib/pi-commands.ts";
+import { runCommand, runCommandPayloads } from "../../lib/pi-commands.ts";
 import {
   invalidateManifest,
   publishConventionalDecoy,
@@ -92,6 +92,24 @@ Given(
     await rewritePublishedManifest(this.requirePublished(name), text);
   },
 );
+
+// A bare update emits one cascade per marketplace and an MCP config notice
+// after a cascade that rewrote a commented config. The update has succeeded
+// when no cascade reports a failure.
+Given("the user has updated every marketplace", async function (this: ScenarioWorld) {
+  const payloads = await runCommandPayloads(this.pi, "/claude:plugin marketplace update");
+  for (const payload of payloads) {
+    if (payload.kind === "mcp-config-notices") {
+      continue;
+    }
+
+    if (payload.kind !== "cascade") {
+      assert.fail(`expected a cascade or an MCP config notice, got ${JSON.stringify(payload)}`);
+    }
+
+    assert.strictEqual(payload.severity, "info", JSON.stringify(payload));
+  }
+});
 
 Given(
   "the manifest of the marketplace {string} to update is not valid json",
