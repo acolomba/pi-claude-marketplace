@@ -3777,36 +3777,35 @@ test("semantic comparison uses the saved baseline before reading changed source 
   });
 });
 
-test("semantic comparison includes unknown fields and array order", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    for (const { baseline, refreshed, title } of [
-      {
-        title: "a changed nested unknown field",
-        baseline: '{"name":"marketplace","plugins":[],"vendor":{"settings":{"revision":1}}}',
-        refreshed: '{ "name":"marketplace", "plugins":[], "vendor":{"settings":{"revision":2}} }\n',
-      },
-      {
-        title: "reordered plugins",
-        baseline:
-          '{"name":"marketplace","plugins":[{"name":"zebra","source":"./zebra"},{"name":"alpha","source":"./alpha"}]}',
-        refreshed:
-          '{ "name":"marketplace", "plugins":[{"name":"alpha","source":"./alpha"},{"name":"zebra","source":"./zebra"}] }\n',
-      },
-      {
-        title: "a reordered unknown array",
-        baseline: '{"name":"marketplace","plugins":[],"vendor":{"sequence":["zebra","alpha"]}}',
-        refreshed:
-          '{ "name":"marketplace", "plugins":[], "vendor":{"sequence":["alpha", "zebra"]} }\n',
-      },
-    ]) {
+for (const { baseline, refreshed, title } of [
+  {
+    title: "a changed nested unknown field",
+    baseline: '{"name":"marketplace","plugins":[],"vendor":{"settings":{"revision":1}}}',
+    refreshed: '{ "name":"marketplace", "plugins":[], "vendor":{"settings":{"revision":2}} }\n',
+  },
+  {
+    title: "reordered plugins",
+    baseline:
+      '{"name":"marketplace","plugins":[{"name":"zebra","source":"./zebra"},{"name":"alpha","source":"./alpha"}]}',
+    refreshed:
+      '{ "name":"marketplace", "plugins":[{"name":"alpha","source":"./alpha"},{"name":"zebra","source":"./zebra"}] }\n',
+  },
+  {
+    title: "a reordered unknown array",
+    baseline: '{"name":"marketplace","plugins":[],"vendor":{"sequence":["zebra","alpha"]}}',
+    refreshed: '{ "name":"marketplace", "plugins":[], "vendor":{"sequence":["alpha", "zebra"]} }\n',
+  },
+]) {
+  test(`semantic comparison reports ${title} as updated`, async () => {
+    await withHermeticHome(async ({ cwd }) => {
       // arrange
-      const marketplaceRoot = path.join(cwd, title.replaceAll(" ", "-"));
+      const marketplaceRoot = path.join(cwd, "tools");
       const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
       await mkdir(path.dirname(manifestPath), { recursive: true });
       await writeFile(manifestPath, refreshed, "utf8");
       await seedPathMarketplace({
         cwd,
-        name: title,
+        name: "tools",
         marketplaceRoot,
         lastSuccessfulManifest: baseline,
       });
@@ -3818,19 +3817,19 @@ test("semantic comparison includes unknown fields and array order", async () => 
         completionCache: createCompletionCache(),
         ctx,
         run,
-        name: title,
+        name: "tools",
         scope: "project",
         cwd,
         gitOps: git.gitOps,
       });
 
       // assert
-      assert.deepStrictEqual(notifications, [{ message: `● ${title} [project] (updated)` }]);
+      assert.deepStrictEqual(notifications, [{ message: "● tools [project] (updated)" }]);
       assert.strictEqual(await readFile(manifestPath, "utf8"), refreshed);
       assert.deepStrictEqual(git.calls, []);
-    }
+    });
   });
-});
+}
 
 test("a legacy local baseline is established once and survives a fresh state load", async () => {
   await withHermeticHome(async ({ cwd }) => {
