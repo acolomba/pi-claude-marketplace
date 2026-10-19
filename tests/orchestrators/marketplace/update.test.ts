@@ -1823,6 +1823,149 @@ test("a pre-persistence manifest failure leaves cache rows intact and calls zero
   });
 });
 
+for (const { invalidBody, problem } of [
+  { problem: "malformed JSON", invalidBody: '{"name":"valid-marketplace","plugins":[' },
+  {
+    problem: "an invalid schema",
+    invalidBody: '{"name":"valid-marketplace","plugins":"not-an-array"}',
+  },
+]) {
+  test(`${problem} keeps durable update state until a repaired retry succeeds`, async () => {
+    await withHermeticHome(async ({ cwd }) => {
+      // arrange
+      const name = problem.replaceAll(" ", "-");
+      const marketplaceRoot = path.join(cwd, name);
+      await cp(fixtureMarketplaceDir("valid-marketplace"), marketplaceRoot, { recursive: true });
+      const installed = makePluginRecord();
+      await seedPathMarketplace({
+        cwd,
+        name,
+        marketplaceRoot,
+        autoupdate: true,
+        plugins: { hello: installed },
+      });
+      const locations = locationsFor("project", cwd);
+      const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
+      await writeFile(manifestPath, invalidBody, "utf8");
+      const beforeState = await loadState(locations.extensionRoot);
+      const beforeConfig = await readFile(locations.baseConfigJsonPath, "utf8");
+      const cascadeCalls: string[] = [];
+      const pluginUpdate: PluginUpdateFn = (plugin) => {
+        cascadeCalls.push(plugin);
+        return Promise.resolve({
+          partition: "unchanged",
+          name: plugin,
+          fromVersion: installed.version,
+          toVersion: installed.version,
+          declaresAgents: false,
+          declaresMcp: false,
+          constraint: undefined,
+          declaresWorkflows: false,
+        });
+      };
+
+      const failed = makeCtx();
+      const failedGit = makeForbiddenGitOps();
+
+      // act
+      await updateMarketplace({
+        completionCache: createCompletionCache(),
+        ctx: failed.ctx,
+        run: failed.run,
+        name,
+        scope: "project",
+        cwd,
+        gitOps: failedGit.gitOps,
+        pluginUpdate,
+      });
+      const stateAfterFailure = await loadState(locations.extensionRoot);
+      assert.deepStrictEqual(cascadeCalls, []);
+      const repairedManifest = JSON.stringify({
+        ...(JSON.parse(VALID_MANIFEST_JSON) as Record<string, unknown>),
+        description: "Valid after a failed update",
+      });
+      assert.notStrictEqual(Buffer.byteLength(repairedManifest), Buffer.byteLength(invalidBody));
+      await writeFile(manifestPath, repairedManifest, "utf8");
+      const retried = makeCtx();
+      const retryGit = makeForbiddenGitOps();
+      await updateMarketplace({
+        completionCache: createCompletionCache(),
+        ctx: retried.ctx,
+        run: retried.run,
+        name,
+        scope: "project",
+        cwd,
+        gitOps: retryGit.gitOps,
+        pluginUpdate,
+      });
+      const stateAfterRepair = await loadState(locations.extensionRoot);
+
+      // assert
+      assert.strictEqual(failed.notifications[0]?.severity, "error");
+      assert.match(failed.notifications[0]?.message ?? "", /\{invalid manifest\}/);
+      assert.deepStrictEqual(stateAfterFailure, beforeState);
+      assert.strictEqual(await readFile(locations.baseConfigJsonPath, "utf8"), beforeConfig);
+      assert.deepStrictEqual(cascadeCalls, ["hello"]);
+      assert.deepStrictEqual(retried.notifications, [
+        { message: `● ${name} [project] (updated)\n  ⊘ hello (skipped) {up-to-date}` },
+      ]);
+      assert.strictEqual(
+        stateAfterRepair.marketplaces[name]?.lastSuccessfulManifest,
+        repairedManifest,
+      );
+      assert.deepStrictEqual(stateAfterRepair.marketplaces[name]?.plugins, { hello: installed });
+      assert.deepStrictEqual(failedGit.calls, []);
+      assert.deepStrictEqual(retryGit.calls, []);
+    });
+  });
+}
+
+test("a missing local source keeps its registration, baseline, config, and plugins", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const marketplaceRoot = path.join(cwd, "missing-source");
+    await cp(fixtureMarketplaceDir("valid-marketplace"), marketplaceRoot, { recursive: true });
+    const installed = makePluginRecord();
+    await seedPathMarketplace({
+      cwd,
+      name: "missing-source",
+      marketplaceRoot,
+      autoupdate: true,
+      plugins: { hello: installed },
+    });
+    const locations = locationsFor("project", cwd);
+    const beforeState = await loadState(locations.extensionRoot);
+    const beforeConfig = await readFile(locations.baseConfigJsonPath, "utf8");
+    await rm(marketplaceRoot, { recursive: true });
+    const cascadeCalls: string[] = [];
+    const { ctx, run, notifications } = makeCtx();
+    const git = makeForbiddenGitOps();
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      name: "missing-source",
+      scope: "project",
+      cwd,
+      gitOps: git.gitOps,
+      pluginUpdate: (plugin) => {
+        cascadeCalls.push(plugin);
+        return Promise.reject(new Error("the missing source must prevent this call"));
+      },
+    });
+
+    // assert
+    assert.strictEqual(notifications[0]?.severity, "error");
+    assert.match(notifications[0]?.message ?? "", /\{source missing\}/);
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), beforeState);
+    assert.strictEqual(await readFile(locations.baseConfigJsonPath, "utf8"), beforeConfig);
+    assert.deepStrictEqual(cascadeCalls, []);
+    assert.deepStrictEqual(git.calls, []);
+  });
+});
+
 test("github-source no-errno refresh failure still renders `{network unreachable}` (classification did not collapse)", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange

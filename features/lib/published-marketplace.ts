@@ -7,7 +7,7 @@
  */
 
 import assert from "node:assert/strict";
-import { stat } from "node:fs/promises";
+import { rm, stat } from "node:fs/promises";
 import path from "node:path";
 
 import {
@@ -176,6 +176,55 @@ export async function rewritePublishedManifest(
     case "github":
       throw noStandIn(published.kind);
   }
+}
+
+function ownedTarget(published: PublishedMarketplace, target: string): string {
+  const root = path.resolve(published.root);
+  const resolved = path.resolve(target);
+  const relative = path.relative(root, resolved);
+  if (
+    root === path.parse(root).root ||
+    (relative !== "" && (relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)))
+  ) {
+    throw new Error(`refusing to change ${resolved} outside the published root ${root}`);
+  }
+
+  return resolved;
+}
+
+/** Removes only the directory or exact manifest recorded for this publication. */
+export async function removePublishedSource(published: PublishedMarketplace): Promise<void> {
+  switch (published.kind) {
+    case "dir":
+      await rm(ownedTarget(published, published.root), { recursive: true });
+      return;
+    case "file":
+      await rm(ownedTarget(published, published.manifestPath));
+      return;
+    case "url":
+    case "github":
+      throw noStandIn(published.kind);
+  }
+}
+
+/** Writes a visibly different conventional manifest beside an external file source. */
+export async function publishConventionalDecoy(
+  published: PublishedMarketplace,
+  name: string,
+): Promise<void> {
+  if (published.kind !== "file") {
+    throw new Error(`a ${published.kind} publication cannot have a file-source decoy`);
+  }
+
+  const conventionalPath = ownedTarget(
+    published,
+    path.join(published.root, ".claude-plugin", "marketplace.json"),
+  );
+  if (conventionalPath === path.resolve(published.manifestPath)) {
+    throw new Error("the published manifest is already the conventional manifest");
+  }
+
+  await writeMarketplace(published.root, `${name}-decoy`, [], conventionalPath);
 }
 
 /**
