@@ -145,8 +145,9 @@ interface SeededClones {
  * is a url source the workflow really refreshes -- but no reachable input opens
  * the door. With both `gitOps: deps.gitOps` forwards deleted, so the workflow
  * falls back to `DEFAULT_GIT_OPS`, five of the seven cases go red on their
- * MESSAGE (`{network unreachable}`, cause `The function requires a "remote OR
- * url" parameter but none was provided`) while this counter stays at exactly
+ * MESSAGE (a failed row with no reason whose cause reads `The function
+ * requires a "remote OR url" parameter but none was provided`) while this
+ * counter stays at exactly
  * ZERO: the refresh path dies inside `isomorphic-git` on a staged clone with no
  * configured remote, one step before the transport. Having the git door in the
  * import graph is not the same as having a route that opens it.

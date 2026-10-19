@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
+import lockfile from "proper-lockfile";
+
 import {
   createHooksRouting,
   createHooksRuntime,
@@ -532,7 +534,7 @@ test("marketplace update transport: classifies a providerless HTTP 403 as authen
   });
 });
 
-test("marketplace update transport: classifies a providerless HTTP 500 as network unreachable", async () => {
+test("marketplace update transport: names the status and URL of a providerless HTTP 500 as a network error", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
     const { cloneDir } = await seedUrlMarketplace({ cwd, name: "urlmp-500", ref: "main" });
@@ -560,7 +562,7 @@ test("marketplace update transport: classifies a providerless HTTP 500 as networ
     assert.deepStrictEqual(notifications, [
       {
         message:
-          'Some operations have failed.\n\n⊘ urlmp-500 [project] (failed)\n  ⊘ urlmp-500 (failed) {network unreachable}\n    cause: Failed to update marketplace "urlmp-500". -> HTTP 500 from fetch',
+          "Some operations have failed.\n\n⊘ urlmp-500 [project] (failed)\n  ⊘ urlmp-500 (failed) {network error}\n    cause: 500 on https://gitlab.example.com/team/urlmp-500 -> HTTP 500 from fetch",
         severity: "error",
       },
     ]);
@@ -579,7 +581,47 @@ test("marketplace update transport: classifies a providerless HTTP 500 as networ
   });
 });
 
-test("marketplace update transport: folds a non-Error rejection into network unreachable", async () => {
+test("marketplace update transport: names a 404 answer as a network error with its URL credentials redacted", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    await seedUrlMarketplace({
+      cwd,
+      name: "urlmp-404",
+      ref: "main",
+      host: "user:secret@gitlab.example.com",
+    });
+    const { ctx, run, notifications } = makeCtx();
+    const { credOps: credentialOps } = createCredentialOps();
+    const transportError = Object.assign(new Error("HTTP 404 from fetch"), {
+      code: "HttpError",
+      data: { statusCode: 404 },
+    });
+    const { gitOps } = createGitOps({ fetchThrows: transportError });
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      name: "urlmp-404",
+      scope: "project",
+      cwd,
+      gitOps,
+      credentialOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "Some operations have failed.\n\n⊘ urlmp-404 [project] (failed)\n  ⊘ urlmp-404 (failed) {network error}\n    cause: 404 on https://***@gitlab.example.com/team/urlmp-404 -> HTTP 404 from fetch",
+        severity: "error",
+      },
+    ]);
+  });
+});
+
+test("marketplace update transport: renders a non-Error rejection with no reason", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
     const { cloneDir } = await seedUrlMarketplace({ cwd, name: "urlmp-string", ref: "main" });
@@ -608,7 +650,7 @@ test("marketplace update transport: folds a non-Error rejection into network unr
     assert.deepStrictEqual(notifications, [
       {
         message:
-          'Some operations have failed.\n\n⊘ urlmp-string [project] (failed)\n  ⊘ urlmp-string (failed) {network unreachable}\n    cause: Failed to update marketplace "urlmp-string". -> transport exploded (string reject)',
+          'Some operations have failed.\n\n⊘ urlmp-string [project] (failed)\n  ⊘ urlmp-string (failed)\n    cause: Failed to update marketplace "urlmp-string". -> transport exploded (string reject)',
         severity: "error",
       },
     ]);
@@ -1501,7 +1543,9 @@ test("CR-05 / MU-5: url-source pre-fetch failure (gitOps.fetch throws) does NOT 
     const { credOps: credentialOps } = createCredentialOps();
     // cloneAdvanced stays false because onFetchSucceeded never fires.
     const { gitOps } = createGitOps({
-      fetchThrows: new Error("mock: ENETUNREACH https://gitlab.example.com"),
+      fetchThrows: Object.assign(new Error("mock: ENETUNREACH https://gitlab.example.com"), {
+        code: "ENETUNREACH",
+      }),
     });
 
     // act
@@ -1729,14 +1773,12 @@ for (const { kind, seed } of [
 
 // ───────────────────────────────────────────────────────────────────────────
 // ATTR-10 / D-48-B: a path-source marketplace.json that is malformed or
-// schema-invalid during `marketplace update` must render
-// `(failed) {invalid manifest}` on the synthetic-child failed row -- NEVER the
-// lying `{network unreachable}` default (NFR-5: path-source touches no network).
-// The reasonsFromCascadeError branch recognizes the typed
-// InvalidMarketplaceManifestError (thrown by loadMarketplaceManifest, wrapped in
-// MarketplaceUpdateError by refreshRecord) BEFORE the `?? network unreachable`
-// fallback fires. github-source no-errno failures KEEP `{network unreachable}`
-// as the catch-all (the path/github classification did not collapse).
+// schema-invalid during `marketplace update` renders
+// `(failed) {invalid manifest}` on the synthetic-child failed row. The refresh
+// classifier recognizes the typed InvalidMarketplaceManifestError, which
+// refreshRecord wraps in a MarketplaceUpdateError. A path-source refresh
+// touches no network (NFR-5), and a refresh failure that no rule classifies
+// renders the failed row with no reason.
 // ───────────────────────────────────────────────────────────────────────────
 
 /**
@@ -2088,19 +2130,14 @@ test("a missing local source keeps its registration, baseline, config, and plugi
   });
 });
 
-test("github-source no-errno refresh failure still renders `{network unreachable}` (classification did not collapse)", async () => {
+test("an unclassified github fetch failure renders a failed row with no reason", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
-    // A github fetch failure with NO errno code and NO typed manifest error is
-    // genuinely plausibly-network -> the `?? ["network unreachable"]` catch-all
-    // MUST still fire. This is the regression lock proving the ATTR-10 typed
-    // manifest branch did NOT swallow the github network default.
     await seedGithubMarketplace({ cwd, name: "ghnet", ref: "main" });
     const { ctx, run, notifications } = makeCtx();
     const { gitOps } = createGitOps({
-      // Plain Error: message mentions ENETUNREACH but carries no `.code` errno,
-      // so reasonsFromCascadeError returns undefined and the network default
-      // fires for this github source.
+      // A plain Error carries no errno code and no HTTP status, so no rule
+      // names its cause and the row shows only the cause line.
       fetchThrows: new Error("mock: connection failed reaching github.com"),
     });
     // act
@@ -2115,13 +2152,13 @@ test("github-source no-errno refresh failure still renders `{network unreachable
     });
 
     // assert
-
-    assert.equal(notifications.length, 1);
-    const first = notifications[0];
-    assert.ok(first !== undefined);
-    assert.equal(first.severity, "error");
-    assert.match(first.message, /\(failed\) \{network unreachable\}/);
-    assert.doesNotMatch(first.message, /\{invalid manifest\}/);
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          'Some operations have failed.\n\n⊘ ghnet [project] (failed)\n  ⊘ ghnet (failed)\n    cause: Failed to update marketplace "ghnet". -> mock: connection failed reaching github.com',
+        severity: "error",
+      },
+    ]);
   });
 });
 
@@ -3997,8 +4034,13 @@ test("a failed state save retains the baseline and retries without cascading ear
       { marketplace: "save-retry", plugin: "hello", scope: "project" },
     ]);
     assert.deepStrictEqual(callsAfterFailure, []);
-    assert.strictEqual(failed.notifications.length, 1);
-    assert.strictEqual(failed.notifications[0]?.severity, "error");
+    assert.deepStrictEqual(failed.notifications, [
+      {
+        message:
+          "Some operations have failed.\n\n⊘ save-retry [project] (failed)\n  ⊘ save-retry (failed)\n    cause: state save failed",
+        severity: "error",
+      },
+    ]);
     assert.deepStrictEqual(retried.notifications, [
       { message: "● save-retry [project] (updated)\n  ⊘ hello (skipped) {up-to-date}" },
     ]);
@@ -4010,6 +4052,112 @@ test("a failed state save retains the baseline and retries without cascading ear
       hello: installed,
     });
     assert.deepStrictEqual(failedGit.calls, []);
+    assert.deepStrictEqual(retryGit.calls, []);
+  });
+});
+
+for (const { code, name } of [
+  { code: "EACCES", name: "save-eacces" },
+  { code: "EPERM", name: "save-eperm" },
+  { code: "ENOENT", name: "save-enoent" },
+  { code: "ENOTDIR", name: "save-enotdir" },
+] as const) {
+  test(`a state save failing with ${code} renders a failed row with no reason`, async () => {
+    await withHermeticHome(async ({ cwd }) => {
+      // arrange
+      const marketplaceRoot = path.join(cwd, `${name}-marketplace`);
+      await cp(fixtureMarketplaceDir("valid-marketplace"), marketplaceRoot, { recursive: true });
+      await seedPathMarketplace({ cwd, name, marketplaceRoot });
+      const locations = locationsFor("project", cwd);
+      const beforeState = await loadState(locations.extensionRoot);
+      const { ctx, run, notifications } = makeCtx();
+      const git = makeForbiddenGitOps();
+      const saveError = Object.assign(new Error(`${code}: state save failed`), { code });
+
+      // act
+      await updateMarketplace({
+        completionCache: createCompletionCache(),
+        ctx,
+        run,
+        name,
+        scope: "project",
+        cwd,
+        gitOps: git.gitOps,
+        stateTransaction: {
+          saveState: (): Promise<never> => Promise.reject(saveError),
+        },
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message: `Some operations have failed.\n\n⊘ ${name} [project] (failed)\n  ⊘ ${name} (failed)\n    cause: ${code}: state save failed`,
+          severity: "error",
+        },
+      ]);
+      assert.deepStrictEqual(await loadState(locations.extensionRoot), beforeState);
+      assert.deepStrictEqual(git.calls, []);
+    });
+  });
+}
+
+test("a held scope lock fails the update as lock held and a retry after release succeeds", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const marketplaceRoot = path.join(cwd, "locked-marketplace");
+    await cp(fixtureMarketplaceDir("valid-marketplace"), marketplaceRoot, { recursive: true });
+    await seedPathMarketplace({ cwd, name: "locked", marketplaceRoot });
+    const locations = locationsFor("project", cwd);
+    const beforeState = await loadState(locations.extensionRoot);
+    const blocked = makeCtx();
+    const blockedGit = makeForbiddenGitOps();
+    const retried = makeCtx();
+    const retryGit = makeForbiddenGitOps();
+    const release = await lockfile.lock(locations.extensionRoot, {
+      lockfilePath: locations.stateLockFile,
+      realpath: false,
+    });
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx: blocked.ctx,
+      run: blocked.run,
+      name: "locked",
+      scope: "project",
+      cwd,
+      gitOps: blockedGit.gitOps,
+    });
+    const stateWhileLocked = await loadState(locations.extensionRoot);
+    await release();
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx: retried.ctx,
+      run: retried.run,
+      name: "locked",
+      scope: "project",
+      cwd,
+      gitOps: retryGit.gitOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(blocked.notifications, [
+      {
+        message: [
+          "Some operations have failed.",
+          "",
+          "⊘ locked [project] (failed)",
+          "  ⊘ locked (failed) {lock held}",
+          `    cause: Another pi-claude-marketplace operation is in progress for project scope (${locations.stateLockFile}). Retry after it completes. -> Lock file is already being held`,
+        ].join("\n"),
+        severity: "error",
+      },
+    ]);
+    assert.deepStrictEqual(stateWhileLocked, beforeState);
+    assert.deepStrictEqual(retried.notifications, [
+      { message: "● locked [project] (skipped) {up-to-date}" },
+    ]);
+    assert.deepStrictEqual(blockedGit.calls, []);
     assert.deepStrictEqual(retryGit.calls, []);
   });
 });

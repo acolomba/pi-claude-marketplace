@@ -98,6 +98,7 @@
 import path from "node:path";
 import { isDeepStrictEqual } from "node:util";
 
+import { networkCloneUrl } from "../../domain/clone-key.ts";
 import { loadMarketplaceManifestDocument } from "../../domain/manifest.ts";
 import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
@@ -108,11 +109,13 @@ import {
   MarketplaceBaselineUnreadableError,
   MarketplaceUpdateError,
   PluginShapeError,
+  StateLockHeldError,
   composeErrorWithCauseChain,
   errorMessage,
   rethrowInvalidGitHubBaseUrl,
 } from "../../shared/errors.ts";
 import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
+import { gitHubWireUrl } from "../../shared/github-base-url.ts";
 import { notifyMcpConfigNotices } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import { type PluginFailedMessage } from "../../shared/notification-types.ts";
@@ -364,6 +367,8 @@ async function refreshRecord(
 ): Promise<boolean> {
   const { name, locations, gitOps } = args;
   const source = record.source as ParsedSource;
+  const remoteUrl =
+    source.kind === "github" || source.kind === "url" ? networkCloneUrl(source) : undefined;
   let cloneAdvanced = false;
   try {
     // A local legacy record has no historical content to compare. Its first
@@ -436,14 +441,51 @@ async function refreshRecord(
     return changed;
   } catch (err) {
     throw new MarketplaceUpdateError(
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- cloneAdvanced is set via callback inside refreshGitHubClone.
-      cloneAdvanced
-        ? `Marketplace "${name}" clone advanced but manifest could not be persisted.`
-        : `Failed to update marketplace "${name}".`,
+      refreshFailureMessage(name, err, remoteUrl, cloneAdvanced),
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- cloneAdvanced is set via callback inside refreshGitHubClone.
       { cause: err, retryHint: cloneAdvanced ? "Retry the command." : "" },
     );
   }
+}
+
+/**
+ * UPD-11: the first frame of a refresh failure's cause line. When the git host
+ * answered with an HTTP status, the frame names the status and the URL the
+ * fetch sent, because a reason token cannot carry either. The fetch already
+ * went out, so the GitHub base override is valid when the URL is rebuilt.
+ */
+function refreshFailureMessage(
+  name: string,
+  err: unknown,
+  remoteUrl: string | undefined,
+  cloneAdvanced: boolean,
+): string {
+  const status = hostHttpStatus(err);
+  if (status !== undefined && remoteUrl !== undefined) {
+    return `${status} on ${gitHubWireUrl(remoteUrl)}`;
+  }
+
+  return cloneAdvanced
+    ? `Marketplace "${name}" clone advanced but manifest could not be persisted.`
+    : `Failed to update marketplace "${name}".`;
+}
+
+/**
+ * UPD-11: the HTTP status of an isomorphic-git `HttpError` that the shared
+ * transport classifier leaves unclassified, so the 401/403 auth challenge stays
+ * `authentication required`. Returns undefined for any other error.
+ */
+function hostHttpStatus(err: unknown): number | undefined {
+  if (!(err instanceof Error) || (err as NodeJS.ErrnoException).code !== "HttpError") {
+    return undefined;
+  }
+
+  const statusCode = (err as { data?: { statusCode?: unknown } }).data?.statusCode;
+  if (typeof statusCode !== "number" || classifyGitTransportFailure(err) !== undefined) {
+    return undefined;
+  }
+
+  return statusCode;
 }
 
 interface RefreshSnapshot {
@@ -477,9 +519,9 @@ async function snapshotAfterRefresh(args: RefreshOneArgs): Promise<RefreshSnapsh
         // standalone `{marketplace not added}` variant); reaching here means a concurrent
         // removal in that window. Return undefined so the caller skips the
         // cascade and emits NOTHING further -- no raw MarketplaceNotFoundError
-        // escapes (which `refreshOneMarketplace`'s catch would misattribute as the
-        // lying `{network unreachable}` default, the exact ATTR-10/NFR-5 class this
-        // change closes). Mirrors runRemoveLockBody's silent-return in remove.ts
+        // escapes to `refreshOneMarketplace`'s catch, which would render a
+        // second, failed row for a marketplace that is already gone (ATTR-10).
+        // Mirrors runRemoveLockBody's silent-return in remove.ts
         // at the same withLockedStateTransaction boundary; that path also
         // saves the unmodified state (a harmless re-write of the same content).
         await tx.save();
@@ -560,7 +602,9 @@ async function cascadeAutoupdates(
  * error to a closed-set Reason[] using the same priority order as the cascade
  * narrowers in `orchestrators/plugin/{update,reinstall}.ts::reasonsFromTypedError`:
  * PluginShapeError variants first, then errno-bearing FS errors, then
- * `undefined` to defer to the consumer's substring fallback.
+ * `undefined` to defer to the consumer's substring fallback. The refresh
+ * classification in `refreshFailureReasons` calls it as well, with the
+ * `MarketplaceUpdateError` that wraps a refresh failure.
  */
 function reasonsFromCascadeError(err: unknown): readonly ContentReason[] | undefined {
   if (err instanceof PluginShapeError) {
@@ -582,11 +626,10 @@ function reasonsFromCascadeError(err: unknown): readonly ContentReason[] | undef
   // ATTR-10 / D-48-B: a typed marketplace-manifest parse/validation failure
   // (malformed JSON or schema-invalid marketplace.json) maps to the closed-set
   // `invalid manifest` reason for BOTH path and github sources. A path-source
-  // manifest failure is network-free (NFR-5), so it MUST NOT fall through to the
-  // `?? ["network unreachable"]` default at the refreshOneMarketplace catch; a
-  // github clone that advanced and then hit a malformed manifest is genuinely
-  // `invalid manifest` too (only typed manifest errors map here, not generic
-  // github network failures). The refreshOneMarketplace catch sees
+  // manifest failure is network-free (NFR-5); a github clone that advanced and
+  // then hit a malformed manifest is genuinely `invalid manifest` too (only
+  // typed manifest errors map here, not generic github fetch failures). The
+  // refresh classification sees
   // the InvalidMarketplaceManifestError WRAPPED inside a MarketplaceUpdateError
   // (refreshRecord rethrows with `{ cause }`), so unwrap ONE level of cause as
   // well (mirrors add.ts::unwrapAddError). The cascadeAutoupdates catch passes
@@ -618,13 +661,11 @@ function reasonsFromCascadeError(err: unknown): readonly ContentReason[] | undef
 
 /**
  * Narrow a code-bearing transport failure to its closed-set Reason. The
- * refreshOneMarketplace catch receives the transport error WRAPPED inside a
+ * refresh classification receives the transport error WRAPPED inside a
  * MarketplaceUpdateError (refreshRecord rethrows with `{ cause }`), so the
- * wrapper itself carries no `code` -- hence the one-level cause unwrap.
- * Without it, a path-source refresh that hits ENOENT/ENOTDIR/EACCES/EPERM --
- * a network-free failure (NFR-5) -- would fall through to the lying
- * `?? ["network unreachable"]` default instead of the correct closed-set
- * `source missing` / `permission denied` reasons.
+ * wrapper itself carries no `code` -- hence the one-level cause unwrap. A
+ * path-source refresh that hits ENOENT/ENOTDIR/EACCES/EPERM is a network-free
+ * failure (NFR-5) and maps to `source missing` / `permission denied`.
  *
  * EACCES/EPERM/ENOENT/ENOTDIR classify first since the shared classifier
  * has no opinion on them (path-source failures never reach git). The
@@ -657,6 +698,32 @@ function transportReason(err: Error): ContentReason | undefined {
   return classifyGitTransportFailure(bearer);
 }
 
+/**
+ * ATTR-10 / UPD-11: the reasons of a failed marketplace refresh row. Only a
+ * failure of the refresh itself, which `refreshRecord` wraps in a
+ * `MarketplaceUpdateError`, is classified. A held state lock is `lock held`,
+ * as in autoupdate. Any other error failed outside the refresh (the state
+ * load, the state save, or the lock release), so no errno code on it is
+ * mapped. A refresh failure that no rule names gets no reason; its cause chain
+ * still prints.
+ */
+function refreshFailureReasons(err: unknown): readonly ContentReason[] {
+  if (err instanceof StateLockHeldError) {
+    return ["lock held"];
+  }
+
+  if (!(err instanceof MarketplaceUpdateError)) {
+    return [];
+  }
+
+  const typedReasons = reasonsFromCascadeError(err);
+  if (typedReasons !== undefined) {
+    return typedReasons;
+  }
+
+  return hostHttpStatus(err.cause) === undefined ? [] : ["network error"];
+}
+
 async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
   const { ctx, cardinality, name, scope, locations, pluginUpdate, run } = args;
 
@@ -673,11 +740,10 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
     // failed-plugin child whose `cause` drives the depth-5 cause-chain
     // trailer the renderer appends. Mirrors the reinstall synthetic-failed
     // recipe (orchestrators/plugin/reinstall-flow.ts).
-    const typedReasons = reasonsFromCascadeError(err);
     const failedRow: PluginFailedMessage = {
       status: "failed",
       name,
-      reasons: typedReasons ?? (["network unreachable"] as const),
+      reasons: refreshFailureReasons(err),
       cause: err as Error,
       // D-03/D-06: a marketplace-refresh failure -> error, no reload.
       severity: "error",
@@ -698,9 +764,8 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
     // TOCTOU concurrent-removal no-op: the marketplace was removed between the
     // pre-guard existence read and snapshotAfterRefresh's fresh guard load. The
     // pre-guard already emitted the standalone `{marketplace not added}` notification, so
-    // return silently -- NO second contradictory notification, and crucially NO
-    // lying `{network unreachable}` (the raw MarketplaceNotFoundError does not
-    // escape; mirrors remove.ts).
+    // return silently -- NO second contradictory notification (the raw
+    // MarketplaceNotFoundError does not escape; mirrors remove.ts).
     return;
   }
 
