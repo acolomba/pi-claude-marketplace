@@ -65,13 +65,13 @@
 //  // at false so the "Retry the command." hint is suppressed.
 //  // Any later step throw (forceUpdateRef/checkout) or
 //  // manifest re-read throw still produces the retry hint.
-//  manifest = read+validate <marketplaceRoot>/.claude-plugin/marketplace.json
+//  manifest = read+validate recordedManifestPath(record)
 //  record.lastUpdatedAt = now
 //  } catch (err) {
 //  throw new MarketplaceUpdateError(..., { cause, retryHint: cloneAdvanced ? "Retry the command." : "" })
 //  }
 //  else if path:
-//  refreshPathManifest(record) // NO gitOps; NFR-5
+//  manifest = read+validate recordedManifestPath(record) // NO gitOps; NFR-5
 //  // capture snapshot for cascade-outside-guard:
 //  snapshot = { autoupdate: record.autoupdate ?? false, plugins: Object.keys(record.plugins) }
 //  return snapshot
@@ -95,7 +95,6 @@
 //  D-14 sequence: fetch + (symbolic HEAD) forceUpdateRef + checkout, OR
 //  (detached HEAD) checkout directly. NO `pull`.
 
-import path from "node:path";
 import { isDeepStrictEqual } from "node:util";
 
 import { networkCloneUrl } from "../../domain/clone-key.ts";
@@ -139,6 +138,7 @@ import { DEFAULT_CREDENTIAL_OPS, buildGitHubAuth } from "../auth-host.ts";
 
 import {
   DEFAULT_GIT_OPS,
+  recordedManifestPath,
   refreshGitHubClone,
   refreshUrlClone,
   resolveScopeOrNotifyNotAdded,
@@ -151,7 +151,6 @@ import {
 } from "./update.messaging.ts";
 
 import type { DeviceFlowHttp } from "../../domain/github-auth.ts";
-import type { MarketplaceManifestDocument } from "../../domain/manifest.ts";
 import type { ParsedSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
@@ -337,7 +336,7 @@ async function manifestContentKey(
   record: ExtensionState["marketplaces"][string],
 ): Promise<string | undefined> {
   try {
-    return (await loadMarketplaceManifestDocument(record.manifestPath)).comparisonJson;
+    return (await loadMarketplaceManifestDocument(recordedManifestPath(record))).comparisonJson;
   } catch {
     // The fetched manifest is still validated, so an invalid one fails there.
     return undefined;
@@ -377,7 +376,6 @@ async function refreshRecord(
       record.lastSuccessfulManifest ??
       (source.kind === "path" ? undefined : await manifestContentKey(record));
     const baseline = parseBaseline(name, preKey);
-    let document: MarketplaceManifestDocument;
     if (source.kind === "github") {
       const cloneDir = await locations.sourceCloneDir(name);
       // AUTH-02 / D-79-05: buildGitHubAuth binds github.com with the GitHub
@@ -406,7 +404,6 @@ async function refreshRecord(
         },
         auth,
       );
-      document = await validateManifestAtRoot(record, cloneDir);
     } else if (source.kind === "url") {
       const cloneDir = await locations.sourceCloneDir(name);
       const { ctx, credentialOps, deviceFlowHttp } = args;
@@ -422,14 +419,13 @@ async function refreshRecord(
           cloneAdvanced = true;
         },
       });
-      document = await validateManifestAtRoot(record, cloneDir);
-    } else if (source.kind === "path") {
-      document = await loadMarketplaceManifestDocument(record.manifestPath);
-    } else {
+    } else if (source.kind !== "path") {
       throw new Error(
         `Cannot update marketplace "${name}": unsupported source kind "${source.kind}"`,
       );
     }
+
+    const document = await loadMarketplaceManifestDocument(recordedManifestPath(record));
 
     const changed =
       preKey === undefined || !isDeepStrictEqual(baseline, JSON.parse(document.comparisonJson));
@@ -895,26 +891,4 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
       o.partition === "updated" || o.partition === "failed" ? (o.mcpConfigNotices ?? []) : [],
     ),
   );
-}
-
-/**
- * Validates a managed clone's manifest and repairs its recorded root and path.
- * Local sources retain their own recorded manifest path.
- */
-async function validateManifestAtRoot(
-  record: ExtensionState["marketplaces"][string],
-  marketplaceRoot: string,
-): Promise<MarketplaceManifestDocument> {
-  const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
-  const document = await loadMarketplaceManifestDocument(manifestPath);
-
-  if (record.manifestPath !== manifestPath) {
-    record.manifestPath = manifestPath;
-  }
-
-  if (record.marketplaceRoot !== marketplaceRoot) {
-    record.marketplaceRoot = marketplaceRoot;
-  }
-
-  return document;
 }

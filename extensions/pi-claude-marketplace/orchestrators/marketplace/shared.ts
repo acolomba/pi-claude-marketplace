@@ -961,6 +961,20 @@ export async function crossScopeFlag(opts: {
 }
 
 /**
+ * WR-02 / D-01 / D-02: the manifest file of a recorded marketplace. Every
+ * marketplace is a directory on disk: the managed clone of a github or url
+ * source, or the user's own directory of a path source. The add records the
+ * absolute path of the manifest inside that directory: the conventional
+ * `.claude-plugin/marketplace.json` for a clone or a directory source, and the
+ * exact file for a file source. Every reader locates the manifest here. The
+ * typed source and the add-time directory only say where the marketplace came
+ * from.
+ */
+export function recordedManifestPath(record: ExtensionState["marketplaces"][string]): string {
+  return record.manifestPath;
+}
+
+/**
  * The rows of a marketplace-level failure that has a cause: a `(failed)`
  * marketplace header with one failed child of the same name. A marketplace
  * header carries no cause (SNM-10), so the child carries the reason and the

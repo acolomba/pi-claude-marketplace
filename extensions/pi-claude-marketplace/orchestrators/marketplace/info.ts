@@ -9,7 +9,6 @@
 // emits one notify per scope in project-first order, so a corrupt manifest
 // in one scope cannot silently hide behind a healthy other-scope render.
 
-import os from "node:os";
 import path from "node:path";
 
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
@@ -22,7 +21,7 @@ import {
 import { narrowProbeError } from "../../shared/probe-classifiers.ts";
 import { collectMarketplaceRecordsByScope } from "../scope-fanout.ts";
 
-import { crossScopeFlag } from "./shared.ts";
+import { crossScopeFlag, recordedManifestPath } from "./shared.ts";
 
 import type { ParsedSource } from "../../domain/source.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
@@ -56,12 +55,20 @@ type MarketplaceRecord = ExtensionState["marketplaces"][string];
  * dedicated projections. Every OTHER kind coerces to the `path` arm with
  * `record.marketplaceRoot` -- surfacing a bare row beats refusing to render
  * (NFR-12).
+ *
+ * D-01: a path source shows a path the record holds. When the typed source's
+ * basename equals the recorded manifest's basename, the user named the
+ * manifest file, so the row shows the recorded manifest; otherwise it shows
+ * the recorded root of the directory source. The typed source is provenance
+ * and is read only for that basename, so the row and `marketplace update` name
+ * the same file.
  */
 async function buildBlock(
   record: MarketplaceRecord,
   autoupdate: boolean,
 ): Promise<MarketplaceInfoMessage> {
   const src = record.source as ParsedSource;
+  const manifestPath = recordedManifestPath(record);
   let source: MarketplaceInfoMessage["source"];
   if (src.kind === "github") {
     source = {
@@ -82,7 +89,10 @@ async function buildBlock(
   } else if (src.kind === "path") {
     source = {
       sourceKind: "path",
-      absPath: path.resolve(record.addedFromCwd, src.logical.replace(/^~(?=$|\/)/, os.homedir())),
+      absPath:
+        path.basename(src.logical) === path.basename(manifestPath)
+          ? manifestPath
+          : record.marketplaceRoot,
     };
   } else {
     source = { sourceKind: "path", absPath: record.marketplaceRoot };
@@ -96,7 +106,7 @@ async function buildBlock(
     ...(record.lastUpdatedAt !== undefined && { lastUpdatedAt: record.lastUpdatedAt }),
   };
 
-  const parsed = await loadMarketplaceManifest(record.manifestPath);
+  const parsed = await loadMarketplaceManifest(manifestPath);
   const rawDescription = (parsed as Record<string, unknown>).description;
   const description = typeof rawDescription === "string" ? rawDescription : undefined;
 

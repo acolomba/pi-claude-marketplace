@@ -6,6 +6,7 @@ import { test, type TestContext } from "node:test";
 import { mock, verify, when } from "strong-mock";
 
 import { GENERATED_AGENT_MARKER } from "../../../extensions/pi-claude-marketplace/bridges/agents/marker.ts";
+import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
   AgentsUnstageFailureError,
   DEFAULT_GIT_OPS,
@@ -17,6 +18,7 @@ import {
   marketplaceInOtherScope,
   marketplaceLayerVerdict,
   narrowCascadeFailure,
+  recordedManifestPath,
   refreshGitHubClone,
   refreshUrlClone,
   resolveScopeOrNotifyNotAdded,
@@ -2415,3 +2417,22 @@ for (const { title, target, other, targetIsLocal, marketplace, expectedVerdict }
     assert.deepStrictEqual(verdict, expectedVerdict);
   });
 }
+
+test("recordedManifestPath returns the manifest path the record holds", () => {
+  // arrange
+  const record = {
+    name: "tools",
+    scope: "project",
+    source: pathSource("./elsewhere/.claude-plugin/marketplace.json"),
+    addedFromCwd: "/work",
+    manifestPath: "/marketplaces/tools/catalog/marketplace.json",
+    marketplaceRoot: "/marketplaces/tools",
+    plugins: {},
+  } satisfies MarketplaceRecord;
+
+  // act
+  const manifestPath = recordedManifestPath(record);
+
+  // assert
+  assert.strictEqual(manifestPath, "/marketplaces/tools/catalog/marketplace.json");
+});

@@ -561,66 +561,82 @@ test("INFO-01: an explicit project path source renders its minimal block", async
   });
 });
 
-for (const { title, source, expectedPath } of [
+for (const { title, source, marketplaceRoot, manifestPath, expectedPath } of [
   {
     title: "directory source",
     source: (cwd: string): string => path.join(cwd, "sources", "directory"),
-    expectedPath: (cwd: string): string => path.join(cwd, "sources", "directory"),
+    marketplaceRoot: (cwd: string): string => path.join(cwd, "recorded", "directory"),
+    manifestPath: (cwd: string): string =>
+      path.join(cwd, "recorded", "directory", ".claude-plugin", "marketplace.json"),
+    expectedPath: (cwd: string): string => path.join(cwd, "recorded", "directory"),
   },
   {
     title: "conventional manifest file",
     source: (cwd: string): string =>
       path.join(cwd, "sources", "conventional", ".claude-plugin", "marketplace.json"),
+    marketplaceRoot: (cwd: string): string => path.join(cwd, "recorded", "conventional"),
+    manifestPath: (cwd: string): string =>
+      path.join(cwd, "recorded", "conventional", ".claude-plugin", "marketplace.json"),
     expectedPath: (cwd: string): string =>
-      path.join(cwd, "sources", "conventional", ".claude-plugin", "marketplace.json"),
+      path.join(cwd, "recorded", "conventional", ".claude-plugin", "marketplace.json"),
   },
   {
     title: "external manifest file",
     source: (cwd: string): string =>
       path.join(cwd, "sources", "external", "catalog", "marketplace.json"),
+    marketplaceRoot: (cwd: string): string => path.join(cwd, "recorded", "external"),
+    manifestPath: (cwd: string): string =>
+      path.join(cwd, "recorded", "external", "catalog", "marketplace.json"),
     expectedPath: (cwd: string): string =>
-      path.join(cwd, "sources", "external", "catalog", "marketplace.json"),
+      path.join(cwd, "recorded", "external", "catalog", "marketplace.json"),
   },
   {
     title: "relative manifest file",
     source: (): string => "./sources/relative/catalog/marketplace.json",
+    marketplaceRoot: (cwd: string): string => path.join(cwd, "recorded", "relative"),
+    manifestPath: (cwd: string): string =>
+      path.join(cwd, "recorded", "relative", "catalog", "marketplace.json"),
     expectedPath: (cwd: string): string =>
-      path.join(cwd, "sources", "relative", "catalog", "marketplace.json"),
+      path.join(cwd, "recorded", "relative", "catalog", "marketplace.json"),
   },
   {
     title: "tilde manifest file",
     source: (): string => "~/sources/tilde/catalog/marketplace.json",
-    expectedPath: (_cwd: string, home: string): string =>
-      path.join(home, "sources", "tilde", "catalog", "marketplace.json"),
+    marketplaceRoot: (cwd: string): string => path.join(cwd, "recorded", "tilde"),
+    manifestPath: (cwd: string): string =>
+      path.join(cwd, "recorded", "tilde", "catalog", "marketplace.json"),
+    expectedPath: (cwd: string): string =>
+      path.join(cwd, "recorded", "tilde", "catalog", "marketplace.json"),
   },
   {
     title: "home directory source",
     source: (): string => "~",
-    expectedPath: (_cwd: string, home: string): string => home,
+    marketplaceRoot: (cwd: string): string => path.join(cwd, "recorded", "home"),
+    manifestPath: (cwd: string): string =>
+      path.join(cwd, "recorded", "home", ".claude-plugin", "marketplace.json"),
+    expectedPath: (cwd: string): string => path.join(cwd, "recorded", "home"),
   },
 ] as const) {
-  test(`D-01: marketplace info resolves the original ${title}`, async () => {
+  test(`D-01: marketplace info shows the recorded path for the ${title}`, async () => {
     await withHermeticHome(async ({ cwd, home }) => {
       // arrange
       const locations = locationsFor("project", cwd);
-      const manifestPath = path.join(locations.extensionRoot, "source-identity.json");
-      await writeMarketplaceJson(manifestPath, "source-identity");
-      const rawSource = source(cwd);
+      await writeMarketplaceJson(manifestPath(cwd), "source-identity");
       await saveMarketplace(
         locations,
         marketplaceRecord({
           addedFromCwd: cwd,
           lastSuccessfulManifest: '{"name":"source-identity","plugins":[]}',
-          manifestPath,
-          marketplaceRoot: path.join(cwd, "managed", "source-identity"),
+          manifestPath: manifestPath(cwd),
+          marketplaceRoot: marketplaceRoot(cwd),
           name: "source-identity",
           scope: "project",
-          source: pathSource(rawSource),
+          source: pathSource(source(cwd)),
         }),
       );
       const before = await snapshotEnvironment(home, cwd);
       const boundary = notificationBoundary({
-        message: `● source-identity [project] <no autoupdate>\npath: ${expectedPath(cwd, home)}`,
+        message: `● source-identity [project] <no autoupdate>\npath: ${expectedPath(cwd)}`,
       });
 
       // act

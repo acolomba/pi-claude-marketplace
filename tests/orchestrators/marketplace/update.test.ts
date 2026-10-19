@@ -1501,9 +1501,9 @@ test("MU-5: clone advances + manifest re-validation fails -- 'Retry the command.
       async checkout(opts): Promise<void> {
         await gitOps.checkout(opts);
         // After the clone advances (fetch + checkout), the working-tree
-        // manifest is INVALID, so the POST re-validation in
-        // validateManifestAtRoot throws -> MarketplaceUpdateError with the
-        // "clone advanced but manifest could not be persisted" diagnostic.
+        // manifest is INVALID, so the read of the recorded manifest throws ->
+        // MarketplaceUpdateError with the "clone advanced but manifest could
+        // not be persisted" diagnostic.
         await cp(fixtureMarketplaceDir("invalid-manifest"), cloneDir, { recursive: true });
       },
     };
@@ -1928,9 +1928,9 @@ test("ATTR-10: path-source SCHEMA-INVALID manifest renders `(failed) {invalid ma
 test("a pre-persistence manifest failure leaves cache rows intact and calls zero git operations", async (testContext) => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
-    // The failure path must not reach for the network either: the path branch of
-    // refreshRecord calls validateManifestAtRoot -> loadMarketplaceManifest (a
-    // readFile + parse) and NO gitOps. Sibling of the success-path NFR-5 test.
+    // The failure path must not reach for the network either: for a path source,
+    // refreshRecord only reads the recorded manifest (a readFile + parse), which
+    // throws, and calls NO gitOps. Sibling of the success-path NFR-5 test.
     const localMpDir = await mkdtemp(path.join(tmpdir(), "mp-path-fail-nfr5-"));
     try {
       await mkdir(path.join(localMpDir, ".claude-plugin"), { recursive: true });
@@ -4187,7 +4187,6 @@ test("drops a changed target after persistence and before its plugin cascade", a
       throw new Error("the cache invalidation fixture has no target marketplace");
     }
 
-    record.manifestPath = path.join(cloneDir, ".claude-plugin", "before-update.json");
     record.lastSuccessfulManifest = '{"name":"valid-marketplace","plugins":[]}';
     await saveState(locations.extensionRoot, state);
     const pluginCachePath = await locations.pluginCacheFile("official");
@@ -5093,77 +5092,6 @@ test("updateMarketplace: bare-form missing marketplace -> bracketless {marketpla
       "A marketplace operation has failed.\n\n⊘ ghost (failed) {marketplace not added}",
     );
     assert.equal(first.severity, "error");
-  });
-});
-
-test("validateManifestAtRoot: stale manifestPath and marketplaceRoot are corrected (lines 382-388)", async () => {
-  // The conditional writes in validateManifestAtRoot update
-  // record.manifestPath and record.marketplaceRoot only when they differ
-  // from the canonical computed values.  Seed with stale paths, run
-  // update, then re-read state and assert both fields were corrected.
-  await withHermeticHome(async ({ cwd }) => {
-    // arrange
-    const locations = locationsFor("project", cwd);
-    await mkdir(locations.extensionRoot, { recursive: true });
-    const cloneDir = await locations.sourceCloneDir("stale-mp");
-    await cp(fixtureMarketplaceDir("valid-marketplace"), cloneDir, { recursive: true });
-
-    const staleManifestPath = path.join(cwd, "old-dir", ".claude-plugin", "marketplace.json");
-    const staleMarketplaceRoot = path.join(cwd, "old-dir");
-
-    await saveState(locations.extensionRoot, {
-      schemaVersion: 1,
-      marketplaces: {
-        "stale-mp": {
-          name: "stale-mp",
-          scope: "project",
-          source: makeGithubSource("main"),
-          addedFromCwd: cwd,
-          manifestPath: staleManifestPath,
-          marketplaceRoot: staleMarketplaceRoot,
-          plugins: {},
-        },
-      },
-    });
-
-    const { ctx, run, notifications } = makeCtx();
-    const { gitOps } = createGitOps({
-      remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000011" },
-    });
-
-    // act
-    await updateMarketplace({
-      completionCache: createCompletionCache(),
-      ctx,
-      run,
-      name: "stale-mp",
-      scope: "project",
-      cwd,
-      gitOps,
-    });
-
-    // assert
-
-    // No error -- update should have succeeded.
-    const errNotif = notifications.find((n) => n.severity === "error");
-    assert.equal(errNotif, undefined, `unexpected error: ${errNotif?.message}`);
-
-    // Re-read state and confirm both stale paths were corrected.
-    const afterState = await loadState(locations.extensionRoot);
-    const record = afterState.marketplaces["stale-mp"];
-    assert.ok(record !== undefined, "stale-mp record must still be in state");
-
-    const expectedManifestPath = path.join(cloneDir, ".claude-plugin", "marketplace.json");
-    assert.equal(
-      record.manifestPath,
-      expectedManifestPath,
-      `manifestPath not updated: got ${record.manifestPath}`,
-    );
-    assert.equal(
-      record.marketplaceRoot,
-      cloneDir,
-      `marketplaceRoot not updated: got ${record.marketplaceRoot}`,
-    );
   });
 });
 

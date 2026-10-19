@@ -104,7 +104,12 @@ import {
 import { seedSameRepoPluginMirrors } from "../plugin/clone-cache.ts";
 
 import { ADD_CONTEXT } from "./add.messaging.ts";
-import { DEFAULT_GIT_OPS, type GitAuthBundle, type GitOps } from "./shared.ts";
+import {
+  DEFAULT_GIT_OPS,
+  recordedManifestPath,
+  type GitAuthBundle,
+  type GitOps,
+} from "./shared.ts";
 
 import type { DeviceFlowHttp } from "../../domain/github-auth.ts";
 import type { GitHubSource, PathSource, UrlSource } from "../../domain/source.ts";
@@ -386,10 +391,9 @@ function addSubjectName(rawErr: unknown, rawSource: string): string {
 /**
  * WR-06: a typed path source names the recorded marketplace only when it
  * resolves, as the add resolves it (`~` expanded, relative to the command's
- * directory), to the record's root or manifest, resolved from the directory
- * the record was added from. The same spelling typed in another directory
- * names another directory, which the add must read. Other kinds match on
- * `samePlannedSource` alone.
+ * directory), to the record's root or its recorded manifest. The same
+ * spelling typed in another directory names another directory, which the add
+ * must read. Other kinds match on `samePlannedSource` alone.
  */
 function resolvesToRecord(
   record: ExtensionState["marketplaces"][string],
@@ -402,9 +406,7 @@ function resolvesToRecord(
   }
 
   const onDisk = path.resolve(cwd, expandTildePath(typed.logical));
-  return [record.marketplaceRoot, record.manifestPath].some(
-    (recorded) => path.resolve(record.addedFromCwd, recorded) === onDisk,
-  );
+  return onDisk === record.marketplaceRoot || onDisk === recordedManifestPath(record);
 }
 
 /**
