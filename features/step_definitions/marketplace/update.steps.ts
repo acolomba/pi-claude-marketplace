@@ -3,6 +3,7 @@
  */
 
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 
 import { Given } from "@cucumber/cucumber";
 
@@ -224,7 +225,8 @@ Given(
 Given(
   "the published plugin {string} of the marketplace {string} has an unreadable skill file",
   async function (this: ScenarioWorld, plugin: string, name: string) {
-    await publishUnreadableSkillFile(this.requirePublished(name), plugin);
+    const file = await publishUnreadableSkillFile(this.requirePublished(name), plugin);
+    await assert.rejects(readFile(file), { code: "EACCES" });
   },
 );
 

@@ -251,26 +251,25 @@ export async function invalidateManifest(
 }
 
 /**
- * Adds a file nobody may read to the skill of the published plugin `plugin`.
- * Pi reads the plugin's manifest and dependencies as usual, then fails to
- * copy the skill when it stages the update.
+ * Adds a file nobody may read to the skill of the published plugin `plugin`,
+ * and returns its path. Pi reads the plugin's manifest and dependencies as
+ * usual, then fails to copy the skill when it stages the update.
  */
 export async function publishUnreadableSkillFile(
   published: PublishedMarketplace,
   plugin: string,
-): Promise<void> {
+): Promise<string> {
   switch (published.kind) {
     case "dir":
-    case "file":
-      await writeFile(
-        ownedTarget(
-          published,
-          path.join(published.root, "plugins", plugin, "skills", `${plugin}-skill`, "notes.md"),
-        ),
-        "Unreadable.\n",
-        { mode: 0o000 },
+    case "file": {
+      const file = ownedTarget(
+        published,
+        path.join(published.root, "plugins", plugin, "skills", `${plugin}-skill`, "notes.md"),
       );
-      return;
+      await writeFile(file, "Unreadable.\n", { mode: 0o000 });
+      return file;
+    }
+
     case "url":
     case "github":
       throw noStandIn(published.kind);
