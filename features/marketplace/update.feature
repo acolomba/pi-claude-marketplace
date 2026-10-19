@@ -192,6 +192,194 @@ Feature: Marketplace update
       | marketplace name | marketplace scope | marketplace status |
       | tools            | project           | updated            |
 
+  Scenario Outline: Autoupdate off preserves installed versions
+    Given the marketplace "tools" is published as a <source kind> source
+    Given the marketplace "tools" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install demo@tools --scope project"
+    Given the marketplace "tools" offers these plugins:
+      | name | version |
+      | demo | 1.10.0  |
+    Given the marketplace "tools" has the description "A longer refreshed catalog description"
+    When the user runs "/claude:plugin marketplace update tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | marketplace status |
+      | tools            | project           | updated            |
+    When the user runs "/claude:plugin list --scope project"
+    Then the result has these fields:
+      | kind                | cascade     |
+      | severity            | info        |
+      | needs reload        | false       |
+      | tally label         | Plugin list |
+      | tally failures      | 0           |
+      | tally warnings      | 0           |
+      | tally success count | 1           |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id         | name | status     | reasons | scope   | version |
+      | tools            | project           | demo@tools | demo | upgradable |         | project | 1.0.0   |
+    When the user runs "/claude:plugin info demo@tools --scope project"
+    Then the result has these fields:
+      | kind                           | plugin-info |
+      | severity                       | info        |
+      | needs reload                   | false       |
+      | marketplace name               | tools       |
+      | marketplace scope              | project     |
+      | marketplace details autoupdate | false       |
+      | plugin status                  | installed   |
+      | plugin name                    | demo        |
+      | plugin id                      | demo@tools  |
+      | plugin reasons                 |             |
+      | plugin scope                   | project     |
+      | plugin version                 | 1.0.0       |
+      | plugin components resolved     | true        |
+      | plugin components skills       | demo-skill  |
+    When the user starts a new pi session
+    Then the session offers these skills:
+      | command           | description            |
+      | /skill:demo-skill | A skill of demo 1.0.0. |
+
+    Examples:
+      | source kind |
+      | dir         |
+      | file        |
+
+    @url
+    Examples:
+      | source kind |
+      | url         |
+
+    @github
+    Examples:
+      | source kind |
+      | github      |
+
+  Scenario Outline: Autoupdate exposes the offered version in a new session
+    Given the marketplace "tools" is published as a <source kind> source
+    Given the marketplace "tools" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install demo@tools --scope project"
+    Given the user has run "/claude:plugin marketplace autoupdate tools --scope project"
+    Given the marketplace "tools" offers these plugins:
+      | name | version |
+      | demo | 1.10.0  |
+    Given the marketplace "tools" has the description "A longer refreshed catalog description"
+    When the user runs "/claude:plugin marketplace update tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | marketplace status | id         | name | status  | reasons | scope   | from  | to     |
+      | tools            | project           | updated            | demo@tools | demo | updated |         | project | 1.0.0 | 1.10.0 |
+    When the user runs "/claude:plugin list --scope project"
+    Then the result has these fields:
+      | kind                | cascade     |
+      | severity            | info        |
+      | needs reload        | false       |
+      | tally label         | Plugin list |
+      | tally failures      | 0           |
+      | tally warnings      | 0           |
+      | tally success count | 1           |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace details autoupdate | id         | name | status    | reasons | scope   | version |
+      | tools            | project           | true                           | demo@tools | demo | installed |         | project | 1.10.0  |
+    When the user runs "/claude:plugin info demo@tools --scope project"
+    Then the result has these fields:
+      | kind                           | plugin-info |
+      | severity                       | info        |
+      | needs reload                   | false       |
+      | marketplace name               | tools       |
+      | marketplace scope              | project     |
+      | marketplace details autoupdate | true        |
+      | plugin status                  | installed   |
+      | plugin name                    | demo        |
+      | plugin id                      | demo@tools  |
+      | plugin reasons                 |             |
+      | plugin scope                   | project     |
+      | plugin version                 | 1.10.0      |
+      | plugin components resolved     | true        |
+      | plugin components skills       | demo-skill  |
+    When the user starts a new pi session
+    Then the session offers these skills:
+      | command           | description             |
+      | /skill:demo-skill | A skill of demo 1.10.0. |
+
+    Examples:
+      | source kind |
+      | dir         |
+      | file        |
+
+    @url
+    Examples:
+      | source kind |
+      | url         |
+
+    @github
+    Examples:
+      | source kind |
+      | github      |
+
+  Scenario Outline: Repeating an autoupdate does not reinstall a plugin
+    Given the marketplace "tools" is published as a <source kind> source
+    Given the marketplace "tools" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install demo@tools --scope project"
+    Given the user has run "/claude:plugin marketplace autoupdate tools --scope project"
+    Given the marketplace "tools" offers these plugins:
+      | name | version |
+      | demo | 1.10.0  |
+    Given the marketplace "tools" has the description "A longer refreshed catalog description"
+    Given the user has run "/claude:plugin marketplace update tools --scope project"
+    When the user runs "/claude:plugin marketplace update tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | marketplace status | marketplace reasons |
+      | tools            | project           | skipped            | up-to-date          |
+    When the user runs "/claude:plugin list --scope project"
+    Then the result has these fields:
+      | kind                | cascade     |
+      | severity            | info        |
+      | needs reload        | false       |
+      | tally label         | Plugin list |
+      | tally failures      | 0           |
+      | tally warnings      | 0           |
+      | tally success count | 1           |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace details autoupdate | id         | name | status    | reasons | scope   | version |
+      | tools            | project           | true                           | demo@tools | demo | installed |         | project | 1.10.0  |
+    When the user starts a new pi session
+    Then the session offers these skills:
+      | command           | description             |
+      | /skill:demo-skill | A skill of demo 1.10.0. |
+
+    Examples:
+      | source kind |
+      | dir         |
+      | file        |
+
+    @url
+    Examples:
+      | source kind |
+      | url         |
+
+    @github
+    Examples:
+      | source kind |
+      | github      |
+
   Scenario Outline: An invalid refreshed manifest leaves installed plugins unchanged
     Given the marketplace "tools" is published as a <source kind> source
     Given the marketplace "tools" offers these plugins:

@@ -2003,16 +2003,17 @@ test("github-source no-errno refresh failure still renders `{network unreachable
   });
 });
 
-test("MU-6 + MU-8: cascade runs ONLY when autoupdate=true; pluginUpdate called once per state plugin (never for new-manifest entries)", async () => {
+test("autoupdate calls each installed plugin in record order", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
-    // Seed with autoupdate=true and one installed plugin.
+    // State order is the installation order. The refreshed manifest is not the
+    // source of cascade targets.
     await seedGithubMarketplace({
       cwd,
       name: "auto-mp",
       ref: "main",
       autoupdate: true,
-      plugins: { hello: makePluginRecord() },
+      plugins: { zeta: makePluginRecord(), alpha: makePluginRecord() },
     });
     const { ctx, run } = makeCtx();
     const { gitOps } = createGitOps({
@@ -2049,19 +2050,14 @@ test("MU-6 + MU-8: cascade runs ONLY when autoupdate=true; pluginUpdate called o
 
     // assert
 
-    // Exactly one cascade call -- for the installed plugin. MU-8: even
-    // though the manifest fixture lists `hello` as well, the cascade
-    // enumerates state.plugins keys, not manifest entries, so a manifest
-    // that grew new entries would NOT trigger spurious calls.
-    assert.equal(calls.length, 1);
-    const first = calls[0];
-    assert.ok(first !== undefined);
-    assert.equal(first.plugin, "hello");
-    assert.equal(first.marketplace, "auto-mp");
+    assert.deepStrictEqual(calls, [
+      { plugin: "zeta", marketplace: "auto-mp" },
+      { plugin: "alpha", marketplace: "auto-mp" },
+    ]);
   });
 });
 
-test("MU-6: cascade skipped when autoupdate=false (default)", async () => {
+test("autoupdate off never invokes a plugin update", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
     await seedGithubMarketplace({
@@ -2658,6 +2654,84 @@ test("UXG-05 (UAT Test-3 gap) regression guard: autoupdate-ON cascade where a pl
       `expected (updated) header, got: ${first.message}`,
     );
     assert.match(first.message, /\/reload to pick up changes/);
+  });
+});
+
+test("a repeated autoupdate collapses after the first run changes a plugin", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    await seedGithubMarketplace({
+      cwd,
+      name: "repeat",
+      ref: "main",
+      autoupdate: true,
+      plugins: { demo: makePluginRecord() },
+    });
+    const calls: string[] = [];
+    const pluginUpdate: PluginUpdateFn = (plugin) => {
+      calls.push(plugin);
+      const firstRun = calls.length === 1;
+      return Promise.resolve(
+        firstRun
+          ? {
+              partition: "updated",
+              name: plugin,
+              fromVersion: "0.0.1",
+              toVersion: "0.0.2",
+              stagedAgentNames: [],
+              stagedMcpServerNames: [],
+              declaresAgents: false,
+              declaresMcp: false,
+              constraint: undefined,
+              declaresWorkflows: false,
+            }
+          : {
+              partition: "unchanged",
+              name: plugin,
+              fromVersion: "0.0.2",
+              toVersion: "0.0.2",
+              declaresAgents: false,
+              declaresMcp: false,
+              constraint: undefined,
+              declaresWorkflows: false,
+            },
+      );
+    };
+
+    const git = createGitOps({
+      remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000009" },
+    });
+    const first = makeCtx();
+    const second = makeCtx();
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx: first.ctx,
+      run: first.run,
+      name: "repeat",
+      scope: "project",
+      cwd,
+      gitOps: git.gitOps,
+      pluginUpdate,
+    });
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx: second.ctx,
+      run: second.run,
+      name: "repeat",
+      scope: "project",
+      cwd,
+      gitOps: git.gitOps,
+      pluginUpdate,
+    });
+
+    // assert
+    assert.deepStrictEqual(calls, ["demo", "demo"]);
+    assert.match(first.notifications[0]?.message ?? "", /^● repeat \[project\] \(updated\)/);
+    assert.deepStrictEqual(second.notifications, [
+      { message: "● repeat [project] (skipped) {up-to-date}" },
+    ]);
   });
 });
 
