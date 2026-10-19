@@ -692,6 +692,14 @@ validated and archived in [milestones/json-output-REQUIREMENTS.md](milestones/js
 
 ### Validated
 
+- ✓ `marketplace update` scenarios cover single and bare updates, semantic
+  manifest comparison, autoupdate off and on with new-session versions, catalog
+  membership, ordered plugin-failure continuation, project-first bare order with
+  adjacent MCP notices, empty runs, scoped and Unicode misses, and invalid or
+  missing path sources. The C-10 fix re-reads a manifest added from outside
+  `.claude-plugin/`, written test-first — marketplace-features Phase 6,
+  2026-10-19 (UPD-01..UPD-10, UPD-13, UPD-14, FIX-01).
+
 - ✓ `marketplace info` scenarios cover directory and file source details,
   project-first independent scope fan-out, scoped and unscoped misses, the
   shipped invalid-manifest failed row, and manifest-order dependency
@@ -1291,6 +1299,12 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
+
+_Last updated: 2026-10-19 after marketplace-features Phase 6 completed. All
+5 success criteria and UPD-01..UPD-10 / UPD-13 / UPD-14 / FIX-01 pass. The
+code review left 19 findings open in `06-REVIEW-DISPOSITION.md`, including a
+test-strength blocker (CR-01) and unrepaired legacy path records (WR-02).
+Phase 7 (Marketplace Autoupdate) is next. Prior updates follow._
 
 _Last updated: 2026-10-18 after marketplace-features Phase 5 completed. All
 11 verification truths and INFO-01..INFO-06 / INFO-08 / INFO-09 pass; D-MF-06
