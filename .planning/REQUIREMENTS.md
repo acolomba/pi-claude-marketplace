@@ -118,9 +118,9 @@ A scope (user or project) has two layers: shared (`claude-plugins.json`) and loc
 - [x] **UPD-04**: With autoupdate on, the update moves installed plugins to the offered version, and a new session offers the new version
 - [x] **UPD-05**: With autoupdate on and nothing changed, the marketplace is skipped as `up-to-date`
 - [x] **UPD-06**: A plugin newly offered by the refreshed manifest is not installed
-- [ ] **UPD-07**: A bare `update` refreshes every marketplace of both scopes, one result per marketplace, project first
-- [ ] **UPD-08**: A bare `update` with nothing added reports no marketplaces
-- [ ] **UPD-09**: Updating a name the scope lacks fails as `marketplace not added`, with and without `--scope`
+- [x] **UPD-07**: A bare `update` refreshes every marketplace of both scopes, one result per marketplace, project first
+- [x] **UPD-08**: A bare `update` with nothing added reports no marketplaces
+- [x] **UPD-09**: Updating a name the scope lacks fails as `marketplace not added`, with and without `--scope`
 - [x] **UPD-10**: A path marketplace whose manifest became invalid fails with an `invalid manifest` row
 - [ ] **UPD-11**: A git marketplace whose host answers 5xx, 404, or drops the connection fails as `network unreachable`
 - [ ] **UPD-12**: A git marketplace whose host now answers 401 fails as `authentication required`, with the cause line naming `git credential approve` for that host (url, gh)
@@ -247,9 +247,9 @@ A scope (user or project) has two layers: shared (`claude-plugins.json`) and loc
 | UPD-04 | Phase 6 | Complete |
 | UPD-05 | Phase 6 | Complete |
 | UPD-06 | Phase 6 | Complete |
-| UPD-07 | Phase 6 | Pending |
-| UPD-08 | Phase 6 | Pending |
-| UPD-09 | Phase 6 | Pending |
+| UPD-07 | Phase 6 | Complete |
+| UPD-08 | Phase 6 | Complete |
+| UPD-09 | Phase 6 | Complete |
 | UPD-10 | Phase 6 | Complete |
 | UPD-11 | Phase 9 | Pending |
 | UPD-12 | Phase 10 | Pending |
