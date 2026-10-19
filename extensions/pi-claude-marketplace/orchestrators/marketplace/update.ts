@@ -105,6 +105,7 @@ import { loadState } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import {
   InvalidMarketplaceManifestError,
+  MarketplaceBaselineUnreadableError,
   MarketplaceUpdateError,
   PluginShapeError,
   composeErrorWithCauseChain,
@@ -346,6 +347,23 @@ async function manifestContentKey(
   }
 }
 
+/**
+ * Parses the comparison text, or returns undefined when there is none. A saved
+ * baseline that does not parse refuses the refresh as unreadable before any
+ * source read or fetch.
+ */
+function parseBaseline(name: string, text: string | undefined): unknown {
+  if (text === undefined) {
+    return undefined;
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch (cause) {
+    throw new MarketplaceBaselineUnreadableError(name, { cause });
+  }
+}
+
 async function refreshRecord(
   record: ExtensionState["marketplaces"][string],
   args: RefreshOneArgs,
@@ -359,6 +377,7 @@ async function refreshRecord(
     const preKey =
       record.lastSuccessfulManifest ??
       (source.kind === "path" ? undefined : await manifestContentKey(record));
+    const baseline = parseBaseline(name, preKey);
     let document: MarketplaceManifestDocument;
     if (source.kind === "github") {
       const cloneDir = await locations.sourceCloneDir(name);
@@ -414,8 +433,7 @@ async function refreshRecord(
     }
 
     const changed =
-      preKey === undefined ||
-      !isDeepStrictEqual(JSON.parse(preKey), JSON.parse(document.comparisonJson));
+      preKey === undefined || !isDeepStrictEqual(baseline, JSON.parse(document.comparisonJson));
 
     record.lastSuccessfulManifest = document.comparisonJson;
     // lastUpdatedAt is stamped on EVERY refresh (used elsewhere); it is
@@ -586,6 +604,10 @@ function reasonsFromCascadeError(err: unknown): readonly ContentReason[] | undef
     (err instanceof Error && err.cause instanceof InvalidMarketplaceManifestError)
   ) {
     return ["invalid manifest"] as const;
+  }
+
+  if (err instanceof Error && err.cause instanceof MarketplaceBaselineUnreadableError) {
+    return ["unreadable"] as const;
   }
 
   // Mirror the one-level cause unwrap above for code-bearing transport

@@ -29,6 +29,7 @@ import {
   LayerConfigUnreadableError,
   ManualRecoveryError,
   manualRecoveryLeaks,
+  MarketplaceBaselineUnreadableError,
   MarketplaceInBaseLayerOnlyError,
   MarketplaceInLocalLayerOnlyError,
   MarketplaceDuplicateNameError,
@@ -1105,6 +1106,28 @@ describe("MarketplaceUpdateError", () => {
         message: "update failed",
         retryHint: "",
         cause: undefined,
+      },
+    );
+  });
+});
+
+describe("MarketplaceBaselineUnreadableError", () => {
+  test("names the marketplace whose saved manifest is unreadable and keeps the parse cause", () => {
+    // arrange
+    const cause = new SyntaxError("Unexpected end of JSON input");
+
+    // act
+    const error = new MarketplaceBaselineUnreadableError("tools", { cause });
+
+    // assert
+    assert.ok(error instanceof Error);
+    assert.deepStrictEqual(
+      { name: error.name, message: error.message, mpName: error.mpName, cause: error.cause },
+      {
+        name: "MarketplaceBaselineUnreadableError",
+        message: 'The saved manifest of marketplace "tools" in state.json is unreadable.',
+        mpName: "tools",
+        cause,
       },
     );
   });

@@ -247,6 +247,7 @@ async function seedGithubMarketplace(opts: {
   plugins?: Record<string, ExtensionState["marketplaces"][string]["plugins"][string]>;
   fixture?: "valid-marketplace" | "invalid-manifest";
   legacy?: boolean;
+  lastSuccessfulManifest?: string;
 }): Promise<{ cloneDir: string }> {
   const locations = locationsFor("project", opts.cwd);
   await mkdir(locations.extensionRoot, { recursive: true });
@@ -267,7 +268,9 @@ async function seedGithubMarketplace(opts: {
         manifestPath: path.join(cloneDir, ".claude-plugin", "marketplace.json"),
         marketplaceRoot: cloneDir,
         plugins: opts.plugins ?? {},
-        ...(opts.legacy === true ? {} : { lastSuccessfulManifest: VALID_MANIFEST_JSON }),
+        ...(opts.legacy === true
+          ? {}
+          : { lastSuccessfulManifest: opts.lastSuccessfulManifest ?? VALID_MANIFEST_JSON }),
         ...(opts.autoupdate !== undefined && { autoupdate: opts.autoupdate }),
       },
     },
@@ -301,6 +304,7 @@ async function seedUrlMarketplace(opts: {
   name: string;
   ref?: string;
   host?: string;
+  lastSuccessfulManifest?: string;
 }): Promise<{ cloneDir: string }> {
   const locations = locationsFor("project", opts.cwd);
   await mkdir(locations.extensionRoot, { recursive: true });
@@ -321,6 +325,9 @@ async function seedUrlMarketplace(opts: {
         manifestPath: path.join(cloneDir, ".claude-plugin", "marketplace.json"),
         marketplaceRoot: cloneDir,
         plugins: {},
+        ...(opts.lastSuccessfulManifest !== undefined && {
+          lastSuccessfulManifest: opts.lastSuccessfulManifest,
+        }),
       },
     },
   });
@@ -1615,6 +1622,74 @@ test("WR-02: corrupt pre-existing manifest routes to (failed), never a silent no
     assert.doesNotMatch(first.message, /\(skipped\) \{up-to-date\}/);
   });
 });
+
+for (const { kind, seed } of [
+  {
+    kind: "path",
+    seed: async (cwd: string): Promise<void> => {
+      const marketplaceRoot = path.join(cwd, "tools-source");
+      await cp(fixtureMarketplaceDir("valid-marketplace"), marketplaceRoot, { recursive: true });
+      await seedPathMarketplace({
+        cwd,
+        name: "tools",
+        marketplaceRoot,
+        lastSuccessfulManifest: "",
+      });
+    },
+  },
+  {
+    kind: "github",
+    seed: async (cwd: string): Promise<void> => {
+      await seedGithubMarketplace({ cwd, name: "tools", ref: "main", lastSuccessfulManifest: "" });
+    },
+  },
+  {
+    kind: "url",
+    seed: async (cwd: string): Promise<void> => {
+      await seedUrlMarketplace({ cwd, name: "tools", ref: "main", lastSuccessfulManifest: "" });
+    },
+  },
+]) {
+  test(`a ${kind} marketplace with an unparseable saved manifest fails as unreadable before any fetch`, async () => {
+    await withHermeticHome(async ({ cwd }) => {
+      // arrange
+      await seed(cwd);
+      const extensionRoot = locationsFor("project", cwd).extensionRoot;
+      const recordBefore = (await loadState(extensionRoot)).marketplaces.tools;
+      const { ctx, run, notifications } = makeCtx();
+      const { calls, gitOps } = makeForbiddenGitOps();
+      const { credOps: credentialOps } = createCredentialOps();
+      let parseMessage = "";
+      try {
+        JSON.parse("");
+      } catch (err) {
+        parseMessage = (err as Error).message;
+      }
+
+      // act
+      await updateMarketplace({
+        completionCache: createCompletionCache(),
+        ctx,
+        run,
+        name: "tools",
+        scope: "project",
+        cwd,
+        gitOps,
+        credentialOps,
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message: `Some operations have failed.\n\n⊘ tools [project] (failed)\n  ⊘ tools (failed) {unreadable}\n    cause: Failed to update marketplace "tools". -> The saved manifest of marketplace "tools" in state.json is unreadable. -> ${parseMessage}`,
+          severity: "error",
+        },
+      ]);
+      assert.deepStrictEqual(calls, []);
+      assert.deepStrictEqual((await loadState(extensionRoot)).marketplaces.tools, recordBefore);
+    });
+  });
+}
 
 // ───────────────────────────────────────────────────────────────────────────
 // ATTR-10 / D-48-B: a path-source marketplace.json that is malformed or

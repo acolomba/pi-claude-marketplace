@@ -522,6 +522,22 @@ export class MarketplaceUpdateError extends Error {
 }
 
 /**
+ * D-04 / D-07: the manifest text that `state.json` saved from the last
+ * successful add or refresh of a marketplace does not parse, so `marketplace
+ * update` cannot tell whether a refresh changed the marketplace. The refresh
+ * refuses with `{unreadable}` before it reads or fetches the source, and the
+ * record stays as it was.
+ */
+export class MarketplaceBaselineUnreadableError extends Error {
+  readonly mpName: string;
+  constructor(mpName: string, options?: ErrorOptions) {
+    super(`The saved manifest of marketplace "${mpName}" in state.json is unreadable.`, options);
+    this.name = "MarketplaceBaselineUnreadableError";
+    this.mpName = mpName;
+  }
+}
+
+/**
  * Q-02 / GAUTH-06: a hop reached after a redirect left the original request's
  * origin answered 401 or 203. The HTTP client in `platform/git.ts` throws this
  * before isomorphic-git's auth loop runs, so no credential is looked up,
