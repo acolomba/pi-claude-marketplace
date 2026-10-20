@@ -5,16 +5,16 @@ milestone_name: Marketplace Behavioral Tests
 current_phase: 8
 current_phase_name: Marketplace Help and Usage Errors
 status: executing
-stopped_at: Paused after Phase 8 wave 1 (08-01 complete)
-last_updated: "2026-10-20T12:27:09.711Z"
+stopped_at: Completed 08-02-PLAN.md
+last_updated: "2026-10-20T12:42:26.764Z"
 last_activity: 2026-10-20
 last_activity_desc: Phase 8 execution started
-state_head: 2c6ec3cb6ef53a2a460f0d35580d06824987b640
+state_head: e88237c914e1f64fac144fc8061c19cfaad9fe82
 progress:
   total_phases: 14
   completed_phases: 11
   total_plans: 67
-  completed_plans: 63
+  completed_plans: 64
   percent: 79
 ---
 
@@ -32,8 +32,8 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 8 (Marketplace Help and Usage Errors) — EXECUTING
-Plan: 2 of 5
-Status: Executing Phase 8
+Plan: 3 of 5
+Status: Ready to execute
 Last activity: 2026-10-20 — Phase 8 execution started
 
 Progress: [████████░░] 79%
@@ -183,9 +183,9 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-20T12:15:35.898Z
-**Stopped at:** Paused after Phase 8 wave 1 (08-01 complete); 08-02 next
-**Resume file:** `.planning/phases/08-marketplace-help-and-usage-errors/.continue-here.md`
+**Last session:** 2026-10-20T12:42:05.050Z
+**Stopped at:** Completed 08-02-PLAN.md
+**Resume file:** None
 
 **Pause (2026-10-20, operator's choice, not a block):** the
 `/gsd-autonomous --from 7 --interactive` run is paused at a wave boundary.
@@ -359,6 +359,7 @@ archived milestone artifacts.
 | Phase 07 P03 | 7 min | 2 tasks | 9 files |
 | Phase 07 P04 | 7min | 3 tasks | 1 files |
 | Phase 08 P01 | 4 min | 2 tasks | 1 files |
+| Phase 08 P02 | 11 min | 3 tasks | 12 files |
 
 ## Decisions
 
@@ -493,6 +494,8 @@ archived milestone artifacts.
 - [Phase 07]: No step, library, support, production, or cucumber.json change: every step the AU-01..AU-09 pins use already existed, and each pin passed on first run against the final code.
 - [Phase 08]: Usage-error Outlines name columns arguments, message, value, and usage only, so Gherkin never rewrites <name> or <source> inside a usage cell
 - [Phase 08]: Marketplace usage-error rows carry one fault each and no rm or ls alias rows; combined-fault precedence by parser path stays unpinned
+- [Phase 08]: Signature table in edge/router.ts builds both the marketplace help and each verb's usage line; handlers value-import marketplaceUsage
+- [Phase 08]: Marketplace help alias column is computed from the rows; the list line gains 10 spaces to keep (alias: ls) under (alias: rm)
 
 ### mcp-4 decisions
 

@@ -459,14 +459,14 @@ Plans:
 2. `marketplace` with no subcommand, or an unknown one, shows the usage with a reason, and `add`, `remove`, and `info` without their argument fail as `Missing required argument.`.
 3. Surplus arguments, unknown flags (including `--local` on `list`, `info`, and `update`), a bad or missing `--scope` value in any position, and an explicitly empty optional argument (`update ""`, `autoupdate ""`) are each rejected.
 
-**Plans:** 1/5 plans executed
+**Plans:** 2/5 plans executed
 
 Plans:
 **Wave 1**
 - [x] 08-01-PLAN.md — Tracer: pin every marketplace rejection that passes today (missing, surplus, unknown flag, bad and missing --scope in every position)
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 08-02-PLAN.md — One signature table builds the marketplace help and every usage line; the help shows --local (D-01 red/green, D-02); help marketplace and the bare and unknown subcommand scenarios
+- [x] 08-02-PLAN.md — One signature table builds the marketplace help and every usage line; the help shows --local (D-01 red/green, D-02); help marketplace and the bare and unknown subcommand scenarios
 
 **Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 08-03-PLAN.md — An empty argument names its field in the shared parser, on the marketplace verbs and uninstall, enable, and disable (D-05 red/green)
@@ -525,7 +525,7 @@ Plans:
 | 5. Marketplace Info | 3/3 | Complete    | 2026-10-18 |
 | 6. Marketplace Update and C-10 Fix | 4/4 | Complete    | 2026-10-19 |
 | 7. Marketplace Autoupdate | 4/4 | Complete    | 2026-10-20 |
-| 8. Marketplace Help and Usage Errors | 1/5 | In Progress | - |
+| 8. Marketplace Help and Usage Errors | 2/5 | In Progress | - |
 | 9. URL Source Kind and HTTPS Git Stand-In | 0/TBD | Not started | - |
 | 10. GitHub Source Kind and Suite Close | 0/TBD | Not started | - |
 

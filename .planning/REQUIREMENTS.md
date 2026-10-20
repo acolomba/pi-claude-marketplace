@@ -141,14 +141,14 @@ A scope (user or project) has two layers: shared (`claude-plugins.json`) and loc
 
 ### Help and usage errors
 
-- [ ] **USE-01**: `marketplace help` and `help marketplace` show the marketplace usage
-- [ ] **USE-02**: `marketplace` with no subcommand, or an unknown one, shows the usage with a reason
+- [x] **USE-01**: `marketplace help` and `help marketplace` show the marketplace usage
+- [x] **USE-02**: `marketplace` with no subcommand, or an unknown one, shows the usage with a reason
 - [x] **USE-03**: `add`, `remove`, and `info` without their argument fail as `Missing required argument.`
 - [x] **USE-04**: Surplus arguments are rejected
 - [x] **USE-05**: Unknown flags are rejected, including `--local` on `list`, `info`, and `update`
 - [x] **USE-06**: A bad or missing `--scope` value is rejected in any position
 - [ ] **USE-07**: An explicitly empty optional argument (`update ""`, `autoupdate ""`) is rejected
-- [ ] **USE-08**: `marketplace help` with an argument is rejected
+- [x] **USE-08**: `marketplace help` with an argument is rejected
 
 ### Source forms
 
@@ -264,14 +264,14 @@ A scope (user or project) has two layers: shared (`claude-plugins.json`) and loc
 | AU-07 | Phase 7 | Complete |
 | AU-08 | Phase 7 | Complete |
 | AU-09 | Phase 7 | Complete |
-| USE-01 | Phase 8 | Pending |
-| USE-02 | Phase 8 | Pending |
+| USE-01 | Phase 8 | Complete |
+| USE-02 | Phase 8 | Complete |
 | USE-03 | Phase 8 | Complete |
 | USE-04 | Phase 8 | Complete |
 | USE-05 | Phase 8 | Complete |
 | USE-06 | Phase 8 | Complete |
 | USE-07 | Phase 8 | Pending |
-| USE-08 | Phase 8 | Pending |
+| USE-08 | Phase 8 | Complete |
 | SRC-01 | Phase 9 | Pending |
 | SRC-02 | Phase 10 | Pending |
 | SRC-03 | Phase 10 | Pending |
