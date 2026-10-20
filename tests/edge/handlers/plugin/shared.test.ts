@@ -425,6 +425,8 @@ describe("parsePluginRef", () => {
     { rejectedRef: "@", sentence: 'Invalid <plugin>@<marketplace> ref: "@".' },
     { rejectedRef: "alpha@", sentence: 'Invalid <plugin>@<marketplace> ref: "alpha@".' },
     { rejectedRef: "@official", sentence: 'Invalid <plugin>@<marketplace> ref: "@official".' },
+    { rejectedRef: " @official", sentence: 'Invalid <plugin>@<marketplace> ref: " @official".' },
+    { rejectedRef: "alpha@  ", sentence: 'Invalid <plugin>@<marketplace> ref: "alpha@  ".' },
     { rejectedRef: "alpha", sentence: 'Invalid <plugin>@<marketplace> ref: "alpha".' },
   ]) {
     test(`rejects the ref "${rejectedRef}" with "${sentence}" (PI-1, USE-07)`, () => {
@@ -489,6 +491,8 @@ describe("parsePluginTarget", () => {
     { rejectedRef: "@   ", sentence: "Marketplace name must not be empty." },
     { rejectedRef: "", sentence: "Plugin name must not be empty." },
     { rejectedRef: "alpha@", sentence: 'Invalid <plugin>@<marketplace> ref: "alpha@".' },
+    { rejectedRef: "alpha@  ", sentence: 'Invalid <plugin>@<marketplace> ref: "alpha@  ".' },
+    { rejectedRef: " @official", sentence: 'Invalid <plugin>@<marketplace> ref: " @official".' },
   ]) {
     test(`rejects the target "${rejectedRef}" with "${sentence}" (PI-1, USE-07)`, () => {
       // arrange

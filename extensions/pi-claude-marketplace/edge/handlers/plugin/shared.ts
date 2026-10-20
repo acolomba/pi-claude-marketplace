@@ -28,21 +28,24 @@ export interface ParsedPluginMarketplaceRef extends PluginMarketplaceRef {
 
 function splitPluginMarketplaceRef(ref: string): PluginMarketplaceRef | undefined {
   const atIdx = ref.indexOf("@");
-  if (atIdx <= 0 || atIdx === ref.length - 1) {
+  if (atIdx < 0) {
     return undefined;
   }
 
-  return {
-    plugin: ref.slice(0, atIdx),
-    marketplace: ref.slice(atIdx + 1),
-  };
+  const plugin = ref.slice(0, atIdx);
+  const marketplace = ref.slice(atIdx + 1);
+  if (plugin.trim() === "" || marketplace.trim() === "") {
+    return undefined;
+  }
+
+  return { plugin, marketplace };
 }
 
 /**
  * Splits the one `<plugin>@<marketplace>` reference of a verb that takes no
  * other form, or notifies the usage error and returns `undefined`. A reference
  * that is empty or blank as a whole names the plugin name; any other reference
- * that does not split is invalid (PI-1, USE-07).
+ * that does not split into two non-blank halves is invalid (PI-1, USE-07).
  */
 export function parsePluginRef(
   ref: string,
