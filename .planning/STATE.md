@@ -5,16 +5,16 @@ milestone_name: Marketplace Behavioral Tests
 current_phase: 07
 current_phase_name: Marketplace Autoupdate
 status: executing
-stopped_at: Phase 7 context gathered
-last_updated: "2026-10-20T03:50:55.639Z"
+stopped_at: Completed 07-01-PLAN.md
+last_updated: "2026-10-20T04:04:00.992Z"
 last_activity: 2026-10-19
 last_activity_desc: Phase 07 execution started
-state_head: 73e21f6736f2876be87a4af3287812c3ba2c15c1
+state_head: f377b98a65e67fc84f2bafebc88c1b0438aa1056
 progress:
   total_phases: 14
   completed_phases: 10
   total_plans: 62
-  completed_plans: 58
+  completed_plans: 59
   percent: 71
 ---
 
@@ -32,8 +32,8 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 07 (Marketplace Autoupdate) — EXECUTING
-Plan: 1 of 4
-Status: Executing Phase 07
+Plan: 2 of 4
+Status: Ready to execute
 Last activity: 2026-10-19 — Phase 07 execution started
 
 Progress: [███████░░░] 71%
@@ -183,9 +183,9 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-20T02:23:28.806Z
-**Stopped at:** Phase 7 context gathered
-**Resume file:** .planning/phases/07-marketplace-autoupdate/07-CONTEXT.md
+**Last session:** 2026-10-20T04:03:56.679Z
+**Stopped at:** Completed 07-01-PLAN.md
+**Resume file:** None
 
 **Main merge (2026-10-11, quick task 261011-bsm):** `origin/main` at
 `94160614` (#248, and #250, the mcp-4 milestone released as 0.20.0) is merged
@@ -332,6 +332,7 @@ archived milestone artifacts.
 | Phase 03.4 P08 | 36min | 3 tasks | 56 files |
 | Phase 03.4 P10 | 40min | 2 tasks | 20 files |
 | Phase 06 P02 | 50 min | 3 tasks | 6 files |
+| Phase 07 P01 | 10 min | 2 tasks | 8 files |
 
 ## Decisions
 
@@ -459,6 +460,7 @@ archived milestone artifacts.
 - [Phase 06]: Use bare marketplace update for one-record behavioral checks because only the plural result includes the required tally. — The named form omits tally fields.
 - [Phase 06]: Derive destructive fixture targets from PublishedMarketplace and reject filesystem-root or out-of-root targets. — Missing-source scenarios must not accept arbitrary deletion paths.
 - [Phase 06]: Assert the prior failed refresh inside Given for repair scenarios. — The action under test remains after all setup and runs in the same Pi process.
+- [Phase 07]: D-08 landed: an unscoped autoupdate/noautoupdate miss reports marketplace-not-added with no scope; autoupdate joins OPS_BARE and the catalog byte total is 46_623
 
 ### mcp-4 decisions
 

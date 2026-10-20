@@ -135,7 +135,7 @@ A scope (user or project) has two layers: shared (`claude-plugins.json`) and loc
 - [ ] **AU-04**: `noautoupdate` turns autoupdate off
 - [ ] **AU-05**: The setting shows in `list` and `info` and survives a new session
 - [ ] **AU-06**: Without a name, the change applies to every marketplace of both scopes
-- [ ] **AU-07**: Without a name and with nothing added, the result is empty
+- [x] **AU-07**: Without a name and with nothing added, the result is empty
 - [ ] **AU-08**: A name neither scope holds fails as `marketplace not added`
 - [ ] **AU-09**: Without `--scope`, `autoupdate <name>` for a name both scopes hold changes both (pins today's behavior)
 
@@ -261,7 +261,7 @@ A scope (user or project) has two layers: shared (`claude-plugins.json`) and loc
 | AU-04 | Phase 7 | Pending |
 | AU-05 | Phase 7 | Pending |
 | AU-06 | Phase 7 | Pending |
-| AU-07 | Phase 7 | Pending |
+| AU-07 | Phase 7 | Complete |
 | AU-08 | Phase 7 | Pending |
 | AU-09 | Phase 7 | Pending |
 | USE-01 | Phase 8 | Pending |
