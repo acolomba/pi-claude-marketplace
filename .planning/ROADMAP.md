@@ -459,7 +459,23 @@ Plans:
 2. `marketplace` with no subcommand, or an unknown one, shows the usage with a reason, and `add`, `remove`, and `info` without their argument fail as `Missing required argument.`.
 3. Surplus arguments, unknown flags (including `--local` on `list`, `info`, and `update`), a bad or missing `--scope` value in any position, and an explicitly empty optional argument (`update ""`, `autoupdate ""`) are each rejected.
 
-**Plans:** TBD
+**Plans:** 5 plans
+
+Plans:
+**Wave 1**
+- [ ] 08-01-PLAN.md — Tracer: pin every marketplace rejection that passes today (missing, surplus, unknown flag, bad and missing --scope in every position)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 08-02-PLAN.md — One signature table builds the marketplace help and every usage line; the help shows --local (D-01 red/green, D-02); help marketplace and the bare and unknown subcommand scenarios
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 08-03-PLAN.md — An empty argument names its field in the shared parser, on the marketplace verbs and uninstall, enable, and disable (D-05 red/green)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 08-04-PLAN.md — An empty install or info reference and an empty plugin list name are named (D-06 red/green); partly malformed references keep their message
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [ ] 08-05-PLAN.md — Empty update, fetch, and reinstall targets through one shared target parser (D-06 red/green); CHANGELOG, cucumber review, and the phase gate
 
 ### Phase 9: URL Source Kind and HTTPS Git Stand-In
 
@@ -509,7 +525,7 @@ Plans:
 | 5. Marketplace Info | 3/3 | Complete    | 2026-10-18 |
 | 6. Marketplace Update and C-10 Fix | 4/4 | Complete    | 2026-10-19 |
 | 7. Marketplace Autoupdate | 4/4 | Complete    | 2026-10-20 |
-| 8. Marketplace Help and Usage Errors | 0/TBD | Not started | - |
+| 8. Marketplace Help and Usage Errors | 0/5 | Not started | - |
 | 9. URL Source Kind and HTTPS Git Stand-In | 0/TBD | Not started | - |
 | 10. GitHub Source Kind and Suite Close | 0/TBD | Not started | - |
 
