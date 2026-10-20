@@ -458,6 +458,40 @@ test("reports an empty implicit two-scope inventory without creating files", asy
   });
 });
 
+test("AU-06: an unscoped unnamed flip reports only the scope that holds a marketplace and creates nothing in the other", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const projectLocations = locationsFor("project", cwd);
+    const userLocations = locationsFor("user", cwd);
+    await saveMarketplaces(userLocations, [marketplaceRecord("only", "user", cwd)]);
+    await writeConfig(userLocations, {
+      schemaVersion: 1,
+      marketplaces: { only: { source: "./src" } },
+    });
+    const boundary = notificationBoundary({
+      message: "● only [user] <autoupdate>\n\nMarketplace autoupdate: 1 success",
+    });
+
+    // act
+    await setMarketplaceAutoupdate({
+      ctx: boundary.ctx,
+      run: boundary.run,
+      enable: true,
+      cwd,
+    });
+
+    // assert
+    assert.equal(
+      await readFile(userLocations.baseConfigJsonPath, "utf8"),
+      '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "only": {\n      "source": "./src",\n      "autoupdate": true\n    }\n  },\n  "plugins": {}\n}\n',
+    );
+    assert.equal(await readOptionalBytes(projectLocations.stateJsonPath), undefined);
+    assert.equal(await readOptionalBytes(projectLocations.baseConfigJsonPath), undefined);
+    verify(boundary.ctx);
+    verify(boundary.ui);
+  });
+});
+
 test("finds a named user marketplace after an implicit project miss", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
@@ -540,6 +574,54 @@ test("reports a named marketplace absent from an explicit user scope", async () 
     verify(boundary.ui);
   });
 });
+
+const scopedMissCases = [
+  {
+    holding: "project",
+    requested: "user",
+    expectedMessage:
+      "A marketplace operation has failed.\n\n⊘ mp [user] (failed) {marketplace not added to user scope}",
+  },
+  {
+    holding: "user",
+    requested: "project",
+    expectedMessage:
+      "A marketplace operation has failed.\n\n⊘ mp [project] (failed) {marketplace not added to project scope}",
+  },
+] as const;
+
+for (const { holding, requested, expectedMessage } of scopedMissCases) {
+  test(`SCOPE-01: a flip with --scope ${requested} while only the ${holding} scope records the marketplace reports it not added to the ${requested} scope`, async () => {
+    await withHermeticHome(async ({ cwd }) => {
+      // arrange
+      const holdingLocations = locationsFor(holding, cwd);
+      const requestedLocations = locationsFor(requested, cwd);
+      await saveMarketplaces(holdingLocations, [marketplaceRecord("mp", holding, cwd)]);
+      const holdingBytes = await scopeBytes(holdingLocations);
+      const boundary = notificationBoundary({ message: expectedMessage, severity: "error" });
+
+      // act
+      await setMarketplaceAutoupdate({
+        ctx: boundary.ctx,
+        run: boundary.run,
+        name: "mp",
+        enable: true,
+        scope: requested,
+        cwd,
+      });
+
+      // assert
+      assert.deepEqual(await scopeBytes(holdingLocations), holdingBytes);
+      assert.deepEqual(await scopeBytes(requestedLocations), {
+        state: undefined,
+        base: undefined,
+        local: undefined,
+      });
+      verify(boundary.ctx);
+      verify(boundary.ui);
+    });
+  });
+}
 
 test("LAYER-02: a local flip writes an explicit value into a local entry that has none", async () => {
   await withHermeticHome(async ({ cwd }) => {

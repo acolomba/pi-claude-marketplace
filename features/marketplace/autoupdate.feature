@@ -212,3 +212,37 @@ Feature: Marketplace autoupdate
       | autoupdate   | tools |
       | noautoupdate | tools |
       | autoupdate   | 工具  |
+
+  Scenario Outline: A flip with a scope that does not hold the marketplace reports it not added to that scope
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" is added to the <added scope> scope
+    When the user runs "/claude:plugin marketplace <verb> tools --scope <requested scope>"
+    Then the result has these fields:
+      | kind         | marketplace-not-added               |
+      | severity     | error                               |
+      | needs reload | false                               |
+      | summary      | A marketplace operation has failed. |
+      | name         | tools                               |
+      | scope        | <requested scope>                   |
+      | reasons      | <reasons>                           |
+    Then the "claude-plugins.json" file of the <added scope> scope declares these marketplaces:
+      | name  | source                    |
+      | tools | {home}/marketplaces/tools |
+    Then the "claude-plugins.json" file of the <requested scope> scope does not exist
+
+    Examples:
+      | verb         | added scope | requested scope | reasons                                |
+      | autoupdate   | project     | user            | marketplace not added to user scope    |
+      | noautoupdate | project     | user            | marketplace not added to user scope    |
+      | autoupdate   | user        | project         | marketplace not added to project scope |
+      | noautoupdate | user        | project         | marketplace not added to project scope |
+
+  Scenario: Enabling autoupdate for every marketplace with none added reports an empty result
+    When the user runs "/claude:plugin marketplace autoupdate"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists no marketplaces
+    Then the "claude-plugins.json" file of the project scope does not exist
+    Then the "claude-plugins.json" file of the user scope does not exist
