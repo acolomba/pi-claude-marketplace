@@ -5,11 +5,11 @@ milestone_name: Marketplace Behavioral Tests
 current_phase: 9
 current_phase_name: URL Source Kind and HTTPS Git Stand-In
 status: verifying
-stopped_at: Phase 8 complete, Phase 9 ready for discussion
-last_updated: "2026-10-20T14:14:00.761Z"
+stopped_at: Phase 9 context gathered
+last_updated: "2026-10-20T19:36:02.505Z"
 last_activity: 2026-10-20
 last_activity_desc: Phase 8 complete, transitioned to Phase 9
-state_head: a393beada96c2a9ec8399f1697829e5331652153
+state_head: b5cba747f0a33c5ba94770c43484c6704d59b834
 progress:
   total_phases: 14
   completed_phases: 12
@@ -183,9 +183,9 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-20
-**Stopped at:** Phase 8 complete, Phase 9 ready for discussion
-**Resume file:** None
+**Last session:** 2026-10-20T19:35:57.323Z
+**Stopped at:** Phase 9 context gathered
+**Resume file:** .planning/phases/09-url-source-kind-and-https-git-stand-in/09-CONTEXT.md
 
 **Phase 8 closed (2026-10-20):** all five plans executed, Nyquist-compliant,
 `threats_open: 0`, the code review fix loop closed 7 of 7 findings, and
