@@ -3,11 +3,12 @@
 // The module is one factory returning the shared single-name marketplace
 // handler, so its whole promise is three things: the usage block it supplies,
 // the delegate it supplies, and the notification run it forwards. The parse
-// itself, the collapse of the duplicated usage block,
-// the surplus-argument rejection, and the options-bag shape belong to
+// itself, the collapse of the duplicated usage block, the surplus-argument
+// rejection, and the options-bag shape belong to
 // `tests/edge/handlers/marketplace/shared.test.ts`, which drives
-// `makeSingleNameMarketplaceHandler` with an injected collaborator (D-116-07). Nothing here restates that mechanism; what is asserted is WHICH
-// constant and WHICH workflow this factory wires into it, observed end to end.
+// `makeSingleNameMarketplaceHandler` with an injected collaborator (D-116-07).
+// Nothing here restates that mechanism; what is asserted is WHICH constant and
+// WHICH workflow this factory wires into it, observed end to end.
 //
 // D-116-05 (O3) places this handler in Group C: `getMarketplaceInfo` is reached
 // by direct import at the factory call site with no injection point, so a
