@@ -433,7 +433,20 @@ Plans:
 3. The setting shows in `list` and `info` and survives a new session.
 4. Without a name, the change applies to every marketplace of both scopes, or gives an empty result when none is added. A name neither scope holds fails as `marketplace not added`, and `autoupdate <name>` without `--scope` changes both scopes that hold the name.
 
-**Plans:** TBD
+**Plans:** 4 plans
+
+Plans:
+**Wave 1**
+- [ ] 07-01-PLAN.md — Unscoped misses without a scope (D-08 red/green), scoped misses in both directions, and the empty result
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 07-02-PLAN.md — A local entry without a value inherits it (D-02 to D-05 red/green) and explicit-value pins
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 07-03-PLAN.md — Raw-text config steps, the broken-base scenario (D-05, D-09), and the docs and CHANGELOG
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 07-04-PLAN.md — Named, default, persistence, and both-scope scenarios, then the phase gate
 
 ### Phase 8: Marketplace Help and Usage Errors
 
@@ -495,7 +508,7 @@ Plans:
 | 4. Marketplace Remove and List | 4/4 | Complete    | 2026-10-18 |
 | 5. Marketplace Info | 3/3 | Complete    | 2026-10-18 |
 | 6. Marketplace Update and C-10 Fix | 4/4 | Complete    | 2026-10-19 |
-| 7. Marketplace Autoupdate | 0/TBD | Not started | - |
+| 7. Marketplace Autoupdate | 0/4 | Not started | - |
 | 8. Marketplace Help and Usage Errors | 0/TBD | Not started | - |
 | 9. URL Source Kind and HTTPS Git Stand-In | 0/TBD | Not started | - |
 | 10. GitHub Source Kind and Suite Close | 0/TBD | Not started | - |
