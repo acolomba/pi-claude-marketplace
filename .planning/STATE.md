@@ -5,16 +5,16 @@ milestone_name: Marketplace Behavioral Tests
 current_phase: 8
 current_phase_name: Marketplace Help and Usage Errors
 status: executing
-stopped_at: Completed 08-03-PLAN.md
-last_updated: "2026-10-20T12:56:48.198Z"
+stopped_at: Completed 08-04-PLAN.md
+last_updated: "2026-10-20T13:10:50.810Z"
 last_activity: 2026-10-20
 last_activity_desc: Phase 8 execution started
-state_head: 4ab7100c1d27d1c15c915fdf1ef00c8e2bdef450
+state_head: 9efd9b0a626374f4d6152a2a9faf1349ce6e7b89
 progress:
   total_phases: 14
   completed_phases: 11
   total_plans: 67
-  completed_plans: 65
+  completed_plans: 66
   percent: 79
 ---
 
@@ -32,7 +32,7 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 8 (Marketplace Help and Usage Errors) — EXECUTING
-Plan: 4 of 5
+Plan: 5 of 5
 Status: Ready to execute
 Last activity: 2026-10-20 — Phase 8 execution started
 
@@ -183,8 +183,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-20T12:56:43.171Z
-**Stopped at:** Completed 08-03-PLAN.md
+**Last session:** 2026-10-20T13:10:45.721Z
+**Stopped at:** Completed 08-04-PLAN.md
 **Resume file:** None
 
 **Pause (2026-10-20, operator's choice, not a block):** the
@@ -361,6 +361,7 @@ archived milestone artifacts.
 | Phase 08 P01 | 4 min | 2 tasks | 1 files |
 | Phase 08 P02 | 11 min | 3 tasks | 12 files |
 | Phase 08 P03 | 12 min | 2 tasks | 20 files |
+| Phase 08 P04 | 9 min | 2 tasks | 10 files |
 
 ## Decisions
 
@@ -498,6 +499,7 @@ archived milestone artifacts.
 - [Phase 08]: Signature table in edge/router.ts builds both the marketplace help and each verb's usage line; handlers value-import marketplaceUsage
 - [Phase 08]: Marketplace help alias column is computed from the rows; the list line gains 10 spaces to keep (alias: ls) under (alias: rm)
 - [Phase 08]: PositionalSpec.label is required, so every parseCommandArgs call site names its field and an empty value reports <label> must not be empty. (USE-07)
+- [Phase 08]: parsePluginRef in edge/handlers/plugin/shared.ts is the one source of the empty-reference and invalid-reference messages for install, info, and the shared required-reference parser; a bare @ and other partly malformed references keep the invalid-reference message
 
 ### mcp-4 decisions
 
