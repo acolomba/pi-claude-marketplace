@@ -536,11 +536,11 @@ function scopeFailure(rows: AutoupdateFlipRow[], scope: Scope, err: unknown): Sc
 }
 
 /**
- * A named flip that changed no scope reports the first scope's refusal, or,
- * when no scope's layers declare the marketplace,
- * `(failed) {marketplace not added}` (ATTR-05). With no `--scope`, every scope
- * missed, so the bracket names the first one in SC-6 order: project, and no
- * other scope is suggested (SCOPE-01): the flip already tried it.
+ * A named flip that changed no scope reports the first scope's refusal.
+ * Otherwise it reports `(failed) {marketplace not added}` (ATTR-05). With
+ * `--scope`, the row names the requested scope and whether the other scope
+ * holds the marketplace (SCOPE-01). Without it, every scope missed, so the row
+ * names no scope, as `marketplace remove`, `info`, and `update` do (AU-08).
  */
 async function notifyNamedMiss(
   opts: AutoupdateOptions,
@@ -558,11 +558,10 @@ async function notifyNamedMiss(
     return;
   }
 
-  const missScope = opts.scope ?? "project";
   notify(opts.ctx, opts.run, {
     kind: "marketplace-not-added",
     name,
-    scope: missScope,
+    ...(opts.scope !== undefined && { scope: opts.scope }),
     ...(await crossScopeFlag({ cwd: opts.cwd, marketplace: name, scope: opts.scope })),
   });
 }

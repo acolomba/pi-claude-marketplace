@@ -4482,14 +4482,14 @@ A marketplace operation has failed.
 
 ### Failure -- missing marketplace (bare form, absent from both scopes)
 
-Triggered when `marketplace autoupdate <name>` (no `--scope`) targets a name absent from EVERY iterated scope (ATTR-05 / S2). The former byte form was a reason-LESS bare `(failed)` row; it is superseded by the SAME standalone `MarketplaceNotAddedMessage` `{marketplace not added}` variant. The bare form carries `first.scope` -- the scope where the first not-found was observed; SC-6 iterates project-before-user, so the bracket is `[project]`. Severity `error`; no reload-hint. Two-block form: the `A marketplace operation has failed.` summary on the host `Error:` label line, then the bare detail row as its own block (GRAM-01 / GRAM-02).
+Triggered when `marketplace autoupdate <name>` (no `--scope`) targets a name absent from EVERY iterated scope (ATTR-05 / S2, AU-08). The miss routes to the SAME standalone `MarketplaceNotAddedMessage` `{marketplace not added}` variant with no `scope`, so the renderer drops the `[scope]` token, as the bare forms of `marketplace remove`, `marketplace info`, and `marketplace update` do. Severity `error`; no reload-hint. Two-block form: the `A marketplace operation has failed.` summary on the host `Error:` label line, then the bare detail row as its own block (GRAM-01 / GRAM-02).
 
 <!-- catalog-state: autoupdate-missing-not-added-bare -->
 
 ```text
 A marketplace operation has failed.
 
-⊘ missing-mp [project] (failed) {marketplace not added}
+⊘ missing-mp (failed) {marketplace not added}
 ```
 
 The blocks above span two ladders. The severity ladder runs fresh → info, benign skipped → info, failed (and the `{marketplace not added}` precondition miss) → error (per D-16-11 + Phase 17.1's mp-level skipped extension, refined by UXG-02 / D-28-06: the two idempotent autoupdate no-ops carry benign reasons -- `already autoupdate` / `already no autoupdate` -- so they compute info, not warning; an mp-level `skipped` with non-benign or missing reasons would still route to warning). The reload-hint ladder is uniform here: every autoupdate flag flip suppresses the trailer (per SNM-33 / D-22-01 / D-22-03). The autoupdate flag lives on a marketplace record, not on any Pi-visible resource, so neither a fresh flip nor an idempotent no-op nor a missing-marketplace `{marketplace not added}` failure contributes to "/reload to pick up changes" -- only a plugin row state change does.

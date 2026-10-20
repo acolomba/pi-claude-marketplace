@@ -87,16 +87,14 @@ export const MARKETPLACE_AUTOUPDATE_FIXTURES: FixtureMap = {
       },
     },
 
-    // ATTR-05 / S2: the bare form absent from EVERY iterated scope routes to
-    // the SAME standalone variant carrying `first.scope` (project-before-user
-    // SC-6 order -> `[project]`).
+    // ATTR-05 / S2 / AU-08: the bare form absent from both scopes routes to
+    // the SAME standalone variant with no scope.
     "autoupdate-missing-not-added-bare": {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",
       message: {
         kind: "marketplace-not-added",
         name: "missing-mp",
-        scope: "project",
       },
     },
   },

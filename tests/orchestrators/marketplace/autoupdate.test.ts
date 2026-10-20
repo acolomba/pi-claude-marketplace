@@ -492,12 +492,12 @@ test("finds a named user marketplace after an implicit project miss", async () =
   });
 });
 
-test("reports a named marketplace absent from both implicit scopes", async () => {
+test("AU-08: reports a named marketplace absent from both implicit scopes", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
     const boundary = notificationBoundary({
       message:
-        "A marketplace operation has failed.\n\n⊘ missing-mp [project] (failed) {marketplace not added}",
+        "A marketplace operation has failed.\n\n⊘ missing-mp (failed) {marketplace not added}",
       severity: "error",
     });
 
@@ -1189,14 +1189,13 @@ for (const { label, declaringLayer, local, expectedMessage } of layerRefusalCase
   });
 }
 
-test("SCOPE-01: an unscoped flip both scopes miss names no other scope, even one that records the marketplace", async () => {
+test("SCOPE-01: an unscoped flip both scopes miss names no scope, even when one scope records the marketplace", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
     const userLocations = locationsFor("user", cwd);
     await saveMarketplaces(userLocations, [marketplaceRecord("mp", "user", cwd)]);
     const boundary = notificationBoundary({
-      message:
-        "A marketplace operation has failed.\n\n⊘ mp [project] (failed) {marketplace not added}",
+      message: "A marketplace operation has failed.\n\n⊘ mp (failed) {marketplace not added}",
       severity: "error",
     });
 

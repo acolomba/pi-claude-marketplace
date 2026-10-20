@@ -190,3 +190,25 @@ Feature: Marketplace autoupdate
       | name   | source                     | autoupdate |
       | tools  | {home}/marketplaces/tools  | true       |
       | extras | {home}/marketplaces/extras | true       |
+
+  Scenario Outline: A flip of a marketplace neither scope holds fails as not added without a scope
+    Given the marketplace "other" is published as a dir source
+    Given the marketplace "other" is added to the project scope
+    When the user runs "/claude:plugin marketplace <verb> <name>"
+    Then the result has these fields:
+      | kind         | marketplace-not-added               |
+      | severity     | error                               |
+      | needs reload | false                               |
+      | summary      | A marketplace operation has failed. |
+      | name         | <name>                              |
+      | reasons      | marketplace not added               |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name  | source                    |
+      | other | {home}/marketplaces/other |
+    Then the "claude-plugins.json" file of the user scope does not exist
+
+    Examples:
+      | verb         | name  |
+      | autoupdate   | tools |
+      | noautoupdate | tools |
+      | autoupdate   | 工具  |
