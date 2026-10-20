@@ -5,16 +5,16 @@ milestone_name: Marketplace Behavioral Tests
 current_phase: 8
 current_phase_name: Marketplace Help and Usage Errors
 status: executing
-stopped_at: Phase 8 context gathered
-last_updated: "2026-10-20T12:03:58.491Z"
+stopped_at: Completed 08-01-PLAN.md
+last_updated: "2026-10-20T12:12:07.168Z"
 last_activity: 2026-10-20
 last_activity_desc: Phase 8 execution started
-state_head: f6ddd30776b1b8915e11a95f7e0004e9da9b0bc6
+state_head: 4a59da1030d514a6d04e0a6bf4658835588022f7
 progress:
   total_phases: 14
   completed_phases: 11
   total_plans: 67
-  completed_plans: 62
+  completed_plans: 63
   percent: 79
 ---
 
@@ -32,8 +32,8 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 8 (Marketplace Help and Usage Errors) — EXECUTING
-Plan: 1 of 5
-Status: Executing Phase 8
+Plan: 2 of 5
+Status: Ready to execute
 Last activity: 2026-10-20 — Phase 8 execution started
 
 Progress: [████████░░] 79%
@@ -183,9 +183,9 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-20T10:15:40.833Z
-**Stopped at:** Phase 8 context gathered
-**Resume file:** .planning/phases/08-marketplace-help-and-usage-errors/08-CONTEXT.md
+**Last session:** 2026-10-20T12:12:02.602Z
+**Stopped at:** Completed 08-01-PLAN.md
+**Resume file:** None
 
 **Main merge (2026-10-11, quick task 261011-bsm):** `origin/main` at
 `94160614` (#248, and #250, the mcp-4 milestone released as 0.20.0) is merged
@@ -336,6 +336,7 @@ archived milestone artifacts.
 | Phase 07 P02 | 11 min | 2 tasks | 6 files |
 | Phase 07 P03 | 7 min | 2 tasks | 9 files |
 | Phase 07 P04 | 7min | 3 tasks | 1 files |
+| Phase 08 P01 | 4 min | 2 tasks | 1 files |
 
 ## Decisions
 
@@ -468,6 +469,8 @@ archived milestone artifacts.
 - [Phase 07]: D-09 allows two layer-config writers (plugins member and whole text); a raw-text read step is an ordinary read step
 - [Phase 07]: Docs say a nameless flip writes a local entry only when the value that applies to it still differs, since an enable also writes a valueless local-only entry
 - [Phase 07]: No step, library, support, production, or cucumber.json change: every step the AU-01..AU-09 pins use already existed, and each pin passed on first run against the final code.
+- [Phase 08]: Usage-error Outlines name columns arguments, message, value, and usage only, so Gherkin never rewrites <name> or <source> inside a usage cell
+- [Phase 08]: Marketplace usage-error rows carry one fault each and no rm or ls alias rows; combined-fault precedence by parser path stays unpinned
 
 ### mcp-4 decisions
 
