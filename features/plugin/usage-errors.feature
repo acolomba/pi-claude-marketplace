@@ -30,3 +30,21 @@ Feature: Plugin usage errors
       | needs reload | false                                                                                                                                 |
       | message      | Marketplace name must not be empty.                                                                                                   |
       | usage        | Usage: /claude:plugin list [<marketplace>] [--installed] [--available] [--unavailable] [--partial] [--remote] [--scope user\|project] |
+
+  Scenario Outline: A partly malformed plugin reference keeps the invalid reference message
+    When the user runs "/claude:plugin <arguments>"
+    Then the result has these fields:
+      | kind         | usage-error |
+      | severity     | error       |
+      | needs reload | false       |
+      | message      | <message>   |
+      | usage        | <usage>     |
+
+    Examples:
+      | arguments      | message                                     | usage                                                                                                                               |
+      | install @      | Invalid <plugin>@<marketplace> ref: "@".    | Usage: /claude:plugin install <plugin>@<marketplace> [--scope user\|project] [--map-model] [--partial] [--local]                    |
+      | info @         | Invalid <plugin>@<marketplace> ref: "@".    | Usage: /claude:plugin info <plugin>@<marketplace> [--fetch] [--scope user\|project]                                                 |
+      | uninstall @    | Invalid <plugin>@<marketplace> ref: "@".    | Usage: /claude:plugin uninstall <plugin>@<marketplace> [--scope user\|project] [--keep-data] [--local] [--prune]                    |
+      | update foo@    | Invalid <plugin>@<marketplace> ref: "foo@". | Usage: /claude:plugin update [<plugin>@<marketplace> \| @<marketplace>] [--scope user\|project] [--map-model] [--partial] [--local] |
+      | fetch foo@     | Invalid <plugin>@<marketplace> ref: "foo@". | Usage: /claude:plugin fetch [<plugin>@<marketplace> \| @<marketplace>] [--scope user\|project]                                      |
+      | reinstall foo@ | Invalid <plugin>@<marketplace> ref: "foo@". | Usage: /claude:plugin reinstall [<plugin>@<marketplace> \| @<marketplace>] [--scope user\|project] [--local]                        |
