@@ -181,6 +181,26 @@ Feature: Marketplace autoupdate
       | name  | source                    | autoupdate |
       | tools | {home}/marketplaces/tools | true       |
 
+  Scenario: Enabling autoupdate without a scope changes both scopes that hold the marketplace
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" is added to the project scope
+    Given the marketplace "tools" is added to the user scope
+    When the user runs "/claude:plugin marketplace autoupdate tools"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these marketplaces:
+      | name  | scope   | status             |
+      | tools | project | autoupdate enabled |
+      | tools | user    | autoupdate enabled |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name  | source                    | autoupdate |
+      | tools | {home}/marketplaces/tools | true       |
+    Then the "claude-plugins.json" file of the user scope declares these marketplaces:
+      | name  | source                    | autoupdate |
+      | tools | {home}/marketplaces/tools | true       |
+
   Scenario: A local declaration without autoupdate takes the setting from the declaration in the base layer
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" is added to the project scope
