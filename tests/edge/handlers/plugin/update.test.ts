@@ -987,7 +987,7 @@ for (const { args, expectedMessage, label, summary } of [
     args: MARKETPLACE_PREFIX,
     label: "ref-lone-separator",
     summary: "a lone separator with no marketplace after it",
-    expectedMessage: `Invalid <plugin>@<marketplace> ref: "@".\n\n${USAGE}`,
+    expectedMessage: `Marketplace name must not be empty.\n\n${USAGE}`,
   },
   {
     args: "one@",
@@ -995,8 +995,14 @@ for (const { args, expectedMessage, label, summary } of [
     summary: "a reference ending at the separator",
     expectedMessage: `Invalid <plugin>@<marketplace> ref: "one@".\n\n${USAGE}`,
   },
+  {
+    args: '""',
+    label: "ref-empty",
+    summary: "an empty reference",
+    expectedMessage: `Plugin name must not be empty.\n\n${USAGE}`,
+  },
 ]) {
-  test(`names ${summary} verbatim and never reaches the update workflow (PI-1)`, async (t) => {
+  test(`rejects ${summary} with its usage error and never reaches the update workflow (PI-1, USE-07)`, async (t) => {
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);

@@ -26,7 +26,7 @@ export interface ParsedPluginMarketplaceRef extends PluginMarketplaceRef {
   readonly scope?: Scope;
 }
 
-export function splitPluginMarketplaceRef(ref: string): PluginMarketplaceRef | undefined {
+function splitPluginMarketplaceRef(ref: string): PluginMarketplaceRef | undefined {
   const atIdx = ref.indexOf("@");
   if (atIdx <= 0 || atIdx === ref.length - 1) {
     return undefined;
@@ -64,6 +64,41 @@ export function parsePluginRef(
   }
 
   return split;
+}
+
+export type PluginCommandTarget =
+  | { readonly kind: "all" }
+  | { readonly kind: "marketplace"; readonly marketplace: string }
+  | { readonly kind: "plugin"; readonly plugin: string; readonly marketplace: string };
+
+/**
+ * Maps the optional target of `update`, `fetch`, and `reinstall`, or notifies
+ * the usage error and returns `undefined`. No reference is every plugin,
+ * `@<marketplace>` one marketplace, and `<plugin>@<marketplace>` one plugin. An
+ * `@` with an empty or blank name names the marketplace name (D-81-01, USE-07).
+ */
+export function parsePluginTarget(
+  ref: string | undefined,
+  ctx: ExtensionCommandContext,
+  run: NotificationRun,
+  usage: string,
+): PluginCommandTarget | undefined {
+  if (ref === undefined) {
+    return { kind: "all" };
+  }
+
+  if (ref.startsWith("@")) {
+    const marketplace = ref.slice(1);
+    if (marketplace.trim() === "") {
+      notifyUsageError(ctx, run, { message: "Marketplace name must not be empty.", usage });
+      return undefined;
+    }
+
+    return { kind: "marketplace", marketplace };
+  }
+
+  const split = parsePluginRef(ref, ctx, run, usage);
+  return split === undefined ? undefined : { kind: "plugin", ...split };
 }
 
 interface ParsedPositionalsResult {

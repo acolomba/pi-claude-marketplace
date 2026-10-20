@@ -1,8 +1,10 @@
 // Owner for edge/handlers/plugin/fetch.ts (MOD-09).
 //
-// Target parsing is private. Successful forms are observed through the complete
-// scoped fetch notification; rejected forms retain their exact sentence and
-// severity and prove that validation precedes every workflow interaction.
+// The shared `parsePluginTarget`, which shared.test.ts owns, maps the target, so
+// this file observes the forms only through the notifications. Successful forms
+// are observed through the complete scoped fetch notification; rejected forms
+// retain their exact sentence and severity and prove that validation precedes
+// every workflow interaction.
 //
 // D-81-01 gives the three accepted positional shapes and the three target forms
 // they select: no positional yields the all form, `@<marketplace>` yields the
@@ -153,7 +155,7 @@ for (const { args, expectedMessage, summary } of [
     args: "@",
     summary: "a lone separator with no marketplace after it",
     expectedMessage:
-      'Invalid <plugin>@<marketplace> ref: "@".\n\nUsage: /claude:plugin fetch [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]',
+      "Marketplace name must not be empty.\n\nUsage: /claude:plugin fetch [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]",
   },
   {
     args: "foo@",
@@ -161,8 +163,14 @@ for (const { args, expectedMessage, summary } of [
     expectedMessage:
       'Invalid <plugin>@<marketplace> ref: "foo@".\n\nUsage: /claude:plugin fetch [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]',
   },
+  {
+    args: '""',
+    summary: "an empty reference",
+    expectedMessage:
+      "Plugin name must not be empty.\n\nUsage: /claude:plugin fetch [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]",
+  },
 ]) {
-  test(`names ${summary} verbatim and returns no target (FTCH-01)`, async (t) => {
+  test(`rejects ${summary} with its usage error and returns no target (FTCH-01, USE-07)`, async (t) => {
     // arrange
     const workspace = await createHermeticWorkspace(t, "validation");
     await seedBothScopes(workspace);
