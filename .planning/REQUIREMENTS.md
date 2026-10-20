@@ -147,7 +147,7 @@ A scope (user or project) has two layers: shared (`claude-plugins.json`) and loc
 - [x] **USE-04**: Surplus arguments are rejected
 - [x] **USE-05**: Unknown flags are rejected, including `--local` on `list`, `info`, and `update`
 - [x] **USE-06**: A bad or missing `--scope` value is rejected in any position
-- [ ] **USE-07**: An explicitly empty optional argument (`update ""`, `autoupdate ""`) is rejected
+- [x] **USE-07**: An explicitly empty optional argument (`update ""`, `autoupdate ""`) is rejected
 - [x] **USE-08**: `marketplace help` with an argument is rejected
 
 ### Source forms
@@ -270,7 +270,7 @@ A scope (user or project) has two layers: shared (`claude-plugins.json`) and loc
 | USE-04 | Phase 8 | Complete |
 | USE-05 | Phase 8 | Complete |
 | USE-06 | Phase 8 | Complete |
-| USE-07 | Phase 8 | Pending |
+| USE-07 | Phase 8 | Complete |
 | USE-08 | Phase 8 | Complete |
 | SRC-01 | Phase 9 | Pending |
 | SRC-02 | Phase 10 | Pending |
