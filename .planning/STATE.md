@@ -22,12 +22,12 @@ progress:
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-10-20 after marketplace-features Phase 7)
+See: `.planning/PROJECT.md` (updated 2026-10-20 after marketplace-features Phase 8)
 
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 8 — Marketplace Help and Usage Errors
+**Current focus:** Phase 9 — URL Source Kind and HTTPS Git Stand-In
 
 ## Current Position
 
@@ -183,31 +183,20 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-20T13:27:17.190Z
+**Last session:** 2026-10-20
 **Stopped at:** Phase 8 complete, Phase 9 ready for discussion
 **Resume file:** None
 
-**Pause (2026-10-20, operator's choice, not a block):** the
-`/gsd-autonomous --from 7 --interactive` run is paused at a wave boundary.
-The work lives only in the worktree
+**Phase 8 closed (2026-10-20):** all five plans executed, Nyquist-compliant,
+`threats_open: 0`, the code review fix loop closed 7 of 7 findings, and
+`npm run check` exited 0 at `a393bead`; verification passed 12/12. The work
+lives only in the worktree
 `/home/acolomba/src/pi-claude-marketplace-cucumber-behavioral-tests` on
-`features/cucumber-behavioral-tests` (HEAD `8e5dc94f`, clean, 527 commits
-ahead of `main`, 6 behind, nothing pushed); the primary checkout on `main` has
-none of this milestone's planning files. Phase 7 is complete and verified.
-Phase 8 is planned (5 plans, one per wave) and plan 08-01 is done; 08-02..08-05
-are not started. Resume with `/gsd-resume-work`, then
-`/gsd-execute-phase 8 --no-transition` from the worktree, then the autonomous
-tail for Phase 8 (code review chain if the execute-phase gate did not run it,
-`transition.md`, the STATE fix after `phase.complete`), then
-`/gsd-autonomous --from 9 --interactive`. Do not resume with
-`/gsd-autonomous --from 8`: its plan step reruns plan-phase, whose
-existing-plans check offers only add, view, or replan. Skipped on purpose:
-the execute-phase line `config-set workflow._auto_chain_active false` (never
-run config-set). Not yet run for Phase 8: the post-merge `npm run check`,
-validate-phase, secure-phase, code review, the regression gate, and the
-verifier. Debts: the codebase map is stale by 465 elements (advisory drift
-gate only); Phases 1-6 verifications are stale for the milestone audit; the
-un-numbered CHANGELOG bullets are consolidated into one at PR time.
+`features/cucumber-behavioral-tests`, nothing pushed. Next:
+`/gsd-autonomous --from 9 --interactive` from the worktree. Debts: the
+codebase map is stale by 468 elements (advisory drift gate only); Phases 1-6
+verifications are stale for the milestone audit; the un-numbered CHANGELOG
+bullets are consolidated into one at PR time.
 
 **Main merge (2026-10-11, quick task 261011-bsm):** `origin/main` at
 `94160614` (#248, and #250, the mcp-4 milestone released as 0.20.0) is merged

@@ -692,6 +692,17 @@ validated and archived in [milestones/json-output-REQUIREMENTS.md](milestones/js
 
 ### Validated
 
+- ✓ `marketplace help`, `help marketplace`, and every marketplace usage
+  rejection have scenarios that compare the whole `usage-info` or `usage-error`
+  payload: missing and surplus arguments, unknown flags, and bad or missing
+  `--scope` values in every position. The help now shows `[--local]` for
+  `add`, `remove`, `autoupdate`, and `noautoupdate`, and one signature table
+  builds the help and every marketplace usage line. An explicitly empty or
+  blank argument is rejected with `<Field> must not be empty.` on the
+  marketplace verbs and every plugin verb, and a blank half of
+  `<plugin>@<marketplace>` gets the invalid-reference message; all written
+  test-first — marketplace-features Phase 8, 2026-10-20 (USE-01..USE-08).
+
 - ✓ `marketplace autoupdate` and `noautoupdate` scenarios cover named and
   nameless flips over both scopes, the changed-first row order, the off default
   of a new marketplace for every source kind, the setting in `list` and `info`
@@ -1308,6 +1319,13 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
+
+_Last updated: 2026-10-20 after marketplace-features Phase 8 completed. All
+3 success criteria and USE-01..USE-08 pass (12/12 must-haves). The code
+review fix loop closed all 7 findings in 3 passes (2 warnings: a hand-copied
+verb list and a blank reference half; 5 info: comments and docs), with
+`open: 0`. Phase 9 (URL Source Kind and HTTPS Git Stand-In) is next. Prior
+updates follow._
 
 _Last updated: 2026-10-20 after marketplace-features Phase 7 completed. All
 4 success criteria and AU-01..AU-09 pass. The code review fix loop closed all
