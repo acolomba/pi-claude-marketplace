@@ -56,7 +56,7 @@
     {
       "number": "7",
       "name": "Marketplace Autoupdate",
-      "status": "pending"
+      "status": "in_progress"
     },
     {
       "number": "8",
@@ -79,5 +79,5 @@
     "label": "Advance to the next step",
     "reason": "Phase 11 of 14 · 71% · executing"
   },
-  "updated_at": "2026-10-20T04:03:41.276Z"
+  "updated_at": "2026-10-20T04:21:06.715Z"
 }
