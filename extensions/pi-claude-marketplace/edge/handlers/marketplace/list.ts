@@ -1,7 +1,7 @@
 // edge/handlers/marketplace/list.ts
 //
-// Thin-shim factory for
-// `/claude:plugin marketplace <list|ls> [--scope user|project]`.
+// Thin-shim factory for `marketplace list`; its usage line comes from
+// `marketplaceUsage("list")`.
 // Also reached via the `ls` alias through edge/router.ts.
 //
 // `makeMarketplaceListHandler()` returns a handler that passes the command's

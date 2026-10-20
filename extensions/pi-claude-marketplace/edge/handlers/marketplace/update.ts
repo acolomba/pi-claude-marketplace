@@ -1,7 +1,7 @@
 // edge/handlers/marketplace/update.ts
 //
-// Thin-shim handler factory for
-// `/claude:plugin marketplace update [<name>] [--scope user|project]`.
+// Thin-shim handler factory for `marketplace update`; its usage line comes
+// from `marketplaceUsage("update")`.
 //
 // Two forms via optional positional:
 //   - bare    -> updateAllMarketplaces

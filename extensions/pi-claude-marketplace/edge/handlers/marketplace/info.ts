@@ -1,7 +1,7 @@
 // edge/handlers/marketplace/info.ts
 //
-// Thin-shim handler factory for
-// `/claude:plugin marketplace info <name> [--scope user|project]`.
+// Thin-shim handler factory for `marketplace info`; its usage line comes
+// from `marketplaceUsage("info")`.
 // Argument-parsing failures route through `notifyUsageError`; the
 // orchestrator handles per-scope projection, fan-out, and the
 // `{marketplace not added}` carve-out. This shim validates the positional/scope
