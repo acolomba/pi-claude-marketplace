@@ -51,6 +51,75 @@ Feature: Marketplace autoupdate
       | name  | source                    | autoupdate |
       | tools | {home}/marketplaces/tools | false      |
 
+  Scenario Outline: A newly added marketplace has autoupdate off
+    Given the marketplace "tools" is published as a <source kind> source
+    Given the user has run "/claude:plugin marketplace add <source> --scope project"
+    When the user runs "/claude:plugin marketplace noautoupdate tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these marketplaces:
+      | name  | scope   | status  | reasons               |
+      | tools | project | skipped | already no autoupdate |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name  | source   |
+      | tools | <source> |
+
+    Examples:
+      | source kind | source                                                    |
+      | dir         | {home}/marketplaces/tools                                 |
+      | file        | {home}/marketplaces/tools/.claude-plugin/marketplace.json |
+
+    @url
+    Examples:
+      | source kind | source                            |
+      | url         | https://{git host}/acme/tools.git |
+
+    @github
+    Examples:
+      | source kind | source     |
+      | github      | acme/tools |
+
+  Scenario: An enabled autoupdate shows in the marketplace list of a new session
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin marketplace autoupdate tools --scope project"
+    Given the user has started a new pi session
+    When the user runs "/claude:plugin marketplace list"
+    Then the result has these fields:
+      | kind                | cascade          |
+      | severity            | info             |
+      | needs reload        | false            |
+      | tally label         | Marketplace list |
+      | tally failures      | 0                |
+      | tally warnings      | 0                |
+      | tally success count | 1                |
+    Then the result lists these marketplaces:
+      | name  | scope   | details autoupdate | details last updated at |
+      | tools | project | true               | {scenario time}         |
+
+  Scenario: An enabled autoupdate shows in the marketplace info of a new session
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin marketplace autoupdate tools --scope project"
+    Given the user has started a new pi session
+    When the user runs "/claude:plugin marketplace info tools --scope project"
+    Then the marketplace info result has these fields:
+      | kind                    | marketplace-info          |
+      | name                    | tools                     |
+      | scope                   | project                   |
+      | details autoupdate      | true                      |
+      | details last updated at | {scenario time}           |
+      | source kind             | path                      |
+      | source abs path         | {home}/marketplaces/tools |
+      | source url              |                           |
+      | source owner            |                           |
+      | source repo             |                           |
+      | source ref              |                           |
+      | severity                | info                      |
+      | needs reload            | false                     |
+
   Scenario: A local declaration without autoupdate takes the setting from the declaration in the base layer
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" is added to the project scope
