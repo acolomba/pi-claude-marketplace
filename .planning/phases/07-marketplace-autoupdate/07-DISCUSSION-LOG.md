@@ -70,6 +70,20 @@ Question 2: for an unscoped flip of a name neither scope holds, which form shoul
 
 ---
 
+## D-05 proof (after research)
+
+Research found that no scenario can make a config invalid, so D-05 had no cucumber coverage.
+
+| Option | Description | Selected |
+|--------|-------------|----------|
+| Integration + unit (Recommended) | A case beside the existing CFG-03 integration test, plus paired unit tests. | |
+| Unit tests only | Paired unit tests in autoupdate.test.ts only. | |
+
+**User's choice (free text):** "unit as usual and cucumber tests. everything we've discussed has been in the process of writing cucumber tests, right"
+**Notes:** Recorded as D-09. A second config-writing step writes raw layer-config text (a hand edit that breaks the file), and the steps.md rule is amended to name both writers.
+
+---
+
 ## Claude's Discretion
 
 - Scenario wording, fixtures, step boundaries, and plan split.

@@ -83,6 +83,22 @@ rows, which wait for Phases 9 and 10.
   corrected. The tests that pin the old rule are listed under Integration
   Points.
 
+- **D-09 (user, after research):** D-05 is proven the same way as the other
+  decisions: by paired unit tests as usual and by a cucumber scenario. Every
+  decision in this phase serves the cucumber suite. No step can make a config
+  invalid today, because `.agents/skills/cucumber/rules/steps.md` allows only
+  one config-writing step, the `plugins`-member writer. So this phase adds a
+  second config step. It writes the raw text of one layer config, which
+  models a hand edit that breaks the file. Its library code goes in
+  `features/lib/layer-config.ts`, and the step goes in
+  `features/step_definitions/config.steps.ts`. The steps.md rule is amended
+  to name both writers. The D-05 scenario runs a `--local` flip that needs the
+  inherited value while the base config is malformed. It expects the
+  CFG-03 `invalid manifest` failure naming `claude-plugins.json` and no
+  change to either config. This resolves Open Question 1 of
+  07-RESEARCH.md. Any gate that enforces the "only config step that writes"
+  rule (for example in `npm run check:features`) is updated with the rule.
+
 ### Not-added results
 
 - **D-07 (user):** Pin the scoped misses in both directions for both verbs.
@@ -220,6 +236,9 @@ rows, which wait for Phases 9 and 10.
 - `features/step_definitions/marketplace/info.steps.ts` and
   `features/lib/marketplace-info-fields.ts`: the info field rows, including
   autoupdate.
+- `features/lib/layer-config.ts` and the `plugins` writer step in
+  `features/step_definitions/config.steps.ts`: the pattern for the second
+  config writer of D-09.
 
 ### Established Patterns
 
