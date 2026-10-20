@@ -1,6 +1,6 @@
 Feature: Plugin usage errors
 
-  Each plugin command rejects an empty or malformed reference and shows its own usage line.
+  Each plugin command rejects an empty or malformed plugin reference or marketplace name and shows its own usage line.
   The scenarios run the real extension in a headless Pi and read its JSON results.
 
   Scenario Outline: An empty plugin reference is rejected as an empty plugin name
