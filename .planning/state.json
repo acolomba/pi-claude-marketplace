@@ -61,7 +61,7 @@
     {
       "number": "8",
       "name": "Marketplace Help and Usage Errors",
-      "status": "pending"
+      "status": "in_progress"
     },
     {
       "number": "9",
@@ -79,5 +79,5 @@
     "label": "Advance to the next step",
     "reason": "Phase 12 of 14 · 79% · executing"
   },
-  "updated_at": "2026-10-20T12:11:36.777Z"
+  "updated_at": "2026-10-20T12:27:09.801Z"
 }
