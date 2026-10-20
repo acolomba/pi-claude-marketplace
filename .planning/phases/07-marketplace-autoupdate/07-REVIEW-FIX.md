@@ -37,7 +37,7 @@ Iteration 1 fixed WR-01 (commit 4a40a0c2) and WR-02 (commit e32d79a1); its repor
 **Commit:** 306f6465 (iteration 3)
 **Applied fix:** Added the scenario "Disabling autoupdate for every marketplace skips a local entry without a value that the base config does not declare". It fails only on mutant M2. See `07-REVIEW-FIX.iter4.md`.
 
-### IN-02: Two comments still say a nameless flip writes every declaring layer, or only the base entry
+### IN-02: Two comments still say a nameless flip writes every declaring layer, or only the base entry (carried forward, extended)
 
 **Files modified:** `extensions/pi-claude-marketplace/orchestrators/marketplace/autoupdate.ts`
 **Commit:** 5d70ff48
@@ -46,7 +46,7 @@ Iteration 1 fixed WR-01 (commit 4a40a0c2) and WR-02 (commit e32d79a1); its repor
 - Module header, unnamed (D-MF-03) line: now says each recorded marketplace is written in each declaring layer whose value, own or inherited, differs from the request; with `--local`, `claude-plugins.local.json` only. A local entry without a value inherits the base entry's value, or off when the base config does not declare the marketplace (LAYER-09).
 - `planEveryFlip` doc comment: "so only the base entry is written" now ends with "when the base config declares the marketplace".
 
-### IN-03: Small inaccuracies and placement issues in the docs
+### IN-03: Small inaccuracies and placement issues in the docs (carried forward)
 
 **Files modified:** `README.md`, `README.es.md`, `docs/output-catalog.md`, `CHANGELOG.md`
 **Commit:** e63a536d
@@ -59,7 +59,7 @@ Iteration 1 fixed WR-01 (commit 4a40a0c2) and WR-02 (commit e32d79a1); its repor
 
 ## Skipped Issues
 
-### IN-01: The inherited-value path reports an unreadable base config as `{invalid manifest}` / "failed schema validation"
+### IN-01: The inherited-value path reports an unreadable base config as `{invalid manifest}` / "failed schema validation" (carried forward)
 
 **File:** `extensions/pi-claude-marketplace/orchestrators/marketplace/autoupdate.ts:301-311`
 **Reason:** It matches the existing CFG-03 layer-gate reporting. A cause change across every site belongs in a later change. The review itself calls the fix optional and says this diff did not introduce the problem.
