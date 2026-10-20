@@ -18,3 +18,15 @@ Feature: Plugin usage errors
       | uninstall '   ' | Usage: /claude:plugin uninstall <plugin>@<marketplace> [--scope user\|project] [--keep-data] [--local] [--prune] |
       | enable ''       | Usage: /claude:plugin enable <plugin>@<marketplace> [--scope user\|project] [--local]                            |
       | disable ''      | Usage: /claude:plugin disable <plugin>@<marketplace> [--scope user\|project] [--local]                           |
+      | install ''      | Usage: /claude:plugin install <plugin>@<marketplace> [--scope user\|project] [--map-model] [--partial] [--local] |
+      | install '   '   | Usage: /claude:plugin install <plugin>@<marketplace> [--scope user\|project] [--map-model] [--partial] [--local] |
+      | info ''         | Usage: /claude:plugin info <plugin>@<marketplace> [--fetch] [--scope user\|project]                              |
+
+  Scenario: Listing the plugins of an empty marketplace name is rejected
+    When the user runs "/claude:plugin list ''"
+    Then the result has these fields:
+      | kind         | usage-error                                                                                                                           |
+      | severity     | error                                                                                                                                 |
+      | needs reload | false                                                                                                                                 |
+      | message      | Marketplace name must not be empty.                                                                                                   |
+      | usage        | Usage: /claude:plugin list [<marketplace>] [--installed] [--available] [--unavailable] [--partial] [--remote] [--scope user\|project] |

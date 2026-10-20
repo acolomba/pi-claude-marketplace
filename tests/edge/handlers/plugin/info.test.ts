@@ -2,7 +2,8 @@
 //
 // The shim runs the shared prelude, scans its positionals against the flag set
 // the catalog derives for this verb, and rejects three ways: an unrecognised
-// long flag, a positional count other than one, and a malformed reference.
+// long flag, a positional count other than one, and an empty or malformed
+// reference.
 //
 // Which parser this module calls decides its arity and flag answers, and this
 // one reaches `parseArgs` through `withParsedArgs` and never calls
@@ -364,8 +365,29 @@ for (const { args, expectedMessage, label, summary } of [
     expectedMessage:
       'Invalid <plugin>@<marketplace> ref: "alpha@".\n\nUsage: /claude:plugin info <plugin>@<marketplace> [--fetch] [--scope user|project]',
   },
+  {
+    args: "@",
+    label: "ref-lone-separator",
+    summary: "a reference holding only the separator",
+    expectedMessage:
+      'Invalid <plugin>@<marketplace> ref: "@".\n\nUsage: /claude:plugin info <plugin>@<marketplace> [--fetch] [--scope user|project]',
+  },
+  {
+    args: '""',
+    label: "ref-empty",
+    summary: "an empty reference",
+    expectedMessage:
+      "Plugin name must not be empty.\n\nUsage: /claude:plugin info <plugin>@<marketplace> [--fetch] [--scope user|project]",
+  },
+  {
+    args: "'   '",
+    label: "ref-blank",
+    summary: "a blank reference",
+    expectedMessage:
+      "Plugin name must not be empty.\n\nUsage: /claude:plugin info <plugin>@<marketplace> [--fetch] [--scope user|project]",
+  },
 ]) {
-  test(`names ${summary} verbatim and never reaches the info workflow (PI-1)`, async (t) => {
+  test(`rejects ${summary} with its usage error and never reaches the info workflow (PI-1, USE-07)`, async (t) => {
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);

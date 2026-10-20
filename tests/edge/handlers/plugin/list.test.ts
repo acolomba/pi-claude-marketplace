@@ -9,7 +9,8 @@
 // following were measured against the real module before a case was written:
 //   * ZERO and ONE marketplace positional are both accepted, and TWO or THREE
 //     are rejected. There is no arity one BELOW the accepted range, so only the
-//     surplus half of the arity obligation has a target here;
+//     surplus half of the arity obligation has a target here. One empty or
+//     blank name is rejected too (USE-07);
 //   * the scope-target flag is REJECTED. This module never reaches
 //     `extractLocalFlag`, so the token survives `parseArgs` as an ordinary
 //     positional, fails the recognized-filter test, opens with `--`, and lands
@@ -691,21 +692,44 @@ for (const { args, expectedBlocks, label, summary } of [
 }
 
 // ---------------------------------------------------------------------------
-// One above the accepted arity. Rejections size the boundary at one emission
-// and no stated `cwd`, so a workflow that ran would read an unstated boundary
-// member.
+// One above the accepted arity, or one empty or blank marketplace name.
+// Rejections size the boundary at one emission and no stated `cwd`, so a
+// workflow that ran would read an unstated boundary member.
 // ---------------------------------------------------------------------------
 
-for (const { args, label, summary } of [
-  { args: "mp other", label: "arity-two", summary: "two marketplace names" },
-  { args: "mp other third", label: "arity-three", summary: "three marketplace names" },
+for (const { args, expectedSentence, label, summary } of [
+  {
+    args: "mp other",
+    expectedSentence: "Too many arguments.",
+    label: "arity-two",
+    summary: "two marketplace names",
+  },
+  {
+    args: "mp other third",
+    expectedSentence: "Too many arguments.",
+    label: "arity-three",
+    summary: "three marketplace names",
+  },
   {
     args: `${INSTALLED_FLAG} mp other`,
+    expectedSentence: "Too many arguments.",
     label: "arity-two-with-filter",
     summary: "two marketplace names beside a recognized filter",
   },
+  {
+    args: '""',
+    expectedSentence: "Marketplace name must not be empty.",
+    label: "empty-name",
+    summary: "an empty marketplace name",
+  },
+  {
+    args: "'   '",
+    expectedSentence: "Marketplace name must not be empty.",
+    label: "blank-name",
+    summary: "a blank marketplace name",
+  },
 ]) {
-  test(`rejects ${summary} with the too-many-arguments sentence and never reaches the list workflow (MSG-NC-2)`, async (t) => {
+  test(`rejects ${summary} with "${expectedSentence}" and never reaches the list workflow (MSG-NC-2, USE-07)`, async (t) => {
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
@@ -717,7 +741,7 @@ for (const { args, label, summary } of [
 
     // assert
     assert.deepStrictEqual(notifications, [
-      { message: `Too many arguments.\n\n${LIST_USAGE}`, severity: "error" },
+      { message: `${expectedSentence}\n\n${LIST_USAGE}`, severity: "error" },
     ]);
     assert.strictEqual(workspace.transportCalls(), 0);
     verifyBoundary();
@@ -844,6 +868,10 @@ for (const mode of ["json", "rpc"] as const) {
     {
       args: "alpha@official beta@official",
       message: "Too many arguments.",
+    },
+    {
+      args: '""',
+      message: "Marketplace name must not be empty.",
     },
   ]) {
     test(`appends plugin/list rejection for ${args} in ${mode} (enabled)`, async () => {

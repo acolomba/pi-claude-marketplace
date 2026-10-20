@@ -12,7 +12,7 @@ import { notifyUsageError } from "../../../shared/notification-dispatch.ts";
 import { parseArgs } from "../../args.ts";
 import { parseFlagNames } from "../../flag-catalog.ts";
 
-import { splitPluginMarketplaceRef, withParsedArgs } from "./shared.ts";
+import { parsePluginRef, withParsedArgs } from "./shared.ts";
 
 import type { McpStatusReader } from "../../../platform/mcp-status.ts";
 import type { SubcommandHandler } from "../../router.ts";
@@ -58,12 +58,8 @@ export function makePluginInfoHandler(mcpStatus: McpStatusReader): SubcommandHan
       return;
     }
 
-    const ref = splitPluginMarketplaceRef(positional);
+    const ref = parsePluginRef(positional, ctx, run, USAGE);
     if (ref === undefined) {
-      notifyUsageError(ctx, run, {
-        message: `Invalid <plugin>@<marketplace> ref: "${positional}".`,
-        usage: USAGE,
-      });
       return;
     }
 

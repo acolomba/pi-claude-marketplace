@@ -34,6 +34,7 @@ import { mock, verify, when } from "strong-mock";
 
 import {
   parseMapModelArgs,
+  parsePluginRef,
   parseRequiredPluginMarketplaceRef,
   splitPluginMarketplaceRef,
   withParsedArgs,
@@ -427,6 +428,48 @@ describe("parseRequiredPluginMarketplaceRef", () => {
           message: `Invalid <plugin>@<marketplace> ref: "${malformedRef}".\n\nUsage: /claude:plugin uninstall <plugin>@<marketplace> [--scope user|project] [--local]`,
           severity: "error",
         },
+      ]);
+      verifyBoundary();
+    });
+  }
+});
+
+describe("parsePluginRef", () => {
+  test("returns both halves of a ref that splits and notifies nothing", () => {
+    // arrange
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
+
+    // act
+    const ref = parsePluginRef("alpha@official", ctx, runWithNothingLoaded(), INSTALL_USAGE);
+
+    // assert
+    assert.deepStrictEqual(ref, {
+      marketplace: "official",
+      plugin: "alpha",
+    } satisfies PluginMarketplaceRef);
+    assert.deepStrictEqual(notifications, []);
+    verifyBoundary();
+  });
+
+  for (const { rejectedRef, sentence } of [
+    { rejectedRef: "", sentence: "Plugin name must not be empty." },
+    { rejectedRef: "   ", sentence: "Plugin name must not be empty." },
+    { rejectedRef: "@", sentence: 'Invalid <plugin>@<marketplace> ref: "@".' },
+    { rejectedRef: "alpha@", sentence: 'Invalid <plugin>@<marketplace> ref: "alpha@".' },
+    { rejectedRef: "@official", sentence: 'Invalid <plugin>@<marketplace> ref: "@official".' },
+    { rejectedRef: "alpha", sentence: 'Invalid <plugin>@<marketplace> ref: "alpha".' },
+  ]) {
+    test(`rejects the ref "${rejectedRef}" with "${sentence}" (PI-1, USE-07)`, () => {
+      // arrange
+      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+
+      // act
+      const ref = parsePluginRef(rejectedRef, ctx, runWithNothingLoaded(), INSTALL_USAGE);
+
+      // assert
+      assert.strictEqual(ref, undefined);
+      assert.deepStrictEqual(notifications, [
+        { message: `${sentence}\n\n${INSTALL_USAGE}`, severity: "error" },
       ]);
       verifyBoundary();
     });

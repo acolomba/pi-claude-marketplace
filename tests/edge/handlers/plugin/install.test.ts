@@ -725,8 +725,29 @@ for (const { args, expectedMessage, label, summary } of [
     expectedMessage:
       'Invalid <plugin>@<marketplace> ref: "alpha@".\n\nUsage: /claude:plugin install <plugin>@<marketplace> [--scope user|project] [--map-model] [--partial] [--local]',
   },
+  {
+    args: "@",
+    label: "ref-lone-separator",
+    summary: "a reference holding only the separator",
+    expectedMessage:
+      'Invalid <plugin>@<marketplace> ref: "@".\n\nUsage: /claude:plugin install <plugin>@<marketplace> [--scope user|project] [--map-model] [--partial] [--local]',
+  },
+  {
+    args: '""',
+    label: "ref-empty",
+    summary: "an empty reference",
+    expectedMessage:
+      "Plugin name must not be empty.\n\nUsage: /claude:plugin install <plugin>@<marketplace> [--scope user|project] [--map-model] [--partial] [--local]",
+  },
+  {
+    args: "'   '",
+    label: "ref-blank",
+    summary: "a blank reference",
+    expectedMessage:
+      "Plugin name must not be empty.\n\nUsage: /claude:plugin install <plugin>@<marketplace> [--scope user|project] [--map-model] [--partial] [--local]",
+  },
 ]) {
-  test(`names ${summary} verbatim and never reaches the install workflow (PI-1)`, async (t) => {
+  test(`rejects ${summary} with its usage error and never reaches the install workflow (PI-1, USE-07)`, async (t) => {
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);

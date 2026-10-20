@@ -38,6 +38,34 @@ export function splitPluginMarketplaceRef(ref: string): PluginMarketplaceRef | u
   };
 }
 
+/**
+ * Splits the one `<plugin>@<marketplace>` reference of a verb that takes no
+ * other form, or notifies the usage error and returns `undefined`. A reference
+ * that is empty or blank as a whole names the plugin name; any other reference
+ * that does not split is invalid (PI-1, USE-07).
+ */
+export function parsePluginRef(
+  ref: string,
+  ctx: ExtensionCommandContext,
+  run: NotificationRun,
+  usage: string,
+): PluginMarketplaceRef | undefined {
+  if (ref.trim() === "") {
+    notifyUsageError(ctx, run, { message: "Plugin name must not be empty.", usage });
+    return undefined;
+  }
+
+  const split = splitPluginMarketplaceRef(ref);
+  if (split === undefined) {
+    notifyUsageError(ctx, run, {
+      message: `Invalid <plugin>@<marketplace> ref: "${ref}".`,
+      usage,
+    });
+  }
+
+  return split;
+}
+
 interface ParsedPositionalsResult {
   readonly nonFlagPositionals: readonly string[];
   readonly mapModel: boolean;
@@ -162,13 +190,8 @@ export function parseRequiredPluginMarketplaceRef(
     return undefined;
   }
 
-  const ref = splitPluginMarketplaceRef(parsed.ref);
+  const ref = parsePluginRef(parsed.ref, ctx, run, usage);
   if (ref === undefined) {
-    // PI-1 invalid `<plugin>@<marketplace>` token -- USAGE error per MSG-NC-2.
-    notifyUsageError(ctx, run, {
-      message: `Invalid <plugin>@<marketplace> ref: "${parsed.ref}".`,
-      usage,
-    });
     return undefined;
   }
 
