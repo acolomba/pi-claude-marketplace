@@ -26,8 +26,9 @@
   - Without a name, `autoupdate` and `noautoupdate` set the value in the base config. They write a local entry only when its setting still differs. With `--local`, they change only the local config.
   - A local marketplace entry now takes the fields it leaves out from the base config, so one without `autoupdate` follows the base config's setting. If your local config declares a marketplace, run `marketplace list` to see which `autoupdate` setting applies.
   - With `--local`, `autoupdate` and `noautoupdate` write a value only when it changes the setting that applies. They fail with `{invalid manifest}` when they need the base config's setting and cannot read that config.
-  - Without `--scope`, `autoupdate <name>` and `noautoupdate <name>` report a marketplace that no scope holds without naming a scope, like `marketplace remove`, `info`, and `update`.
   - A project-scope install from a user-scope marketplace now adds that marketplace, and those of its dependencies, to the project as `marketplace add --scope project` does. The project's base config declares them, and each git marketplace gets its own project clone.
+
+- Without `--scope`, `marketplace autoupdate <name>` and `marketplace noautoupdate <name>` report a marketplace that no scope holds without naming a scope, like `marketplace remove`, `info`, and `update`.
 
 - A marketplace you add or a plugin you install with `--local` now stays out of the base config (`claude-plugins.json`). If a reload already copied one there, remove that entry and run `/reload`.
 
