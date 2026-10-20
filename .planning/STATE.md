@@ -2,20 +2,20 @@
 gsd_state_version: "1.0"
 milestone: marketplace-features
 milestone_name: Marketplace Behavioral Tests
-current_phase: 8
-current_phase_name: Marketplace Help and Usage Errors
+current_phase: 9
+current_phase_name: URL Source Kind and HTTPS Git Stand-In
 status: verifying
-stopped_at: Completed 08-05-PLAN.md
-last_updated: "2026-10-20T13:27:22.256Z"
+stopped_at: Phase 8 complete, Phase 9 ready for discussion
+last_updated: "2026-10-20T14:14:00.761Z"
 last_activity: 2026-10-20
-last_activity_desc: Phase 8 plan 05 executed; awaiting code review and verification
-state_head: aac186f0897b1f43c83df0904e69523ed316701f
+last_activity_desc: Phase 8 complete, transitioned to Phase 9
+state_head: a393beada96c2a9ec8399f1697829e5331652153
 progress:
   total_phases: 14
-  completed_phases: 11
+  completed_phases: 12
   total_plans: 67
   completed_plans: 67
-  percent: 79
+  percent: 86
 ---
 
 # Project State
@@ -31,12 +31,12 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: 8 (Marketplace Help and Usage Errors) — EXECUTING
-Plan: 5 of 5
-Status: Awaiting code review and verification
-Last activity: 2026-10-20 — Phase 8 plan 05 executed; phase gate green
+Phase: 9 — URL Source Kind and HTTPS Git Stand-In
+Plan: Not started
+Status: Ready to discuss
+Last activity: 2026-10-20 — Phase 8 complete, transitioned to Phase 9
 
-Progress: [████████░░] 79%
+Progress: [█████████░] 86%
 
 ### mcp-4 closeout
 
@@ -184,7 +184,7 @@ hit the same wall; convert it rather than re-disclosing it.
 ## Session Continuity
 
 **Last session:** 2026-10-20T13:27:17.190Z
-**Stopped at:** Completed 08-05-PLAN.md
+**Stopped at:** Phase 8 complete, Phase 9 ready for discussion
 **Resume file:** None
 
 **Pause (2026-10-20, operator's choice, not a block):** the

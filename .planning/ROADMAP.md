@@ -65,7 +65,7 @@ path), **url** (https git URL on the loopback stand-in), and **gh**
 - [x] **Phase 5: Marketplace Info** — `info` source details for every kind, scope fan-out, not-added forms, and a broken manifest (completed 2026-10-18)
 - [x] **Phase 6: Marketplace Update and C-10 Fix** — Single and bare `update`, with and without autoupdate, path-source failures, and the C-10 fix written test-first (completed 2026-10-19)
 - [x] **Phase 7: Marketplace Autoupdate** — `autoupdate` and `noautoupdate`, by name and for all marketplaces, persisting across sessions (completed 2026-10-20)
-- [ ] **Phase 8: Marketplace Help and Usage Errors** — `marketplace help` and every usage rejection across the marketplace verbs
+- [x] **Phase 8: Marketplace Help and Usage Errors** — `marketplace help` and every usage rejection across the marketplace verbs (completed 2026-10-20)
 - [ ] **Phase 9: URL Source Kind and HTTPS Git Stand-In** — A loopback HTTPS git stand-in, url-only failure and no-request scenarios, and the removal of `@url` from the exclusion
 - [ ] **Phase 10: GitHub Source Kind and Suite Close** — GitHub rows run through the override, 401 is covered on both git kinds, and the suite closes with no tag excluded
 
@@ -459,7 +459,7 @@ Plans:
 2. `marketplace` with no subcommand, or an unknown one, shows the usage with a reason, and `add`, `remove`, and `info` without their argument fail as `Missing required argument.`.
 3. Surplus arguments, unknown flags (including `--local` on `list`, `info`, and `update`), a bad or missing `--scope` value in any position, and an explicitly empty optional argument (`update ""`, `autoupdate ""`) are each rejected.
 
-**Plans:** 5/5 plans executed
+**Plans:** 5/5 plans complete
 
 Plans:
 **Wave 1**
@@ -525,7 +525,7 @@ Plans:
 | 5. Marketplace Info | 3/3 | Complete    | 2026-10-18 |
 | 6. Marketplace Update and C-10 Fix | 4/4 | Complete    | 2026-10-19 |
 | 7. Marketplace Autoupdate | 4/4 | Complete    | 2026-10-20 |
-| 8. Marketplace Help and Usage Errors | 5/5 | In Progress | - |
+| 8. Marketplace Help and Usage Errors | 5/5 | Complete    | 2026-10-20 |
 | 9. URL Source Kind and HTTPS Git Stand-In | 0/TBD | Not started | - |
 | 10. GitHub Source Kind and Suite Close | 0/TBD | Not started | - |
 
