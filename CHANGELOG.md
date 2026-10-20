@@ -4,7 +4,8 @@
 
 - An empty argument now fails with a message that names it, such as `Source must not be empty.` or `Marketplace name must not be empty.`.
 
-  - `uninstall`, `enable`, and `disable` report an empty `<plugin>@<marketplace>` as `Plugin name must not be empty.`.
+  - Plugin commands report an empty `<plugin>@<marketplace>` as `Plugin name must not be empty.`. `update`, `fetch`, and `reinstall` report an `@` with no marketplace name as `Marketplace name must not be empty.`.
+  - `/claude:plugin list ""` now fails with `Marketplace name must not be empty.` instead of listing no plugins.
 
 - `/claude:plugin marketplace help` now shows `--local` on `add`, `remove`, `autoupdate`, and `noautoupdate`, as their own usage lines do.
 
