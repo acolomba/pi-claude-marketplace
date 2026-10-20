@@ -8,7 +8,8 @@
 // outside of shared/notification-dispatch.ts.
 //
 // `TOP_LEVEL_USAGE` is a PRD-stable string. `MARKETPLACE_USAGE` is built from
-// one signature row per marketplace verb (USE-01).
+// one signature row per marketplace verb (USE-01). The same row also builds
+// that verb's own usage line through `marketplaceUsage`.
 //
 // `routeClaudePlugin` accepts `ls` as an alias for `list`; `routeMarketplace`
 // accepts `rm` and `ls` as aliases for `remove` and `list`.
@@ -127,7 +128,7 @@ export const TOP_LEVEL_USAGE =
   "  marketplace <add|remove|rm|list|ls|info|update|autoupdate|noautoupdate> ...\n" +
   "  help [marketplace]";
 
-type MarketplaceVerb =
+export type MarketplaceVerb =
   "add" | "remove" | "list" | "info" | "update" | "autoupdate" | "noautoupdate";
 
 interface MarketplaceVerbSignature {
@@ -144,6 +145,13 @@ const MARKETPLACE_VERB_SIGNATURES: Readonly<Record<MarketplaceVerb, MarketplaceV
   autoupdate: { args: "[<name>] [--scope user|project] [--local]" },
   noautoupdate: { args: "[<name>] [--scope user|project] [--local]" },
 };
+
+/** The usage line of one marketplace verb, built from its signature row. */
+export function marketplaceUsage(verb: MarketplaceVerb): string {
+  const { alias, args } = MARKETPLACE_VERB_SIGNATURES[verb];
+  const spelling = alias === undefined ? verb : `<${verb}|${alias}>`;
+  return `Usage: /claude:plugin marketplace ${spelling} ${args}`;
+}
 
 // The alias notes share one column, three spaces past the longest line that
 // carries one.

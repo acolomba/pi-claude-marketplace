@@ -26,11 +26,12 @@ import {
 } from "../../../orchestrators/marketplace/update.ts";
 import { notifyUsageError } from "../../../shared/notification-dispatch.ts";
 import { parseCommandArgs } from "../../args-schema.ts";
+import { marketplaceUsage } from "../../router.ts";
 
 import type { SubcommandHandler } from "../../router.ts";
 import type { EdgeDeps } from "../../types.ts";
 
-const USAGE = "Usage: /claude:plugin marketplace update [<name>] [--scope user|project]";
+const USAGE = marketplaceUsage("update");
 
 export function makeMarketplaceUpdateHandler(
   deps: Pick<EdgeDeps, "beginPluginUpdateRun" | "completionCache" | "gitOps">,

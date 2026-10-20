@@ -38,9 +38,11 @@ import { mock, verify, when } from "strong-mock";
 
 import {
   MARKETPLACE_SUBCOMMANDS,
+  marketplaceUsage,
   routeClaudePlugin,
   selectClaudePluginRoute,
   TOP_LEVEL_SUBCOMMANDS,
+  type MarketplaceVerb,
   type SubcommandHandlers,
 } from "../../extensions/pi-claude-marketplace/edge/router.ts";
 import { notify } from "../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
@@ -426,6 +428,52 @@ test("accepts exactly the marketplace names its dispatch rows serve", () => {
   // assert
   assert.deepStrictEqual(vocabulary, expectedVocabulary);
 });
+
+for (const { verb, expectedUsage } of [
+  {
+    verb: "add",
+    expectedUsage:
+      "Usage: /claude:plugin marketplace add <source> [--scope user|project] [--local]",
+  },
+  {
+    verb: "remove",
+    expectedUsage:
+      "Usage: /claude:plugin marketplace <remove|rm> <name> [--scope user|project] [--local]",
+  },
+  {
+    verb: "list",
+    expectedUsage: "Usage: /claude:plugin marketplace <list|ls> [--scope user|project]",
+  },
+  {
+    verb: "info",
+    expectedUsage: "Usage: /claude:plugin marketplace info <name> [--scope user|project]",
+  },
+  {
+    verb: "update",
+    expectedUsage: "Usage: /claude:plugin marketplace update [<name>] [--scope user|project]",
+  },
+  {
+    verb: "autoupdate",
+    expectedUsage:
+      "Usage: /claude:plugin marketplace autoupdate [<name>] [--scope user|project] [--local]",
+  },
+  {
+    verb: "noautoupdate",
+    expectedUsage:
+      "Usage: /claude:plugin marketplace noautoupdate [<name>] [--scope user|project] [--local]",
+  },
+] satisfies readonly { verb: MarketplaceVerb; expectedUsage: string }[]) {
+  test(`gives marketplace ${verb} its own usage line: ${expectedUsage}`, () => {
+    // arrange
+    const marketplaceVerb = verb;
+
+    // act
+    const usage = marketplaceUsage(marketplaceVerb);
+
+    // assert
+    assert.strictEqual(usage, expectedUsage);
+  });
+}
 
 test("routes the marketplace help subcommand to handlers.help with marketplace topic", async () => {
   // arrange

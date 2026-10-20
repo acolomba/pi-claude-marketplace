@@ -8,12 +8,13 @@
 // shape and delegates.
 
 import { getMarketplaceInfo } from "../../../orchestrators/marketplace/info.ts";
+import { marketplaceUsage } from "../../router.ts";
 
 import { makeSingleNameMarketplaceHandler } from "./shared.ts";
 
 import type { SubcommandHandler } from "../../router.ts";
 
-const USAGE = "Usage: /claude:plugin marketplace info <name> [--scope user|project]";
+const USAGE = marketplaceUsage("info");
 
 export function makeMarketplaceInfoHandler(): SubcommandHandler {
   return makeSingleNameMarketplaceHandler(USAGE, getMarketplaceInfo);

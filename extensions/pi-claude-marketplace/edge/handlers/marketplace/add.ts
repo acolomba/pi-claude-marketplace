@@ -17,13 +17,14 @@
 // `EntityErrorRow` compact lines per CMC-34.
 
 import { addMarketplace } from "../../../orchestrators/marketplace/add.ts";
+import { marketplaceUsage } from "../../router.ts";
 
 import { openMarketplaceCommand } from "./shared.ts";
 
 import type { SubcommandHandler } from "../../router.ts";
 import type { EdgeDeps } from "../../types.ts";
 
-const USAGE = "Usage: /claude:plugin marketplace add <source> [--scope user|project] [--local]";
+const USAGE = marketplaceUsage("add");
 
 export function makeAddHandler(
   deps: Pick<EdgeDeps, "completionCache" | "gitOps">,
