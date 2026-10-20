@@ -64,7 +64,7 @@ path), **url** (https git URL on the loopback stand-in), and **gh**
 - [x] **Phase 4: Marketplace Remove and List** — `remove`/`rm` with the plugin cascade, and `list`/`ls` across both scopes (completed 2026-10-18)
 - [x] **Phase 5: Marketplace Info** — `info` source details for every kind, scope fan-out, not-added forms, and a broken manifest (completed 2026-10-18)
 - [x] **Phase 6: Marketplace Update and C-10 Fix** — Single and bare `update`, with and without autoupdate, path-source failures, and the C-10 fix written test-first (completed 2026-10-19)
-- [ ] **Phase 7: Marketplace Autoupdate** — `autoupdate` and `noautoupdate`, by name and for all marketplaces, persisting across sessions
+- [x] **Phase 7: Marketplace Autoupdate** — `autoupdate` and `noautoupdate`, by name and for all marketplaces, persisting across sessions (completed 2026-10-20)
 - [ ] **Phase 8: Marketplace Help and Usage Errors** — `marketplace help` and every usage rejection across the marketplace verbs
 - [ ] **Phase 9: URL Source Kind and HTTPS Git Stand-In** — A loopback HTTPS git stand-in, url-only failure and no-request scenarios, and the removal of `@url` from the exclusion
 - [ ] **Phase 10: GitHub Source Kind and Suite Close** — GitHub rows run through the override, 401 is covered on both git kinds, and the suite closes with no tag excluded
@@ -433,7 +433,7 @@ Plans:
 3. The setting shows in `list` and `info` and survives a new session.
 4. Without a name, the change applies to every marketplace of both scopes, or gives an empty result when none is added. A name neither scope holds fails as `marketplace not added`, and `autoupdate <name>` without `--scope` changes both scopes that hold the name.
 
-**Plans:** 4/4 plans executed
+**Plans:** 4/4 plans complete
 
 Plans:
 **Wave 1**
@@ -508,7 +508,7 @@ Plans:
 | 4. Marketplace Remove and List | 4/4 | Complete    | 2026-10-18 |
 | 5. Marketplace Info | 3/3 | Complete    | 2026-10-18 |
 | 6. Marketplace Update and C-10 Fix | 4/4 | Complete    | 2026-10-19 |
-| 7. Marketplace Autoupdate | 4/4 | In Progress | - |
+| 7. Marketplace Autoupdate | 4/4 | Complete    | 2026-10-20 |
 | 8. Marketplace Help and Usage Errors | 0/TBD | Not started | - |
 | 9. URL Source Kind and HTTPS Git Stand-In | 0/TBD | Not started | - |
 | 10. GitHub Source Kind and Suite Close | 0/TBD | Not started | - |
