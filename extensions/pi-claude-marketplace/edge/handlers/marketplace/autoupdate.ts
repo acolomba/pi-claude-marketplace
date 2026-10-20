@@ -1,9 +1,8 @@
 // edge/handlers/marketplace/autoupdate.ts
 //
-// Dual-form thin-shim handler factory for
-// `/claude:plugin marketplace autoupdate [<name>] [--scope user|project]`
-// and
-// `/claude:plugin marketplace noautoupdate [<name>] [--scope user|project]`.
+// Dual-form thin-shim handler factory for `marketplace autoupdate` and
+// `marketplace noautoupdate`; each usage line comes from
+// `marketplaceUsage(...)`.
 //
 // D-01 ships a SINGLE `setMarketplaceAutoupdate` orchestrator
 // parameterized by `enable: boolean`. The edge layer maps the two slash

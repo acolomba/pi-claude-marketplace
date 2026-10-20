@@ -1,7 +1,7 @@
 // edge/handlers/marketplace/remove.ts
 //
-// Thin-shim handler factory for
-// `/claude:plugin marketplace <remove|rm> <name> [--scope user|project]`.
+// Thin-shim handler factory for `marketplace remove`; its usage line comes
+// from `marketplaceUsage("remove")`.
 // (Also reached via the `rm` alias -- routed through this same handler by
 // `routeMarketplace` in edge/router.ts.)
 //

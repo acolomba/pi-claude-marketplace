@@ -1,7 +1,7 @@
 // edge/handlers/marketplace/add.ts
 //
-// Thin-shim handler factory for
-// `/claude:plugin marketplace add <source> [--scope user|project]`.
+// Thin-shim handler factory for `marketplace add`; its usage line comes from
+// `marketplaceUsage("add")`.
 // Delegates to `addMarketplace` orchestrator, threading deps.gitOps through.
 //
 // D-05: the orchestrator renders from the router's notification run, which
