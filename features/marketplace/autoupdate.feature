@@ -283,6 +283,26 @@ Feature: Marketplace autoupdate
       | name  | source                    |
       | tools | {home}/marketplaces/tools |
 
+  Scenario: Enabling autoupdate for every marketplace writes a local entry the base config does not declare
+    Given the marketplace "tools" is published as a dir source
+    Given the user has run "/claude:plugin marketplace add {home}/marketplaces/tools --scope project --local"
+    When the user runs "/claude:plugin marketplace autoupdate --scope project"
+    Then the result has these fields:
+      | kind                | cascade                |
+      | severity            | info                   |
+      | needs reload        | false                  |
+      | tally label         | Marketplace autoupdate |
+      | tally failures      | 0                      |
+      | tally warnings      | 0                      |
+      | tally success count | 1                      |
+    Then the result lists these marketplaces:
+      | name  | scope   | status             |
+      | tools | project | autoupdate enabled |
+    Then the "claude-plugins.local.json" file of the project scope declares these marketplaces:
+      | name  | source                    | autoupdate |
+      | tools | {home}/marketplaces/tools | true       |
+    Then the "claude-plugins.json" file of the project scope does not exist
+
   Scenario: Disabling autoupdate with --local writes the setting to the local config only
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" is added to the project scope
