@@ -445,7 +445,7 @@ for (const mode of ["json", "rpc"] as const) {
     },
     {
       args: '""',
-      message: "Argument must not be empty.",
+      message: "Marketplace name must not be empty.",
     },
     {
       args: "alpha@official beta@official",
@@ -495,7 +495,7 @@ for (const mode of ["json", "rpc"] as const) {
     },
     {
       args: '""',
-      message: "Argument must not be empty.",
+      message: "Marketplace name must not be empty.",
     },
     {
       args: "alpha@official beta@official",

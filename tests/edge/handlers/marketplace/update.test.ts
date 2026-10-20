@@ -487,7 +487,7 @@ test("reports an unrecognised scope value with the update usage block and never 
 for (const { args, diagnostic } of [
   { args: "alpha extra", diagnostic: "Too many arguments." },
   { args: "alpha --bogus", diagnostic: 'Unknown flag: "--bogus".' },
-  { args: '""', diagnostic: "Argument must not be empty." },
+  { args: '""', diagnostic: "Marketplace name must not be empty." },
   { args: "'' --local", diagnostic: 'Unknown flag: "--local".' },
   { args: '--local " "', diagnostic: 'Unknown flag: "--local".' },
   { args: "--scope user --local", diagnostic: 'Unknown flag: "--local".' },
@@ -616,7 +616,7 @@ for (const mode of ["json", "rpc"] as const) {
     },
     {
       args: '""',
-      message: "Argument must not be empty.",
+      message: "Marketplace name must not be empty.",
     },
     {
       args: "alpha@official beta@official",

@@ -56,7 +56,7 @@ export function makeSingleNameMarketplaceHandler(
     const parsed = parseCommandArgs(
       args,
       {
-        positional: [{ name: "name" }] as const,
+        positional: [{ name: "name", label: "Marketplace name" }] as const,
         usage,
       },
       (message) => {
@@ -90,13 +90,14 @@ export function makeSingleNameMarketplaceHandler(
  *
  *   1. WB-01: `extractLocalFlag` BEFORE positional parsing so flag position
  *      cannot change the outcome (matches the enable-disable handler shape).
- *   2. `parseCommandArgs` with the single positional name supplied by the
- *      caller.
+ *   2. `parseCommandArgs` with the single positional name and label supplied
+ *      by the caller; the label names the field when the value is empty
+ *      (USE-07).
  *   3. MSG-NC-2: argument-parsing failure -> sentence form + Usage block
  *      (notifyUsageError contract: `${message}\n\n${usageBlock}`). Substitute
  *      `"Missing required argument."` when the parser hands back the usage
- *      string verbatim (the duplicate-usage case -- notifyUsageError would
- *      re-emit the Usage block otherwise).
+ *      string verbatim, which it does for an omitted positional
+ *      (notifyUsageError would re-emit the Usage block otherwise).
  *
  * Returns `undefined` when either the local-flag extraction or the
  * positional parse fails (the usage error has already been notified; the
@@ -108,7 +109,7 @@ export function openMarketplaceCommand<N extends string>(
   args: string,
   ctx: ExtensionCommandContext,
   run: NotificationRun,
-  opts: { usage: string; positionalName: N },
+  opts: { usage: string; positionalName: N; positionalLabel: string },
 ): (Readonly<Record<N, string>> & { readonly scope?: Scope; readonly local: boolean }) | undefined {
   const localFlag = extractLocalFlag(args, { ctx, run, usage: opts.usage });
   if (localFlag === undefined) {
@@ -118,7 +119,7 @@ export function openMarketplaceCommand<N extends string>(
   const parsed = parseCommandArgs(
     localFlag.residualArgs,
     {
-      positional: [{ name: opts.positionalName }] as const,
+      positional: [{ name: opts.positionalName, label: opts.positionalLabel }] as const,
       usage: opts.usage,
     },
     (message) => {

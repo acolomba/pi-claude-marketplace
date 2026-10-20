@@ -146,7 +146,7 @@ export function parseRequiredPluginMarketplaceRef(
   const parsed = parseCommandArgs(
     args,
     {
-      positional: [{ name: "ref" }] as const,
+      positional: [{ name: "ref", label: "Plugin name" }] as const,
       usage,
     },
     (message) => {

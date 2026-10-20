@@ -1,10 +1,8 @@
 // Owner for edge/handlers/marketplace/list.ts (MOD-09).
 //
-// The shim declares an EMPTY positional schema, so its arity contract is "zero
-// positionals accepted", and the interesting question is what the schema loop
-// does with a surplus token. That loop walks the SCHEMA, not the input, so a
-// surplus token is dropped and the listing still runs; two rows state the
-// outcome at one and at two surplus tokens. Nothing here is a rejection.
+// The shim declares an EMPTY positional schema, so it accepts zero positionals
+// and rejects a surplus token with `Too many arguments.` before any scope is
+// listed; two rows state that at one and at two surplus tokens.
 //
 // D-116-05 (O3) places this handler in Group C: `listMarketplaces` is reached by
 // direct import with no injection point, so the delegation is observed as one

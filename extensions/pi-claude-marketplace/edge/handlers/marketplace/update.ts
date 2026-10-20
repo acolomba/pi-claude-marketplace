@@ -40,7 +40,7 @@ export function makeMarketplaceUpdateHandler(
     const parsed = parseCommandArgs(
       args,
       {
-        positional: [{ name: "name", required: false }] as const,
+        positional: [{ name: "name", label: "Marketplace name", required: false }] as const,
         usage: USAGE,
       },
       (message) => {

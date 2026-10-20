@@ -105,3 +105,23 @@ Feature: Marketplace usage errors
       | update tools --scope     | Usage: /claude:plugin marketplace update [<name>] [--scope user\|project]                 |
       | autoupdate tools --scope | Usage: /claude:plugin marketplace autoupdate [<name>] [--scope user\|project] [--local]   |
       | noautoupdate --scope     | Usage: /claude:plugin marketplace noautoupdate [<name>] [--scope user\|project] [--local] |
+
+  Scenario Outline: An empty marketplace argument is rejected with a message that names its field
+    When the user runs "/claude:plugin marketplace <arguments>"
+    Then the result has these fields:
+      | kind         | usage-error |
+      | severity     | error       |
+      | needs reload | false       |
+      | message      | <message>   |
+      | usage        | <usage>     |
+
+    Examples:
+      | arguments       | message                             | usage                                                                                     |
+      | add ''          | Source must not be empty.           | Usage: /claude:plugin marketplace add <source> [--scope user\|project] [--local]          |
+      | add '   '       | Source must not be empty.           | Usage: /claude:plugin marketplace add <source> [--scope user\|project] [--local]          |
+      | remove ''       | Marketplace name must not be empty. | Usage: /claude:plugin marketplace <remove\|rm> <name> [--scope user\|project] [--local]   |
+      | info ''         | Marketplace name must not be empty. | Usage: /claude:plugin marketplace info <name> [--scope user\|project]                     |
+      | update ''       | Marketplace name must not be empty. | Usage: /claude:plugin marketplace update [<name>] [--scope user\|project]                 |
+      | update '   '    | Marketplace name must not be empty. | Usage: /claude:plugin marketplace update [<name>] [--scope user\|project]                 |
+      | autoupdate ''   | Marketplace name must not be empty. | Usage: /claude:plugin marketplace autoupdate [<name>] [--scope user\|project] [--local]   |
+      | noautoupdate '' | Marketplace name must not be empty. | Usage: /claude:plugin marketplace noautoupdate [<name>] [--scope user\|project] [--local] |

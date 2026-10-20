@@ -33,6 +33,7 @@ export function makeAddHandler(
     const opened = openMarketplaceCommand(args, ctx, run, {
       usage: USAGE,
       positionalName: "source",
+      positionalLabel: "Source",
     });
     if (opened === undefined) {
       return;

@@ -127,6 +127,27 @@ describe("makeSingleNameMarketplaceHandler", () => {
     verify(operation);
   });
 
+  test("names an explicitly empty name by its label and never reaches the operation (USE-07)", async () => {
+    // arrange
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const run = runWithNothingLoaded();
+    const operation = mock<MarketplaceOperation>({
+      exactParams: true,
+      name: "marketplace operation",
+    });
+    const handler = makeSingleNameMarketplaceHandler(INFO_USAGE, operation);
+
+    // act
+    await handler('""', ctx, run);
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      { message: `Marketplace name must not be empty.\n\n${INFO_USAGE}`, severity: "error" },
+    ]);
+    verifyBoundary();
+    verify(operation);
+  });
+
   test("rejects surplus input before reading cwd or calling the operation", async () => {
     // arrange
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
@@ -253,9 +274,17 @@ describe("makeSingleNameMarketplaceHandler", () => {
 });
 
 describe("openMarketplaceCommand", () => {
-  for (const { expectedCommand, positionalName } of [
-    { expectedCommand: { local: true, source: "official" }, positionalName: "source" },
-    { expectedCommand: { local: true, name: "official" }, positionalName: "name" },
+  for (const { expectedCommand, positionalName, positionalLabel } of [
+    {
+      expectedCommand: { local: true, source: "official" },
+      positionalName: "source",
+      positionalLabel: "Source",
+    },
+    {
+      expectedCommand: { local: true, name: "official" },
+      positionalName: "name",
+      positionalLabel: "Marketplace name",
+    },
   ] as const) {
     test(`returns the positional under the caller-supplied name "${positionalName}"`, () => {
       // arrange
@@ -264,6 +293,7 @@ describe("openMarketplaceCommand", () => {
       // act
       const command = openMarketplaceCommand("official --local", ctx, runWithNothingLoaded(), {
         positionalName,
+        positionalLabel,
         usage: ADD_USAGE,
       });
 
@@ -285,6 +315,7 @@ describe("openMarketplaceCommand", () => {
       // act
       const command = openMarketplaceCommand(args, ctx, runWithNothingLoaded(), {
         positionalName: "source",
+        positionalLabel: "Source",
         usage: ADD_USAGE,
       });
 
@@ -306,6 +337,7 @@ describe("openMarketplaceCommand", () => {
       runWithNothingLoaded(),
       {
         positionalName: "source",
+        positionalLabel: "Source",
         usage: ADD_USAGE,
       },
     );
@@ -323,6 +355,7 @@ describe("openMarketplaceCommand", () => {
     // act
     const command = openMarketplaceCommand("--local", ctx, runWithNothingLoaded(), {
       positionalName: "source",
+      positionalLabel: "Source",
       usage: ADD_USAGE,
     });
 
@@ -345,6 +378,7 @@ describe("openMarketplaceCommand", () => {
     // act
     const command = openMarketplaceCommand("official --bogus", ctx, runWithNothingLoaded(), {
       positionalName: "source",
+      positionalLabel: "Source",
       usage: ADD_USAGE,
     });
 
@@ -371,6 +405,7 @@ describe("openMarketplaceCommand", () => {
       runWithNothingLoaded(),
       {
         positionalName: "source",
+        positionalLabel: "Source",
         usage: ADD_USAGE,
       },
     );
@@ -387,13 +422,42 @@ describe("openMarketplaceCommand", () => {
     verifyBoundary();
   });
 
-  test("rejects empty arguments with the collapsed sentence (MSG-NC-2)", () => {
+  for (const { positionalName, positionalLabel, message } of [
+    { positionalName: "source", positionalLabel: "Source", message: "Source must not be empty." },
+    {
+      positionalName: "name",
+      positionalLabel: "Marketplace name",
+      message: "Marketplace name must not be empty.",
+    },
+  ] as const) {
+    test(`names an explicitly empty "${positionalName}" positional by the label "${positionalLabel}" (USE-07)`, () => {
+      // arrange
+      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+
+      // act
+      const command = openMarketplaceCommand('""', ctx, runWithNothingLoaded(), {
+        positionalName,
+        positionalLabel,
+        usage: ADD_USAGE,
+      });
+
+      // assert
+      assert.strictEqual(command, undefined);
+      assert.deepStrictEqual(notifications, [
+        { message: `${message}\n\n${ADD_USAGE}`, severity: "error" },
+      ]);
+      verifyBoundary();
+    });
+  }
+
+  test("rejects an omitted positional with the collapsed sentence (MSG-NC-2)", () => {
     // arrange
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
 
     // act
     const command = openMarketplaceCommand("", ctx, runWithNothingLoaded(), {
       positionalName: "source",
+      positionalLabel: "Source",
       usage: ADD_USAGE,
     });
 
@@ -424,6 +488,7 @@ for (const mode of ["json", "rpc"] as const) {
       const parsed = openMarketplaceCommand(args, ctx, run, {
         usage: "Usage: marketplace name",
         positionalName: "name",
+        positionalLabel: "Marketplace name",
       });
 
       // assert

@@ -28,6 +28,7 @@ export function makeRemoveHandler(deps: Pick<EdgeDeps, "completionCache">): Subc
     const opened = openMarketplaceCommand(args, ctx, run, {
       usage: USAGE,
       positionalName: "name",
+      positionalLabel: "Marketplace name",
     });
     if (opened === undefined) {
       return;

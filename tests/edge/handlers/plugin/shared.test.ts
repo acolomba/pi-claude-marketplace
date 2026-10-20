@@ -359,6 +359,26 @@ describe("parseRequiredPluginMarketplaceRef", () => {
     verifyBoundary();
   });
 
+  test("names an explicitly empty ref as an empty plugin name (USE-07)", () => {
+    // arrange
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+
+    // act
+    const parsed = parseRequiredPluginMarketplaceRef(
+      '""',
+      ctx,
+      runWithNothingLoaded(),
+      UNINSTALL_USAGE,
+    );
+
+    // assert
+    assert.strictEqual(parsed, undefined);
+    assert.deepStrictEqual(notifications, [
+      { message: `Plugin name must not be empty.\n\n${UNINSTALL_USAGE}`, severity: "error" },
+    ]);
+    verifyBoundary();
+  });
+
   test("shows a parse diagnostic other than the usage string verbatim (MSG-NC-2)", () => {
     // arrange
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);

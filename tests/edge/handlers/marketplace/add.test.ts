@@ -27,14 +27,14 @@
 //
 // NFR-5: every case also asserts that the door the git transport opens --
 // `https.request`, replaced by a counting fail-fast throw -- recorded ZERO
-// calls. On the seven clone-carrying rows that zero CAN rise, which is what
+// calls. On the clone-carrying rows that zero CAN rise, which is what
 // separates it from a regression guard: deleting the handler's single
 // `gitOps: deps.gitOps` forward drops the add workflow onto `DEFAULT_GIT_OPS`,
 // and the url source is then dialled for real -- measured, the fail-fast fires
-// from `simple-get` inside `isomorphic-git/http/node` and exactly those seven
-// rows go red. What the zero states there is that the clone was carried out by
+// from `simple-get` inside `isomorphic-git/http/node` and exactly those rows
+// go red. What the zero states there is that the clone was carried out by
 // the injected port and never by the real transport. On the path-source row and
-// the three rejecting rows the same plant leaves the zero GREEN, because
+// the rejecting rows the same plant leaves the zero GREEN, because
 // neither ever clones; there it is a regression guard, not a measurement.
 // `globalThis.fetch` is deliberately NOT the door watched; see
 // `installNetworkCounter`.
@@ -47,13 +47,11 @@
 // `claude-plugins.json` to `claude-plugins.local.json` -- which is what makes
 // "present only when supplied" provable rather than asserted.
 //
-// Arity: the schema declares ONE REQUIRED positional. Zero positionals is
-// rejected with the collapsed missing-argument sentence. `parseCommandArgs`
-// iterates `schema.positional.entries()` -- the SCHEMA, not the input -- so a
-// second token is never inspected and is silently DROPPED; one above the accepted
-// arity is not a rejection here, and the row table states the drop.
+// Arity: the schema declares ONE REQUIRED positional. Zero positionals get the
+// collapsed missing-argument sentence, and a second positional is rejected with
+// `Too many arguments.` before any clone or config write.
 //
-// A scope flag and the scope-target flag supplied together are likewise NOT
+// A scope flag and the scope-target flag supplied together are NOT
 // mutually exclusive: `extractLocalFlag` consumes `--scope <value>` as a
 // downstream-owned pair and removes only the scope-target token from the
 // residual, so both members reach the workflow. The case states that observed
@@ -529,7 +527,7 @@ for (const mode of ["json", "rpc"] as const) {
     },
     {
       args: '""',
-      message: "Missing required argument.",
+      message: "Source must not be empty.",
     },
     {
       args: "alpha@official beta@official",

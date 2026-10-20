@@ -33,7 +33,7 @@ export function makeAutoupdateHandler(enable: boolean): SubcommandHandler {
     const parsed = parseCommandArgs(
       localFlag.residualArgs,
       {
-        positional: [{ name: "name", required: false }] as const,
+        positional: [{ name: "name", label: "Marketplace name", required: false }] as const,
         usage,
       },
       (message) => {
