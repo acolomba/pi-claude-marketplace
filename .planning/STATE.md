@@ -5,7 +5,7 @@ milestone_name: Marketplace Behavioral Tests
 current_phase: 8
 current_phase_name: Marketplace Help and Usage Errors
 status: executing
-stopped_at: Completed 08-01-PLAN.md
+stopped_at: Paused after Phase 8 wave 1 (08-01 complete)
 last_updated: "2026-10-20T12:12:07.168Z"
 last_activity: 2026-10-20
 last_activity_desc: Phase 8 execution started
@@ -183,9 +183,31 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-20T12:12:02.602Z
-**Stopped at:** Completed 08-01-PLAN.md
-**Resume file:** None
+**Last session:** 2026-10-20T12:15:35.898Z
+**Stopped at:** Paused after Phase 8 wave 1 (08-01 complete); 08-02 next
+**Resume file:** `.planning/phases/08-marketplace-help-and-usage-errors/.continue-here.md`
+
+**Pause (2026-10-20, operator's choice, not a block):** the
+`/gsd-autonomous --from 7 --interactive` run is paused at a wave boundary.
+The work lives only in the worktree
+`/home/acolomba/src/pi-claude-marketplace-cucumber-behavioral-tests` on
+`features/cucumber-behavioral-tests` (HEAD `8e5dc94f`, clean, 527 commits
+ahead of `main`, 6 behind, nothing pushed); the primary checkout on `main` has
+none of this milestone's planning files. Phase 7 is complete and verified.
+Phase 8 is planned (5 plans, one per wave) and plan 08-01 is done; 08-02..08-05
+are not started. Resume with `/gsd-resume-work`, then
+`/gsd-execute-phase 8 --no-transition` from the worktree, then the autonomous
+tail for Phase 8 (code review chain if the execute-phase gate did not run it,
+`transition.md`, the STATE fix after `phase.complete`), then
+`/gsd-autonomous --from 9 --interactive`. Do not resume with
+`/gsd-autonomous --from 8`: its plan step reruns plan-phase, whose
+existing-plans check offers only add, view, or replan. Skipped on purpose:
+the execute-phase line `config-set workflow._auto_chain_active false` (never
+run config-set). Not yet run for Phase 8: the post-merge `npm run check`,
+validate-phase, secure-phase, code review, the regression gate, and the
+verifier. Debts: the codebase map is stale by 465 elements (advisory drift
+gate only); Phases 1-6 verifications are stale for the milestone audit; the
+un-numbered CHANGELOG bullets are consolidated into one at PR time.
 
 **Main merge (2026-10-11, quick task 261011-bsm):** `origin/main` at
 `94160614` (#248, and #250, the mcp-4 milestone released as 0.20.0) is merged
