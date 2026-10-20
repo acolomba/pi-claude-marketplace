@@ -5,16 +5,16 @@ milestone_name: Marketplace Behavioral Tests
 current_phase: 8
 current_phase_name: Marketplace Help and Usage Errors
 status: executing
-stopped_at: Completed 08-02-PLAN.md
-last_updated: "2026-10-20T12:42:26.764Z"
+stopped_at: Completed 08-03-PLAN.md
+last_updated: "2026-10-20T12:56:48.198Z"
 last_activity: 2026-10-20
 last_activity_desc: Phase 8 execution started
-state_head: e88237c914e1f64fac144fc8061c19cfaad9fe82
+state_head: 4ab7100c1d27d1c15c915fdf1ef00c8e2bdef450
 progress:
   total_phases: 14
   completed_phases: 11
   total_plans: 67
-  completed_plans: 64
+  completed_plans: 65
   percent: 79
 ---
 
@@ -32,7 +32,7 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 8 (Marketplace Help and Usage Errors) — EXECUTING
-Plan: 3 of 5
+Plan: 4 of 5
 Status: Ready to execute
 Last activity: 2026-10-20 — Phase 8 execution started
 
@@ -183,8 +183,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-20T12:42:05.050Z
-**Stopped at:** Completed 08-02-PLAN.md
+**Last session:** 2026-10-20T12:56:43.171Z
+**Stopped at:** Completed 08-03-PLAN.md
 **Resume file:** None
 
 **Pause (2026-10-20, operator's choice, not a block):** the
@@ -360,6 +360,7 @@ archived milestone artifacts.
 | Phase 07 P04 | 7min | 3 tasks | 1 files |
 | Phase 08 P01 | 4 min | 2 tasks | 1 files |
 | Phase 08 P02 | 11 min | 3 tasks | 12 files |
+| Phase 08 P03 | 12 min | 2 tasks | 20 files |
 
 ## Decisions
 
@@ -496,6 +497,7 @@ archived milestone artifacts.
 - [Phase 08]: Marketplace usage-error rows carry one fault each and no rm or ls alias rows; combined-fault precedence by parser path stays unpinned
 - [Phase 08]: Signature table in edge/router.ts builds both the marketplace help and each verb's usage line; handlers value-import marketplaceUsage
 - [Phase 08]: Marketplace help alias column is computed from the rows; the list line gains 10 spaces to keep (alias: ls) under (alias: rm)
+- [Phase 08]: PositionalSpec.label is required, so every parseCommandArgs call site names its field and an empty value reports <label> must not be empty. (USE-07)
 
 ### mcp-4 decisions
 
