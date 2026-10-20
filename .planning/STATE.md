@@ -4,17 +4,17 @@ milestone: marketplace-features
 milestone_name: Marketplace Behavioral Tests
 current_phase: 07
 current_phase_name: Marketplace Autoupdate
-status: executing
-stopped_at: Completed 07-03-PLAN.md
-last_updated: "2026-10-20T04:31:34.003Z"
+status: verifying
+stopped_at: Completed 07-04-PLAN.md
+last_updated: "2026-10-20T04:43:03.423Z"
 last_activity: 2026-10-19
 last_activity_desc: Phase 07 execution started
-state_head: fa48fde32b517d547caf56b22d7b8d773d9927bf
+state_head: 421d363cb1facfbeb3c3ac84abd6e5ca836c44ed
 progress:
   total_phases: 14
   completed_phases: 10
   total_plans: 62
-  completed_plans: 61
+  completed_plans: 62
   percent: 71
 ---
 
@@ -33,7 +33,7 @@ component as a working Pi artifact.
 
 Phase: 07 (Marketplace Autoupdate) — EXECUTING
 Plan: 4 of 4
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-10-19 — Phase 07 execution started
 
 Progress: [███████░░░] 71%
@@ -183,8 +183,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-20T04:31:29.496Z
-**Stopped at:** Completed 07-03-PLAN.md
+**Last session:** 2026-10-20T04:42:47.688Z
+**Stopped at:** Completed 07-04-PLAN.md
 **Resume file:** None
 
 **Main merge (2026-10-11, quick task 261011-bsm):** `origin/main` at
@@ -335,6 +335,7 @@ archived milestone artifacts.
 | Phase 07 P01 | 10 min | 2 tasks | 8 files |
 | Phase 07 P02 | 11 min | 2 tasks | 6 files |
 | Phase 07 P03 | 7 min | 2 tasks | 9 files |
+| Phase 07 P04 | 7min | 3 tasks | 1 files |
 
 ## Decisions
 
@@ -466,6 +467,7 @@ archived milestone artifacts.
 - [Phase 07]: A local autoupdate entry without a value inherits the base value; the base is read once and an invalid base fails a flip only when a valueless local entry needs it (D-02..D-05, fc43090a)
 - [Phase 07]: D-09 allows two layer-config writers (plugins member and whole text); a raw-text read step is an ordinary read step
 - [Phase 07]: Docs say a nameless flip writes a local entry only when the value that applies to it still differs, since an enable also writes a valueless local-only entry
+- [Phase 07]: No step, library, support, production, or cucumber.json change: every step the AU-01..AU-09 pins use already existed, and each pin passed on first run against the final code.
 
 ### mcp-4 decisions
 
