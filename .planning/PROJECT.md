@@ -692,6 +692,15 @@ validated and archived in [milestones/json-output-REQUIREMENTS.md](milestones/js
 
 ### Validated
 
+- ✓ `marketplace autoupdate` and `noautoupdate` scenarios cover named and
+  nameless flips over both scopes, the changed-first row order, the off default
+  of a new marketplace for every source kind, the setting in `list` and `info`
+  across a new session, unscoped flips that change both scopes, and scoped and
+  unscoped misses. A local entry without a value now takes the value it inherits
+  (the base entry's value, or off), so a flip writes a local value only when the
+  value that applies changes, and an unscoped miss names no scope; both written
+  test-first — marketplace-features Phase 7, 2026-10-20 (AU-01..AU-09).
+
 - ✓ `marketplace update` scenarios cover single and bare updates, semantic
   manifest comparison, autoupdate off and on with new-session versions, catalog
   membership, ordered plugin-failure continuation, project-first bare order with
@@ -1299,6 +1308,13 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
+
+_Last updated: 2026-10-20 after marketplace-features Phase 7 completed. All
+4 success criteria and AU-01..AU-09 pass. The code review fix loop closed all
+5 warnings (missing scenarios on the inheritance matrix) and 2 of 3 info
+findings; IN-01 (an unreadable base config reported as `{invalid manifest}`)
+stays by design. Phase 8 (Marketplace Help and Usage Errors) is next. Prior
+updates follow._
 
 _Last updated: 2026-10-19 after marketplace-features Phase 6 completed. All
 5 success criteria and UPD-01..UPD-10 / UPD-13 / UPD-14 / FIX-01 pass. The

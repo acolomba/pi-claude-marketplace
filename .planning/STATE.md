@@ -22,12 +22,12 @@ progress:
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-10-18 after marketplace-features Phase 5)
+See: `.planning/PROJECT.md` (updated 2026-10-20 after marketplace-features Phase 7)
 
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 07 — Marketplace Autoupdate
+**Current focus:** Phase 8 — Marketplace Help and Usage Errors
 
 ## Current Position
 
