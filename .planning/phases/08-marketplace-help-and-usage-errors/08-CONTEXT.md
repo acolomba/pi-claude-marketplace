@@ -94,11 +94,35 @@ D-05 reaches the plugin verbs too, because they share the parser.
   across both the marketplace and the plugin verbs, so undoing it touches the
   catalog, the scenarios, and the unit tests again.
 
+- **D-06 (user, after research):** D-05 reaches every verb, including the
+  plugin verbs that do not use the shared parser. Research found two gaps
+  there:
+  - `install`, `info`, `update`, `fetch`, and `reinstall` reject `""` as
+    `Invalid <plugin>@<marketplace> ref: "".`.
+  - Plugin `list ""` is accepted and lists nothing.
+
+  Under D-06:
+  - An explicitly empty plugin ref (`""`) reports
+    `Plugin name must not be empty.`.
+  - An `@<marketplace>` form whose name is empty (`@`) reports
+    `Marketplace name must not be empty.`.
+  - Plugin `list ""` is rejected with `Marketplace name must not be empty.`.
+
+  A partly malformed ref (for example `foo@`) keeps its
+  `Invalid <plugin>@<marketplace> ref` message, unless research shows a clean
+  mapping to a named empty field. The rule covers values that are empty as a
+  whole. Written test-first. The tests that pin the old messages are updated,
+  for example `tests/edge/handlers/plugin/reinstall.test.ts:898-920`.
+- **Resolved after research (orchestrator):**
+  - The top-level `help` and `help help` text is not pinned in this phase.
+    It belongs to the deferred top-level help fix, which will change it.
+  - The user-visible changes of D-01, D-05, and D-06 each get a CHANGELOG
+    entry under `[Unreleased]`, per `.agents/skills/changelog/SKILL.md`.
+
 ### Pinned as they are (carried forward, not re-asked)
 
 - USE-01: `marketplace help` and `help marketplace` both return `usage-info`
-  with the marketplace usage. `help help` and a bare `help` show the top-level
-  usage.
+  with the marketplace usage.
 - USE-02: a bare `marketplace` reports `marketplace requires a subcommand.`,
   and an unknown subcommand reports `Unknown marketplace subcommand: "<x>".`.
   Both show the marketplace usage.

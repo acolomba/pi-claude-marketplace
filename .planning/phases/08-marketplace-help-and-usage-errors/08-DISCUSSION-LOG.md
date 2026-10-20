@@ -74,6 +74,19 @@ Question 2: which wording and reach?
 
 ---
 
+## D-05 reach (after research)
+
+Research found that install/info/update/fetch/reinstall reject `""` with their own `Invalid <plugin>@<marketplace> ref: "".` message (outside the shared parser), and plugin `list ""` is accepted.
+
+| Option | Description | Selected |
+|--------|-------------|----------|
+| Every verb (Recommended) | Named empty-value messages everywhere, including those plugin verbs and plugin `list ""`. | ✓ |
+| Shared parser only | Only the verbs using `parseCommandArgs` change. | |
+
+**User's choice:** Every verb. Recorded as D-06.
+
+---
+
 ## Claude's Discretion
 
 - Alias rows (`rm`, `ls`) in the rejection Outlines.
