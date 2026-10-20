@@ -104,14 +104,42 @@ and the suite close (Phase 10).
   CHANGELOG line. A wrong row is corrected. A fix that changes user-visible
   behavior beyond the requirement wording, or touches upstream parity, stops
   for the user's decision.
-- **D-14 (user):** Until the last plan, plans run `cucumber-js --tags @url`
-  by hand to triage. `cucumber.json` keeps the exclusion until the last plan,
-  so every commit stays green.
+- **D-14 (user):** Until the last plan, plans run the `@url` rows by hand to
+  triage. `cucumber.json` keeps the exclusion until the last plan, so every
+  commit stays green. Correction from research: `--tags @url` on the CLI is
+  ANDed with the profile's exclusion and runs 0 scenarios, so the triage run
+  uses a scratch config with `"tags": "@url"` passed through `-c` (see
+  09-RESEARCH.md for the exact command).
 - **D-15 (user):** The LAYER-07 remove Outlines' red-then-green proof (SC6)
   plants the old install files from the parent of the commit Phase 3.2's plan
   07 SUMMARY names (or an equivalent local edit), runs the `@url` rows, saves
   the result as a `*-RED.json` in the phase directory as Phase 7 did,
   restores, and runs green. The plant is never committed.
+
+### Decisions after research
+
+- **D-16 (user):** A url add whose `#ref` does not exist emits
+  `internal-error` "Command failed unexpectedly." today. Fix it test-first in
+  this phase: a scenario fails first, then the failure becomes a typed result
+  (research and planning pick the reason token, likely `source missing`
+  naming the ref; if no existing token fits, stop for the user), with paired
+  unit tests and a CHANGELOG line.
+- **D-17:** The `info.feature` url row types a ref the bare repository has
+  (`#main` instead of `#stable`), or the fixture publishes a `stable` ref;
+  the planner picks one. The row stays a ref-carrying source.
+- **D-18 (user):** The unreadable-skill-file update Outline
+  (`features/marketplace/update.feature`, about line 885) is a local
+  filesystem behavior: git cannot index a mode-000 file. Drop its `@url` and
+  `@github` Examples blocks and keep the rule of three variants by turning it
+  into a local-only scenario form that still has three or more variants, or
+  into separate scenarios.
+- **D-19 (user):** A failed url add's child row id reads `<url>@<url>`
+  (03.2 review IN-04). Fix it in this phase, test-first: the scenario fails
+  on today's id, then passes on the corrected one. Research or planning
+  determines the correct id from the row grammar the other failed-add rows
+  use; it changes the JSON payload of failed git adds, so it gets a CHANGELOG
+  line and updates any catalog entry or unit test that pins the old id. —
+  **Reversibility:** costly — it changes the published payload's row id.
 
 ### Pinned as they are (carried forward, not re-asked)
 
