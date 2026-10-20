@@ -227,6 +227,31 @@ Feature: Marketplace autoupdate
       | name  | source                    | autoupdate |
       | tools | {home}/marketplaces/tools | true       |
 
+  Scenario: Disabling autoupdate with --local fails as invalid manifest when the base config cannot be read
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin marketplace add {home}/marketplaces/tools --scope project --local"
+    Given a config in scope project and layer base, with this text:
+      """
+      { "schemaVersion": 1,
+      """
+    When the user runs "/claude:plugin marketplace noautoupdate tools --scope project --local"
+    Then the result has these fields:
+      | kind         | cascade                      |
+      | severity     | error                        |
+      | needs reload | false                        |
+      | summary      | Some operations have failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id          | name  | status | reasons          | scope   | cause chain                                                 | cause truncated | leaks | rollback partial |
+      | tools            | project           | failed             | tools@tools | tools | failed | invalid manifest | project | Config file "claude-plugins.json" failed schema validation. | false           |       |                  |
+    Then the "claude-plugins.local.json" file of the project scope declares these marketplaces:
+      | name  | source                    |
+      | tools | {home}/marketplaces/tools |
+    Then the "claude-plugins.json" file of the project scope holds this text:
+      """
+      { "schemaVersion": 1,
+      """
+
   Scenario: A local autoupdate setting overrides the base-layer setting in the marketplace list
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" is added to the project scope

@@ -2,10 +2,12 @@
  * @fileoverview Steps about the configs a user owns in a scope: the base config
  * `claude-plugins.json` and the local config `claude-plugins.local.json`.
  *
- * One setup step writes the `plugins` member of one layer config, to model a
- * hand edit or a version-control update. It keeps the config's other members.
- * Every other step only reads, so this module writes nothing else and deletes
- * nothing.
+ * Two setup steps each write one layer config, to model a hand edit or a
+ * version-control update. One writes the `plugins` member and keeps the
+ * config's other members. The other writes the whole text, which can leave the
+ * file broken. Every other step only reads, so this module writes nothing else
+ * and deletes nothing. `holds this text` compares the raw text of a config, so
+ * a scenario can show that a broken config stayed as it was.
  *
  * A missing file fails every step that reads one; it never reads as zero
  * declarations. A file whose `marketplaces` map is empty declares that no
@@ -28,7 +30,7 @@ import path from "node:path";
 import { type DataTable, Given, Then } from "@cucumber/cucumber";
 
 import { fieldRecord, flatten, isPlainObject, recordTable } from "../lib/field-rows.ts";
-import { readLayerPlugins, writeLayerPlugins } from "../lib/layer-config.ts";
+import { readLayerPlugins, writeLayerPlugins, writeLayerText } from "../lib/layer-config.ts";
 
 import type { ScenarioWorld } from "../support/world.ts";
 
@@ -130,6 +132,15 @@ Given(
   },
 );
 
+Given(
+  "a config in scope {word} and layer {word}, with this text:",
+  async function (this: ScenarioWorld, scope: string, layer: string, text: string) {
+    const file = layerConfigPath(this, scope, layer);
+    await writeLayerText(file, text);
+    assert.strictEqual(await readFile(file, "utf8"), text, `${file} does not hold the text`);
+  },
+);
+
 Then(
   "the {string} file of the {word} scope declares these marketplaces:",
   async function (this: ScenarioWorld, fileName: string, scope: string, table: DataTable) {
@@ -147,6 +158,15 @@ Then(
   "the {string} file of the {word} scope declares these plugins:",
   async function (this: ScenarioWorld, fileName: string, scope: string, table: DataTable) {
     await compareDeclarations(this, configFilePath(this, fileName, scope), table, "plugins", "id");
+  },
+);
+
+Then(
+  "the {string} file of the {word} scope holds this text:",
+  async function (this: ScenarioWorld, fileName: string, scope: string, text: string) {
+    const file = configFilePath(this, fileName, scope);
+    assert.ok(existsSync(file), `${file} does not exist`);
+    assert.strictEqual(await readFile(file, "utf8"), text, `${file} does not hold the text`);
   },
 );
 

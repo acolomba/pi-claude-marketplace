@@ -55,7 +55,7 @@ Use `@cucumber/cucumber` for the runner, `node:assert/strict` for assertions, an
 
 - A `Given` that performs setup asserts that the setup succeeded, so a broken precondition fails in the `Given` and not in a later `Then`.
 
-- The config steps read the layer configs a user owns and never write them, with one exception. The step `a config in scope <scope> and layer <layer>, with these plugins:` writes the `plugins` member of one layer config through `features/lib/layer-config.ts` and keeps the other members of the file. It models a hand edit, or a version-control update of the base config. It is the only config step that writes.
+- The config steps read the layer configs a user owns and never write them, with two exceptions. Both write through `features/lib/layer-config.ts`. The step `a config in scope <scope> and layer <layer>, with these plugins:` writes the `plugins` member of one layer config and keeps the other members of the file. It models a hand edit, or a version-control update of the base config. The step `a config in scope <scope> and layer <layer>, with this text:` writes the whole text of one layer config from a doc string. It models a hand edit that breaks the file. No other config step writes.
 
 - A `Then` has no side effects. It reads what the `When` left on the world. Two exceptions: a step that compares the row arrays of the last results calls `this.markRowsCompared()` after its comparison, and the step that compares the fields of every result calls `this.markNoticesCompared()`, so the world can fail a scenario whose rows or MCP config notices no step compared (`.agents/skills/cucumber/rules/world-and-stand-ins.md`). No `Then` writes to the world in any other way.
 

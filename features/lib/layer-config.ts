@@ -1,10 +1,12 @@
 /**
- * @fileoverview Reads the plugin table of the one setup step that writes a
- * layer config, and writes that config's `plugins` member.
+ * @fileoverview Writes one layer config of a scope for the two setup steps that
+ * write one.
  *
- * The step models a hand edit or a version-control update of one layer config
- * of a scope. It owns only the `plugins` member: every other member, such as the
- * `marketplaces` member a `marketplace add` wrote, stays as it is.
+ * Both steps model a hand edit or a version-control update of one layer config.
+ * One writes only the `plugins` member, from a plugin table this module reads:
+ * every other member, such as the `marketplaces` member a `marketplace add`
+ * wrote, stays as it is. The other writes the whole text of the file, which can
+ * leave it broken.
  */
 
 import { existsSync } from "node:fs";
@@ -85,4 +87,13 @@ export async function writeLayerPlugins(
   };
   await mkdir(path.dirname(filePath), { recursive: true });
   await writeFile(filePath, `${JSON.stringify(written, null, 2)}\n`);
+}
+
+/**
+ * Writes `text` as the whole layer config at `filePath`, as a hand edit that
+ * can break the file, and creates its directory when it does not exist.
+ */
+export async function writeLayerText(filePath: string, text: string): Promise<void> {
+  await mkdir(path.dirname(filePath), { recursive: true });
+  await writeFile(filePath, text);
 }
