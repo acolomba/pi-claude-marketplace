@@ -3950,3 +3950,29 @@ Found by the marketplace-features research (2026-10-15,
 The marketplace-features milestone keeps them out of scope. Scope when picked
 up: confirm each against the upstream docs and binary first, then implement it
 with a behavioral scenario under `features/marketplace/`.
+
+## GITERR-01: a git host's HTTP answer is classified per caller, not in one place
+
+Found during marketplace-features (2026-10-20), after quick task 261019-fvd
+(`d430aca1`) made `marketplace add` report a host's HTTP answer as
+`{network error}`. That fix moved the status helpers into
+`shared/git-failure-classifiers.ts` (`hostHttpStatus`, `hostHttpFailureFrame`)
+and added `classifyGitSourceAccessFailure`: errno -> `network unreachable`,
+401/403 -> `authentication required`, 404/410 -> `source missing`, any other
+status -> `network error`. Each operation still composes these pieces itself:
+
+| Remote git access | Classifier | Host 5xx reports |
+|---|---|---|
+| `marketplace add` | `classifyGitSourceAccessFailure` | `{network error}` + status/URL cause frame |
+| `marketplace update` (and the autoupdate cascade) | `classifyGitTransportFailure` + `hostHttpStatus` in `update.ts` | `{network error}` + frame (404 is `network error` here by design, UPD-11) |
+| git-source plugin `install` (`install.messaging.ts`) | only extracts `authentication required` | the generic cause chain |
+| plugin `update` (`update-flow.ts`, `update-preflight.ts`), `fetch`, `info`, the dependency tag probe, `marketplace/shared.ts` | `classifyGitTransportFailure` only | not `{network error}` |
+
+Scope when picked up: research Claude Code's behavior for plugin git-source
+failures first (claude-code-compat-research), then route every remote git
+access through one classification entry point with an explicit per-operation
+404/410 rule, so plugin install/update/fetch/info report a host's HTTP answer
+the way marketplace add and update do. Paired unit tests at 100% direct
+coverage, the output-catalog entries, and a CHANGELOG line. Related:
+`GAUTH-01` (the auth-hint cause line has the same one-call-site-at-a-time
+shape).
