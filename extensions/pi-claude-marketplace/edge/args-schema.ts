@@ -64,9 +64,9 @@ export type ParsedCommandArgs<Spec extends readonly PositionalSpec[]> = {
  *   - the `--scope` errors of `parseArgs`;
  *   - an unknown flag, as `Unknown flag: "<flag>".`;
  *   - surplus positionals, as `Too many arguments.`;
- *   - an omitted required positional, as the `usage` string itself;
- *   - a supplied empty or blank positional, required or optional, as
- *     `<label> must not be empty.` (USE-07).
+ *   - then, slot by slot in schema order, an omitted required positional as
+ *     the `usage` string itself, or a supplied empty or blank positional,
+ *     required or optional, as `<label> must not be empty.` (USE-07).
  *
  * Example:
  *   const parsed = parseCommandArgs(args, {
