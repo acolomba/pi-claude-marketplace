@@ -5,16 +5,16 @@ milestone_name: Marketplace Behavioral Tests
 current_phase: 07
 current_phase_name: Marketplace Autoupdate
 status: executing
-stopped_at: Completed 07-02-PLAN.md
-last_updated: "2026-10-20T04:21:33.239Z"
+stopped_at: Completed 07-03-PLAN.md
+last_updated: "2026-10-20T04:31:34.003Z"
 last_activity: 2026-10-19
 last_activity_desc: Phase 07 execution started
-state_head: c0f5399e22ba5c2900ce230fb7fc26889b9dd0c8
+state_head: fa48fde32b517d547caf56b22d7b8d773d9927bf
 progress:
   total_phases: 14
   completed_phases: 10
   total_plans: 62
-  completed_plans: 60
+  completed_plans: 61
   percent: 71
 ---
 
@@ -32,7 +32,7 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 07 (Marketplace Autoupdate) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 Status: Ready to execute
 Last activity: 2026-10-19 — Phase 07 execution started
 
@@ -183,8 +183,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-20T04:21:28.741Z
-**Stopped at:** Completed 07-02-PLAN.md
+**Last session:** 2026-10-20T04:31:29.496Z
+**Stopped at:** Completed 07-03-PLAN.md
 **Resume file:** None
 
 **Main merge (2026-10-11, quick task 261011-bsm):** `origin/main` at
@@ -334,6 +334,7 @@ archived milestone artifacts.
 | Phase 06 P02 | 50 min | 3 tasks | 6 files |
 | Phase 07 P01 | 10 min | 2 tasks | 8 files |
 | Phase 07 P02 | 11 min | 2 tasks | 6 files |
+| Phase 07 P03 | 7 min | 2 tasks | 9 files |
 
 ## Decisions
 
@@ -463,6 +464,8 @@ archived milestone artifacts.
 - [Phase 06]: Assert the prior failed refresh inside Given for repair scenarios. — The action under test remains after all setup and runs in the same Pi process.
 - [Phase 07]: D-08 landed: an unscoped autoupdate/noautoupdate miss reports marketplace-not-added with no scope; autoupdate joins OPS_BARE and the catalog byte total is 46_623
 - [Phase 07]: A local autoupdate entry without a value inherits the base value; the base is read once and an invalid base fails a flip only when a valueless local entry needs it (D-02..D-05, fc43090a)
+- [Phase 07]: D-09 allows two layer-config writers (plugins member and whole text); a raw-text read step is an ordinary read step
+- [Phase 07]: Docs say a nameless flip writes a local entry only when the value that applies to it still differs, since an enable also writes a valueless local-only entry
 
 ### mcp-4 decisions
 
