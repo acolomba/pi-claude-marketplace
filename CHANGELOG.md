@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- An empty argument now fails with a message that names it, such as `Source must not be empty.` or `Marketplace name must not be empty.`.
+
+  - `uninstall`, `enable`, and `disable` report an empty `<plugin>@<marketplace>` as `Plugin name must not be empty.`.
+
 - `/claude:plugin marketplace help` now shows `--local` on `add`, `remove`, `autoupdate`, and `noautoupdate`, as their own usage lines do.
 
 - When a command cannot read a plugin's dependencies, its `{unreadable}` cause says whether the manifest is missing, unreadable, or invalid, without its parser error.
