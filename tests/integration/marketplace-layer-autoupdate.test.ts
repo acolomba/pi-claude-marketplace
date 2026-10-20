@@ -255,7 +255,7 @@ test("CFG-03: a named flip whose target layer is silent while the config of the 
   boundary.verifyBoundary();
 });
 
-test("D-07: the list reads the value both layers carry, then the local override", async (t) => {
+test("D-07: the list reads the base value a local entry without one inherits, then the local override", async (t) => {
   // arrange
   const scope = await projectScope(t, "mp-layer-autoupdate-merged-", ["tools"]);
   const boundary = createNotificationBoundary(4);
@@ -275,7 +275,7 @@ test("D-07: the list reads the value both layers carry, then the local override"
     { message: "● tools [project] <autoupdate>\n\nMarketplace autoupdate: 1 success" },
     { message: "● tools [project] <no autoupdate>" },
   ]);
-  assert.deepStrictEqual(afterEnable, { base: true, local: true, listed: true });
+  assert.deepStrictEqual(afterEnable, { base: true, local: undefined, listed: true });
   assert.deepStrictEqual(afterOverride, { base: true, local: false, listed: false });
   boundary.verifyBoundary();
 });

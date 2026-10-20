@@ -49,7 +49,8 @@
 //    when only the other layer declares the marketplace, and reports it not
 //    added when neither does
 //   unnamed (D-MF-03): each recorded marketplace in every layer that declares
-//    it, or in claude-plugins.local.json only with --local
+//    it, or in claude-plugins.local.json only with --local; a local entry
+//    without a value inherits the base value (LAYER-09)
 //   each changed layer gets one batched config write; WR-05: a flip reads and
 //   writes only config, never state.json (SPLIT-01)
 //  accumulate the changed and unchanged names across scopes
@@ -90,7 +91,7 @@ import { AUTOUPDATE_CONTEXT, NOAUTOUPDATE_CONTEXT } from "./autoupdate.messaging
 import { crossScopeFlag, marketplaceFailureRows, marketplaceLayerVerdict } from "./shared.ts";
 
 import type { MarketplaceLayerVerdict } from "./shared.ts";
-import type { ScopeConfig } from "../../persistence/config-io.ts";
+import type { ConfigLoadResult, ScopeConfig } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
@@ -125,8 +126,9 @@ export interface AutoupdateOptions {
   readonly cwd: string;
   /**
    * WB-01: when true, target the local config (`claude-plugins.local.json`)
-   * instead of the base config (`claude-plugins.json`). The base config is
-   * NEVER touched on the --local path.
+   * instead of the base config (`claude-plugins.json`). The --local path never
+   * writes the base config, but it reads it for the value a local entry without
+   * one inherits.
    */
   readonly local?: boolean;
   /**
@@ -161,6 +163,9 @@ interface FlipPlan {
 }
 
 type RefusedVerdict = Extract<MarketplaceLayerVerdict, { kind: "refused" }>;
+
+/** The `autoupdate` value a local entry without one inherits (D-MF-03 / LAYER-09). */
+type InheritedValue = (name: string) => boolean;
 
 /**
  * Leaves the state lock when the layer gate refuses a named flip, carrying the
@@ -289,30 +294,60 @@ async function loadFlipLayer(filePath: string, local: boolean): Promise<FlipLaye
 }
 
 /**
- * Whether a layer's own `autoupdate` value already matches the request. An
- * absent value in the base layer reads as off (MAU-4). An absent value in
- * the local layer is no value at all, so a flip always writes it, which is how
- * a per-machine override comes to exist.
+ * The base entry's current value, off when the base config is absent or does
+ * not set it. An invalid base config fails closed, and only when a local entry
+ * without a value asks (CFG-03).
  */
-function layerAlreadySet(layer: FlipLayer, name: string, enable: boolean): boolean {
+function inheritFrom(base: ConfigLoadResult): InheritedValue {
+  return (name) => {
+    if (base.status === "invalid") {
+      throw invalidConfigError(path.basename(base.filePath));
+    }
+
+    return (
+      base.status === "valid" && (ownValue(base.config.marketplaces, name)?.autoupdate ?? false)
+    );
+  };
+}
+
+/** After a flip of the base layer, a base config that declares the marketplace holds `enable`. */
+function inheritAfterFlip(base: FlipLayer, enable: boolean): InheritedValue {
+  return (name) => enable && ownValue(base.config.marketplaces, name) !== undefined;
+}
+
+/**
+ * Whether a layer's `autoupdate` value already matches the request. A base
+ * entry without a value reads as off (MAU-4). A local entry without a value has
+ * the value it inherits: the base entry's value, or off when the base config
+ * does not declare the marketplace or the base entry has no value (D-MF-03 /
+ * LAYER-09). So a flip writes a local value only when it changes the value that
+ * applies.
+ */
+function layerAlreadySet(
+  layer: FlipLayer,
+  name: string,
+  enable: boolean,
+  inherited: InheritedValue,
+): boolean {
   const own = ownValue(layer.config.marketplaces, name)?.autoupdate;
-  if (own === undefined) {
-    return !layer.local && !enable;
+  if (own !== undefined) {
+    return own === enable;
   }
 
-  return own === enable;
+  return (layer.local && inherited(name)) === enable;
 }
 
 /**
  * Plans a flip over `names`: a name with no layer gets no row; otherwise it is
- * changed when any of its layers lacks the requested value, and each such
- * layer gets the name in its write batch. One row per name, never one per
- * layer.
+ * changed when any of its layers lacks the requested value, the inherited value
+ * of a local entry without one included, and each such layer gets the name in
+ * its write batch. One row per name, never one per layer.
  */
 function planFlip(
   names: readonly string[],
   layersOf: (name: string) => readonly FlipLayer[],
   enable: boolean,
+  inherited: InheritedValue,
 ): FlipPlan {
   const changed: string[] = [];
   const unchanged: string[] = [];
@@ -323,7 +358,7 @@ function planFlip(
       continue;
     }
 
-    const stale = layers.filter((layer) => !layerAlreadySet(layer, name, enable));
+    const stale = layers.filter((layer) => !layerAlreadySet(layer, name, enable, inherited));
     if (stale.length === 0) {
       unchanged.push(name);
       continue;
@@ -370,14 +405,10 @@ async function writeFlipPlan(plan: FlipPlan, scopeRoot: string, enable: boolean)
  * neither does, and the CFG-03 failure naming the other file when that file
  * cannot be read.
  */
-async function requireTargetDeclares(
-  target: FlipLayer,
-  otherPath: string,
-  name: string,
-): Promise<void> {
+function requireTargetDeclares(target: FlipLayer, other: ConfigLoadResult, name: string): void {
   const verdict = marketplaceLayerVerdict({
     target: target.config,
-    other: await loadConfig(otherPath),
+    other,
     targetIsLocal: target.local,
     marketplace: name,
   });
@@ -396,7 +427,8 @@ async function requireTargetDeclares(
 
 /**
  * Plans a named flip inside the scope lock. Reconcile-driven flips apply no
- * layer rule (WR-09).
+ * layer rule (WR-09). It reads the other layer once, for the layer gate and,
+ * for a local target, for the inherited value.
  */
 async function planNamedFlip(
   opts: AutoupdateOptions,
@@ -413,40 +445,67 @@ async function planNamedFlip(
     throw new MarketplaceNotFoundError(name, []);
   }
 
+  const other = await loadConfig(
+    local ? locations.baseConfigJsonPath : locations.localConfigJsonPath,
+  );
   if (opts.notifications?.mode !== "orchestrated") {
-    await requireTargetDeclares(
-      target,
-      local ? locations.baseConfigJsonPath : locations.localConfigJsonPath,
-      name,
-    );
+    requireTargetDeclares(target, other, name);
   }
 
-  return planFlip([name], () => [target], opts.enable);
+  return planFlip(
+    [name],
+    () => [target],
+    opts.enable,
+    inheritFrom(local ? other : { status: "absent" }),
+  );
+}
+
+/**
+ * The layers an unnamed flip may write and the value a local entry without one
+ * inherits. With `--local` only the local layer, loaded first so an invalid
+ * local config fails first, and the current base value; otherwise the base
+ * layer then the local layer, and the value the base config holds after the
+ * flip.
+ */
+async function everyFlipLayers(
+  opts: AutoupdateOptions,
+  locations: ScopedLocations,
+): Promise<{ readonly layers: readonly FlipLayer[]; readonly inherited: InheritedValue }> {
+  if (opts.local === true) {
+    const local = await loadFlipLayer(locations.localConfigJsonPath, true);
+    return {
+      layers: [local],
+      inherited: inheritFrom(await loadConfig(locations.baseConfigJsonPath)),
+    };
+  }
+
+  const base = await loadFlipLayer(locations.baseConfigJsonPath, false);
+  const local = await loadFlipLayer(locations.localConfigJsonPath, true);
+  return { layers: [base, local], inherited: inheritAfterFlip(base, opts.enable) };
 }
 
 /**
  * Plans an unnamed flip (D-MF-03): every recorded marketplace, in state order,
- * changes in each layer that declares it. Without `--local` both layers are
- * read, so either one being invalid aborts the flip (CFG-03); with `--local`
- * only `claude-plugins.local.json` is read and written. A marketplace that no
- * applicable layer declares gets no row.
+ * changes in each layer that declares it. With `--local` only
+ * `claude-plugins.local.json` is written; the base config is read for inherited
+ * values, and an unreadable base fails the flip only when a local entry without
+ * a value needs it (CFG-03). Without `--local` both layers are read, so either
+ * one being invalid aborts the flip (CFG-03), and a local entry without a value
+ * inherits the value the base config holds after the flip, so only the base
+ * entry is written. A marketplace that no applicable layer declares gets no
+ * row.
  */
 async function planEveryFlip(
   opts: AutoupdateOptions,
   locations: ScopedLocations,
   state: ExtensionState,
 ): Promise<FlipPlan> {
-  const layers =
-    opts.local === true
-      ? [await loadFlipLayer(locations.localConfigJsonPath, true)]
-      : [
-          await loadFlipLayer(locations.baseConfigJsonPath, false),
-          await loadFlipLayer(locations.localConfigJsonPath, true),
-        ];
+  const { layers, inherited } = await everyFlipLayers(opts, locations);
   return planFlip(
     Object.keys(state.marketplaces),
     (name) => layers.filter((layer) => ownValue(layer.config.marketplaces, name) !== undefined),
     opts.enable,
+    inherited,
   );
 }
 
@@ -456,8 +515,9 @@ async function planEveryFlip(
  *
  * WR-05: a flip reads and writes only config, never the legacy `autoupdate`
  * field of the state record, and the closure has no tx.save() (SPLIT-01).
- * Only layers whose own value differs are written, so an idempotent flip
- * leaves every file's bytes and mtime unchanged (RECON-05).
+ * Only layers whose value differs from the request are written, a local
+ * entry's inherited value included, so an idempotent flip leaves every file's
+ * bytes and mtime unchanged (RECON-05).
  *
  * WR-09 / T-56-02-01: orchestrated mode writes nothing, so a reconcile-driven
  * flip never copies an override in the local config

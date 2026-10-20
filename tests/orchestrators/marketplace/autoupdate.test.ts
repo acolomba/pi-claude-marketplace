@@ -623,36 +623,79 @@ for (const { holding, requested, expectedMessage } of scopedMissCases) {
   });
 }
 
-test("LAYER-02: a local flip writes an explicit value into a local entry that has none", async () => {
+const inheritedNamedLocalCases = [
+  {
+    label: "inherits off from a base config that does not declare it",
+    enable: false,
+    base: { base: { source: "./base", autoupdate: false } },
+    expectedMessage: "● mp [user] <no autoupdate> {already no autoupdate}",
+    expectedLocal: undefined,
+  },
+  {
+    label: "inherits off from a base entry without a value",
+    enable: false,
+    base: { mp: { source: "./src" } },
+    expectedMessage: "● mp [user] <no autoupdate> {already no autoupdate}",
+    expectedLocal: undefined,
+  },
+  {
+    label: "inherits on from a base entry that has it on",
+    enable: true,
+    base: { mp: { source: "./src", autoupdate: true } },
+    expectedMessage: "● mp [user] <autoupdate> {already autoupdate}",
+    expectedLocal: undefined,
+  },
+  {
+    label: "writes an explicit off over a base entry that has it on",
+    enable: false,
+    base: { mp: { source: "./src", autoupdate: true } },
+    expectedMessage: "● mp [user] <no autoupdate>",
+    expectedLocal:
+      '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "mp": {\n      "source": "./src",\n      "autoupdate": false\n    }\n  },\n  "plugins": {}\n}\n',
+  },
+] as const;
+
+for (const { label, enable, base, expectedMessage, expectedLocal } of inheritedNamedLocalCases) {
+  test(`LAYER-02: a named --local ${enable ? "enable" : "disable"} of a local entry without a value ${label}`, async () => {
+    await withHermeticHome(async ({ cwd }) => {
+      // arrange
+      const locations = locationsFor("user", cwd);
+      await recordAndDeclare(locations, cwd, "local");
+      await writeConfig(locations, { schemaVersion: 1, marketplaces: base });
+      const bytesBefore = await scopeBytes(locations);
+      const boundary = notificationBoundary({ message: expectedMessage });
+
+      // act
+      await setMarketplaceAutoupdate({
+        ctx: boundary.ctx,
+        run: boundary.run,
+        name: "mp",
+        enable,
+        scope: "user",
+        cwd,
+        local: true,
+      });
+
+      // assert
+      assert.deepEqual(await scopeBytes(locations), {
+        ...bytesBefore,
+        local: expectedLocal ?? bytesBefore.local,
+      });
+      verify(boundary.ctx);
+      verify(boundary.ui);
+    });
+  });
+}
+
+test("LAYER-02: a named --local disable of a local entry without a value and no base config reports already no autoupdate", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
     const locations = locationsFor("user", cwd);
-    await saveMarketplaces(locations, [marketplaceRecord("mp", "user", cwd)]);
-    await writeConfig(locations, {
-      schemaVersion: 1,
-      marketplaces: { base: { source: "./base", autoupdate: false } },
+    await recordAndDeclare(locations, cwd, "local");
+    const bytesBefore = await scopeBytes(locations);
+    const boundary = notificationBoundary({
+      message: "● mp [user] <no autoupdate> {already no autoupdate}",
     });
-    await writeConfig(
-      locations,
-      { schemaVersion: 1, marketplaces: { mp: { source: "./src" } } },
-      true,
-    );
-    const baseBytes = await readFile(locations.baseConfigJsonPath, "utf8");
-    const stateBytes = await readFile(locations.stateJsonPath, "utf8");
-    const boundary = notificationBoundary({ message: "● mp [user] <no autoupdate>" });
-    const expectedLocalBytes = [
-      "{",
-      '  "schemaVersion": 1,',
-      '  "marketplaces": {',
-      '    "mp": {',
-      '      "source": "./src",',
-      '      "autoupdate": false',
-      "    }",
-      "  },",
-      '  "plugins": {}',
-      "}",
-      "",
-    ].join("\n");
 
     // act
     await setMarketplaceAutoupdate({
@@ -666,9 +709,7 @@ test("LAYER-02: a local flip writes an explicit value into a local entry that ha
     });
 
     // assert
-    assert.equal(await readFile(locations.baseConfigJsonPath, "utf8"), baseBytes);
-    assert.equal(await readFile(locations.localConfigJsonPath, "utf8"), expectedLocalBytes);
-    assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
+    assert.deepEqual(await scopeBytes(locations), { ...bytesBefore, base: undefined });
     verify(boundary.ctx);
     verify(boundary.ui);
   });
@@ -1143,7 +1184,10 @@ test("D-06: an unnamed flip whose local write fails reports the marketplaces the
       marketplaces: { extras: { source: "./extras" }, mp: { source: "./src" } },
     });
     const localTarget = path.join(home, "claude-plugins.local.json");
-    await writeFile(localTarget, '{"schemaVersion":1,"marketplaces":{"mp":{"source":"./src"}}}\n');
+    await writeFile(
+      localTarget,
+      '{"schemaVersion":1,"marketplaces":{"mp":{"source":"./src","autoupdate":false}}}\n',
+    );
     await symlink(localTarget, locations.localConfigJsonPath);
     const notifications: string[] = [];
     const boundary = notificationBoundary({
@@ -1181,7 +1225,7 @@ test("D-06: an unnamed flip whose local write fails reports the marketplaces the
       [await readFile(locations.baseConfigJsonPath, "utf8"), await readFile(localTarget, "utf8")],
       [
         '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "extras": {\n      "source": "./extras",\n      "autoupdate": true\n    },\n    "mp": {\n      "source": "./src",\n      "autoupdate": true\n    }\n  },\n  "plugins": {}\n}\n',
-        '{"schemaVersion":1,"marketplaces":{"mp":{"source":"./src"}}}\n',
+        '{"schemaVersion":1,"marketplaces":{"mp":{"source":"./src","autoupdate":false}}}\n',
       ],
     );
     verify(boundary.ctx);
@@ -1571,7 +1615,7 @@ test("CFG-03: an unnamed --local flip over an invalid local config fails and wri
   });
 });
 
-test("D-06: an unnamed flip sets the value in every layer that declares each marketplace", async () => {
+test("D-06: an unnamed flip sets the base value and leaves a local entry without a value to inherit it", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
     const locations = locationsFor("project", cwd);
@@ -1589,6 +1633,7 @@ test("D-06: an unnamed flip sets the value in every layer that declares each mar
       true,
     );
     const stateBytes = await readFile(locations.stateJsonPath, "utf8");
+    const localBytes = await readFile(locations.localConfigJsonPath, "utf8");
     const boundary = notificationBoundary({
       message: [
         "● extras [project] <autoupdate>",
@@ -1628,19 +1673,7 @@ test("D-06: an unnamed flip sets the value in every layer that declares each mar
         "}",
         "",
       ].join("\n"),
-      local: [
-        "{",
-        '  "schemaVersion": 1,',
-        '  "marketplaces": {',
-        '    "tools": {',
-        '      "source": "./tools",',
-        '      "autoupdate": true',
-        "    }",
-        "  },",
-        '  "plugins": {}',
-        "}",
-        "",
-      ].join("\n"),
+      local: localBytes,
     });
     verify(boundary.ctx);
     verify(boundary.ui);
@@ -1649,11 +1682,11 @@ test("D-06: an unnamed flip sets the value in every layer that declares each mar
 
 const baseOnUnnamedCases = [
   {
-    label: "writes the explicit value into a local entry that has none",
+    label: "leaves a local entry without a value to inherit it",
     localEntry: { source: "./src" },
-    expectedMessage: "● mp [project] <autoupdate>\n\nMarketplace autoupdate: 1 success",
-    expectedLocal:
-      '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "mp": {\n      "source": "./src",\n      "autoupdate": true\n    }\n  },\n  "plugins": {}\n}\n',
+    expectedMessage:
+      "● mp [project] <autoupdate> {already autoupdate}\n\nMarketplace autoupdate: 1 success",
+    expectedLocal: undefined,
   },
   {
     label: "reports already autoupdate when every declaring layer has it on",
@@ -1661,6 +1694,12 @@ const baseOnUnnamedCases = [
     expectedMessage:
       "● mp [project] <autoupdate> {already autoupdate}\n\nMarketplace autoupdate: 1 success",
     expectedLocal: undefined,
+  },
+  {
+    label: "writes a local entry whose own value is off",
+    localEntry: { source: "./src", autoupdate: false },
+    expectedMessage: "● mp [project] <autoupdate>\n\nMarketplace autoupdate: 1 success",
+    expectedLocal: BASE_FLIP_BYTES,
   },
 ] as const;
 
@@ -1700,6 +1739,69 @@ for (const { label, localEntry, expectedMessage, expectedLocal } of baseOnUnname
   });
 }
 
+test("D-MF-03: an unnamed enable writes a local entry the base config does not declare", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    await recordAndDeclare(locations, cwd, "local");
+    const bytesBefore = await scopeBytes(locations);
+    const boundary = notificationBoundary({
+      message: "● mp [project] <autoupdate>\n\nMarketplace autoupdate: 1 success",
+    });
+
+    // act
+    await setMarketplaceAutoupdate({
+      ctx: boundary.ctx,
+      run: boundary.run,
+      enable: true,
+      scope: "project",
+      cwd,
+    });
+
+    // assert
+    assert.deepEqual(await scopeBytes(locations), {
+      state: bytesBefore.state,
+      base: undefined,
+      local: BASE_FLIP_BYTES,
+    });
+    verify(boundary.ctx);
+    verify(boundary.ui);
+  });
+});
+
+test("D-MF-03: an unnamed disable writes the base entry and leaves a local entry without a value to inherit it", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    await recordAndDeclare(locations, cwd, "local");
+    await writeConfig(locations, {
+      schemaVersion: 1,
+      marketplaces: { mp: { source: "./src", autoupdate: true } },
+    });
+    const bytesBefore = await scopeBytes(locations);
+    const boundary = notificationBoundary({
+      message: "● mp [project] <no autoupdate>\n\nMarketplace noautoupdate: 1 success",
+    });
+
+    // act
+    await setMarketplaceAutoupdate({
+      ctx: boundary.ctx,
+      run: boundary.run,
+      enable: false,
+      scope: "project",
+      cwd,
+    });
+
+    // assert
+    assert.deepEqual(await scopeBytes(locations), {
+      ...bytesBefore,
+      base: '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "mp": {\n      "source": "./src",\n      "autoupdate": false\n    }\n  },\n  "plugins": {}\n}\n',
+    });
+    verify(boundary.ctx);
+    verify(boundary.ui);
+  });
+});
+
 test("D-09: an unnamed --local flip changes only the local config and skips what it does not declare", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
@@ -1710,7 +1812,7 @@ test("D-09: an unnamed --local flip changes only the local config and skips what
     ]);
     await writeConfig(locations, {
       schemaVersion: 1,
-      marketplaces: { extras: { source: "./extras" }, mp: { source: "./src" } },
+      marketplaces: { extras: { source: "./extras" }, mp: { source: "./src", autoupdate: true } },
     });
     await writeConfig(
       locations,
@@ -1779,34 +1881,112 @@ test("CFG-03: an unnamed flip without --local over an invalid local config fails
   });
 });
 
-test("D-09: an unnamed --local flip reads only the local config", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    // arrange
-    const locations = locationsFor("project", cwd);
-    await recordAndDeclare(locations, cwd, "local");
-    await writeFile(locations.baseConfigJsonPath, "{ malformed", "utf8");
-    const baseBytes = await readFile(locations.baseConfigJsonPath, "utf8");
-    const boundary = notificationBoundary({
-      message: "● mp [project] <autoupdate>\n\nMarketplace autoupdate: 1 success",
-    });
+const invalidBaseValuedLocalCases = [
+  {
+    title:
+      "CFG-03: an unnamed --local flip of a local entry with a value ignores an invalid base config",
+    invocation: {},
+    expectedMessage: "● mp [project] <autoupdate>\n\nMarketplace autoupdate: 1 success",
+  },
+  {
+    title:
+      "CFG-03: a named --local flip of a local entry with a value ignores an invalid base config",
+    invocation: { name: "mp" },
+    expectedMessage: "● mp [project] <autoupdate>",
+  },
+] as const;
 
-    // act
-    await setMarketplaceAutoupdate({
-      ctx: boundary.ctx,
-      run: boundary.run,
-      enable: true,
-      scope: "project",
-      cwd,
-      local: true,
-    });
+for (const { title, invocation, expectedMessage } of invalidBaseValuedLocalCases) {
+  test(title, async () => {
+    await withHermeticHome(async ({ cwd }) => {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await saveMarketplaces(locations, [marketplaceRecord("mp", "project", cwd)]);
+      await writeConfig(
+        locations,
+        { schemaVersion: 1, marketplaces: { mp: { source: "./src", autoupdate: false } } },
+        true,
+      );
+      await writeFile(locations.baseConfigJsonPath, "{ malformed", "utf8");
+      const bytesBefore = await scopeBytes(locations);
+      const boundary = notificationBoundary({ message: expectedMessage });
 
-    // assert
-    assert.equal(await readFile(locations.baseConfigJsonPath, "utf8"), baseBytes);
-    assert.equal(await readFile(locations.localConfigJsonPath, "utf8"), BASE_FLIP_BYTES);
-    verify(boundary.ctx);
-    verify(boundary.ui);
+      // act
+      await setMarketplaceAutoupdate({
+        ctx: boundary.ctx,
+        run: boundary.run,
+        enable: true,
+        scope: "project",
+        cwd,
+        local: true,
+        ...invocation,
+      });
+
+      // assert
+      assert.deepEqual(await scopeBytes(locations), { ...bytesBefore, local: BASE_FLIP_BYTES });
+      verify(boundary.ctx);
+      verify(boundary.ui);
+    });
   });
-});
+}
+
+const invalidBaseInheritedCases = [
+  {
+    title:
+      "CFG-03: an unnamed --local flip that needs the value of an invalid base config fails and writes nothing",
+    invocation: {},
+    expectedMessage: [
+      "Some operations have failed.",
+      "",
+      "⊘ (unknown) [project] (failed)",
+      "  ⊘ (unknown) (failed) {invalid manifest}",
+      '    cause: Config file "claude-plugins.json" failed schema validation.',
+      "",
+      "Marketplace autoupdate: 2 failures",
+    ].join("\n"),
+  },
+  {
+    title:
+      "CFG-03: a named --local flip that needs the value of an invalid base config fails and writes nothing",
+    invocation: { name: "mp" },
+    expectedMessage: [
+      "Some operations have failed.",
+      "",
+      "⊘ mp [project] (failed)",
+      "  ⊘ mp (failed) {invalid manifest}",
+      '    cause: Config file "claude-plugins.json" failed schema validation.',
+    ].join("\n"),
+  },
+] as const;
+
+for (const { title, invocation, expectedMessage } of invalidBaseInheritedCases) {
+  test(title, async () => {
+    await withHermeticHome(async ({ cwd }) => {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await recordAndDeclare(locations, cwd, "local");
+      await writeFile(locations.baseConfigJsonPath, "{ malformed", "utf8");
+      const bytesBefore = await scopeBytes(locations);
+      const boundary = notificationBoundary({ message: expectedMessage, severity: "error" });
+
+      // act
+      await setMarketplaceAutoupdate({
+        ctx: boundary.ctx,
+        run: boundary.run,
+        enable: true,
+        scope: "project",
+        cwd,
+        local: true,
+        ...invocation,
+      });
+
+      // assert
+      assert.deepEqual(await scopeBytes(locations), bytesBefore);
+      verify(boundary.ctx);
+      verify(boundary.ui);
+    });
+  });
+}
 
 test("D-08-07: reports a marketplace named constructor as not added when no record owns the name", async () => {
   await withHermeticHome(async ({ cwd }) => {

@@ -257,10 +257,9 @@ test("flips every marketplace in both scopes when no scope flag narrows the comm
     },
   ]);
   assert.deepStrictEqual(await readConfigFootprint(workspace), {
+    ...SEEDED_FOOTPRINT,
     projectBase: PROJECT_ALPHA_ON,
-    projectLocal: PROJECT_ALPHA_ON,
     userBase: USER_BETA_ON,
-    userLocal: USER_BETA_ON,
   });
   verifyBoundary();
 });
@@ -359,16 +358,12 @@ for (const { expectedFootprint, expectedMessage, scopeValue } of [
   {
     scopeValue: "project",
     expectedMessage: "● alpha [project] <autoupdate>\n\nMarketplace autoupdate: 1 success",
-    expectedFootprint: {
-      ...SEEDED_FOOTPRINT,
-      projectBase: PROJECT_ALPHA_ON,
-      projectLocal: PROJECT_ALPHA_ON,
-    },
+    expectedFootprint: PROJECT_BASE_ONLY,
   },
   {
     scopeValue: "user",
     expectedMessage: "● beta [user] <autoupdate>\n\nMarketplace autoupdate: 1 success",
-    expectedFootprint: { ...SEEDED_FOOTPRINT, userBase: USER_BETA_ON, userLocal: USER_BETA_ON },
+    expectedFootprint: { ...SEEDED_FOOTPRINT, userBase: USER_BETA_ON },
   },
 ]) {
   test(`flips the ${scopeValue} scope alone when --scope ${scopeValue} is supplied`, async (t) => {
