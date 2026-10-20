@@ -639,6 +639,13 @@ const inheritedNamedLocalCases = [
     expectedLocal: undefined,
   },
   {
+    label: "inherits off from a base entry that has it off",
+    enable: false,
+    base: { mp: { source: "./src", autoupdate: false } },
+    expectedMessage: "● mp [user] <no autoupdate> {already no autoupdate}",
+    expectedLocal: undefined,
+  },
+  {
     label: "inherits on from a base entry that has it on",
     enable: true,
     base: { mp: { source: "./src", autoupdate: true } },

@@ -402,6 +402,27 @@ Feature: Marketplace autoupdate
       | name  | source                    |
       | tools | {home}/marketplaces/tools |
 
+  Scenario: Disabling autoupdate with --local skips a local entry without a value while the base layer has it set off
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin marketplace autoupdate tools --scope project"
+    Given the user has run "/claude:plugin marketplace noautoupdate tools --scope project"
+    Given the user has run "/claude:plugin marketplace add {home}/marketplaces/tools --scope project --local"
+    When the user runs "/claude:plugin marketplace noautoupdate tools --scope project --local"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these marketplaces:
+      | name  | scope   | status  | reasons               |
+      | tools | project | skipped | already no autoupdate |
+    Then the "claude-plugins.local.json" file of the project scope declares these marketplaces:
+      | name  | source                    |
+      | tools | {home}/marketplaces/tools |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name  | source                    | autoupdate |
+      | tools | {home}/marketplaces/tools | false      |
+
   Scenario: Enabling autoupdate with --local skips a local entry without a value while the base layer has it on
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" is added to the project scope
