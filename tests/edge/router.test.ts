@@ -38,10 +38,12 @@ import { mock, verify, when } from "strong-mock";
 
 import {
   MARKETPLACE_SUBCOMMANDS,
+  MARKETPLACE_USAGE,
   marketplaceUsage,
   routeClaudePlugin,
   selectClaudePluginRoute,
   TOP_LEVEL_SUBCOMMANDS,
+  TOP_LEVEL_USAGE,
   type MarketplaceVerb,
   type SubcommandHandlers,
 } from "../../extensions/pi-claude-marketplace/edge/router.ts";
@@ -427,6 +429,23 @@ test("accepts exactly the marketplace names its dispatch rows serve", () => {
 
   // assert
   assert.deepStrictEqual(vocabulary, expectedVocabulary);
+});
+
+test("spells every marketplace name except help in both help headers", () => {
+  // arrange
+  const spellings = MARKETPLACE_SUBCOMMANDS.filter((name) => name !== "help").join("|");
+
+  // act
+  const headers = [
+    MARKETPLACE_USAGE.split("\n")[0],
+    TOP_LEVEL_USAGE.split("\n").find((line) => line.startsWith("  marketplace ")),
+  ];
+
+  // assert
+  assert.deepStrictEqual(headers, [
+    `Usage: /claude:plugin marketplace <${spellings}> ...`,
+    `  marketplace <${spellings}> ...`,
+  ]);
 });
 
 for (const { verb, expectedUsage } of [
