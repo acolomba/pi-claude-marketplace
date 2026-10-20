@@ -7,7 +7,8 @@
 // `architecture/notify-chokepoint` forbids direct notify on the Pi context
 // outside of shared/notification-dispatch.ts.
 //
-// `TOP_LEVEL_USAGE` and `MARKETPLACE_USAGE` are PRD-stable strings.
+// `TOP_LEVEL_USAGE` is a PRD-stable string. `MARKETPLACE_USAGE` is built from
+// one signature row per marketplace verb (USE-01).
 //
 // `routeClaudePlugin` accepts `ls` as an alias for `list`; `routeMarketplace`
 // accepts `rm` and `ls` as aliases for `remove` and `list`.
@@ -126,15 +127,42 @@ export const TOP_LEVEL_USAGE =
   "  marketplace <add|remove|rm|list|ls|info|update|autoupdate|noautoupdate> ...\n" +
   "  help [marketplace]";
 
-export const MARKETPLACE_USAGE =
-  "Usage: /claude:plugin marketplace <add|remove|rm|list|ls|info|update|autoupdate|noautoupdate> ...\n" +
-  "  add <source> [--scope user|project]\n" +
-  "  remove <name> [--scope user|project]   (alias: rm)\n" +
-  "  list [--scope user|project]            (alias: ls)\n" +
-  "  info <name> [--scope user|project]\n" +
-  "  update [<name>] [--scope user|project]\n" +
-  "  autoupdate [<name>] [--scope user|project]\n" +
-  "  noautoupdate [<name>] [--scope user|project]";
+type MarketplaceVerb =
+  "add" | "remove" | "list" | "info" | "update" | "autoupdate" | "noautoupdate";
+
+interface MarketplaceVerbSignature {
+  readonly alias?: string;
+  readonly args: string;
+}
+
+const MARKETPLACE_VERB_SIGNATURES: Readonly<Record<MarketplaceVerb, MarketplaceVerbSignature>> = {
+  add: { args: "<source> [--scope user|project] [--local]" },
+  remove: { alias: "rm", args: "<name> [--scope user|project] [--local]" },
+  list: { alias: "ls", args: "[--scope user|project]" },
+  info: { args: "<name> [--scope user|project]" },
+  update: { args: "[<name>] [--scope user|project]" },
+  autoupdate: { args: "[<name>] [--scope user|project] [--local]" },
+  noautoupdate: { args: "[<name>] [--scope user|project] [--local]" },
+};
+
+// The alias notes share one column, three spaces past the longest line that
+// carries one.
+function marketplaceHelp(): string {
+  const rows = Object.entries(MARKETPLACE_VERB_SIGNATURES).map(([verb, { alias, args }]) => ({
+    line: `  ${verb} ${args}`,
+    alias,
+  }));
+  const aliasColumn =
+    Math.max(...rows.filter((row) => row.alias !== undefined).map((row) => row.line.length)) + 3;
+  return [
+    "Usage: /claude:plugin marketplace <add|remove|rm|list|ls|info|update|autoupdate|noautoupdate> ...",
+    ...rows.map(({ line, alias }) =>
+      alias === undefined ? line : `${line.padEnd(aliasColumn)}(alias: ${alias})`,
+    ),
+  ].join("\n");
+}
+
+export const MARKETPLACE_USAGE = marketplaceHelp();
 
 /**
  * Peel off the first whitespace-delimited token from `args`. Returns

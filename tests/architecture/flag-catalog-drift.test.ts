@@ -230,7 +230,9 @@ test("catalog and alias completions cover the complete router inventory", () => 
 // WR-02: the `omitted` rows record today's help block. Uninstall documents every
 // one of its extra flags (FLAG-01: `--keep-data`, `--local`, `--prune`) because
 // tab completion and a usage error are the only other routes an operator has
-// to them; the remaining rows stay as the block has them.
+// to them; the remaining rows stay as the block has them. The marketplace
+// lines are built from the same signatures as each verb's own usage line, so
+// they document every flag the verb accepts.
 const TOP_LEVEL_USAGE_FLAGS: Record<
   CatalogVerb,
   { readonly documented: readonly string[]; readonly omitted: readonly string[] }
@@ -254,13 +256,13 @@ const TOP_LEVEL_USAGE_FLAGS: Record<
   browse: { documented: [], omitted: [] },
   help: { documented: [], omitted: [] },
   "marketplace help": { documented: [], omitted: [] },
-  "marketplace add": { documented: [], omitted: ["--local"] },
-  "marketplace remove": { documented: [], omitted: ["--local"] },
+  "marketplace add": { documented: ["--local"], omitted: [] },
+  "marketplace remove": { documented: ["--local"], omitted: [] },
   "marketplace info": { documented: [], omitted: [] },
   "marketplace list": { documented: [], omitted: [] },
   "marketplace update": { documented: [], omitted: [] },
-  "marketplace autoupdate": { documented: [], omitted: ["--local"] },
-  "marketplace noautoupdate": { documented: [], omitted: ["--local"] },
+  "marketplace autoupdate": { documented: ["--local"], omitted: [] },
+  "marketplace noautoupdate": { documented: ["--local"], omitted: [] },
 };
 
 /**

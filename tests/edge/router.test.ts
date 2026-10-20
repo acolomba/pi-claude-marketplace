@@ -286,13 +286,13 @@ const MARKETPLACE_DISPATCH: readonly DispatchRow[] = [
 
 const EXPECTED_MARKETPLACE_USAGE =
   "Usage: /claude:plugin marketplace <add|remove|rm|list|ls|info|update|autoupdate|noautoupdate> ...\n" +
-  "  add <source> [--scope user|project]\n" +
-  "  remove <name> [--scope user|project]   (alias: rm)\n" +
-  "  list [--scope user|project]            (alias: ls)\n" +
+  "  add <source> [--scope user|project] [--local]\n" +
+  "  remove <name> [--scope user|project] [--local]   (alias: rm)\n" +
+  "  list [--scope user|project]                      (alias: ls)\n" +
   "  info <name> [--scope user|project]\n" +
   "  update [<name>] [--scope user|project]\n" +
-  "  autoupdate [<name>] [--scope user|project]\n" +
-  "  noautoupdate [<name>] [--scope user|project]";
+  "  autoupdate [<name>] [--scope user|project] [--local]\n" +
+  "  noautoupdate [<name>] [--scope user|project] [--local]";
 
 for (const mode of ["json", "rpc"] as const) {
   const spellings: readonly DispatchRow[] = [
