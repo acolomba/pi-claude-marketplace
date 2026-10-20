@@ -120,6 +120,67 @@ Feature: Marketplace autoupdate
       | severity                | info                      |
       | needs reload            | false                     |
 
+  Scenario: Enabling autoupdate for every marketplace lists the changed marketplaces of each scope before the ones already on
+    Given the marketplace "zeta" is published as a dir source
+    Given the marketplace "alpha" is published as a dir source
+    Given the marketplace "mid" is published as a dir source
+    Given the marketplace "bravo" is published as a dir source
+    Given the marketplace "yankee" is published as a dir source
+    Given the marketplace "zeta" is added to the project scope
+    Given the marketplace "alpha" is added to the project scope
+    Given the marketplace "mid" is added to the project scope
+    Given the marketplace "bravo" is added to the user scope
+    Given the marketplace "yankee" is added to the user scope
+    Given the user has run "/claude:plugin marketplace autoupdate zeta --scope project"
+    Given the user has run "/claude:plugin marketplace autoupdate mid --scope project"
+    Given the user has run "/claude:plugin marketplace autoupdate bravo --scope user"
+    When the user runs "/claude:plugin marketplace autoupdate"
+    Then the result has these fields:
+      | kind                | cascade                |
+      | severity            | info                   |
+      | needs reload        | false                  |
+      | tally label         | Marketplace autoupdate |
+      | tally failures      | 0                      |
+      | tally warnings      | 0                      |
+      | tally success count | 5                      |
+    Then the result lists these marketplaces:
+      | name   | scope   | status             | reasons            |
+      | alpha  | project | autoupdate enabled |                    |
+      | zeta   | project | skipped            | already autoupdate |
+      | mid    | project | skipped            | already autoupdate |
+      | yankee | user    | autoupdate enabled |                    |
+      | bravo  | user    | skipped            | already autoupdate |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name  | source                    | autoupdate |
+      | zeta  | {home}/marketplaces/zeta  | true       |
+      | alpha | {home}/marketplaces/alpha | true       |
+      | mid   | {home}/marketplaces/mid   | true       |
+    Then the "claude-plugins.json" file of the user scope declares these marketplaces:
+      | name   | source                     | autoupdate |
+      | bravo  | {home}/marketplaces/bravo  | true       |
+      | yankee | {home}/marketplaces/yankee | true       |
+
+  Scenario: Enabling autoupdate without a scope judges each scope that holds the marketplace on its own
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" is added to the project scope
+    Given the marketplace "tools" is added to the user scope
+    Given the user has run "/claude:plugin marketplace autoupdate tools --scope project"
+    When the user runs "/claude:plugin marketplace autoupdate tools"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these marketplaces:
+      | name  | scope   | status             | reasons            |
+      | tools | project | skipped            | already autoupdate |
+      | tools | user    | autoupdate enabled |                    |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name  | source                    | autoupdate |
+      | tools | {home}/marketplaces/tools | true       |
+    Then the "claude-plugins.json" file of the user scope declares these marketplaces:
+      | name  | source                    | autoupdate |
+      | tools | {home}/marketplaces/tools | true       |
+
   Scenario: A local declaration without autoupdate takes the setting from the declaration in the base layer
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" is added to the project scope
