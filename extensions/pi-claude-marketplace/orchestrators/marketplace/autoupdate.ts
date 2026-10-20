@@ -48,9 +48,11 @@
 //   named (LAYER-02): the target layer only; the layer gate refuses the flip
 //    when only the other layer declares the marketplace, and reports it not
 //    added when neither does
-//   unnamed (D-MF-03): each recorded marketplace in every layer that declares
-//    it, or in claude-plugins.local.json only with --local; a local entry
-//    without a value inherits the base value (LAYER-09)
+//   unnamed (D-MF-03): each recorded marketplace, in each declaring layer whose
+//    value, own or inherited, differs from the request; with --local,
+//    claude-plugins.local.json only. A local entry without a value inherits
+//    the base entry's value, or off when the base config does not declare the
+//    marketplace (LAYER-09)
 //   each changed layer gets one batched config write; WR-05: a flip reads and
 //   writes only config, never state.json (SPLIT-01)
 //  accumulate the changed and unchanged names across scopes
@@ -492,8 +494,8 @@ async function everyFlipLayers(
  * a value needs it (CFG-03). Without `--local` both layers are read, so either
  * one being invalid aborts the flip (CFG-03), and a local entry without a value
  * inherits the value the base config holds after the flip, so only the base
- * entry is written. A marketplace that no applicable layer declares gets no
- * row.
+ * entry is written when the base config declares the marketplace. A
+ * marketplace that no applicable layer declares gets no row.
  */
 async function planEveryFlip(
   opts: AutoupdateOptions,
