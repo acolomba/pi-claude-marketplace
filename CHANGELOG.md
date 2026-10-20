@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- `/claude:plugin marketplace help` now shows `--local` on `add`, `remove`, `autoupdate`, and `noautoupdate`, as their own usage lines do.
+
 - When a command cannot read a plugin's dependencies, its `{unreadable}` cause says whether the manifest is missing, unreadable, or invalid, without its parser error.
 
 - You can now declare a plugin in both the base config (`claude-plugins.json`) and the local config (`claude-plugins.local.json`), and the scope installs it once. With a plugin name, `uninstall`, `enable`, `disable`, `update`, and `reinstall` change only the layer you target.
