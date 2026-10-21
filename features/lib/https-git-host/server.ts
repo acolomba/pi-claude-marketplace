@@ -452,8 +452,8 @@ export class HttpsGitHost {
     res: ServerResponse,
   ): Promise<void> {
     // The request answers 500, and the log says so, when the CGI fails or is
-    // killed, or when the CGI prints a status or a header Node cannot send. Nothing escapes, so no request can crash
-    // the worker that hosts the server.
+    // killed, or when the CGI prints a status or a header Node cannot send.
+    // Nothing escapes, so no request can crash the worker that hosts the server.
     try {
       const request = {
         method: logged.method,
