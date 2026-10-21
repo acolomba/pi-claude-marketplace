@@ -884,7 +884,7 @@ async function installOnePlannedPlugin(
   } catch (err) {
     rethrowInvalidGitHubBaseUrl(err);
     // The orchestrated install returns a typed outcome for every failure
-    // except an invalid GitHub base override, which the call above rethrows so
+    // except an invalid GitHub base override, which the line above rethrows so
     // the whole import fails (GHB-03). An install that fails on it after
     // leaving a rollback partial or an MCP config rewrite (AFILE-04) returns
     // its failed outcome instead, so the import continues past that plugin,
@@ -995,7 +995,7 @@ async function addOnePlannedMarketplace(
   } catch (err) {
     rethrowInvalidGitHubBaseUrl(err);
     // Defensive: orchestrated mode coerces classified failures into typed
-    // outcomes, and the call above rethrows an invalid GitHub base override so
+    // outcomes, and the line above rethrows an invalid GitHub base override so
     // the whole import fails (GHB-03). Only a genuinely unexpected throw is
     // recorded here.
     recordMarketplaceAddFailure(

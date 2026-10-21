@@ -144,7 +144,8 @@ export type BuildAuthCallbacksOpts =
  *   next invocation re-enters via onAuth, which falls through to
  *   `onAuthRequired` on the (now-empty) fill miss.
  * - CP-10 (no raw exception escape): both callbacks wrap their bodies in
- *   try/catch and convert unrelated errors into `{ cancel: true }`.
+ *   try/catch and convert unrelated errors into `{ cancel: true }`, except
+ *   the typed StoredCredentialRejectedError, which is rethrown (AUTH-09).
  *   DeviceFlowUnavailableError preserves the fixed print-mode remedy, and
  *   StoredCredentialRejectedError names only the host (AUTH-09).
  *   Error messages from

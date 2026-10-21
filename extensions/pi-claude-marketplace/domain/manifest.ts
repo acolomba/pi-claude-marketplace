@@ -105,9 +105,9 @@ function normalizeDependencyEntries(raw: unknown): unknown {
  * marketplace.json file read in the repo (CACHE-06) and the injected loader
  * behind the cache. Valid entries retain the RAW JSON.parse value (WR-01),
  * including key order and extra fields (`info.ts` reads `parsed.description`).
- * The comparison text preserves every parsed field. Invalid dependency entries become
- * unsupported stubs, or are dropped when unnamed, as in Claude Code. Keep this
- * focused on path-based reads only: no cache state, invalidation, or
+ * The comparison text preserves every parsed field. Invalid dependency entries
+ * become unsupported stubs, or are dropped when unnamed, as in Claude Code.
+ * Keep this focused on path-based reads only: no cache state, invalidation, or
  * caller-specific error wrapping belongs here.
  */
 async function loadMarketplaceManifestUncached(

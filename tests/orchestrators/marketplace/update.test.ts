@@ -1694,6 +1694,40 @@ test("WR-02: corrupt pre-existing manifest routes to (failed), never a silent no
   });
 });
 
+test("a legacy git record whose manifest cannot be read fails the update instead of recovering", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const { cloneDir } = await seedGithubMarketplace({
+      cwd,
+      name: "unreadable",
+      ref: "main",
+      legacy: true,
+    });
+    const manifestPath = path.join(cloneDir, ".claude-plugin", "marketplace.json");
+    await rm(manifestPath);
+    await mkdir(manifestPath);
+    const { ctx, run, notifications } = makeCtx();
+    const { gitOps } = createGitOps({
+      remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000123" },
+    });
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      name: "unreadable",
+      scope: "project",
+      cwd,
+      gitOps,
+    });
+
+    // assert
+    assert.equal(notifications.length, 1);
+    assert.match(notifications[0]?.message ?? "", /^⊘ unreadable \[project\] \(failed\)/m);
+  });
+});
+
 test("a legacy git record with a corrupt on-disk manifest recovers once the fetch repairs it", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange

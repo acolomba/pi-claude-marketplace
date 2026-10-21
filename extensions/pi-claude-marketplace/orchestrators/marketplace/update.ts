@@ -111,6 +111,7 @@ import {
   StateLockHeldError,
   composeErrorWithCauseChain,
   errorMessage,
+  isErrnoException,
   rethrowInvalidGitHubBaseUrl,
 } from "../../shared/errors.ts";
 import {
@@ -337,18 +338,26 @@ interface RefreshOneArgs {
 
 /**
  * Reads the pre-fetch comparison for a git record without a saved baseline.
- * A manifest that is missing, unreadable, or invalid gives no comparison, so
- * the refresh counts as changed once the fetched manifest validates. D-07: a
- * later update can succeed once the source is fixed.
+ * A manifest that is missing or invalid gives no comparison, so the refresh
+ * counts as changed once the fetched manifest validates. D-07: a later update
+ * can succeed once the source is fixed. Any other read failure (EACCES, EIO,
+ * EISDIR) fails the refresh.
  */
 async function manifestContentKey(
   record: ExtensionState["marketplaces"][string],
 ): Promise<string | undefined> {
   try {
     return (await loadMarketplaceManifestDocument(recordedManifestPath(record))).comparisonJson;
-  } catch {
+  } catch (err) {
     // The fetched manifest is still validated, so an invalid one fails there.
-    return undefined;
+    if (
+      err instanceof InvalidMarketplaceManifestError ||
+      (isErrnoException(err) && err.code === "ENOENT")
+    ) {
+      return undefined;
+    }
+
+    throw err;
   }
 }
 

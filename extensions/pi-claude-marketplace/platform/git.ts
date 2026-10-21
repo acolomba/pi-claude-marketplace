@@ -386,13 +386,12 @@ async function withFetchedUrlCause<T>(
   try {
     return await call();
   } catch (error: unknown) {
-    // isomorphic-git and the HTTP client above reject only with Error instances.
-    const failure = error as Error;
-    if (failure.cause === undefined) {
-      failure.cause = new FetchedUrlCause(wireUrl);
+    // A rejection that is not a writable Error passes through unchanged.
+    if (error instanceof Error && error.cause === undefined && Object.isExtensible(error)) {
+      error.cause = new FetchedUrlCause(wireUrl);
     }
 
-    throw failure;
+    throw error;
   }
 }
 
