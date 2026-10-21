@@ -19,14 +19,14 @@ Research detail per requirement is in `.planning/research/FEATURES.md`
 
 - [x] **DRV-01**: The driver returns every payload a command emits, validates each against the published notification schema, and asserts the expected kinds and count (`cascade`, `marketplace-info`, `marketplace-info-cascade`, `marketplace-not-added`, `usage-error`, `usage-info`, `plugin-info`; one payload per marketplace from a bare `update`)
 - [x] **DRV-02**: Run-specific values (sandbox paths, the stand-in origin) are written in scenarios as exact tokens substituted in both directions, and `lastUpdatedAt` is checked within a time window, never hidden
-- [ ] **DRV-03**: Pi, the stand-in, and every fixture `git` run with a hermetic git environment (`GIT_CONFIG_NOSYSTEM=1`, a sandbox global config, no inherited `GIT_*`), so no scenario reads the developer's credential helpers or git config
+- [x] **DRV-03**: Pi, the stand-in, and every fixture `git` run with a hermetic git environment (`GIT_CONFIG_NOSYSTEM=1`, a sandbox global config, no inherited `GIT_*`), so no scenario reads the developer's credential helpers or git config
 - [x] **DRV-04**: A gate fails when a step definition is unused, undefined, or ambiguous (`cucumber-js --dry-run --format usage`)
 
 ### HTTPS git stand-in
 
 - [ ] **HOST-01**: A loopback HTTPS git server (a `node:https` CGI wrapper around `git http-backend`, run-time openssl certificate trusted through `NODE_EXTRA_CA_CERTS`) serves bare marketplace repositories that isomorphic-git inside Pi can clone and fetch
 - [ ] **HOST-02**: The stand-in lives for the worker's run alongside Pi and is reset before every scenario (repositories, arming, request log, CGI children), with the reset asserted empty; the cucumber skill rule is amended to allow it
-- [ ] **HOST-03**: A scenario can arm a repository to answer 401, 404, or 5xx, or to drop the connection
+- [x] **HOST-03**: A scenario can arm a repository to answer 401, 404, or 5xx, or to drop the connection
 - [ ] **HOST-04**: The stand-in records every request, and scenarios can assert the exact request log, including that it is empty
 
 ### GitHub clone-base override (D-MF-01)
@@ -71,7 +71,7 @@ A scope (user or project) has two layers: shared (`claude-plugins.json`) and loc
 - [x] **ADD-06**: A path that does not exist fails as `source missing`, named by the source as typed
 - [x] **ADD-07**: A malformed or schema-invalid manifest fails as `invalid manifest` (dir, url)
 - [ ] **ADD-08**: Refused source forms (`http://`, `ssh://`, `git@host:...`, GitHub `/tree/` URLs, `https://github.com/o`, a bare word, `a/b/c`, `~other/...`) fail as `unsupported source`, and the stand-in receives no request
-- [ ] **ADD-09**: A url clone answered with 404 fails as `source missing`
+- [x] **ADD-09**: A url clone answered with 404 fails as `source missing`
 - [ ] **ADD-10**: A url clone answered with 5xx fails as `network error`, with a cause line that names the HTTP status and the fetched URL; one whose connection drops fails as `network unreachable`
 - [ ] **ADD-11**: A clone answered with 401 and no stored credential fails as `authentication required`; with a stored credential in the sandbox, it succeeds (url, gh)
 - [ ] **ADD-12**: A removed git marketplace can be added again from the same source (url, gh)
@@ -180,11 +180,11 @@ A scope (user or project) has two layers: shared (`claude-plugins.json`) and loc
 |-------------|-------|--------|
 | DRV-01 | Phase 1 | Complete |
 | DRV-02 | Phase 1 | Complete |
-| DRV-03 | Phase 9 | Pending |
+| DRV-03 | Phase 9 | Complete |
 | DRV-04 | Phase 1 | Complete |
 | HOST-01 | Phase 9 | Pending |
 | HOST-02 | Phase 9 | Pending |
-| HOST-03 | Phase 9 | Pending |
+| HOST-03 | Phase 9 | Complete |
 | HOST-04 | Phase 9 | Pending |
 | GHB-01 | Phase 2 | Complete |
 | GHB-02 | Phase 2 | Complete |
@@ -212,7 +212,7 @@ A scope (user or project) has two layers: shared (`claude-plugins.json`) and loc
 | ADD-06 | Phase 3 | Complete |
 | ADD-07 | Phase 3 | Complete |
 | ADD-08 | Phase 9 | Pending |
-| ADD-09 | Phase 9 | Pending |
+| ADD-09 | Phase 9 | Complete |
 | ADD-10 | Phase 9 | Pending |
 | ADD-11 | Phase 10 | Pending |
 | ADD-12 | Phase 9 | Pending |

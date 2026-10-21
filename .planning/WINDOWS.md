@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 3
+open_count: 4
 waived_count: 51
 fixed_count: 45
-total_count: 99
-last_updated: 2026-10-17T20:49:33.381Z
+total_count: 100
+last_updated: 2026-10-21T03:59:49.683Z
 ---
 
 # Broken Windows Ledger
@@ -114,6 +114,7 @@ last_updated: 2026-10-17T20:49:33.381Z
 | 97 | 03.2 | todo | README.md | 305 | [marketplace-features] The command reference line 'Remove a marketplace and all plugins installed from it.' (and its README.es.md twin) predates the layer partition: a remove from one config file uninstalls only that file's plugins, and a dependency another plugin needs stays | fixed |  | 2026-10-17T04:38:40.511Z | 2026-10-17T06:03:01.499Z |
 | 98 | 03.2 | todo | extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts |  | [marketplace-features] A marketplace-level refusal row (marketplaceFailureRows: remove, autoupdate, add under the GitHub base override) carries a synthetic failed child named after the marketplace, so its JSON wire id reads <mp>@<mp> (tools@tools), as if a plugin named tools existed; the scenarios pin that value. Fixing it needs a wire decision (mark the child as a marketplace subject, or give it no plugin id), so the review fix left it open | open |  | 2026-10-17T06:00:17.471Z |  |
 | 99 | 03.3 | deviation | extensions/pi-claude-marketplace/orchestrators/reconcile/pending.ts |  | [marketplace-features] LAYER-06: in the MIG-01 pre-migration window (no claude-plugins.json, a populated state.json, and a local layer), pending checks the layer files on disk while the load checks them after the first-run migration writes the shared layer from state, so a local plugin whose marketplace only the migrated shared layer would declare is an error on load but not in pending | fixed |  | 2026-10-17T19:17:47.670Z | 2026-10-17T20:49:33.381Z |
+| 100 | 09 | deviation | docs/output-catalog.md | 2563 | [marketplace-features] The add-authentication-required catalog state (docs/output-catalog.md and tests/architecture/catalog-uat/fixtures/marketplace-add.ts:222) shows the 401 reason on a synthetic child row with a cause, but a real url marketplace add answered 401 renders a bare failed row with reasons [authentication required] and no cause; features/marketplace/url-source.feature pins the measured shape. The catalog is unchanged. | open |  | 2026-10-21T03:59:49.683Z |  |
 
 ````json
 [
@@ -1346,6 +1347,19 @@ last_updated: 2026-10-17T20:49:33.381Z
     "reason": "",
     "recorded_at": "2026-10-17T19:17:47.670Z",
     "resolved_at": "2026-10-17T20:49:33.381Z",
+    "milestone": null
+  },
+  {
+    "id": 100,
+    "kind": "deviation",
+    "phase": "09",
+    "file": "docs/output-catalog.md",
+    "line": 2563,
+    "description": "[marketplace-features] The add-authentication-required catalog state (docs/output-catalog.md and tests/architecture/catalog-uat/fixtures/marketplace-add.ts:222) shows the 401 reason on a synthetic child row with a cause, but a real url marketplace add answered 401 renders a bare failed row with reasons [authentication required] and no cause; features/marketplace/url-source.feature pins the measured shape. The catalog is unchanged.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-10-21T03:59:49.683Z",
+    "resolved_at": null,
     "milestone": null
   }
 ]
