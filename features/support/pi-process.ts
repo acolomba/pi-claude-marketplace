@@ -55,6 +55,18 @@ export function currentRun(): PiRun {
   return piRun;
 }
 
+/** Runs each stage in order, even when an earlier one fails, and returns every failure. */
+async function settleInOrder(stages: ReadonlyArray<() => Promise<unknown>>): Promise<unknown[]> {
+  const failures: unknown[] = [];
+  for (const stage of stages) {
+    await stage().catch((error: unknown) => {
+      failures.push(error);
+    });
+  }
+
+  return failures;
+}
+
 BeforeAll(async (): Promise<void> => {
   // Pi receives the realpath of each sandbox location, so the run uses the
   // same spelling and `{home}` matches the paths Pi reports.
@@ -73,6 +85,16 @@ BeforeAll(async (): Promise<void> => {
     GIT_CONFIG_GLOBAL: path.join(sandbox.home, ".gitconfig"),
     PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL: `https://${gitHost.address}`,
   } satisfies RpcGitEnvironment;
+  // A Pi that fails to start must not leave the host listening or the root behind.
+  const pi = await PiProcess.start(sandbox, piEnvironment).catch(async (error: unknown) => {
+    const failures = await settleInOrder([
+      () => gitHost.close(),
+      () => rm(root, { recursive: true, force: true }),
+    ]);
+    throw failures.length === 0
+      ? error
+      : new AggregateError([error, ...failures], "the run's Pi failed to start");
+  });
   piRun = {
     root,
     sandbox,
@@ -81,7 +103,7 @@ BeforeAll(async (): Promise<void> => {
     marketplacesRoot: path.join(sandbox.home, "marketplaces"),
     gitHost,
     piEnvironment,
-    pi: await PiProcess.start(sandbox, piEnvironment),
+    pi,
   };
 });
 
@@ -115,9 +137,19 @@ Before(async (): Promise<void> => {
   );
 });
 
+// No run means `BeforeAll()` failed, and it cleaned up after itself.
 AfterAll(async (): Promise<void> => {
-  const run = currentRun();
-  await run.pi.stop();
-  await run.gitHost.close();
-  await rm(run.root, { recursive: true, force: true });
+  const run = piRun;
+  if (run === undefined) {
+    return;
+  }
+
+  const failures = await settleInOrder([
+    () => run.pi.stop(),
+    () => run.gitHost.close(),
+    () => rm(run.root, { recursive: true, force: true }),
+  ]);
+  if (failures.length > 0) {
+    throw new AggregateError(failures, "the run's teardown failed");
+  }
 });
