@@ -82,3 +82,9 @@ Then("the git host receives these requests:", function (this: ScenarioWorld, tab
   ]);
   assert.deepStrictEqual([["method", "path", "status"], ...rows], table.raw());
 });
+
+// A request over a kept-alive socket, or a non-TLS attempt that never becomes
+// a request, still counts as a connection.
+Then("the git host receives no request", function (this: ScenarioWorld) {
+  assert.deepStrictEqual(this.requestsOfLastCommand(), { requests: [], connections: 0 });
+});
