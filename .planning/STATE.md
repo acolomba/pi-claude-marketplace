@@ -5,16 +5,16 @@ milestone_name: Marketplace Behavioral Tests
 current_phase: 09
 current_phase_name: URL Source Kind and HTTPS Git Stand-In
 status: executing
-stopped_at: Phase 9 context gathered
-last_updated: "2026-10-21T02:52:41.240Z"
+stopped_at: Completed 09-01-PLAN.md
+last_updated: "2026-10-21T03:12:06.406Z"
 last_activity: 2026-10-20
 last_activity_desc: Phase 09 execution started
-state_head: f2371b75ddafefe5ce03e1aaf4d7e89732c4b809
+state_head: 96a41ae381b238e4c4da7360191093ccbed139d0
 progress:
   total_phases: 14
   completed_phases: 12
   total_plans: 75
-  completed_plans: 67
+  completed_plans: 68
   percent: 86
 ---
 
@@ -32,8 +32,8 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 09 (URL Source Kind and HTTPS Git Stand-In) — EXECUTING
-Plan: 1 of 8
-Status: Executing Phase 09
+Plan: 2 of 8
+Status: Ready to execute
 Last activity: 2026-10-20 — Phase 09 execution started
 
 Progress: [█████████░] 86%
@@ -183,9 +183,9 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-20T19:35:57.323Z
-**Stopped at:** Phase 9 context gathered
-**Resume file:** .planning/phases/09-url-source-kind-and-https-git-stand-in/09-CONTEXT.md
+**Last session:** 2026-10-21T03:12:01.156Z
+**Stopped at:** Completed 09-01-PLAN.md
+**Resume file:** None
 
 **Phase 8 closed (2026-10-20):** all five plans executed, Nyquist-compliant,
 `threats_open: 0`, the code review fix loop closed 7 of 7 findings, and
@@ -352,6 +352,7 @@ archived milestone artifacts.
 | Phase 08 P03 | 12 min | 2 tasks | 20 files |
 | Phase 08 P04 | 9 min | 2 tasks | 10 files |
 | Phase 08 P05 | 12 min | 3 tasks | 10 files |
+| Phase 09 P01 | 14 min | 1 tasks | 16 files |
 
 ## Decisions
 
@@ -491,6 +492,8 @@ archived milestone artifacts.
 - [Phase 08]: PositionalSpec.label is required, so every parseCommandArgs call site names its field and an empty value reports <label> must not be empty. (USE-07)
 - [Phase 08]: parsePluginRef in edge/handlers/plugin/shared.ts is the one source of the empty-reference and invalid-reference messages for install, info, and the shared required-reference parser; a bare @ and other partly malformed references keep the invalid-reference message
 - [Phase 08]: An @ followed only by blanks on update, fetch, or reinstall is the marketplace form with an empty name and reports `Marketplace name must not be empty.`, and parsePluginTarget is the one target parser of the three verbs
+- [Phase 09]: The url publication splits PublishedMarketplace into a path and a git variant, and the publishing functions take PublicationSites { marketplacesRoot, gitHost }, so features/lib never imports features/support
+- [Phase 09]: A plan checkpoint commit cannot export a function whose only consumer lands later: fallow dead-code fails the hook (runGit was held back to the final commit)
 
 ### mcp-4 decisions
 
