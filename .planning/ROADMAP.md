@@ -533,7 +533,29 @@ Plans:
 4. The suite closes clean: a source-walk check fails if `cucumber.json` still excludes any tag; `cucumber-js --dry-run --format usage` reports no unused, undefined, or ambiguous step; the whole suite passes on Node 24 and Node 26; CI timing is recorded; a credential-isolation control run once by hand (a hostile `~/.gitconfig` and a planted system credential helper) changes no result; and a cucumber skill review of the suite finds no BLOCKER.
 5. The `@github` rows that Phase 3.2 wrote for LAYER-07 run through the override and pass: the cross-scope install Outline in `features/plugin/cross-scope-install.feature` and the three user-scope remove Outlines in `features/marketplace/remove.feature`. Each remove Outline's `@github` row is first shown failing, on a behavioral assertion, on code where a project install reuses the user-scope record instead of adding the marketplace (the install files planted from the parent of the commit that Phase 3.2's plan 07 SUMMARY names, or, if they no longer load, an equivalent local edit that is never committed), then passing on the current code. The install Outline's row guards the project declaration, which the older code also wrote, so it passes on both.
 
-**Plans:** TBD
+**Plans:** 7 plans
+
+Plans:
+**Wave 1**
+- [ ] 10-01-PLAN.md — Tracer: one github add through the base override, end to end; the SRC-02 spelling Outline (D-01); the refused-source wording (IN-05); the `@github` triage
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 10-02-PLAN.md — The stand-in's EPIPE fix before any Node 24 run (D-14); the Phase 9 stand-in, hook, and doc findings (IN-01 to IN-04, IN-06 to IN-10)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 10-03-PLAN.md — A `stable` branch on every git publication (D-03, IN-11); `owner/repo#ref` test-first and refs proven by content (SRC-03, D-02, D-12); CHANGELOG and D-MF-07
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 10-04-PLAN.md — 401 on add and update for url and github (ADD-11, UPD-12, D-09 to D-11); the github update remedy line test-first (D-13)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [ ] 10-05-PLAN.md — Remove the `@github` exclusion (SC1, D-07); the LAYER-07 github remove rows red then green (SC5)
+
+**Wave 6** *(blocked on Wave 5 completion)*
+- [ ] 10-06-PLAN.md — A cucumber skill review of the whole suite with no open BLOCKER (SC4)
+
+**Wave 7** *(blocked on Wave 6 completion)*
+- [ ] 10-07-PLAN.md — Suite close: Node 24 and 26 runs (D-06), local timing (D-08), the hostile-config control, the Phase 9 ledger at `open: 0` (D-04), carry-overs (D-05), and the phase gate
 
 ## Progress
 
@@ -552,7 +574,7 @@ Plans:
 | 7. Marketplace Autoupdate | 4/4 | Complete    | 2026-10-20 |
 | 8. Marketplace Help and Usage Errors | 5/5 | Complete    | 2026-10-20 |
 | 9. URL Source Kind and HTTPS Git Stand-In | 8/8 | Complete    | 2026-10-21 |
-| 10. GitHub Source Kind and Suite Close | 0/TBD | Not started | - |
+| 10. GitHub Source Kind and Suite Close | 0/7 | Not started | - |
 
 ## Carried Forward
 
