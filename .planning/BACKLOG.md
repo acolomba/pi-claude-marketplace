@@ -3996,3 +3996,19 @@ Scope when picked up: set the same marker in `marketplaceFailureRows`, change
 the pinned cells and any unit case that pins `<mp>@<mp>`, update
 `docs/json-output.md`, and add a CHANGELOG line, because it changes the
 published payload. WINDOWS entry 98 was waived to this entry.
+
+## SHORTREF-01: the `owner/repo@ref` shorthand splits at the last `@`, upstream at the first
+
+Found during marketplace-features (2026-10-21), in the review of the `#ref`
+shorthand fix (D-12, review finding IN-04). Pi's `parseShorthandSourceForm`
+in `domain/source.ts` splits `owner/repo@ref` at the LAST `@` (D-76-04).
+Claude Code 2.1.296 parses the shorthand with `/^([^#@]+)(?:[#@](.+))?$/`,
+which splits at the FIRST `@` or `#`. So `acme/tools@a@b` is repo `tools`,
+ref `a@b` upstream, but repo `tools@a`, ref `b` in Pi. Only sources with two
+or more `@` differ. The user chose to record it as a follow-up rather than
+reverse D-76-04 inside the suite close.
+
+Scope when picked up: decide parity (switch to the first-`@` split and retire
+D-76-04) or record D-76-04 as a divergence with an ID. A switch is test-first
+in `tests/domain/source.test.ts`, keeps the `#` arm's rule (D-12, D-MF-07),
+and adds a CHANGELOG line, because it changes which sources parse.
