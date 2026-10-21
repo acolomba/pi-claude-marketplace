@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 10
+open_count: 12
 waived_count: 52
 fixed_count: 45
-total_count: 107
-last_updated: 2026-10-21T15:20:48.101Z
+total_count: 109
+last_updated: 2026-10-21T15:24:37.353Z
 ---
 
 # Broken Windows Ledger
@@ -122,6 +122,8 @@ last_updated: 2026-10-21T15:20:48.101Z
 | 105 | 10 | lint-warning | features/marketplace/list.feature | 3 | [marketplace-features] cucumber review: features/marketplace/list.feature:3 the feature description does not say that the scenarios use local marketplaces in place of published ones (features.md: the description names what the scenarios stand in for) | open |  | 2026-10-21T15:20:47.362Z |  |
 | 106 | 10 | lint-warning | features/marketplace/url-source-update.feature | 7 | [marketplace-features] cucumber review: features/marketplace/url-source-update.feature:7 the failed url update Outline does not state that the config still declares the marketplace, as update.feature states for the local kinds | open |  | 2026-10-21T15:20:47.728Z |  |
 | 107 | 10 | lint-warning | features/marketplace/url-source-update.feature | 31 | [marketplace-features] cucumber review: features/marketplace/url-source-update.feature:31 the bare update past a dropped connection does not state that the config still declares both marketplaces | open |  | 2026-10-21T15:20:48.101Z |  |
+| 108 | 10 | lint-warning | features/plugin/disable.feature | 3 | [marketplace-features] cucumber review: features/plugin/disable.feature:3 the description says disabling keeps the plugin installed, but both scenarios are refusals; no scenario of the file disables a plugin and shows what it keeps | open |  | 2026-10-21T15:24:37.024Z |  |
+| 109 | 10 | lint-warning | features/plugin/enable.feature | 3 | [marketplace-features] cucumber review: features/plugin/enable.feature:3 the description says enabling materializes the plugin again, but both scenarios are refusals; no scenario of the file enables a plugin and shows it materialized | open |  | 2026-10-21T15:24:37.353Z |  |
 
 ````json
 [
@@ -1457,6 +1459,32 @@ last_updated: 2026-10-21T15:20:48.101Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-10-21T15:20:48.101Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 108,
+    "kind": "lint-warning",
+    "phase": "10",
+    "file": "features/plugin/disable.feature",
+    "line": 3,
+    "description": "[marketplace-features] cucumber review: features/plugin/disable.feature:3 the description says disabling keeps the plugin installed, but both scenarios are refusals; no scenario of the file disables a plugin and shows what it keeps",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-10-21T15:24:37.024Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 109,
+    "kind": "lint-warning",
+    "phase": "10",
+    "file": "features/plugin/enable.feature",
+    "line": 3,
+    "description": "[marketplace-features] cucumber review: features/plugin/enable.feature:3 the description says enabling materializes the plugin again, but both scenarios are refusals; no scenario of the file enables a plugin and shows it materialized",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-10-21T15:24:37.353Z",
     "resolved_at": null,
     "milestone": null
   }
