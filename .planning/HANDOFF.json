@@ -1,0 +1,33 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-10-21T10:29:40.563Z",
+  "phase": "10",
+  "phase_name": "GitHub Source Kind and Suite Close",
+  "phase_dir": ".planning/phases/10-github-source-kind-and-suite-close",
+  "plan": 0,
+  "task": 0,
+  "total_tasks": 0,
+  "status": "paused",
+  "completed_tasks": [
+    {"id": 1, "name": "Phase 9 discuss, research, plan (8 plans), execute, validate, secure, review+fix, verify (passed), complete", "status": "done", "commit": "f495d387"},
+    {"id": 2, "name": "Phase 10 discuss: 10-CONTEXT.md (D-01..D-10) and 10-DISCUSSION-LOG.md", "status": "done", "commit": "51c364e5"}
+  ],
+  "remaining_tasks": [
+    {"id": 3, "name": "Phase 10 plan (research first, then planner + plan-checker)", "status": "not_started"},
+    {"id": 4, "name": "Phase 10 execute, validate, secure, code review + fix, verify, complete", "status": "not_started"},
+    {"id": 5, "name": "Milestone lifecycle: audit, complete, cleanup", "status": "not_started"}
+  ],
+  "blockers": [],
+  "async_jobs": [],
+  "human_actions_pending": [
+    {"action": "At milestone close, read CI duration from the PR's behavioral-tests job and confirm the url stand-in passes on CI (OpenSSL 3.0.13, Node 24)", "context": "Phase 10 D-08; Phase 9 CI assumptions A1/A2/A4 are unproven until the branch is pushed", "blocking": false}
+  ],
+  "decisions": [
+    {"decision": "Phase 10 D-07: no 'no tag excluded in cucumber.json' source-walk check; ROADMAP SC4 item dropped", "rationale": "user ruling during discuss", "phase": "10"},
+    {"decision": "Phase 10 D-04: fix all 11 open Phase 9 info findings", "rationale": "clean suite-close review; ledger to open: 0", "phase": "10"},
+    {"decision": "Executors run sequentially on this worktree (isolation forced to none per plan)", "rationale": "single-plan waves; agent worktrees lack GSD tooling/node_modules and their cleanup would ff the main checkout", "phase": "09"}
+  ],
+  "uncommitted_files": [],
+  "next_action": "Run /gsd-autonomous --from 10 --interactive (context exists, so it skips discuss and starts plan-phase 10 with research)",
+  "context_notes": "Autonomous run paused by the user after Phase 10 context was written. Phase 9 is complete and verified (373/373 scenarios, @url no longer excluded). Phases 1-7 read 'stale' verification because Phase 9 touched files their reports cover; that surfaces at the milestone audit. gsd-tools resolves 'phase 10' lookups like find-phase to an archived milestone dir (.planning/milestones/v1.20-phases/10-constraint-aware-update); init.phase-op 10 is correct."
+}
