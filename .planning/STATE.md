@@ -718,5 +718,8 @@ in the phase deferred items. The milestone remains open for audit and archival.
 
 - [Phase 9] The url stand-in is proven only locally (OpenSSL 4, Node 26, git 2.55);
   CI (OpenSSL 3.0.13, Node 24) first runs it when the branch is pushed.
-- [Phase 9] `@github` rows stay excluded until Phase 10, including four refused
-  GitHub forms and the git-source re-add/no-request Outlines (09-08 hand-off).
+- [Phase 10] Resolved: no tag is excluded; every `@github` row runs (48 pass).
+- [Phase 10] BACKLOG SHORTREF-01: the `owner/repo@ref` shorthand splits at the
+  last `@` (D-76-04), Claude Code at the first; a parity decision for later.
+- [Milestone] Phases 1-7 read stale verification (later phases touched files
+  their reports cover); the milestone audit must re-verify them.
