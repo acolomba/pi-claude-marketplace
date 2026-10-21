@@ -60,7 +60,7 @@ A marketplace can be published as one of several source kinds: `dir`, `file`, `u
 
 - An untagged `Examples:` block holds the local kinds, `dir` and `file`. An `@url` block holds the url kind, and an `@github` block holds the github kind. `npm run check:features` fails on a row whose `source kind` does not belong in its block, and on a tagged block with no `source kind` column.
 - The kind reaches the steps through a `<source kind>` column, and the source the user types reaches them through a `<source>` column.
-- Tags appear only on `Examples:` blocks, and the only tags are `@url` and `@github`. A tag on a feature or a scenario would also drop its local rows.
+- Tags appear only on `Examples:` blocks, and the only tags are `@url` and `@github`. A tag on a feature or a scenario would also tag its local rows, so excluding that tag would drop them.
 
 ```gherkin
   Scenario Outline: Adding a marketplace records it in the chosen scope
@@ -93,7 +93,7 @@ A marketplace can be published as one of several source kinds: `dir`, `file`, `u
       | github      | acme/tools |
 ```
 
-`cucumber.json` runs the tag expression `not @github` until the github kind has its stand-in. The url kind's stand-in, the run's https git host, runs every `@url` row. The work that adds the github source kind removes `@github`. Removing a tag turns on every row of that kind, with no edit to a feature file.
+`cucumber.json` excludes no tag, so every row runs. The url and github kinds share one stand-in, the run's https git host. The github kind reaches it through `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL`. If a new source kind has no stand-in yet, `cucumber.json` excludes its tag, and the work that adds the stand-in removes the exclusion. Removing a tag turns on every row of that kind, with no edit to a feature file.
 
 A behavior that only one kind has lives in a feature file of its own.
 
