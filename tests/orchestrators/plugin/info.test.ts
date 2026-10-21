@@ -5992,6 +5992,8 @@ test("GHB-03: info --fetch on a not-installed GitHub plugin fails the command on
         return true;
       },
     );
+
+    // assert
     assert.deepStrictEqual(gitState.cloneCalls, []);
     assert.deepStrictEqual(gitState.fetchCalls, []);
     verify(ctx);
@@ -6041,6 +6043,8 @@ test("GHB-03: info --fetch on an installed GitHub plugin fails the command on an
         return true;
       },
     );
+
+    // assert
     assert.deepStrictEqual(gitState.cloneCalls, []);
     assert.deepStrictEqual(gitState.fetchCalls, []);
     verify(ctx);

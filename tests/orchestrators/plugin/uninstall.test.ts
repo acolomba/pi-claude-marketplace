@@ -2454,6 +2454,7 @@ test("RECON-03 uninstall standalone-default mode -- omitted notifications option
 
 test("WB-01: standalone uninstall deletes the plugin entry from claude-plugins.json", async () => {
   await withHermeticHome(async () => {
+    // arrange
     const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-wb01-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -2473,6 +2474,8 @@ test("WB-01: standalone uninstall deletes the plugin entry from claude-plugins.j
       );
 
       const { ctx, run } = makeCtx();
+
+      // act
       await uninstallWithFreshOwner({
         ctx,
         run,
@@ -2482,6 +2485,7 @@ test("WB-01: standalone uninstall deletes the plugin entry from claude-plugins.j
         plugin: "hello",
       });
 
+      // assert
       const { loadConfig } =
         await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
       const cfg = await loadConfig(locations.baseConfigJsonPath);
@@ -2499,6 +2503,7 @@ test("WB-01: standalone uninstall deletes the plugin entry from claude-plugins.j
 
 test("WR-09 / T-56-03-01: orchestrated-mode uninstall SKIPS write-back; config untouched", async () => {
   await withHermeticHome(async () => {
+    // arrange
     const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-wb01-orch-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -2514,6 +2519,8 @@ test("WR-09 / T-56-03-01: orchestrated-mode uninstall SKIPS write-back; config u
       const bytesBefore = await readFile(locations.baseConfigJsonPath);
 
       const { ctx, run } = makeCtx();
+
+      // act
       await uninstallWithFreshOwner({
         ctx,
         run,
@@ -2524,6 +2531,7 @@ test("WR-09 / T-56-03-01: orchestrated-mode uninstall SKIPS write-back; config u
         notifications: { mode: "orchestrated" },
       });
 
+      // assert
       // Config file byte-identical -- orchestrated mode skipped the write-back.
       const bytesAfter = await readFile(locations.baseConfigJsonPath);
       assert.deepEqual(bytesAfter, bytesBefore);
@@ -2535,6 +2543,7 @@ test("WR-09 / T-56-03-01: orchestrated-mode uninstall SKIPS write-back; config u
 
 test("WB-01: ALREADY-GONE uninstall leaves config byte-unchanged", async () => {
   await withHermeticHome(async () => {
+    // arrange
     const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-wb01-gone-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -2567,6 +2576,8 @@ test("WB-01: ALREADY-GONE uninstall leaves config byte-unchanged", async () => {
       const bytesBefore = await readFile(locations.baseConfigJsonPath);
 
       const { ctx, run } = makeCtx();
+
+      // act
       await uninstallWithFreshOwner({
         ctx,
         run,
@@ -2576,6 +2587,7 @@ test("WB-01: ALREADY-GONE uninstall leaves config byte-unchanged", async () => {
         plugin: "hello",
       });
 
+      // assert
       // Config bytes UNCHANGED -- alreadyGone arm short-circuits before write-back.
       const bytesAfter = await readFile(locations.baseConfigJsonPath);
       assert.deepEqual(bytesAfter, bytesBefore);
@@ -2587,6 +2599,7 @@ test("WB-01: ALREADY-GONE uninstall leaves config byte-unchanged", async () => {
 
 test("CFG-03 / T-56-03-04: invalid config aborts uninstall; basename-only cause; state untouched", async () => {
   await withHermeticHome(async () => {
+    // arrange
     const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-wb01-cfg03-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -2603,6 +2616,8 @@ test("CFG-03 / T-56-03-04: invalid config aborts uninstall; basename-only cause;
       const stateMtimePre = (await stat(statePath)).mtimeMs;
 
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       await uninstallWithFreshOwner({
         ctx,
         run,
@@ -2612,6 +2627,7 @@ test("CFG-03 / T-56-03-04: invalid config aborts uninstall; basename-only cause;
         plugin: "hello",
       });
 
+      // assert
       assert.equal(notifications.length, 1);
       const note = notifications[0]!;
       assert.match(note.message, /\{invalid manifest\}/);
@@ -3504,6 +3520,7 @@ test("GC never rolls back the committed uninstall: the state record is deleted e
 
 test("cross-layer cascade: a --local uninstall clears the key only the local layer declares", async () => {
   await withHermeticHome(async () => {
+    // arrange
     const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-xlayer-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -3539,6 +3556,8 @@ test("cross-layer cascade: a --local uninstall clears the key only the local lay
       );
 
       const { ctx, run } = makeCtx();
+
+      // act
       // STANDALONE mode (notifications omitted), targeting the local layer: a
       // flagless uninstall of a key only the local layer declares is refused
       // (LAYER-04).
@@ -3552,6 +3571,7 @@ test("cross-layer cascade: a --local uninstall clears the key only the local lay
         local: true,
       });
 
+      // assert
       const { loadConfig } =
         await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
 

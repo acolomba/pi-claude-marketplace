@@ -3712,6 +3712,7 @@ test("SCOPE-01 <plugin>@<mp>: marketplace present only in other scope -> (skippe
 // searches both scopes and finds nothing, so the fallback fires to locate the marketplace scope.
 test("PUP-1 pl@mp: no explicit scope + plugin absent -> marketplace-fallback resolution; partition='skipped'", async () => {
   await withHermeticHome(async () => {
+    // arrange
     const cwd = await createCaseDir("update-pup1-noscope-fallback-");
     try {
       await seedPathMarketplace({
@@ -3723,6 +3724,8 @@ test("PUP-1 pl@mp: no explicit scope + plugin absent -> marketplace-fallback res
       });
 
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       await updatePlugins({
         ctx,
         run,
@@ -3732,6 +3735,7 @@ test("PUP-1 pl@mp: no explicit scope + plugin absent -> marketplace-fallback res
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
       });
 
+      // assert
       const body = notifications[0]?.message ?? "";
       // V2 byte form mirrors the pl@mp not-installed shape (PUP-1 above).
       // Plugin-row `[<scope>]` bracket suppressed by orphan-fold. D-01:
@@ -3751,6 +3755,7 @@ test("PUP-1 pl@mp: no explicit scope + plugin absent -> marketplace-fallback res
 
 test("syncClone-fail: gitOps.fetch throws -> notifyError fired and updatePlugins returns early", async () => {
   await withHermeticHome(async () => {
+    // arrange
     const cwd = await createCaseDir("update-syncfail-");
     try {
       const locations = locationsFor("project", cwd);
@@ -3783,6 +3788,7 @@ test("syncClone-fail: gitOps.fetch throws -> notifyError fired and updatePlugins
         remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000001" },
       });
 
+      // act
       await updatePlugins({
         ctx,
         run,
@@ -3792,6 +3798,7 @@ test("syncClone-fail: gitOps.fetch throws -> notifyError fired and updatePlugins
         gitOps,
       });
 
+      // assert
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, "error");
       assert.match(notifications[0]?.message ?? "", /network/);
@@ -3986,6 +3993,7 @@ test("manifest-load-fail: manifest with invalid entry name type -> notifyError o
   // unreachable: MARKETPLACE_VALIDATOR uses the same PLUGIN_ENTRY_SCHEMA, so
   // any entry that passes MARKETPLACE_VALIDATOR also passes PLUGIN_ENTRY_VALIDATOR.
   await withHermeticHome(async () => {
+    // arrange
     const cwd = await createCaseDir("update-manifest-fail-");
     try {
       const seeded = await seedPathMarketplace({
@@ -4009,6 +4017,8 @@ test("manifest-load-fail: manifest with invalid entry name type -> notifyError o
       );
 
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       await updatePlugins({
         ctx,
         run,
@@ -4017,6 +4027,7 @@ test("manifest-load-fail: manifest with invalid entry name type -> notifyError o
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
       });
 
+      // assert
       // The direct path fires notifyError (not a skipped outcome, because
       // loadMarketplaceManifest threw before PLUGIN_ENTRY_VALIDATOR.Check).
       assert.equal(notifications.length, 1);
@@ -4045,6 +4056,7 @@ test("prepare-handles-fail: MCP collision aborts partial handles, outcome=failed
   // prepareStageMcpServers then reads the scoped mcp-adapter.json, finds the
   // key in `theirs`, and throws McpServerCollisionError.
   await withHermeticHome(async () => {
+    // arrange
     const cwd = await createCaseDir("update-prepare-mcp-fail-");
     try {
       const marketplaceRoot = path.join(cwd, "mp-src");
@@ -4082,26 +4094,31 @@ test("prepare-handles-fail: MCP collision aborts partial handles, outcome=failed
         }),
       );
 
-      // Cascade path: updateSinglePlugin must return failed (not throw).
       const prevCwd = process.cwd();
       process.chdir(cwd);
+
+      // act
+      // Cascade path: updateSinglePlugin must return failed (not throw).
+      let outcome: Awaited<ReturnType<typeof updateSinglePlugin>>;
       try {
-        const outcome = await updateSinglePlugin("hello", "mp", "project");
-        assert.equal(outcome.partition, "failed", `expected failed, got ${outcome.partition}`);
-        assert.equal(outcome.name, "hello");
-        assert.deepEqual(outcome.reasons, ["not in manifest"]);
-        assert.ok((outcome.notes ?? []).length > 0, "failed outcome must carry error notes");
-        for (const stagingRoot of [
-          locations.skillsStagingDir,
-          locations.commandsStagingDir,
-          locations.agentsStagingDir,
-        ]) {
-          if (await pathExists(stagingRoot)) {
-            assert.deepStrictEqual(await readdir(stagingRoot), []);
-          }
-        }
+        outcome = await updateSinglePlugin("hello", "mp", "project");
       } finally {
         process.chdir(prevCwd);
+      }
+
+      // assert
+      assert.equal(outcome.partition, "failed", `expected failed, got ${outcome.partition}`);
+      assert.equal(outcome.name, "hello");
+      assert.deepEqual(outcome.reasons, ["not in manifest"]);
+      assert.ok((outcome.notes ?? []).length > 0, "failed outcome must carry error notes");
+      for (const stagingRoot of [
+        locations.skillsStagingDir,
+        locations.commandsStagingDir,
+        locations.agentsStagingDir,
+      ]) {
+        if (await pathExists(stagingRoot)) {
+          assert.deepStrictEqual(await readdir(stagingRoot), []);
+        }
       }
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -4113,6 +4130,7 @@ test("prepare-handles-fail: MCP collision aborts partial handles, outcome=failed
 
 test("bare-form both-scopes: changed plugins render marketplace groups in presentation order", async () => {
   await withHermeticHome(async () => {
+    // arrange
     const cwd = await createCaseDir("update-bare-both-");
     try {
       // Seed project scope with plugin alpha.
@@ -4171,6 +4189,8 @@ test("bare-form both-scopes: changed plugins render marketplace groups in presen
 
       // bare form with no explicit scope -> enumerates both scopes
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       await updatePlugins({
         ctx,
         run,
@@ -4179,6 +4199,7 @@ test("bare-form both-scopes: changed plugins render marketplace groups in presen
         // No scope -> bare form enumerates both user and project scopes
       });
 
+      // assert
       // Both scopes are enumerated and both changed rows survive grouping. Static
       // marketplace presentation is alphabetical; the plugin rows retain their
       // public enumeration order inside each group.
@@ -4434,6 +4455,7 @@ test("swapState-mp-gone: marketplace removed via gitOps.fetch side-effect -> gra
   // absent -> returns partition='skipped' (notes: marketplace not found).
   // No unhandled throw; no error notification.
   await withHermeticHome(async () => {
+    // arrange
     const cwd = await createCaseDir("update-swap-mp-gone-");
     try {
       const locations = locationsFor("project", cwd);
@@ -4475,6 +4497,8 @@ test("swapState-mp-gone: marketplace removed via gitOps.fetch side-effect -> gra
       };
 
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       await updatePlugins({
         ctx,
         run,
@@ -4484,6 +4508,7 @@ test("swapState-mp-gone: marketplace removed via gitOps.fetch side-effect -> gra
         gitOps: mutatingGitOps,
       });
 
+      // assert
       // enumerateTargets ran with original state (hello in official).
       // syncCloneOnce ran, modified state.json to remove official.
       // preflightUpdate reads modified state -> marketplace not found ->
@@ -4597,6 +4622,7 @@ test("swapState-version-advanced: version advanced during fetch -> update runs a
   // fromVersion==0.0.10 matches state.version==0.0.10 -> no ST-9 error.
   // The update proceeds successfully.
   await withHermeticHome(async () => {
+    // arrange
     const cwd = await createCaseDir("update-swap-ver-advanced-");
     try {
       const locations = locationsFor("project", cwd);
@@ -4653,6 +4679,8 @@ test("swapState-version-advanced: version advanced during fetch -> update runs a
       };
 
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       await updatePlugins({
         ctx,
         run,
@@ -4662,6 +4690,7 @@ test("swapState-version-advanced: version advanced during fetch -> update runs a
         gitOps: mutatingGitOps,
       });
 
+      // assert
       // No error: version advanced from 0.0.9 to 0.0.10, manifest has 1.0.0.
       // preflightUpdate uses 0.0.10 as fromVersion; withStateGuard finds 0.0.10
       // -> they match -> update proceeds.
@@ -4686,6 +4715,7 @@ test("phase3a-commands-fail: command target occupied by directory -> phase3aFail
   // force skills commit failure too, ensuring the phase3aFailures array has
   // multiple entries and the recovery hint includes the command failure.
   await withHermeticHome(async () => {
+    // arrange
     const cwd = await createCaseDir("update-phase3a-cmd-");
     try {
       const locations = locationsFor("project", cwd);
@@ -4709,6 +4739,8 @@ test("phase3a-commands-fail: command target occupied by directory -> phase3aFail
       await mkdir(path.join(locations.promptsTargetDir, "hello:deploy.md"), { recursive: true });
 
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       await updatePlugins({
         ctx,
         run,
@@ -4717,6 +4749,7 @@ test("phase3a-commands-fail: command target occupied by directory -> phase3aFail
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
       });
 
+      // assert
       // Both skills and commands commit should fail; the aggregate recovery
       // hint should appear in the notifications.
       const allText = notifications.map((n) => n.message).join("\n");
@@ -4762,6 +4795,7 @@ test("phase3a-agents-fail: agent target path is a directory -> commitPreparedAge
   // Also pre-create the skills obstacle so the test also verifies that
   // phase 3a continues across multiple bridge failures (D-03 discipline).
   await withHermeticHome(async () => {
+    // arrange
     const cwd = await createCaseDir("update-phase3a-agents-");
     try {
       const locations = locationsFor("project", cwd);
@@ -4788,6 +4822,8 @@ test("phase3a-agents-fail: agent target path is a directory -> commitPreparedAge
       });
 
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       await updatePlugins({
         ctx,
         run,
@@ -4796,6 +4832,7 @@ test("phase3a-agents-fail: agent target path is a directory -> commitPreparedAge
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
       });
 
+      // assert
       // Both skills and agents commit should fail; recovery hint appears.
       const allText = notifications.map((n) => n.message).join("\n");
       assert.match(
@@ -5117,6 +5154,7 @@ test("TR-04 retry: partial-success-state-converges-to-new-version", async () => 
 
 test("RECON-05: an up-to-date named update leaves the base layer unchanged", async () => {
   await withHermeticHome(async () => {
+    // arrange
     const cwd = await createCaseDir("update-uptodate-layer-");
     try {
       const locations = locationsFor("project", cwd);
@@ -5138,6 +5176,8 @@ test("RECON-05: an up-to-date named update leaves the base layer unchanged", asy
       const bytesBefore = await readFile(locations.baseConfigJsonPath);
 
       const { ctx, run } = makeCtx();
+
+      // act
       await updatePlugins({
         ctx,
         run,
@@ -5146,6 +5186,7 @@ test("RECON-05: an up-to-date named update leaves the base layer unchanged", asy
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
       });
 
+      // assert
       const bytesAfter = await readFile(locations.baseConfigJsonPath);
       assert.deepEqual(bytesAfter, bytesBefore);
     } finally {
@@ -6880,6 +6921,7 @@ test("D-99-05a: an unsupported kind gained under an unchanged version degrades t
 
 test("D-99-05a counter-case: an unsupported kind LOST under an unchanged version promotes the refreshed record", async () => {
   await withHermeticHome(async () => {
+    // arrange
     const cwd = await createCaseDir("update-d9905a-promote-");
     try {
       const locations = locationsFor("project", cwd);
@@ -6899,6 +6941,8 @@ test("D-99-05a counter-case: an unsupported kind LOST under an unchanged version
       await saveState(locations.extensionRoot, state);
 
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       await updatePlugins({
         ctx,
         run,
@@ -6907,6 +6951,7 @@ test("D-99-05a counter-case: an unsupported kind LOST under an unchanged version
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
       });
 
+      // assert
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.message, "● mp [project]\n  ⊘ hello (skipped) {up-to-date}");
 
@@ -7833,6 +7878,7 @@ async function seedGitPluginMarketplace(opts: {
 
 test("PURL-06 / D-78-05 pinned sha-change: manifest sha differs from recorded -> swap; resolvedSha + shaVersion updated, old clone GC'd, new clone present", async () => {
   await withHermeticHome(async () => {
+    // arrange
     const cwd = await createCaseDir("update-git-pinned-swap-");
     try {
       const cloneUrl = "https://example.com/org/repo";
@@ -7853,6 +7899,8 @@ test("PURL-06 / D-78-05 pinned sha-change: manifest sha differs from recorded ->
 
       const { gitOps, state: gitState } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
       const { ctx, run } = makeCtx();
+
+      // act
       await updatePlugins({
         ctx,
         run,
@@ -7862,6 +7910,7 @@ test("PURL-06 / D-78-05 pinned sha-change: manifest sha differs from recorded ->
         cloneCacheSeam: seamWith(gitOps),
       });
 
+      // assert
       const locations = locationsFor("project", cwd);
       const after = await loadState(locations.extensionRoot);
       const record = after.marketplaces["mp"]?.plugins["gp"];

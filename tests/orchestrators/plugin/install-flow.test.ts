@@ -138,7 +138,14 @@ interface ObservedCompletionDrop {
 }
 
 test("install exposes its required transaction factory", () => {
-  assert.strictEqual(typeof createInstallPlugin, "function");
+  // arrange
+  const expectedType = "function";
+
+  // act
+  const factoryType = typeof createInstallPlugin;
+
+  // assert
+  assert.strictEqual(factoryType, expectedType);
 });
 function observeRetryBridgeSchedule(
   transactionControl: InstallTransactionControl,
@@ -1558,6 +1565,7 @@ const DFEN_DECLARATION_SITES = [
 for (const site of DFEN_DECLARATION_SITES) {
   test(`DFEN-04 / OUT-04: ${site.label} -> records disabled, drops the artifacts, writes through, and says so`, async () => {
     await withHermeticHome(async ({ installPlugin }) => {
+      // arrange
       const cwd = await mkdtemp(path.join(tmpdir(), site.tmpPrefix));
       try {
         const locations = locationsFor("project", cwd);
@@ -1572,6 +1580,8 @@ for (const site of DFEN_DECLARATION_SITES) {
         });
 
         const { ctx, run, notifications } = makeCtx();
+
+        // act
         await installPlugin({
           ctx,
           run,
@@ -1582,6 +1592,7 @@ for (const site of DFEN_DECLARATION_SITES) {
           applyDefaultEnabled: true,
         });
 
+        // assert
         const errs = notifications.filter((n) => n.severity === "error");
         assert.equal(errs.length, 0, `unexpected errors: ${JSON.stringify(errs)}`);
 
@@ -1816,6 +1827,7 @@ test("OUT-04 / D-102-10: an ordinary successful install carries no enable-hint t
 
 test("OUT-04 / WARN-01 / FSTAT-07: the install-disabled row names the degradations the enable it advertises would inherit", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
+    // arrange
     const cwd = await mkdtemp(path.join(tmpdir(), "install-out04-degraded-"));
     try {
       await seedPathMarketplaceWithPlugin({
@@ -1836,6 +1848,8 @@ test("OUT-04 / WARN-01 / FSTAT-07: the install-disabled row names the degradatio
       });
 
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       await installPlugin({
         ctx,
         run,
@@ -1847,6 +1861,7 @@ test("OUT-04 / WARN-01 / FSTAT-07: the install-disabled row names the degradatio
         applyDefaultEnabled: true,
       });
 
+      // assert
       assert.equal(notifications.length, 1);
       const note = notifications[0]!;
       // WARN-01: a degrade this ledger run produced is a shortfall, and landing
@@ -2043,6 +2058,7 @@ const DFEN_PRECEDENCE_CASES: readonly DfenPrecedenceCase[] = [
 for (const precedence of DFEN_PRECEDENCE_CASES) {
   test(`DFEN-05: ${precedence.label}`, async () => {
     await withHermeticHome(async ({ installPlugin }) => {
+      // arrange
       const cwd = await mkdtemp(path.join(tmpdir(), precedence.tmpPrefix));
       try {
         const locations = locationsFor("project", cwd);
@@ -2081,6 +2097,8 @@ for (const precedence of DFEN_PRECEDENCE_CASES) {
         }
 
         const { ctx, run, notifications } = makeCtx();
+
+        // act
         await installPlugin({
           ctx,
           run,
@@ -2091,6 +2109,7 @@ for (const precedence of DFEN_PRECEDENCE_CASES) {
           applyDefaultEnabled: true,
         });
 
+        // assert
         const errs = notifications.filter((n) => n.severity === "error");
         assert.equal(errs.length, 0, `unexpected errors: ${JSON.stringify(errs)}`);
 
@@ -2217,6 +2236,7 @@ for (const precedence of DFEN_PRECEDENCE_CASES) {
  */
 test("DFEN-08: a declared-true entry and a silent entry render identical install rows", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
+    // arrange
     const cwd = await mkdtemp(path.join(tmpdir(), "install-dfen08-parity-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -2254,16 +2274,21 @@ test("DFEN-08: a declared-true entry and a silent entry render identical install
           plugin,
           applyDefaultEnabled: true,
         });
-        assert.deepEqual(
-          session.notifications.filter((n) => n.severity === "error"),
-          [],
-        );
         return session.notifications;
       };
 
+      // act
       const alphaNotifications = await install("alpha");
       const betaNotifications = await install("beta");
       const gammaNotifications = await install("gamma");
+
+      // assert
+      for (const notifications of [alphaNotifications, betaNotifications, gammaNotifications]) {
+        assert.deepEqual(
+          notifications.filter((n) => n.severity === "error"),
+          [],
+        );
+      }
 
       // Whole-body rather than a substring match: the literal pins the header,
       // the row, the reload trailer and the absence of one.
@@ -2356,6 +2381,7 @@ test("DFEN-08: a declared-true entry and a silent entry render identical install
 
 test("DFEN-06 / CFG-02: an install with --local of a plugin the local layer declares stamps the local layer and moves the merged view", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
+    // arrange
     const cwd = await mkdtemp(path.join(tmpdir(), "install-dfen06-local-stamp-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -2383,6 +2409,8 @@ test("DFEN-06 / CFG-02: an install with --local of a plugin the local layer decl
       );
 
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       await installPlugin({
         ctx,
         run,
@@ -2393,6 +2421,8 @@ test("DFEN-06 / CFG-02: an install with --local of a plugin the local layer decl
         applyDefaultEnabled: true,
         local: true,
       });
+
+      // assert
       assert.deepEqual(
         notifications.filter((n) => n.severity === "error"),
         [],
@@ -2430,6 +2460,7 @@ test("DFEN-06 / CFG-02: an install with --local of a plugin the local layer decl
 
 test("DFEN-06 / CFG-02: the reload after an install with --local of a plugin the local layer declares plans nothing", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
+    // arrange
     const cwd = await mkdtemp(path.join(tmpdir(), "install-dfen06-local-reload-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -2461,6 +2492,8 @@ test("DFEN-06 / CFG-02: the reload after an install with --local of a plugin the
       );
 
       const install = makeCtx();
+
+      // act
       await installPlugin({
         ctx: install.ctx,
         run: install.run,
@@ -2487,6 +2520,8 @@ test("DFEN-06 / CFG-02: the reload after an install with --local of a plugin the
         completionCache: createCompletionCache(),
         hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
       });
+
+      // assert
       assert.deepEqual(reload.notifications, [], "a converged pass says nothing");
 
       const after = await loadState(locations.extensionRoot);
@@ -2707,6 +2742,7 @@ test("T-102-01: the same hooks fixture installed ENABLED does get its routing en
 
 test("D-102-02 / NFR-3: a disable cascade that throws reports failure and leaves the record shrunk to what survived", async (t) => {
   await withHermeticHome(async ({ completionCache, installPlugin }) => {
+    // arrange
     const cwd = await mkdtemp(path.join(tmpdir(), "install-d10202-cascade-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -2762,6 +2798,8 @@ test("D-102-02 / NFR-3: a disable cascade that throws reports failure and leaves
 
       const { ctx, run, notifications } = makeCtx();
       const cacheDrops = observeCompletionDrops(t, completionCache);
+
+      // act
       await installPlugin({
         ctx,
         run,
@@ -2772,6 +2810,7 @@ test("D-102-02 / NFR-3: a disable cascade that throws reports failure and leaves
         applyDefaultEnabled: true,
       });
 
+      // assert
       assert.equal(notifications.length, 1);
       const note = notifications[0]!;
       assert.equal(note.severity, "error");
@@ -4903,6 +4942,7 @@ test("WR-03: installPlugin's marketplaceTagProbe seam reaches a path-source depe
 for (const allowed of [false, true]) {
   test(`XMKT-01 direct install ${allowed ? "allows listed" : "refuses unlisted"} foreign dependency`, async () => {
     await withHermeticHome(async ({ installPlugin }) => {
+      // arrange
       const cwd = await mkdtemp(path.join(tmpdir(), "install-xmkt01-policy-"));
       try {
         await seedPathMarketplaceWithPlugin({
@@ -4931,6 +4971,7 @@ for (const allowed of [false, true]) {
         const userTreeBefore = await retryTree(user.scopeRoot);
         const { ctx, run, notifications } = makeCtx();
 
+        // act
         const outcome = await installPlugin({
           ctx,
           run,
@@ -4940,6 +4981,7 @@ for (const allowed of [false, true]) {
           plugin: "hello",
         });
 
+        // assert
         if (allowed) {
           assert.equal(outcome.status, "installed");
           const installed = await loadState(project.extensionRoot);
@@ -4985,6 +5027,7 @@ for (const allowed of [false, true]) {
 for (const allowGamma of [false, true]) {
   test(`XMKT-01 direct install ${allowGamma ? "allows" : "refuses"} a transitive foreign marketplace using the original root policy`, async () => {
     await withHermeticHome(async ({ installPlugin }) => {
+      // arrange
       const cwd = await mkdtemp(path.join(tmpdir(), "install-xmkt01-transitive-"));
       try {
         const project = locationsFor("project", cwd);
@@ -5027,6 +5070,7 @@ for (const allowGamma of [false, true]) {
         const treeBefore = await retryTree(cwd);
         const { ctx, run, notifications } = makeCtx();
 
+        // act
         const outcome = await installPlugin({
           ctx,
           run,
@@ -5036,6 +5080,7 @@ for (const allowGamma of [false, true]) {
           plugin: "hello",
         });
 
+        // assert
         if (allowGamma) {
           assert.equal(outcome.status, "installed");
           const installed = await loadState(project.extensionRoot);
@@ -5532,6 +5577,7 @@ test("AS-7: retired foreign agent target is preserved while a distinct new agent
 
 test("CMP-3 / PI-16: project-target install falls back to user-scope marketplace source", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
+    // arrange
     const cwd = await mkdtemp(path.join(tmpdir(), "install-cmp3-"));
     try {
       const userLocations = locationsFor("user", cwd);
@@ -5545,6 +5591,8 @@ test("CMP-3 / PI-16: project-target install falls back to user-scope marketplace
       });
 
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       await installPlugin({
         ctx,
         run,
@@ -5554,6 +5602,7 @@ test("CMP-3 / PI-16: project-target install falls back to user-scope marketplace
         plugin: "hello",
       });
 
+      // assert
       // V2 byte form: bare marketplace header + plugin row at 2-space
       // indent + reload-hint trailer per D-16-12.
       assert.equal(notifications.length, 1);
@@ -7801,6 +7850,7 @@ test("SEV-01 / SEV-02 / FSTAT-07 / D-71-06: partial-hook install blocks without 
 
 test("WB-01: standalone install writes the plugin entry to claude-plugins.json", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
+    // arrange
     const cwd = await mkdtemp(path.join(tmpdir(), "install-wb01-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -7812,6 +7862,8 @@ test("WB-01: standalone install writes the plugin entry to claude-plugins.json",
       });
 
       const { ctx, run } = makeCtx();
+
+      // act
       await installPlugin({
         ctx,
         run,
@@ -7821,6 +7873,7 @@ test("WB-01: standalone install writes the plugin entry to claude-plugins.json",
         plugin: "hello",
       });
 
+      // assert
       const { loadConfig } =
         await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
       const cfg = await loadConfig(locations.baseConfigJsonPath);
@@ -8895,6 +8948,7 @@ test("RESV-01 / D-01-32: a dependency declared only in the plugin's own manifest
 
 test("WB-01: --local routes the write to claude-plugins.local.json; base config untouched", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
+    // arrange
     const cwd = await mkdtemp(path.join(tmpdir(), "install-wb01-local-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -8906,6 +8960,8 @@ test("WB-01: --local routes the write to claude-plugins.local.json; base config 
       });
 
       const { ctx, run } = makeCtx();
+
+      // act
       await installPlugin({
         ctx,
         run,
@@ -8916,6 +8972,7 @@ test("WB-01: --local routes the write to claude-plugins.local.json; base config 
         local: true,
       });
 
+      // assert
       const { loadConfig } =
         await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
       const localCfg = await loadConfig(locations.localConfigJsonPath);
@@ -8934,6 +8991,7 @@ test("WB-01: --local routes the write to claude-plugins.local.json; base config 
 
 test("WR-09 / T-56-03-01: orchestrated-mode install SKIPS write-back (neither file created)", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
+    // arrange
     const cwd = await mkdtemp(path.join(tmpdir(), "install-wb01-orch-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -8945,6 +9003,8 @@ test("WR-09 / T-56-03-01: orchestrated-mode install SKIPS write-back (neither fi
       });
 
       const { ctx, run } = makeCtx();
+
+      // act
       const outcome = await installPlugin({
         ctx,
         run,
@@ -8954,6 +9014,8 @@ test("WR-09 / T-56-03-01: orchestrated-mode install SKIPS write-back (neither fi
         plugin: "hello",
         notifications: { mode: "orchestrated" },
       });
+
+      // assert
       assert.equal(outcome.status, "installed");
 
       const { loadConfig } =
@@ -8973,6 +9035,7 @@ test("WR-09 / T-56-03-01: orchestrated-mode install SKIPS write-back (neither fi
 test("WB-01 / LAYER-04: a flagless install of a plugin no layer declares stamps the base layer, local not created", async () => {
   // The majority path -- the shape every fresh `/claude:plugin install` has.
   await withHermeticHome(async ({ installPlugin }) => {
+    // arrange
     const cwd = await mkdtemp(path.join(tmpdir(), "install-wb01-undeclared-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -8986,6 +9049,8 @@ test("WB-01 / LAYER-04: a flagless install of a plugin no layer declares stamps 
       });
 
       const { ctx, run } = makeCtx();
+
+      // act
       await installPlugin({
         ctx,
         run,
@@ -8996,6 +9061,7 @@ test("WB-01 / LAYER-04: a flagless install of a plugin no layer declares stamps 
         applyDefaultEnabled: true,
       });
 
+      // assert
       const { loadConfig } =
         await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
       const baseCfg = await loadConfig(locations.baseConfigJsonPath);
@@ -9016,6 +9082,7 @@ test("WB-01 / LAYER-05: an install with --local of a plugin only the base layer 
   // so the install materializes it and declares it in the local layer, leaving
   // the base declaration as it was.
   await withHermeticHome(async ({ installPlugin }) => {
+    // arrange
     const cwd = await mkdtemp(path.join(tmpdir(), "install-wb01-flag-wins-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -9036,6 +9103,8 @@ test("WB-01 / LAYER-05: an install with --local of a plugin only the base layer 
       );
 
       const { ctx, run } = makeCtx();
+
+      // act
       await installPlugin({
         ctx,
         run,
@@ -9047,6 +9116,7 @@ test("WB-01 / LAYER-05: an install with --local of a plugin only the base layer 
         local: true,
       });
 
+      // assert
       const localCfg = await loadConfig(locations.localConfigJsonPath);
       assert.equal(localCfg.status, "valid");
       if (localCfg.status === "valid") {
@@ -9412,6 +9482,7 @@ for (const arm of [
     // fact: given the flag the apply path derives, the stamp lands in the file
     // it lands in today. The two are not duplicates.
     await withHermeticHome(async ({ installPlugin }) => {
+      // arrange
       const cwd = await mkdtemp(path.join(tmpdir(), arm.tmpPrefix));
       try {
         const locations = locationsFor("project", cwd);
@@ -9441,6 +9512,8 @@ for (const arm of [
         );
 
         const { ctx, run, notifications } = makeCtx();
+
+        // act
         const outcome = await installPlugin({
           ctx,
           run,
@@ -9452,6 +9525,8 @@ for (const arm of [
           local: arm.configSource === "local",
           notifications: { mode: "orchestrated" },
         });
+
+        // assert
         assert.equal(outcome.status, "installed");
         assert.deepEqual(notifications, []);
 
@@ -9473,10 +9548,13 @@ for (const arm of [
 
 test("WB-01: marketplace-not-added FAILED arm does NOT write back; config untouched", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
+    // arrange
     const cwd = await mkdtemp(path.join(tmpdir(), "install-wb01-fail-"));
     try {
       const locations = locationsFor("project", cwd);
       const { ctx, run } = makeCtx();
+
+      // act
       await installPlugin({
         ctx,
         run,
@@ -9486,6 +9564,7 @@ test("WB-01: marketplace-not-added FAILED arm does NOT write back; config untouc
         plugin: "any",
       });
 
+      // assert
       const { loadConfig } =
         await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
       assert.equal((await loadConfig(locations.baseConfigJsonPath)).status, "absent");
@@ -9498,6 +9577,7 @@ test("WB-01: marketplace-not-added FAILED arm does NOT write back; config untouc
 
 test("CFG-03 / T-56-03-04: invalid config aborts install; basename-only cause; state untouched", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
+    // arrange
     const cwd = await mkdtemp(path.join(tmpdir(), "install-wb01-cfg03-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -9519,6 +9599,8 @@ test("CFG-03 / T-56-03-04: invalid config aborts install; basename-only cause; s
       const stateMtimePre = (await stat(statePath)).mtimeMs;
 
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       await installPlugin({
         ctx,
         run,
@@ -9528,6 +9610,7 @@ test("CFG-03 / T-56-03-04: invalid config aborts install; basename-only cause; s
         plugin: "hello",
       });
 
+      // assert
       assert.equal(notifications.length, 1);
       const note = notifications[0]!;
       assert.match(note.message, /\{invalid manifest\}/);
@@ -9552,6 +9635,7 @@ test("CFG-03 / T-56-03-04: invalid config aborts install; basename-only cause; s
 
 test("CFG-03: an invalid local layer aborts a flagless install and changes nothing", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
+    // arrange
     const cwd = await mkdtemp(path.join(tmpdir(), "install-cfg03-local-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -9580,6 +9664,8 @@ test("CFG-03: an invalid local layer aborts a flagless install and changes nothi
       const stateMtimePre = (await stat(statePath)).mtimeMs;
 
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       await installPlugin({
         ctx,
         run,
@@ -9590,6 +9676,7 @@ test("CFG-03: an invalid local layer aborts a flagless install and changes nothi
         applyDefaultEnabled: true,
       });
 
+      // assert
       assert.equal(notifications.length, 1);
       const note = notifications[0]!;
       assert.match(note.message, /\{invalid manifest\}/);
@@ -9877,6 +9964,7 @@ test("FIX-03: an orchestrated install under a local-only marketplace is not refu
 
 test("CFG-03: an invalid base layer aborts an install with --local and changes nothing", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
+    // arrange
     const cwd = await mkdtemp(path.join(tmpdir(), "install-cfg03-shared-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -9910,6 +9998,8 @@ test("CFG-03: an invalid base layer aborts an install with --local and changes n
       const stateBytes = await readFile(statePath, "utf8");
 
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       await installPlugin({
         ctx,
         run,
@@ -9920,6 +10010,7 @@ test("CFG-03: an invalid base layer aborts an install with --local and changes n
         local: true,
       });
 
+      // assert
       assert.deepStrictEqual(notifications, [
         {
           message: [
@@ -9952,6 +10043,7 @@ test("CFG-03: an invalid base layer aborts an install with --local and changes n
 
 test("LAYER-06: an install with --local under a marketplace only the base layer declares also declares it in the local layer; the base autoupdate survives the merge", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
+    // arrange
     const cwd = await mkdtemp(path.join(tmpdir(), "install-uat05-local-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -9978,6 +10070,8 @@ test("LAYER-06: an install with --local under a marketplace only the base layer 
       );
 
       const { ctx, run } = makeCtx();
+
+      // act
       await installPlugin({
         ctx,
         run,
@@ -9988,6 +10082,7 @@ test("LAYER-06: an install with --local under a marketplace only the base layer 
         local: true,
       });
 
+      // assert
       const { loadConfig } =
         await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
       const localCfg = await loadConfig(locations.localConfigJsonPath);
@@ -10025,6 +10120,7 @@ test("LAYER-06: an install with --local under a marketplace only the base layer 
 
 test("UAT-05 / CR-02: --local install with marketplace declared NOWHERE declares it in the SAME local config; reconcile stays convergent", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
+    // arrange
     const cwd = await mkdtemp(path.join(tmpdir(), "install-uat05-nowhere-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -10040,6 +10136,8 @@ test("UAT-05 / CR-02: --local install with marketplace declared NOWHERE declares
       });
 
       const { ctx, run } = makeCtx();
+
+      // act
       await installPlugin({
         ctx,
         run,
@@ -10050,6 +10148,7 @@ test("UAT-05 / CR-02: --local install with marketplace declared NOWHERE declares
         local: true,
       });
 
+      // assert
       const { loadConfig } =
         await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
 
@@ -10087,6 +10186,7 @@ test("UAT-05 / CR-02: --local install with marketplace declared NOWHERE declares
 
 test("UAT-05: base-targeted install with marketplace already in base leaves the marketplace entry unchanged (entry-level no-op)", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
+    // arrange
     const cwd = await mkdtemp(path.join(tmpdir(), "install-uat05-base-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -10109,6 +10209,8 @@ test("UAT-05: base-targeted install with marketplace already in base leaves the 
       );
 
       const { ctx, run } = makeCtx();
+
+      // act
       await installPlugin({
         ctx,
         run,
@@ -10118,6 +10220,7 @@ test("UAT-05: base-targeted install with marketplace already in base leaves the 
         plugin: "hello",
       });
 
+      // assert
       const { loadConfig } =
         await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
       const baseCfg = await loadConfig(locations.baseConfigJsonPath);
@@ -10852,12 +10955,15 @@ test("FORCE-05: force cannot bypass an unavailable (structural) plugin", async (
 
 test("FORCE-05: force cannot bypass a missing marketplace", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
+    // arrange
     const cwd = await mkdtemp(path.join(tmpdir(), "install-force05b-"));
     try {
       const locations = locationsFor("project", cwd);
       await mkdir(locations.extensionRoot, { recursive: true });
 
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       // No marketplace seeded -> the marketplace-absent precondition
       // short-circuits BEFORE the gate; `--partial` cannot conjure a source.
       await installPlugin({
@@ -10870,6 +10976,7 @@ test("FORCE-05: force cannot bypass a missing marketplace", async () => {
         partial: true,
       });
 
+      // assert
       assert.ok(notifications.length >= 1, "a notification must surface on missing marketplace");
       const after = await loadState(locations.extensionRoot);
       assert.equal(after.marketplaces["ghost-mp"], undefined, "no marketplace record conjured");
