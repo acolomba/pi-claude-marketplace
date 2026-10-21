@@ -1,6 +1,6 @@
 ---
 phase: 07-marketplace-autoupdate
-verified: 2026-10-20T05:55:00Z
+verified: 2026-10-21T00:00:00Z
 status: passed
 score: 4/4 must-haves verified
 covered_files:
@@ -20,17 +20,35 @@ covered_files:
   - features/step_definitions/config.steps.ts
   - tests/architecture/cross-op-convergence.test.ts
   - tests/orchestrators/marketplace/autoupdate.test.ts
-covered_digest: "v3:sha256:4be6c9a0b02067abf91a228b753db1dc2e071d050570a26f3e68a126a0ec0351"
+covered_digest: "v3:sha256:9774a2dad0289cf88a1e87365a74ba1ddadd57473034822a29b78f7174bf6a96"
 behavior_unverified: 0
 overrides_applied: 0
+re_verification:
+  previous_status: passed
+  previous_score: 4/4
+  gaps_closed: []
+  gaps_remaining: []
+  regressions: []
 ---
 
 # Phase 7: Marketplace Autoupdate Verification Report
 
 **Phase Goal:** `marketplace autoupdate` and `noautoupdate` have scenarios for one marketplace and for all, with the new-marketplace default written as an Outline over every kind.
-**Verified:** 2026-10-20
+**Verified:** 2026-10-21
 **Status:** passed
-**Re-verification:** No (initial verification)
+**Re-verification:** Yes. The earlier report went stale because later phases touched covered files. The check runs against HEAD.
+
+## What changed since the previous report (cd2dd0e9)
+
+Against HEAD, only three covered files differ from the code the earlier report judged:
+
+| File | Change | Effect on Phase 7 truths |
+| ---- | ------ | ------------------------ |
+| `features/marketplace/autoupdate.feature` | Description paragraph reworded to say the scenarios use "local marketplaces and a loopback https git host". No scenario changed. | None. The `@url` and `@github` Examples blocks were already in the Outline. They are now live (see truth 2). |
+| `CHANGELOG.md` | New Unreleased bullets from later phases (`#ref` shorthand, empty-argument messages, `marketplace help` `--local`, GitHub 401 hint). The Phase 7 bullets (lines 35-46: layer-aware `autoupdate`/`noautoupdate`, inherited value, unscoped miss without a scope) are intact. | None. |
+| `docs/output-catalog.md` | One sentence added to the `source missing` entry: a git `marketplace add` with no repository or no `#ref` also renders it. | None. The Phase 7 entries are untouched. |
+
+`autoupdate.ts`, `layer-config.ts`, `config.steps.ts`, `cross-op-convergence.test.ts`, and `autoupdate.test.ts` are byte-identical to the code the earlier report judged.
 
 ## Goal Achievement
 
@@ -38,55 +56,46 @@ overrides_applied: 0
 
 | # | Truth | Status | Evidence |
 |---|-------|--------|----------|
-| 1 | `autoupdate` turns it on; on an already-on marketplace it is skipped as `already autoupdate`; `noautoupdate` turns it off | VERIFIED | `autoupdate.feature` lines 7-52: enable (config `autoupdate: true`, row `autoupdate enabled`), repeat (skipped / `already autoupdate`), disable (`autoupdate disabled`, config `false`). All pass in a real headless Pi run. |
-| 2 | A new marketplace has autoupdate off, so `noautoupdate` is skipped as `already no autoupdate`; dir, `@url`, `@github` rows; local rows pass | VERIFIED | Scenario Outline at lines 54-82: untagged `dir` + `file` block, `@url` block, `@github` block. `cucumber.json` excludes `@url`/`@github` (by design, Phases 9/10); local rows pass. The config assertion also shows no `autoupdate` key is written by add. |
-| 3 | The setting shows in `list` and `info` and survives a new session | VERIFIED | Lines 84-121: `autoupdate` then `Given the user has started a new pi session` then `marketplace list` (details autoupdate true) and `marketplace info` (details autoupdate true). Asserted value is one the default (off) cannot produce. |
-| 4 | Nameless flip covers both scopes; empty result when none added; unknown name fails `marketplace not added`; unscoped named flip changes both scopes | VERIFIED | Nameless over both scopes with D-01 ordering (lines 123-161); both-scope named flip (163-202); empty result (648-656); not-added Outline unscoped x3 incl. non-ASCII, with no scope (602-622) and scoped x4 both directions (624-646). |
+| 1 | `autoupdate` turns it on; on an already-on marketplace it is skipped as `already autoupdate`; `noautoupdate` turns it off | VERIFIED | `features/marketplace/autoupdate.feature` enable, repeat, and disable scenarios (top of file) assert the row (`autoupdate enabled`, skipped `already autoupdate`, `autoupdate disabled`) and the `autoupdate` value in `claude-plugins.json`. Passes in the single-feature run below. |
+| 2 | A new marketplace has autoupdate off, so `noautoupdate` is skipped as `already no autoupdate`; dir, `@url`, `@github` rows; local rows pass | VERIFIED | Scenario Outline "A newly added marketplace has autoupdate off" (lines 54-82) has Examples for `dir`, `file`, and tagged `@url` (`https://{git host}/acme/tools.git`) and `@github` (`acme/tools`) rows. The previous report ran only the local rows. The `@url` and `@github` rows now run too: the Outline yields 4 scenarios, all passing, and the feature total rose from 37 to 39. The regression gate ran the whole suite with those tags on: 433 of 433 scenarios passed. |
+| 3 | The setting shows in `list` and `info` and survives a new session | VERIFIED | Scenarios at lines 84-121 start a new pi session, then assert `list` and `info` details show autoupdate true, a value the default (off) cannot produce. They pass. |
+| 4 | Nameless flip covers both scopes; empty result when none added; unknown name fails `marketplace not added`; unscoped named flip changes both scopes | VERIFIED | Nameless two-scope scenario with D-01 ordering (line 123), both-scope named flip (line 163, AU-09 pin at 184), empty result (line 648), not-added Outlines unscoped (line 602) and scoped (line 624). All pass. The production paths behind them (`layerAlreadySet`, `inheritAfterFlip`, `notifyNamedMiss`) are unchanged and covered by 59 passing unit tests. |
 
 **Score:** 4/4 truths verified
 
 ### Decision verification (D-01..D-09)
 
-| Decision | Status | Evidence |
-|----------|--------|----------|
-| D-01 row order | VERIFIED | Scenario at line 123 uses zeta/alpha/mid and bravo/yankee with interleaved starting values; expects alpha, zeta, mid, then yankee, bravo (changed first, insertion order, project before user). Passes. |
-| D-02/D-03 local entry inherits value | VERIFIED | `layerAlreadySet` in `autoupdate.ts` (~line 328) judges a local entry without a value by `inherited(name)`, with base value else off. Scenarios at lines 326-344, 390-464 pin skip/write cases and assert the exact local config. |
-| D-04 nameless flip against post-flip base | VERIFIED | `inheritAfterFlip`; scenarios 279-304 and 346-368 assert the local entry keeps no value. |
-| D-05/D-09 invalid base fails closed | VERIFIED | `inheritFrom` throws the CFG-03 error only when a local entry without a value asks; scenario 512-535 uses the new raw-text step and asserts `invalid manifest` naming `claude-plugins.json`, local config unchanged, base text unchanged. Second writer step added in `config.steps.ts` + `layer-config.ts`; `.agents/skills/cucumber/rules/steps.md` amended to name both writers. |
-| D-06 test-first, docs, CHANGELOG | VERIFIED | `07-0{1,2,3}-RED.json` hold red-run evidence (e.g. D-08: exactly one extra `[scope, project]` row on the old code); CHANGELOG, README, `docs/output-catalog.md` S2 and unit tests updated. |
-| D-07 scoped misses both directions, both verbs | VERIFIED | Outline lines 624-646; asserts the config stays and the requested scope has no file. |
-| D-08 unscoped miss carries no scope | VERIFIED | `notifyNamedMiss` spreads `scope` only when `opts.scope !== undefined`; Outline 602-622; `cross-op-convergence.test.ts` and catalog fixtures updated. |
-| AU-09 pin | VERIFIED | Scenario 184-202 (project row before user row). |
+All nine decisions hold. Their scenarios and production code are unchanged since the previous report, and every one of them passes in the current run (39 of 39). `07-REVIEW-DISPOSITION.md` records no open review findings.
 
 ### Requirements Coverage
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| AU-01 | SATISFIED | Scenario line 7 |
-| AU-02 | SATISFIED | Scenario line 22, plus nameless skips |
-| AU-03 | SATISFIED | Outline line 54 (dir/file run; url/github bound, dry-run only until Phases 9/10) |
-| AU-04 | SATISFIED | Scenario line 38 |
-| AU-05 | SATISFIED | Scenarios lines 84 and 102 |
-| AU-06 | SATISFIED | Scenario line 123 |
-| AU-07 | SATISFIED | Scenario line 648 |
-| AU-08 | SATISFIED | Outlines lines 602 and 624 |
-| AU-09 | SATISFIED | Scenario line 184 |
+| AU-01 | SATISFIED | Enable scenario |
+| AU-02 | SATISFIED | Repeat scenario and the nameless skips |
+| AU-03 | SATISFIED | Outline at line 54, now running dir, file, url, and github rows |
+| AU-04 | SATISFIED | Disable scenario |
+| AU-05 | SATISFIED | `list` and `info` new-session scenarios |
+| AU-06 | SATISFIED | Nameless two-scope scenario with D-01 ordering |
+| AU-07 | SATISFIED | Empty-result scenario |
+| AU-08 | SATISFIED | Not-added Outlines (unscoped and scoped) |
+| AU-09 | SATISFIED | Both-scope named flip scenario |
 
-All nine IDs appear in the PLAN frontmatter set, in REQUIREMENTS.md (checked, traceability "Complete"), and in ROADMAP. No orphaned requirements.
+All nine IDs are in REQUIREMENTS.md, checked `[x]`, with the traceability table showing "Phase 7 | Complete". No orphaned requirements.
 
-### Behavioral Spot-Checks (run by the verifier, with a temp HOME)
+### Behavioral Spot-Checks (run by the verifier)
 
-| Check | Command | Result | Status |
-|-------|---------|--------|--------|
-| Feature run | `npx cucumber-js features/marketplace/autoupdate.feature` | 37 scenarios, 366 steps, all passed | PASS |
-| Feature dry-run incl. `@url`/`@github` binding | `npm run check:features` | exit clean | PASS |
+| Behavior | Command | Result | Status |
+| -------- | ------- | ------ | ------ |
+| Whole feature, serial | `npx cucumber-js features/marketplace/autoupdate.feature --parallel 1` | 39 scenarios, 382 steps, all passed | PASS |
+| The new-marketplace-default Outline only | `npx cucumber-js features/marketplace/autoupdate.feature --parallel 1 --name "A newly added marketplace has autoupdate off"` | 4 scenarios (dir, file, url, github), 32 steps, all passed | PASS |
 | Paired unit test | `node --test tests/orchestrators/marketplace/autoupdate.test.ts` | 59 pass, 0 fail | PASS |
-
-The orchestrator's `npm run check` result (exit 0 on `cd2dd0e9`) was not re-run; the focused checks above were.
+| Cross-op convergence gate | `node --test tests/architecture/cross-op-convergence.test.ts` | 24 pass, 0 fail | PASS |
+| Full gate at 0110a355 (cited, not re-run) | `regression-gate.log` | typecheck, lint, fallow, format, corresponding, check:features, unit, integration, and direct coverage green; 433 of 433 scenarios, 4050 of 4050 steps | PASS |
 
 ### Anti-Patterns
 
-TBD/FIXME/XXX/TODO scan over the modified production, feature, and step files: none. Review disposition: 0 open findings.
+No `TBD`, `FIXME`, or `XXX` marker in the modified feature, production, or step files.
 
 ### Human Verification Required
 
@@ -94,9 +103,9 @@ None.
 
 ### Gaps Summary
 
-No gaps. Every success criterion and decision is backed by a passing scenario and the supporting production change. The `@url`/`@github` Outline rows are excluded at run time by design until Phases 9/10 and bound by the dry run.
+No gaps. The one difference from the earlier report is in the goal's favor: the `@url` and `@github` rows of the new-marketplace-default Outline, bound but excluded before, now run and pass, so the Outline covers every kind as the goal asks.
 
 ---
 
-_Verified: 2026-10-20_
+_Verified: 2026-10-21_
 _Verifier: Claude (gsd-verifier)_
