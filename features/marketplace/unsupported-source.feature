@@ -14,6 +14,7 @@ Feature: Marketplace unsupported source
     Then the result lists these marketplaces:
       | name     | scope   | status | reasons            |
       | <source> | project | failed | unsupported source |
+    Then the "claude-plugins.json" file of the project scope does not exist
     Then the git host receives no request
 
     Examples:

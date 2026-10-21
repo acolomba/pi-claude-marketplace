@@ -275,6 +275,7 @@ Feature: Marketplace add
     Then the result lists these marketplaces:
       | name     | scope   | status | reasons        |
       | <source> | project | failed | source missing |
+    Then the "claude-plugins.json" file of the project scope does not exist
 
     Examples:
       | directory | directory state               | source                                                      |
@@ -295,6 +296,7 @@ Feature: Marketplace add
     Then the result lists these marketplaces:
       | name     | scope   | status | reasons          |
       | <source> | project | failed | invalid manifest |
+    Then the "claude-plugins.json" file of the project scope does not exist
 
     Examples:
       | manifest problem           | source kind | source                                                    |

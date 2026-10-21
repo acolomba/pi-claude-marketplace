@@ -52,6 +52,7 @@ Feature: Marketplace url source
     Then the result lists these marketplaces:
       | name                              | scope   | status | reasons        |
       | https://{git host}/acme/tools.git | project | failed | source missing |
+    Then the "claude-plugins.json" file of the project scope does not exist
     Then the git host receives these requests:
       | method | path                                              | status |
       | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 404    |
@@ -67,6 +68,7 @@ Feature: Marketplace url source
     Then the result lists these marketplaces:
       | name                                      | scope   | status | reasons        |
       | https://{git host}/acme/tools.git#missing | project | failed | source missing |
+    Then the "claude-plugins.json" file of the project scope does not exist
     Then the git host receives these requests:
       | method | path                                              | status |
       | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 200    |
@@ -83,6 +85,7 @@ Feature: Marketplace url source
     Then the result lists these marketplaces:
       | name                              | scope   | status | reasons             |
       | https://{git host}/acme/tools.git | project | failed | network unreachable |
+    Then the "claude-plugins.json" file of the project scope does not exist
     Then the git host receives these requests:
       | method | path                                              | status  |
       | GET    | /acme/tools.git/info/refs?service=git-upload-pack | dropped |
@@ -99,6 +102,7 @@ Feature: Marketplace url source
     Then the result lists these plugins:
       | marketplace name                  | marketplace scope | marketplace status | id                                | name                              | status | reasons       | scope   | leaks | rollback partial | cause chain                                                                  | cause truncated |
       | https://{git host}/acme/tools.git | project           | failed             | https://{git host}/acme/tools.git | https://{git host}/acme/tools.git | failed | network error | project |       |                  | <status> on https://{git host}/acme/tools.git, HTTP Error: <status> <phrase> | false           |
+    Then the "claude-plugins.json" file of the project scope does not exist
     Then the git host receives these requests:
       | method | path                                              | status   |
       | GET    | /acme/tools.git/info/refs?service=git-upload-pack | <status> |
