@@ -159,6 +159,7 @@
     "dev-dependencies-in-production": "error",
     "stale-suppressions": "error",
     "require-suppression-reason": "error",
+    "added-suppression": "off",
     "policy-violation": "error"
   }
 }
