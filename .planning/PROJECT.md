@@ -21,7 +21,7 @@ Use these terms in code, messages, docs, and planning (user decisions 2026-10-17
 - **Declaration:** an entry in a layer. **Installation:** the plugin's artifacts and record in a scope.
 - **Effective configuration:** a scope's two layers merged field by field, local winning on conflicts. The same intent may be declared in both layers.
 
-## Current Milestone: marketplace-features -- Marketplace Behavioral Tests
+## Previous Milestone: marketplace-features -- Marketplace Behavioral Tests (branch: features/cucumber-behavioral-tests, started 2026-10-15, completed 2026-10-21, not yet merged, no npm release)
 
 **Goal:** A cucumber suite drives every `/claude:plugin marketplace` lifecycle
 command through a real headless Pi, against local stand-ins for every source
@@ -580,6 +580,19 @@ Four distinct categories of unsupported Claude hook events. All cause plugin `(u
 
 ## Current State
 
+**Completed on a branch, unmerged:** milestone `marketplace-features`
+(2026-10-21, Phases 1-10 with 3.1-3.4 inserted, 82 plans, 183 tasks, 97/97
+requirements; archived to `.planning/milestones/marketplace-features-*`). A
+cucumber suite of 433 scenarios drives every `/claude:plugin marketplace` verb
+through a real headless Pi against local stand-ins for directory, file, https
+git URL, and GitHub sources, with no tag excluded, on Node 24 and Node 26.
+Product changes it carried: the GitHub base override (D-MF-01), config-layer
+partition and field merge (D-MF-02, D-MF-03), per-scope marketplace records
+for project installs (D-MF-04), project-first remove and info (D-MF-05,
+D-MF-06), the `#ref` shorthand (D-MF-07), C-10, and clearer git
+authentication causes. The audit reads `tech_debt` with no blockers; CI
+portability of the git host is read at PR time.
+
 **Completed on a branch, unmerged:** milestone `json-output` (2026-10-11, Phases 1-9,
 50 plans, 72 tasks, 36/36 requirements; archived to `.planning/milestones/json-output-*`).
 `/claude:plugin` output comes from a text or a JSON presentation strategy chosen
@@ -686,9 +699,11 @@ operator decision. Workstream `milestone` (force-install closeout) remains open.
 
 ### Active
 
-marketplace-features is active; its requirements are in
-[REQUIREMENTS.md](REQUIREMENTS.md). The 36 json-output requirements are
-validated and archived in [milestones/json-output-REQUIREMENTS.md](milestones/json-output-REQUIREMENTS.md).
+No milestone is active; start the next one with `/new-gsd-milestone`. The 97
+marketplace-features requirements are validated and archived in
+[milestones/marketplace-features-REQUIREMENTS.md](milestones/marketplace-features-REQUIREMENTS.md);
+the 36 json-output requirements in
+[milestones/json-output-REQUIREMENTS.md](milestones/json-output-REQUIREMENTS.md).
 
 ### Validated
 
@@ -1319,10 +1334,10 @@ test.ts` (43 V2 tests, +2 G-21-01 inventory-vs-transition regressions)
 | **D-06-01/06a/09 (mcp-4, Phase 6): status in Claude Code's words from the adapter's status events** — nine closed tokens, an explicit unknown, and `overridden by project scope` for a user row shadowed by a project install | Parity with Claude Code's `/mcp` wording; never import the adapter | ✓ Good |
 | **D-07-02/07/11 (mcp-4, Phase 7): operator-run live canary, adapter floor `>=5.2.0 <6`, 0.20.0 bump offered at PR time** | A real Pi 1.0 plus adapter run proves the whole path; 5.2.0 fixes GHSA-6qxp-vccf-f47h | ✓ Good; bump still to offer |
 | **D-08-02/05/07 (mcp-4, Phase 8): choices survive uninstall and disable; remedies must clear their cause; state maps are read by own key** — choices move to `_piClaudeMarketplace.serverChoices`; `reinstall` falls back to the recorded-sha clone; `constructor`/`__proto__` names behave like any other | The first audit's `tech_debt`: a remedy that cannot fix its cause breaks NFR-3, and inherited keys misread records | ✓ Good; ROOTKEY-01 carried |
-| **D-MF-01 (marketplace-features): `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL` overrides the github.com clone base for GitHub sources** — read per call; one seam covers the clone URL, origin matching, update and the auth host (bound to the override host, so Device Flow never fires); unset is byte-identical; an invalid value is a typed error. Amended 2026-10-15 from `GITHUB_BASE_URL`, which the Terraform GitHub provider reads as an API URL | Lets the behavioral suite serve `owner/repo` sources from a loopback stand-in; Claude Code has no such override, so this is a recorded divergence that changes nothing for a user who never sets it | — Pending |
-| **D-MF-02 (marketplace-features): a plugin may not be declared in `claude-plugins.json` while its marketplace is declared only in `claude-plugins.local.json`** — install, enable, and disable refuse that write and suggest `--local` (FIX-03, user decision 2026-10-16); update and reinstall write no declaration, so they never meet the rule (Phase 3.3) | A shared file must not depend on a per-machine declaration a teammate cannot see; also makes the first-run migration's local exclusion safe | — Pending |
-| **D-MF-03 (marketplace-features): mutations are partitioned between a scope's base and local layers** — a command naming a marketplace or plugin acts on the base layer, or the local layer with `--local`, and fails when only the other layer declares the entry; the same marketplace or plugin may be declared in both layers and is cloned or installed once per scope; installing into a layer while the other declares the plugin only adds the declaration, and uninstalling from a layer while the other declares it only drops the declaration; a plugin's marketplace must be declared in the same layer, and a violation is a configuration error on load; plugin and marketplace entries merge field by field, local winning (LAYER-01..06, LAYER-08, user decisions 2026-10-16/17); a named uninstall of a dependency that plugins still need is refused, a recorded divergence from Claude Code, which uninstalls it and reports the dependents | Each layer stays self-consistent so the base layer never depends on per-machine state; Claude Code declares marketplaces per settings file (user, project, local) and removes one declaration per scope, but does not refuse a command whose layer lacks the entry, so the refusals are a project decision | — Pending |
-| **D-MF-04 (marketplace-features): each scope owns its marketplace records and clones** — a project-scope install that uses a user-scope marketplace declares that marketplace in the project config (desired state, the plugin's target layer) and gives the project a real record with its own clone, as if the marketplace had been added to the project scope; the install adds it through the same `marketplace add` code, so leftovers, cleanup, and record shape match an explicit add, and a git source is cloned once from the network (NFR-5 amended); marketplaces adopted for dependencies are treated the same; every marketplace verb then acts per scope (user decision 2026-10-16) | A user-scope remove must never break a project scope; extends D-29. Claude Code keeps one machine-global clone (`~/.claude/plugins/marketplaces/`), so the per-scope clone is a divergence licensed by this decision | — Pending |
+| **D-MF-01 (marketplace-features): `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL` overrides the github.com clone base for GitHub sources** — read per call; one seam covers the clone URL, origin matching, update and the auth host (bound to the override host, so Device Flow never fires); unset is byte-identical; an invalid value is a typed error. Amended 2026-10-15 from `GITHUB_BASE_URL`, which the Terraform GitHub provider reads as an API URL | Lets the behavioral suite serve `owner/repo` sources from a loopback stand-in; Claude Code has no such override, so this is a recorded divergence that changes nothing for a user who never sets it | ✓ Good |
+| **D-MF-02 (marketplace-features): a plugin may not be declared in `claude-plugins.json` while its marketplace is declared only in `claude-plugins.local.json`** — install, enable, and disable refuse that write and suggest `--local` (FIX-03, user decision 2026-10-16); update and reinstall write no declaration, so they never meet the rule (Phase 3.3) | A shared file must not depend on a per-machine declaration a teammate cannot see; also makes the first-run migration's local exclusion safe | ✓ Good |
+| **D-MF-03 (marketplace-features): mutations are partitioned between a scope's base and local layers** — a command naming a marketplace or plugin acts on the base layer, or the local layer with `--local`, and fails when only the other layer declares the entry; the same marketplace or plugin may be declared in both layers and is cloned or installed once per scope; installing into a layer while the other declares the plugin only adds the declaration, and uninstalling from a layer while the other declares it only drops the declaration; a plugin's marketplace must be declared in the same layer, and a violation is a configuration error on load; plugin and marketplace entries merge field by field, local winning (LAYER-01..06, LAYER-08, user decisions 2026-10-16/17); a named uninstall of a dependency that plugins still need is refused, a recorded divergence from Claude Code, which uninstalls it and reports the dependents | Each layer stays self-consistent so the base layer never depends on per-machine state; Claude Code declares marketplaces per settings file (user, project, local) and removes one declaration per scope, but does not refuse a command whose layer lacks the entry, so the refusals are a project decision | ✓ Good |
+| **D-MF-04 (marketplace-features): each scope owns its marketplace records and clones** — a project-scope install that uses a user-scope marketplace declares that marketplace in the project config (desired state, the plugin's target layer) and gives the project a real record with its own clone, as if the marketplace had been added to the project scope; the install adds it through the same `marketplace add` code, so leftovers, cleanup, and record shape match an explicit add, and a git source is cloned once from the network (NFR-5 amended); marketplaces adopted for dependencies are treated the same; every marketplace verb then acts per scope (user decision 2026-10-16) | A user-scope remove must never break a project scope; extends D-29. Claude Code keeps one machine-global clone (`~/.claude/plugins/marketplaces/`), so the per-scope clone is a divergence licensed by this decision | ✓ Good |
 | **D-MF-05 (marketplace-features): unscoped marketplace removal selects project before user** — when both scopes hold the name it changes only the project copy and reports only that selected scope; when only user holds the name it falls back to user; scope before layer means a project-local-only match refuses flagless removal without falling through to the user base layer (user decisions 2026-10-18) | This is an explicit divergence from Claude Code 2.1.296, whose `claude plugin marketplace remove --help` and official command reference said on 2026-10-18 that omitting `--scope` removes the marketplace from every scope. Project-first selection preserves this project's independently owned per-scope records and clones, while scope-before-layer preserves D-MF-03's mutation boundary. | ✓ Good |
 | **D-MF-06 (marketplace-features): marketplace info composes scopes independently in project-first order** — an invalid manifest keeps the shipped failed `plugin-info` row without suppressing a healthy scope; an explicit scope miss reports that requested scope without fallback; `allowCrossMarketplaceDependenciesOn` preserves manifest declaration order (user decisions 2026-10-18) | Claude Code 2.1.296 has no marketplace `info` command, so this Pi-only surface follows the project's established notification grammar and independently owned scope model while retaining upstream source field concepts. | ✓ Good |
 | **D-MF-07 (marketplace-features): the `owner/repo` shorthand takes a ref after `#`, as after `@`** — the split matches Claude Code 2.1.296's shorthand split; a `#` that an `@` comes before stays part of the `@` ref (D-76-04); an empty ref after `#` adds `owner/repo` with no ref (user decision 2026-10-21) | Restores upstream parity for `#`. Claude Code refuses `owner/repo#`, so reading it as no ref is a recorded divergence that matches how the URL form drops an empty fragment. | ✓ Good |
@@ -1347,6 +1362,8 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
+
+_Last updated: 2026-10-21 after the marketplace-features milestone was completed and archived. 97/97 requirements validated; audit `tech_debt`, no blockers; carried items are in BACKLOG.md and WINDOWS.md. Prior updates follow._
 
 _Last updated: 2026-10-21 after marketplace-features Phase 10 completed. All
 5 success criteria and ADD-11, UPD-12, SRC-02, SRC-03 pass (5/5); the source-

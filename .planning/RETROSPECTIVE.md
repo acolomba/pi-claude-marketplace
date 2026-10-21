@@ -2,6 +2,40 @@
 
 *A living document updated after each milestone. Lessons feed forward into future planning.*
 
+## Milestone: marketplace-features -- Marketplace Behavioral Tests
+
+**Completed:** 2026-10-21 on `features/cucumber-behavioral-tests` (not yet merged, no npm release)
+**Phases:** 14 (1-10, with 3.1-3.4 inserted) | **Plans:** 82 | **Tasks:** 183 | **Requirements:** 97/97 | **Audit:** `tech_debt`, no blockers (integration 9/9, flows 5/6); override close (one deferred todo)
+
+### What Was Built
+- A cucumber suite of 433 scenarios drives every `/claude:plugin marketplace` verb through a real headless Pi, with stand-ins for directory, file, https git URL, and GitHub sources, and no tag excluded.
+- A loopback HTTPS git host around `git http-backend`, armed per repository for 401, 404, 5xx, and dropped connections, and a GitHub base override (D-MF-01) that points GitHub sources at it.
+- Product fixes the scenarios surfaced: the `--local` migration leak, base/local layer partition, per-scope marketplace records for project installs, C-10, the `#ref` shorthand, and clearer git authentication causes.
+
+### What Worked
+- **Outlines written once with `@url`/`@github` blocks that waited for their kind phase.** The verb phases wrote every row; phases 9 and 10 only had to remove the tag exclusion, and 38 of 39 github rows passed on first run.
+- **Scenarios as a defect finder.** Four inserted phases (3.1-3.4) and five test-first product fixes came straight from scenarios that pinned upstream-parity behavior.
+- **Red proofs recorded as JSON evidence** (`*-RED.json`) before every product fix and for the LAYER-07 rows, so a fix is shown failing on the old code, not just passing on the new.
+
+### What Was Inefficient
+- **Verification went stale across the milestone.** Phases 1-7 and 9 read `stale` at close because later phases touched shared fixtures and orchestrators; all 12 needed a re-verify pass before the lifecycle could run.
+- **The review fix loop renumbered findings across re-reviews.** The scripted disposition ledger kept only the last two, so phase 10's ledger was rendered by hand, and its built-in commit bypassed the hooks (`ca1ec217`).
+
+### Patterns Established
+- **One `<source kind>` parameter and kind-neutral steps**, with tagged `Examples:` blocks per kind and a scratch tags config (relative path) for triage.
+- **Hermetic everything:** Pi, the git host, and fixture git run with `GIT_CONFIG_NOSYSTEM=1`, a sandbox global config, and no inherited `GIT_*`; a hostile-config control changes no result.
+
+### Key Lessons
+1. **Re-verify early when shared fixtures move.** A cheap verifier pass per touched phase at each phase close would avoid a 12-phase re-verification at milestone close.
+2. **Upstream-parity questions surface in review, not only in discuss.** SHORTREF-01 (the `@` split) was found by a reviewer in phase 10; check the upstream binary's parse rules when a phase touches source parsing.
+
+### Cost Observations
+- Model mix: opus research, planning, execution, review and fixing; sonnet verifiers, plan checker and integration checker
+- Timeline: 2026-10-15 -> 2026-10-21, ~662 commits on the branch
+- Notable: Phase 10 ran 7 sequential plans with an `npm run check` gate after each (~75 s), 3 review-fix iterations plus one targeted pass, and 12 parallel re-verifications in batches of 4.
+
+---
+
 ## Milestone: json-output -- Mode-Keyed Presentation Strategies
 
 **Completed:** 2026-10-11 on `features/json` (not yet merged, no npm release)

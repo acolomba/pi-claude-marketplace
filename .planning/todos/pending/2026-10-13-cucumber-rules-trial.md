@@ -1,6 +1,9 @@
 ---
 created: 2026-10-13
 source: cucumber JSON behavioral-test spike (branch features/cucumber-behavioral-tests)
+audit_acknowledged:
+  milestone: marketplace-features
+  at: 2026-10-21
 ---
 
 # Try the cucumber rules on the behavioral-test POC

@@ -2,20 +2,20 @@
 gsd_state_version: "1.0"
 milestone: marketplace-features
 milestone_name: Marketplace Behavioral Tests
-current_phase: 10
-current_phase_name: GitHub Source Kind and Suite Close
-status: completed
+status: Awaiting next milestone
 stopped_at: Phase 10 complete — all phases complete
-last_updated: "2026-10-21T17:33:31.722Z"
+last_updated: "2026-10-21T17:56:29.371Z"
 last_activity: 2026-10-21
-last_activity_desc: Phase 10 complete
-state_head: 2ee590fa8762c75cf0138f4acc950f44cfcf035c
+last_activity_desc: Milestone marketplace-features completed and archived
+state_head: 2addc6ed0114dc8a0ff9729c9f7a7ad51450425c
 progress:
   total_phases: 14
   completed_phases: 14
   total_plans: 82
   completed_plans: 82
   percent: 100
+current_phase: 10
+current_phase_name: GitHub Source Kind and Suite Close
 ---
 
 # Project State
@@ -31,12 +31,10 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: 10 — GitHub Source Kind and Suite Close
-Plan: 7 of 7
-Status: All phases complete
-Last activity: 2026-10-21 — Phase 10 complete
-
-Progress: [██████████] 100%
+Phase: Milestone marketplace-features complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-10-21 — Milestone marketplace-features completed and archived
 
 ### mcp-4 closeout
 
@@ -133,6 +131,7 @@ Items acknowledged and deferred at milestone close, most recent first.
 
 | Category       | Item                                                                                                                                                                                          | Status          | Deferred At          | Milestone |
 | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- | -------------------- | --------- |
+| todos          | 2026-10-13-cucumber-rules-trial.md: try the cucumber rules on another repository (§3; reviewed in Phase 10 and not folded) | acknowledged — still pending | 2026-10-21 | marketplace-features |
 | deferred_items | 07/deferred-items.md: DEP-07-03-01 brace-expansion advisory in the root Pi tree; TEST-07-06-01 optional pi-subagents resolver skip | acknowledged — carried as BACKLOG DEPADV-01; WINDOWS #92 (was #89 before the main merge) | 2026-10-11 | json-output |
 | deferred_items | 08/deferred-items.md: DEF-08-04-01 `windows status --pick` fails when stdout is a pipe | acknowledged — upstream gsd-tools, out of scope | 2026-10-11 | json-output |
 | deferred_items | 05/deferred-items.md: the record (five open comment-drift items, three closed; the scanner reads the file as one entry)                                                                | acknowledged    | 2026-09-18           | test-backlog |
@@ -178,8 +177,6 @@ hit the same wall; convert it rather than re-disclosing it.
 
 | # | Description | Date | Commit | Status | Directory |
 | --- | --- | --- | --- | --- | --- |
-| 261019-czw | Resolve marketplace manifests from the materialized root; drop false failure reasons | 2026-10-19 | fc342f86 | — | [261019-czw-resolve-marketplace-manifest-from-materi](./quick/261019-czw-resolve-marketplace-manifest-from-materi/) |
-| 261019-fvd | marketplace add reports host HTTP errors as network error | 2026-10-19 | d430aca1 | — | [261019-fvd-marketplace-add-network-error-reason](./quick/261019-fvd-marketplace-add-network-error-reason/) |
 
 ## Session Continuity
 
@@ -261,12 +258,20 @@ archived milestone artifacts.
 
 ## Operator Next Steps
 
-- json-output is archived under `.planning/milestones/json-output-*` and
-  merged to main as PR #251 (squash `0e45ffd9`); its CHANGELOG bullet waits
-  under `[Unreleased]` for the next release.
-- Open user choice (Phase 9 D-03): keep the returned `isError: true` that
-  Pi 0.87.1 ignores, or throw a redacted Error so Pi flags the failure.
-- Start the next milestone with /gsd-new-milestone.
+- marketplace-features is archived under `.planning/milestones/marketplace-features-*`
+  on `features/cucumber-behavioral-tests`; nothing is pushed. Next: offer the
+  version bump, then open the PR (consolidate the un-numbered CHANGELOG
+  bullets into one at PR time).
+- At PR time (D-08): read the behavioral-tests job duration and confirm the
+  loopback git host passes on CI (OpenSSL 3.0.13, Node 24, `git http-backend`);
+  change `parallel` only if the job nears its timeout.
+- Follow-ups recorded at close: BACKLOG SHORTREF-01 (the `@` split parity),
+  WINDOWS #101 (plugin update github 401 line), WINDOWS #102-#109 (cucumber
+  review warnings).
+- Open user choice (json-output Phase 9 D-03): keep the returned
+  `isError: true` that Pi 0.87.1 ignores, or throw a redacted Error so Pi
+  flags the failure.
+- Start the next milestone with /new-gsd-milestone.
 
 ## Performance Metrics
 
