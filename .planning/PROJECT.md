@@ -692,6 +692,20 @@ validated and archived in [milestones/json-output-REQUIREMENTS.md](milestones/js
 
 ### Validated
 
+- ✓ A loopback HTTPS git stand-in (`node:https` around `git http-backend`,
+  a run-time openssl certificate trusted only through `NODE_EXTRA_CA_CERTS`)
+  lives for each cucumber worker's run, resets before every scenario, and
+  serves every url row the verb phases wrote: `@url` left the `cucumber.json`
+  exclusion (373 scenarios). Pi, the stand-in, and fixture git run hermetic
+  (`GIT_CONFIG_NOSYSTEM=1`, sandbox global config, no inherited `GIT_*`). Url
+  scenarios pin 401 with and without a stored credential, 404, 5xx, dropped
+  connections on add and update, the verbatim URL, refused forms and offline
+  verbs that make no request (asserted from the request log), and git re-add.
+  Two product fixes, test-first: a url add at a missing `#ref` fails as
+  `source missing`, and a failed git add's child row id is the bare source —
+  marketplace-features Phase 9, 2026-10-21 (HOST-01..04, DRV-03, ADD-08..10,
+  ADD-12, RM-09, LS-05, INFO-07, UPD-11, SRC-01).
+
 - ✓ `marketplace help`, `help marketplace`, and every marketplace usage
   rejection have scenarios that compare the whole `usage-info` or `usage-error`
   payload: missing and surplus arguments, unknown flags, and bad or missing
@@ -1319,6 +1333,16 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
+
+_Last updated: 2026-10-21 after marketplace-features Phase 9 completed. All
+6 success criteria and its 14 requirements pass; both manual controls (the
+credential-isolation check and the LAYER-07 remove red proof) were reproduced
+by the verifier. The code review fix loop closed all 3 warnings in 2 passes
+(a github info row at a ref the fixture lacks, stale feature descriptions, and
+a git-host error path that could kill a worker); 11 info items stay open in
+09-REVIEW-DISPOSITION.md. CI portability of the stand-in (OpenSSL 3, Node 24)
+is first proven when the branch is pushed. Phase 10 (GitHub Source Kind and
+Suite Close) is next. Prior updates follow._
 
 _Last updated: 2026-10-20 after marketplace-features Phase 8 completed. All
 3 success criteria and USE-01..USE-08 pass (12/12 must-haves). The code

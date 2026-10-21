@@ -5,11 +5,11 @@ milestone_name: Marketplace Behavioral Tests
 current_phase: 10
 current_phase_name: GitHub Source Kind and Suite Close
 status: verifying
-stopped_at: Phase 09 complete, ready to verify Phase 10
-last_updated: "2026-10-21T05:38:29.524Z"
+stopped_at: Phase 9 complete, ready to plan Phase 10
+last_updated: "2026-10-21T05:40:23.303Z"
 last_activity: 2026-10-21
 last_activity_desc: Phase 09 complete, transitioned to Phase 10
-state_head: c43fa8caec094b6b08771f08906bb30c6e09f1b6
+state_head: 7d1193f95e075a330030cb8aa356a076154c8f7d
 progress:
   total_phases: 14
   completed_phases: 13
@@ -22,18 +22,18 @@ progress:
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-10-20 after marketplace-features Phase 8)
+See: `.planning/PROJECT.md` (updated 2026-10-21 after marketplace-features Phase 9)
 
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 09 — URL Source Kind and HTTPS Git Stand-In
+**Current focus:** Phase 10 — GitHub Source Kind and Suite Close
 
 ## Current Position
 
 Phase: 10 — GitHub Source Kind and Suite Close
-Plan: 4
-Status: Phase complete — ready for verification
+Plan: Not started
+Status: Ready to discuss
 Last activity: 2026-10-21 — Phase 09 complete, transitioned to Phase 10
 
 Progress: [█████████░] 93%
@@ -183,8 +183,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-21T04:58:13.457Z
-**Stopped at:** Phase 09 complete, ready to verify Phase 10
+**Last session:** 2026-10-21T05:40:17.634Z
+**Stopped at:** Phase 9 complete, ready to plan Phase 10
 **Resume file:** None
 
 **Phase 8 closed (2026-10-20):** all five plans executed, Nyquist-compliant,
@@ -702,5 +702,7 @@ in the phase deferred items. The milestone remains open for audit and archival.
 
 ### Blockers/Concerns
 
-None from Phase 5. Tagged remote source-kind rows remain intentionally deferred
-to Phases 9 and 10, where their loopback stand-ins are delivered.
+- [Phase 9] The url stand-in is proven only locally (OpenSSL 4, Node 26, git 2.55);
+  CI (OpenSSL 3.0.13, Node 24) first runs it when the branch is pushed.
+- [Phase 9] `@github` rows stay excluded until Phase 10, including four refused
+  GitHub forms and the git-source re-add/no-request Outlines (09-08 hand-off).
