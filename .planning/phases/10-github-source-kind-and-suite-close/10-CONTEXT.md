@@ -118,6 +118,29 @@ Requirements: ADD-11, UPD-12, SRC-02, SRC-03.
 - The hostile `~/.gitconfig` plus planted system credential helper control is
   run once by hand, never committed (CONVENTIONS), mirroring Phase 9 D-11.
 
+### Post-research decisions (2026-10-21)
+
+- **D-11 (user):** The add-401-without-credential behavior is split by kind,
+  because url and github payloads differ by design (GHB-01; WINDOWS #100
+  stays deferred). The url scenario stays a single scenario in the git-kind
+  feature file; a github Outline has three rows (`acme/tools`,
+  `https://github.com/acme/tools`, and a third spelling such as
+  `https://github.com/acme/tools.git`). D-09 holds unchanged for
+  add-with-credential and update-401.
+- **D-12 (user):** Fix P-1 test-first: the shorthand `owner/repo#ref` parses
+  the ref (as `owner/repo@ref` already does), restoring parity with Claude
+  Code 2.1.296's `/^([^#@]+)(?:[#@](.+))?$/`. An empty ref (`acme/tools#`)
+  is **allowed and treated as no ref** (user choice; upstream rejects it, so
+  this is a recorded divergence). CHANGELOG line.
+- **D-13 (user):** Fix P-2 test-first: a 401 on github `update` under the
+  override carries the `no credential was obtained for {git host}; store one
+  with: … git credential approve` cause, placed **before** the `fetched …`
+  tail so the fetched URL stays the last link (GHB-01). With the override
+  unset, nothing changes.
+- **D-14:** The stand-in's HOST-EPIPE defect (`features/lib/https-git-host/cgi.ts`
+  rejects on `EPIPE` from the CGI's stdin and answers 500, flaking url
+  scenarios on Node 24) is fixed early in the phase, ahead of the Node 24 run.
+
 ### Claude's Discretion
 
 - Exact step wording, feature-file placement for github-only behaviors, the
