@@ -684,7 +684,8 @@ function reasonsFromCascadeError(err: unknown): readonly ContentReason[] | undef
  * has no opinion on them (path-source failures never reach git). The
  * remaining ladder -- `StoredCredentialRejectedError` (a stored credential the
  * host refused), isomorphic-git `HttpError` 401/403, `UserCanceledError` (a
- * helper miss or a declined or failed Device Flow), and network errno --
+ * helper miss, a declined or failed Device Flow, or a device-flow credential
+ * the host refused), and network errno --
  * delegates to `classifyGitTransportFailure` (`shared/git-failure-classifiers.ts`)
  * instead of a hand-rolled copy, so `update` cannot drift out of sync with
  * `install-outcome.ts`/`fetch.ts` (plugin), which already delegate to it.
