@@ -1,8 +1,8 @@
 Feature: Marketplace add
 
   Adding a marketplace records it in a scope under the name its manifest declares.
-  The scenarios run the real extension in a headless Pi, read its JSON results,
-  and use local marketplaces in place of published ones.
+  The scenarios run the real extension in a headless Pi, read its JSON results, and
+  use local marketplaces and a loopback https git host in place of published ones.
 
   Scenario Outline: Adding a marketplace records it in the chosen scope
     Given the marketplace "tools" is published as a <source kind> source

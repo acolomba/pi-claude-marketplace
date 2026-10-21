@@ -1,8 +1,8 @@
 Feature: Marketplace autoupdate
 
-  Autoupdate turns automatic updates on and off for an added marketplace, and a
-  scope's two layers combine the setting. The scenarios run the real
-  extension in a headless Pi and use local marketplaces in place of published ones.
+  Autoupdate turns automatic updates on and off for an added marketplace, and a scope's
+  two layers combine the setting. The scenarios run the real extension in a headless Pi
+  and use local marketplaces and a loopback https git host in place of published ones.
 
   Scenario: Enabling autoupdate turns it on for a marketplace
     Given the marketplace "tools" is published as a dir source

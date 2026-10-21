@@ -1,8 +1,8 @@
 Feature: Marketplace update
 
   Updating a marketplace refreshes its manifest from its source.
-  The scenarios run the real extension in a headless Pi and use local
-  marketplaces in place of published ones.
+  The scenarios run the real extension in a headless Pi and use local marketplaces
+  and a loopback https git host in place of published ones.
 
   Scenario: A bare update preserves scope and insertion order with adjacent notices
     Given the marketplace "theta" is published as a dir source

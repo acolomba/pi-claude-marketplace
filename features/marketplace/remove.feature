@@ -1,8 +1,8 @@
 Feature: Marketplace remove
 
-  Removing a marketplace drops its declaration from one config of a scope and
-  uninstalls the plugins that config declares from it. The scenarios run the
-  real extension in a headless Pi and use local marketplaces in place of published ones.
+  Removing a marketplace drops its declaration from one config of a scope and uninstalls
+  the plugins that config declares from it. The scenarios run the real extension in a
+  headless Pi and use local marketplaces and a loopback https git host in place of published ones.
 
   Scenario Outline: Removing an empty marketplace needs no reload
     Given the marketplace "tools" is published as a <source kind> source

@@ -1,8 +1,8 @@
 Feature: Marketplace info
 
   Info shows what the extension knows about an added marketplace: where it comes from and how it updates.
-  The scenarios run the real extension in a headless Pi, read its JSON results,
-  and use local marketplaces in place of published ones.
+  The scenarios run the real extension in a headless Pi, read its JSON results, and
+  use local marketplaces and a loopback https git host in place of published ones.
 
   Scenario Outline: Info shows the source identity and description
     Given the marketplace "tools" is published as a <source kind> source
