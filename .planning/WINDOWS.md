@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 4
+open_count: 10
 waived_count: 52
 fixed_count: 45
-total_count: 101
-last_updated: 2026-10-21T14:53:20.602Z
+total_count: 107
+last_updated: 2026-10-21T15:20:48.101Z
 ---
 
 # Broken Windows Ledger
@@ -116,6 +116,12 @@ last_updated: 2026-10-21T14:53:20.602Z
 | 99 | 03.3 | deviation | extensions/pi-claude-marketplace/orchestrators/reconcile/pending.ts |  | [marketplace-features] LAYER-06: in the MIG-01 pre-migration window (no claude-plugins.json, a populated state.json, and a local layer), pending checks the layer files on disk while the load checks them after the first-run migration writes the shared layer from state, so a local plugin whose marketplace only the migrated shared layer would declare is an error on load but not in pending | fixed |  | 2026-10-17T19:17:47.670Z | 2026-10-17T20:49:33.381Z |
 | 100 | 09 | deviation | docs/output-catalog.md | 2563 | [marketplace-features] The add-authentication-required catalog state (docs/output-catalog.md and tests/architecture/catalog-uat/fixtures/marketplace-add.ts:222) shows the 401 reason on a synthetic child row with a cause, but a real url marketplace add answered 401 renders a bare failed row with reasons [authentication required] and no cause; features/marketplace/url-source.feature pins the measured shape. The catalog is unchanged. | open |  | 2026-10-21T03:59:49.683Z |  |
 | 101 | 10 | deviation | extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts | 184 | [marketplace-features] The github marketplace sync of plugin update (orchestrators/plugin/update-flow.ts) under PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL still fails a 401 without the git credential approve line, while its url arm has it (UPD-12 fixed this only in marketplace update). | open |  | 2026-10-21T14:53:20.602Z |  |
+| 102 | 10 | lint-warning | features/marketplace/add.feature | 208 | [marketplace-features] cucumber review: features/marketplace/add.feature:208 the duplicate-name Outline, a behavior the git kinds share, has no @github Examples block, so the github kind's duplicate-name refusal is never run | open |  | 2026-10-21T15:20:46.310Z |  |
+| 103 | 10 | lint-warning | features/marketplace/add.feature | 287 | [marketplace-features] cucumber review: features/marketplace/add.feature:287 the invalid-manifest Outline has no @github Examples block, so a github marketplace whose manifest is malformed or schema-invalid is never added in a scenario | open |  | 2026-10-21T15:20:46.677Z |  |
+| 104 | 10 | lint-warning | features/marketplace/autoupdate.feature | 556 | [marketplace-features] cucumber review: features/marketplace/autoupdate.feature:556 the already-autoupdate skip states the local config but not the base config, unlike its siblings, so a skip that rewrote the base autoupdate value is not compared | open |  | 2026-10-21T15:20:46.996Z |  |
+| 105 | 10 | lint-warning | features/marketplace/list.feature | 3 | [marketplace-features] cucumber review: features/marketplace/list.feature:3 the feature description does not say that the scenarios use local marketplaces in place of published ones (features.md: the description names what the scenarios stand in for) | open |  | 2026-10-21T15:20:47.362Z |  |
+| 106 | 10 | lint-warning | features/marketplace/url-source-update.feature | 7 | [marketplace-features] cucumber review: features/marketplace/url-source-update.feature:7 the failed url update Outline does not state that the config still declares the marketplace, as update.feature states for the local kinds | open |  | 2026-10-21T15:20:47.728Z |  |
+| 107 | 10 | lint-warning | features/marketplace/url-source-update.feature | 31 | [marketplace-features] cucumber review: features/marketplace/url-source-update.feature:31 the bare update past a dropped connection does not state that the config still declares both marketplaces | open |  | 2026-10-21T15:20:48.101Z |  |
 
 ````json
 [
@@ -1373,6 +1379,84 @@ last_updated: 2026-10-21T14:53:20.602Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-10-21T14:53:20.602Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 102,
+    "kind": "lint-warning",
+    "phase": "10",
+    "file": "features/marketplace/add.feature",
+    "line": 208,
+    "description": "[marketplace-features] cucumber review: features/marketplace/add.feature:208 the duplicate-name Outline, a behavior the git kinds share, has no @github Examples block, so the github kind's duplicate-name refusal is never run",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-10-21T15:20:46.310Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 103,
+    "kind": "lint-warning",
+    "phase": "10",
+    "file": "features/marketplace/add.feature",
+    "line": 287,
+    "description": "[marketplace-features] cucumber review: features/marketplace/add.feature:287 the invalid-manifest Outline has no @github Examples block, so a github marketplace whose manifest is malformed or schema-invalid is never added in a scenario",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-10-21T15:20:46.677Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 104,
+    "kind": "lint-warning",
+    "phase": "10",
+    "file": "features/marketplace/autoupdate.feature",
+    "line": 556,
+    "description": "[marketplace-features] cucumber review: features/marketplace/autoupdate.feature:556 the already-autoupdate skip states the local config but not the base config, unlike its siblings, so a skip that rewrote the base autoupdate value is not compared",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-10-21T15:20:46.996Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 105,
+    "kind": "lint-warning",
+    "phase": "10",
+    "file": "features/marketplace/list.feature",
+    "line": 3,
+    "description": "[marketplace-features] cucumber review: features/marketplace/list.feature:3 the feature description does not say that the scenarios use local marketplaces in place of published ones (features.md: the description names what the scenarios stand in for)",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-10-21T15:20:47.362Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 106,
+    "kind": "lint-warning",
+    "phase": "10",
+    "file": "features/marketplace/url-source-update.feature",
+    "line": 7,
+    "description": "[marketplace-features] cucumber review: features/marketplace/url-source-update.feature:7 the failed url update Outline does not state that the config still declares the marketplace, as update.feature states for the local kinds",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-10-21T15:20:47.728Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 107,
+    "kind": "lint-warning",
+    "phase": "10",
+    "file": "features/marketplace/url-source-update.feature",
+    "line": 31,
+    "description": "[marketplace-features] cucumber review: features/marketplace/url-source-update.feature:31 the bare update past a dropped connection does not state that the config still declares both marketplaces",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-10-21T15:20:48.101Z",
     "resolved_at": null,
     "milestone": null
   }
