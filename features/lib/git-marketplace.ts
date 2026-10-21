@@ -39,12 +39,13 @@ export async function publishGitRepository(
  * commit to its bare repository as both `main` and `stable`. The commit is new
  * even when no file changed, so every republish reaches the git host. The push
  * is a fast-forward, so a `stable` branch that moved away from `main` makes it
- * fail. Every git runs with the HOME `home`.
+ * fail. It is atomic, so a failed push leaves both branches as they were. Every
+ * git runs with the HOME `home`.
  */
 export async function pushGitRepository(workTree: string, home: string): Promise<void> {
   await runGit(workTree, home, "add", "-A");
   await runGit(workTree, home, "commit", "-q", "--allow-empty", "-m", "publish");
-  await runGit(workTree, home, "push", "-q", "origin", "main", "main:stable");
+  await runGit(workTree, home, "push", "-q", "--atomic", "origin", "main", "main:stable");
 }
 
 /**
