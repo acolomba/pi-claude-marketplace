@@ -70,7 +70,14 @@ function parseLine(line: string): RpcRecord | undefined {
     return undefined;
   }
 
-  const parsed: unknown = JSON.parse(line);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(line);
+  } catch {
+    // A line that is not JSON is not an RPC record.
+    return undefined;
+  }
+
   return isRecord(parsed) ? parsed : undefined;
 }
 
@@ -94,6 +101,8 @@ export class PiProcess {
     createInterface({ input: child.stdout }).on("line", (line) => {
       this.handleLine(line);
     });
+    // A write after Pi died fails with EPIPE; the exit handler rejects the request.
+    child.stdin.on("error", () => undefined);
     child.on("exit", (code, signal) => {
       this.exited = true;
       this.pending?.reject(new Error(`Pi exited (${code ?? signal}):\n${this.stderr}`));
@@ -137,7 +146,12 @@ export class PiProcess {
     if (!this.exited) {
       const exit = once(this.child, "exit");
       this.child.stdin.end();
-      await Promise.race([exit, new Promise((resolve) => setTimeout(resolve, STOP_GRACE_MS))]);
+      let timer: NodeJS.Timeout | undefined = undefined;
+      const grace = new Promise((resolve) => {
+        timer = setTimeout(resolve, STOP_GRACE_MS);
+      });
+      await Promise.race([exit, grace]);
+      clearTimeout(timer);
     }
 
     killProcessGroup(this.child);

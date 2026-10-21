@@ -35,7 +35,7 @@ const ROW_FIELDS: ReadonlySet<string> = new Set(["marketplaces", "blocks"]);
 // Fields no scenario states: `schemaVersion` is fixed by the schema the
 // driver checks, `origin` carries per-run ids, and the row arrays have steps
 // of their own. Every table states `kind`, as the wire writes it, hyphens
-// included (D-01).
+// included.
 const UNSTATED_FIELDS: ReadonlySet<string> = new Set(["schemaVersion", "origin", ...ROW_FIELDS]);
 
 // The non-empty row arrays of `results`, as `<kind> <field>`.

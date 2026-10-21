@@ -1,7 +1,7 @@
 /**
- * @fileoverview The run's one headless Pi.
+ * @fileoverview Each worker's one headless Pi.
  *
- * The run starts one Pi in RPC mode with the real extension loaded, in a
+ * Each worker starts one Pi in RPC mode with the real extension loaded, in a
  * sandbox of a HOME, a Pi agent directory, and a project directory under one
  * temporary root outside the repository. Pi fixes those locations when it
  * starts, so the sandbox lasts the whole run. Before each scenario the
@@ -42,7 +42,7 @@ export interface PiRun {
   pi: PiProcess;
 }
 
-// Cucumber builds a world per scenario, but Pi lives for the run, so the run
+// Cucumber builds a world per scenario, but Pi lives for the worker, so the worker
 // is the one piece of module state under `features/`.
 let piRun: PiRun | undefined = undefined;
 
@@ -94,7 +94,7 @@ BeforeAll(async (): Promise<void> => {
       root,
       sandbox,
       // Local marketplaces live under HOME, so a command types them through
-      // `{home}` (D-04).
+      // `{home}`.
       marketplacesRoot: path.join(sandbox.home, "marketplaces"),
       gitHost,
       piEnvironment,

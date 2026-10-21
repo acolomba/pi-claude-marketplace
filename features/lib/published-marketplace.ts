@@ -1,8 +1,7 @@
 /**
  * @fileoverview A marketplace published as one source kind.
  *
- * The dir and file kinds write the path fixture under the sandbox HOME
- * (D-04). The url and github kinds write the same files in a work tree there
+ * The dir and file kinds write the path fixture under the sandbox HOME. The url and github kinds write the same files in a work tree there
  * and publish them as a commit in a bare repository that the run's git host
  * serves. Every later change to a git marketplace writes the work tree the
  * same way and pushes a new commit, so Pi sees it through a clone or fetch
@@ -161,7 +160,7 @@ export async function requireFreeRoot(
 /**
  * Publishes the marketplace `name` at `sites` as a `kind` source offering
  * `plugins`, in a directory of its own name. A file source is the manifest
- * inside `.claude-plugin/` (D-04).
+ * inside `.claude-plugin/`.
  */
 export function publishMarketplace(
   sites: PublicationSites,

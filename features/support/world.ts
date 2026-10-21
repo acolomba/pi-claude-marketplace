@@ -2,7 +2,7 @@
  * @fileoverview The per-scenario world.
  *
  * Every scenario gets a fresh world. The world holds what the steps of one
- * scenario share and reaches the run's one headless Pi and its git host,
+ * scenario share and reaches the worker's one headless Pi and its git host,
  * which `support/pi-process.ts` resets before every scenario. Whatever a step or
  * hook creates registers its release here, and the world runs those releases
  * in reverse order when the scenario ends. A passing scenario also fails
