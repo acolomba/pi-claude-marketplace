@@ -104,6 +104,7 @@ import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import {
+  CrossOriginChallengeError,
   InvalidMarketplaceManifestError,
   MarketplaceBaselineUnreadableError,
   MarketplaceUpdateError,
@@ -132,7 +133,11 @@ import {
   withLockedStateTransaction,
   type LockedStateTransactionDeps,
 } from "../../transaction/with-state-guard.ts";
-import { DEFAULT_CREDENTIAL_OPS, buildGitHubAuth } from "../auth-host.ts";
+import {
+  DEFAULT_CREDENTIAL_OPS,
+  NO_STORED_CREDENTIAL_CAUSE,
+  buildGitHubAuth,
+} from "../auth-host.ts";
 // WR-12 / WR-03: the `(updated)` row composer, imported from the LEAF module
 // that holds it rather than from the plugin-update ledger. The ledger stays
 // behind the injected `pluginUpdate` seam -- and now stays out of this module's
@@ -145,6 +150,7 @@ import {
   refreshGitHubClone,
   refreshUrlClone,
   resolveScopeOrNotifyNotAdded,
+  type GitAuthBundle,
   type GitOps,
 } from "./shared.ts";
 import {
@@ -363,6 +369,47 @@ function parseBaseline(name: string, text: string | undefined): unknown {
   }
 }
 
+/**
+ * UPD-12 / GAUTH-04 / GHB-01: refresh a github clone. Under
+ * `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL` the bundle is a stored credential
+ * bound to the override's host, so a failed credential lookup gains the line
+ * that names how to store one. The line goes before the fetched-URL link, which
+ * stays the last link, and the code-bearing error stays at depth 0. With the
+ * override unset the bundle is the github.com Device Flow and nothing changes
+ * (GHB-04).
+ */
+async function refreshGitHubSource(
+  cloneDir: string,
+  ref: string | undefined,
+  gitOps: GitOps,
+  onFetchSucceeded: () => void,
+  auth: GitAuthBundle,
+): Promise<void> {
+  try {
+    await refreshGitHubClone(cloneDir, ref, gitOps, onFetchSucceeded, auth);
+  } catch (err) {
+    if (lacksStoredCredential(err, auth)) {
+      err.cause = new Error(NO_STORED_CREDENTIAL_CAUSE(auth.host), { cause: err.cause });
+    }
+
+    throw err;
+  }
+}
+
+/**
+ * GAUTH-04: an auth failure that a stored credential could answer. A challenge
+ * after a cross-origin redirect is not one, because a credential stored for the
+ * bundle's host is never sent there (Q-02).
+ */
+function lacksStoredCredential(err: unknown, auth: GitAuthBundle): err is Error {
+  return (
+    err instanceof Error &&
+    auth.kind === "stored-credential" &&
+    !(err instanceof CrossOriginChallengeError) &&
+    classifyGitTransportFailure(err) === "authentication required"
+  );
+}
+
 async function refreshRecord(
   record: ExtensionState["marketplaces"][string],
   args: RefreshOneArgs,
@@ -398,7 +445,7 @@ async function refreshRecord(
         ...(deviceFlowHttp !== undefined && { deviceFlowHttp }),
       });
 
-      await refreshGitHubClone(
+      await refreshGitHubSource(
         cloneDir,
         source.ref,
         gitOps,

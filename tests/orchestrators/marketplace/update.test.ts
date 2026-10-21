@@ -33,6 +33,7 @@ import { buildAuthCallbacks } from "../../../extensions/pi-claude-marketplace/pl
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import {
   CrossOriginChallengeError,
+  FetchedUrlCause,
   InvalidGitHubBaseUrlError,
   PluginShapeError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
@@ -5236,6 +5237,180 @@ test("GHB-02: updating a GitHub marketplace under the override fetches with the 
       state.fetchCalls.map(({ auth }) => auth),
       [{ credentialOps, host: "mirror.example:8443", kind: "stored-credential" }],
     );
+  });
+});
+
+const OVERRIDE_WIRE_URL = "https://mirror.example:8443/git/anthropics/claude-plugins-official.git";
+
+test("UPD-12 / GHB-01: a cancelled credential lookup on a GitHub update under the override names git credential approve before the fetched URL", async (t) => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    setGitHubBaseUrl(t, "https://mirror.example:8443/git");
+    await seedGithubMarketplace({ cwd, name: "mirror-mp", ref: "main" });
+    const { ctx, run, notifications } = makeCtx();
+    const { credOps: credentialOps } = createCredentialOps();
+    const authError = Object.assign(new Error("cancelled"), {
+      code: "UserCanceledError",
+      cause: new FetchedUrlCause(OVERRIDE_WIRE_URL),
+    });
+    const { gitOps } = createGitOps({ fetchThrows: authError });
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      name: "mirror-mp",
+      scope: "project",
+      cwd,
+      gitOps,
+      credentialOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: `Some operations have failed.\n\n⊘ mirror-mp [project] (failed)\n  ⊘ mirror-mp (failed) {authentication required}\n    cause: Failed to update marketplace "mirror-mp". -> cancelled -> no credential was obtained for mirror.example:8443; store one with: printf 'protocol=https\\nhost=mirror.example:8443\\nusername=<user>\\npassword=<token>\\n\\n' | git credential approve -> fetched ${OVERRIDE_WIRE_URL}`,
+        severity: "error",
+      },
+    ]);
+  });
+});
+
+test("UPD-12 / GHB-01: a GitHub update under the override that the host answers with 500 keeps its chain without the stored-credential line", async (t) => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    setGitHubBaseUrl(t, "https://mirror.example:8443/git");
+    await seedGithubMarketplace({ cwd, name: "mirror-mp", ref: "main" });
+    const { ctx, run, notifications } = makeCtx();
+    const { credOps: credentialOps } = createCredentialOps();
+    const httpErr = Object.assign(new Error("HTTP Error: 500 Internal Server Error"), {
+      code: "HttpError",
+      data: { statusCode: 500 },
+      cause: new FetchedUrlCause(OVERRIDE_WIRE_URL),
+    });
+    const { gitOps } = createGitOps({ fetchThrows: httpErr });
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      name: "mirror-mp",
+      scope: "project",
+      cwd,
+      gitOps,
+      credentialOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: `Some operations have failed.\n\n⊘ mirror-mp [project] (failed)\n  ⊘ mirror-mp (failed) {network error}\n    cause: 500 on ${OVERRIDE_WIRE_URL} -> HTTP Error: 500 Internal Server Error -> fetched ${OVERRIDE_WIRE_URL}`,
+        severity: "error",
+      },
+    ]);
+  });
+});
+
+test("UPD-12 / GHB-01: a challenge after a cross-origin redirect on a GitHub update under the override keeps its chain without the stored-credential line", async (t) => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    setGitHubBaseUrl(t, "https://mirror.example:8443/git");
+    await seedGithubMarketplace({ cwd, name: "mirror-mp", ref: "main" });
+    const { ctx, run, notifications } = makeCtx();
+    const { credOps: credentialOps } = createCredentialOps();
+    const challenge = new CrossOriginChallengeError("https://sso.example.com");
+    challenge.cause = new FetchedUrlCause(OVERRIDE_WIRE_URL);
+    const { gitOps } = createGitOps({ fetchThrows: challenge });
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      name: "mirror-mp",
+      scope: "project",
+      cwd,
+      gitOps,
+      credentialOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: `Some operations have failed.\n\n⊘ mirror-mp [project] (failed)\n  ⊘ mirror-mp (failed) {authentication required}\n    cause: Failed to update marketplace "mirror-mp". -> redirected request to https://sso.example.com asked for credentials; a credential is not sent after a redirect to another origin -> fetched ${OVERRIDE_WIRE_URL}`,
+        severity: "error",
+      },
+    ]);
+  });
+});
+
+test("UPD-12: a non-Error fetch rejection on a GitHub update under the override reaches the failure row unchanged", async (t) => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    setGitHubBaseUrl(t, "https://mirror.example:8443/git");
+    await seedGithubMarketplace({ cwd, name: "mirror-mp", ref: "main" });
+    const { ctx, run, notifications } = makeCtx();
+    const { credOps: credentialOps } = createCredentialOps();
+    const gitOps: GitOps = {
+      ...createGitOps().gitOps,
+      // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the case is a non-Error rejection
+      fetch: () => Promise.reject("socket closed"),
+    };
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      name: "mirror-mp",
+      scope: "project",
+      cwd,
+      gitOps,
+      credentialOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          'Some operations have failed.\n\n⊘ mirror-mp [project] (failed)\n  ⊘ mirror-mp (failed)\n    cause: Failed to update marketplace "mirror-mp". -> socket closed',
+        severity: "error",
+      },
+    ]);
+  });
+});
+
+test("GHB-04: a declined Device Flow on a GitHub update without the override keeps its chain without the stored-credential line", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    await seedGithubMarketplace({ cwd, name: "declined", ref: "main" });
+    const { ctx, run, notifications } = makeCtx();
+    const { credOps: credentialOps } = createCredentialOps();
+    const authError = Object.assign(new Error("cancelled"), { code: "UserCanceledError" });
+    const { gitOps } = createGitOps({ fetchThrows: authError });
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      name: "declined",
+      scope: "project",
+      cwd,
+      gitOps,
+      credentialOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          'Some operations have failed.\n\n⊘ declined [project] (failed)\n  ⊘ declined (failed) {authentication required}\n    cause: Failed to update marketplace "declined". -> cancelled',
+        severity: "error",
+      },
+    ]);
   });
 });
 
