@@ -228,6 +228,25 @@ function writeResponse(res: ServerResponse, response: CgiResponse): void {
   res.end(response.body);
 }
 
+/**
+ * Answers 500 with no header the CGI set, and logs it. A response whose
+ * headers went out already can only be cut off.
+ */
+function answerServerError(logged: LoggedRequest, res: ServerResponse): void {
+  logged.status = 500;
+  if (res.headersSent) {
+    res.destroy();
+    return;
+  }
+
+  for (const name of res.getHeaderNames()) {
+    res.removeHeader(name);
+  }
+
+  res.statusCode = 500;
+  res.end();
+}
+
 export class HttpsGitHost {
   /** The `127.0.0.1:<port>` the host listens on. */
   readonly address: string;
@@ -405,29 +424,27 @@ export class HttpsGitHost {
     body: Buffer,
     res: ServerResponse,
   ): Promise<void> {
-    const request = {
-      method: logged.method,
-      url: new URL(logged.path, `https://${this.address}`),
-      headers,
-      body,
-    };
-    const env = cgiEnvironment(request, this.repositories, this.gitHome);
-    let response: CgiResponse;
+    // The request answers 500, and the log says so, when its path does not
+    // decode, when the CGI fails or is killed, or when the CGI prints a status
+    // or a header Node cannot send. Nothing escapes, so no request can crash
+    // the worker that hosts the server.
     try {
-      response = parseCgiResponse(
+      const request = {
+        method: logged.method,
+        url: new URL(logged.path, `https://${this.address}`),
+        headers,
+        body,
+      };
+      const env = cgiEnvironment(request, this.repositories, this.gitHome);
+      const response = parseCgiResponse(
         await runHttpBackend(env, body, (child) => {
           this.track(child);
         }),
       );
+      logged.status = response.status;
+      writeResponse(res, response);
     } catch (_error: unknown) {
-      // A CGI that fails or is killed answers 500, and the log says so.
-      logged.status = 500;
-      res.statusCode = 500;
-      res.end();
-      return;
+      answerServerError(logged, res);
     }
-
-    logged.status = response.status;
-    writeResponse(res, response);
   }
 }

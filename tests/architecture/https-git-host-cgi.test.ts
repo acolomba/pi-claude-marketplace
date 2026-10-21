@@ -87,6 +87,49 @@ describe("parseCgiResponse", () => {
     // act & assert
     assert.throws(() => parseCgiResponse(backendOutput), Error);
   });
+
+  for (const { status, expectedMessage } of [
+    {
+      status: "Not Found",
+      expectedMessage: 'the CGI response status "Not Found" is not an HTTP status',
+    },
+    { status: "99 Low", expectedMessage: 'the CGI response status "99 Low" is not an HTTP status' },
+    {
+      status: "1000 High",
+      expectedMessage: 'the CGI response status "1000 High" is not an HTTP status',
+    },
+  ]) {
+    test(`throws on the status "${status}", which Node cannot send`, () => {
+      // arrange
+      const backendOutput = Buffer.from(`Status: ${status}\r\nContent-Type: text/plain\r\n\r\nok`);
+
+      // act & assert
+      assert.throws(() => parseCgiResponse(backendOutput), {
+        name: "Error",
+        message: expectedMessage,
+      });
+    });
+  }
+
+  for (const { status, expectedStatus } of [
+    { status: "100 Continue", expectedStatus: 100 },
+    { status: "999 Last", expectedStatus: 999 },
+  ]) {
+    test(`reads the status "${status}" at the edge of the HTTP range as ${expectedStatus}`, () => {
+      // arrange
+      const backendOutput = Buffer.from(`Status: ${status}\r\n\r\n`);
+
+      // act
+      const response = parseCgiResponse(backendOutput);
+
+      // assert
+      assert.deepStrictEqual(response, {
+        status: expectedStatus,
+        headers: [],
+        body: Buffer.alloc(0),
+      });
+    });
+  }
 });
 
 /** The keys every CGI environment of the host at `/run/repositories` holds. */

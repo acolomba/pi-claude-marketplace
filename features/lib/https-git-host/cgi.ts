@@ -90,10 +90,21 @@ function headerLine(line: string): readonly [string, string] {
   return [line.slice(0, colon), line.slice(colon + 1).trim()];
 }
 
+// Node refuses to send a status outside 100-999.
+function statusCode(value: string): number {
+  const status = Number.parseInt(value, 10);
+  if (!Number.isInteger(status) || status < 100 || status > 999) {
+    throw new Error(`the CGI response status "${value}" is not an HTTP status`);
+  }
+
+  return status;
+}
+
 /**
  * Parses the output of `git http-backend`: the status from its `Status`
  * header, 200 when absent, the other headers, and the bytes after the first
- * blank line as the body, never decoded.
+ * blank line as the body, never decoded. Throws on a status that is not a
+ * number from 100 to 999.
  */
 export function parseCgiResponse(output: Buffer): CgiResponse {
   const { end, gap } = headerBlockEnd(output);
@@ -106,7 +117,7 @@ export function parseCgiResponse(output: Buffer): CgiResponse {
   const headers: Array<readonly [string, string]> = [];
   for (const [name, value] of lines.map((line) => headerLine(line))) {
     if (name.toLowerCase() === "status") {
-      status = Number.parseInt(value, 10);
+      status = statusCode(value);
     } else {
       headers.push([name, value]);
     }
