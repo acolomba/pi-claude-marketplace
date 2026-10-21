@@ -492,14 +492,14 @@ Plans:
 5. The phase's last plan removes `@url` from the `cucumber.json` exclusion, and every `@url` row the verb phases wrote passes.
 6. The `@url` rows that Phase 3.2 wrote for LAYER-07 run against the stand-in and pass: the cross-scope install Outline in `features/plugin/cross-scope-install.feature` and the three user-scope remove Outlines in `features/marketplace/remove.feature`. Each remove Outline's `@url` row is first shown failing, on a behavioral assertion, on code where a project install reuses the user-scope record instead of adding the marketplace (the install files planted from the parent of the commit that Phase 3.2's plan 07 SUMMARY names, or, if they no longer load, an equivalent local edit that is never committed), then passing on the current code. The install Outline's row guards the project declaration, which the older code also wrote, so it passes on both.
 
-**Plans:** 1/8 plans executed
+**Plans:** 2/8 plans executed
 
 Plans:
 **Wave 1**
 - [x] 09-01-PLAN.md — Tracer: one url add cloned over HTTPS from the per-worker loopback git host, with the request log asserted and hermetic git environments; one task with a green checkpoint commit (HOST-01, HOST-02, HOST-04, DRV-03)
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 09-02-PLAN.md — Unit cases for the CGI parser and the git environment builders (D-11, unit half); the cucumber rules for the git host's lifetime, log steps, and `{git host}` token (HOST-01, HOST-02, DRV-03)
+- [x] 09-02-PLAN.md — Unit cases for the CGI parser and the git environment builders (D-11, unit half); the cucumber rules for the git host's lifetime, log steps, and `{git host}` token (HOST-01, HOST-02, DRV-03)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 09-03-PLAN.md — Every url fixture operation, the verb-phase `@url` triage (D-13), the info ref and unreadable-skill row corrections (D-17, D-18), and the verbatim URL (SRC-01)
@@ -551,7 +551,7 @@ Plans:
 | 6. Marketplace Update and C-10 Fix | 4/4 | Complete    | 2026-10-19 |
 | 7. Marketplace Autoupdate | 4/4 | Complete    | 2026-10-20 |
 | 8. Marketplace Help and Usage Errors | 5/5 | Complete    | 2026-10-20 |
-| 9. URL Source Kind and HTTPS Git Stand-In | 1/8 | In Progress | - |
+| 9. URL Source Kind and HTTPS Git Stand-In | 2/8 | In Progress | - |
 | 10. GitHub Source Kind and Suite Close | 0/TBD | Not started | - |
 
 ## Carried Forward

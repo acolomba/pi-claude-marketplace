@@ -5,16 +5,16 @@ milestone_name: Marketplace Behavioral Tests
 current_phase: 09
 current_phase_name: URL Source Kind and HTTPS Git Stand-In
 status: executing
-stopped_at: Completed 09-01-PLAN.md
-last_updated: "2026-10-21T03:12:06.406Z"
+stopped_at: Completed 09-02-PLAN.md
+last_updated: "2026-10-21T03:24:53.292Z"
 last_activity: 2026-10-20
 last_activity_desc: Phase 09 execution started
-state_head: 96a41ae381b238e4c4da7360191093ccbed139d0
+state_head: 3cfaa1268cba64d1057e9f413ecc72df1fd7d537
 progress:
   total_phases: 14
   completed_phases: 12
   total_plans: 75
-  completed_plans: 68
+  completed_plans: 69
   percent: 86
 ---
 
@@ -32,7 +32,7 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 09 (URL Source Kind and HTTPS Git Stand-In) — EXECUTING
-Plan: 2 of 8
+Plan: 3 of 8
 Status: Ready to execute
 Last activity: 2026-10-20 — Phase 09 execution started
 
@@ -183,8 +183,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-21T03:12:01.156Z
-**Stopped at:** Completed 09-01-PLAN.md
+**Last session:** 2026-10-21T03:24:48.139Z
+**Stopped at:** Completed 09-02-PLAN.md
 **Resume file:** None
 
 **Phase 8 closed (2026-10-20):** all five plans executed, Nyquist-compliant,
@@ -353,6 +353,7 @@ archived milestone artifacts.
 | Phase 08 P04 | 9 min | 2 tasks | 10 files |
 | Phase 08 P05 | 12 min | 3 tasks | 10 files |
 | Phase 09 P01 | 14 min | 1 tasks | 16 files |
+| Phase 09 P02 | 6min | 2 tasks | 6 files |
 
 ## Decisions
 
@@ -494,6 +495,7 @@ archived milestone artifacts.
 - [Phase 08]: An @ followed only by blanks on update, fetch, or reinstall is the marketplace form with an empty name and reports `Marketplace name must not be empty.`, and parsePluginTarget is the one target parser of the three verbs
 - [Phase 09]: The url publication splits PublishedMarketplace into a path and a git variant, and the publishing functions take PublicationSites { marketplacesRoot, gitHost }, so features/lib never imports features/support
 - [Phase 09]: A plan checkpoint commit cannot export a function whose only consumer lands later: fallow dead-code fails the hook (runGit was held back to the final commit)
+- [Phase 09]: The colon-in-value parser case uses an Expires header, because the plan's Content-Type example held no colon in its value
 
 ### mcp-4 decisions
 
