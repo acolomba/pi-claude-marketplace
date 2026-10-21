@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 3
+open_count: 4
 waived_count: 52
 fixed_count: 45
-total_count: 100
-last_updated: 2026-10-21T04:17:09.380Z
+total_count: 101
+last_updated: 2026-10-21T14:53:20.602Z
 ---
 
 # Broken Windows Ledger
@@ -115,6 +115,7 @@ last_updated: 2026-10-21T04:17:09.380Z
 | 98 | 03.2 | todo | extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts |  | [marketplace-features] A marketplace-level refusal row (marketplaceFailureRows: remove, autoupdate, add under the GitHub base override) carries a synthetic failed child named after the marketplace, so its JSON wire id reads <mp>@<mp> (tools@tools), as if a plugin named tools existed; the scenarios pin that value. Fixing it needs a wire decision (mark the child as a marketplace subject, or give it no plugin id), so the review fix left it open | waived | [marketplace-features] The failed git marketplace add child row now has the bare source as its JSON id (D-19). The other marketplace-level failure rows from marketplaceFailureRows (remove, update, autoupdate, info) keep <mp>@<mp> by the user's scope for D-19; BACKLOG ROWID-01 carries them. | 2026-10-17T06:00:17.471Z | 2026-10-21T04:17:09.380Z |
 | 99 | 03.3 | deviation | extensions/pi-claude-marketplace/orchestrators/reconcile/pending.ts |  | [marketplace-features] LAYER-06: in the MIG-01 pre-migration window (no claude-plugins.json, a populated state.json, and a local layer), pending checks the layer files on disk while the load checks them after the first-run migration writes the shared layer from state, so a local plugin whose marketplace only the migrated shared layer would declare is an error on load but not in pending | fixed |  | 2026-10-17T19:17:47.670Z | 2026-10-17T20:49:33.381Z |
 | 100 | 09 | deviation | docs/output-catalog.md | 2563 | [marketplace-features] The add-authentication-required catalog state (docs/output-catalog.md and tests/architecture/catalog-uat/fixtures/marketplace-add.ts:222) shows the 401 reason on a synthetic child row with a cause, but a real url marketplace add answered 401 renders a bare failed row with reasons [authentication required] and no cause; features/marketplace/url-source.feature pins the measured shape. The catalog is unchanged. | open |  | 2026-10-21T03:59:49.683Z |  |
+| 101 | 10 | deviation | extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts | 184 | [marketplace-features] The github marketplace sync of plugin update (orchestrators/plugin/update-flow.ts) under PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL still fails a 401 without the git credential approve line, while its url arm has it (UPD-12 fixed this only in marketplace update). | open |  | 2026-10-21T14:53:20.602Z |  |
 
 ````json
 [
@@ -1359,6 +1360,19 @@ last_updated: 2026-10-21T04:17:09.380Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-10-21T03:59:49.683Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 101,
+    "kind": "deviation",
+    "phase": "10",
+    "file": "extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts",
+    "line": 184,
+    "description": "[marketplace-features] The github marketplace sync of plugin update (orchestrators/plugin/update-flow.ts) under PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL still fails a 401 without the git credential approve line, while its url arm has it (UPD-12 fixed this only in marketplace update).",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-10-21T14:53:20.602Z",
     "resolved_at": null,
     "milestone": null
   }
