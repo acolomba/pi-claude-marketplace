@@ -15,9 +15,9 @@ import { createInterface } from "node:readline";
 
 import { killProcessGroup, startRpcPi } from "../../tests/e2e/_rpc.ts";
 
-import type { RpcSandbox } from "../../tests/e2e/_rpc.ts";
+import type { RpcGitEnvironment, RpcSandbox } from "../../tests/e2e/_rpc.ts";
 
-export type { RpcSandbox };
+export type { RpcGitEnvironment, RpcSandbox };
 
 /** A parsed stdout record, read only through narrowing. */
 type RpcRecord = Readonly<Record<string, unknown>>;
@@ -97,9 +97,9 @@ export class PiProcess {
     });
   }
 
-  /** Starts Pi in RPC mode in `sandbox`, with the real extension loaded. */
-  static async start(sandbox: RpcSandbox): Promise<PiProcess> {
-    return new PiProcess(await startRpcPi(sandbox));
+  /** Starts Pi in RPC mode in `sandbox` with `git`, with the real extension loaded. */
+  static async start(sandbox: RpcSandbox, git: RpcGitEnvironment): Promise<PiProcess> {
+    return new PiProcess(await startRpcPi(sandbox, git));
   }
 
   /**

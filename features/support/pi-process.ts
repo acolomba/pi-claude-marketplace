@@ -9,6 +9,11 @@
  * which rebuilds the extension runtime, then checks that no plugin,
  * marketplace, or skill is left. So no scenario sees the state of another,
  * and the run order is random to prove it.
+ *
+ * The run also starts the https git host that git marketplace sources clone
+ * from, before Pi, because Pi fixes the host's CA file and port when it
+ * starts. `Before()` resets the host with Pi and checks that it holds no
+ * repository, request, connection, or CGI child (HOST-02).
  */
 
 import assert from "node:assert/strict";
@@ -18,16 +23,20 @@ import path from "node:path";
 
 import { AfterAll, Before, BeforeAll } from "@cucumber/cucumber";
 
+import { HttpsGitHost } from "../lib/https-git-host/server.ts";
 import { runCommand, startSession } from "../lib/pi-commands.ts";
 import { PiProcess } from "../lib/pi-process.ts";
 
-import type { RpcSandbox } from "../lib/pi-process.ts";
+import type { RpcGitEnvironment, RpcSandbox } from "../lib/pi-process.ts";
 
-/** The Pi process and the sandbox it runs in, which last the whole run. */
+/** The Pi process, the sandbox it runs in, and its git host, which last the whole run. */
 export interface PiRun {
   readonly root: string;
   readonly sandbox: RpcSandbox;
   readonly marketplacesRoot: string;
+  readonly gitHost: HttpsGitHost;
+  /** The git and trust environment every Pi of the run starts with. */
+  readonly piEnvironment: RpcGitEnvironment;
   pi: PiProcess;
 }
 
@@ -54,13 +63,22 @@ BeforeAll(async (): Promise<void> => {
     cwd: path.join(root, "project"),
   };
   await Promise.all(Object.values(sandbox).map((location) => mkdir(location, { recursive: true })));
+  const gitHost = await HttpsGitHost.start(path.join(root, "git-host"));
+  // The global git config is absent until a scenario writes it (DRV-03).
+  const piEnvironment = {
+    NODE_EXTRA_CA_CERTS: gitHost.certificatePath,
+    GIT_CONFIG_NOSYSTEM: "1",
+    GIT_CONFIG_GLOBAL: path.join(sandbox.home, ".gitconfig"),
+  } satisfies RpcGitEnvironment;
   piRun = {
     root,
     sandbox,
     // Local marketplaces live under HOME, so a command types them through
     // `{home}` (D-04).
     marketplacesRoot: path.join(sandbox.home, "marketplaces"),
-    pi: await PiProcess.start(sandbox),
+    gitHost,
+    piEnvironment,
+    pi: await PiProcess.start(sandbox, piEnvironment),
   };
 });
 
@@ -70,9 +88,10 @@ Before(async (): Promise<void> => {
   // scenario gets a new process.
   if (!run.pi.idle) {
     await run.pi.stop();
-    run.pi = await PiProcess.start(run.sandbox);
+    run.pi = await PiProcess.start(run.sandbox, run.piEnvironment);
   }
 
+  await run.gitHost.reset();
   // Empties each sandbox directory but keeps it, because Pi holds it as HOME,
   // agent directory, or cwd.
   const entries = await Promise.all(
@@ -84,13 +103,18 @@ Before(async (): Promise<void> => {
   const skills = await startSession(run.pi);
   const listed = await runCommand(run.pi, "/claude:plugin list");
   assert.deepStrictEqual(
-    { skills, marketplaces: listed.marketplaces },
-    { skills: [], marketplaces: [] },
+    { skills, marketplaces: listed.marketplaces, gitHost: await run.gitHost.snapshot() },
+    {
+      skills: [],
+      marketplaces: [],
+      gitHost: { repositories: [], requests: [], connections: 0, children: 0 },
+    },
   );
 });
 
 AfterAll(async (): Promise<void> => {
   const run = currentRun();
   await run.pi.stop();
+  await run.gitHost.close();
   await rm(run.root, { recursive: true, force: true });
 });
