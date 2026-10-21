@@ -5,16 +5,16 @@ milestone_name: Marketplace Behavioral Tests
 current_phase: 10
 current_phase_name: GitHub Source Kind and Suite Close
 status: executing
-stopped_at: Completed 10-02-PLAN.md
-last_updated: "2026-10-21T14:17:26.846Z"
+stopped_at: Completed 10-03-PLAN.md
+last_updated: "2026-10-21T14:34:42.274Z"
 last_activity: 2026-10-21
 last_activity_desc: Phase 10 execution started
-state_head: a8ec3abc6de46d5089f4788d2eb5f7dcb68c19ac
+state_head: 7b9e185641a03ad47cddeb5b5c569709d3b2e898
 progress:
   total_phases: 14
   completed_phases: 13
   total_plans: 82
-  completed_plans: 77
+  completed_plans: 78
   percent: 93
 ---
 
@@ -32,7 +32,7 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 10 (GitHub Source Kind and Suite Close) — EXECUTING
-Plan: 3 of 7
+Plan: 4 of 7
 Status: Ready to execute
 Last activity: 2026-10-21 — Phase 10 execution started
 
@@ -183,8 +183,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-21T14:17:20.764Z
-**Stopped at:** Completed 10-02-PLAN.md
+**Last session:** 2026-10-21T14:34:36.063Z
+**Stopped at:** Completed 10-03-PLAN.md
 **Resume file:** None
 
 **Phase 8 closed (2026-10-20):** all five plans executed, Nyquist-compliant,
@@ -362,6 +362,7 @@ archived milestone artifacts.
 | Phase 09 P08 | 8 min | 3 tasks | 4 files |
 | Phase 10 P01 | 8min | 2 tasks | 9 files |
 | Phase 10 P02 | 14min | 2 tasks | 8 files |
+| Phase 10 P03 | 10 min | 3 tasks | 11 files |
 
 ## Decisions
 
@@ -514,6 +515,7 @@ archived milestone artifacts.
 - [Phase 09]: SC6 evidence uses the local edit in resolveTargetScopeMarketplace: the f78907bf plant now loads but crashes in the Given install, which is not behavioral RED
 - [Phase 10]: The github publication kind shares the url arms; only the source differs (GitRepositoryHost.repositoryShorthand), and the acme owner stays a literal of server.ts
 - [Phase 10]: The git host's unread-body case GETs /acme/tools.git/HEAD; for info/refs the backend forwards a GET body to upload-pack and exits 141, which stays a 500
+- [Phase 10]: The owner/repo shorthand splits at the first # only when no @ comes before it; an empty # ref reads as no ref (D-MF-07)
 
 ### mcp-4 decisions
 

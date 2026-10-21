@@ -533,7 +533,7 @@ Plans:
 4. The suite closes clean: a source-walk check fails if `cucumber.json` still excludes any tag; `cucumber-js --dry-run --format usage` reports no unused, undefined, or ambiguous step; the whole suite passes on Node 24 and Node 26; CI timing is recorded; a credential-isolation control run once by hand (a hostile `~/.gitconfig` and a planted system credential helper) changes no result; and a cucumber skill review of the suite finds no BLOCKER.
 5. The `@github` rows that Phase 3.2 wrote for LAYER-07 run through the override and pass: the cross-scope install Outline in `features/plugin/cross-scope-install.feature` and the three user-scope remove Outlines in `features/marketplace/remove.feature`. Each remove Outline's `@github` row is first shown failing, on a behavioral assertion, on code where a project install reuses the user-scope record instead of adding the marketplace (the install files planted from the parent of the commit that Phase 3.2's plan 07 SUMMARY names, or, if they no longer load, an equivalent local edit that is never committed), then passing on the current code. The install Outline's row guards the project declaration, which the older code also wrote, so it passes on both.
 
-**Plans:** 2/7 plans executed
+**Plans:** 3/7 plans executed
 
 Plans:
 **Wave 1**
@@ -543,7 +543,7 @@ Plans:
 - [x] 10-02-PLAN.md — The stand-in's EPIPE fix before any Node 24 run (D-14); the Phase 9 stand-in, hook, and doc findings (IN-01 to IN-04, IN-06 to IN-10)
 
 **Wave 3** *(blocked on Wave 2 completion)*
-- [ ] 10-03-PLAN.md — A `stable` branch on every git publication (D-03, IN-11); `owner/repo#ref` test-first and refs proven by content (SRC-03, D-02, D-12); CHANGELOG and D-MF-07
+- [x] 10-03-PLAN.md — A `stable` branch on every git publication (D-03, IN-11); `owner/repo#ref` test-first and refs proven by content (SRC-03, D-02, D-12); CHANGELOG and D-MF-07
 
 **Wave 4** *(blocked on Wave 3 completion)*
 - [ ] 10-04-PLAN.md — 401 on add and update for url and github (ADD-11, UPD-12, D-09 to D-11); the github update remedy line test-first (D-13)
@@ -574,7 +574,7 @@ Plans:
 | 7. Marketplace Autoupdate | 4/4 | Complete    | 2026-10-20 |
 | 8. Marketplace Help and Usage Errors | 5/5 | Complete    | 2026-10-20 |
 | 9. URL Source Kind and HTTPS Git Stand-In | 8/8 | Complete    | 2026-10-21 |
-| 10. GitHub Source Kind and Suite Close | 2/7 | In Progress | - |
+| 10. GitHub Source Kind and Suite Close | 3/7 | In Progress | - |
 
 ## Carried Forward
 
