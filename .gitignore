@@ -18,6 +18,7 @@
 /.gsd
 /.gsd-capabilities.json
 /.planning/research/.cache/
+/.planning/state.json
 
 # claude
 **/.claude/settings.local.json
