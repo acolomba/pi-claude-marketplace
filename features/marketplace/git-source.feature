@@ -1,0 +1,120 @@
+Feature: Marketplace git source
+
+  A git marketplace is cloned once when it is added; listing, inspecting, and
+  removing it read only local state. The scenarios run the real extension in a
+  headless Pi against a loopback https git host and read its request log.
+
+  Scenario Outline: A removed git marketplace can be added again from the same source
+    Given the marketplace "tools" is published as a <source kind> source
+    Given the marketplace "tools" is added to the <scope> scope
+    Given the user has run "/claude:plugin marketplace remove tools --scope <scope>"
+    When the user runs "/claude:plugin marketplace add <source> --scope <scope>"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these marketplaces:
+      | name  | scope   | status |
+      | tools | <scope> | added  |
+    Then the git host receives these requests:
+      | method | path                                                | status |
+      | GET    | <repository path>/info/refs?service=git-upload-pack | 200    |
+      | POST   | <repository path>/git-upload-pack                   | 200    |
+
+    @url
+    Examples:
+      | source kind | scope   | source                            | repository path |
+      | url         | project | https://{git host}/acme/tools.git | /acme/tools.git |
+      | url         | user    | https://{git host}/acme/tools.git | /acme/tools.git |
+
+    @github
+    Examples:
+      | source kind | scope   | source     | repository path |
+      | github      | project | acme/tools | /acme/tools.git |
+      | github      | user    | acme/tools | /acme/tools.git |
+
+  Scenario Outline: Listing git marketplaces makes no request to the git host
+    Given the marketplace "tools" is published as a <source kind> source
+    Given the marketplace "tools" is added to the <scope> scope
+    When the user runs "/claude:plugin marketplace list --scope <scope>"
+    Then the result has these fields:
+      | kind                | cascade          |
+      | severity            | info             |
+      | needs reload        | false            |
+      | tally label         | Marketplace list |
+      | tally failures      | 0                |
+      | tally warnings      | 0                |
+      | tally success count | 1                |
+    Then the result lists these marketplaces:
+      | name  | scope   | details autoupdate | details last updated at |
+      | tools | <scope> | false              | {scenario time}         |
+    Then the git host receives no request
+
+    @url
+    Examples:
+      | source kind | scope   |
+      | url         | project |
+      | url         | user    |
+
+    @github
+    Examples:
+      | source kind | scope   |
+      | github      | project |
+      | github      | user    |
+
+  Scenario Outline: Info on a git marketplace makes no request to the git host
+    Given the marketplace "tools" is published as a <source kind> source
+    Given the marketplace "tools" is added to the <scope> scope
+    When the user runs "/claude:plugin marketplace info tools --scope <scope>"
+    Then the marketplace info result has these fields:
+      | kind                    | marketplace-info       |
+      | name                    | tools                  |
+      | scope                   | <scope>                |
+      | details autoupdate      | false                  |
+      | details last updated at | {scenario time}        |
+      | source kind             | <expected source kind> |
+      | source abs path         |                        |
+      | source url              | <source url>           |
+      | source owner            | <source owner>         |
+      | source repo             | <source repo>          |
+      | source ref              |                        |
+      | severity                | info                   |
+      | needs reload            | false                  |
+    Then the git host receives no request
+
+    @url
+    Examples:
+      | source kind | scope   | expected source kind | source url                    | source owner | source repo |
+      | url         | project | url                  | https://{git host}/acme/tools |              |             |
+      | url         | user    | url                  | https://{git host}/acme/tools |              |             |
+
+    @github
+    Examples:
+      | source kind | scope   | expected source kind | source url | source owner | source repo |
+      | github      | project | github               |            | acme         | tools       |
+      | github      | user    | github               |            | acme         | tools       |
+
+  Scenario Outline: Removing a git marketplace makes no request to the git host
+    Given the marketplace "tools" is published as a <source kind> source
+    Given the marketplace "tools" is added to the <scope> scope
+    When the user runs "/claude:plugin marketplace remove tools --scope <scope>"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these marketplaces:
+      | name  | scope   | status  |
+      | tools | <scope> | removed |
+    Then the git host receives no request
+
+    @url
+    Examples:
+      | source kind | scope   |
+      | url         | project |
+      | url         | user    |
+
+    @github
+    Examples:
+      | source kind | scope   |
+      | github      | project |
+      | github      | user    |
