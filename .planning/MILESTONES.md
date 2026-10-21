@@ -1,6 +1,6 @@
 # Milestones: pi-claude-marketplace
 
-## marketplace-features -- Marketplace Behavioral Tests (Completed: 2026-10-21 on `features/cucumber-behavioral-tests`; not yet merged or released)
+## marketplace-features -- Marketplace Behavioral Tests (Completed: 2026-10-21 on `features/cucumber-behavioral-tests`; PR #271, not yet merged or released)
 
 **Phases completed:** 14 phases (1-10, with 3.1-3.4 inserted), 82 plans, 183 tasks; 97/97 requirements
 

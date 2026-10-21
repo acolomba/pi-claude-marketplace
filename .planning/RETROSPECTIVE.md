@@ -2,7 +2,7 @@
 
 *A living document updated after each milestone. Lessons feed forward into future planning.*
 
-## Milestone: marketplace-features -- Marketplace Behavioral Tests
+## Milestone: marketplace-features -- Marketplace Behavioral Tests (PR #271)
 
 **Completed:** 2026-10-21 on `features/cucumber-behavioral-tests` (not yet merged, no npm release)
 **Phases:** 14 (1-10, with 3.1-3.4 inserted) | **Plans:** 82 | **Tasks:** 183 | **Requirements:** 97/97 | **Audit:** `tech_debt`, no blockers (integration 9/9, flows 5/6); override close (one deferred todo)
