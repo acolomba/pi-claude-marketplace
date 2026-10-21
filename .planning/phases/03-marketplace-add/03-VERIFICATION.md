@@ -1,6 +1,6 @@
 ---
 phase: 03-marketplace-add
-verified: 2026-10-16T15:00:00Z
+verified: 2026-10-21T00:00:00Z
 status: passed
 score: 8/8 must-haves verified
 covered_files:
@@ -17,18 +17,30 @@ covered_files:
   - features/step_definitions/marketplace/add.steps.ts
   - features/step_definitions/marketplace/publishing.steps.ts
   - features/support/world.ts
-covered_digest: "v3:sha256:fe41284dfdd3ee03bb95e0952df6794fa0b7029f89a9c377f3c90ff02cc36a05"
+covered_digest: "v3:sha256:9c2caed79efb2dfc8d40b1bb82b65c02f10f41e56cbe638650d6fce0f686c367"
 behavior_unverified: 0
 overrides_applied: 0
-re_verification: false
+re_verification:
+  previous_status: passed
+  previous_score: 8/8
+  gaps_closed: []
+  gaps_remaining: []
+  regressions: []
 ---
 
 # Phase 3: Marketplace Add Verification Report
 
 **Phase Goal:** `marketplace add` has scenarios for every add behavior, with multi-kind behaviors written once as Outlines whose dir and file rows pass now and whose `@url` and `@github` rows wait for their kind phase.
-**Verified:** 2026-10-16
+**Verified:** 2026-10-21
 **Status:** passed
-**Re-verification:** No, initial verification
+**Re-verification:** Yes. The earlier report was stale because later phases changed files it covers. Every truth was re-checked against HEAD.
+
+## What changed since the previous report
+
+- Phases 9 and 10 (url and github sources) turned the waiting rows on. `cucumber.json` no longer carries the `not @url and not @github` filter. The `noStandIn` throws in the fixture arms are gone (`grep -rn noStandIn features` finds nothing). The `@url` and `@github` Examples blocks now run against the loopback https git host.
+- `add.feature` grew from 9 behaviors to 14 scenarios and Outlines. It gained `--local` layer scenarios: base and local layer declarations, duplicate names across layers, and a new-session check.
+- `remove.feature` grew from the single `remove --local` scenario to a full remove feature, which still holds the `remove --local` scenarios for ADD-13.
+- `extensions/` changed in the same window (for example `9ed41788`, `a8a57548`, `bfecbe17`). Those are later-phase fixes found by the scenarios and do not weaken any add truth.
 
 ## Goal Achievement
 
@@ -36,14 +48,14 @@ re_verification: false
 
 | #   | Truth | Status | Evidence |
 | --- | ----- | ------ | -------- |
-| 1 | SC1: add records the marketplace in the chosen scope under its manifest name, with dir, file, `@url`, `@github` rows (ADD-01) | VERIFIED | `add.feature` Outline "records it in the chosen scope": untagged dir and file rows, `@url` and `@github` Examples blocks. Asserts the whole envelope, the added row, and the scope's `claude-plugins.json`. |
-| 2 | SC1: an added marketplace is listed and survives a new session (ADD-03), with dir/file untagged and `@url`/`@github` blocks | VERIFIED | Outline "still listed in a new session" uses `the user has started a new pi session`, then `marketplace list` with a whole-value tally and row table. |
-| 3 | SC1: a name the scope already holds fails as `duplicate name`, same-source and different-directory variants, each with dir and `@url` rows (ADD-04) | VERIFIED | Outline has two dir rows and two `@url` rows. It checks the error envelope, the `failed`/`duplicate name` row, and that the project `claude-plugins.json` still declares the original source. Mutation probe: disabling the duplicate check makes the run fail. |
-| 4 | SC1: malformed JSON or schema-invalid manifest fails as `invalid manifest`, dir/file untagged and `@url` rows (ADD-07) | VERIFIED | Outline has a `manifest problem` column with 4 local rows plus 2 `@url` rows. Fixtures differ in size (56/57/61 bytes) so the manifest cache cannot mask a row. The url fixture arm throws `noStandIn`, and the dry-run gate accepts every url step. |
-| 5 | SC2: without `--scope`, add uses the user scope (ADD-02) | VERIFIED | Scenario "without a scope records it in the user scope" checks the `user` row and the user scope file. |
-| 6 | SC2: the same marketplace can be added to both scopes (ADD-05), all four kinds | VERIFIED | Outline adds to user, then project; asserts both scopes' files. Rows for dir, file, `@url`, `@github`. |
-| 7 | SC2: a path that does not exist fails as `source missing`, named as typed (ADD-06) | VERIFIED | Outline of 4 local rows: absolute missing dir, `~/` form, missing manifest-file path, existing dir with no manifest. The row name is the source as typed, including `~/`. Every precondition is asserted in the Given. |
-| 8 | SC3: `add --local` writes `claude-plugins.local.json` and `remove --local` clears it (ADD-13); `add ~/...` keeps the `~` form (ADD-14) | VERIFIED | add.feature "--local" scenario asserts the base file holds only `extras` and the local file holds only `tools`. remove.feature asserts only `tools` leaves the local file, `extras` stays, and the base is untouched. The ADD-14 scenario asserts source `~/marketplaces/tools`. Mutation probe: making add ignore `--local` fails 2 scenarios. |
+| 1 | SC1: add records the marketplace in the chosen scope under its manifest name, with dir, file, `@url`, `@github` rows (ADD-01) | VERIFIED | `add.feature` Outline "records it in the chosen scope" has untagged dir and file Examples plus `@url` and `@github` blocks. It asserts the result fields, the added row, and the project `claude-plugins.json` declaration. |
+| 2 | SC1: an added marketplace is listed and survives a new session (ADD-03) | VERIFIED | Outline "still listed in a new session" has dir, file, `@url`, `@github` blocks. It restarts Pi, runs `marketplace list`, and asserts tally fields and the row's `details autoupdate` and `last updated at`. |
+| 3 | SC1: a name the scope already holds fails as `duplicate name`, same-source and different-directory variants, dir and `@url` rows (ADD-04) | VERIFIED | Outline has two dir rows and two `@url` rows. It asserts error severity, the `failed` / `duplicate name` row, and that the project config still declares the original source. Extra `--local` duplicate scenarios sit beside it. |
+| 4 | SC1: a malformed or schema-invalid manifest fails as `invalid manifest`, dir/file and `@url` rows (ADD-07) | VERIFIED | Outline has four local rows and two `@url` rows. Each asserts the failed row named by the source and that `claude-plugins.json` does not exist. |
+| 5 | SC2: without `--scope`, add uses the user scope (ADD-02) | VERIFIED | Scenario "without a scope records it in the user scope" asserts the `user` row and the user scope file. |
+| 6 | SC2: the same marketplace can be added to both scopes independently (ADD-05) | VERIFIED | Outline adds to user, then project, and asserts both scopes' files. It has dir, file, `@url`, `@github` rows. |
+| 7 | SC2: a path that does not exist fails as `source missing`, named by the source as typed (ADD-06) | VERIFIED | Outline of four local rows (missing dir, `~/` form, missing manifest-file path, existing dir with no manifest). The row name is the source as typed, `~/` included. |
+| 8 | SC3: `add --local` writes `claude-plugins.local.json` and `remove --local` clears it (ADD-13); `add ~/...` keeps the `~` form and resolves it against HOME (ADD-14) | VERIFIED | `add.feature` "--local" scenario asserts the base file holds only `extras` and the local file holds only `tools`. `remove.feature` "Removing a marketplace with --local clears only its local declaration" asserts the local file keeps `extras` and the base file keeps `base`. A new-session scenario confirms the removal sticks. The `~/marketplaces/tools` scenario asserts the `~` form in the user config and an `added` row, so HOME resolution works. |
 
 **Score:** 8/8 truths verified (0 behavior-unverified)
 
@@ -51,77 +63,64 @@ re_verification: false
 
 | Prohibition | Status | Evidence |
 | ----------- | ------ | -------- |
-| No fixture reads or writes the real HOME or `~/.pi/agent` (judgment) | VERIFIED | All fixture paths join `this.marketplacesRoot`. The `~` row resolves against the sandbox HOME of Pi's child. I touched nothing under the real home. |
-| No row reaches the network (judgment) | VERIFIED | `cucumber.json` keeps `not @url and not @github`. The url/github fixture arms throw `noStandIn`. |
+| No fixture reads or writes the real HOME or `~/.pi/agent` (judgment) | VERIFIED | Fixture paths join the per-scenario `marketplacesRoot`. The `~` row resolves against the sandbox HOME of Pi's child. My run used the hermetic scenario world and set TMPDIR to the session scratchpad. |
+| No row reaches the public network (judgment) | VERIFIED | `@url` and `@github` rows use the loopback https git host (`features/lib/https-git-host`, `features/support/https-git-host.ts`) and the base-override clone path from commit `68fd3694`. No public host is named in the Examples. |
 
 ### Required Artifacts
 
 | Artifact | Status | Details |
 | -------- | ------ | ------- |
-| `features/marketplace/add.feature` | VERIFIED | 9 behaviors; 19 local rows run; `@url`/`@github` blocks present with a `source kind` column. |
-| `features/marketplace/remove.feature` | VERIFIED | `Feature: Marketplace remove` with the single `remove --local` scenario (D-07). |
-| `features/step_definitions/marketplace/add.steps.ts` | VERIFIED | 87 lines. Four add-only Given steps, each text naming `add`, one literal text per variant. |
-| `features/lib/path-marketplace.ts` | VERIFIED | `writeMalformedManifest` beside `writeInvalidManifest`, one shared `manifestText` builder. |
-| `features/lib/published-marketplace.ts` | VERIFIED | `ManifestProblem`, `invalidateManifest`, `publishMarketplaceIn`, `requireFreeRoot`, one kind switch per function. |
+| `features/marketplace/add.feature` | VERIFIED | 14 scenarios and Outlines. `@url` and `@github` blocks present and now running. |
+| `features/marketplace/remove.feature` | VERIFIED | Holds the `remove --local` scenarios. |
+| `features/step_definitions/marketplace/add.steps.ts` | VERIFIED | Add-only Given steps. |
+| `features/lib/path-marketplace.ts` | VERIFIED | `writeMalformedManifest` and shared manifest builder. |
+| `features/lib/published-marketplace.ts` | VERIFIED | Kind switch now implements url and github arms. |
 
 ### Key Link Verification
 
 | From | To | Status |
 | ---- | -- | ------ |
-| `add.steps.ts` | `published-marketplace.ts` (`invalidateManifest`, `publishMarketplaceIn`, `requireFreeRoot`) | WIRED |
-| `published-marketplace.ts` | `path-marketplace.ts` (`writeMalformedManifest`) | WIRED |
-| `publishing.steps.ts` | `invalidateManifest` with `"schema-invalid"` | WIRED |
-| Feature steps | step definitions | WIRED: `check:features` passes (0 undefined or ambiguous steps, 0 unused definitions, including excluded rows). |
+| `add.steps.ts` | `published-marketplace.ts` | WIRED. The dry run resolves every step. |
+| `published-marketplace.ts` | `path-marketplace.ts` | WIRED |
+| Feature steps | step definitions | WIRED. `npx cucumber-js --dry-run` on add and remove features: 86 scenarios, 828 steps, none undefined. |
 
 ### Behavioral Spot-Checks
 
 | Behavior | Command | Result | Status |
 | -------- | ------- | ------ | ------ |
-| Full cucumber suite | `npm run test:cucumber` | 41 scenarios, 324 steps passed | PASS |
-| add and remove features alone | `npx cucumber-js features/marketplace/add.feature features/marketplace/remove.feature` | 20 scenarios passed | PASS |
-| Feature gate, including excluded `@url`/`@github` rows | `CI=1 npm run check:features` | "Feature gate passed: 51 scenarios, 22 step definitions" | PASS |
-| Scenarios catch a wrong implementation: add ignores `--local` (temporary edit, restored) | cucumber on add and remove features | 2 scenarios failed | PASS |
-| Scenarios catch a wrong implementation: duplicate check disabled (temporary edit, restored) | cucumber on `add.feature` | duplicate-name scenarios failed | PASS |
+| Whole add feature, including `@url` and `@github` rows | `npx cucumber-js --parallel 1 features/marketplace/add.feature` (TMPDIR in scratchpad) | 37 scenarios (37 passed), 301 steps (301 passed) | PASS |
+| Add and remove features resolve every step | `npx cucumber-js --dry-run features/marketplace/add.feature features/marketplace/remove.feature` | 86 scenarios, 828 steps, no undefined or ambiguous step | PASS |
+| Full gate at HEAD 0110a355 (cited, not re-run) | `/tmp/claude-1000/-home-acolomba-src-pi-claude-marketplace-cucumber-behavioral-tests/e37b84b9-da30-433b-a2eb-65b65d26c976/scratchpad/regression-gate.log` | `npm run check`: every static gate passed, 433 scenarios (433 passed), 4050 steps (4050 passed), merged LCOV written | PASS |
 
-`git status` was clean after both probes. `extensions/` has no diff since the phase's first commit (`16d18652..HEAD`), so the phase changed no production code.
+Only planning Markdown changed between 0110a355 and HEAD, per the caller. The `remove --local` scenarios are covered by the cited full-suite run.
+
+### Probe Execution
+
+None declared for this phase. Skipped.
 
 ### Requirements Coverage
 
 | Requirement | Source Plan | Status | Evidence |
 | ----------- | ----------- | ------ | -------- |
-| ADD-01 | 03-03 | SATISFIED | Outline with dir, file, `@url`, `@github` rows; local rows pass |
-| ADD-02 | 03-02 | SATISFIED | Default-scope scenario |
-| ADD-03 | 03-03 | SATISFIED | New-session list Outline, dir/file pass, `@url`/`@github` tagged |
-| ADD-04 | 03-02 | SATISFIED | Duplicate-name Outline, two variants, dir and `@url` |
-| ADD-05 | 03-02 | SATISFIED | Both-scopes Outline, all four kinds |
-| ADD-06 | 03-01 | SATISFIED | Source-missing Outline, 4 local rows |
-| ADD-07 | 03-01 | SATISFIED | Invalid-manifest Outline, dir/file plus `@url` |
-| ADD-13 | 03-03 | SATISFIED | add `--local` scenario and `remove.feature` |
+| ADD-01 | 03-03 | SATISFIED | Records Outline, four kinds, all rows now run |
+| ADD-02 | 03-02 | SATISFIED | Default user scope scenario |
+| ADD-03 | 03-03 | SATISFIED | New-session list Outline, four kinds |
+| ADD-04 | 03-02 | SATISFIED | Duplicate-name Outline, dir and `@url` |
+| ADD-05 | 03-02 | SATISFIED | Both-scopes Outline, four kinds |
+| ADD-06 | 03-01 | SATISFIED | Source-missing Outline, four local rows |
+| ADD-07 | 03-01 | SATISFIED | Invalid-manifest Outline, local and `@url` rows |
+| ADD-13 | 03-03 | SATISFIED | add and remove `--local` scenarios |
 | ADD-14 | 03-03 | SATISFIED | `~/` scenario keeps the `~` form |
 
-All nine phase IDs appear in a PLAN `requirements` field (03-01: ADD-06, ADD-07; 03-02: ADD-02, ADD-04, ADD-05; 03-03: ADD-01, ADD-03, ADD-13, ADD-14). `REQUIREMENTS.md` maps no other ID to Phase 3. There are no orphans. FIX-02 maps to Phase 3.1, so it is out of scope here (D-08).
-
-### Notes on literal text the review superseded
-
-The three-round code review (commits 258ccb32..0061bcd5) replaced some wording that the plans quote. The behavior each must-have asserts still holds in the current tree.
-
-- Plan 03-02 named the step `another marketplace named {string} to add is published as a {source kind} source in {string}`. The tree now has `a second marketplace declaring the name {string} is ready to add from {string}`. It publishes a copy with its own plugin, and the copy is never added.
-- The Given steps in `publishing.steps.ts` now assert that the target directory is free (`requireFreeRoot`).
-- The duplicated published-marketplace lookup that plan 03-03's review recorded as a warning was moved onto the world (`requirePublished`, commit d057ce3e).
+PLAN frontmatter: 03-01 lists ADD-06, ADD-07; 03-02 lists ADD-02, ADD-04, ADD-05; 03-03 lists ADD-01, ADD-03, ADD-13, ADD-14. That covers all nine phase IDs. `REQUIREMENTS.md` marks all nine Phase 3 and Complete and maps no other ID to Phase 3. No orphans.
 
 ### Anti-Patterns Found
 
-None. No `TBD`, `FIXME`, or `XXX` marker under `features/`. No stub steps. The url and github arms throw `noStandIn` on purpose until Phases 9 and 10.
+None. No `TBD`, `FIXME`, or `XXX` marker under `features/`. No stub steps. The `noStandIn` placeholders are gone.
 
-### Deferred (not gaps)
+### Deferred Items
 
-| Item | Addressed in | Evidence |
-| ---- | ------------ | -------- |
-| `@url` and `@github` rows run green | Phases 9 and 10 | `cucumber.json` excludes the tags. SC1 says "the local rows pass." |
-| `--local` leak into `claude-plugins.json` after a reload | Phase 3.1 (FIX-02) | D-08: deliberately untested and unfixed here. |
-| Listing both scopes (LS-02), removing one of two scopes (RM-08) | Phase 4 | D-09 and the CONTEXT deferred section. |
-
-Seven review Info findings (IN-01..IN-06 and the Info-level leftovers) are recorded as deferred in `03-REVIEW-DISPOSITION.md`, with `open: 0`. They are wording or doc-comment items and do not affect any must-have.
+None. The previous report deferred "`@url` and `@github` rows run green" to Phases 9 and 10, and that work is done. The `--local` leak (FIX-02, Phase 3.1) and the two-scope list and remove items (Phase 4) belong to other phases and are not Phase 3 truths.
 
 ### Human Verification Required
 
@@ -129,9 +128,9 @@ None.
 
 ### Gaps Summary
 
-No gaps. Every must-have resolves to VERIFIED against the current tree. `npm run test:cucumber` and `check:features` were re-run in this verification. Two mutation probes confirmed that the add `--local` and duplicate-name scenarios fail on a wrong implementation, so they check behavior and are not stubs.
+No gaps. Every must-have holds at HEAD. The waiting `@url` and `@github` rows now run green with the rest of the feature. The full gate log shows 433 of 433 scenarios passing, and the add feature alone passes 37 of 37 scenarios in a serial run.
 
 ---
 
-_Verified: 2026-10-16_
+_Verified: 2026-10-21_
 _Verifier: Claude (gsd-verifier)_
