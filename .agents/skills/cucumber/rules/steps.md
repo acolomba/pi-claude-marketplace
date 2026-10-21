@@ -59,6 +59,8 @@ Use `@cucumber/cucumber` for the runner, `node:assert/strict` for assertions, an
 
 - A `Then` has no side effects. It reads what the `When` left on the world. Two exceptions: a step that compares the row arrays of the last results calls `this.markRowsCompared()` after its comparison, and the step that compares the fields of every result calls `this.markNoticesCompared()`, so the world can fail a scenario whose rows or MCP config notices no step compared (`.agents/skills/cucumber/rules/world-and-stand-ins.md`). No `Then` writes to the world in any other way.
 
+- A request-log step, such as `the git host receives these requests:` or the step that states an empty log, compares only the requests of the last `When` step. A `BeforeStep` hook opens a new request window at each `When`, so the requests of a `Given` or of an earlier command are never part of it. Unlike the row arrays, the log has no compared-marker, so a command's requests go unchecked unless a log step states them. Log steps appear only in the feature files of the git source kinds, never in an Outline that a verb feature shares with the local kinds.
+
 - Assert with `node:assert/strict`, comparing whole values: build the expected record or row set from the step argument and `deepStrictEqual` it against the same projection of the actual value. No `assert.ok(x.includes(...))`.
 
 - A `Then` compares a data table as strings: project the actual value to rows of strings, header included, and `deepStrictEqual` them against `table.raw()`. A `Given` that needs typed values reads the table through a parser in `features/lib/` that throws on a missing or unknown column. `noUncheckedIndexedAccess` types every cell as `string | undefined`, and a default such as `?? ""` hides a typo in the feature.

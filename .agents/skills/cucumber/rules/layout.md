@@ -53,4 +53,4 @@ Every file is organized by vertical function: the user-facing function it is abo
 - A support module holds no helpers. A small helper private to one step module may stay in it; once a second module needs it, or a hook and a step both need it, it moves to `features/lib/`.
 - Every external service the code talks to has a local stand-in in its own module under `features/lib/`: a loopback-only fake for a networked service, a fixture for local input such as a directory of files.
 - Nothing under `features/` imports from `tests/`, except a driver that reuses a process harness.
-- A process under test too slow to start per scenario is the run's only module-level state. It lives in the support module named after it, and steps reach it through the world; `.agents/skills/cucumber/rules/steps.md` says how it starts, resets, and stops.
+- A process under test too slow to start per scenario is the run's only module-level state. It lives in the support module named after it, and steps reach it through the world. A stand-in whose address the process fixes at start joins that state. `.agents/skills/cucumber/rules/world-and-stand-ins.md` says how they start, reset, and stop.
