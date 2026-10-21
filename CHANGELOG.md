@@ -2,13 +2,13 @@
 
 ## [Unreleased]
 
-- Adding a git marketplace now takes a `#ref` on the `owner/repo` shorthand, and a failed add gives a clearer reason and JSON row.
+- Adding a git marketplace now takes a `#ref` on the `owner/repo` shorthand, and a failed add, update, or fetch reports its git failure more clearly.
 
   - The `owner/repo#ref` shorthand now adds the marketplace at that ref, as `owner/repo@ref` does.
   - An empty `#`, as in `owner/repo#`, adds `owner/repo` with no ref, where Claude Code refuses it.
   - Adding a git marketplace at a missing `#ref` now fails as `{source missing}`. It used to fail as `Command failed unexpectedly.`, or as `{unparseable}` on a reload or an import.
   - In JSON output, the row of a failed git `marketplace add` names the source with any credentials removed. Its `id` is that name alone, not that name twice around an `@`.
-  - When any git host rejects your stored credential, the cause reads `<host> rejected the stored credential`, and `marketplace update` no longer asks you to store one.
+  - When a host with no Device Flow rejects your stored credential, `marketplace update` and plugin `fetch` say `<host> rejected the stored credential`. So does a GitHub-source add under `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL`, and `marketplace update` no longer asks you to store one.
 
 - An empty argument now fails with a message that names it, such as `Source must not be empty.` or `Marketplace name must not be empty.`.
 
