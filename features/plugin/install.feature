@@ -53,6 +53,8 @@ Feature: Plugin install
     Then the result lists these plugins:
       | marketplace name | marketplace scope | id               | name    | status | reasons         | scope   | cause chain                                           | cause truncated | leaks | rollback partial |
       | fixtures         | project           | missing@fixtures | missing | failed | not in manifest | project | Plugin "missing" not found in marketplace "fixtures". | false           |       |                  |
+    Then the "claude-plugins.json" file of the project scope declares no plugins
+    Then the project scope has no installed plugins
 
   Scenario: Installing a plugin that is already installed fails as already installed
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
@@ -65,6 +67,13 @@ Feature: Plugin install
     Then the result lists these plugins:
       | marketplace name | marketplace scope | id            | name | status | reasons           | scope   | cause chain                                                   | cause truncated | leaks | rollback partial |
       | fixtures         | project           | demo@fixtures | demo | failed | already installed | project | Plugin "demo" is already installed in marketplace "fixtures". | false           |       |                  |
+    Then the "claude-plugins.json" file of the project scope declares these plugins:
+      | id            |
+      | demo@fixtures |
+    When the user starts a new pi session
+    Then the session offers these skills:
+      | command           | description            |
+      | /skill:demo-skill | A skill of demo 1.0.0. |
 
   Scenario: Installing a plugin into the base layer from a marketplace added with --local fails as marketplace in local layer only
     Given the marketplace "tools" is published as a dir source
