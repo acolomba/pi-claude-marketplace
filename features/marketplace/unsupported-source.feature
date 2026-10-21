@@ -1,8 +1,8 @@
 Feature: Marketplace unsupported source
 
-  A source form the extension does not accept fails before any network access.
-  The scenarios point every form that can name a host at the loopback https git
-  host and check that the host receives nothing.
+  A refused source form fails before any network access, and the git host receives nothing.
+  That check can fail only for forms that would reach the host: http and ssh on its port,
+  and GitHub through the base override. The scp-style and home-relative rows pin the refusal.
 
   Scenario Outline: Adding a refused source form fails as unsupported source and reaches no host
     When the user runs "/claude:plugin marketplace add <source> --scope project"
