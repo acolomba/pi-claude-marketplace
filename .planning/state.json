@@ -71,7 +71,7 @@
     {
       "number": "10",
       "name": "GitHub Source Kind and Suite Close",
-      "status": "pending"
+      "status": "in_progress"
     }
   ],
   "next": {
@@ -79,5 +79,5 @@
     "label": "Advance to the next step",
     "reason": "Phase 14 of 14 · 93% · executing"
   },
-  "updated_at": "2026-10-21T13:56:50.924Z"
+  "updated_at": "2026-10-21T14:17:00.995Z"
 }
