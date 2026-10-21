@@ -146,17 +146,18 @@ function composeNotInstallableMessage(
 /**
  * D-76-08 / D-79-03: classify a git-source clone auth challenge into
  * the EXISTING closed-set `authentication required` REASON -- no new token. A
- * credential the server rejects (a still-401 after a fresh credential, D-79-02)
- * throws the isomorphic-git `HttpError` with a 401/403 status. When no
- * credential can be produced at all -- an empty helper on a host the provider
- * registry does not claim (GAUTH-03), or an unsuccessful device flow (denied /
- * expired / poll network error) -- `platform/git-auth-callbacks.ts::onAuth`
- * returns `{ cancel: true }`, which isomorphic-git throws as `UserCanceledError`
- * instead. The seam append-leak-rethrows either
- * up to the install catch; both shapes narrow through the shared
- * `classifyGitTransportFailure` ladder. Install keeps ONLY its auth
- * classification: a network-class transport failure stays undefined here so it
- * rides the generic-runtime cause-chain fallthrough.
+ * stored credential the server rejects throws `StoredCredentialRejectedError`
+ * (GAUTH-04), and a device-flow credential it rejects (a still-401 after a
+ * fresh credential, D-79-02) makes `onAuthFailure` return `{ cancel: true }`,
+ * which isomorphic-git throws as `UserCanceledError`. When no credential can be
+ * produced at all -- an empty helper on a host the provider registry does not
+ * claim (GAUTH-03), or an unsuccessful device flow (denied / expired / poll
+ * network error) -- `platform/git-auth-callbacks.ts::onAuth` cancels the same
+ * way. A 401/403 that no auth callback answered throws the isomorphic-git
+ * `HttpError`. The seam append-leak-rethrows each up to the install catch;
+ * every shape narrows through the shared `classifyGitTransportFailure` ladder.
+ * Install keeps ONLY its auth classification: a network-class transport failure
+ * stays undefined here so it rides the generic-runtime cause-chain fallthrough.
  *
  * D-79-03 (amended): the install row is the BARE `(failed) {authentication
  * required}` -- no `NO_STORED_CREDENTIAL_CAUSE` cause line (the plugin failure

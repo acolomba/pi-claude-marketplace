@@ -559,10 +559,12 @@ function failedRow(entry: ManifestEntry, err: unknown): FetchMsg {
 /**
  * Narrow a git-materialize throw into an EXISTING closed-set REASON -- no new
  * token. The shared `classifyGitTransportFailure` ladder handles the
- * isomorphic-git `HttpError` (401/403 -> auth), `UserCanceledError` (the auth
- * flow terminated unsuccessfully), and network-errno arms; fetch adds the fs
- * errno arms of `reasonsFromTypedError` and folds any non-recognized throw to
- * `source missing` (the fail-clean default -- the tree could not be produced).
+ * `StoredCredentialRejectedError` (a stored credential the host refused), the
+ * isomorphic-git `HttpError` (401/403 -> auth), `UserCanceledError` (a helper
+ * miss, or a device flow that failed or whose credential the host refused), and
+ * network-errno arms; fetch adds the fs errno arms of `reasonsFromTypedError`
+ * and folds any non-recognized throw to `source missing` (the fail-clean
+ * default -- the tree could not be produced).
  */
 function narrowFetchFailure(err: unknown): ContentReason {
   const transport = classifyGitTransportFailure(err);

@@ -42,13 +42,15 @@ function classifyNetworkErrno(code: string | undefined): GitTransportReason | un
  *   - `StoredCredentialRejectedError` -> `authentication required`: the host
  *     refused the stored credential it was sent (GAUTH-04).
  *   - isomorphic-git `HttpError` (`.code === "HttpError"`) with a 401/403
- *     status -> `authentication required` (a private clone challenge, or a
- *     still-401 after a fresh credential).
+ *     status -> `authentication required`: a 401/403 that no auth callback
+ *     answered, such as a 403, or a 401 with no bundle.
  *   - `UserCanceledError` (both `code` and `name` carry the string) ->
- *     `authentication required`. A device flow that terminates unsuccessfully
- *     (denied / expired / poll network error) makes platform/git.ts's onAuth
- *     return `{ cancel: true }`, which isomorphic-git throws as
- *     `UserCanceledError` -- a real auth failure, NOT an HttpError 401/403.
+ *     `authentication required`. A stored-credential helper miss, a device
+ *     flow that terminates unsuccessfully (denied / expired / poll network
+ *     error), or a device-flow credential the host refuses makes
+ *     `platform/git-auth-callbacks.ts` return `{ cancel: true }`, which
+ *     isomorphic-git throws as `UserCanceledError` -- a real auth failure, NOT
+ *     an HttpError 401/403.
  *   - network errno ladder -> `network unreachable`.
  *
  * Returns undefined for any other throw so each caller keeps its own

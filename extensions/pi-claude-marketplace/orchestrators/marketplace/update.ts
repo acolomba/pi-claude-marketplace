@@ -682,9 +682,10 @@ function reasonsFromCascadeError(err: unknown): readonly ContentReason[] | undef
  *
  * EACCES/EPERM/ENOENT/ENOTDIR classify first since the shared classifier
  * has no opinion on them (path-source failures never reach git). The
- * remaining ladder -- isomorphic-git `HttpError` 401/403, `UserCanceledError`
- * (a declined or failed Device Flow), and network errno -- delegates to
- * `classifyGitTransportFailure` (`shared/git-failure-classifiers.ts`)
+ * remaining ladder -- `StoredCredentialRejectedError` (a stored credential the
+ * host refused), isomorphic-git `HttpError` 401/403, `UserCanceledError` (a
+ * helper miss or a declined or failed Device Flow), and network errno --
+ * delegates to `classifyGitTransportFailure` (`shared/git-failure-classifiers.ts`)
  * instead of a hand-rolled copy, so `update` cannot drift out of sync with
  * `install-outcome.ts`/`fetch.ts` (plugin), which already delegate to it.
  */
