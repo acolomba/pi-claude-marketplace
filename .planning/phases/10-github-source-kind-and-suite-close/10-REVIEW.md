@@ -1,8 +1,8 @@
 ---
 phase: 10-github-source-kind-and-suite-close
-reviewed: 2026-10-21T00:00:00Z
+reviewed: 2026-10-21T16:59:12Z
 depth: standard
-files_reviewed: 29
+files_reviewed: 40
 files_reviewed_list:
   - .agents/skills/cucumber/rules/features.md
   - .agents/skills/cucumber/rules/steps.md
@@ -12,6 +12,12 @@ files_reviewed_list:
   - docs/json-output.md
   - extensions/pi-claude-marketplace/domain/source.ts
   - extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts
+  - extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/fetch.ts
+  - extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts
+  - extensions/pi-claude-marketplace/shared/errors.ts
+  - extensions/pi-claude-marketplace/shared/git-failure-classifiers.ts
   - features/lib/git-marketplace.ts
   - features/lib/https-git-host/cgi.ts
   - features/lib/https-git-host/server.ts
@@ -32,129 +38,70 @@ files_reviewed_list:
   - tests/architecture/https-git-host-server.test.ts
   - tests/domain/source.test.ts
   - tests/e2e/_rpc.ts
+  - tests/orchestrators/auth-host.test.ts
+  - tests/orchestrators/marketplace/shared.test.ts
   - tests/orchestrators/marketplace/update.test.ts
+  - tests/platform/git-auth-callbacks.test.ts
+  - tests/shared/errors.test.ts
+  - tests/shared/git-failure-classifiers.test.ts
 findings:
   critical: 0
-  warning: 4
-  info: 5
-  total: 9
+  warning: 0
+  info: 2
+  total: 2
 status: issues_found
 ---
 
 # Phase 10: Code Review Report
 
-**Reviewed:** 2026-10-21T00:00:00Z
+**Reviewed:** 2026-10-21T16:59:12Z
 **Depth:** standard
-**Files Reviewed:** 29
+**Files Reviewed:** 40
 **Status:** issues_found
-
-## Structural Findings (fallow)
-
-The structural pre-pass found nothing: 0 unused exports, 0 unused files, 0 duplicate blocks, and 0 circular dependencies.
 
 ## Narrative Findings (AI reviewer)
 
 ## Summary
 
-The review covered the diff from `f495d387` to HEAD: the `owner/repo#ref` shorthand parse (D-12), the github `marketplace update` 401 cause line (D-13), the github arms of the published-marketplace fixture, the `stable` branch fixture, the GitHub base override passed to Pi, the git host fixes (EPIPE, decoded-path arms, dropped vs 500 logging, BeforeAll/AfterAll cleanup), and the new and changed feature files.
+This re-review covers the diff from `f495d387` to `175d590c`. It focuses on the seven fix commits for IN-01..IN-07 (442eb7c5, 0df7e3fc, 3a2610ed, 4a4f70b9, 9214555c, 13fd212c, 175d590c). Outside `.planning/`, those commits touch only nine files: `CHANGELOG.md`, `domain/source.ts`, `marketplace/update.ts`, `plugin/fetch.ts`, `plugin/install.messaging.ts`, `shared/git-failure-classifiers.ts`, `features/lib/git-marketplace.ts`, `features/lib/https-git-host/server.ts`, and `features/marketplace/url-source.feature`. No source logic changed. The fixer's `npm run check` log at 175d590c shows every gate passing and 433 of 433 scenarios passing.
 
-The targeted unit suites pass when run alone: `tests/domain/source.test.ts`, the three `tests/architecture/https-git-host-*` and hermetic tests (188 pass), and the five new `update.test.ts` cases. No BLOCKER was found. I checked the new github scenarios against plausible wrong implementations. The ref Outline proves the ref by content, the spelling Outline proves the wire path through the request log, and the 401 Outlines compare whole cause chains. Under the override, no scenario reaches github.com or the Device Flow.
+What I checked for each fix:
 
-The main concerns:
-- The new github update cause line also fires when the host rejects a stored credential that was sent. In that case the text "no credential was obtained" is false.
-- The GAUTH-04 predicate now has two hand-kept copies.
-- The IN-07 fix is incomplete: the run's scratch root still leaks on an early `BeforeAll` failure, and the new comment says it does not.
+- **IN-01 (fixed).** The new `url-source.feature` scenario follows the github "at a ref" scenario. `main` gets "Tools for formatting". `pushGitBranch` then gives `stable` its own commit with "Stable tools", and the scenario checks `description | Stable tools` in `marketplace info`. A clone of the default branch would now show the `main` description and fail the scenario.
+- **IN-02 (fixed).** `pushGitRepository` now pushes with `--atomic`, and its doc comment says so. The bare repository is a local clone, so receive-pack supports atomic pushes. The two single-ref pushes do not need the flag.
+- **IN-03 (fixed).** The `answer()` comment wraps within the width. The only line in `server.ts` over 100 columns is the template literal at line 75, which Prettier does not break and which predates this round.
+- **IN-04 (partly fixed, the rest declined as intended).** The blank line now separates the SRC-03 and D-76-04 paragraphs. The parser change was not made because it moves away from upstream, so I do not report it again.
+- **IN-05 (fixed).** The empty-`#` sub-bullet matches `parseShorthandHashRef` (`source.ts:437-445`): an empty ref returns the bare `github` source.
+- **IN-06 (moved, but the new text is wrong in two ways).** See IN-08.
+- **IN-07 (fixed, with one small gap).** I checked each new comment against `git-auth-callbacks.ts:202-266` and isomorphic-git's `discover` loop (`node_modules/isomorphic-git/index.js:9458-9484`). A cancel from either callback throws `UserCanceledError`. A 401 or 203 with no callback, or any other non-200 status, throws `HttpError`. The `StoredCredentialRejectedError` throw goes through unchanged. The classifier, fetch, and install comments are now correct. The `update.ts` comment leaves out one source of the cancel. See IN-09.
 
-Recorded decisions D-MF-07 and D-01..D-14, and the carry-overs WINDOWS #100, #101, #102-109, and ROWID-01, are not re-reported.
-
-## Warnings
-
-### WR-01: A github update whose stored credential the host rejects is told no credential was obtained
-
-**File:** `extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts:381-411`
-**Issue:** `lacksStoredCredential` fires on any `authentication required` classification for a `stored-credential` bundle. Take the case where the helper's `fill` returns a credential and the override host rejects it with 401 or 403. `platform/git-auth-callbacks.ts:227-237` (`onAuthFailure`, stored-credential arm) returns `{ cancel: true }`, isomorphic-git throws `UserCanceledError`, and `classifyGitTransportFailure` maps that to `authentication required`. `refreshGitHubSource` then puts `no credential was obtained for <host>; store one with: ... git credential approve` into the chain. The credential was obtained, and it was sent. The remedy tells the user to store a credential they already have, when the real fix is to replace it. `auth-host.ts:103-123` defines the line for "the helper was consulted and produced no usable credential" only, so this use breaks its own contract. The url arm in `shared.ts:381-392` has the same gap, but this phase extends it to every github update under the override. No scenario covers it: the stored-credential Outline in `git-source.feature` uses the correct password.
-**Fix:** Make a fill miss distinct from a rejected credential before attaching the line. For example, have the stored-credential `onAuthFailure` throw a typed `StoredCredentialRejectedError(host)` (or set a flag on the bundle) instead of a bare cancel. Then attach `NO_STORED_CREDENTIAL_CAUSE` only on a miss:
-
-```ts
-function lacksStoredCredential(err: unknown, auth: GitAuthBundle): err is Error {
-  return (
-    err instanceof Error &&
-    auth.kind === "stored-credential" &&
-    !(err instanceof CrossOriginChallengeError) &&
-    !(err instanceof StoredCredentialRejectedError) &&
-    classifyGitTransportFailure(err) === "authentication required"
-  );
-}
-```
-
-Add a unit case where `fill` returns a credential and the fetch then fails with `UserCanceledError`. Add a scenario row whose stored password differs from the armed one.
-
-### WR-02: The GAUTH-04 stored-credential predicate is now kept in two places
-
-**File:** `extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts:403-411`, `extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts:381-392`
-**Issue:** `lacksStoredCredential` (module-private in `update.ts`) copies the condition inline in `refreshUrlClone`: `instanceof Error`, `auth.kind === "stored-credential"`, not `CrossOriginChallengeError`, and classified `authentication required`. Only the placement differs: the github copy inserts at depth 1, and the url copy attaches the tail only when `cause === undefined`. The PUP-2 github sync in `orchestrators/plugin/update-flow.ts:184` (WINDOWS #101) will need a third copy. A later change to the rule in one copy, such as WR-01's fix or excluding 403, will silently diverge from the others.
-**Fix:** Export one helper from `orchestrators/marketplace/shared.ts` next to `refreshUrlClone` and call it from both sites. For example, `attachStoredCredentialCause(err, auth, { position: "before-fetched-url" | "tail" })`, or a shared `lacksStoredCredential` predicate plus the two placement lines.
-
-### WR-03: An early `BeforeAll` failure still leaks the run root, and the new comment says it cannot
-
-**File:** `features/support/pi-process.ts:70-108`, `features/support/pi-process.ts:140`
-**Issue:** The IN-07 fix cleans up only when `PiProcess.start` rejects. If `mkdir` of the sandbox fails (line 78), or `HttpsGitHost.start` fails (line 79: openssl missing, `listen` failing), the `mkdtemp` root is left in `tmpdir()`. Once openssl has run, that root holds the host's private key `key.pem`. `piRun` stays `undefined`, so `AfterAll` returns early. Its new comment says "`BeforeAll()` failed, and it cleaned up after itself", which is false for these paths. The cucumber skill counts "a resource no release frees" as a finding. This one happens only on a failed run start, so it is a WARNING here, not a BLOCKER.
-**Fix:** Put everything after `mkdtemp` in one guard:
-
-```ts
-const root = await realpath(await mkdtemp(path.join(tmpdir(), "pi-cm-features-")));
-let gitHost: HttpsGitHost | undefined;
-try {
-  // mkdir sandbox, start gitHost, start pi, assign piRun
-} catch (error: unknown) {
-  const failures = await settleInOrder([
-    async () => gitHost?.close(),
-    () => rm(root, { recursive: true, force: true }),
-  ]);
-  throw failures.length === 0 ? error : new AggregateError([error, ...failures], "the run failed to start");
-}
-```
-
-### WR-04: The `git-source.feature` description no longer covers what the file protects
-
-**File:** `features/marketplace/git-source.feature:3-5`
-**Issue:** The description says "Listing, inspecting, and removing it read only local state". The file now also holds `Updating a git marketplace whose host now needs a credential fails as authentication required` (lines 197-227). That Outline fetches over the network and is the UPD-12 proof. `rules/features.md` requires the description to say what the feature protects. A reader of the description would not expect an update behavior in this file.
-**Fix:** Name the update behavior. For example: "A git marketplace is cloned when it is added and fetched when it is updated, with the user's stored credential if the host asks for one, and fails without it. Listing, inspecting, and removing it read only local state."
+Recorded decisions D-MF-07, D-01..D-14, and D-76-04, the carry-overs WINDOWS #100-109 and ROWID-01, and the documented 403-after-credential gap are not re-reported.
 
 ## Info
 
-### IN-01: The url kind's ref is echoed, never proven by content
+### IN-08: The rejected-credential CHANGELOG line says "any git host" and "the cause reads", but github.com and two verbs do not behave that way
 
-**File:** `features/marketplace/info.feature:37-39`, `features/lib/git-marketplace.ts:34`
-**Issue:** Each fixture's `stable` branch points at `main`'s commit, so the `@url` info row `#stable` proves only that `info` echoes the parsed ref. The content proof, `github-source.feature`'s ref Outline (`description | Stable tools`), runs for github sources only, and url sources take a separate parse arm (`parseUrlSource`). An implementation that checks the url ref exists but checks out the default branch passes every url scenario. The url `#missing` scenario catches an implementation that ignores the ref entirely.
-**Fix:** Add a url row to a ref-by-content scenario, `https://{git host}/acme/tools.git#stable` with `the branch "stable" ... has the description "Stable tools"`, in `url-source.feature` or as an `@url` block.
+**File:** `CHANGELOG.md:11`
+**Issue:** The new line reads: "When any git host rejects your stored credential, the cause reads `<host> rejected the stored credential`, and `marketplace update` no longer asks you to store one." It is wrong in two ways:
 
-### IN-02: After a branch diverges, republishing leaves the host half-updated
+1. **Not any host.** Only a `stored-credential` bundle throws `StoredCredentialRejectedError` (`git-auth-callbacks.ts:236-247`). `buildAuthForHost` gives that bundle only to a host the provider registry does not claim, to the `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL` host, and to every host in the autoupdate cascade (`auth-host.ts:128-141`, `:214-221`). github.com in an interactive command gets a `device-flow` bundle instead. There, a rejected keychain token is evicted and the operation cancels, so the user still sees `The operation was canceled.`. github.com is the most common host, so "any git host" misleads the most readers.
+2. **Not every verb shows a cause.** A plugin `install` that fails on auth shows the bare `(failed) {authentication required}` row with no cause (`install.messaging.ts:249-264`, amended D-79-03). A url-source `marketplace add` with no override also shows a bare row with no cause (`add.ts:758-773`, as in the first url scenario of `git-source.feature:125-140`). The new text shows up only in `marketplace update`, in plugin `fetch`, and in an add whose URL the override rewrote.
 
-**File:** `features/lib/git-marketplace.ts:46-49`, `features/lib/git-marketplace.ts:57-69`
-**Issue:** Once `pushGitBranch` moves `stable` past `main`, any later `changePublication` runs `git push origin main main:stable`. That push is not atomic. The host's `main` advances, `stable` is rejected, and the step fails with a raw git non-fast-forward error. The doc comments state the limit, but a scenario author who writes a branch `Given` before another publication `Given` gets a confusing failure and a host left half-updated.
-**Fix:** Pass `--atomic` to both pushes, and/or have `pushGitRepository` refuse up front with "the branch stable moved away from main; publish branch changes last".
+The line also sits under the parent bullet "…and a failed add gives a clearer reason and JSON row". The fixer pointed this out. But a url add, the main case the parent bullet describes, does not show this text at all.
+**Fix:** Name where the change applies, and move the line out from under the add entry, for example to its own bullet:
 
-### IN-03: A comment line in `answer()` overruns the line width and breaks mid-sentence
+```markdown
+- When a git host without a GitHub sign-in rejects your stored credential, `marketplace update` and plugin `fetch` now say `<host> rejected the stored credential`, and `marketplace update` no longer asks you to store one. This includes the host that `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL` names.
+```
 
-**File:** `features/lib/https-git-host/server.ts:454-456`
-**Issue:** The rewrite of this comment left one line of about 120 characters ("...cannot send. Nothing escapes, so no request can crash") followed by a one-line tail. Prettier does not reflow comments.
-**Fix:** Reflow the three lines to the 100-column width.
+### IN-09: The `transportReason` ladder comment still leaves out a refused device-flow credential as a source of `UserCanceledError`
 
-### IN-04: In the `@` arm, the repo half can still contain `#`
-
-**File:** `extensions/pi-claude-marketplace/domain/source.ts:411-433`, `extensions/pi-claude-marketplace/domain/source.ts:467-479`
-**Issue:** With `#` now a ref separator, the last-`@` split (D-76-04) still sends a left side that contains `#` or `@` to `parseOwnerRepo`, which accepts it. Measured results: `acme/tools@x#y@z` parses to `repo: "tools@x#y", ref: "z"`, and `acme/tools@a@b` parses to `repo: "tools@a"`. A repo name holding `#` builds a clone URL whose fragment WHATWG parsing drops (`networkCloneUrl` -> `.../tools@x#y.git`). The doc comment also merges the new SRC-03 paragraph and the D-76-04 paragraph with no break. That makes it read as though both arms follow Claude Code 2.1.296's first-separator split, but the `@` arm does not.
-**Fix:** In `parseOwnerRepo`, reject `#` and `@` in either half (GitHub owner and repo names cannot contain them). Put a blank line between the SRC-03 and D-76-04 paragraphs.
-
-### IN-05: The CHANGELOG does not mention the empty `#` ref divergence
-
-**File:** `CHANGELOG.md:5-7`
-**Issue:** D-MF-07 accepts `owner/repo#` as no ref, where Claude Code refuses it. The entry describes `owner/repo#ref` only. Elsewhere the project names user-visible divergences in the CHANGELOG ("a setting that Claude Code lacks").
-**Fix:** Optionally extend the sub-bullet: "An empty `#` adds `owner/repo` with no ref. Claude Code refuses it."
+**File:** `extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts:685-687`
+**Issue:** The fixed comment calls `UserCanceledError` "a helper miss or a declined or failed Device Flow". On a github.com update, the most common cancel is different: the keychain token is filled, the host returns 401, and `onAuthFailure` evicts the token and cancels (`git-auth-callbacks.ts:249-265`). No Device Flow ran, so neither phrase covers this case. The three sibling comments fixed in the same commit do name it: "a device-flow credential the host refuses" (`git-failure-classifiers.ts:48-53`), "whose credential the host refused" (`fetch.ts:564-565`), and "a device-flow credential it rejects" (`install.messaging.ts:150-152`). So the update ladder, the one most likely to see this case, is now the only comment that leaves it out. This error comes from my own iter3 fix text. Behavior is correct.
+**Fix:** Change the parenthetical to "(a helper miss, a declined or failed Device Flow, or a device-flow credential the host refused)".
 
 ---
 
-_Reviewed: 2026-10-21T00:00:00Z_
+_Reviewed: 2026-10-21T16:59:12Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
