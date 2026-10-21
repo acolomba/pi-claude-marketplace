@@ -58,15 +58,15 @@ Feature: Marketplace url source
 
   Scenario: Adding a url marketplace at a ref the repository lacks fails as source missing
     Given the marketplace "tools" is published as a url source
-    When the user runs "/claude:plugin marketplace add https://{git host}/acme/tools.git#stable --scope project"
+    When the user runs "/claude:plugin marketplace add https://{git host}/acme/tools.git#missing --scope project"
     Then the result has these fields:
       | kind         | cascade                             |
       | severity     | error                               |
       | needs reload | false                               |
       | summary      | A marketplace operation has failed. |
     Then the result lists these marketplaces:
-      | name                                     | scope   | status | reasons        |
-      | https://{git host}/acme/tools.git#stable | project | failed | source missing |
+      | name                                      | scope   | status | reasons        |
+      | https://{git host}/acme/tools.git#missing | project | failed | source missing |
     Then the git host receives these requests:
       | method | path                                              | status |
       | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 200    |

@@ -4,7 +4,9 @@
  * A git marketplace holds the same files as the dir fixture, committed in a
  * work tree and published into a bare repository that the git host serves.
  * A later change to the work tree reaches the host as a new pushed commit.
- * The url and github kinds both publish this way.
+ * The url and github kinds both publish this way. Every published repository
+ * also carries a `stable` branch at the commit of `main`, so a scenario can add
+ * a git marketplace at a ref that is not its default branch (HOST-01).
  */
 
 import { mkdir } from "node:fs/promises";
@@ -14,8 +16,8 @@ import { runGit } from "./hermetic-git.ts";
 
 /**
  * Commits every file of `workTree` and publishes the commit as the bare
- * repository `bareRepository`, the work tree's `origin`. Every git runs with
- * the HOME `home`.
+ * repository `bareRepository`, the work tree's `origin`, on the branches
+ * `main` and `stable`. Every git runs with the HOME `home`.
  */
 export async function publishGitRepository(
   workTree: string,
@@ -29,15 +31,18 @@ export async function publishGitRepository(
   await mkdir(parent, { recursive: true });
   await runGit(parent, home, "clone", "-q", "--bare", workTree, bareRepository);
   await runGit(workTree, home, "remote", "add", "origin", bareRepository);
+  await runGit(workTree, home, "push", "-q", "origin", "main:stable");
 }
 
 /**
  * Commits every change in the published work tree `workTree` and pushes the
- * commit to its bare repository. The commit is new even when no file changed,
- * so every republish reaches the git host. Every git runs with the HOME `home`.
+ * commit to its bare repository as both `main` and `stable`. The commit is new
+ * even when no file changed, so every republish reaches the git host. The push
+ * is a fast-forward, so a `stable` branch that moved away from `main` makes it
+ * fail. Every git runs with the HOME `home`.
  */
 export async function pushGitRepository(workTree: string, home: string): Promise<void> {
   await runGit(workTree, home, "add", "-A");
   await runGit(workTree, home, "commit", "-q", "--allow-empty", "-m", "publish");
-  await runGit(workTree, home, "push", "-q", "origin", "main");
+  await runGit(workTree, home, "push", "-q", "origin", "main", "main:stable");
 }
