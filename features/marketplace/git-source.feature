@@ -1,8 +1,8 @@
 Feature: Marketplace git source
 
-  A git marketplace is cloned once when it is added, with the user's stored credential if the host
-  asks for one, and fails to add without it. Listing, inspecting, and removing it read only local
-  state. The scenarios run a headless Pi against a loopback https git host and read its request log.
+  A git marketplace is cloned when it is added and fetched when it is updated, with the user's stored
+  credential if the host asks for one, and fails without it. Listing, inspecting, and removing it read
+  only local state. The scenarios run a headless Pi against a loopback https git host.
 
   Scenario Outline: A removed git marketplace can be added again from the same source
     Given the marketplace "tools" is published as a <source kind> source
