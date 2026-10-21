@@ -12,7 +12,7 @@ import { loadConfiguration, runCucumber } from "@cucumber/cucumber/api";
  * feature file that breaks its Gherkin rules, read from the same run's Gherkin documents.
  *
  * It runs through the API rather than the CLI because the CLI's `--tags` is and-joined with the
- * profile's `not @url and not @github`, so only the API can clear that exclusion: a step that only
+ * profile's tag exclusion, so only the API can clear that exclusion: a step that only
  * an excluded row uses still counts as used, and every step of an excluded row must still match
  * exactly one definition (D-09). `check:static` runs it, so a commit fails within seconds (D-10).
  */

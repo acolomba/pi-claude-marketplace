@@ -93,7 +93,7 @@ A marketplace can be published as one of several source kinds: `dir`, `file`, `u
       | github      | acme/tools |
 ```
 
-`cucumber.json` runs the tag expression `not @url and not @github` until each kind has its stand-in. The work that adds the url source kind removes `@url`, and the work that adds the github source kind removes `@github`. Removing a tag turns on every row of that kind, with no edit to a feature file.
+`cucumber.json` runs the tag expression `not @github` until the github kind has its stand-in. The url kind's stand-in, the run's https git host, runs every `@url` row. The work that adds the github source kind removes `@github`. Removing a tag turns on every row of that kind, with no edit to a feature file.
 
 A behavior that only one kind has lives in a feature file of its own.
 
