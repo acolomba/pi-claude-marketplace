@@ -401,6 +401,7 @@ function parseUrlSourceForm(raw: string): GitHubSource | UrlSource | UnknownSour
  * the first `#` when no `@` comes before it, as Claude Code 2.1.296's shorthand
  * does. An empty `#` ref reads as no ref, the way the URL form drops an empty
  * fragment (D-MF-07, a recorded divergence: Claude Code refuses it).
+ *
  * D-76-04: `owner/repo@<ref>` folds into `github` plus a ref. The split is on
  * the LAST `@`, and the fold only happens when the left side is a valid
  * `owner/repo`. SP-5: a bare `owner/repo` is exactly one slash with both
