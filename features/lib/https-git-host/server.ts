@@ -8,9 +8,9 @@
  * `git http-backend`. It records every request in arrival order with the
  * status it answered, and counts connections, so a scenario can state the
  * exact traffic of a command (HOST-04). A scenario can arm one repository to
- * answer an error status or to drop the connection, and the other
- * repositories keep serving (HOST-03). Before each scenario the run resets it
- * to an empty host with no arm.
+ * answer an error status, to drop the connection, or to require one
+ * credential, and the other repositories keep serving (HOST-03). Before each
+ * scenario the run resets it to an empty host with no arm.
  */
 
 import { execFile } from "node:child_process";
@@ -178,9 +178,18 @@ function armFor(
   return undefined;
 }
 
+/** Returns the `Authorization` header value that carries `user` and `password`. */
+function basicAuthorization(user: string, password: string): string {
+  const token = Buffer.from(`${user}:${password}`).toString("base64");
+  return `Basic ${token}`;
+}
+
 /**
  * Answers a request of an armed repository the way the arm fails, and returns
- * whether it did. A `drop` arm destroys the socket before any answer.
+ * whether it did. A `drop` arm destroys the socket before any answer. A
+ * `credential` arm lets a request with its credential through to the CGI;
+ * it compares the header in memory, and the log keeps only the status
+ * (HOST-04).
  */
 function failArmed(
   arm: GitHostArm,
@@ -199,7 +208,14 @@ function failArmed(
       res.end();
       return true;
     case "credential":
-      return false;
+      if (req.headers.authorization === basicAuthorization(arm.user, arm.password)) {
+        return false;
+      }
+
+      logged.status = 401;
+      res.writeHead(401, { "WWW-Authenticate": 'Basic realm="git host"' });
+      res.end();
+      return true;
   }
 }
 

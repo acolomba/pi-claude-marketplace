@@ -71,3 +71,37 @@ Feature: Marketplace url source
     Then the git host receives these requests:
       | method | path                                              | status  |
       | GET    | /acme/tools.git/info/refs?service=git-upload-pack | dropped |
+
+  Scenario: Adding a url marketplace that needs a credential fails as authentication required without one
+    Given the marketplace "tools" is published as a url source
+    Given the git host requires the user "alice" with the password "s3cret" for the marketplace "tools"
+    When the user runs "/claude:plugin marketplace add https://{git host}/acme/tools.git --scope project"
+    Then the result has these fields:
+      | kind         | cascade                             |
+      | severity     | error                               |
+      | needs reload | false                               |
+      | summary      | A marketplace operation has failed. |
+    Then the result lists these marketplaces:
+      | name                              | scope   | status | reasons                 |
+      | https://{git host}/acme/tools.git | project | failed | authentication required |
+    Then the git host receives these requests:
+      | method | path                                              | status |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 401    |
+
+  Scenario: Adding a url marketplace with a stored credential clones it
+    Given the marketplace "tools" is published as a url source
+    Given the git host requires the user "alice" with the password "s3cret" for the marketplace "tools"
+    Given the user has stored a credential for the git host with the user "alice" and the password "s3cret"
+    When the user runs "/claude:plugin marketplace add https://{git host}/acme/tools.git --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these marketplaces:
+      | name  | scope   | status |
+      | tools | project | added  |
+    Then the git host receives these requests:
+      | method | path                                              | status |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 401    |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |
