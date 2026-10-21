@@ -2,10 +2,10 @@
 phase: "9"
 slug: "url-source-kind-and-https-git-stand-in"
 # status lifecycle: draft (seeded by plan-phase) → validated (set by validate-phase §6)
-# audit-milestone §5.5 distinguishes NOT-VALIDATED (draft) from PARTIAL (validated + nyquist_compliant: false) (#2117)
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+# audit-milestone §5.5 distinguishes NOT-VALIDATED (draft) from PARTIAL (validated + nyquist_compliant: true) (#2117)
+status: validated
+nyquist_compliant: true
+wave_0_complete: true
 created: "2026-10-20"
 ---
 
@@ -44,25 +44,25 @@ Filled in by the planner and executor per task. Requirement-level map:
 
 | Requirement | Behavior | Test Type | Automated Command | File Exists | Status |
 |-------------|----------|-----------|-------------------|-------------|--------|
-| HOST-01 | url add clones over HTTPS from 127.0.0.1, run-time cert, log shows clone | behavioral | url-only feature file | ❌ W0 | ⬜ pending |
-| HOST-01 | no `NODE_TLS_REJECT_UNAUTHORIZED`, no committed key | grep | `! rg -n 'NODE_TLS_REJECT_UNAUTHORIZED\|BEGIN (EC )?PRIVATE KEY' features tests/e2e` | n/a | ⬜ pending |
-| HOST-01 | CGI header parser | unit | `node --test tests/architecture/<parser>.test.ts` | ❌ W0 | ⬜ pending |
-| HOST-02 | reset empties repos, arms, log, connections, children; asserted | behavioral (every `Before`) | `npm run test:cucumber` ×2 random | ✅ extended | ⬜ pending |
-| HOST-03 | 401 / 404 / 500 / 502 / 503 / drop arms | behavioral | url-only feature files | ❌ W0 | ⬜ pending |
-| HOST-04 | exact log table; empty log (requests and connections) | behavioral | url-only feature files | ❌ W0 | ⬜ pending |
-| DRV-03 | env builders: no inherited `GIT_*`, `GIT_CONFIG_NOSYSTEM=1`, `GIT_CONFIG_GLOBAL` set | unit | `node --test tests/architecture/<env>.test.ts` | ❌ W0 | ⬜ pending |
-| DRV-03 / ADD-11 url | 401 fails without credential, succeeds with sandbox credential | behavioral | url-only feature file | ❌ W0 | ⬜ pending |
-| ADD-08 | refused forms → `unsupported source`, no request | behavioral | refused-form Outline | ❌ W0 | ⬜ pending |
-| ADD-09 | 404 → `source missing` | behavioral | url-only feature file | ❌ W0 | ⬜ pending |
-| ADD-10 | 500/502/503 → `network error` + cause; drop → `network unreachable` | behavioral | url-only feature file | ❌ W0 | ⬜ pending |
-| ADD-12 | remove then re-add from same source | behavioral (`@url`, `@github` block) | git-source feature file | ❌ W0 | ⬜ pending |
-| RM-09 / LS-05 / INFO-07 | remove / list / info make no request | behavioral (`@url`, `@github` block) | git-source feature file | ❌ W0 | ⬜ pending |
-| UPD-11 | update vs 5xx/404 → `network error` + frame; drop → `network unreachable` | behavioral | url-only update feature file | ❌ W0 | ⬜ pending |
-| SRC-01 | typed URL without `.git` cloned verbatim | behavioral | url-only feature file | ❌ W0 | ⬜ pending |
-| D-16 | missing `#ref` → typed failure, not `internal-error` | behavioral RED→GREEN + unit | url-only feature file + paired unit test | ❌ | ⬜ pending |
-| D-19 | failed url add child row id corrected | behavioral RED→GREEN + unit | url-only feature file + paired unit test | ❌ | ⬜ pending |
-| SC5 | `@url` removed from exclusion; every `@url` row passes | behavioral | `npm run test:cucumber` | ✅ rows exist | ⬜ pending |
-| SC6 | three remove rows RED on local edit, GREEN restored | behavioral + evidence | `09-NN-RED.json` | ❌ | ⬜ pending |
+| HOST-01 | url add clones over HTTPS from 127.0.0.1, run-time cert, log shows clone | behavioral | url-only feature file | ✅ | ✅ green |
+| HOST-01 | no `NODE_TLS_REJECT_UNAUTHORIZED`, no committed key | grep | `! rg -n 'NODE_TLS_REJECT_UNAUTHORIZED\|BEGIN (EC )?PRIVATE KEY' features tests/e2e` | n/a | ✅ green |
+| HOST-01 | CGI header parser | unit | `node --test tests/architecture/<parser>.test.ts` | ✅ | ✅ green |
+| HOST-02 | reset empties repos, arms, log, connections, children; asserted | behavioral (every `Before`) | `npm run test:cucumber` ×2 random | ✅ | ✅ green |
+| HOST-03 | 401 / 404 / 500 / 502 / 503 / drop arms | behavioral | url-only feature files | ✅ | ✅ green |
+| HOST-04 | exact log table; empty log (requests and connections) | behavioral | url-only feature files | ✅ | ✅ green |
+| DRV-03 | env builders: no inherited `GIT_*`, `GIT_CONFIG_NOSYSTEM=1`, `GIT_CONFIG_GLOBAL` set | unit | `node --test tests/architecture/<env>.test.ts` | ✅ | ✅ green |
+| DRV-03 / ADD-11 url | 401 fails without credential, succeeds with sandbox credential | behavioral | url-only feature file | ✅ | ✅ green |
+| ADD-08 | refused forms → `unsupported source`, no request | behavioral | refused-form Outline | ✅ | ✅ green |
+| ADD-09 | 404 → `source missing` | behavioral | url-only feature file | ✅ | ✅ green |
+| ADD-10 | 500/502/503 → `network error` + cause; drop → `network unreachable` | behavioral | url-only feature file | ✅ | ✅ green |
+| ADD-12 | remove then re-add from same source | behavioral (`@url`, `@github` block) | git-source feature file | ✅ | ✅ green |
+| RM-09 / LS-05 / INFO-07 | remove / list / info make no request | behavioral (`@url`, `@github` block) | git-source feature file | ✅ | ✅ green |
+| UPD-11 | update vs 5xx/404 → `network error` + frame; drop → `network unreachable` | behavioral | url-only update feature file | ✅ | ✅ green |
+| SRC-01 | typed URL without `.git` cloned verbatim | behavioral | url-only feature file | ✅ | ✅ green |
+| D-16 | missing `#ref` → typed failure, not `internal-error` | behavioral RED→GREEN + unit | url-only feature file + paired unit test | ✅ | ✅ green |
+| D-19 | failed url add child row id corrected | behavioral RED→GREEN + unit | url-only feature file + paired unit test | ✅ | ✅ green |
+| SC5 | `@url` removed from exclusion; every `@url` row passes | behavioral | `npm run test:cucumber` | ✅ | ✅ green |
+| SC6 | three remove rows RED on local edit, GREEN restored | behavioral + evidence | `09-NN-RED.json` | ✅ | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -70,12 +70,12 @@ Filled in by the planner and executor per task. Requirement-level map:
 
 ## Wave 0 Requirements
 
-- [ ] `features/lib/` stand-in module (+ CGI parser) — HOST-01/03/04
-- [ ] `features/lib/` bare-repository fixture and fixture-git env — DRV-03, D-12
-- [ ] `tests/e2e/_rpc.ts` typed extra env; `features/lib/pi-process.ts` pass-through
-- [ ] `features/support/pi-process.ts` lifetime and reset assertion; per-command log window hook
-- [ ] `features/lib/run-tokens.ts` `{git host}`
-- [ ] `tests/architecture/<…>.test.ts` — parser and env builders
+- [x] `features/lib/` stand-in module (+ CGI parser) — HOST-01/03/04
+- [x] `features/lib/` bare-repository fixture and fixture-git env — DRV-03, D-12
+- [x] `tests/e2e/_rpc.ts` typed extra env; `features/lib/pi-process.ts` pass-through
+- [x] `features/support/pi-process.ts` lifetime and reset assertion; per-command log window hook
+- [x] `features/lib/run-tokens.ts` `{git host}`
+- [x] `tests/architecture/<…>.test.ts` — parser and env builders
 
 ---
 
@@ -90,11 +90,19 @@ Filled in by the planner and executor per task. Requirement-level map:
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 90s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags
+- [x] Feedback latency < 90s
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** approved 2026-10-21
+
+## Validation Audit 2026-10-21
+
+| Metric | Count |
+|---|---|
+| Gaps found | 0 |
+| Resolved | 0 |
+| Escalated | 0 |
