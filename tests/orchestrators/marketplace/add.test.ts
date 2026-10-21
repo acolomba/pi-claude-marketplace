@@ -396,6 +396,13 @@ function httpError(statusCode: number): Error {
   });
 }
 
+function refNotFoundError(ref: string): Error {
+  return Object.assign(new Error(`Could not find ${ref}.`), {
+    code: "NotFoundError",
+    name: "NotFoundError",
+  });
+}
+
 async function withTmpScope<T>(
   fn: (env: { cwd: string; locations: ScopedLocations }) => Promise<T>,
 ): Promise<T> {
@@ -3862,6 +3869,71 @@ test("D-76-09: a missing repository HttpError renders (failed) {source missing} 
         severity: "error",
       },
     ]);
+  });
+});
+
+test("ADD-09: a clone of a ref the remote lacks renders (failed) {source missing} named by the typed source", async (t) => {
+  await createHermeticEnvironment(t, "mp-add-missing-ref-home-");
+  await withTmpScope(async ({ cwd }) => {
+    // arrange
+    const { ctx, run, notifications } = makeCtx();
+    const { gitOps } = createGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+      cloneThrows: refNotFoundError("stable"),
+    });
+
+    // act
+    await addMarketplace({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource: "https://gitlab.example.com/team/mp#stable",
+      gitOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A marketplace operation has failed.\n\n" +
+          "⊘ https://gitlab.example.com/team/mp#stable [project] (failed) {source missing}",
+        severity: "error",
+      },
+    ]);
+  });
+});
+
+test("ADD-09 orchestrated mode -- a clone of a ref the remote lacks returns the source-missing outcome without notifying", async (t) => {
+  await createHermeticEnvironment(t, "mp-add-missing-ref-orchestrated-home-");
+  await withTmpScope(async ({ cwd }) => {
+    // arrange
+    const { ctx, run, notifications } = makeCtx(0);
+    const cloneThrows = refNotFoundError("stable");
+    const { gitOps } = createGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+      cloneThrows,
+    });
+
+    // act
+    const outcome = await addMarketplace({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource: "https://gitlab.example.com/team/mp#stable",
+      gitOps,
+      notifications: { mode: "orchestrated" },
+    });
+
+    // assert
+    assert.deepStrictEqual(outcome, {
+      status: "failed",
+      reason: "source missing",
+      error: cloneThrows,
+      cause: "Could not find stable.",
+    });
+    assert.deepStrictEqual(notifications, []);
   });
 });
 

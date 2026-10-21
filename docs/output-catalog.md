@@ -2534,7 +2534,7 @@ A marketplace operation has failed.
 
 ### Failure -- source missing (ATTR-07)
 
-Triggered when a path `marketplace add` points at a path that does not exist (ENOENT) or exists but is neither a file nor a directory (e.g. a socket; tagged ENOTDIR). Pre-name failure (no readable manifest): the subject is the user-typed source string. NFR-5: a path source never touches the network. Severity `error`; no reload-hint.
+Triggered when a path `marketplace add` points at a path that does not exist (ENOENT) or exists but is neither a file nor a directory (e.g. a socket; tagged ENOTDIR). The same row renders when a git `marketplace add` finds no repository (the host answers 404 or 410) or no `#ref` the repository has. Pre-name failure (no readable manifest): the subject is the user-typed source string. NFR-5: a path source never touches the network. Severity `error`; no reload-hint.
 
 <!-- catalog-state: add-source-missing -->
 

@@ -108,12 +108,22 @@ export function hostHttpFailureFrame(err: unknown, remoteUrl: string): string | 
 }
 
 /**
+ * isomorphic-git's `NotFoundError`, which a clone throws when the remote does
+ * not have the ref or object it asked for.
+ */
+function isRemoteNotFound(err: unknown): boolean {
+  return err instanceof Error && (err as NodeJS.ErrnoException).code === "NotFoundError";
+}
+
+/**
  * Extend the shared transport ladder for a source-access operation such as
- * `marketplace add`. A 404 or 410 is `source missing` (ADD-09). Any other
- * status outside the 401/403 auth challenge is `network error`, because the
- * host was reached and refused; `network unreachable` stays for the
- * connection errno codes. The opt-in layer keeps other callers' fallthroughs
- * unchanged.
+ * `marketplace add`. A 404 or 410 is `source missing` (ADD-09), and so is a
+ * ref or object the remote does not have, like a repository the host does not
+ * have. Any other status outside the 401/403 auth challenge is
+ * `network error`, because the host was reached and refused;
+ * `network unreachable` stays for the connection errno codes. The opt-in
+ * layer keeps other callers' fallthroughs unchanged: the transport ladder
+ * that update and the plugin verbs use leaves a missing ref unclassified.
  */
 export function classifyGitSourceAccessFailure(
   err: unknown,
@@ -126,6 +136,10 @@ export function classifyGitSourceAccessFailure(
   const transportReason = classifyGitTransportFailure(err);
   if (transportReason !== undefined) {
     return transportReason;
+  }
+
+  if (isRemoteNotFound(err)) {
+    return "source missing";
   }
 
   const status = hostHttpStatus(err);

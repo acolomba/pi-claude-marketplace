@@ -227,6 +227,14 @@ for (const { title, createFailure } of [
     title: "leaves a filesystem error for the caller to classify",
     createFailure: () => Object.assign(new Error("permission denied"), { code: "EACCES" }),
   },
+  {
+    title: "leaves a ref the remote does not have to the caller",
+    createFailure: () =>
+      Object.assign(new Error("Could not find stable."), {
+        code: "NotFoundError",
+        name: "NotFoundError",
+      }),
+  },
 ] as const) {
   test(title, () => {
     // arrange
@@ -279,6 +287,15 @@ for (const { title, createFailure, expectedReason } of [
     title: "keeps the transport ladder's network verdict for a source access",
     createFailure: () => Object.assign(new Error("Git transport failure"), { code: "ENOTFOUND" }),
     expectedReason: "network unreachable",
+  },
+  {
+    title: "classifies a ref the remote does not have as source missing",
+    createFailure: () =>
+      Object.assign(new Error("Could not find stable."), {
+        code: "NotFoundError",
+        name: "NotFoundError",
+      }),
+    expectedReason: "source missing",
   },
   {
     title: "leaves a non-Error source-access failure unclassified",
