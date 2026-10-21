@@ -72,6 +72,28 @@ Feature: Marketplace url source
       | method | path                                              | status  |
       | GET    | /acme/tools.git/info/refs?service=git-upload-pack | dropped |
 
+  Scenario Outline: Adding a url marketplace the git host answers with a server error fails as network error
+    Given the marketplace "tools" is published as a url source
+    Given the git host answers <status> for the marketplace "tools"
+    When the user runs "/claude:plugin marketplace add https://{git host}/acme/tools.git --scope project"
+    Then the result has these fields:
+      | kind         | cascade                      |
+      | severity     | error                        |
+      | needs reload | false                        |
+      | summary      | Some operations have failed. |
+    Then the result lists these plugins:
+      | marketplace name                  | marketplace scope | marketplace status | id                                | name                              | status | reasons       | scope   | leaks | rollback partial | cause chain                                                                  | cause truncated |
+      | https://{git host}/acme/tools.git | project           | failed             | https://{git host}/acme/tools.git | https://{git host}/acme/tools.git | failed | network error | project |       |                  | <status> on https://{git host}/acme/tools.git, HTTP Error: <status> <phrase> | false           |
+    Then the git host receives these requests:
+      | method | path                                              | status   |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | <status> |
+
+    Examples:
+      | status | phrase                |
+      | 500    | Internal Server Error |
+      | 502    | Bad Gateway           |
+      | 503    | Service Unavailable   |
+
   Scenario: Adding a url marketplace that needs a credential fails as authentication required without one
     Given the marketplace "tools" is published as a url source
     Given the git host requires the user "alice" with the password "s3cret" for the marketplace "tools"

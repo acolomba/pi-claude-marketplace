@@ -1003,6 +1003,29 @@ const PLANTED_CREDENTIAL_SITES: ReadonlyArray<{
       ]),
   },
   {
+    site: "the id of a failed row whose subject is a marketplace",
+    planted: USERINFO,
+    probe: () =>
+      probeReconcileAppliedSubject([
+        {
+          name: USERINFO_URL,
+          scope: "project",
+          status: "failed",
+          severity: "error",
+          plugins: [
+            {
+              status: "failed",
+              name: USERINFO_URL,
+              reasons: ["network error"],
+              marketplaceSubject: true,
+              severity: "error",
+              needsReload: false,
+            },
+          ],
+        },
+      ]),
+  },
+  {
     site: "the marketplace-not-added name",
     planted: USERINFO,
     probe: () =>

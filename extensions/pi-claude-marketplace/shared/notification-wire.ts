@@ -275,9 +275,10 @@ const ROLLBACK_PHASE = Type.Object(
 );
 
 /**
- * WIRE-04 / WIRE-06: one plugin row. `id` is `<name>@<marketplace>`. `reasons`
- * is always present; every other optional field is absent when the row has no
- * value for it.
+ * WIRE-04 / WIRE-06: one plugin row. `id` is `<name>@<marketplace>`, a
+ * dependency row's own `<plugin>@<marketplace>` key, or the name alone for a
+ * row whose subject is a marketplace. `reasons` is always present; every other
+ * optional field is absent when the row has no value for it.
  */
 const PLUGIN_ROW = Type.Object(
   {

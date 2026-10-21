@@ -751,6 +751,9 @@ function removalAdvisories(err: unknown): readonly string[] | undefined {
  *
  * ADD-10 / UPD-11: a `network error` takes the same child row, and its cause
  * line opens with the `{status} on {url}` frame (`hostFrame`), as on update.
+ *
+ * ADD-10: the child names the source, not a plugin, so its JSON id is that
+ * source alone.
  */
 function failedAddRow(
   subject: string,
@@ -777,6 +780,7 @@ function failedAddRow(
     name: subject,
     reasons: [reason],
     cause,
+    marketplaceSubject: true,
     // D-03/D-06: a failed marketplace add -> error, no reload.
     severity: "error",
     needsReload: false,

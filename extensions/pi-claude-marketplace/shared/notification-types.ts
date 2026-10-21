@@ -571,6 +571,12 @@ export interface PluginFailedMessage extends MessageBase {
     readonly phase: string;
     readonly cause?: Error;
   }[];
+  /**
+   * ADD-10: the row's subject is a marketplace, or the source a failed
+   * `marketplace add` was typed with, not a plugin, so its JSON id is its name
+   * alone.
+   */
+  readonly marketplaceSubject?: true;
 }
 
 /** Skipped plugin row. */

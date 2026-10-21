@@ -46,8 +46,10 @@ import {
   createRemovalOps,
   pathExists,
 } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
+import { openNotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import { SymlinkRefusedError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
+import { createJsonCapture } from "../../edge/json-capture.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
@@ -3923,6 +3925,92 @@ test("ADD-10: a GitHub clone the host answers with HTTP 502 names the github.com
         severity: "error",
       },
     ]);
+  });
+});
+
+test("ADD-10: a failed git add's JSON child row takes the source as typed as its id", async (t) => {
+  await createHermeticEnvironment(t, "mp-add-host-http-json-home-");
+  await withTmpScope(async ({ cwd }) => {
+    // arrange
+    const capture = createJsonCapture();
+    const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
+    when(() => ctx.mode)
+      .thenReturn("json")
+      .once();
+    const inventory = mock<
+      Pick<Parameters<typeof openNotificationRun>[0], "getAllTools" | "getCommands">
+    >({ exactParams: true, name: "inventory" });
+    when(() => inventory.getAllTools())
+      .thenReturn([])
+      .times(3);
+    when(() => inventory.getCommands())
+      .thenReturn([])
+      .once();
+    const run = openNotificationRun(
+      {
+        getAllTools: () => inventory.getAllTools(),
+        getCommands: () => inventory.getCommands(),
+        appendEntry: capture.entrySink.appendEntry,
+      },
+      { kind: "command", commandId: "plugin", invocationId: "test-run" },
+    );
+    const { gitOps } = createGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+      cloneThrows: httpError(503),
+    });
+
+    // act
+    await addMarketplace({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource: "https://gitlab.example.com/team/flaky-mp",
+      gitOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(capture.entries, [
+      {
+        customType: "claude-plugin",
+        payload: {
+          schemaVersion: 1,
+          origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+          kind: "cascade",
+          severity: "error",
+          needsReload: false,
+          summary: "Some operations have failed.",
+          marketplaces: [
+            {
+              name: "https://gitlab.example.com/team/flaky-mp",
+              scope: "project",
+              status: "failed",
+              plugins: [
+                {
+                  status: "failed",
+                  name: "https://gitlab.example.com/team/flaky-mp",
+                  id: "https://gitlab.example.com/team/flaky-mp",
+                  reasons: ["network error"],
+                  scope: "project",
+                  cause: {
+                    causeChain: [
+                      "503 on https://gitlab.example.com/team/flaky-mp",
+                      "HTTP Error: 503",
+                    ],
+                    truncated: false,
+                  },
+                  leaks: [],
+                  rollbackPartial: [],
+                },
+              ],
+            },
+          ],
+        },
+      },
+    ]);
+    capture.assertValid();
+    verify(inventory);
+    verify(ctx);
   });
 });
 
