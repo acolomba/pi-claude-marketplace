@@ -40,8 +40,8 @@ Feature: Marketplace info
 
     @github
     Examples:
-      | source kind | source            | expected source kind | source abs path | source url | source owner | source repo | source ref |
-      | github      | acme/tools#stable | github               |                 |            | acme         | tools       | stable     |
+      | source kind | source          | expected source kind | source abs path | source url | source owner | source repo | source ref |
+      | github      | acme/tools#main | github               |                 |            | acme         | tools       | main       |
 
   Scenario: Info preserves the declared order of allowed marketplaces
     Given the marketplace "tools" is published as a dir source
