@@ -5,16 +5,16 @@ milestone_name: Marketplace Behavioral Tests
 current_phase: 09
 current_phase_name: URL Source Kind and HTTPS Git Stand-In
 status: executing
-stopped_at: Completed 09-02-PLAN.md
-last_updated: "2026-10-21T03:24:53.292Z"
+stopped_at: Completed 09-03-PLAN.md
+last_updated: "2026-10-21T03:42:45.011Z"
 last_activity: 2026-10-20
 last_activity_desc: Phase 09 execution started
-state_head: 3cfaa1268cba64d1057e9f413ecc72df1fd7d537
+state_head: 8330990b4e61e12877c3704d6ef85a1d748f399b
 progress:
   total_phases: 14
   completed_phases: 12
   total_plans: 75
-  completed_plans: 69
+  completed_plans: 70
   percent: 86
 ---
 
@@ -32,7 +32,7 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 09 (URL Source Kind and HTTPS Git Stand-In) — EXECUTING
-Plan: 3 of 8
+Plan: 4 of 8
 Status: Ready to execute
 Last activity: 2026-10-20 — Phase 09 execution started
 
@@ -183,8 +183,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-21T03:24:48.139Z
-**Stopped at:** Completed 09-02-PLAN.md
+**Last session:** 2026-10-21T03:42:39.801Z
+**Stopped at:** Completed 09-03-PLAN.md
 **Resume file:** None
 
 **Phase 8 closed (2026-10-20):** all five plans executed, Nyquist-compliant,
@@ -354,6 +354,7 @@ archived milestone artifacts.
 | Phase 08 P05 | 12 min | 3 tasks | 10 files |
 | Phase 09 P01 | 14 min | 1 tasks | 16 files |
 | Phase 09 P02 | 6min | 2 tasks | 6 files |
+| Phase 09 P03 | 11min | 3 tasks | 6 files |
 
 ## Decisions
 
@@ -496,6 +497,7 @@ archived milestone artifacts.
 - [Phase 09]: The url publication splits PublishedMarketplace into a path and a git variant, and the publishing functions take PublicationSites { marketplacesRoot, gitHost }, so features/lib never imports features/support
 - [Phase 09]: A plan checkpoint commit cannot export a function whose only consumer lands later: fallow dead-code fails the hook (runGit was held back to the final commit)
 - [Phase 09]: The colon-in-value parser case uses an Expires header, because the plan's Content-Type example held no colon in its value
+- [Phase 09]: Url fixture changes go through one private dispatch (changePublication) that writes the work tree, then commits and pushes; removing a url source deletes only its bare repository
 
 ### mcp-4 decisions
 
