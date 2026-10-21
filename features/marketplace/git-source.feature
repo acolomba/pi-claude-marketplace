@@ -16,6 +16,9 @@ Feature: Marketplace git source
     Then the result lists these marketplaces:
       | name  | scope   | status |
       | tools | <scope> | added  |
+    Then the "claude-plugins.json" file of the <scope> scope declares these marketplaces:
+      | name  | source   |
+      | tools | <source> |
     Then the git host receives these requests:
       | method | path                                                | status |
       | GET    | <repository path>/info/refs?service=git-upload-pack | 200    |
@@ -131,6 +134,7 @@ Feature: Marketplace git source
     Then the result lists these marketplaces:
       | name                              | scope   | status | reasons                 |
       | https://{git host}/acme/tools.git | project | failed | authentication required |
+    Then the "claude-plugins.json" file of the project scope does not exist
     Then the git host receives these requests:
       | method | path                                              | status |
       | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 401    |
@@ -147,6 +151,7 @@ Feature: Marketplace git source
     Then the result lists these plugins:
       | marketplace name | marketplace scope | marketplace status | id       | name     | status | reasons                 | scope   | leaks | rollback partial | cause chain                                                            | cause truncated |
       | <source>         | project           | failed             | <source> | <source> | failed | authentication required | project |       |                  | The operation was canceled., fetched https://{git host}/acme/tools.git | false           |
+    Then the "claude-plugins.json" file of the project scope does not exist
     Then the git host receives these requests:
       | method | path                                              | status |
       | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 401    |
@@ -170,6 +175,9 @@ Feature: Marketplace git source
     Then the result lists these marketplaces:
       | name  | scope   | status |
       | tools | project | added  |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name  | source   |
+      | tools | <source> |
     Then the git host receives these requests:
       | method | path                                              | status |
       | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 401    |
@@ -200,6 +208,9 @@ Feature: Marketplace git source
     Then the result lists these plugins:
       | marketplace name | marketplace scope | marketplace status | id          | name  | status | reasons                 | scope   | leaks | rollback partial | cause chain   | cause truncated |
       | tools            | project           | failed             | tools@tools | tools | failed | authentication required | project |       |                  | <cause chain> | false           |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name  | source   |
+      | tools | <source> |
     Then the git host receives these requests:
       | method | path                                              | status |
       | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 401    |

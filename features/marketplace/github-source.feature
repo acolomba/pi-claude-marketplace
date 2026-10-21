@@ -75,6 +75,13 @@ Feature: Marketplace github source
     Then the result lists these marketplaces:
       | name  | scope   | status |
       | tools | project | added  |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name  | source   |
+      | tools | <source> |
+    Then the git host receives these requests:
+      | method | path                                              | status |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |
     When the user runs "/claude:plugin marketplace info tools --scope project"
     Then the marketplace info result has these fields:
       | kind                    | marketplace-info |
