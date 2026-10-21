@@ -25,10 +25,10 @@ Given(
     secondScope: string,
   ) {
     const first = this.requirePublished(name);
-    const root = await requireFreeRoot(this.marketplacesRoot, directory, first.kind);
+    const root = await requireFreeRoot(this.publicationSites, directory, first.kind);
     this.onRelease(() => rm(root, { recursive: true, force: true }));
     const second = await publishMarketplaceIn(
-      this.marketplacesRoot,
+      this.publicationSites,
       directory,
       name,
       first.kind,

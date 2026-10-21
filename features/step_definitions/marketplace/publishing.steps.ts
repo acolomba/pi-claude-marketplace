@@ -50,9 +50,9 @@ Given(
       assert.fail(`the marketplace ${name} is already published in this scenario`);
     }
 
-    const root = await requireFreeRoot(this.marketplacesRoot, name, kind);
+    const root = await requireFreeRoot(this.publicationSites, name, kind);
     this.onRelease(() => rm(root, { recursive: true, force: true }));
-    this.recordPublished(name, await publishMarketplace(this.marketplacesRoot, name, kind, []));
+    this.recordPublished(name, await publishMarketplace(this.publicationSites, name, kind, []));
   },
 );
 
@@ -60,7 +60,7 @@ Given(
   "the marketplace {string} is published as an external manifest",
   async function (this: ScenarioWorld, name: string) {
     assert.strictEqual(this.publishedMarketplace(name), undefined);
-    const root = await requireFreeRoot(this.marketplacesRoot, name, "file");
+    const root = await requireFreeRoot(this.publicationSites, name, "file");
     this.onRelease(() => rm(root, { recursive: true, force: true }));
     this.recordPublished(name, await publishExternalMarketplace(this.marketplacesRoot, name));
   },

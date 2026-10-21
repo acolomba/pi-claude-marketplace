@@ -2,14 +2,17 @@
  * @fileoverview A marketplace published as one source kind.
  *
  * The dir and file kinds write the path fixture under the sandbox HOME
- * (D-04). The url and github kinds land with their stand-ins, so the steps
- * that publish a marketplace do not change when they do.
+ * (D-04). The url kind writes the same files in a work tree there and
+ * publishes them as a commit in a bare repository that the run's git host
+ * serves. The github kind lands with its stand-in, so the steps that publish
+ * a marketplace do not change when it does.
  */
 
 import assert from "node:assert/strict";
 import { rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
+import { publishGitRepository } from "./git-marketplace.ts";
 import {
   writeDependencyAllowance,
   writeInvalidManifest,
@@ -39,16 +42,51 @@ const MANIFEST_WRITERS: Readonly<
   "schema-invalid": writeInvalidManifest,
 };
 
+/** The git host as the publishing code needs it: where it keeps and serves repositories. */
+export interface GitRepositoryHost {
+  /** Returns the bare repository the host serves for `directory`. */
+  repositoryPath(directory: string): string;
+  /** Returns the URL a user types to clone the repository `directory`. */
+  repositoryUrl(directory: string): string;
+  /** The scratch HOME of every git that writes the host's repositories. */
+  readonly gitHome: string;
+}
+
+/** Where marketplaces are published: local directories and the run's git host. */
+export interface PublicationSites {
+  readonly marketplacesRoot: string;
+  readonly gitHost: GitRepositoryHost;
+}
+
 /**
- * A published marketplace: its kind, the directory it is published in, and
- * the source a user types to add it.
+ * A marketplace published as a local path: its kind, the directory it is
+ * published in, the source a user types to add it, and its manifest.
  */
-export interface PublishedMarketplace {
-  readonly kind: SourceKind;
+export interface PathPublication {
+  readonly kind: "dir" | "file";
   readonly root: string;
   readonly source: string;
   readonly manifestPath: string;
 }
+
+/**
+ * A marketplace published as a git repository: `root` is the work tree that
+ * holds its files, `repository` the directory the git host serves it under
+ * `acme/`, and `bareRepository` the repository the host serves. `gitHome` is
+ * the HOME of the git that commits and publishes it.
+ */
+export interface GitPublication {
+  readonly kind: "url" | "github";
+  readonly root: string;
+  readonly source: string;
+  readonly manifestPath: string;
+  readonly repository: string;
+  readonly bareRepository: string;
+  readonly gitHome: string;
+}
+
+/** A published marketplace of any source kind. */
+export type PublishedMarketplace = PathPublication | GitPublication;
 
 /** Returns the source kind `text` names, throwing on any other text. */
 export function parseSourceKind(text: string): SourceKind {
@@ -64,62 +102,68 @@ function noStandIn(kind: SourceKind): Error {
   return new Error(`the ${kind} source kind has no stand-in yet`);
 }
 
+async function requireAbsent(location: string, directory: string): Promise<void> {
+  await assert.rejects(
+    stat(location),
+    { code: "ENOENT" },
+    `${directory} already holds a marketplace`,
+  );
+}
+
 /**
  * Returns the directory that a `kind` marketplace published in `directory`
- * under `marketplacesRoot` lives in, failing when a marketplace is published
- * there already. The url and github kinds throw until they have a stand-in.
+ * lives in, failing when a marketplace is published there already. A url
+ * marketplace lives in a work tree under the marketplaces root and is served
+ * as a commit in a bare repository on the git host, so neither may exist. The
+ * github kind throws until it has a stand-in.
  */
 export async function requireFreeRoot(
-  marketplacesRoot: string,
+  sites: PublicationSites,
   directory: string,
   kind: SourceKind,
 ): Promise<string> {
+  const root = path.join(sites.marketplacesRoot, directory);
   switch (kind) {
     case "dir":
-    case "file": {
-      const root = path.join(marketplacesRoot, directory);
-      await assert.rejects(
-        stat(root),
-        { code: "ENOENT" },
-        `${directory} already holds a marketplace`,
-      );
+    case "file":
+      await requireAbsent(root, directory);
       return root;
-    }
-
     case "url":
+      await requireAbsent(root, directory);
+      await requireAbsent(sites.gitHost.repositoryPath(directory), directory);
+      return root;
     case "github":
       throw noStandIn(kind);
   }
 }
 
 /**
- * Publishes the marketplace `name` under `marketplacesRoot` as a `kind`
- * source offering `plugins`, in a directory of its own name. A file source is
- * the manifest inside `.claude-plugin/` (D-04).
+ * Publishes the marketplace `name` at `sites` as a `kind` source offering
+ * `plugins`, in a directory of its own name. A file source is the manifest
+ * inside `.claude-plugin/` (D-04).
  */
 export function publishMarketplace(
-  marketplacesRoot: string,
+  sites: PublicationSites,
   name: string,
   kind: SourceKind,
   plugins: readonly OfferedPlugin[],
 ): Promise<PublishedMarketplace> {
-  return publishMarketplaceIn(marketplacesRoot, name, name, kind, plugins);
+  return publishMarketplaceIn(sites, name, name, kind, plugins);
 }
 
 /**
  * Publishes a marketplace whose manifest declares `name` in the directory
- * `directory` under `marketplacesRoot`, as a `kind` source offering
- * `plugins`. For a git kind, `directory` is the repository its stand-in
- * serves (ADD-04).
+ * `directory` at `sites`, as a `kind` source offering `plugins`. For a git
+ * kind, `directory` is the repository the git host serves (ADD-04).
  */
 export async function publishMarketplaceIn(
-  marketplacesRoot: string,
+  sites: PublicationSites,
   directory: string,
   name: string,
   kind: SourceKind,
   plugins: readonly OfferedPlugin[],
 ): Promise<PublishedMarketplace> {
-  const root = path.join(marketplacesRoot, directory);
+  const root = path.join(sites.marketplacesRoot, directory);
   const manifestPath = path.join(root, ".claude-plugin", "marketplace.json");
   switch (kind) {
     case "dir":
@@ -128,7 +172,22 @@ export async function publishMarketplaceIn(
     case "file":
       await writeMarketplace(root, name, plugins, manifestPath);
       return { kind, root, source: manifestPath, manifestPath };
-    case "url":
+    case "url": {
+      const { gitHost } = sites;
+      const bareRepository = gitHost.repositoryPath(directory);
+      await writeMarketplace(root, name, plugins, manifestPath);
+      await publishGitRepository(root, bareRepository, gitHost.gitHome);
+      return {
+        kind,
+        root,
+        source: gitHost.repositoryUrl(directory),
+        manifestPath,
+        repository: directory,
+        bareRepository,
+        gitHome: gitHost.gitHome,
+      };
+    }
+
     case "github":
       throw noStandIn(kind);
   }

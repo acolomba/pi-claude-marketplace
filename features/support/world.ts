@@ -2,8 +2,8 @@
  * @fileoverview The per-scenario world.
  *
  * Every scenario gets a fresh world. The world holds what the steps of one
- * scenario share and reaches the run's one headless Pi, which
- * `support/pi-process.ts` resets before every scenario. Whatever a step or
+ * scenario share and reaches the run's one headless Pi and its git host,
+ * which `support/pi-process.ts` resets before every scenario. Whatever a step or
  * hook creates registers its release here, and the world runs those releases
  * in reverse order when the scenario ends. A passing scenario also fails
  * there when a row array or an MCP config notice of its last results went
@@ -24,9 +24,10 @@ import {
 
 import { currentRun } from "./pi-process.ts";
 
+import type { GitHostTraffic, HttpsGitHost, RequestWindow } from "../lib/https-git-host/server.ts";
 import type { NotificationPayload, OfferedSkill } from "../lib/pi-commands.ts";
 import type { PiProcess } from "../lib/pi-process.ts";
-import type { PublishedMarketplace } from "../lib/published-marketplace.ts";
+import type { PublicationSites, PublishedMarketplace } from "../lib/published-marketplace.ts";
 import type { RunTokens } from "../lib/run-tokens.ts";
 
 // Starting Pi takes most of a second and a command a tenth of that; the
@@ -49,6 +50,10 @@ export class ScenarioWorld extends World {
   // `{scenario time}` window opens before any setup command runs (D-05).
   readonly startedAt = Date.now();
   skills: readonly OfferedSkill[] | undefined = undefined;
+  // The git host's counts when the last `When` step started, so a request
+  // step reads only that command's traffic. The `BeforeStep` hook in
+  // `support/https-git-host.ts` sets it.
+  requestWindow: RequestWindow | undefined = undefined;
   private readonly published = new Map<string, PublishedMarketplace>();
   private readonly releases: Array<() => Promise<void> | void> = [];
 
@@ -60,6 +65,16 @@ export class ScenarioWorld extends World {
   /** The directory the marketplace steps write local marketplaces into. */
   get marketplacesRoot(): string {
     return currentRun().marketplacesRoot;
+  }
+
+  /** The run's https git host, which the `Before()` hook has reset for this scenario. */
+  get gitHost(): HttpsGitHost {
+    return currentRun().gitHost;
+  }
+
+  /** Where the marketplace steps publish marketplaces of every source kind. */
+  get publicationSites(): PublicationSites {
+    return { marketplacesRoot: this.marketplacesRoot, gitHost: this.gitHost };
   }
 
   /**
@@ -81,7 +96,12 @@ export class ScenarioWorld extends World {
 
   /** The values the run tokens of this scenario stand for. */
   get tokens(): RunTokens {
-    return { home: currentRun().sandbox.home, scenarioStartedAt: this.startedAt };
+    const run = currentRun();
+    return {
+      home: run.sandbox.home,
+      gitHost: run.gitHost.address,
+      scenarioStartedAt: this.startedAt,
+    };
   }
 
   /**
@@ -111,6 +131,19 @@ export class ScenarioWorld extends World {
     }
 
     return this.results;
+  }
+
+  /**
+   * Returns the requests the git host received and the connections it
+   * accepted since the last `When` step started.
+   */
+  requestsOfLastCommand(): GitHostTraffic {
+    const window = this.requestWindow;
+    if (window === undefined) {
+      throw new Error("no command has run in this scenario");
+    }
+
+    return this.gitHost.requestsSince(window);
   }
 
   /**

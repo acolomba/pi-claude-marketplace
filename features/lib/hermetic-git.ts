@@ -8,6 +8,11 @@
  * points a fixture at this repository (DRV-03).
  */
 
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+
+const execFileAsync = promisify(execFile);
+
 /** Returns the environment of a suite git whose HOME is `home`. */
 export function hermeticGitEnvironment(home: string): NodeJS.ProcessEnv {
   return {
@@ -20,4 +25,16 @@ export function hermeticGitEnvironment(home: string): NodeJS.ProcessEnv {
     GIT_COMMITTER_NAME: "features",
     GIT_COMMITTER_EMAIL: "features@example.test",
   };
+}
+
+/**
+ * Runs git with `args` in `cwd` and the environment of `home`. It never
+ * blocks, because the worker that runs it may also serve the git host.
+ */
+export async function runGit(cwd: string, home: string, ...args: string[]): Promise<void> {
+  await execFileAsync(
+    "git",
+    ["-c", "init.defaultBranch=main", "-c", "commit.gpgsign=false", ...args],
+    { cwd, env: hermeticGitEnvironment(home) },
+  );
 }
