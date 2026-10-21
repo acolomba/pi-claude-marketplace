@@ -72,7 +72,7 @@ A scope (user or project) has two layers: shared (`claude-plugins.json`) and loc
 - [x] **ADD-07**: A malformed or schema-invalid manifest fails as `invalid manifest` (dir, url)
 - [ ] **ADD-08**: Refused source forms (`http://`, `ssh://`, `git@host:...`, GitHub `/tree/` URLs, `https://github.com/o`, a bare word, `a/b/c`, `~other/...`) fail as `unsupported source`, and the stand-in receives no request
 - [x] **ADD-09**: A url clone answered with 404 fails as `source missing`
-- [ ] **ADD-10**: A url clone answered with 5xx fails as `network error`, with a cause line that names the HTTP status and the fetched URL; one whose connection drops fails as `network unreachable`
+- [x] **ADD-10**: A url clone answered with 5xx fails as `network error`, with a cause line that names the HTTP status and the fetched URL; one whose connection drops fails as `network unreachable`
 - [ ] **ADD-11**: A clone answered with 401 and no stored credential fails as `authentication required`; with a stored credential in the sandbox, it succeeds (url, gh)
 - [ ] **ADD-12**: A removed git marketplace can be added again from the same source (url, gh)
 - [x] **ADD-13**: `add --local` writes the declaration to `claude-plugins.local.json`, and `remove --local` clears it
@@ -213,7 +213,7 @@ A scope (user or project) has two layers: shared (`claude-plugins.json`) and loc
 | ADD-07 | Phase 3 | Complete |
 | ADD-08 | Phase 9 | Pending |
 | ADD-09 | Phase 9 | Complete |
-| ADD-10 | Phase 9 | Pending |
+| ADD-10 | Phase 9 | Complete |
 | ADD-11 | Phase 10 | Pending |
 | ADD-12 | Phase 9 | Pending |
 | ADD-13 | Phase 3 | Complete |

@@ -5,16 +5,16 @@ milestone_name: Marketplace Behavioral Tests
 current_phase: 09
 current_phase_name: URL Source Kind and HTTPS Git Stand-In
 status: executing
-stopped_at: Completed 09-04-PLAN.md
-last_updated: "2026-10-21T04:02:03.328Z"
+stopped_at: Completed 09-05-PLAN.md
+last_updated: "2026-10-21T04:19:31.972Z"
 last_activity: 2026-10-20
 last_activity_desc: Phase 09 execution started
-state_head: 32e5d5a18ce1117783862a7a7f6abecb3765dea9
+state_head: d97bc1c42b494ecbe6158ff970b1c454acf721b3
 progress:
   total_phases: 14
   completed_phases: 12
   total_plans: 75
-  completed_plans: 71
+  completed_plans: 72
   percent: 86
 ---
 
@@ -32,7 +32,7 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 09 (URL Source Kind and HTTPS Git Stand-In) — EXECUTING
-Plan: 5 of 8
+Plan: 6 of 8
 Status: Ready to execute
 Last activity: 2026-10-20 — Phase 09 execution started
 
@@ -183,8 +183,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-21T04:01:58.137Z
-**Stopped at:** Completed 09-04-PLAN.md
+**Last session:** 2026-10-21T04:19:26.703Z
+**Stopped at:** Completed 09-05-PLAN.md
 **Resume file:** None
 
 **Phase 8 closed (2026-10-20):** all five plans executed, Nyquist-compliant,
@@ -356,6 +356,7 @@ archived milestone artifacts.
 | Phase 09 P02 | 6min | 2 tasks | 6 files |
 | Phase 09 P03 | 11min | 3 tasks | 6 files |
 | Phase 09 P04 | 12 min | 2 tasks | 4 files |
+| Phase 09 P05 | 11 min | 2 tasks | 13 files |
 
 ## Decisions
 
@@ -501,6 +502,7 @@ archived milestone artifacts.
 - [Phase 09]: Url fixture changes go through one private dispatch (changePublication) that writes the work tree, then commits and pushes; removing a url source deletes only its bare repository
 - [Phase 09]: The git host arms one repository by request path (404/500/502/503, drop, or one Basic credential); reset clears the arms and Before() asserts arms: []
 - [Phase 09]: The add-authentication-required catalog child-row shape differs from the measured bare url add 401 row; the scenario pins the code, WINDOWS #100 records it
+- [Phase 09]: D-19 applied: a failed git marketplace add child row carries marketplaceSubject, and rowId in notification-json.ts uses its redacted name alone as the JSON id; marketplaceFailureRows keeps <mp>@<mp> (BACKLOG ROWID-01)
 
 ### mcp-4 decisions
 
