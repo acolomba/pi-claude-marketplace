@@ -67,7 +67,7 @@ path), **url** (https git URL on the loopback stand-in), and **gh**
 - [x] **Phase 7: Marketplace Autoupdate** — `autoupdate` and `noautoupdate`, by name and for all marketplaces, persisting across sessions (completed 2026-10-20)
 - [x] **Phase 8: Marketplace Help and Usage Errors** — `marketplace help` and every usage rejection across the marketplace verbs (completed 2026-10-20)
 - [x] **Phase 9: URL Source Kind and HTTPS Git Stand-In** — A loopback HTTPS git stand-in, url-only failure and no-request scenarios, and the removal of `@url` from the exclusion (completed 2026-10-21)
-- [ ] **Phase 10: GitHub Source Kind and Suite Close** — GitHub rows run through the override, 401 is covered on both git kinds, and the suite closes with no tag excluded
+- [x] **Phase 10: GitHub Source Kind and Suite Close** — GitHub rows run through the override, 401 is covered on both git kinds, and the suite closes with no tag excluded (completed 2026-10-21)
 
 #### Parallelism
 
@@ -533,7 +533,7 @@ Plans:
 4. The suite closes clean: a source-walk check fails if `cucumber.json` still excludes any tag; `cucumber-js --dry-run --format usage` reports no unused, undefined, or ambiguous step; the whole suite passes on Node 24 and Node 26; CI timing is recorded; a credential-isolation control run once by hand (a hostile `~/.gitconfig` and a planted system credential helper) changes no result; and a cucumber skill review of the suite finds no BLOCKER.
 5. The `@github` rows that Phase 3.2 wrote for LAYER-07 run through the override and pass: the cross-scope install Outline in `features/plugin/cross-scope-install.feature` and the three user-scope remove Outlines in `features/marketplace/remove.feature`. Each remove Outline's `@github` row is first shown failing, on a behavioral assertion, on code where a project install reuses the user-scope record instead of adding the marketplace (the install files planted from the parent of the commit that Phase 3.2's plan 07 SUMMARY names, or, if they no longer load, an equivalent local edit that is never committed), then passing on the current code. The install Outline's row guards the project declaration, which the older code also wrote, so it passes on both.
 
-**Plans:** 7/7 plans executed
+**Plans:** 7/7 plans complete
 
 Plans:
 **Wave 1**
@@ -574,7 +574,7 @@ Plans:
 | 7. Marketplace Autoupdate | 4/4 | Complete    | 2026-10-20 |
 | 8. Marketplace Help and Usage Errors | 5/5 | Complete    | 2026-10-20 |
 | 9. URL Source Kind and HTTPS Git Stand-In | 8/8 | Complete    | 2026-10-21 |
-| 10. GitHub Source Kind and Suite Close | 7/7 | In Progress | - |
+| 10. GitHub Source Kind and Suite Close | 7/7 | Complete    | 2026-10-21 |
 
 ## Carried Forward
 
