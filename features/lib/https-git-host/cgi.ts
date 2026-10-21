@@ -142,7 +142,12 @@ export function runHttpBackend(
     const chunks: Buffer[] = [];
     let stderr = "";
     child.on("error", reject);
-    child.stdin.on("error", reject);
+    // A backend that needs no body may exit before it reads stdin; its exit code decides.
+    child.stdin.on("error", (error: NodeJS.ErrnoException) => {
+      if (error.code !== "EPIPE") {
+        reject(error);
+      }
+    });
     child.stdout.on("data", (chunk: Buffer) => {
       chunks.push(chunk);
     });

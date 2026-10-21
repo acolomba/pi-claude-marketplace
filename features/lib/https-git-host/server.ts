@@ -58,9 +58,9 @@ const ARMED_STATUSES = [404, 500, 502, 503] as const;
 export type ArmedStatus = (typeof ARMED_STATUSES)[number];
 
 /**
- * How an armed repository fails: it answers an error status, drops the
- * connection on the first request, or answers 401 to every request that does
- * not carry one user and password.
+ * How an armed repository fails until the next reset: it answers an error
+ * status, drops the connection on every request, or answers 401 to every
+ * request that does not carry one user and password.
  */
 export type GitHostArm =
   | { readonly kind: "status"; readonly status: ArmedStatus }
@@ -84,8 +84,9 @@ export interface GitHostRequest {
   readonly method: string;
   readonly path: string;
   /**
-   * The status the host answered, `dropped` when an arm destroyed the
-   * connection, or `pending` while the answer is open.
+   * The status the host answered, `dropped` when the host destroyed the
+   * connection, by an arm or after a failure, or `pending` while the answer
+   * is open.
    */
   readonly status: number | "pending" | "dropped";
 }
@@ -161,16 +162,26 @@ async function listRepositories(root: string): Promise<string[]> {
 }
 
 /**
- * Returns the arm of the repository that `requestPath` belongs to: a path
- * under `/acme/<repository>/` or `/acme/<repository>.git/`.
+ * Returns the path the CGI serves for the request path `requestPath`: its
+ * pathname, URL-resolved against `origin` and decoded, or undefined when it
+ * does not decode.
  */
-function armFor(
-  arms: ReadonlyMap<string, GitHostArm>,
-  requestPath: string,
-): GitHostArm | undefined {
+function servedPath(requestPath: string, origin: string): string | undefined {
+  try {
+    return decodeURIComponent(new URL(requestPath, origin).pathname);
+  } catch (_error: unknown) {
+    return undefined;
+  }
+}
+
+/**
+ * Returns the arm of the repository that `served` belongs to: a decoded path
+ * the CGI serves, under `/acme/<repository>/` or `/acme/<repository>.git/`.
+ */
+function armFor(arms: ReadonlyMap<string, GitHostArm>, served: string): GitHostArm | undefined {
   for (const [repository, arm] of arms) {
     const prefix = `/${OWNER}/${repository}`;
-    if (requestPath.startsWith(`${prefix}/`) || requestPath.startsWith(`${prefix}.git/`)) {
+    if (served.startsWith(`${prefix}/`) || served.startsWith(`${prefix}.git/`)) {
       return arm;
     }
   }
@@ -230,15 +241,16 @@ function writeResponse(res: ServerResponse, response: CgiResponse): void {
 
 /**
  * Answers 500 with no header the CGI set, and logs it. A response whose
- * headers went out already can only be cut off.
+ * headers went out already can only be cut off, and logs as dropped.
  */
 function answerServerError(logged: LoggedRequest, res: ServerResponse): void {
-  logged.status = 500;
   if (res.headersSent) {
+    logged.status = "dropped";
     res.destroy();
     return;
   }
 
+  logged.status = 500;
   for (const name of res.getHeaderNames()) {
     res.removeHeader(name);
   }
@@ -413,7 +425,13 @@ export class HttpsGitHost {
     res.on("error", () => {
       res.destroy();
     });
-    const arm = armFor(this.arms, logged.path);
+    const served = servedPath(logged.path, `https://${this.address}`);
+    if (served === undefined) {
+      answerServerError(logged, res);
+      return;
+    }
+
+    const arm = armFor(this.arms, served);
     if (arm !== undefined && failArmed(arm, logged, req, res)) {
       return;
     }
@@ -433,9 +451,8 @@ export class HttpsGitHost {
     body: Buffer,
     res: ServerResponse,
   ): Promise<void> {
-    // The request answers 500, and the log says so, when its path does not
-    // decode, when the CGI fails or is killed, or when the CGI prints a status
-    // or a header Node cannot send. Nothing escapes, so no request can crash
+    // The request answers 500, and the log says so, when the CGI fails or is
+    // killed, or when the CGI prints a status or a header Node cannot send. Nothing escapes, so no request can crash
     // the worker that hosts the server.
     try {
       const request = {

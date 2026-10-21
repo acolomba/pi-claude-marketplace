@@ -85,7 +85,21 @@ describe("parseCgiResponse", () => {
     const backendOutput = Buffer.from("Content-Type: text/plain\r\nok");
 
     // act & assert
-    assert.throws(() => parseCgiResponse(backendOutput), Error);
+    assert.throws(() => parseCgiResponse(backendOutput), {
+      name: "Error",
+      message: "the CGI response has no blank line after its headers",
+    });
+  });
+
+  test("throws on a header with no colon", () => {
+    // arrange
+    const backendOutput = Buffer.from("NoColon\r\n\r\n");
+
+    // act & assert
+    assert.throws(() => parseCgiResponse(backendOutput), {
+      name: "Error",
+      message: 'the CGI response header "NoColon" has no colon',
+    });
   });
 
   for (const { status, expectedMessage } of [
