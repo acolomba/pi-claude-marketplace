@@ -21,3 +21,44 @@ Feature: Marketplace github source
       | method | path                                              | status |
       | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 200    |
       | POST   | /acme/tools.git/git-upload-pack                   | 200    |
+
+  Scenario Outline: Each spelling of a GitHub URL clones and shows the same repository
+    Given the marketplace "tools" is published as a github source
+    When the user runs "/claude:plugin marketplace add <source> --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these marketplaces:
+      | name  | scope   | status |
+      | tools | project | added  |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name  | source   |
+      | tools | <source> |
+    Then the git host receives these requests:
+      | method | path                                              | status |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |
+    When the user runs "/claude:plugin marketplace info tools --scope project"
+    Then the marketplace info result has these fields:
+      | kind                    | marketplace-info |
+      | name                    | tools            |
+      | scope                   | project          |
+      | details autoupdate      | false            |
+      | details last updated at | {scenario time}  |
+      | source kind             | github           |
+      | source abs path         |                  |
+      | source url              |                  |
+      | source owner            | acme             |
+      | source repo             | tools            |
+      | source ref              |                  |
+      | severity                | info             |
+      | needs reload            | false            |
+
+    Examples:
+      | source                            |
+      | https://github.com/acme/tools     |
+      | https://GitHub.com/acme/tools     |
+      | https://www.github.com/acme/tools |
+      | https://github.com/acme/tools.git |
+      | https://github.com/acme/tools/    |
