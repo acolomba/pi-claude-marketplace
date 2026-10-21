@@ -5,17 +5,17 @@ milestone_name: Marketplace Behavioral Tests
 current_phase: 10
 current_phase_name: GitHub Source Kind and Suite Close
 status: executing
-stopped_at: Phase 10 planned (7 plans)
-last_updated: "2026-10-21T13:42:35.379Z"
+stopped_at: Completed 10-01-PLAN.md
+last_updated: "2026-10-21T13:57:17.536Z"
 last_activity: 2026-10-21
-last_activity_desc: Phase 10 planned (7 plans in 7 waves)
-state_head: 3bc84b58efe7177cd0e7537b8a00b603b52a0d25
+last_activity_desc: Phase 10 execution started
+state_head: 39488cf1108d679f3e8c87bfb8ce94ec70f38eca
 progress:
   total_phases: 14
   completed_phases: 13
   total_plans: 82
-  completed_plans: 75
-  percent: 91
+  completed_plans: 76
+  percent: 93
 ---
 
 # Project State
@@ -31,12 +31,12 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: 10 (GitHub Source Kind and Suite Close) — READY TO EXECUTE
-Plan: Not started
+Phase: 10 (GitHub Source Kind and Suite Close) — EXECUTING
+Plan: 2 of 7
 Status: Ready to execute
-Last activity: 2026-10-21 — Phase 10 planned: 7 plans in 7 waves
+Last activity: 2026-10-21 — Phase 10 execution started
 
-Progress: [█████████░] 91%
+Progress: [█████████░] 93%
 
 ### mcp-4 closeout
 
@@ -183,9 +183,9 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-21T10:29:10.412Z
-**Stopped at:** Phase 10 context gathered
-**Resume file:** .planning/phases/10-github-source-kind-and-suite-close/10-CONTEXT.md
+**Last session:** 2026-10-21T13:57:11.414Z
+**Stopped at:** Completed 10-01-PLAN.md
+**Resume file:** None
 
 **Phase 8 closed (2026-10-20):** all five plans executed, Nyquist-compliant,
 `threats_open: 0`, the code review fix loop closed 7 of 7 findings, and
@@ -360,6 +360,7 @@ archived milestone artifacts.
 | Phase 09 P06 | 7 min | 2 tasks | 8 files |
 | Phase 09 P07 | 6 min | 2 tasks | 3 files |
 | Phase 09 P08 | 8 min | 3 tasks | 4 files |
+| Phase 10 P01 | 8min | 2 tasks | 9 files |
 
 ## Decisions
 
@@ -510,6 +511,7 @@ archived milestone artifacts.
 - [Phase 09]: The empty-log step compares the whole git host traffic record ({ requests: [], connections: 0 }) in one deepStrictEqual, so a kept-alive request or a non-TLS attempt fails it
 - [Phase 09]: cucumber.json excludes only @github; every @url row runs by default (D-14)
 - [Phase 09]: SC6 evidence uses the local edit in resolveTargetScopeMarketplace: the f78907bf plant now loads but crashes in the Given install, which is not behavioral RED
+- [Phase 10]: The github publication kind shares the url arms; only the source differs (GitRepositoryHost.repositoryShorthand), and the acme owner stays a literal of server.ts
 
 ### mcp-4 decisions
 
