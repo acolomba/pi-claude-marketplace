@@ -71,40 +71,47 @@ BeforeAll(async (): Promise<void> => {
   // Pi receives the realpath of each sandbox location, so the run uses the
   // same spelling and `{home}` matches the paths Pi reports.
   const root = await realpath(await mkdtemp(path.join(tmpdir(), "pi-cm-features-")));
-  const sandbox = {
-    home: path.join(root, "home"),
-    agentDir: path.join(root, "agent"),
-    cwd: path.join(root, "project"),
-  };
-  await Promise.all(Object.values(sandbox).map((location) => mkdir(location, { recursive: true })));
-  const gitHost = await HttpsGitHost.start(path.join(root, "git-host"));
-  // The global git config is absent until a scenario writes it (DRV-03).
-  const piEnvironment = {
-    NODE_EXTRA_CA_CERTS: gitHost.certificatePath,
-    GIT_CONFIG_NOSYSTEM: "1",
-    GIT_CONFIG_GLOBAL: path.join(sandbox.home, ".gitconfig"),
-    PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL: `https://${gitHost.address}`,
-  } satisfies RpcGitEnvironment;
-  // A Pi that fails to start must not leave the host listening or the root behind.
-  const pi = await PiProcess.start(sandbox, piEnvironment).catch(async (error: unknown) => {
+  let gitHost: HttpsGitHost | undefined = undefined;
+  try {
+    const sandbox = {
+      home: path.join(root, "home"),
+      agentDir: path.join(root, "agent"),
+      cwd: path.join(root, "project"),
+    };
+    await Promise.all(
+      Object.values(sandbox).map((location) => mkdir(location, { recursive: true })),
+    );
+    gitHost = await HttpsGitHost.start(path.join(root, "git-host"));
+    // The global git config is absent until a scenario writes it (DRV-03).
+    const piEnvironment = {
+      NODE_EXTRA_CA_CERTS: gitHost.certificatePath,
+      GIT_CONFIG_NOSYSTEM: "1",
+      GIT_CONFIG_GLOBAL: path.join(sandbox.home, ".gitconfig"),
+      PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL: `https://${gitHost.address}`,
+    } satisfies RpcGitEnvironment;
+    const pi = await PiProcess.start(sandbox, piEnvironment);
+    piRun = {
+      root,
+      sandbox,
+      // Local marketplaces live under HOME, so a command types them through
+      // `{home}` (D-04).
+      marketplacesRoot: path.join(sandbox.home, "marketplaces"),
+      gitHost,
+      piEnvironment,
+      pi,
+    };
+  } catch (error: unknown) {
+    // A run that fails to start must not leave the host listening or the
+    // root, which holds the host's private key once it has started, behind.
+    const startedHost = gitHost;
     const failures = await settleInOrder([
-      () => gitHost.close(),
+      () => startedHost?.close() ?? Promise.resolve(),
       () => rm(root, { recursive: true, force: true }),
     ]);
     throw failures.length === 0
       ? error
-      : new AggregateError([error, ...failures], "the run's Pi failed to start");
-  });
-  piRun = {
-    root,
-    sandbox,
-    // Local marketplaces live under HOME, so a command types them through
-    // `{home}` (D-04).
-    marketplacesRoot: path.join(sandbox.home, "marketplaces"),
-    gitHost,
-    piEnvironment,
-    pi,
-  };
+      : new AggregateError([error, ...failures], "the run failed to start");
+  }
 });
 
 Before(async (): Promise<void> => {
