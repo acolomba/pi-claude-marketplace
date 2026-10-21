@@ -1,13 +1,13 @@
 /**
  * @fileoverview A marketplace published as one source kind.
  *
- * The dir and file kinds write the path fixture under the sandbox HOME. The url and github kinds write the same files in a work tree there
- * and publish them as a commit in a bare repository that the run's git host
- * serves. Every later change to a git marketplace writes the work tree the
- * same way and pushes a new commit, so Pi sees it through a clone or fetch
- * (HOST-01). The github kind publishes the same way; its source is the
- * `owner/repo` shorthand, which the GitHub base override sends to the git
- * host (GHB-01).
+ * The dir and file kinds write the path fixture under the sandbox HOME. The
+ * url and github kinds write the same files in a work tree there and publish
+ * them as a commit in a bare repository that the run's git host serves. Every
+ * later change to a git marketplace writes the work tree the same way and
+ * pushes a new commit, so Pi sees it through a clone or fetch (HOST-01). The
+ * github kind publishes the same way; its source is the `owner/repo`
+ * shorthand, which the GitHub base override sends to the git host (GHB-01).
  */
 
 import assert from "node:assert/strict";

@@ -1707,9 +1707,19 @@ test("a legacy git record whose manifest cannot be read fails the update instead
     await rm(manifestPath);
     await mkdir(manifestPath);
     const { ctx, run, notifications } = makeCtx();
-    const { gitOps } = createGitOps({
+    const git = createGitOps({
       remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000123" },
     });
+    let fetchCalls = 0;
+    const gitOps: GitOps = {
+      ...git.gitOps,
+      async fetch(fetchOptions): Promise<void> {
+        fetchCalls += 1;
+        await git.gitOps.fetch(fetchOptions);
+        await rm(manifestPath, { recursive: true });
+        await writeFile(manifestPath, VALID_MANIFEST_JSON, "utf8");
+      },
+    };
 
     // act
     await updateMarketplace({
@@ -1723,6 +1733,7 @@ test("a legacy git record whose manifest cannot be read fails the update instead
     });
 
     // assert
+    assert.strictEqual(fetchCalls, 0);
     assert.equal(notifications.length, 1);
     assert.match(notifications[0]?.message ?? "", /^⊘ unreadable \[project\] \(failed\)/m);
   });

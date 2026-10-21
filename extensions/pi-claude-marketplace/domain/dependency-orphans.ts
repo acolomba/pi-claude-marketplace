@@ -174,8 +174,8 @@ export type DeclaringLayers = "target" | "other" | "both" | "none";
  * holder that a layer declares is a needer of that layer, and a holder both
  * layers declare counts for the target layer. A holder no layer declares is
  * itself a dependency, so the walk goes on to its own holders; it does not
- * continue past a declared holder. A visited set
- * ends cycles. Each list is in `localeCompare` order, and no input is mutated.
+ * continue past a declared holder. A visited set ends cycles. Each list is in
+ * `localeCompare` order, and no input is mutated.
  */
 export function declaredNeedersByLayer(
   target: string,
