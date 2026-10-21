@@ -2,8 +2,9 @@
 
 ## [Unreleased]
 
-- A failed add of a git marketplace source now gives a clearer reason and JSON row.
+- Adding a git marketplace now takes a `#ref` on the `owner/repo` shorthand, and a failed add gives a clearer reason and JSON row.
 
+  - The `owner/repo#ref` shorthand now adds the marketplace at that ref, as `owner/repo@ref` does.
   - Adding a git marketplace at a missing `#ref` now fails as `{source missing}`. It used to fail as `Command failed unexpectedly.`, or as `{unparseable}` on a reload or an import.
   - In JSON output, the row of a failed git `marketplace add` names the source with any credentials removed. Its `id` is that name alone, not that name twice around an `@`.
 
