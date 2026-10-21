@@ -4,15 +4,17 @@
  * The dir and file kinds write the path fixture under the sandbox HOME
  * (D-04). The url kind writes the same files in a work tree there and
  * publishes them as a commit in a bare repository that the run's git host
- * serves. The github kind lands with its stand-in, so the steps that publish
- * a marketplace do not change when it does.
+ * serves. Every later change to a url marketplace writes the work tree the
+ * same way and pushes a new commit, so Pi sees it through a clone or fetch
+ * (HOST-01). The github kind lands with its stand-in, so the steps that
+ * publish a marketplace do not change when it does.
  */
 
 import assert from "node:assert/strict";
 import { rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { publishGitRepository } from "./git-marketplace.ts";
+import { publishGitRepository, pushGitRepository } from "./git-marketplace.ts";
 import {
   writeDependencyAllowance,
   writeInvalidManifest,
@@ -100,6 +102,29 @@ export function parseSourceKind(text: string): SourceKind {
 
 function noStandIn(kind: SourceKind): Error {
   return new Error(`the ${kind} source kind has no stand-in yet`);
+}
+
+/**
+ * Runs `write`, which changes the files of `published`. For a url
+ * publication, it then commits the change and pushes it to the bare
+ * repository the git host serves.
+ */
+async function changePublication(
+  published: PublishedMarketplace,
+  write: () => Promise<void>,
+): Promise<void> {
+  switch (published.kind) {
+    case "dir":
+    case "file":
+      await write();
+      return;
+    case "url":
+      await write();
+      await pushGitRepository(published.root, published.gitHome);
+      return;
+    case "github":
+      throw noStandIn(published.kind);
+  }
 }
 
 async function requireAbsent(location: string, directory: string): Promise<void> {
@@ -210,15 +235,9 @@ export async function republishMarketplace(
   name: string,
   plugins: readonly OfferedPlugin[],
 ): Promise<void> {
-  switch (published.kind) {
-    case "dir":
-    case "file":
-      await writeMarketplace(published.root, name, plugins, published.manifestPath);
-      return;
-    case "url":
-    case "github":
-      throw noStandIn(published.kind);
-  }
+  await changePublication(published, () =>
+    writeMarketplace(published.root, name, plugins, published.manifestPath),
+  );
 }
 
 /** Rewrites the exact published manifest with the supplied JSON text. */
@@ -226,15 +245,7 @@ export async function rewritePublishedManifest(
   published: PublishedMarketplace,
   text: string,
 ): Promise<void> {
-  switch (published.kind) {
-    case "dir":
-    case "file":
-      await writeManifestText(published.manifestPath, text);
-      return;
-    case "url":
-    case "github":
-      throw noStandIn(published.kind);
-  }
+  await changePublication(published, () => writeManifestText(published.manifestPath, text));
 }
 
 function ownedTarget(published: PublishedMarketplace, target: string): string {
@@ -253,7 +264,11 @@ function ownedTarget(published: PublishedMarketplace, target: string): string {
   return resolved;
 }
 
-/** Removes only the directory or exact manifest recorded for this publication. */
+/**
+ * Removes only the directory, exact manifest, or bare repository recorded for
+ * this publication. Once a url publication's bare repository is gone, the git
+ * host answers a clone or fetch of it with 404.
+ */
 export async function removePublishedSource(published: PublishedMarketplace): Promise<void> {
   switch (published.kind) {
     case "dir":
@@ -263,6 +278,8 @@ export async function removePublishedSource(published: PublishedMarketplace): Pr
       await rm(ownedTarget(published, published.manifestPath));
       return;
     case "url":
+      await rm(published.bareRepository, { recursive: true });
+      return;
     case "github":
       throw noStandIn(published.kind);
   }
@@ -298,21 +315,15 @@ export async function invalidateManifest(
   published: PublishedMarketplace,
   problem: ManifestProblem,
 ): Promise<void> {
-  switch (published.kind) {
-    case "dir":
-    case "file":
-      await MANIFEST_WRITERS[problem](published.manifestPath, name);
-      return;
-    case "url":
-    case "github":
-      throw noStandIn(published.kind);
-  }
+  await changePublication(published, () => MANIFEST_WRITERS[problem](published.manifestPath, name));
 }
 
 /**
  * Adds a file nobody may read to the skill of the published plugin `plugin`,
  * and returns its path. Pi reads the plugin's manifest and dependencies as
- * usual, then fails to copy the skill when it stages the update.
+ * usual, then fails to copy the skill when it stages the update. Only a local
+ * publication can hold such a file: git stores no file mode that denies
+ * reading.
  */
 export async function publishUnreadableSkillFile(
   published: PublishedMarketplace,
@@ -330,28 +341,25 @@ export async function publishUnreadableSkillFile(
     }
 
     case "url":
+      throw new Error("a git repository cannot hold a file nobody may read");
     case "github":
       throw noStandIn(published.kind);
   }
 }
 
 /**
- * Returns the path of `file` inside the published plugin `plugin`, refusing a
- * path outside the publication.
+ * Writes `text` to `file` inside the published plugin `plugin`, which must
+ * not hold that file yet. It refuses a path outside the publication, and a
+ * url publication commits and pushes the new file.
  */
-export function publishedPluginFile(
+export async function writePublishedPluginFile(
   published: PublishedMarketplace,
   plugin: string,
   file: string,
-): string {
-  switch (published.kind) {
-    case "dir":
-    case "file":
-      return ownedTarget(published, path.join(published.root, "plugins", plugin, file));
-    case "url":
-    case "github":
-      throw noStandIn(published.kind);
-  }
+  text: string,
+): Promise<void> {
+  const target = ownedTarget(published, path.join(published.root, "plugins", plugin, file));
+  await changePublication(published, () => writeFile(target, text, { flag: "wx" }));
 }
 
 /**
@@ -362,15 +370,9 @@ export async function allowDependenciesOn(
   published: PublishedMarketplace,
   target: string,
 ): Promise<void> {
-  switch (published.kind) {
-    case "dir":
-    case "file":
-      await writeDependencyAllowance(published.manifestPath, target);
-      return;
-    case "url":
-    case "github":
-      throw noStandIn(published.kind);
-  }
+  await changePublication(published, () =>
+    writeDependencyAllowance(published.manifestPath, target),
+  );
 }
 
 /** Sets the description of the marketplace `published` records. */
@@ -378,13 +380,7 @@ export async function describeMarketplace(
   published: PublishedMarketplace,
   description: string,
 ): Promise<void> {
-  switch (published.kind) {
-    case "dir":
-    case "file":
-      await writeMarketplaceDescription(published.manifestPath, description);
-      return;
-    case "url":
-    case "github":
-      throw noStandIn(published.kind);
-  }
+  await changePublication(published, () =>
+    writeMarketplaceDescription(published.manifestPath, description),
+  );
 }

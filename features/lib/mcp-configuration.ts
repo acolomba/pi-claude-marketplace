@@ -11,7 +11,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { publishedPluginFile } from "./published-marketplace.ts";
+import { writePublishedPluginFile } from "./published-marketplace.ts";
 
 import type { PublishedMarketplace } from "./published-marketplace.ts";
 
@@ -34,10 +34,11 @@ export async function declarePublishedMcpServer(
   plugin: string,
   server: string,
 ): Promise<void> {
-  await writeFile(
-    publishedPluginFile(published, plugin, ".mcp.json"),
+  await writePublishedPluginFile(
+    published,
+    plugin,
+    ".mcp.json",
     JSON.stringify({ mcpServers: { [server]: { command: ABSENT_COMMAND, args: [] } } }),
-    { flag: "wx" },
   );
 }
 
