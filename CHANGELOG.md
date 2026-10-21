@@ -8,6 +8,7 @@
   - An empty `#`, as in `owner/repo#`, adds `owner/repo` with no ref, where Claude Code refuses it.
   - Adding a git marketplace at a missing `#ref` now fails as `{source missing}`. It used to fail as `Command failed unexpectedly.`, or as `{unparseable}` on a reload or an import.
   - In JSON output, the row of a failed git `marketplace add` names the source with any credentials removed. Its `id` is that name alone, not that name twice around an `@`.
+  - When any git host rejects your stored credential, the cause reads `<host> rejected the stored credential`, and `marketplace update` no longer asks you to store one.
 
 - An empty argument now fails with a message that names it, such as `Source must not be empty.` or `Marketplace name must not be empty.`.
 
@@ -53,7 +54,6 @@
 - GitHub sources clone and fetch from another https git host, such as a mirror, when you set `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL`, a setting that Claude Code lacks.
 
   - With that setting, a `marketplace update` that the host answers with 401 now shows the `git credential approve` command for that host.
-  - When a git host rejects your stored credential, the cause now reads `<host> rejected the stored credential` and no longer tells you to store one.
 
 - Internal: the `new-gsd-workspace` skill is now `new-workspace`, and the project skills match the latest TypeScript blueprint. (#263)
 
