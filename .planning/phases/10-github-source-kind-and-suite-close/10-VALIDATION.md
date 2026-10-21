@@ -2,10 +2,10 @@
 phase: "10"
 slug: "github-source-kind-and-suite-close"
 # status lifecycle: draft (seeded by plan-phase) → validated (set by validate-phase §6)
-# audit-milestone §5.5 distinguishes NOT-VALIDATED (draft) from PARTIAL (validated + nyquist_compliant: false) (#2117)
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+# audit-milestone §5.5 distinguishes NOT-VALIDATED (draft) from PARTIAL (validated + nyquist_compliant: true) (#2117)
+status: validated
+nyquist_compliant: true
+wave_0_complete: true
 created: "2026-10-21"
 ---
 
@@ -40,11 +40,21 @@ created: "2026-10-21"
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| ADD-11 (url) | TBD | TBD | ADD-11 | — | 401 without a credential fails as `authentication required` | cucumber | `npm run test:cucumber -- features/marketplace/git-source.feature` | ✅ (moves from url-source.feature) | ⬜ pending |
-| ADD-11 (gh) | TBD | TBD | ADD-11 | — | same through the override (D-11 github Outline) | cucumber | same | ❌ W0 | ⬜ pending |
-| UPD-12 | TBD | TBD | UPD-12 | — | update 401 names `git credential approve` for `{git host}` (D-10, D-13) | cucumber + unit | same; `node --test tests/orchestrators/marketplace/update.test.ts` | ❌ W0 | ⬜ pending |
-| SRC-02 | TBD | TBD | SRC-02 | — | N/A | cucumber | `npm run test:cucumber -- features/marketplace/github-source.feature` | ❌ W0 | ⬜ pending |
-| SRC-03 | TBD | TBD | SRC-03 | — | N/A | cucumber + unit (D-12) | same; `node --test tests/domain/source.test.ts` | ❌ W0 | ⬜ pending |
+| 10-01-01 | 01 | 1 | SRC-02 | — | override reaches Pi only from the run (operator value never leaks) | cucumber + arch | `npm run test:cucumber -- features/marketplace/github-source.feature --parallel 1`; `node --test tests/architecture/hermetic-git-environment.test.ts` | ✅ | ✅ green |
+| 10-01-02 | 01 | 1 | SRC-02 | — | N/A | cucumber | `npm run test:cucumber -- features/marketplace/github-source.feature features/marketplace/unsupported-source.feature --parallel 1` | ✅ | ✅ green |
+| 10-02-01 | 02 | 2 | ADD-11, UPD-12 | — | host keeps serving when the backend skips the body (D-14) | arch | `node --test tests/architecture/https-git-host-server.test.ts tests/architecture/https-git-host-cgi.test.ts` | ✅ | ✅ green |
+| 10-02-02 | 02 | 2 | ADD-11, UPD-12 | — | run frees host and root on partial failure | cucumber (Node 24 + 26) | `npm run test:cucumber` | ✅ | ✅ green |
+| 10-03-01 | 03 | 3 | SRC-03 | — | N/A | cucumber | `npm run test:cucumber -- features/marketplace/info.feature features/marketplace/url-source.feature --parallel 1` | ✅ | ✅ green |
+| 10-03-02 | 03 | 3 | SRC-03 | — | N/A | unit + cucumber (D-12) | `node --test tests/domain/source.test.ts`; `npm run test:cucumber -- features/marketplace/github-source.feature --parallel 1` | ✅ | ✅ green |
+| 10-03-03 | 03 | 3 | SRC-03 | — | N/A | docs | `SKIP=npm-check pre-commit run --files CHANGELOG.md .planning/PROJECT.md` | ✅ | ✅ green |
+| 10-04-01 | 04 | 4 | ADD-11 | — | 401 without a credential fails as `authentication required`; credential only in sandbox | cucumber | `npm run test:cucumber -- features/marketplace/git-source.feature --parallel 1` | ✅ | ✅ green |
+| 10-04-02 | 04 | 4 | UPD-12 | — | update 401 names `git credential approve` for `{git host}`; no credential leak (D-10, D-13) | unit + cucumber | `node --test tests/orchestrators/marketplace/update.test.ts tests/architecture/no-credential-leak.test.ts` | ✅ | ✅ green |
+| 10-05-01 | 05 | 5 | all four | — | N/A | cucumber | `npm run test:cucumber` (429/429, 46 `@github`) | ✅ | ✅ green |
+| 10-05-02 | 05 | 5 | all four | — | N/A | cucumber red/green (SC5) | `npm run test:cucumber -- features/marketplace/remove.feature features/plugin/cross-scope-install.feature --parallel 1 --tags @github` | ✅ | ✅ green |
+| 10-06-01 | 06 | 6 | all four | — | N/A | cucumber review | `npm run test:cucumber`; `npm run check:features` | ✅ | ✅ green |
+| 10-06-02 | 06 | 6 | all four | — | N/A | cucumber review | `npx cucumber-js --dry-run --format usage` | ✅ | ✅ green |
+| 10-07-01 | 07 | 7 | all four | — | credential isolation under hostile config (manual) | cucumber (Node 24 + 26) | `npm run test:cucumber` | ✅ | ✅ green |
+| 10-07-02 | 07 | 7 | all four | — | N/A | phase gate | `npm run check` | ✅ | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -52,9 +62,9 @@ created: "2026-10-21"
 
 ## Wave 0 Requirements
 
-- [ ] `RpcGitEnvironment` override field and its architecture test
-- [ ] github fixture arms in `features/lib/published-marketplace.ts`, and the HOST-EPIPE fix (D-14), before any github scenario or Node 24 run
-- [ ] A branch-publishing fixture helper and its step (D-02, D-03)
+- [x] `RpcGitEnvironment` override field and its architecture test
+- [x] github fixture arms in `features/lib/published-marketplace.ts`, and the HOST-EPIPE fix (D-14), before any github scenario or Node 24 run
+- [x] A branch-publishing fixture helper and its step (D-02, D-03)
 
 ---
 
@@ -70,11 +80,19 @@ created: "2026-10-21"
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 120s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags
+- [x] Feedback latency < 120s
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** approved 2026-10-21
+
+## Validation Audit 2026-10-21
+
+| Metric | Count |
+|---|---|
+| Gaps found | 0 |
+| Resolved | 0 |
+| Escalated | 0 |
