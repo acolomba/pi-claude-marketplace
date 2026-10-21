@@ -2,9 +2,10 @@
 
 ## [Unreleased]
 
-- Adding a git marketplace at a `#ref` the repository does not have now fails as `{source missing}`, instead of `Command failed unexpectedly.`, or `{unparseable}` during a reload or an import.
+- A failed add of a git marketplace source now gives a clearer reason and JSON row.
 
-- In JSON output, the row of a failed git `marketplace add` now has the source you typed as its `id`, not that source twice around an `@`.
+  - Adding a git marketplace at a missing `#ref` now fails as `{source missing}`. It used to fail as `Command failed unexpectedly.`, or as `{unparseable}` on a reload or an import.
+  - In JSON output, the row of a failed git `marketplace add` names the source with any credentials removed. Its `id` is that name alone, not that name twice around an `@`.
 
 - An empty argument now fails with a message that names it, such as `Source must not be empty.` or `Marketplace name must not be empty.`.
 
