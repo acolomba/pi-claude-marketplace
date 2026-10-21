@@ -492,7 +492,29 @@ Plans:
 5. The phase's last plan removes `@url` from the `cucumber.json` exclusion, and every `@url` row the verb phases wrote passes.
 6. The `@url` rows that Phase 3.2 wrote for LAYER-07 run against the stand-in and pass: the cross-scope install Outline in `features/plugin/cross-scope-install.feature` and the three user-scope remove Outlines in `features/marketplace/remove.feature`. Each remove Outline's `@url` row is first shown failing, on a behavioral assertion, on code where a project install reuses the user-scope record instead of adding the marketplace (the install files planted from the parent of the commit that Phase 3.2's plan 07 SUMMARY names, or, if they no longer load, an equivalent local edit that is never committed), then passing on the current code. The install Outline's row guards the project declaration, which the older code also wrote, so it passes on both.
 
-**Plans:** TBD
+**Plans:** 7 plans
+
+Plans:
+**Wave 1**
+- [ ] 09-01-PLAN.md — Tracer: one url add cloned over HTTPS from the per-worker loopback git host, with the request log asserted; hermetic git environments, unit cases, and the cucumber rule for the host's lifetime (HOST-01, HOST-02, HOST-04, DRV-03)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 09-02-PLAN.md — Every url fixture operation, the verb-phase `@url` triage (D-13), the info ref and unreadable-skill row corrections (D-17, D-18), and the verbatim URL (SRC-01)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 09-03-PLAN.md — Per-repository arms; 404, dropped connection, and 401 with and without a sandbox credential on add; the by-hand isolation control (HOST-03, ADD-09, ADD-10, DRV-03)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 09-04-PLAN.md — Test-first: the 5xx add Outline gives a failed git add row its source as the JSON id (ADD-10, D-19); BACKLOG ROWID-01
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [ ] 09-05-PLAN.md — Test-first: a missing ref on a url add fails as source missing (D-16); url update failures (UPD-11)
+
+**Wave 6** *(blocked on Wave 5 completion)*
+- [ ] 09-06-PLAN.md — Refused source forms reach no host (ADD-08); git re-add and the no-request list, info, and remove, each with an `@github` block (ADD-12, LS-05, INFO-07, RM-09)
+
+**Wave 7** *(blocked on Wave 6 completion)*
+- [ ] 09-07-PLAN.md — Remove `@url` from the exclusion (SC5); the LAYER-07 remove rows red then green (SC6); the phase gate
 
 ### Phase 10: GitHub Source Kind and Suite Close
 
