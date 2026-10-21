@@ -1,8 +1,8 @@
 Feature: Marketplace git source
 
-  A git marketplace is cloned once when it is added; listing, inspecting, and
-  removing it read only local state. The scenarios run the real extension in a
-  headless Pi against a loopback https git host and read its request log.
+  A git marketplace is cloned once when it is added, with the user's stored credential if the host
+  asks for one, and fails to add without it. Listing, inspecting, and removing it read only local
+  state. The scenarios run a headless Pi against a loopback https git host and read its request log.
 
   Scenario Outline: A removed git marketplace can be added again from the same source
     Given the marketplace "tools" is published as a <source kind> source
@@ -118,3 +118,71 @@ Feature: Marketplace git source
       | source kind | scope   |
       | github      | project |
       | github      | user    |
+
+  Scenario: Adding a url marketplace that needs a credential fails as authentication required without one
+    Given the marketplace "tools" is published as a url source
+    Given the git host requires the user "alice" with the password "s3cret" for the marketplace "tools"
+    When the user runs "/claude:plugin marketplace add https://{git host}/acme/tools.git --scope project"
+    Then the result has these fields:
+      | kind         | cascade                             |
+      | severity     | error                               |
+      | needs reload | false                               |
+      | summary      | A marketplace operation has failed. |
+    Then the result lists these marketplaces:
+      | name                              | scope   | status | reasons                 |
+      | https://{git host}/acme/tools.git | project | failed | authentication required |
+    Then the git host receives these requests:
+      | method | path                                              | status |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 401    |
+
+  Scenario Outline: Adding a github marketplace that needs a credential fails as authentication required without one
+    Given the marketplace "tools" is published as a <source kind> source
+    Given the git host requires the user "alice" with the password "s3cret" for the marketplace "tools"
+    When the user runs "/claude:plugin marketplace add <source> --scope project"
+    Then the result has these fields:
+      | kind         | cascade                      |
+      | severity     | error                        |
+      | needs reload | false                        |
+      | summary      | Some operations have failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id       | name     | status | reasons                 | scope   | leaks | rollback partial | cause chain                                                            | cause truncated |
+      | <source>         | project           | failed             | <source> | <source> | failed | authentication required | project |       |                  | The operation was canceled., fetched https://{git host}/acme/tools.git | false           |
+    Then the git host receives these requests:
+      | method | path                                              | status |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 401    |
+
+    @github
+    Examples:
+      | source kind | source                            |
+      | github      | acme/tools                        |
+      | github      | https://github.com/acme/tools     |
+      | github      | https://github.com/acme/tools.git |
+
+  Scenario Outline: Adding a git marketplace with a stored credential clones it
+    Given the marketplace "tools" is published as a <source kind> source
+    Given the git host requires the user "alice" with the password "s3cret" for the marketplace "tools"
+    Given the user has stored a credential for the git host with the user "alice" and the password "s3cret"
+    When the user runs "/claude:plugin marketplace add <source> --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these marketplaces:
+      | name  | scope   | status |
+      | tools | project | added  |
+    Then the git host receives these requests:
+      | method | path                                              | status |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 401    |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |
+
+    @url
+    Examples:
+      | source kind | source                            |
+      | url         | https://{git host}/acme/tools.git |
+
+    @github
+    Examples:
+      | source kind | source                        |
+      | github      | acme/tools                    |
+      | github      | https://github.com/acme/tools |
