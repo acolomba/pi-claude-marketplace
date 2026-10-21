@@ -2,20 +2,20 @@
 gsd_state_version: "1.0"
 milestone: marketplace-features
 milestone_name: Marketplace Behavioral Tests
-current_phase: 09
-current_phase_name: URL Source Kind and HTTPS Git Stand-In
+current_phase: 10
+current_phase_name: GitHub Source Kind and Suite Close
 status: verifying
-stopped_at: Completed 09-08-PLAN.md
-last_updated: "2026-10-21T04:58:18.628Z"
-last_activity: 2026-10-20
-last_activity_desc: Phase 09 execution started
-state_head: 63d0592455652eef7828fc5eada79ad71f33d8d0
+stopped_at: Phase 09 complete, ready to verify Phase 10
+last_updated: "2026-10-21T05:38:29.524Z"
+last_activity: 2026-10-21
+last_activity_desc: Phase 09 complete, transitioned to Phase 10
+state_head: c43fa8caec094b6b08771f08906bb30c6e09f1b6
 progress:
   total_phases: 14
-  completed_phases: 12
+  completed_phases: 13
   total_plans: 75
   completed_plans: 75
-  percent: 86
+  percent: 93
 ---
 
 # Project State
@@ -31,12 +31,12 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: 09 (URL Source Kind and HTTPS Git Stand-In) — EXECUTING
-Plan: 8 of 8
+Phase: 10 — GitHub Source Kind and Suite Close
+Plan: 4
 Status: Phase complete — ready for verification
-Last activity: 2026-10-20 — Phase 09 execution started
+Last activity: 2026-10-21 — Phase 09 complete, transitioned to Phase 10
 
-Progress: [█████████░] 86%
+Progress: [█████████░] 93%
 
 ### mcp-4 closeout
 
@@ -184,7 +184,7 @@ hit the same wall; convert it rather than re-disclosing it.
 ## Session Continuity
 
 **Last session:** 2026-10-21T04:58:13.457Z
-**Stopped at:** Completed 09-08-PLAN.md
+**Stopped at:** Phase 09 complete, ready to verify Phase 10
 **Resume file:** None
 
 **Phase 8 closed (2026-10-20):** all five plans executed, Nyquist-compliant,
