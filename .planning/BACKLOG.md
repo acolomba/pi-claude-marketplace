@@ -3976,3 +3976,23 @@ the way marketplace add and update do. Paired unit tests at 100% direct
 coverage, the output-catalog entries, and a CHANGELOG line. Related:
 `GAUTH-01` (the auth-hint cause line has the same one-call-site-at-a-time
 shape).
+
+## ROWID-01: marketplace-level failure rows carry a plugin-shaped JSON id
+
+Found during marketplace-features (2026-10-21), when D-19 fixed the id of a
+failed git `marketplace add` child row. `marketplaceFailureRows` in
+`orchestrators/marketplace/shared.ts` names its synthetic failed child row
+after the marketplace, so the wire id reads `<mp>@<mp>` (`tools@tools`) on the
+failure rows of `marketplace remove`, `update`, `autoupdate`, and `info`, as if
+a plugin of that name existed. Scenarios in `remove.feature`, `update.feature`,
+`autoupdate.feature`, `info.feature`, and `file-source-update.feature` pin it.
+
+What exists: a failed `marketplace add` child row sets `marketplaceSubject` on
+its `PluginFailedMessage`, and `rowId` in `shared/notification-json.ts` then
+uses the row name alone, so its id is the bare source (marketplace-features,
+D-19). The user kept the other rows out of D-19's scope.
+
+Scope when picked up: set the same marker in `marketplaceFailureRows`, change
+the pinned cells and any unit case that pins `<mp>@<mp>`, update
+`docs/json-output.md`, and add a CHANGELOG line, because it changes the
+published payload. WINDOWS entry 98 was waived to this entry.
