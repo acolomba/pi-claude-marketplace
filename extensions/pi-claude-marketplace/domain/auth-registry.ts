@@ -8,9 +8,8 @@
  * access token to the isomorphic-git credential shape.
  *
  * Descriptors are COMPILE-TIME constants; there is no runtime provider
- * configuration in v1 (PROV-07 per-source declarations deferred to v2). The
- * GitHub descriptor supplies today's exact literals so github.com behavior is
- * byte-identical when the engine defaults to GITHUB_PROVIDER.
+ * configuration (PROV-07 per-source declarations are deferred). The engine
+ * defaults to GITHUB_PROVIDER.
  *
  * The registry carries two descriptors: GITHUB_PROVIDER and GITLAB_PROVIDER
  * (GAUTH-02). GitLab's Device Authorization Grant matches GitHub's on field
@@ -44,10 +43,9 @@ export interface GitAuthProvider {
 }
 
 /**
- * GitHub descriptor carrying today's exact literals (byte-identity source for
- * the engine's default path). deviceCodeUrl/tokenUrl/clientId/scope and the
- * `x-access-token` credential mapping are GitHub's real Device Flow values,
- * injected into the generic engine in domain/github-auth.ts.
+ * GitHub descriptor and the engine's default. deviceCodeUrl/tokenUrl/clientId/
+ * scope and the `x-access-token` credential mapping are GitHub's real Device
+ * Flow values, injected into the generic engine in domain/github-auth.ts.
  */
 export const GITHUB_PROVIDER: GitAuthProvider = {
   id: "github",

@@ -151,6 +151,7 @@ test("SPLIT-02: only saveConfig writes claude-plugins.json / claude-plugins.loca
 });
 
 test("SPLIT-02: only saveState / persistMigratedState write state.json", async () => {
+  // arrange
   const offenders: string[] = [];
   let walked = 0;
 
@@ -188,17 +189,27 @@ test("SPLIT-02: only saveState / persistMigratedState write state.json", async (
 // against the same registry group it was built from would pin nothing.
 
 test("SPLIT-02 whitelist: exactly the named writers may write state.json", () => {
-  // act & assert
-  assert.deepStrictEqual(
-    [...ALLOWED_STATE_JSON_WRITERS].map((rel) => path.relative(EXTENSION_ROOT_REL, rel)).sort(),
-    ["persistence/migrate.ts", "persistence/state-io.ts"],
-  );
+  // arrange
+  const expectedWriters = ["persistence/migrate.ts", "persistence/state-io.ts"];
+
+  // act
+  const stateWriters = [...ALLOWED_STATE_JSON_WRITERS]
+    .map((rel) => path.relative(EXTENSION_ROOT_REL, rel))
+    .sort();
+
+  // assert
+  assert.deepStrictEqual(stateWriters, expectedWriters);
 });
 
 test("SPLIT-02 whitelist: exactly one file may write claude-plugins.json files", () => {
-  // act & assert
-  assert.deepStrictEqual(
-    [...ALLOWED_CONFIG_JSON_WRITERS].map((rel) => path.relative(EXTENSION_ROOT_REL, rel)).sort(),
-    ["persistence/config-io.ts"],
-  );
+  // arrange
+  const expectedWriters = ["persistence/config-io.ts"];
+
+  // act
+  const configWriters = [...ALLOWED_CONFIG_JSON_WRITERS]
+    .map((rel) => path.relative(EXTENSION_ROOT_REL, rel))
+    .sort();
+
+  // assert
+  assert.deepStrictEqual(configWriters, expectedWriters);
 });

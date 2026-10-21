@@ -127,7 +127,7 @@ export const MARKETPLACE_INFO_FIXTURES: FixtureMap = {
       // TYPE-01: the dedicated `marketplace-not-added` variant. `scope` is
       // OMITTED so the renderer emits no `[scope]` token -- absent-from-both
       // states have no bracket because the marketplace is in NEITHER scope.
-      // Byte form is unchanged (`⊘ ghost-mp (failed) {marketplace not added}`).
+      // Byte form: `⊘ ghost-mp (failed) {marketplace not added}`.
       message: {
         kind: "marketplace-not-added",
         name: "ghost-mp",

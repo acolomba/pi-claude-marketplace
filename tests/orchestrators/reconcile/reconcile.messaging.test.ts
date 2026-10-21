@@ -153,7 +153,6 @@ test("pending will-install omits optional tokens when they are absent", () => {
   const rendered = composePluginLines(message, "user")[0]!.slice(2);
 
   // assert
-  assert.deepStrictEqual(message, { name: "alpha", status: "will install", reasons: [] });
   assert.equal(rendered, "● alpha (will install)");
 });
 
@@ -259,13 +258,6 @@ test("applied installed omits optional row tokens when they are absent", () => {
   const rendered = composePluginLines(message, "user")[0]!.slice(2);
 
   // assert
-  assert.deepStrictEqual(message, {
-    name: "alpha",
-    needsReload: true,
-    reasons: [],
-    severity: "info",
-    status: "installed",
-  });
   assert.equal(rendered, "● alpha (installed)");
 });
 

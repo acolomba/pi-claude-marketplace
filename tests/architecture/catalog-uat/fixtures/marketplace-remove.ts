@@ -51,7 +51,7 @@ export const MARKETPLACE_REMOVE_FIXTURES: FixtureMap = {
       },
     },
 
-    // ATTR-06 / S3 / D-48-C Shape 1: explicit-scope remove of a name not added
+    // ATTR-06 / D-48-C Shape 1: explicit-scope remove of a name not added
     // in the requested scope -> standalone `marketplace-not-added` `{marketplace not added}`
     // variant carrying the requested scope bracket (pre-guard miss; no raw
     // MarketplaceNotFoundError escapes the orchestrator).
@@ -65,7 +65,7 @@ export const MARKETPLACE_REMOVE_FIXTURES: FixtureMap = {
       },
     },
 
-    // ATTR-06 / S4: bare-form remove of a name absent from BOTH scopes -> the
+    // ATTR-06: bare-form remove of a name absent from BOTH scopes -> the
     // SAME standalone variant with NO bracket (resolveScopeFromState's
     // MarketplaceNotFoundError caught at the entrypoint, absent-from-both form).
     "remove-missing-not-added-bare": {

@@ -1135,9 +1135,9 @@ async function executeScopedPlan(
  * constructively on the next import run instead of leaving
  * recorded-but-undeclared entries the reconcile planner would tear down.
  *
- * Target: import does NOT support `--local` (per RESEARCH project structure;
- * the flag is per-command and not on the import surface), so the batch
- * targets `locations.baseConfigJsonPath`. The one exception is a re-enabled
+ * Target: import does NOT support `--local` (the flag is per-command and not
+ * on the import surface), so the batch targets `locations.baseConfigJsonPath`.
+ * The one exception is a re-enabled
  * promotion whose key the local config declares: its `{ enabled: true }` goes
  * to the local config (`stampReenabledWhereLocalDeclares`) and the batch
  * keeps the bare key.

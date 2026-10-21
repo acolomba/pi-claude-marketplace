@@ -29,6 +29,7 @@ import type { ExtensionContext } from "../../platform/pi-api.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { Scope } from "../../shared/types.ts";
 
+/** Inputs to `getMarketplaceInfo`: the notification context and the marketplace to describe. */
 export interface GetMarketplaceInfoOptions {
   readonly ctx: ExtensionContext;
   /** D-05: the command's notification run; every block renders from its snapshot. */

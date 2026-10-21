@@ -1,7 +1,7 @@
 // Owner for edge/handlers/marketplace/remove.ts (MOD-09).
 //
 // The module is one factory that opens the command through the shared
-// marketplace opener and forwards four members to the remove workflow: the
+// marketplace opener and forwards five members to the remove workflow: the
 // parsed name, the working directory, the optional scope, the optional
 // scope-target flag, and the required lifecycle completion cache. Its whole
 // promise is therefore the usage block it supplies plus those five forwards.
@@ -64,8 +64,10 @@ import { locationsFor } from "../../../../extensions/pi-claude-marketplace/persi
 import { createCompletionCache } from "../../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
 import { runWithNothingLoaded } from "../../../shared/notification-run-seeds.ts";
-import { createMachineNotificationBoundary } from "../../notification-boundary.ts";
-import { createNotificationBoundary } from "../../notification-boundary.ts";
+import {
+  createMachineNotificationBoundary,
+  createNotificationBoundary,
+} from "../../notification-boundary.ts";
 import { mergeMarketplaceIntoState } from "../marketplace-seed.ts";
 
 import type { Scope } from "../../../../extensions/pi-claude-marketplace/shared/types.ts";

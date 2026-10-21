@@ -22,17 +22,17 @@ Feature: Marketplace remove
       | extras | {home}/marketplaces/extras |
 
     Examples:
-      | scope   | source kind | source                                                       |
-      | project | dir         | {home}/marketplaces/tools                                    |
-      | project | file        | {home}/marketplaces/tools/.claude-plugin/marketplace.json    |
-      | user    | dir         | {home}/marketplaces/tools                                    |
-      | user    | file        | {home}/marketplaces/tools/.claude-plugin/marketplace.json    |
+      | scope   | source kind | source                                                    |
+      | project | dir         | {home}/marketplaces/tools                                 |
+      | project | file        | {home}/marketplaces/tools/.claude-plugin/marketplace.json |
+      | user    | dir         | {home}/marketplaces/tools                                 |
+      | user    | file        | {home}/marketplaces/tools/.claude-plugin/marketplace.json |
 
     @url
     Examples:
-      | scope   | source kind | source                              |
-      | project | url         | https://{git host}/acme/tools.git   |
-      | user    | url         | https://{git host}/acme/tools.git   |
+      | scope   | source kind | source                            |
+      | project | url         | https://{git host}/acme/tools.git |
+      | user    | url         | https://{git host}/acme/tools.git |
 
     @github
     Examples:

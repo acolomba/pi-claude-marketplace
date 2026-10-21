@@ -64,8 +64,11 @@ describe("renderDependentKeys", () => {
     },
   ]) {
     test(`names ${label}`, () => {
+      // arrange
+      const keys = dependents;
+
       // act
-      const rendered = renderDependentKeys(dependents);
+      const rendered = renderDependentKeys(keys);
 
       // assert
       assert.equal(rendered, expected);
@@ -90,8 +93,11 @@ describe("isRenderablePluginKey", () => {
     },
   ]) {
     test(`${label} is ${expected ? "" : "not "}a renderable plugin key`, () => {
+      // arrange
+      const pluginKey = key;
+
       // act
-      const renderable = isRenderablePluginKey(key);
+      const renderable = isRenderablePluginKey(pluginKey);
 
       // assert
       assert.equal(renderable, expected);

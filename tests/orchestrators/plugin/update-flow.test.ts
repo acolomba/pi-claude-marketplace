@@ -3747,7 +3747,7 @@ test("PUP-1 pl@mp: no explicit scope + plugin absent -> marketplace-fallback res
   });
 });
 
-// ─── syncCloneOnce fetch failure -> notifyError (lines 207-213) ───────────────
+// ─── syncCloneOnce fetch failure -> notifyError ────────────────────────────────
 
 test("syncClone-fail: gitOps.fetch throws -> notifyError fired and updatePlugins returns early", async () => {
   await withHermeticHome(async () => {
@@ -3777,7 +3777,7 @@ test("syncClone-fail: gitOps.fetch throws -> notifyError fired and updatePlugins
 
       const { ctx, run, notifications } = makeCtx();
       // fetchThrows causes refreshGitHubClone -> gitOps.fetch to throw,
-      // which propagates through syncCloneOnce and is caught at lines 207-213.
+      // which propagates through syncCloneOnce and is caught there.
       const { gitOps } = createGitOps({
         fetchThrows: new Error("network: connection refused"),
         remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000001" },
@@ -3974,15 +3974,15 @@ for (const { title, makeFailure, reason } of [
 }
 
 // ─── invalid manifest -> loadMarketplaceManifest throws (covers preflightUpdate
-//     path where manifest load fails; lines 374-379 PLUGIN_ENTRY_VALIDATOR.Check
+//     path where manifest load fails; the PLUGIN_ENTRY_VALIDATOR.Check
 //     is structurally unreachable because MARKETPLACE_VALIDATOR embeds the same
 //     PLUGIN_ENTRY_SCHEMA -- the outer check always catches it first) ───────────
 
 test("manifest-load-fail: manifest with invalid entry name type -> notifyError on direct path", async () => {
   // When loadMarketplaceManifest throws (MARKETPLACE_VALIDATOR rejects an
   // entry with name=number), the error propagates out of preflightUpdate
-  // and is caught by the direct path's catch at lines 232-239 -> notifyError.
-  // Lines 374-379 (PLUGIN_ENTRY_VALIDATOR.Check) are structurally
+  // and is caught by the direct path's catch -> notifyError.
+  // The PLUGIN_ENTRY_VALIDATOR.Check is structurally
   // unreachable: MARKETPLACE_VALIDATOR uses the same PLUGIN_ENTRY_SCHEMA, so
   // any entry that passes MARKETPLACE_VALIDATOR also passes PLUGIN_ENTRY_VALIDATOR.
   await withHermeticHome(async () => {
@@ -4109,7 +4109,7 @@ test("prepare-handles-fail: MCP collision aborts partial handles, outcome=failed
   });
 });
 
-// ─── bare form: enumerates both user and project scopes (lines 816-819) ───────
+// ─── bare form: enumerates both user and project scopes ───────────────────────
 
 test("bare-form both-scopes: changed plugins render marketplace groups in presentation order", async () => {
   await withHermeticHome(async () => {
@@ -4169,7 +4169,7 @@ test("bare-form both-scopes: changed plugins render marketplace groups in presen
         },
       });
 
-      // bare form with no explicit scope -> enumerates both scopes (lines 816-819)
+      // bare form with no explicit scope -> enumerates both scopes
       const { ctx, run, notifications } = makeCtx();
       await updatePlugins({
         ctx,
@@ -4499,7 +4499,7 @@ test("swapState-mp-gone: marketplace removed via gitOps.fetch side-effect -> gra
   });
 });
 
-// ─── swapStateRecord: plugin concurrently uninstalled (lines 511-514) ─────────
+// ─── swapStateRecord: plugin concurrently uninstalled ──────────────────────────
 
 test("swapState-plugin-gone: plugin removed from state between enumerateTargets and preflight -> error (not installed)", async () => {
   // gitOps.fetch removes the plugin record from state.json after
@@ -4674,13 +4674,13 @@ test("swapState-version-advanced: version advanced during fetch -> update runs a
   });
 });
 
-// ─── phase 3a commands commit failure (lines 618-619) ─────────────────────────
+// ─── phase 3a commands commit failure ──────────────────────────────────────────
 
 test("phase3a-commands-fail: command target occupied by directory -> phase3aFailures includes commands", async () => {
   // commitPreparedCommands calls rename(stagedFile.md, targetFile.md).
   // On Linux, rename(regular_file, existing_directory) fails with EISDIR.
   // Pre-creating the command target path as a DIRECTORY forces this error.
-  // This exercises lines 618-619 in runThreePhaseUpdate's phase 3a aggregation.
+  // This exercises runThreePhaseUpdate's phase 3a aggregation.
   //
   // We also pre-create the skills target as a FILE (as in the PUP-6 test) to
   // force skills commit failure too, ensuring the phase3aFailures array has
@@ -4751,13 +4751,13 @@ test("phase3a-commands-fail: command target occupied by directory -> phase3aFail
   });
 });
 
-// ─── phase 3a agents commit failure (lines 631-632) ──────────────────────────
+// ─── phase 3a agents commit failure ──────────────────────────────────────────
 
 test("phase3a-agents-fail: agent target path is a directory -> commitPreparedAgents throws", async () => {
   // commitPreparedAgents calls rename(stagedFile.md, targetFile.md) for each
   // agent. On Linux, rename(regular_file, existing_directory) fails with
   // EISDIR. Pre-creating the agent target path as a DIRECTORY forces this.
-  // This exercises lines 631-632 in runThreePhaseUpdate's phase 3a aggregation.
+  // This exercises runThreePhaseUpdate's phase 3a aggregation.
   //
   // Also pre-create the skills obstacle so the test also verifies that
   // phase 3a continues across multiple bridge failures (D-03 discipline).

@@ -97,8 +97,10 @@ import { createGitOpsFake } from "../../../platform/git-ops-fake.ts";
 import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
 import { setGitHubBaseUrl } from "../../../shared/github-base-url-environment.ts";
 import { runWithNothingLoaded } from "../../../shared/notification-run-seeds.ts";
-import { createMachineNotificationBoundary } from "../../notification-boundary.ts";
-import { createNotificationBoundary } from "../../notification-boundary.ts";
+import {
+  createMachineNotificationBoundary,
+  createNotificationBoundary,
+} from "../../notification-boundary.ts";
 
 import type { EdgeDeps } from "../../../../extensions/pi-claude-marketplace/edge/types.ts";
 import type { Scope } from "../../../../extensions/pi-claude-marketplace/shared/types.ts";

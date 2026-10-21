@@ -65,7 +65,7 @@ import type { NotificationRun } from "../../extensions/pi-claude-marketplace/sha
 
 // ---------------------------------------------------------------------------
 // Hermetic harness -- mirrors the per-op orchestrator test idiom
-// (makeCtx + withHermeticHome). No seeded state -> the marketplace is absent in
+// (makeCtx + withHermeticEnvironment). No seeded state -> the marketplace is absent in
 // BOTH scopes, which drives every op onto the converged `{marketplace not added}` row.
 // ---------------------------------------------------------------------------
 
@@ -106,10 +106,6 @@ function makeCtx(): {
     },
   };
   return { ctx, notifications };
-}
-
-async function withHermeticHome<T>(fn: (env: { cwd: string }) => Promise<T>): Promise<T> {
-  return withHermeticEnvironment("xop-", ({ cwd }) => fn({ cwd }));
 }
 
 const NAME = "ghost-mp";
@@ -233,7 +229,7 @@ const INVOKERS: Record<string, Invoker> = {
 };
 
 async function captureOp(op: string, mode: "explicit" | "bare"): Promise<Emission> {
-  return withHermeticHome(async ({ cwd }) => {
+  return withHermeticEnvironment("xop-", async ({ cwd }) => {
     const { ctx, notifications } = makeCtx();
     const invoke = INVOKERS[op];
     assert.ok(invoke !== undefined, `no invoker registered for op "${op}"`);
@@ -304,10 +300,16 @@ for (const op of OPS_BARE) {
 }
 
 test("SC#1 cross-op convergence: the explicit-scope and bare canonical rows stay distinct byte forms", () => {
-  // act & assert
-  assert.notEqual(
-    CANONICAL_EXPLICIT,
-    CANONICAL_BARE,
+  // arrange
+  const canonicalRows = [CANONICAL_EXPLICIT, CANONICAL_BARE];
+
+  // act
+  const distinctRows = new Set(canonicalRows);
+
+  // assert
+  assert.strictEqual(
+    distinctRows.size,
+    canonicalRows.length,
     "explicit-scope and bare rows must remain distinct byte forms",
   );
 });

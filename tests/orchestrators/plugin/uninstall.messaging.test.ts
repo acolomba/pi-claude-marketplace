@@ -46,10 +46,10 @@ test("renders a complete cross-scope uninstalled transition row", () => {
   } as const satisfies ResolvedRow<PluginUninstalledMessage>;
 
   // act
-  const actual = composePluginLines(row, "user")[0]!.slice(2);
+  const renderedLine = composePluginLines(row, "user")[0]!.slice(2);
 
   // assert
-  assert.equal(actual, "○ alpha [project] v1.2.3 (uninstalled)");
+  assert.equal(renderedLine, "○ alpha [project] v1.2.3 (uninstalled)");
   assert.deepEqual(row, {
     status: "uninstalled",
     severity: "info",
@@ -81,10 +81,10 @@ test("renders a failed uninstall row without leaking its failure detail into the
   } as const satisfies ResolvedRow<PluginFailedMessage>;
 
   // act
-  const actual = composePluginLines(row, "user")[0]!.slice(2);
+  const renderedLine = composePluginLines(row, "user")[0]!.slice(2);
 
   // assert
-  assert.equal(actual, "⊘ beta v2.0.0 (failed) {permission denied, rollback partial}");
+  assert.equal(renderedLine, "⊘ beta v2.0.0 (failed) {permission denied, rollback partial}");
   assert.deepEqual(row, {
     status: "failed",
     severity: "error",

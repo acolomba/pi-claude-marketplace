@@ -119,7 +119,7 @@ test("SPLIT-01 baseline: every cast-read of autoupdate is in the allow-list", as
     }
   }
 
-  assert.deepEqual(
+  assert.deepStrictEqual(
     offenders,
     [],
     `SPLIT-01 baseline violation: a new cast-read of \`autoupdate\` appeared outside the allow-list:\n  ${offenders.join("\n  ")}\n  (the carved-out autoupdate field lives in claude-plugins.json now; new reads should go through loadMergedScopeConfig(loc).merged.marketplaces[name]?.entry.autoupdate. If you intentionally need a new cast read, add the file to ALLOWED_SPLIT_01_AUTOUPDATE_CAST_FILES above AND update the 'exactly N' sibling assertion in this file in the same commit. The allow-list MUST stay at size 0 for SPLIT-01 to remain closed.)`,
@@ -127,7 +127,7 @@ test("SPLIT-01 baseline: every cast-read of autoupdate is in the allow-list", as
 });
 
 test("SPLIT-01 whitelist: exactly 0 files may read autoupdate via Record<string,unknown> cast", () => {
-  assert.deepEqual([...ALLOWED_SPLIT_01_AUTOUPDATE_CAST_FILES].sort(), []);
+  assert.deepStrictEqual([...ALLOWED_SPLIT_01_AUTOUPDATE_CAST_FILES].sort(), []);
 });
 
 test("SPLIT-01 / WR-05: no orchestrator assigns `.autoupdate =` on a state record (assignment-form gate, allow-list empty)", async () => {
@@ -140,7 +140,7 @@ test("SPLIT-01 / WR-05: no orchestrator assigns `.autoupdate =` on a state recor
     }
   }
 
-  assert.deepEqual(
+  assert.deepStrictEqual(
     offenders,
     [],
     `SPLIT-01 / WR-05 violation: an assignment-form write of \`autoupdate\` appeared in an orchestrator:\n  ${offenders.join("\n  ")}\n  (autoupdate truth lives in claude-plugins.json; flips go through the config write-back helpers, never the state record. The D-13 scrub would strip the field again on the next load.)`,

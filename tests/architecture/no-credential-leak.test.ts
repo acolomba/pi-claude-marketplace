@@ -27,7 +27,7 @@ import {
   EXTENSION_ROOT_REL,
   PRESENTATION_SINK_TARGETS,
 } from "./gate-targets.ts";
-import { filesMatching, REPO_ROOT } from "./source-scan.ts";
+import { filesMatching, REPO_ROOT, stripComments } from "./source-scan.ts";
 
 import type { NotificationContext } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { NotificationPresentation } from "../../extensions/pi-claude-marketplace/shared/notification-present.ts";
@@ -132,10 +132,6 @@ const CREDENTIAL_CAPTURING_ORCHESTRATORS: ReadonlyArray<string> = [
   MARKETPLACE_ADD_FILE,
   MARKETPLACE_UPDATE_FILE,
 ];
-
-function stripComments(src: string): string {
-  return src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
-}
 
 /**
  * Finds every occurrence of `marker` (a global regex whose capture group 1

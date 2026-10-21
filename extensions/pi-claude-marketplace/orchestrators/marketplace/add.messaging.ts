@@ -6,13 +6,12 @@
 //
 // D-01 / MOD-01: each command owns the statuses, reasons, and policy map of its
 // own notifications. The shared spine in `shared/notify-context.ts` dispatches
-// HEADER line (`(added)` / `(failed) {<reason>}`) is rendered centrally by the
-// `renderMpHeader` seam that `notifyWithContext` -> `emitContextCascade` reuses,
-// so the header bytes stay byte-identical to the legacy path. Its `(added)` and
-// `(failed) {<reason>}` header forms carry no local status declaration and route
-// through the central header seam. The one child row `marketplace add` emits is
-// the `failed` row that carries the fetched-URL cause under the GitHub base
-// override (GHB-01), so `failed` is the only plugin status in the policy map.
+// them. The marketplace HEADER line (`(added)` / `(failed) {<reason>}`) is
+// rendered centrally by the `renderMpHeader` seam that `notifyWithContext` ->
+// `emitContextCascade` reuses, so its forms carry no local status declaration.
+// The one child row `marketplace add` emits is the `failed` row that carries the
+// fetched-URL cause under the GitHub base override (GHB-01), so `failed` is the
+// only plugin status in the policy map.
 
 import type { CommandContext } from "../../shared/notify-context.ts";
 

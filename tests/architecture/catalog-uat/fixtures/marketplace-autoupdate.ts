@@ -16,7 +16,7 @@ export const MARKETPLACE_AUTOUPDATE_FIXTURES: FixtureMap = {
     "enable-idempotent": {
       pi: piWithBothLoaded(),
       // Benign idempotent flip (`already autoupdate` in BENIGN_REASONS) ->
-      // INFO per UXG-02 / D-28-07 (no `expectedSeverity`); byte form unchanged.
+      // INFO per UXG-02 / D-28-07 (no `expectedSeverity`).
       message: {
         label: "Marketplace autoupdate",
         cardinality: "single",
@@ -73,7 +73,7 @@ export const MARKETPLACE_AUTOUPDATE_FIXTURES: FixtureMap = {
       },
     },
 
-    // ATTR-05 / S1 / D-48-C Shape 1: an explicit-scope flip of a name not
+    // ATTR-05 / D-48-C Shape 1: an explicit-scope flip of a name not
     // added in the requested scope routes to the standalone
     // `marketplace-not-added` `{marketplace not added}` variant carrying the
     // requested scope bracket.
@@ -87,7 +87,7 @@ export const MARKETPLACE_AUTOUPDATE_FIXTURES: FixtureMap = {
       },
     },
 
-    // ATTR-05 / S2 / AU-08: the bare form absent from both scopes routes to
+    // ATTR-05 / AU-08: the bare form absent from both scopes routes to
     // the SAME standalone variant with no scope.
     "autoupdate-missing-not-added-bare": {
       pi: piWithBothLoaded(),

@@ -2028,6 +2028,8 @@ test("AFILE-02: a plugin with MCP servers refuses an unparseable mcp-adapter.jso
       return true;
     },
   );
+
+  // assert
   assert.equal(await readFile(locations.mcpAdapterJsonPath, "utf8"), "{");
   assert.deepStrictEqual(capture.rollbackPartials, []);
 });
@@ -2068,6 +2070,8 @@ test("ANAME-03: an install whose two servers share one key refuses before any wr
       return true;
     },
   );
+
+  // assert
   await assert.rejects(stat(locations.mcpAdapterJsonPath), { code: "ENOENT" });
   assert.equal(seeded.state.marketplaces.marketplace?.plugins.empty, undefined);
 });

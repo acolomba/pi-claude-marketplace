@@ -74,6 +74,10 @@ function parseLine(line: string): RpcRecord | undefined {
   return isRecord(parsed) ? parsed : undefined;
 }
 
+/**
+ * A headless Pi in RPC mode. Start it with `PiProcess.start`, send requests
+ * one at a time with `request`, and release it with `stop`.
+ */
 export class PiProcess {
   private readonly child: PiChild;
   private pending: PendingRequest | undefined = undefined;

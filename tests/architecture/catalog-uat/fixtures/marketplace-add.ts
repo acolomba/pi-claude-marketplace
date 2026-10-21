@@ -52,7 +52,7 @@ export const MARKETPLACE_ADD_FIXTURES: FixtureMap = {
     // ATTR-07 / D-48-A: the five marketplace-add precondition reasons render on
     // the marketplace subject via the MpFailed.reasons brace. Post-manifest
     // failures carry the derived name; pre-manifest failures carry the raw
-    // source string (A2). All route to `error` severity (failed-bearing).
+    // source string. All route to `error` severity (failed-bearing).
     "add-duplicate-name": {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",

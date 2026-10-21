@@ -163,15 +163,9 @@ describe("marketplace manifest schema", () => {
 describe("loadMarketplaceManifest", () => {
   test("preserves a complete raw manifest by reference with key order and unknown fields", async (t) => {
     // arrange
-    const directory = await mkdtemp(path.join(tmpdir(), "marketplace-manifest-"));
-    t.after(async () => {
-      await rm(directory, { force: true, recursive: true });
-    });
-    const manifestPath = path.join(directory, "marketplace.json");
-    await writeFile(
-      manifestPath,
+    const manifestPath = await manifestFileWith(
+      t,
       '{"vendorRoot":{"enabled":true},"plugins":[{"vendorEntry":1,"source":"./broken","name":"broken","mcpServers":"./missing.mcp.json"},{"source":"./sibling","name":"sibling"}],"name":"marketplace","owner":{"name":"Owner"},"strict":false}',
-      "utf8",
     );
 
     // act
@@ -206,12 +200,7 @@ describe("loadMarketplaceManifest", () => {
 
   test("returns the smallest valid manifest", async (t) => {
     // arrange
-    const directory = await mkdtemp(path.join(tmpdir(), "marketplace-manifest-"));
-    t.after(async () => {
-      await rm(directory, { force: true, recursive: true });
-    });
-    const manifestPath = path.join(directory, "marketplace.json");
-    await writeFile(manifestPath, '{"name":"marketplace","plugins":[]}', "utf8");
+    const manifestPath = await manifestFileWith(t, '{"name":"marketplace","plugins":[]}');
 
     // act
     const marketplaceManifest = await loadMarketplaceManifest(manifestPath);
@@ -305,12 +294,7 @@ describe("loadMarketplaceManifest", () => {
 
   test("preserves a SyntaxError cause for malformed JSON", async (t) => {
     // arrange
-    const directory = await mkdtemp(path.join(tmpdir(), "marketplace-manifest-"));
-    t.after(async () => {
-      await rm(directory, { force: true, recursive: true });
-    });
-    const manifestPath = path.join(directory, "marketplace.json");
-    await writeFile(manifestPath, "{", "utf8");
+    const manifestPath = await manifestFileWith(t, "{");
     const syntaxErrorMessage =
       "Expected property name or '}' in JSON at position 1 (line 1 column 2)";
 
@@ -334,12 +318,7 @@ describe("loadMarketplaceManifest", () => {
 
   test("reports a root marketplace schema defect", async (t) => {
     // arrange
-    const directory = await mkdtemp(path.join(tmpdir(), "marketplace-manifest-"));
-    t.after(async () => {
-      await rm(directory, { force: true, recursive: true });
-    });
-    const manifestPath = path.join(directory, "marketplace.json");
-    await writeFile(manifestPath, '{"name":"marketplace"}', "utf8");
+    const manifestPath = await manifestFileWith(t, '{"name":"marketplace"}');
 
     // act & assert
     await assert.rejects(
@@ -359,15 +338,9 @@ describe("loadMarketplaceManifest", () => {
 
   test("reports a nested plugin schema defect", async (t) => {
     // arrange
-    const directory = await mkdtemp(path.join(tmpdir(), "marketplace-manifest-"));
-    t.after(async () => {
-      await rm(directory, { force: true, recursive: true });
-    });
-    const manifestPath = path.join(directory, "marketplace.json");
-    await writeFile(
-      manifestPath,
+    const manifestPath = await manifestFileWith(
+      t,
       '{"name":"marketplace","plugins":[{"name":"plugin","source":"./plugin","defaultEnabled":"false"}]}',
-      "utf8",
     );
 
     // act & assert
@@ -388,11 +361,7 @@ describe("loadMarketplaceManifest", () => {
 
   test("preserves filesystem error fields for a missing file", async (t) => {
     // arrange
-    const directory = await mkdtemp(path.join(tmpdir(), "marketplace-manifest-"));
-    t.after(async () => {
-      await rm(directory, { force: true, recursive: true });
-    });
-    const manifestPath = path.join(directory, "missing.json");
+    const manifestPath = path.join(path.dirname(await manifestFileWith(t, "{}")), "missing.json");
 
     // act & assert
     await assert.rejects(

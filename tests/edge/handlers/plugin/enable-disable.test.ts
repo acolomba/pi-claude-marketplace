@@ -19,8 +19,7 @@
 // write, and every rejecting case reads the whole footprint back unchanged
 // beside `verifyBoundary()`.
 //
-// Measured counts, taken against the real module through a counting proxy before
-// a case was written:
+// Boundary reads:
 //   * a rejection reads `ctx.ui` once and `ctx.cwd` never -- `notifyUsageError`
 //     writes straight to the channel;
 //   * a delegating command reads `ctx.ui` once and `ctx.cwd` once;
@@ -61,8 +60,10 @@ import { makeEnableDisableHandler } from "../../../../extensions/pi-claude-marke
 import { InvalidGitHubBaseUrlError } from "../../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
 import { runWithNothingLoaded } from "../../../shared/notification-run-seeds.ts";
-import { createMachineNotificationBoundary } from "../../notification-boundary.ts";
-import { createNotificationBoundary } from "../../notification-boundary.ts";
+import {
+  createMachineNotificationBoundary,
+  createNotificationBoundary,
+} from "../../notification-boundary.ts";
 import {
   buildInstalledPluginRecord,
   materializeMarketplaceTree,

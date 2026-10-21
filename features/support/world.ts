@@ -202,7 +202,7 @@ export class ScenarioWorld extends World {
     for (const release of this.releases.splice(0).reverse()) {
       try {
         await release();
-      } catch (error) {
+      } catch (error: unknown) {
         errors.push(error);
       }
     }

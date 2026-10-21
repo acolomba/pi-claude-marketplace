@@ -89,10 +89,8 @@ function ensureMarketplacePaths(
  * Subsequent loads (after `claude-plugins.json` has been materialized) see
  * the config file and scrub.
  *
- * D-13 is implemented via Mechanism A (existsSync-gated). The alternative
- * (Mechanism B: pre-read legacy autoupdate via a separate entry point) is
- * documented in research as equally valid; Mechanism A is the simpler
- * diff and the locked choice.
+ * D-13 gates the scrub on the config file's existence rather than on a
+ * separate entry point that pre-reads the legacy `autoupdate` field.
  */
 function ensureNoLegacyAutoupdate(mp: Record<string, unknown>): boolean {
   if (mp.autoupdate === undefined) {

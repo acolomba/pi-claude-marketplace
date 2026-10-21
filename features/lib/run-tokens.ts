@@ -2,9 +2,10 @@
  * @fileoverview The brace tokens that stand for run-specific values in scenarios.
  *
  * A scenario cannot know where the sandbox lives, where the git host listens,
- * or when it runs, so it writes those values as tokens. A typed command has each token expanded to its
- * value, and a result value is projected back to the token by exact
- * substring, so only that exact value reads as the token (D-03).
+ * or when it runs, so it writes those values as tokens. A typed command has
+ * each token expanded to its value, and a result value is projected back to
+ * the token by exact substring, so only that exact value reads as the token
+ * (D-03).
  * `{scenario time}` stands for any timestamp inside the scenario's window,
  * from the world's construction to the check (D-05).
  */

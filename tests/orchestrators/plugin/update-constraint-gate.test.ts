@@ -1030,10 +1030,10 @@ describe("admitResolvedVersion", () => {
     const verdict = admits("^1.0.0", []);
 
     // act
-    const result = admitResolvedVersion(verdict, "1.4.2");
+    const admission = admitResolvedVersion(verdict, "1.4.2");
 
     // assert
-    assert.deepStrictEqual(result, { kind: "admitted" });
+    assert.deepStrictEqual(admission, { kind: "admitted" });
   });
 
   test("UPDT-02: the out-of-range hold names only the rejecting dependents", () => {
@@ -1045,12 +1045,12 @@ describe("admitResolvedVersion", () => {
     const verdict = admits("<=1.5.0", holders);
 
     // act
-    const result = admitResolvedVersion(verdict, "1.6.0");
+    const admission = admitResolvedVersion(verdict, "1.6.0");
 
     // assert
-    assert.ok(result.kind === "held");
+    assert.ok(admission.kind === "held");
     assert.strictEqual(
-      result.cause,
+      admission.cause,
       'version 1.6.0 falls outside what the combined range admits (<=1.5.0) -- required by "a@mp"',
     );
   });
@@ -1063,10 +1063,10 @@ describe("admitResolvedVersion", () => {
     const verdict = admits("<=1.5.0", holders);
 
     // act
-    const result = admitResolvedVersion(verdict, "1.5.0");
+    const admission = admitResolvedVersion(verdict, "1.5.0");
 
     // assert
-    assert.deepStrictEqual(result, { kind: "admitted" });
+    assert.deepStrictEqual(admission, { kind: "admitted" });
   });
 
   test("UPDT-02: an exclusive upper bound holds the boundary version", () => {
@@ -1077,10 +1077,10 @@ describe("admitResolvedVersion", () => {
     const verdict = admits("<1.5.0", holders);
 
     // act
-    const result = admitResolvedVersion(verdict, "1.5.0");
+    const admission = admitResolvedVersion(verdict, "1.5.0");
 
     // assert
-    assert.strictEqual(result.kind, "held");
+    assert.strictEqual(admission.kind, "held");
   });
 
   test("UPDT-02: a holder that declared no range is left off the held line", () => {
@@ -1094,12 +1094,12 @@ describe("admitResolvedVersion", () => {
     const verdict = admits("<=1.5.0", holders);
 
     // act
-    const result = admitResolvedVersion(verdict, "1.6.0");
+    const admission = admitResolvedVersion(verdict, "1.6.0");
 
     // assert
-    assert.ok(result.kind === "held");
+    assert.ok(admission.kind === "held");
     assert.strictEqual(
-      result.cause,
+      admission.cause,
       'version 1.6.0 falls outside what the combined range admits (<=1.5.0) -- required by "a@mp"',
     );
   });

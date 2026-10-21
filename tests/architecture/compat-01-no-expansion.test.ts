@@ -467,31 +467,39 @@ test("COMPAT-01: every row glyph constant holds its inherited code point", () =>
 
   // act
   const glyphs = {
-    ICON_AVAILABLE: composePluginLines(
-      { status: "available", name: "alpha", reasons: [] },
-      "user",
-    )[0]!.slice(2, 3),
-    ICON_DISABLED: composePluginLines(
-      { status: "disabled", name: "alpha", reasons: [], severity: "info", needsReload: false },
-      "user",
-    )[0]!.slice(2, 3),
-    ICON_INSTALLED: composePluginLines(
-      { status: "installed", name: "alpha", reasons: [], severity: "info", needsReload: false },
-      "user",
-    )[0]!.slice(2, 3),
-    ICON_PARTIALLY_INSTALLED: composePluginLines(
-      { status: "partially-installed", name: "alpha", reasons: [] },
-      "user",
-    )[0]!.slice(2, 3),
-    ICON_UNINSTALLABLE: composePluginLines(
-      { status: "unavailable", name: "alpha", reasons: [] },
-      "user",
-    )[0]!.slice(2, 3),
+    ICON_AVAILABLE: firstRow(
+      composePluginLines({ status: "available", name: "alpha", reasons: [] }, "user"),
+    ).slice(2, 3),
+    ICON_DISABLED: firstRow(
+      composePluginLines(
+        { status: "disabled", name: "alpha", reasons: [], severity: "info", needsReload: false },
+        "user",
+      ),
+    ).slice(2, 3),
+    ICON_INSTALLED: firstRow(
+      composePluginLines(
+        { status: "installed", name: "alpha", reasons: [], severity: "info", needsReload: false },
+        "user",
+      ),
+    ).slice(2, 3),
+    ICON_PARTIALLY_INSTALLED: firstRow(
+      composePluginLines({ status: "partially-installed", name: "alpha", reasons: [] }, "user"),
+    ).slice(2, 3),
+    ICON_UNINSTALLABLE: firstRow(
+      composePluginLines({ status: "unavailable", name: "alpha", reasons: [] }, "user"),
+    ).slice(2, 3),
   };
 
   // assert
   assert.deepStrictEqual(glyphs, expected, "COMPAT-01: every row glyph keeps its named code point");
 });
+
+/** The first rendered row of a plugin, which the glyph clauses read the glyph from. */
+function firstRow(rows: readonly string[]): string {
+  const row = rows[0];
+  assert.ok(row !== undefined, "COMPAT-01: the plugin rendered no row.");
+  return row;
+}
 
 /** The unresolved `info` message one status renders, with no optional field set. */
 function infoMessageFor(status: "remote" | "partially-available"): PluginInfoMessage {
@@ -516,14 +524,18 @@ test("COMPAT-01: the two module-private glyphs reach the output on their own row
 
   // act
   const rows = [
-    composePluginLines(
-      { status: "remote", name: "alpha", version: "1.0.0", reasons: [] },
-      "user",
-    )[0]!.slice(2),
-    composePluginLines(
-      { status: "partially-available", name: "alpha", version: "1.0.0", reasons: ["lsp"] },
-      "user",
-    )[0]!.slice(2),
+    firstRow(
+      composePluginLines(
+        { status: "remote", name: "alpha", version: "1.0.0", reasons: [] },
+        "user",
+      ),
+    ).slice(2),
+    firstRow(
+      composePluginLines(
+        { status: "partially-available", name: "alpha", version: "1.0.0", reasons: ["lsp"] },
+        "user",
+      ),
+    ).slice(2),
   ];
 
   // assert

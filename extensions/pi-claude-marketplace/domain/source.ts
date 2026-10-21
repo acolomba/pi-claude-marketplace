@@ -445,9 +445,11 @@ function parseShorthandHashRef(raw: string, hashIdx: number): ParsedSource {
   return ref.length > 0 ? { ...github, ref } : github;
 }
 
+/** Parses a manifest or user-supplied source into its `ParsedSource` variant; never throws. */
 export function parsePluginSource(raw: unknown): ParsedSource {
   if (typeof raw !== "string") {
     if (typeof raw === "object" && raw !== null && !Array.isArray(raw)) {
+      // A non-array object is a string-keyed record once its values are `unknown`.
       return parseObjectPluginSource(raw as Record<string, unknown>);
     }
 
@@ -701,6 +703,9 @@ export function githubSource(raw: string): GitHubSource {
   return parsed;
 }
 
+/** The outcome of comparing a stored source record with a planned source. */
+export type SamePlannedSourceResult = "same" | "different" | "unknown-stored";
+
 /**
  * Compare a stored source record against a planned raw source string for
  * semantic equality.
@@ -719,18 +724,16 @@ export function githubSource(raw: string): GitHubSource {
  *     source-mismatch.
  *
  * The tri-state union (vs `boolean | "unknown-stored"`) closes a
- * truthy-coercion footgun: under the prior shape a bare
- * `if (samePlannedSource(...))` silently treated `"unknown-stored"` (a
- * corrupt record) as a source match. With the literal union the compiler
- * forces every caller to switch on the discriminant explicitly.
+ * truthy-coercion footgun: a bare `if (samePlannedSource(...))` would treat
+ * `"unknown-stored"` (a corrupt record) as a source match. With the literal
+ * union the compiler forces every caller to switch on the discriminant
+ * explicitly.
  *
  * Used by `orchestrators/import/execute.ts` (existing import path) and
  * `orchestrators/reconcile/plan.ts` (the pure planner foundation).
  * Lives in `domain/source.ts` so both callers import a leaf-pure helper
  * without pulling in either orchestrator's effectful transitive closure.
  */
-export type SamePlannedSourceResult = "same" | "different" | "unknown-stored";
-
 export function samePlannedSource(stored: unknown, plannedRaw: string): SamePlannedSourceResult {
   const planned = parsePluginSource(plannedRaw);
   const current = parsePluginSource(stored);

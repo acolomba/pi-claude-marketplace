@@ -47,8 +47,10 @@ import { makeMarketplaceListHandler } from "../../../../extensions/pi-claude-mar
 import { locationsFor } from "../../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
 import { runWithNothingLoaded } from "../../../shared/notification-run-seeds.ts";
-import { createMachineNotificationBoundary } from "../../notification-boundary.ts";
-import { createNotificationBoundary } from "../../notification-boundary.ts";
+import {
+  createMachineNotificationBoundary,
+  createNotificationBoundary,
+} from "../../notification-boundary.ts";
 import { mergeMarketplaceIntoState } from "../marketplace-seed.ts";
 
 import type { Scope } from "../../../../extensions/pi-claude-marketplace/shared/types.ts";
@@ -234,10 +236,10 @@ test("list --scope project keeps base, local, and overridden entries with unchan
     value: cwd,
     reads: 1,
   });
-  const handler = makeMarketplaceListHandler();
+  const marketplaceListHandler = makeMarketplaceListHandler();
 
   // act
-  await handler("--scope project", ctx, runWithNothingLoaded());
+  await marketplaceListHandler("--scope project", ctx, runWithNothingLoaded());
 
   // assert
   assert.deepStrictEqual(notifications, [
@@ -261,10 +263,10 @@ test("list rejects unknown flags before reading state", async (t) => {
   const { cwd } = await createHermeticScope(t, "unknown-flag");
   await seedBothScopes(cwd);
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
-  const handler = makeMarketplaceListHandler();
+  const marketplaceListHandler = makeMarketplaceListHandler();
 
   // act
-  await handler("--bogus", ctx, runWithNothingLoaded());
+  await marketplaceListHandler("--bogus", ctx, runWithNothingLoaded());
 
   // assert
   assert.deepStrictEqual(notifications, [
@@ -308,7 +310,7 @@ for (const mode of ["json", "rpc"] as const) {
             severity: "error",
             needsReload: false,
             message,
-            usage: "Usage: /claude:plugin marketplace <list|ls> [--scope user|project]",
+            usage: USAGE,
           },
         },
       ]);

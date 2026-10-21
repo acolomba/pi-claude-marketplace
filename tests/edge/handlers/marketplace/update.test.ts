@@ -46,7 +46,7 @@
 //
 // Arity: the positional schema declares ONE optional entry, so zero and one
 // positional are both accepted and there is no count below the accepted range.
-// Surplus positionals and unknown flags now reject before a refresh; the shared
+// Surplus positionals and unknown flags reject before a refresh; the shared
 // schema validates the entire argument list.
 //
 // No exhaustiveness claim: the selection is an `if` over an optional value, not a
@@ -77,8 +77,10 @@ import { createCompletionCache } from "../../../../extensions/pi-claude-marketpl
 import { createGitOpsFake } from "../../../platform/git-ops-fake.ts";
 import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
 import { runWithNothingLoaded } from "../../../shared/notification-run-seeds.ts";
-import { createMachineNotificationBoundary } from "../../notification-boundary.ts";
-import { createNotificationBoundary } from "../../notification-boundary.ts";
+import {
+  createMachineNotificationBoundary,
+  createNotificationBoundary,
+} from "../../notification-boundary.ts";
 import { mergeMarketplaceIntoState, seedAutoupdateConfig } from "../marketplace-seed.ts";
 
 import type { EdgeDeps } from "../../../../extensions/pi-claude-marketplace/edge/types.ts";
@@ -318,39 +320,33 @@ test("updates every recorded marketplace in both scopes when no name is supplied
   verify(pluginUpdate);
 });
 
-for (const { args, label, arity } of [
-  { args: "alpha", label: "named", arity: "at the accepted arity" },
-]) {
-  test(`updates the named marketplace alone and leaves its siblings untouched ${arity}`, async (t) => {
-    // arrange
-    const { cwd, networkCallCount } = await createHermeticScope(t, label);
-    const clones = await seedThreeMarketplaces(cwd);
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
-      value: cwd,
-      reads: 1,
-    });
-    const git = createGitOpsFake({ boundary: "memory" });
-    const pluginUpdate = mock<PluginUpdate>({ exactParams: true, name: "plugin update" });
-    when(() => pluginUpdate("hello", "alpha", "project")).thenResolve(unchangedHello());
-    const marketplaceUpdateHandler = makeMarketplaceUpdateHandler({
-      completionCache: createCompletionCache(),
-      gitOps: git.gitOps,
-      beginPluginUpdateRun: () => pluginUpdate,
-    });
-
-    // act
-    await marketplaceUpdateHandler(args, ctx, runWithNothingLoaded());
-
-    // assert
-    assert.deepStrictEqual(notifications, [{ message: PROJECT_ALPHA_ROW }]);
-    assert.deepStrictEqual(git.state.calls.fetch.map(describeFetch), [
-      fetchOf(clones.projectAlpha),
-    ]);
-    assert.strictEqual(networkCallCount(), 0);
-    verifyBoundary();
-    verify(pluginUpdate);
+test("updates the named marketplace alone and leaves its siblings untouched", async (t) => {
+  // arrange
+  const { cwd, networkCallCount } = await createHermeticScope(t, "named");
+  const clones = await seedThreeMarketplaces(cwd);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
+    value: cwd,
+    reads: 1,
   });
-}
+  const git = createGitOpsFake({ boundary: "memory" });
+  const pluginUpdate = mock<PluginUpdate>({ exactParams: true, name: "plugin update" });
+  when(() => pluginUpdate("hello", "alpha", "project")).thenResolve(unchangedHello());
+  const marketplaceUpdateHandler = makeMarketplaceUpdateHandler({
+    completionCache: createCompletionCache(),
+    gitOps: git.gitOps,
+    beginPluginUpdateRun: () => pluginUpdate,
+  });
+
+  // act
+  await marketplaceUpdateHandler("alpha", ctx, runWithNothingLoaded());
+
+  // assert
+  assert.deepStrictEqual(notifications, [{ message: PROJECT_ALPHA_ROW }]);
+  assert.deepStrictEqual(git.state.calls.fetch.map(describeFetch), [fetchOf(clones.projectAlpha)]);
+  assert.strictEqual(networkCallCount(), 0);
+  verifyBoundary();
+  verify(pluginUpdate);
+});
 
 test("D-10-18: begins one cascade run per command and none when the handler is built", async (t) => {
   // arrange -- every other case injects a factory that returns the same
@@ -401,21 +397,26 @@ test("D-10-18: begins one cascade run per command and none when the handler is b
   verify(pluginUpdate);
 });
 
-for (const { emissions, rows, scope, touched } of [
+for (const { emissions, expectCascade, rows, scope, touched } of [
   {
     emissions: 1,
+    expectCascade: (): void => undefined,
     rows: [USER_ALPHA_ROW],
     scope: "user",
     touched: (clones: SeededClones): readonly string[] => [clones.userAlpha],
   },
   {
     emissions: 2,
+    expectCascade: (pluginUpdate: PluginUpdate): void => {
+      when(() => pluginUpdate("hello", "alpha", "project")).thenResolve(unchangedHello());
+    },
     rows: [PROJECT_ALPHA_ROW, PROJECT_BETA_ROW],
     scope: "project",
     touched: (clones: SeededClones): readonly string[] => [clones.projectAlpha, clones.projectBeta],
   },
 ] satisfies readonly {
   readonly emissions: number;
+  readonly expectCascade: (pluginUpdate: PluginUpdate) => void;
   readonly rows: readonly string[];
   readonly scope: Scope;
   readonly touched: (clones: SeededClones) => readonly string[];
@@ -430,10 +431,7 @@ for (const { emissions, rows, scope, touched } of [
     });
     const git = createGitOpsFake({ boundary: "memory" });
     const pluginUpdate = mock<PluginUpdate>({ exactParams: true, name: "plugin update" });
-    if (scope === "project") {
-      when(() => pluginUpdate("hello", "alpha", "project")).thenResolve(unchangedHello());
-    }
-
+    expectCascade(pluginUpdate);
     const marketplaceUpdateHandler = makeMarketplaceUpdateHandler({
       completionCache: createCompletionCache(),
       gitOps: git.gitOps,

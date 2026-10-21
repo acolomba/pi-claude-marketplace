@@ -971,5 +971,5 @@ Feature: Marketplace update
       | marketplace name | marketplace scope | marketplace status | id          | name  | status | reasons        | scope   | leaks | rollback partial | cause chain                                                                                                                                | cause truncated |
       | tools            | project           | failed             | tools@tools | tools | failed | source missing | project |       |                  | Failed to update marketplace "tools"., ENOENT: no such file or directory, open '{home}/marketplaces/tools/.claude-plugin/marketplace.json' | false           |
     Then the "claude-plugins.json" file of the project scope declares these marketplaces:
-      | name  | source                            |
-      | tools | {home}/marketplaces/tools         |
+      | name  | source                    |
+      | tools | {home}/marketplaces/tools |

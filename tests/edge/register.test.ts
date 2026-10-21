@@ -4,8 +4,8 @@
 //
 // Registration is not the behavior. Every callback this module hands to Pi is
 // captured off the recorded call and INVOKED, because a callback that is only
-// installed leaves its body unexecuted -- which is why the suggestion
-// pass-through and the file-completion trigger were unreached before.
+// installed leaves its body unexecuted. That covers the suggestion
+// pass-through and the file-completion trigger.
 //
 // Capturing a callback is the one place `It.willCapture` earns its keep: a
 // function argument cannot be compared structurally, so the expectation states

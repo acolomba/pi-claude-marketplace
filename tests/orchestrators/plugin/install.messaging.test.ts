@@ -557,13 +557,16 @@ describe("composeInstallFailureMessage", () => {
 
 describe("composePromotedRow", () => {
   test("D-04-07: composes an installed row carrying the promotion brace at info severity with no reload", () => {
-    // act
-    const row = composePromotedRow({
+    // arrange
+    const promotion = {
       plugin: "linter",
       version: "3.0.0",
       scope: "user",
       needsReload: false,
-    });
+    } satisfies Parameters<typeof composePromotedRow>[0];
+
+    // act
+    const row = composePromotedRow(promotion);
 
     // assert
     assert.deepStrictEqual(row, {
@@ -579,13 +582,16 @@ describe("composePromotedRow", () => {
   });
 
   test("D-04-07: stamps the reload hint the caller reports for a re-materialized record", () => {
-    // act
-    const row = composePromotedRow({
+    // arrange
+    const promotion = {
       plugin: "linter",
       version: "3.0.0",
       scope: "user",
       needsReload: true,
-    });
+    } satisfies Parameters<typeof composePromotedRow>[0];
+
+    // act
+    const row = composePromotedRow(promotion);
 
     // assert
     assert.deepStrictEqual(row, {
@@ -601,13 +607,16 @@ describe("composePromotedRow", () => {
   });
 
   test("D-04-07: carries the promotion brace both surfaces spell once", () => {
-    // act
-    const row = composePromotedRow({
+    // arrange
+    const promotion = {
       plugin: "linter",
       version: "3.0.0",
       scope: "user",
       needsReload: false,
-    });
+    } satisfies Parameters<typeof composePromotedRow>[0];
+
+    // act
+    const row = composePromotedRow(promotion);
 
     // assert: the very tuple import's promoted row reads, so the two surfaces
     // cannot drift apart in token set or order.
@@ -1048,16 +1057,19 @@ describe("classifyInstallFailure", () => {
 });
 
 test("INSTALL_CONTEXT declares complete row policies", () => {
-  // act
-  const policies = INSTALL_CONTEXT.rowPolicies;
-
-  // assert
-  assert.deepStrictEqual(policies, {
+  // arrange
+  const expectedPolicies = {
     installed: { markers: true, contentReasons: true },
     "partially-installed": { markers: true, contentReasons: true },
     failed: { markers: false, contentReasons: true },
     unavailable: { markers: false, contentReasons: true },
     "partially-available": { markers: false, contentReasons: true },
     disabled: { markers: false, contentReasons: true },
-  });
+  };
+
+  // act
+  const policies = INSTALL_CONTEXT.rowPolicies;
+
+  // assert
+  assert.deepStrictEqual(policies, expectedPolicies);
 });

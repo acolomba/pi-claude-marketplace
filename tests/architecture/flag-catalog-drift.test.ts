@@ -9,10 +9,11 @@
 // Four reconciliations:
 //
 //   (a) Completion consistency: the labels emitted by `getArgumentCompletions`
-//       for `<verb> -` -- every catalog verb (from the independent EXPECTED_CATALOG_VERBS inventory, so a
-//       new verb cannot be silently omitted) plus the `ls` alias -- with the
-//       global `--scope` excluded, MUST equal the catalog's complete=true
-//       names for that verb (exact set, sorted).
+//       for `<verb> -` -- every catalog verb (from the independent
+//       EXPECTED_CATALOG_VERBS inventory, so a new verb cannot be silently
+//       omitted) plus the `ls` alias -- with the global `--scope` excluded,
+//       MUST equal the catalog's complete=true names for that verb (exact
+//       set, sorted).
 //
 //   (b) Handler-accepted consistency: the catalog list parse-set MUST carry
 //       `--remote` (RSTA-07), and the info parse-set MUST carry `--fetch`
@@ -85,9 +86,9 @@ const EMPTY_RESOLVER: LocationsResolver = {
 };
 
 // Every independently declared catalog verb (the router inventory check below
-// detects any reachable command omitted here) plus the `ls` completion alias, which maps to the
-// `list` catalog key. The completion head is what the user types; the catalog
-// key is what governs its per-verb flags.
+// detects any reachable command omitted here). The completion heads below add
+// the `ls` aliases, which map to a catalog key: the head is what the user
+// types, the key is what governs its per-verb flags.
 const EXPECTED_CATALOG_VERBS = [
   "install",
   "update",
@@ -125,30 +126,37 @@ function sorted(values: Iterable<string>): string[] {
   return [...values].sort();
 }
 
-test("catalog vs completion: per-verb complete-set equals emitted labels (scope excluded)", async () => {
-  const completionCache = createCompletionCache();
-  for (const { head, verb } of COMPLETION_HEADS) {
+for (const { head, verb } of COMPLETION_HEADS) {
+  test(`catalog vs completion: "${head}" emitted labels equal the ${verb} complete-set (scope excluded)`, async () => {
+    // arrange
+    const completionCache = createCompletionCache();
+    const expectedLabels = sorted(completionFlagEntries(verb).map((entry) => entry.name));
+
+    // act
     const items = await getArgumentCompletions(`${head} -`, EMPTY_RESOLVER, completionCache);
+
+    // assert
     assert.ok(items !== null, `expected flag completions for "${head} -"`);
-
-    // Exclude the global `--scope` base flag from both sides.
-    const emitted = items.map((i) => i.label).filter((l) => l !== "--scope");
-    const catalogComplete = completionFlagEntries(verb).map((e) => e.name);
-
-    assert.deepStrictEqual(
-      sorted(emitted),
-      sorted(catalogComplete),
-      `Flag drift for "${head}": completion labels ${JSON.stringify(sorted(emitted))} != catalog complete-set ${JSON.stringify(sorted(catalogComplete))}. Update edge/flag-catalog.ts in the same change.`,
+    // The global `--scope` base flag is excluded from the emitted side.
+    const emittedLabels = sorted(
+      items.map((item) => item.label).filter((label) => label !== "--scope"),
     );
-  }
-});
+    assert.deepStrictEqual(
+      emittedLabels,
+      expectedLabels,
+      `Flag drift for "${head}": completion labels ${JSON.stringify(emittedLabels)} != catalog complete-set ${JSON.stringify(expectedLabels)}. Update edge/flag-catalog.ts in the same change.`,
+    );
+  });
+}
 
 test("catalog vs handler: RSTA-07 list carries --remote; FTCH-03 info carries --fetch", () => {
-  assert.ok(
-    parseFlagNames("list").has("--remote"),
-    "RSTA-07: list parse-set must include --remote",
-  );
-  assert.ok(parseFlagNames("info").has("--fetch"), "FTCH-03: info parse-set must include --fetch");
+  // act
+  const listFlags = parseFlagNames("list");
+  const infoFlags = parseFlagNames("info");
+
+  // assert
+  assert.ok(listFlags.has("--remote"), "RSTA-07: list parse-set must include --remote");
+  assert.ok(infoFlags.has("--fetch"), "FTCH-03: info parse-set must include --fetch");
 });
 
 // Reconciliation (c): the exact flags each handler accepts today. The
@@ -182,10 +190,6 @@ const HANDLER_ACCEPTED_PARSE_SETS: Record<CatalogVerb, readonly string[]> = {
   "marketplace noautoupdate": ["--local"],
 };
 
-function assertFlagSet(observed: Iterable<string>, expected: readonly string[]): void {
-  assert.deepStrictEqual(sorted(observed), expected);
-}
-
 for (const verb of EXPECTED_CATALOG_VERBS) {
   test(`catalog parse flags for ${verb} match the independent handler contract`, () => {
     // arrange
@@ -195,7 +199,7 @@ for (const verb of EXPECTED_CATALOG_VERBS) {
     const accepted = parseFlagNames(verb);
 
     // assert
-    assertFlagSet(accepted, expected);
+    assert.deepStrictEqual(sorted(accepted), expected);
   });
 }
 

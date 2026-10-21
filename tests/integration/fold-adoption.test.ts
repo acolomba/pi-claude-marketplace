@@ -137,9 +137,9 @@ async function seedPathMarketplaceFixture(
 }
 
 function captureLastSuccess(notifications: readonly NotifyRecord[]): string {
-  for (let i = notifications.length - 1; i >= 0; i -= 1) {
-    if (notifications[i]!.severity === undefined) {
-      return notifications[i]!.message;
+  for (const notification of [...notifications].reverse()) {
+    if (notification.severity === undefined) {
+      return notification.message;
     }
   }
 
@@ -149,10 +149,6 @@ function captureLastSuccess(notifications: readonly NotifyRecord[]): string {
     )}`,
   );
 }
-
-// ---------------------------------------------------------------------------
-// CMC-21 / D-13-17 step 1: orphan project plugin folds under user-scope header
-// ---------------------------------------------------------------------------
 
 test("CMC-21 / D-13-17 step 1: project-scope plugin installed from user-scope marketplace folds under the user-scope marketplace header on list", async () => {
   // arrange
@@ -209,7 +205,7 @@ test("CMC-21 / D-13-17 step 1: project-scope plugin installed from user-scope ma
     assert.ok(installOk, `install failed: ${JSON.stringify(installCtx.notifications)}`);
     assert.match(output, /● official \[user\]/);
     assert.match(output, /● alpha \[project\] v1\.0\.0 \(installed\)/);
-    assert.equal(
+    assert.strictEqual(
       output.includes("● official [project]"),
       false,
       `expected no project-scope official header in cloned-state phase: ${output}`,
@@ -219,26 +215,16 @@ test("CMC-21 / D-13-17 step 1: project-scope plugin installed from user-scope ma
   }
 });
 
-// ---------------------------------------------------------------------------
-// CMC-21 / D-13-17 step 2: adoption -- independent project-scope marketplace
-// ---------------------------------------------------------------------------
-
 test("CMC-21 / D-13-17 step 2: when an INDEPENDENT project-scope marketplace is added (different source), the renderer surfaces both blocks; no state mutation in marketplace-add required for adoption", async () => {
   // arrange
   const env = await setupHermeticEnv("pi-cm-fold-adopt-p2-");
   try {
-    // Seed two distinct marketplace fixtures with DIFFERENT names so
-    // addMarketplace can land them in separate scopes without colliding.
-    // The plan/catalog describes "adopting" the existing project plugin
-    // under a same-named project-scope marketplace; that flow throws
-    // MarketplaceDuplicateNameError in real conditions (the project state
-    // already carries the cloned `official-user` record from cross-scope
-    // install). The architecturally equivalent contract that exercises
-    // the adoption invariant -- "the renderer reflects whatever marketplace
-    // records exist; no state mutation in marketplace-add is required" --
-    // uses a DIFFERENT-named marketplace in project scope and demonstrates
-    // that the renderer surfaces both the orphan-fold (alpha under
-    // official-user [user]) AND the independent project-scope record.
+    // Two fixtures with different names land in separate scopes without
+    // colliding. A same-named project-scope marketplace would throw
+    // MarketplaceDuplicateNameError, because the cross-scope install already
+    // put the `official-user` record in project state. A different name
+    // still shows that the list reflects whatever records exist: the
+    // orphan-fold under official-user [user] and the independent record.
     const userOfficialRoot = await seedPathMarketplaceFixture(
       env.home,
       "official-user",
@@ -300,7 +286,7 @@ test("CMC-21 / D-13-17 step 2: when an INDEPENDENT project-scope marketplace is 
     assert.ok(installOk, `install failed: ${JSON.stringify(installCtx.notifications)}`);
     assert.match(beforeOutput, /● official-user \[user\]/);
     assert.match(beforeOutput, /● alpha \[project\] v1\.0\.0 \(installed\)/);
-    assert.equal(beforeOutput.includes("● official-user [project]"), false, beforeOutput);
+    assert.strictEqual(beforeOutput.includes("● official-user [project]"), false, beforeOutput);
     const addOk = projectAdd.notifications.some(
       (notification) =>
         notification.severity === undefined &&
@@ -311,24 +297,16 @@ test("CMC-21 / D-13-17 step 2: when an INDEPENDENT project-scope marketplace is 
       `independent project-scope marketplace add failed: ${JSON.stringify(projectAdd.notifications)}`,
     );
 
-    // The new project-scope `official-project`
-    // marketplace shows as its own block; because its manifest declares
-    // `alpha` AND alpha is not installed in project scope under THIS
-    // marketplace (it is installed under the cloned `official-user`
-    // record), the orchestrator buckets it as `(available)` under
-    // `official-project [project]`. The cross-scope cloned `official-user`
-    // block continues to render alpha [project] under official-user [user].
-    // The adoption invariant: NO state mutation was required; the
-    // renderer surfaces both blocks based on the current state.
-    //
-    // Catalog reference: lines 192-213 ("single marketplace, mixed plugin
-    // statuses") -- (available) rows OMIT the [<scope>] bracket per
-    // MSG-PL-6 carve-out.
+    // The project-scope `official-project` marketplace shows as its own
+    // block. Its manifest declares `alpha`, which is installed under the
+    // cloned `official-user` record, so the list buckets it as `(available)`
+    // under `official-project [project]`. The `official-user` block keeps
+    // alpha [project]. (available) rows omit the [<scope>] bracket (MSG-PL-6).
     assert.match(afterOutput, /● official-project \[project\]/);
     assert.match(afterOutput, /● official-project \[project\]\n {2}○ alpha v0\.9\.0 \(available\)/);
     assert.match(afterOutput, /● official-user \[user\]/);
     assert.match(afterOutput, /● alpha \[project\] v1\.0\.0 \(installed\)/);
-    assert.equal(
+    assert.strictEqual(
       /● official-user \[user\][\s\S]*○ alpha v1\.0\.0 \(available\)/.test(afterOutput),
       false,
       `unexpected duplicate available row under official-user [user]: ${afterOutput}`,

@@ -219,8 +219,11 @@ test("OUT-08: Reason is the closed 77-entry reason set", () => {
   // No changelog of past counts lives here. Git holds that history, a comment is
   // not a gate, and a count restated far from this assertion is a claim nothing
   // turns red for.
-  // act & assert
-  assert.strictEqual(Object.keys(REASON_ENROLLMENT).length, 77);
+  // act
+  const memberCount = Object.keys(REASON_ENROLLMENT).length;
+
+  // assert
+  assert.strictEqual(memberCount, 77);
 });
 
 test("SNM-02: StatusToken is the closed 24-entry token set", () => {
@@ -229,8 +232,11 @@ test("SNM-02: StatusToken is the closed 24-entry token set", () => {
   // `will install`, not a token.
   // USTAT-02 / D-64-01: `partially-available` is the not-installed render token.
   // RSTA-01 / D-80-06: `remote` is the not-installed git-source token.
-  // act & assert
-  assert.strictEqual(Object.keys(STATUS_TOKEN_ENROLLMENT).length, 24);
+  // act
+  const memberCount = Object.keys(STATUS_TOKEN_ENROLLMENT).length;
+
+  // assert
+  assert.strictEqual(memberCount, 24);
 });
 
 test("SNM-02: PluginStatus is the closed 19-entry plugin-status set", () => {
@@ -240,23 +246,35 @@ test("SNM-02: PluginStatus is the closed 19-entry plugin-status set", () => {
   // `PluginInfoRowBase.status` derives via `Extract<PluginStatus, "partially-available">`.
   // RSTA-01 / D-80-06: `remote` belongs to `PluginStatus` because the info surface
   // renders `(remote)` via `Extract<PluginStatus, "remote">`.
-  // act & assert
-  assert.strictEqual(Object.keys(PLUGIN_STATUS_ENROLLMENT).length, 19);
+  // act
+  const memberCount = Object.keys(PLUGIN_STATUS_ENROLLMENT).length;
+
+  // assert
+  assert.strictEqual(memberCount, 19);
 });
 
 test("SNM-02: MarketplaceStatus is the closed 7-entry marketplace-status set", () => {
-  // act & assert
-  assert.strictEqual(Object.keys(MARKETPLACE_STATUS_ENROLLMENT).length, 7);
+  // act
+  const memberCount = Object.keys(MARKETPLACE_STATUS_ENROLLMENT).length;
+
+  // assert
+  assert.strictEqual(memberCount, 7);
 });
 
 test("ASTAT-02: McpServerStatus is the closed 10-entry MCP server status set", () => {
-  // act & assert
-  assert.strictEqual(Object.keys(MCP_SERVER_STATUS_ENROLLMENT).length, 10);
+  // act
+  const memberCount = Object.keys(MCP_SERVER_STATUS_ENROLLMENT).length;
+
+  // assert
+  assert.strictEqual(memberCount, 10);
 });
 
 test("standalone notification kinds include scoped prune outcomes exactly", () => {
-  // act & assert
-  assert.strictEqual(Object.keys(NOTIFICATION_KIND_ENROLLMENT).length, 10);
+  // act
+  const memberCount = Object.keys(NOTIFICATION_KIND_ENROLLMENT).length;
+
+  // assert
+  assert.strictEqual(memberCount, 10);
 });
 
 /**

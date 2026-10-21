@@ -5,8 +5,7 @@
 // global scope flag. It opens with the shared `withParsedArgs` prelude over
 // `parseArgs`, then runs its own scan over the recovered positional tokens.
 //
-// Which parser a module calls decides its arity and flag answers, so all of the
-// following were measured against the real module before a case was written:
+// Which parser a module calls decides its arity and flag answers, so the following holds:
 //   * ZERO and ONE marketplace positional are both accepted, and TWO or THREE
 //     are rejected. There is no arity one BELOW the accepted range, so only the
 //     surplus half of the arity obligation has a target here. One empty or
@@ -59,8 +58,7 @@
 // stated `cwd`, so a workflow that did run reads an unstated boundary member and
 // dies where it happens.
 //
-// Measured boundary counts, taken through a counting context before a case was
-// written, because the two paths disagree:
+// Boundary reads, which differ between the two paths:
 //   * a rejection reads `ctx.ui` once and `ctx.cwd` never -- `notifyUsageError`
 //     writes straight to the channel;
 //   * a delegating command reads `ctx.ui` once and `ctx.cwd` once, on every
@@ -107,8 +105,10 @@ import { SCOPE_TARGET_FLAG } from "../../../../extensions/pi-claude-marketplace/
 import { makeListHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/list.ts";
 import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
 import { runWithNothingLoaded } from "../../../shared/notification-run-seeds.ts";
-import { createMachineNotificationBoundary } from "../../notification-boundary.ts";
-import { createNotificationBoundary } from "../../notification-boundary.ts";
+import {
+  createMachineNotificationBoundary,
+  createNotificationBoundary,
+} from "../../notification-boundary.ts";
 import { buildInstalledPluginRecord, mergeMarketplaceIntoState } from "../marketplace-seed.ts";
 
 import type { Scope } from "../../../../extensions/pi-claude-marketplace/shared/types.ts";

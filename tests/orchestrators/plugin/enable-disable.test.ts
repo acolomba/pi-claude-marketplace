@@ -4544,16 +4544,10 @@ test("Y3: standalone overload still returns | undefined -- typecheck pin", async
   });
 });
 
-test("T1 / PR #51: orchestrated mode enable-success returns { status: 'enabled', name, version } with ZERO notify calls -- pinned alongside the load-time apply-cascade T1 test in apply.test.ts", async () => {
-  // Before T1 only the disable / idempotent-enable / not-added orchestrated
-  // outcomes had explicit tests at :665, :724, :753. The enable-success
-  // outcome (the `enabled` arm of EnableDisablePluginOutcome at
-  // enable-disable.ts:115) was exercised only via the standalone CR-01
-  // fresh-enable at :340, never through the orchestrated notifications
-  // mode the reconcile apply-cascade actually uses. This pins the
-  // contract: a fresh enable against a disabled record returns the typed
-  // outcome (with the version pin preserved) and fires ZERO notifications
-  // (the apply-cascade is the sole projection seam in orchestrated mode).
+test("orchestrated mode enable-success returns { status: 'enabled', name, version } with zero notify calls", async () => {
+  // A fresh enable against a disabled record returns the typed outcome with
+  // the version pin preserved and fires no notifications: the reconcile
+  // apply-cascade is the sole projection seam in orchestrated mode.
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
     await seedRealDisabledMarketplace(home, {

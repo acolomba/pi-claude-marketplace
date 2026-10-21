@@ -58,8 +58,10 @@ import { makeMarketplaceInfoHandler } from "../../../../extensions/pi-claude-mar
 import { locationsFor } from "../../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
 import { runWithNothingLoaded } from "../../../shared/notification-run-seeds.ts";
-import { createMachineNotificationBoundary } from "../../notification-boundary.ts";
-import { createNotificationBoundary } from "../../notification-boundary.ts";
+import {
+  createMachineNotificationBoundary,
+  createNotificationBoundary,
+} from "../../notification-boundary.ts";
 import { mergeMarketplaceIntoState } from "../marketplace-seed.ts";
 
 import type { Scope } from "../../../../extensions/pi-claude-marketplace/shared/types.ts";
@@ -287,10 +289,10 @@ for (const { name, autoupdate } of [
       value: cwd,
       reads: 1,
     });
-    const handler = makeMarketplaceInfoHandler();
+    const infoHandler = makeMarketplaceInfoHandler();
 
     // act
-    await handler(`${name} --scope project`, ctx, runWithNothingLoaded());
+    await infoHandler(`${name} --scope project`, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -350,7 +352,7 @@ for (const mode of ["json", "rpc"] as const) {
             severity: "error",
             needsReload: false,
             message,
-            usage: "Usage: /claude:plugin marketplace info <name> [--scope user|project]",
+            usage: INFO_USAGE,
           },
         },
       ]);

@@ -110,6 +110,7 @@ import type { Scope } from "../../shared/types.ts";
 export type AutoupdateNotifications =
   { readonly mode: "standalone" } | { readonly mode: "orchestrated" };
 
+/** Inputs to `setMarketplaceAutoupdate`: the notification context, target marketplace, and desired flag. */
 export interface AutoupdateOptions {
   readonly ctx: NotificationContext;
   /**

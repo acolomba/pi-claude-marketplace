@@ -666,7 +666,7 @@ for (const mode of ["json", "rpc"] as const) {
   test(`JOUT-01: every catalog tuple reaches ${mode} transport exactly once`, () => {
     // arrange
     const capture = createJsonCapture();
-    const emittedKeys: string[] = [];
+    const emitted: { key: string; payloads: unknown[] }[] = [];
     const ctx: NotificationContext = {
       mode,
       get ui() {
@@ -684,20 +684,25 @@ for (const mode of ["json", "rpc"] as const) {
         notify(ctx, run, catalogMessage(presented.section, presented.fixture));
       }
 
-      capture.assertValid();
-      assert.deepStrictEqual(
-        capture.entries.slice(start).map(({ payload }) => {
-          assert.ok(PAYLOAD_VALIDATOR.Check(payload));
-          return payload.origin;
-        }),
-        [presented.origin],
-      );
-      emittedKeys.push(
-        ...capture.entries.slice(start).map(() => tupleKey(presented.section, presented.state)),
-      );
+      emitted.push({
+        key: tupleKey(presented.section, presented.state),
+        payloads: capture.entries.slice(start).map(({ payload }) => payload),
+      });
     }
 
     // assert
+    capture.assertValid();
+    for (const [index, { payloads }] of emitted.entries()) {
+      assert.deepStrictEqual(
+        payloads.map((payload) => {
+          assert.ok(PAYLOAD_VALIDATOR.Check(payload));
+          return payload.origin;
+        }),
+        [CATALOG_PRESENTED[index]?.origin],
+      );
+    }
+
+    const emittedKeys = emitted.flatMap(({ key, payloads }) => payloads.map(() => key));
     assert.deepStrictEqual(emittedKeys, tupleKeys(EXAMPLES));
     assert.strictEqual(new Set(emittedKeys).size, 290);
     assert.deepStrictEqual(

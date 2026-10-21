@@ -39,8 +39,10 @@ import {
   openMarketplaceCommand,
 } from "../../../../extensions/pi-claude-marketplace/edge/handlers/marketplace/shared.ts";
 import { runWithAllLoaded, runWithNothingLoaded } from "../../../shared/notification-run-seeds.ts";
-import { createMachineNotificationBoundary } from "../../notification-boundary.ts";
-import { createNotificationBoundary } from "../../notification-boundary.ts";
+import {
+  createMachineNotificationBoundary,
+  createNotificationBoundary,
+} from "../../notification-boundary.ts";
 
 type MarketplaceOperation = Parameters<typeof makeSingleNameMarketplaceHandler>[1];
 type MarketplaceOperationOptions = Parameters<MarketplaceOperation>[0];
@@ -472,43 +474,46 @@ describe("openMarketplaceCommand", () => {
     ]);
     verifyBoundary();
   });
-});
 
-for (const mode of ["json", "rpc"] as const) {
-  for (const { args, message } of [
-    { args: "--scope bad", message: 'Invalid --scope value: "bad". Must be "user" or "project".' },
-    { args: "--bogus", message: 'Unknown flag: "--bogus".' },
-    { args: "", message: "Missing required argument." },
-  ]) {
-    test(`appends marketplace parse rejection for ${args} in ${mode}`, () => {
-      // arrange
-      const { ctx, run, capture, verifyBoundary } = createMachineNotificationBoundary(mode);
+  for (const mode of ["json", "rpc"] as const) {
+    for (const { args, message } of [
+      {
+        args: "--scope bad",
+        message: 'Invalid --scope value: "bad". Must be "user" or "project".',
+      },
+      { args: "--bogus", message: 'Unknown flag: "--bogus".' },
+      { args: "", message: "Missing required argument." },
+    ]) {
+      test(`appends marketplace parse rejection for ${args} in ${mode}`, () => {
+        // arrange
+        const { ctx, run, capture, verifyBoundary } = createMachineNotificationBoundary(mode);
 
-      // act
-      const parsed = openMarketplaceCommand(args, ctx, run, {
-        usage: "Usage: marketplace name",
-        positionalName: "name",
-        positionalLabel: "Marketplace name",
-      });
+        // act
+        const parsed = openMarketplaceCommand(args, ctx, run, {
+          usage: "Usage: marketplace name",
+          positionalName: "name",
+          positionalLabel: "Marketplace name",
+        });
 
-      // assert
-      assert.strictEqual(parsed, undefined);
-      assert.deepStrictEqual(capture.entries, [
-        {
-          customType: "claude-plugin",
-          payload: {
-            schemaVersion: 1,
-            origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
-            kind: "usage-error",
-            severity: "error",
-            needsReload: false,
-            message,
-            usage: "Usage: marketplace name",
+        // assert
+        assert.strictEqual(parsed, undefined);
+        assert.deepStrictEqual(capture.entries, [
+          {
+            customType: "claude-plugin",
+            payload: {
+              schemaVersion: 1,
+              origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+              kind: "usage-error",
+              severity: "error",
+              needsReload: false,
+              message,
+              usage: "Usage: marketplace name",
+            },
           },
-        },
-      ]);
-      capture.assertValid();
-      verifyBoundary();
-    });
+        ]);
+        capture.assertValid();
+        verifyBoundary();
+      });
+    }
   }
-}
+});

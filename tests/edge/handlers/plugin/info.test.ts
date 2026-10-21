@@ -7,8 +7,7 @@
 //
 // Which parser this module calls decides its arity and flag answers, and this
 // one reaches `parseArgs` through `withParsedArgs` and never calls
-// `extractLocalFlag`. Measured consequences, taken against the real module
-// before a case was written:
+// `extractLocalFlag`. Consequences:
 //   * exactly one non-flag positional is accepted; zero IS rejected and two or
 //     three ARE rejected, both by the handler's own `!== 1` count guard and
 //     both with the same sentence;
@@ -31,8 +30,7 @@
 // `verifyBoundary()`: this read-only surface writes nothing at any time, so an
 // unchanged-tree assertion would pass whether or not the workflow ran.
 //
-// Measured boundary counts, taken through a counting context before a case was
-// written, because the two emission paths disagree:
+// Boundary reads, which differ between the two emission paths:
 //   * a rejection reads `ctx.ui` once and `ctx.cwd` never -- `notifyUsageError`
 //     writes straight to the channel;
 //   * a delegating command reads `ctx.ui` once and `ctx.cwd` once.
@@ -78,8 +76,10 @@ import { makePluginInfoHandler } from "../../../../extensions/pi-claude-marketpl
 import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
 import { noStatusSnapshot } from "../../../platform/mcp-status-seed.ts";
 import { runWithNothingLoaded } from "../../../shared/notification-run-seeds.ts";
-import { createMachineNotificationBoundary } from "../../notification-boundary.ts";
-import { createNotificationBoundary } from "../../notification-boundary.ts";
+import {
+  createMachineNotificationBoundary,
+  createNotificationBoundary,
+} from "../../notification-boundary.ts";
 import { mergeMarketplaceIntoState } from "../marketplace-seed.ts";
 
 import type { Scope } from "../../../../extensions/pi-claude-marketplace/shared/types.ts";

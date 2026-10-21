@@ -169,7 +169,7 @@ async function listRepositories(root: string): Promise<string[]> {
 function servedPath(requestPath: string, origin: string): string | undefined {
   try {
     return decodeURIComponent(new URL(requestPath, origin).pathname);
-  } catch (_error: unknown) {
+  } catch {
     return undefined;
   }
 }
@@ -259,6 +259,11 @@ function answerServerError(logged: LoggedRequest, res: ServerResponse): void {
   res.end();
 }
 
+/**
+ * The loopback HTTPS git host. Start one with `HttpsGitHost.start()`, publish
+ * bare repositories at `repositoryPath()`, and call `reset()` between
+ * scenarios and `close()` at the end of the run.
+ */
 export class HttpsGitHost {
   /** The `127.0.0.1:<port>` the host listens on. */
   readonly address: string;
@@ -469,7 +474,7 @@ export class HttpsGitHost {
       );
       logged.status = response.status;
       writeResponse(res, response);
-    } catch (_error: unknown) {
+    } catch {
       answerServerError(logged, res);
     }
   }

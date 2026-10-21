@@ -366,10 +366,13 @@ test("PluginBrowser :: shows a scroll position once the marketplaces outrun one 
 });
 
 test("PluginBrowser :: invalidate delegates to the underlying container without throwing", () => {
+  // arrange
   const browser = makeBrowser(
     () => undefined,
     () => undefined,
   );
+
+  // act & assert
   assert.doesNotThrow(() => {
     browser.invalidate();
   });
@@ -378,17 +381,23 @@ test("PluginBrowser :: invalidate delegates to the underlying container without 
 // ─── screen-transition tests ───────────────────────────────────────────────
 
 test("PluginBrowser :: opens on the marketplaces screen with title + entries", () => {
+  // arrange
   const browser = makeBrowser(
     () => undefined,
     () => undefined,
   );
-  const out = rendered(browser);
-  assert.ok(out.includes("Browse Claude Plugin Marketplaces"), out);
-  assert.ok(out.includes("official"), out);
-  assert.ok(out.includes("team-plugins"), out);
+
+  // act
+  const screen = rendered(browser);
+
+  // assert
+  assert.ok(screen.includes("Browse Claude Plugin Marketplaces"), screen);
+  assert.ok(screen.includes("official"), screen);
+  assert.ok(screen.includes("team-plugins"), screen);
 });
 
 test("PluginBrowser :: marketplaces -> plugins -> actions -> esc back to plugins -> esc back to marketplaces -> esc cancel", async () => {
+  // arrange
   let cancelled = false;
   const browser = makeBrowser(
     () => undefined,
@@ -397,69 +406,61 @@ test("PluginBrowser :: marketplaces -> plugins -> actions -> esc back to plugins
     },
   );
 
-  // marketplaces -> plugins (first marketplace = official)
+  // act
   browser.handleInput(ENTER);
   await flush();
-  let out = rendered(browser);
-  assert.ok(out.includes("Plugins in official"), out);
-  assert.ok(out.includes("installed-plug"), out);
-
-  // plugins -> actions (first plugin = installed-plug)
+  const pluginsScreen = rendered(browser);
   browser.handleInput(ENTER);
-  out = rendered(browser);
-  assert.ok(out.includes("Action: installed-plug @ official"), out);
-  // installed family offers Uninstall, Disable, Info
-  assert.ok(out.includes("Uninstall"), out);
-  assert.ok(out.includes("Disable"), out);
-  assert.ok(out.includes("Info"), out);
-
-  // esc: actions -> plugins
+  const actionsScreen = rendered(browser);
   browser.handleInput(ESC);
-  out = rendered(browser);
-  assert.ok(out.includes("Plugins in official"), out);
-
-  // esc: plugins -> marketplaces
+  const backToPluginsScreen = rendered(browser);
   browser.handleInput(ESC);
-  out = rendered(browser);
-  assert.ok(out.includes("Browse Claude Plugin Marketplaces"), out);
-
-  // esc: marketplaces -> cancel
+  const backToMarketplacesScreen = rendered(browser);
   browser.handleInput(ESC);
+
+  // assert
+  assert.ok(pluginsScreen.includes("Plugins in official"), pluginsScreen);
+  assert.ok(pluginsScreen.includes("installed-plug"), pluginsScreen);
+  assert.ok(actionsScreen.includes("Action: installed-plug @ official"), actionsScreen);
+  assert.ok(actionsScreen.includes("Uninstall"), actionsScreen);
+  assert.ok(actionsScreen.includes("Disable"), actionsScreen);
+  assert.ok(actionsScreen.includes("Info"), actionsScreen);
+  assert.ok(backToPluginsScreen.includes("Plugins in official"), backToPluginsScreen);
+  assert.ok(
+    backToMarketplacesScreen.includes("Browse Claude Plugin Marketplaces"),
+    backToMarketplacesScreen,
+  );
   assert.strictEqual(cancelled, true);
 });
 
 test("PluginBrowser :: available plugin offers Install -> Scope screen -> Project local (Recommended) commits project scope with local:true", async () => {
+  // arrange
   let picked: PickerResult | null = null;
   const browser = makeBrowser(
-    (r) => {
-      picked = r;
+    (selection) => {
+      picked = selection;
     },
     () => undefined,
   );
 
-  // open official
+  // act
   browser.handleInput(ENTER);
   await flush();
-
-  // move to the second plugin (avail-plug, status "available")
   browser.handleInput(DOWN);
   browser.handleInput(ENTER);
-  let out = rendered(browser);
-  assert.ok(out.includes("Action: avail-plug @ official"), out);
-  // available offers Install first
-  assert.ok(out.includes("Install"), out);
-  assert.ok(!out.includes("Uninstall"), out);
-
-  // select Install -> opens scope screen
+  const actionsScreen = rendered(browser);
   browser.handleInput(ENTER);
-  out = rendered(browser);
-  assert.ok(out.includes("Install avail-plug @ official: Select Scope"), out);
-  assert.ok(out.includes("Project local (Recommended)"), out);
-  assert.ok(out.includes("Project"), out);
-  assert.ok(out.includes("User (global)"), out);
-
-  // commit first item: Project local (Recommended)
+  const scopeScreen = rendered(browser);
   browser.handleInput(ENTER);
+
+  // assert
+  assert.ok(actionsScreen.includes("Action: avail-plug @ official"), actionsScreen);
+  assert.ok(actionsScreen.includes("Install"), actionsScreen);
+  assert.ok(!actionsScreen.includes("Uninstall"), actionsScreen);
+  assert.ok(scopeScreen.includes("Install avail-plug @ official: Select Scope"), scopeScreen);
+  assert.ok(scopeScreen.includes("Project local (Recommended)"), scopeScreen);
+  assert.ok(scopeScreen.includes("Project"), scopeScreen);
+  assert.ok(scopeScreen.includes("User (global)"), scopeScreen);
   assert.deepStrictEqual(picked, {
     action: "install",
     plugin: "avail-plug",
@@ -470,30 +471,27 @@ test("PluginBrowser :: available plugin offers Install -> Scope screen -> Projec
 });
 
 test("PluginBrowser :: available plugin offers Install -> Scope screen -> Project commits project scope without local", async () => {
+  // arrange
   let picked: PickerResult | null = null;
   const browser = makeBrowser(
-    (r) => {
-      picked = r;
+    (selection) => {
+      picked = selection;
     },
     () => undefined,
   );
 
-  // open official
+  // act
   browser.handleInput(ENTER);
   await flush();
-
-  // move to the second plugin (avail-plug, status "available")
+  browser.handleInput(DOWN);
+  browser.handleInput(ENTER);
+  browser.handleInput(ENTER);
+  const scopeScreen = rendered(browser);
   browser.handleInput(DOWN);
   browser.handleInput(ENTER);
 
-  // select Install -> opens scope screen
-  browser.handleInput(ENTER);
-  const out = rendered(browser);
-  assert.ok(out.includes("Install avail-plug @ official: Select Scope"), out);
-
-  // down to second item: Project
-  browser.handleInput(DOWN);
-  browser.handleInput(ENTER);
+  // assert
+  assert.ok(scopeScreen.includes("Install avail-plug @ official: Select Scope"), scopeScreen);
   assert.deepStrictEqual(picked, {
     action: "install",
     plugin: "avail-plug",
@@ -503,29 +501,26 @@ test("PluginBrowser :: available plugin offers Install -> Scope screen -> Projec
 });
 
 test("PluginBrowser :: available plugin offers Install -> Scope screen -> User (global) commits user scope", async () => {
+  // arrange
   let picked: PickerResult | null = null;
   const browser = makeBrowser(
-    (r) => {
-      picked = r;
+    (selection) => {
+      picked = selection;
     },
     () => undefined,
   );
 
-  // open official
+  // act
   browser.handleInput(ENTER);
   await flush();
-
-  // move to the second plugin (avail-plug, status "available")
   browser.handleInput(DOWN);
   browser.handleInput(ENTER);
-
-  // select Install -> opens scope screen
   browser.handleInput(ENTER);
-
-  // down twice to third item: User (global)
   browser.handleInput(DOWN);
   browser.handleInput(DOWN);
   browser.handleInput(ENTER);
+
+  // assert
   assert.deepStrictEqual(picked, {
     action: "install",
     plugin: "avail-plug",
@@ -577,50 +572,52 @@ test("PluginBrowser :: scope screen names the config each choice installs into",
 });
 
 test("PluginBrowser :: scope screen esc returns to actions screen", async () => {
+  // arrange
   const browser = makeBrowser(
     () => undefined,
     () => undefined,
   );
 
-  // open official -> avail-plug -> install -> scope screen
+  // act
   browser.handleInput(ENTER);
   await flush();
   browser.handleInput(DOWN);
   browser.handleInput(ENTER);
   browser.handleInput(ENTER);
-  let out = rendered(browser);
-  assert.ok(out.includes("Select Scope"), out);
-
-  // esc back to actions
+  const scopeScreen = rendered(browser);
   browser.handleInput(ESC);
-  out = rendered(browser);
-  assert.ok(out.includes("Action: avail-plug @ official"), out);
+  const actionsScreen = rendered(browser);
+
+  // assert
+  assert.ok(scopeScreen.includes("Select Scope"), scopeScreen);
+  assert.ok(actionsScreen.includes("Action: avail-plug @ official"), actionsScreen);
 });
 
 test("PluginBrowser :: disabled plugin offers Enable; committing fires onSelect with action enable", async () => {
+  // arrange
   let picked: PickerResult | null = null;
   const browser = makeBrowser(
-    (r) => {
-      picked = r;
+    (selection) => {
+      picked = selection;
     },
     () => undefined,
   );
 
+  // act
   browser.handleInput(ENTER);
   await flush();
-
-  // installed-plug (0), avail-plug (1), unavail-plug (2), disabled-plug (3)
   browser.handleInput(DOWN);
   browser.handleInput(DOWN);
   browser.handleInput(DOWN);
   browser.handleInput(ENTER);
-  const out = rendered(browser);
-  assert.ok(out.includes("Action: disabled-plug @ official"), out);
-  assert.ok(out.includes("Enable"), out);
-  assert.ok(!out.includes("Install"), out);
-  assert.ok(!out.includes("Uninstall"), out);
-
+  const actionsScreen = rendered(browser);
   browser.handleInput(ENTER);
+
+  // assert
+  assert.ok(actionsScreen.includes("Action: disabled-plug @ official"), actionsScreen);
+  assert.ok(actionsScreen.includes("Enable"), actionsScreen);
+  assert.ok(!actionsScreen.includes("Install"), actionsScreen);
+  assert.ok(!actionsScreen.includes("Uninstall"), actionsScreen);
   assert.deepStrictEqual(picked, {
     action: "enable",
     plugin: "disabled-plug",
@@ -630,27 +627,29 @@ test("PluginBrowser :: disabled plugin offers Enable; committing fires onSelect 
 });
 
 test("PluginBrowser :: empty marketplace renders the (no plugins) placeholder", async () => {
+  // arrange
   const browser = makeBrowser(
     () => undefined,
     () => undefined,
   );
 
-  // down to the second marketplace (team-plugins, 0 plugins) then enter
+  // act
   browser.handleInput(DOWN);
   browser.handleInput(ENTER);
   await flush();
-  const out = rendered(browser);
-  assert.ok(out.includes("Plugins in team-plugins"), out);
-  assert.ok(out.includes("(no plugins)"), out);
-
-  // While this.list is null on the empty screen, non-escape key is a no-op
+  const emptyScreen = rendered(browser);
   browser.handleInput(DOWN);
-  // Pressing escape returns to the marketplaces screen
   browser.handleInput(ESC);
-  assert.ok(rendered(browser).includes("Browse Claude Plugin Marketplaces"));
+  const backScreen = rendered(browser);
+
+  // assert
+  assert.ok(emptyScreen.includes("Plugins in team-plugins"), emptyScreen);
+  assert.ok(emptyScreen.includes("(no plugins)"), emptyScreen);
+  assert.ok(backScreen.includes("Browse Claude Plugin Marketplaces"), backScreen);
 });
 
 test("PluginBrowser :: pluginLoader rejection renders the failure hint", async () => {
+  // arrange
   const browser = new PluginBrowser({
     tui: noopTui(),
     theme: identityTheme(),
@@ -661,14 +660,18 @@ test("PluginBrowser :: pluginLoader rejection renders the failure hint", async (
     onCancel: () => undefined,
   });
 
+  // act
   browser.handleInput(ENTER);
   await flush();
-  const out = rendered(browser);
-  assert.ok(out.includes("Failed to load plugins"), out);
-  assert.ok(out.includes("esc to go back"), out);
+  const screen = rendered(browser);
+
+  // assert
+  assert.ok(screen.includes("Failed to load plugins"), screen);
+  assert.ok(screen.includes("esc to go back"), screen);
 });
 
 test("PluginBrowser :: same-name marketplaces across scopes open their respective scope", async () => {
+  // arrange
   const sameNameMarketplaces: readonly MarketplaceEntry[] = [
     {
       name: "community",
@@ -683,7 +686,6 @@ test("PluginBrowser :: same-name marketplaces across scopes open their respectiv
       source: "github:project/community",
     },
   ];
-
   const browser = new PluginBrowser({
     tui: noopTui(),
     theme: identityTheme(),
@@ -700,22 +702,23 @@ test("PluginBrowser :: same-name marketplaces across scopes open their respectiv
     onCancel: () => undefined,
   });
 
-  // Down to second marketplace (project scope) and Enter
+  // act
   browser.handleInput(DOWN);
   browser.handleInput(ENTER);
   await flush();
+  const screen = rendered(browser);
 
-  const out = rendered(browser);
-  assert.ok(out.includes("Plugins in community [project]"), out);
-  assert.ok(out.includes("project-plug"), out);
+  // assert
+  assert.ok(screen.includes("Plugins in community [project]"), screen);
+  assert.ok(screen.includes("project-plug"), screen);
 });
 
 test("PluginBrowser :: stale load race is cancelled when user navigates back to marketplaces", async () => {
+  // arrange
   let resolveSlowLoad!: (rows: readonly PluginNotificationMessage[]) => void;
   const slowLoadPromise = new Promise<readonly PluginNotificationMessage[]>((resolve) => {
     resolveSlowLoad = resolve;
   });
-
   const browser = new PluginBrowser({
     tui: noopTui(),
     theme: identityTheme(),
@@ -725,17 +728,11 @@ test("PluginBrowser :: stale load race is cancelled when user navigates back to 
     onCancel: () => undefined,
   });
 
-  // Open official marketplace (triggers slow load)
+  // act
   browser.handleInput(ENTER);
-  let out = rendered(browser);
-  assert.ok(out.includes("loading…"), out);
-
-  // User presses Esc to cancel and return to marketplaces
+  const loadingScreen = rendered(browser);
   browser.handleInput(ESC);
-  out = rendered(browser);
-  assert.ok(out.includes("Browse Claude Plugin Marketplaces"), out);
-
-  // Now the slow load resolves
+  const backScreen = rendered(browser);
   resolveSlowLoad([
     {
       status: "available",
@@ -743,19 +740,21 @@ test("PluginBrowser :: stale load race is cancelled when user navigates back to 
     },
   ]);
   await flush();
+  const settledScreen = rendered(browser);
 
-  // Screen must remain on marketplaces, not clobbered by late plugins
-  out = rendered(browser);
-  assert.ok(out.includes("Browse Claude Plugin Marketplaces"), out);
-  assert.ok(!out.includes("late-plug"), out);
+  // assert
+  assert.ok(loadingScreen.includes("loading…"), loadingScreen);
+  assert.ok(backScreen.includes("Browse Claude Plugin Marketplaces"), backScreen);
+  assert.ok(settledScreen.includes("Browse Claude Plugin Marketplaces"), settledScreen);
+  assert.ok(!settledScreen.includes("late-plug"), settledScreen);
 });
 
 test("PluginBrowser :: stale load failure is cancelled when user navigates back to marketplaces", async () => {
+  // arrange
   let rejectSlowLoad!: (err: Error) => void;
   const slowLoadPromise = new Promise<readonly PluginNotificationMessage[]>((_resolve, reject) => {
     rejectSlowLoad = reject;
   });
-
   const browser = new PluginBrowser({
     tui: noopTui(),
     theme: identityTheme(),
@@ -765,38 +764,35 @@ test("PluginBrowser :: stale load failure is cancelled when user navigates back 
     onCancel: () => undefined,
   });
 
-  // Open official marketplace (triggers slow load)
+  // act
   browser.handleInput(ENTER);
-  let out = rendered(browser);
-  assert.ok(out.includes("loading…"), out);
-
-  // User presses Esc to cancel and return to marketplaces
+  const loadingScreen = rendered(browser);
   browser.handleInput(ESC);
-  out = rendered(browser);
-  assert.ok(out.includes("Browse Claude Plugin Marketplaces"), out);
-
-  // Now the slow load rejects
+  const backScreen = rendered(browser);
   rejectSlowLoad(new Error("late failure"));
   await flush();
+  const settledScreen = rendered(browser);
 
-  // Screen must remain on marketplaces, not clobbered by failure hint
-  out = rendered(browser);
-  assert.ok(out.includes("Browse Claude Plugin Marketplaces"), out);
-  assert.ok(!out.includes("Failed to load plugins"), out);
+  // assert
+  assert.ok(loadingScreen.includes("loading…"), loadingScreen);
+  assert.ok(backScreen.includes("Browse Claude Plugin Marketplaces"), backScreen);
+  assert.ok(settledScreen.includes("Browse Claude Plugin Marketplaces"), settledScreen);
+  assert.ok(!settledScreen.includes("Failed to load plugins"), settledScreen);
 });
 
 test("PluginBrowser :: non-install action preserves row-level scope on cross-scope installed row", async () => {
+  // arrange
   let picked: PickerResult | null = null;
   const browser = new PluginBrowser({
     tui: noopTui(),
     theme: identityTheme(),
-    marketplaces, // official is user scope
+    marketplaces,
     pluginLoader: (): Promise<readonly PluginNotificationMessage[]> => {
       return Promise.resolve([
         {
           status: "installed",
           name: "cross-scope-plug",
-          scope: "project", // installed in project scope
+          scope: "project",
           version: "1.0.0",
           dependencies: [],
           severity: "info",
@@ -804,20 +800,19 @@ test("PluginBrowser :: non-install action preserves row-level scope on cross-sco
         },
       ]);
     },
-    onSelect: (r) => {
-      picked = r;
+    onSelect: (selection) => {
+      picked = selection;
     },
     onCancel: () => undefined,
   });
 
-  // Open official
+  // act
   browser.handleInput(ENTER);
   await flush();
-  // Open actions for cross-scope-plug
   browser.handleInput(ENTER);
-  // First action is uninstall
   browser.handleInput(ENTER);
 
+  // assert
   assert.deepStrictEqual(picked, {
     action: "uninstall",
     plugin: "cross-scope-plug",

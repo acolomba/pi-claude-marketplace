@@ -420,6 +420,7 @@ export class PluginBrowser {
     }));
     const list = new SelectList(items, Math.min(items.length, MAX_VISIBLE), this.listTheme());
     list.onSelect = (item) => {
+      // Every item value above comes from `availableActions`.
       const action = item.value as PickerAction;
       if (action === "install") {
         this.showInstallScope(mp, plugin);

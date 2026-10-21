@@ -179,6 +179,7 @@ export type AddMarketplaceOutcome =
       readonly cause: string;
     };
 
+/** Inputs to `addMarketplace`: the notification context, scope, source, and injected ports. */
 export interface AddMarketplaceOptions {
   readonly ctx: NotificationContext;
   /**
