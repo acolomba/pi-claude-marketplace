@@ -73,7 +73,7 @@ A scope (user or project) has two layers: shared (`claude-plugins.json`) and loc
 - [x] **ADD-08**: Refused source forms (`http://`, `ssh://`, `git@host:...`, GitHub `/tree/` URLs, `https://github.com/o`, a bare word, `a/b/c`, `~other/...`) fail as `unsupported source`, and the stand-in receives no request
 - [x] **ADD-09**: A url clone answered with 404 fails as `source missing`
 - [x] **ADD-10**: A url clone answered with 5xx fails as `network error`, with a cause line that names the HTTP status and the fetched URL; one whose connection drops fails as `network unreachable`
-- [ ] **ADD-11**: A clone answered with 401 and no stored credential fails as `authentication required`; with a stored credential in the sandbox, it succeeds (url, gh)
+- [x] **ADD-11**: A clone answered with 401 and no stored credential fails as `authentication required`; with a stored credential in the sandbox, it succeeds (url, gh)
 - [x] **ADD-12**: A removed git marketplace can be added again from the same source (url, gh)
 - [x] **ADD-13**: `add --local` writes the declaration to `claude-plugins.local.json`, and `remove --local` clears it
 - [x] **ADD-14**: `add ~/...` keeps the `~` form and resolves it against HOME
@@ -123,7 +123,7 @@ A scope (user or project) has two layers: shared (`claude-plugins.json`) and loc
 - [x] **UPD-09**: Updating a name the scope lacks fails as `marketplace not added`, with and without `--scope`
 - [x] **UPD-10**: A path marketplace whose manifest became invalid fails with an `invalid manifest` row
 - [x] **UPD-11**: A git marketplace whose host answers 5xx or 404 fails as `network error`, with a cause line that names the HTTP status and the fetched URL; one whose connection drops fails as `network unreachable`
-- [ ] **UPD-12**: A git marketplace whose host now answers 401 fails as `authentication required`, with the cause line naming `git credential approve` for that host (url, gh)
+- [x] **UPD-12**: A git marketplace whose host now answers 401 fails as `authentication required`, with the cause line naming `git credential approve` for that host (url, gh)
 - [x] **UPD-13**: With autoupdate on, an installed plugin the refreshed manifest dropped is skipped as `not in manifest`, with warning severity
 - [x] **UPD-14**: A path marketplace whose directory vanished fails as `source missing`
 
@@ -214,7 +214,7 @@ A scope (user or project) has two layers: shared (`claude-plugins.json`) and loc
 | ADD-08 | Phase 9 | Complete |
 | ADD-09 | Phase 9 | Complete |
 | ADD-10 | Phase 9 | Complete |
-| ADD-11 | Phase 10 | Pending |
+| ADD-11 | Phase 10 | Complete |
 | ADD-12 | Phase 9 | Complete |
 | ADD-13 | Phase 3 | Complete |
 | ADD-14 | Phase 3 | Complete |
@@ -252,7 +252,7 @@ A scope (user or project) has two layers: shared (`claude-plugins.json`) and loc
 | UPD-09 | Phase 6 | Complete |
 | UPD-10 | Phase 6 | Complete |
 | UPD-11 | Phase 9 | Complete |
-| UPD-12 | Phase 10 | Pending |
+| UPD-12 | Phase 10 | Complete |
 | UPD-13 | Phase 6 | Complete |
 | UPD-14 | Phase 6 | Complete |
 | AU-01 | Phase 7 | Complete |
