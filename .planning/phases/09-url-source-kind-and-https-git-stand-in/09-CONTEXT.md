@@ -136,10 +136,18 @@ and the suite close (Phase 10).
 - **D-19 (user):** A failed url add's child row id reads `<url>@<url>`
   (03.2 review IN-04). Fix it in this phase, test-first: the scenario fails
   on today's id, then passes on the corrected one. Research or planning
-  determines the correct id from the row grammar the other failed-add rows
-  use; it changes the JSON payload of failed git adds, so it gets a CHANGELOG
-  line and updates any catalog entry or unit test that pins the old id. —
+  changes the JSON payload of failed git adds, so it gets a CHANGELOG line
+  and updates any catalog entry or unit test that pins the old id. —
   **Reversibility:** costly — it changes the published payload's row id.
+  - **Scope (user, after pattern mapping):** only the child row of a failed
+    git (url) add. The same `<name>@<name>` id on other marketplace-level
+    failure rows (`tools@tools`, from `marketplaceFailureRows`, pinned in
+    remove, update, info, and file-source-update scenarios; 03.2 review IN-04,
+    WINDOWS #98) stays pinned in this phase and is filed to BACKLOG.
+  - **Shape (user):** the id is bare, with no `@`: the row names no plugin. For
+    a failed add it is the source as typed (the row's name), for example
+    `id: https://{git host}/acme/tools.git`. The fix must not change the id of
+    plugin rows or of the other marketplace-level failure rows.
 
 ### Pinned as they are (carried forward, not re-asked)
 
