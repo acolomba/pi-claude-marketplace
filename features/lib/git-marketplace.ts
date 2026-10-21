@@ -4,7 +4,7 @@
  * A git marketplace holds the same files as the dir fixture, committed in a
  * work tree and published into a bare repository that the git host serves.
  * A later change to the work tree reaches the host as a new pushed commit.
- * The url kind publishes this way, and the github kind will share it.
+ * The url and github kinds both publish this way.
  */
 
 import { mkdir } from "node:fs/promises";

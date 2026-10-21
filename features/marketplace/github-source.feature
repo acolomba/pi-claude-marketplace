@@ -1,0 +1,23 @@
+Feature: Marketplace github source
+
+  A github source is an owner/repo shorthand or a github.com URL. The scenarios
+  point the GitHub base override at a loopback https git host, so Pi clones
+  every GitHub source from it, and the host records every request it receives.
+
+  Scenario: Adding a github marketplace clones it from the git host
+    Given the marketplace "tools" is published as a github source
+    When the user runs "/claude:plugin marketplace add acme/tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these marketplaces:
+      | name  | scope   | status |
+      | tools | project | added  |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name  | source     |
+      | tools | acme/tools |
+    Then the git host receives these requests:
+      | method | path                                              | status |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |

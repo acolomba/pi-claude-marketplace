@@ -1,7 +1,8 @@
 /**
  * @fileoverview Checks that every git environment the suite builds is made from
  * scratch, so no inherited `GIT_*` variable reaches Pi, the git host, or a
- * fixture (DRV-03).
+ * fixture (DRV-03). Pi gets the run's GitHub base override, never the
+ * shell's (GHB-01).
  */
 
 import assert from "node:assert/strict";
@@ -13,17 +14,18 @@ import { rpcChildEnvironment } from "../e2e/_rpc.ts";
 import type { RpcGitEnvironment, RpcSandbox } from "../e2e/_rpc.ts";
 import type { TestContext } from "node:test";
 
-const INHERITED_GIT_VARIABLES = {
+const INHERITED_VARIABLES = {
   GIT_DIR: "/shell/repo/.git",
   GIT_INDEX_FILE: "/shell/repo/.git/index",
   GIT_CONFIG_SYSTEM: "/shell/etc/gitconfig",
   GIT_CONFIG_GLOBAL: "/shell/home/.gitconfig",
   GIT_ASKPASS: "/shell/bin/askpass",
+  PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL: "https://operator.example/git",
 } as const;
 
-/** Sets the inherited git variables in `process.env` until the case `t` ends. */
-function inheritGitVariables(t: TestContext): void {
-  const saved = Object.keys(INHERITED_GIT_VARIABLES).map((name) => ({
+/** Sets the inherited variables in `process.env` until the case `t` ends. */
+function inheritVariables(t: TestContext): void {
+  const saved = Object.keys(INHERITED_VARIABLES).map((name) => ({
     name,
     existed: Object.hasOwn(process.env, name),
     value: process.env[name],
@@ -37,7 +39,7 @@ function inheritGitVariables(t: TestContext): void {
       }
     }
   });
-  Object.assign(process.env, INHERITED_GIT_VARIABLES);
+  Object.assign(process.env, INHERITED_VARIABLES);
 }
 
 const sandbox = {
@@ -49,7 +51,7 @@ const sandbox = {
 describe("hermeticGitEnvironment", () => {
   test("returns its eight keys and no inherited git variable", (t) => {
     // arrange
-    inheritGitVariables(t);
+    inheritVariables(t);
 
     // act
     const environment = hermeticGitEnvironment("/scratch/home");
@@ -69,13 +71,14 @@ describe("hermeticGitEnvironment", () => {
 });
 
 describe("rpcChildEnvironment", () => {
-  test("adds the three git keys to the allowlist and no inherited git variable", (t) => {
+  test("adds the three git keys and the run's GitHub base override, and no inherited variable", (t) => {
     // arrange
-    inheritGitVariables(t);
+    inheritVariables(t);
     const git = {
       NODE_EXTRA_CA_CERTS: "/run/cert.pem",
       GIT_CONFIG_NOSYSTEM: "1",
       GIT_CONFIG_GLOBAL: "/sandbox/home/.gitconfig",
+      PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL: "https://127.0.0.1:8443",
     } satisfies RpcGitEnvironment;
 
     // act
@@ -90,12 +93,13 @@ describe("rpcChildEnvironment", () => {
       NODE_EXTRA_CA_CERTS: "/run/cert.pem",
       GIT_CONFIG_NOSYSTEM: "1",
       GIT_CONFIG_GLOBAL: "/sandbox/home/.gitconfig",
+      PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL: "https://127.0.0.1:8443",
     });
   });
 
   test("returns only the allowlist without a git environment", (t) => {
     // arrange
-    inheritGitVariables(t);
+    inheritVariables(t);
 
     // act
     const environment = rpcChildEnvironment(sandbox);

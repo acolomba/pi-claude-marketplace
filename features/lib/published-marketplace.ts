@@ -2,12 +2,13 @@
  * @fileoverview A marketplace published as one source kind.
  *
  * The dir and file kinds write the path fixture under the sandbox HOME
- * (D-04). The url kind writes the same files in a work tree there and
- * publishes them as a commit in a bare repository that the run's git host
- * serves. Every later change to a url marketplace writes the work tree the
+ * (D-04). The url and github kinds write the same files in a work tree there
+ * and publish them as a commit in a bare repository that the run's git host
+ * serves. Every later change to a git marketplace writes the work tree the
  * same way and pushes a new commit, so Pi sees it through a clone or fetch
- * (HOST-01). The github kind lands with its stand-in, so the steps that
- * publish a marketplace do not change when it does.
+ * (HOST-01). The github kind publishes the same way; its source is the
+ * `owner/repo` shorthand, which the GitHub base override sends to the git
+ * host (GHB-01).
  */
 
 import assert from "node:assert/strict";
@@ -50,6 +51,8 @@ export interface GitRepositoryHost {
   repositoryPath(directory: string): string;
   /** Returns the URL a user types to clone the repository `directory`. */
   repositoryUrl(directory: string): string;
+  /** Returns the `owner/repo` shorthand a user types for the repository `directory`. */
+  repositoryShorthand(directory: string): string;
   /** The scratch HOME of every git that writes the host's repositories. */
   readonly gitHome: string;
 }
@@ -100,12 +103,8 @@ export function parseSourceKind(text: string): SourceKind {
   return kind;
 }
 
-function noStandIn(kind: SourceKind): Error {
-  return new Error(`the ${kind} source kind has no stand-in yet`);
-}
-
 /**
- * Runs `write`, which changes the files of `published`. For a url
+ * Runs `write`, which changes the files of `published`. For a git
  * publication, it then commits the change and pushes it to the bare
  * repository the git host serves.
  */
@@ -119,11 +118,10 @@ async function changePublication(
       await write();
       return;
     case "url":
+    case "github":
       await write();
       await pushGitRepository(published.root, published.gitHome);
       return;
-    case "github":
-      throw noStandIn(published.kind);
   }
 }
 
@@ -137,10 +135,9 @@ async function requireAbsent(location: string, directory: string): Promise<void>
 
 /**
  * Returns the directory that a `kind` marketplace published in `directory`
- * lives in, failing when a marketplace is published there already. A url
+ * lives in, failing when a marketplace is published there already. A git
  * marketplace lives in a work tree under the marketplaces root and is served
- * as a commit in a bare repository on the git host, so neither may exist. The
- * github kind throws until it has a stand-in.
+ * as a commit in a bare repository on the git host, so neither may exist.
  */
 export async function requireFreeRoot(
   sites: PublicationSites,
@@ -154,11 +151,10 @@ export async function requireFreeRoot(
       await requireAbsent(root, directory);
       return root;
     case "url":
+    case "github":
       await requireAbsent(root, directory);
       await requireAbsent(sites.gitHost.repositoryPath(directory), directory);
       return root;
-    case "github":
-      throw noStandIn(kind);
   }
 }
 
@@ -197,7 +193,8 @@ export async function publishMarketplaceIn(
     case "file":
       await writeMarketplace(root, name, plugins, manifestPath);
       return { kind, root, source: manifestPath, manifestPath };
-    case "url": {
+    case "url":
+    case "github": {
       const { gitHost } = sites;
       const bareRepository = gitHost.repositoryPath(directory);
       await writeMarketplace(root, name, plugins, manifestPath);
@@ -205,16 +202,16 @@ export async function publishMarketplaceIn(
       return {
         kind,
         root,
-        source: gitHost.repositoryUrl(directory),
+        source:
+          kind === "url"
+            ? gitHost.repositoryUrl(directory)
+            : gitHost.repositoryShorthand(directory),
         manifestPath,
         repository: directory,
         bareRepository,
         gitHome: gitHost.gitHome,
       };
     }
-
-    case "github":
-      throw noStandIn(kind);
   }
 }
 
@@ -266,7 +263,7 @@ function ownedTarget(published: PublishedMarketplace, target: string): string {
 
 /**
  * Removes only the directory, exact manifest, or bare repository recorded for
- * this publication. Once a url publication's bare repository is gone, the git
+ * this publication. Once a git publication's bare repository is gone, the git
  * host answers a clone or fetch of it with 404.
  */
 export async function removePublishedSource(published: PublishedMarketplace): Promise<void> {
@@ -278,10 +275,9 @@ export async function removePublishedSource(published: PublishedMarketplace): Pr
       await rm(ownedTarget(published, published.manifestPath));
       return;
     case "url":
+    case "github":
       await rm(published.bareRepository, { recursive: true });
       return;
-    case "github":
-      throw noStandIn(published.kind);
   }
 }
 
@@ -341,16 +337,15 @@ export async function publishUnreadableSkillFile(
     }
 
     case "url":
-      throw new Error("a git repository cannot hold a file nobody may read");
     case "github":
-      throw noStandIn(published.kind);
+      throw new Error("a git repository cannot hold a file nobody may read");
   }
 }
 
 /**
  * Writes `text` to `file` inside the published plugin `plugin`, which must
  * not hold that file yet. It refuses a path outside the publication, and a
- * url publication commits and pushes the new file.
+ * git publication commits and pushes the new file.
  */
 export async function writePublishedPluginFile(
   published: PublishedMarketplace,

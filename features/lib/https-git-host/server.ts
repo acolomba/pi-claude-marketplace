@@ -303,6 +303,15 @@ export class HttpsGitHost {
   }
 
   /**
+   * Returns the `owner/repo` shorthand a user types for the repository
+   * `directory`. The GitHub base override sends it to this host as the path
+   * that `repositoryUrl` names.
+   */
+  repositoryShorthand(directory: string): string {
+    return `${OWNER}/${directory}`;
+  }
+
+  /**
    * Arms the published repository `repository` to fail as `arm` until the
    * next reset, failing when nothing is published there or when it is armed
    * already.

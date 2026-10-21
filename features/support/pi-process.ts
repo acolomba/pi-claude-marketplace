@@ -12,8 +12,10 @@
  *
  * The run also starts the https git host that git marketplace sources clone
  * from, before Pi, because Pi fixes the host's CA file and port when it
- * starts. `Before()` resets the host with Pi and checks that it holds no
- * repository, arm, request, connection, or CGI child (HOST-02, HOST-03).
+ * starts. Pi also gets the GitHub base override pointed at the host, so a
+ * GitHub source clones from it (GHB-01). `Before()` resets the host with Pi
+ * and checks that it holds no repository, arm, request, connection, or CGI
+ * child (HOST-02, HOST-03).
  */
 
 import assert from "node:assert/strict";
@@ -69,6 +71,7 @@ BeforeAll(async (): Promise<void> => {
     NODE_EXTRA_CA_CERTS: gitHost.certificatePath,
     GIT_CONFIG_NOSYSTEM: "1",
     GIT_CONFIG_GLOBAL: path.join(sandbox.home, ".gitconfig"),
+    PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL: `https://${gitHost.address}`,
   } satisfies RpcGitEnvironment;
   piRun = {
     root,

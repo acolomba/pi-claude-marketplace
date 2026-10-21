@@ -44,12 +44,15 @@ export interface RpcSandbox {
 /**
  * The trust and git settings the cucumber run adds to Pi's allowlist: the CA
  * file of its loopback git host, and git config that skips the system file and
- * reads a global file under the sandbox HOME (DRV-03, HOST-01).
+ * reads a global file under the sandbox HOME (DRV-03, HOST-01). The run also
+ * points the GitHub base override at its git host, so GitHub sources clone
+ * from it (GHB-01, D-MF-01).
  */
 export interface RpcGitEnvironment {
   readonly NODE_EXTRA_CA_CERTS: string;
   readonly GIT_CONFIG_NOSYSTEM: "1";
   readonly GIT_CONFIG_GLOBAL: string;
+  readonly PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL: string;
 }
 
 /** What one RPC session runs: the sandbox, the steps in order, and extra extensions. */
@@ -191,6 +194,7 @@ export function rpcChildEnvironment(
     environment.NODE_EXTRA_CA_CERTS = git.NODE_EXTRA_CA_CERTS;
     environment.GIT_CONFIG_NOSYSTEM = git.GIT_CONFIG_NOSYSTEM;
     environment.GIT_CONFIG_GLOBAL = git.GIT_CONFIG_GLOBAL;
+    environment.PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL = git.PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL;
   }
 
   return environment;
