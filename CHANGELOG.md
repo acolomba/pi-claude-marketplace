@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- In JSON output, the row of a failed git `marketplace add` now has the source you typed as its `id`, not that source twice around an `@`.
+
 - An empty argument now fails with a message that names it, such as `Source must not be empty.` or `Marketplace name must not be empty.`.
 
   - Plugin commands report an empty `<plugin>@<marketplace>` as `Plugin name must not be empty.`. `update`, `fetch`, and `reinstall` report an `@` with no marketplace name as `Marketplace name must not be empty.`.
