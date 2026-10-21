@@ -13,7 +13,7 @@
  * The run also starts the https git host that git marketplace sources clone
  * from, before Pi, because Pi fixes the host's CA file and port when it
  * starts. `Before()` resets the host with Pi and checks that it holds no
- * repository, request, connection, or CGI child (HOST-02).
+ * repository, arm, request, connection, or CGI child (HOST-02, HOST-03).
  */
 
 import assert from "node:assert/strict";
@@ -107,7 +107,7 @@ Before(async (): Promise<void> => {
     {
       skills: [],
       marketplaces: [],
-      gitHost: { repositories: [], requests: [], connections: 0, children: 0 },
+      gitHost: { repositories: [], arms: [], requests: [], connections: 0, children: 0 },
     },
   );
 });

@@ -7,13 +7,15 @@
  * only, and serves the bare repositories under `repositories/acme/` through
  * `git http-backend`. It records every request in arrival order with the
  * status it answered, and counts connections, so a scenario can state the
- * exact traffic of a command (HOST-04). Before each scenario the run resets
- * it to an empty host.
+ * exact traffic of a command (HOST-04). A scenario can arm one repository to
+ * answer an error status or to drop the connection, and the other
+ * repositories keep serving (HOST-03). Before each scenario the run resets it
+ * to an empty host with no arm.
  */
 
 import { execFile } from "node:child_process";
 import { once } from "node:events";
-import { mkdir, readdir, readFile, rm } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, stat } from "node:fs/promises";
 import { createServer } from "node:https";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -50,12 +52,42 @@ const CERTIFICATE_ARGUMENTS = [
   "subjectAltName=IP:127.0.0.1",
 ];
 
+const ARMED_STATUSES = [404, 500, 502, 503] as const;
+
+/** An error status an armed repository answers. */
+export type ArmedStatus = (typeof ARMED_STATUSES)[number];
+
+/**
+ * How an armed repository fails: it answers an error status, drops the
+ * connection on the first request, or answers 401 to every request that does
+ * not carry one user and password.
+ */
+export type GitHostArm =
+  | { readonly kind: "status"; readonly status: ArmedStatus }
+  | { readonly kind: "drop" }
+  | { readonly kind: "credential"; readonly user: string; readonly password: string };
+
+/** Returns `status` as an armed status, throwing on a status the host cannot be armed with. */
+export function armedStatus(status: number): ArmedStatus {
+  const armed = ARMED_STATUSES.find((candidate) => candidate === status);
+  if (armed === undefined) {
+    throw new Error(
+      `the git host cannot be armed to answer ${status}; expected one of ${ARMED_STATUSES.join(", ")}`,
+    );
+  }
+
+  return armed;
+}
+
 /** One request the host received: its path with the query, as sent. */
 export interface GitHostRequest {
   readonly method: string;
   readonly path: string;
-  /** The status the host answered, or `pending` while the answer is open. */
-  readonly status: number | "pending";
+  /**
+   * The status the host answered, `dropped` when an arm destroyed the
+   * connection, or `pending` while the answer is open.
+   */
+  readonly status: number | "pending" | "dropped";
 }
 
 /** The host's request and connection counts at one moment. */
@@ -73,6 +105,8 @@ export interface GitHostTraffic {
 /** Everything the host holds, which the run checks is empty before each scenario. */
 export interface GitHostSnapshot {
   readonly repositories: readonly string[];
+  /** The armed repositories, in arming order. */
+  readonly arms: readonly string[];
   readonly requests: readonly GitHostRequest[];
   readonly connections: number;
   readonly children: number;
@@ -81,7 +115,7 @@ export interface GitHostSnapshot {
 interface LoggedRequest {
   readonly method: string;
   readonly path: string;
-  status: number | "pending";
+  status: number | "pending" | "dropped";
 }
 
 function copyRequest(request: LoggedRequest): GitHostRequest {
@@ -126,6 +160,49 @@ async function listRepositories(root: string): Promise<string[]> {
   return repositories.flat().sort();
 }
 
+/**
+ * Returns the arm of the repository that `requestPath` belongs to: a path
+ * under `/acme/<repository>/` or `/acme/<repository>.git/`.
+ */
+function armFor(
+  arms: ReadonlyMap<string, GitHostArm>,
+  requestPath: string,
+): GitHostArm | undefined {
+  for (const [repository, arm] of arms) {
+    const prefix = `/${OWNER}/${repository}`;
+    if (requestPath.startsWith(`${prefix}/`) || requestPath.startsWith(`${prefix}.git/`)) {
+      return arm;
+    }
+  }
+
+  return undefined;
+}
+
+/**
+ * Answers a request of an armed repository the way the arm fails, and returns
+ * whether it did. A `drop` arm destroys the socket before any answer.
+ */
+function failArmed(
+  arm: GitHostArm,
+  logged: LoggedRequest,
+  req: IncomingMessage,
+  res: ServerResponse,
+): boolean {
+  switch (arm.kind) {
+    case "drop":
+      logged.status = "dropped";
+      req.socket.destroy();
+      return true;
+    case "status":
+      logged.status = arm.status;
+      res.statusCode = arm.status;
+      res.end();
+      return true;
+    case "credential":
+      return false;
+  }
+}
+
 function writeResponse(res: ServerResponse, response: CgiResponse): void {
   res.statusCode = response.status;
   for (const [name, value] of response.headers) {
@@ -146,6 +223,7 @@ export class HttpsGitHost {
   private readonly server: Server;
   private readonly log: LoggedRequest[] = [];
   private readonly children = new Set<ChildProcess>();
+  private readonly arms = new Map<string, GitHostArm>();
   private connections = 0;
 
   private constructor(root: string, server: Server, port: number) {
@@ -189,6 +267,27 @@ export class HttpsGitHost {
     return `https://${this.address}/${OWNER}/${directory}.git`;
   }
 
+  /**
+   * Arms the published repository `repository` to fail as `arm` until the
+   * next reset, failing when nothing is published there or when it is armed
+   * already.
+   */
+  async arm(repository: string, arm: GitHostArm): Promise<void> {
+    const published = await stat(this.repositoryPath(repository)).then(
+      () => true,
+      () => false,
+    );
+    if (!published) {
+      throw new Error(`the git host serves no repository ${OWNER}/${repository}.git to arm`);
+    }
+
+    if (this.arms.has(repository)) {
+      throw new Error(`the git host has armed the repository ${OWNER}/${repository}.git already`);
+    }
+
+    this.arms.set(repository, arm);
+  }
+
   /** Returns the current counts, which open a window for `requestsSince()`. */
   mark(): RequestWindow {
     return { requests: this.log.length, connections: this.connections };
@@ -202,10 +301,11 @@ export class HttpsGitHost {
     };
   }
 
-  /** Returns the repositories, requests, connections, and CGI children the host holds. */
+  /** Returns the repositories, arms, requests, connections, and CGI children the host holds. */
   async snapshot(): Promise<GitHostSnapshot> {
     return {
       repositories: await listRepositories(this.repositories),
+      arms: [...this.arms.keys()],
       requests: this.log.map((request) => copyRequest(request)),
       connections: this.connections,
       children: this.children.size,
@@ -214,11 +314,12 @@ export class HttpsGitHost {
 
   /**
    * Empties the host: kills every CGI child and waits for it to close, then
-   * clears the log, removes every repository, and closes idle connections, so
-   * no keep-alive socket reaches the next scenario.
+   * clears the arms and the log, removes every repository, and closes idle
+   * connections, so no keep-alive socket reaches the next scenario.
    */
   async reset(): Promise<void> {
     await this.killChildren();
+    this.arms.clear();
     this.log.splice(0);
     this.connections = 0;
     const entries = await readdir(this.repositories);
@@ -268,6 +369,11 @@ export class HttpsGitHost {
     res.on("error", () => {
       res.destroy();
     });
+    const arm = armFor(this.arms, logged.path);
+    if (arm !== undefined && failArmed(arm, logged, req, res)) {
+      return;
+    }
+
     const chunks: Buffer[] = [];
     req.on("data", (chunk: Buffer) => {
       chunks.push(chunk);

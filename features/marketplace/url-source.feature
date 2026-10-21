@@ -39,3 +39,35 @@ Feature: Marketplace url source
       | method | path                                          | status |
       | GET    | /acme/tools/info/refs?service=git-upload-pack | 200    |
       | POST   | /acme/tools/git-upload-pack                   | 200    |
+
+  Scenario: Adding a url marketplace the git host answers with 404 fails as source missing
+    Given the marketplace "tools" is published as a url source
+    Given the git host answers 404 for the marketplace "tools"
+    When the user runs "/claude:plugin marketplace add https://{git host}/acme/tools.git --scope project"
+    Then the result has these fields:
+      | kind         | cascade                             |
+      | severity     | error                               |
+      | needs reload | false                               |
+      | summary      | A marketplace operation has failed. |
+    Then the result lists these marketplaces:
+      | name                              | scope   | status | reasons        |
+      | https://{git host}/acme/tools.git | project | failed | source missing |
+    Then the git host receives these requests:
+      | method | path                                              | status |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 404    |
+
+  Scenario: Adding a url marketplace whose connection drops fails as network unreachable
+    Given the marketplace "tools" is published as a url source
+    Given the git host drops the connection for the marketplace "tools"
+    When the user runs "/claude:plugin marketplace add https://{git host}/acme/tools.git --scope project"
+    Then the result has these fields:
+      | kind         | cascade                             |
+      | severity     | error                               |
+      | needs reload | false                               |
+      | summary      | A marketplace operation has failed. |
+    Then the result lists these marketplaces:
+      | name                              | scope   | status | reasons             |
+      | https://{git host}/acme/tools.git | project | failed | network unreachable |
+    Then the git host receives these requests:
+      | method | path                                              | status  |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | dropped |
