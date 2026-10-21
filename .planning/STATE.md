@@ -4,17 +4,17 @@ milestone: marketplace-features
 milestone_name: Marketplace Behavioral Tests
 current_phase: 09
 current_phase_name: URL Source Kind and HTTPS Git Stand-In
-status: executing
-stopped_at: Completed 09-07-PLAN.md
-last_updated: "2026-10-21T04:44:44.787Z"
+status: verifying
+stopped_at: Completed 09-08-PLAN.md
+last_updated: "2026-10-21T04:58:18.628Z"
 last_activity: 2026-10-20
 last_activity_desc: Phase 09 execution started
-state_head: d034917e183cd2aadf3ba89eaa9e910d034f3099
+state_head: 63d0592455652eef7828fc5eada79ad71f33d8d0
 progress:
   total_phases: 14
   completed_phases: 12
   total_plans: 75
-  completed_plans: 74
+  completed_plans: 75
   percent: 86
 ---
 
@@ -33,7 +33,7 @@ component as a working Pi artifact.
 
 Phase: 09 (URL Source Kind and HTTPS Git Stand-In) — EXECUTING
 Plan: 8 of 8
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-10-20 — Phase 09 execution started
 
 Progress: [█████████░] 86%
@@ -183,8 +183,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-21T04:44:39.445Z
-**Stopped at:** Completed 09-07-PLAN.md
+**Last session:** 2026-10-21T04:58:13.457Z
+**Stopped at:** Completed 09-08-PLAN.md
 **Resume file:** None
 
 **Phase 8 closed (2026-10-20):** all five plans executed, Nyquist-compliant,
@@ -359,6 +359,7 @@ archived milestone artifacts.
 | Phase 09 P05 | 11 min | 2 tasks | 13 files |
 | Phase 09 P06 | 7 min | 2 tasks | 8 files |
 | Phase 09 P07 | 6 min | 2 tasks | 3 files |
+| Phase 09 P08 | 8 min | 3 tasks | 4 files |
 
 ## Decisions
 
@@ -507,6 +508,8 @@ archived milestone artifacts.
 - [Phase 09]: D-19 applied: a failed git marketplace add child row carries marketplaceSubject, and rowId in notification-json.ts uses its redacted name alone as the JSON id; marketplaceFailureRows keeps <mp>@<mp> (BACKLOG ROWID-01)
 - [Phase 09]: D-16 uses the existing source missing token for a url add at a missing #ref; only classifyGitSourceAccessFailure (marketplace add) maps NotFoundError, the transport ladder stays unchanged
 - [Phase 09]: The empty-log step compares the whole git host traffic record ({ requests: [], connections: 0 }) in one deepStrictEqual, so a kept-alive request or a non-TLS attempt fails it
+- [Phase 09]: cucumber.json excludes only @github; every @url row runs by default (D-14)
+- [Phase 09]: SC6 evidence uses the local edit in resolveTargetScopeMarketplace: the f78907bf plant now loads but crashes in the Given install, which is not behavioral RED
 
 ### mcp-4 decisions
 

@@ -24,8 +24,8 @@ Research detail per requirement is in `.planning/research/FEATURES.md`
 
 ### HTTPS git stand-in
 
-- [ ] **HOST-01**: A loopback HTTPS git server (a `node:https` CGI wrapper around `git http-backend`, run-time openssl certificate trusted through `NODE_EXTRA_CA_CERTS`) serves bare marketplace repositories that isomorphic-git inside Pi can clone and fetch
-- [ ] **HOST-02**: The stand-in lives for the worker's run alongside Pi and is reset before every scenario (repositories, arming, request log, CGI children), with the reset asserted empty; the cucumber skill rule is amended to allow it
+- [x] **HOST-01**: A loopback HTTPS git server (a `node:https` CGI wrapper around `git http-backend`, run-time openssl certificate trusted through `NODE_EXTRA_CA_CERTS`) serves bare marketplace repositories that isomorphic-git inside Pi can clone and fetch
+- [x] **HOST-02**: The stand-in lives for the worker's run alongside Pi and is reset before every scenario (repositories, arming, request log, CGI children), with the reset asserted empty; the cucumber skill rule is amended to allow it
 - [x] **HOST-03**: A scenario can arm a repository to answer 401, 404, or 5xx, or to drop the connection
 - [x] **HOST-04**: The stand-in records every request, and scenarios can assert the exact request log, including that it is empty
 
@@ -74,7 +74,7 @@ A scope (user or project) has two layers: shared (`claude-plugins.json`) and loc
 - [x] **ADD-09**: A url clone answered with 404 fails as `source missing`
 - [x] **ADD-10**: A url clone answered with 5xx fails as `network error`, with a cause line that names the HTTP status and the fetched URL; one whose connection drops fails as `network unreachable`
 - [ ] **ADD-11**: A clone answered with 401 and no stored credential fails as `authentication required`; with a stored credential in the sandbox, it succeeds (url, gh)
-- [ ] **ADD-12**: A removed git marketplace can be added again from the same source (url, gh)
+- [x] **ADD-12**: A removed git marketplace can be added again from the same source (url, gh)
 - [x] **ADD-13**: `add --local` writes the declaration to `claude-plugins.local.json`, and `remove --local` clears it
 - [x] **ADD-14**: `add ~/...` keeps the `~` form and resolves it against HOME
 
@@ -88,7 +88,7 @@ A scope (user or project) has two layers: shared (`claude-plugins.json`) and loc
 - [x] **RM-06**: Removing a name neither scope holds, without `--scope`, fails as `marketplace not added` with no scope
 - [x] **RM-07**: `rm` behaves as `remove`
 - [x] **RM-08**: Without `--scope`, a name held by both scopes is removed from the project scope only
-- [ ] **RM-09**: Remove of a git marketplace makes no request to the stand-in
+- [x] **RM-09**: Remove of a git marketplace makes no request to the stand-in
 
 ### marketplace list / ls
 
@@ -96,7 +96,7 @@ A scope (user or project) has two layers: shared (`claude-plugins.json`) and loc
 - [x] **LS-02**: The list shows every marketplace of both scopes, project first, each with its autoupdate state and last-updated time
 - [x] **LS-03**: `--scope` narrows the list to one scope
 - [x] **LS-04**: `ls` behaves as `list`
-- [ ] **LS-05**: Listing git marketplaces makes no request to the stand-in
+- [x] **LS-05**: Listing git marketplaces makes no request to the stand-in
 
 ### marketplace info
 
@@ -106,7 +106,7 @@ A scope (user or project) has two layers: shared (`claude-plugins.json`) and loc
 - [x] **INFO-04**: A name both scopes hold, without `--scope`, shows one block per scope, project first
 - [x] **INFO-05**: A name neither scope holds fails as `marketplace not added` with no scope
 - [x] **INFO-06**: `--scope` naming the scope that misses, while the other holds the name, says which scope missed
-- [ ] **INFO-07**: Info on git marketplaces makes no request to the stand-in
+- [x] **INFO-07**: Info on git marketplaces makes no request to the stand-in
 - [x] **INFO-08**: Info on a marketplace whose manifest became invalid reports a failed `invalid manifest` row
 - [x] **INFO-09**: Info shows the marketplaces a manifest allows cross-marketplace dependencies on
 
@@ -182,8 +182,8 @@ A scope (user or project) has two layers: shared (`claude-plugins.json`) and loc
 | DRV-02 | Phase 1 | Complete |
 | DRV-03 | Phase 9 | Complete |
 | DRV-04 | Phase 1 | Complete |
-| HOST-01 | Phase 9 | Pending |
-| HOST-02 | Phase 9 | Pending |
+| HOST-01 | Phase 9 | Complete |
+| HOST-02 | Phase 9 | Complete |
 | HOST-03 | Phase 9 | Complete |
 | HOST-04 | Phase 9 | Complete |
 | GHB-01 | Phase 2 | Complete |
@@ -215,7 +215,7 @@ A scope (user or project) has two layers: shared (`claude-plugins.json`) and loc
 | ADD-09 | Phase 9 | Complete |
 | ADD-10 | Phase 9 | Complete |
 | ADD-11 | Phase 10 | Pending |
-| ADD-12 | Phase 9 | Pending |
+| ADD-12 | Phase 9 | Complete |
 | ADD-13 | Phase 3 | Complete |
 | ADD-14 | Phase 3 | Complete |
 | RM-01 | Phase 4 | Complete |
@@ -226,19 +226,19 @@ A scope (user or project) has two layers: shared (`claude-plugins.json`) and loc
 | RM-06 | Phase 4 | Complete |
 | RM-07 | Phase 4 | Complete |
 | RM-08 | Phase 4 | Complete |
-| RM-09 | Phase 9 | Pending |
+| RM-09 | Phase 9 | Complete |
 | LS-01 | Phase 4 | Complete |
 | LS-02 | Phase 4 | Complete |
 | LS-03 | Phase 4 | Complete |
 | LS-04 | Phase 4 | Complete |
-| LS-05 | Phase 9 | Pending |
+| LS-05 | Phase 9 | Complete |
 | INFO-01 | Phase 5 | Complete |
 | INFO-02 | Phase 5 | Complete |
 | INFO-03 | Phase 5 | Complete |
 | INFO-04 | Phase 5 | Complete |
 | INFO-05 | Phase 5 | Complete |
 | INFO-06 | Phase 5 | Complete |
-| INFO-07 | Phase 9 | Pending |
+| INFO-07 | Phase 9 | Complete |
 | INFO-08 | Phase 5 | Complete |
 | INFO-09 | Phase 5 | Complete |
 | UPD-01 | Phase 6 | Complete |
