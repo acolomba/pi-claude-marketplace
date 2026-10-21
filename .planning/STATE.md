@@ -4,17 +4,17 @@ milestone: marketplace-features
 milestone_name: Marketplace Behavioral Tests
 current_phase: 10
 current_phase_name: GitHub Source Kind and Suite Close
-status: executing
-stopped_at: Completed 10-06-PLAN.md
-last_updated: "2026-10-21T15:27:52.891Z"
+status: verifying
+stopped_at: Completed 10-07-PLAN.md
+last_updated: "2026-10-21T15:41:34.717Z"
 last_activity: 2026-10-21
 last_activity_desc: Phase 10 execution started
-state_head: 49fed0554b3383625a54b8285b4d46a7784fa102
+state_head: 31e793a43930d8fadd47a73c50c89f18b196af2c
 progress:
   total_phases: 14
   completed_phases: 13
   total_plans: 82
-  completed_plans: 81
+  completed_plans: 82
   percent: 93
 ---
 
@@ -33,7 +33,7 @@ component as a working Pi artifact.
 
 Phase: 10 (GitHub Source Kind and Suite Close) — EXECUTING
 Plan: 7 of 7
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-10-21 — Phase 10 execution started
 
 Progress: [█████████░] 93%
@@ -183,8 +183,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-21T15:27:46.507Z
-**Stopped at:** Completed 10-06-PLAN.md
+**Last session:** 2026-10-21T15:41:06.689Z
+**Stopped at:** Completed 10-07-PLAN.md
 **Resume file:** None
 
 **Phase 8 closed (2026-10-20):** all five plans executed, Nyquist-compliant,
@@ -366,6 +366,7 @@ archived milestone artifacts.
 | Phase 10 P04 | 19 min | 2 tasks | 7 files |
 | Phase 10 P05 | 5min | 2 tasks | 4 files |
 | Phase 10 P06 | 14min | 2 tasks | 8 files |
+| Phase 10 P07 | 13min | 2 tasks | 2 files |
 
 ## Decisions
 
@@ -522,6 +523,7 @@ archived milestone artifacts.
 - [Phase 10]: A github update 401 under the override gets the git credential approve line as a new Error whose cause is the FetchedUrlCause, so the fetched URL stays the last link (UPD-12, GHB-01)
 - [Phase 10]: cucumber.json excludes no tag; a future source kind without a stand-in excludes its tag until its stand-in lands (D-07)
 - [Phase 10]: A failed add or install that compares its result but no persisted state is a cucumber BLOCKER; a failed update that does not restate the declaration is a WARNING
+- [Phase 10]: The Phase 9 review ledger's IN rows were closed by hand with commit SHAs in the Source cell, matching the WR rows
 
 ### mcp-4 decisions
 
