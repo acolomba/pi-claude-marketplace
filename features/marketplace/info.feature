@@ -35,8 +35,8 @@ Feature: Marketplace info
 
     @url
     Examples:
-      | source kind | source                                   | expected source kind | source abs path | source url                      | source owner | source repo | source ref |
-      | url         | https://{git host}/acme/tools.git#stable | url                  |                 | https://{git host}/acme/tools   |              |             | stable     |
+      | source kind | source                                 | expected source kind | source abs path | source url                    | source owner | source repo | source ref |
+      | url         | https://{git host}/acme/tools.git#main | url                  |                 | https://{git host}/acme/tools |              |             | main       |
 
     @github
     Examples:

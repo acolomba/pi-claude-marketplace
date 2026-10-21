@@ -835,17 +835,17 @@ Feature: Marketplace update
       | name  | version |
       | zeta  | 1.0.0   |
       | alpha | 1.0.0   |
-    Given the marketplace "tools" is added to the project scope
-    Given the user has run "/claude:plugin install zeta@tools --scope project"
-    Given the user has run "/claude:plugin install alpha@tools --scope project"
-    Given the user has run "/claude:plugin marketplace autoupdate tools --scope project"
+    Given the marketplace "tools" is added to the <scope> scope
+    Given the user has run "/claude:plugin install zeta@tools --scope <scope>"
+    Given the user has run "/claude:plugin install alpha@tools --scope <scope>"
+    Given the user has run "/claude:plugin marketplace autoupdate tools --scope <scope>"
     Given the marketplace "tools" offers these plugins:
       | name  | version |
       | alpha | 1.10.0  |
       | zeta  | 1.10.0  |
     Given the marketplace "tools" has the description "A catalog ordered opposite its installs"
     Given the published plugin "zeta" of the marketplace "tools" has an unreadable skill file
-    When the user runs "/claude:plugin marketplace update tools --scope project"
+    When the user runs "/claude:plugin marketplace update tools --scope <scope>"
     Then the result has these fields:
       | kind         | cascade                        |
       | severity     | error                          |
@@ -853,9 +853,9 @@ Feature: Marketplace update
       | summary      | A plugin operation has failed. |
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | marketplace status | id          | name  | status  | reasons           | scope   | from  | to     | leaks | rollback partial |
-      | tools            | project           | updated            | zeta@tools  | zeta  | failed  | permission denied | project |       |        |       |                  |
-      | tools            | project           | updated            | alpha@tools | alpha | updated |                   | project | 1.0.0 | 1.10.0 |       |                  |
-    When the user runs "/claude:plugin list --scope project"
+      | tools            | <scope>           | updated            | zeta@tools  | zeta  | failed  | permission denied | <scope> |       |        |       |                  |
+      | tools            | <scope>           | updated            | alpha@tools | alpha | updated |                   | <scope> | 1.0.0 | 1.10.0 |       |                  |
+    When the user runs "/claude:plugin list --scope <scope>"
     Then the result has these fields:
       | kind                | cascade     |
       | severity            | info        |
@@ -866,8 +866,8 @@ Feature: Marketplace update
       | tally success count | 2           |
     Then the result lists these plugins:
       | marketplace name | marketplace scope | marketplace details autoupdate | id          | name  | status     | reasons | scope   | version |
-      | tools            | project           | true                           | alpha@tools | alpha | installed  |         | project | 1.10.0  |
-      | tools            | project           | true                           | zeta@tools  | zeta  | upgradable |         | project | 1.0.0   |
+      | tools            | <scope>           | true                           | alpha@tools | alpha | installed  |         | <scope> | 1.10.0  |
+      | tools            | <scope>           | true                           | zeta@tools  | zeta  | upgradable |         | <scope> | 1.0.0   |
     When the user starts a new pi session
     Then the session offers these skills:
       | command            | description              |
@@ -875,19 +875,11 @@ Feature: Marketplace update
       | /skill:zeta-skill  | A skill of zeta 1.0.0.   |
 
     Examples:
-      | source kind |
-      | dir         |
-      | file        |
-
-    @url
-    Examples:
-      | source kind |
-      | url         |
-
-    @github
-    Examples:
-      | source kind |
-      | github      |
+      | source kind | scope   |
+      | dir         | project |
+      | file        | project |
+      | dir         | user    |
+      | file        | user    |
 
   Scenario Outline: An invalid refreshed manifest leaves installed plugins unchanged
     Given the marketplace "tools" is published as a <source kind> source
