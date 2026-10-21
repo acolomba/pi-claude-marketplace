@@ -51,6 +51,8 @@
 
 - GitHub sources clone and fetch from another https git host, such as a mirror, when you set `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL`, a setting that Claude Code lacks.
 
+  - With that setting, a `marketplace update` that the host answers with 401 now shows the `git credential approve` command for that host.
+
 - Internal: the `new-gsd-workspace` skill is now `new-workspace`, and the project skills match the latest TypeScript blueprint. (#263)
 
 - Internal: the project skills match the latest TypeScript blueprint again, and ESLint now checks that variables are declared before use. (#262)
