@@ -1,6 +1,6 @@
 ---
 phase: 04-marketplace-remove-and-list
-verified: 2026-10-18T15:19:42Z
+verified: 2026-10-21T00:00:00Z
 status: passed
 score: 17/17 must-haves verified
 covered_files:
@@ -15,137 +15,131 @@ covered_files:
   - features/marketplace/list.feature
   - features/marketplace/remove.feature
   - tests/integration/marketplace-layer-remove.test.ts
-covered_digest: "v3:sha256:20caf8954db28f305fbd6cd98ff6606078c797fa3b56b1516f41d12e96ba46a0"
+covered_digest: "v3:sha256:b6fe7618fa364bd86ad0679c9b4aa89f8b5a3514f29d32b0df35bbf67609c778"
 behavior_unverified: 0
 overrides_applied: 0
+re_verification:
+  previous_status: passed
+  previous_score: 17/17
+  gaps_closed: []
+  gaps_remaining: []
+  regressions: []
 ---
 
 # Phase 4: Marketplace Remove and List Verification Report
 
 **Phase goal:** `marketplace remove`/`rm` and `marketplace list`/`ls` have scenarios for every scope and cascade behavior, with the multi-kind remove behavior written as an Outline.
-**Verified:** 2026-10-18T15:19:42Z
+**Verified:** 2026-10-21 (HEAD `6bfc1dde`)
 **Status:** passed
-**Re-verification:** No — initial verification; no earlier `04-VERIFICATION.md` existed.
+**Re-verification:** Yes. The earlier report (2026-10-18, status passed, 17/17) went stale because later phases changed covered files. Every truth was re-checked against the current tree.
+
+## What changed since the earlier report
+
+- **Phases 9 and 10 activated the `@url` and `@github` Examples.** `cucumber.json` has no tag exclusion, and `cucumber-js --dry-run` over `remove.feature` plus `list.feature` binds 58 scenarios and 637 steps with none undefined. The earlier report called the remote rows dormant and "definition-checked only"; they now run. A name-filtered run of the empty-removal Outline executed all 8 rows (4 local, 2 `@url`, 2 `@github`) and they passed.
+- **Phase 10's suite review changed `remove.feature`** (commits `49233f15`, `962f57b1`). It added a fresh-session skill-inventory assertion (`/skill:beta-skill`, `/skill:lib-skill`) after the kept-dependency removal at lines 465-491, and the same for `app`/`lib` at lines 601-634. It also reworded the feature description to name the loopback https git host. These only add proof. No truth weakened.
+- `list.feature` and `tests/integration/marketplace-layer-remove.test.ts` are unchanged in substance. The step support files moved to `features/step_definitions/{command,config,session}.steps.ts` and `features/lib/*`. The earlier line citations to `publishing.steps.ts`, `pi-commands.ts` and similar were refreshed below.
+- `remove.feature` now has 49 scenario instances and `list.feature` 9.
 
 ## Goal Achievement
 
-The four roadmap success criteria and the distinct PLAN frontmatter truths are represented by the 17 checks below. Repeated PLAN wording is merged into its roadmap criterion; the evidence column identifies the additional cases. Every state transition and ordering invariant has a passing behavioral or integration test, not merely a symbol or file-presence check.
-
 ### Observable Truths
 
-| # | Truth | Status | Code and behavioral evidence |
+| # | Truth | Status | Evidence |
 | --- | --- | --- | --- |
-| 1 | Roadmap SC1: empty removal drops the selected marketplace without reload for local source kinds, defines `@url` rows, and `rm` matches `remove`. | VERIFIED | `remove.feature:7-58` has one Outline with project/user × dir/file active rows, separate `@url`/`@github` Examples, a surviving `extras` declaration, and an exact `rm` result. All four active Outline rows passed in this verification. Remote rows are definition-checked and intentionally excluded until Phases 9/10. |
-| 2 | Roadmap SC2: installed-plugin removal emits one uninstalled child per plugin, needs reload, and clean removal persists through a new session. | VERIFIED | `remove.feature:60-159` compares the nonalphabetical zebra/amber/elm cascade, single-plugin `rm`, fresh-session skill inventory, plugin list, and marketplace list/config absence. Named cascade and skill-session scenarios passed. |
-| 3 | Roadmap SC3: explicit and unscoped misses report correct scope/reason; unscoped duplicate-name removal selects only project. | VERIFIED | `remove.feature:162-310` covers project-first, sole-user fallback, both explicit miss directions, both elsewhere-present directions, and a scopeless total miss with complete payload fields and surviving declarations. Named project-first scenario passed; `edge/router.ts:254-259` routes aliases to the same handlers. |
-| 4 | Roadmap SC4: `list`/`ls` produce empty and complete project-first inventories with effective autoupdate/time details and scope filters. | VERIFIED | `list.feature:5-197` compares empty and six-row inventories, duplicate scoped names, ordered project/user filters, empty selected scopes, singleton local override, populated/empty `ls`. Named six-row ordering scenario passed. |
-| 5 | D-MF-05 records the approved unscoped project-first divergence. | VERIFIED | `.planning/PROJECT.md:1257` contains one decision row with project priority, sole-user fallback, scope-before-layer refusal, selected-scope-only reporting, and upstream divergence. The scope scenarios in `remove.feature:162-219` pin it. |
-| 6 | Repeating `rm` after a clean removal is a scoped not-added result with no reload and no control-declaration loss. | VERIFIED | `remove.feature:277-294` checks the full miss envelope and retained `extras`; included in the passing combined-tree Cucumber gate. |
-| 7 | An unscoped project-local-only match refuses before considering a user-base match. | VERIFIED | `remove.feature:200-219` compares the failed local-layer-only row and both untouched declarations. Scope selection in `remove.ts` is reached through the registered remove handler; the active scenario passed in the unchanged-input full gate. |
-| 8 | Ordinary successful cascade rows preserve execution order, including a nonalphabetical three-plugin witness. | VERIFIED | `remove.feature:60-93` installs zebra, amber, elm and compares all three children in that order. The named scenario passed with 17/17 steps. |
-| 9 | Removing a user marketplace leaves an independently installed project plugin and its usable project record. | VERIFIED | The three source-kind Outlines at `remove.feature:656-762` assert project plugin list, info, and update after user removal. Active local variants passed in the combined-tree gate; remote variants await their stand-ins. |
-| 10 | Preflight reports every blocker before mutation and preserves eligible plugins, both config layers, and skills. | VERIFIED | `remove.feature:506-555` checks two ordered blockers and the otherwise eligible elm, then a complete five-skill new-session inventory. `marketplace-layer-remove.test.ts:322-417` compares immediate complete state/config/clone inventory and all five skill byte buffers. The named Cucumber blocker scenario and named integration check passed. |
-| 11 | An empty list has no invented marketplace row or populated-list tally. | VERIFIED | `list.feature:5-13` compares the complete envelope and an empty row array. `command.steps.ts:116-151` rejects extra envelope fields and nonempty rows; included in the passing combined-tree gate. |
-| 12 | A singleton list row uses the effective local autoupdate override and a scenario-bounded last-updated timestamp. | VERIFIED | `list.feature:56-79` sets base true/local false, expects false, checks both declarations, and requires `{scenario time}`. `list.ts:83-128` reads merged config and persisted record; `run-tokens.ts:25-38` validates the timestamp window. Active scenario passed in the combined-tree gate. |
-| 13 | Filtering an empty selected scope does not fall back to the populated opposite scope. | VERIFIED | `list.feature:139-158` checks both project-empty/user-populated and user-empty/project-populated directions. `list.ts:73-76` chooses only the requested scope; active scenarios passed in the combined-tree gate. |
-| 14 | A mixed cascade continues after failures, persists successes, and retains failed plugins plus unchanged desired declarations. | VERIFIED | `marketplace-layer-remove.test.ts:419-574` injects two independent EACCES failures, delegates successful unstaging to production, then compares the complete post-state, config bytes, clone/manifest, sentinel, and staged skills. The named test passed. |
-| 15 | A mixed result groups successful rows in execution order before failed rows in discovery order, with error severity and reload true. | VERIFIED | The same integration case compares one literal whole JSON payload with zebra/amber then yak/birch, exact fields, and `needsReload: true`; the named test passed. |
-| 16 | A failure-only cascade preserves the full footprint, reports every failed child in order, and needs no reload. | VERIFIED | `marketplace-layer-remove.test.ts:576-678` compares pre/post footprint, sentinel, both skill bytes, whole yak/birch payload, and `needsReload: false`. The named failure-only check passed. |
-| 17 | Mixed, failure-only, and refusal results each emit exactly one schema-valid JSON entry without invented child reload/severity fields. | VERIFIED | `marketplace-layer-remove.test.ts:344-676` deep-compares the complete one-entry arrays and calls `capture.assertValid()`. `notification-boundary.ts:142-160` supplies JSON `ctx`/`run`; `json-capture.ts:20-49` validates the wire schema and rejects UI output. The named integration checks passed. |
+| 1 | SC1: empty removal drops the marketplace with no reload, with dir and `@url` rows, and `rm` behaves as `remove`. | VERIFIED | `remove.feature:7-41` is one Outline. Local dir/file rows run for project and user scope. The `@url` and `@github` Examples are now active. Rows assert `needs reload false` and the surviving `extras` declaration. The `rm` alias is covered at lines 43-58. Run in this verification: 8 Outline rows passed, plus the alias scenarios in the full gate. |
+| 2 | SC2: installed-plugin removal gives one `uninstalled` row per plugin, needs a reload, and a new session offers no skills; `plugin list` omits the plugin; the marketplace stays removed. | VERIFIED | `remove.feature:60-159`: nonalphabetical zebra/amber/elm cascade (`needs reload true`), single-plugin `rm`, `the session offers no skills` (lines 112-125), empty list in a fresh session (127-145), and base-layer absence (147-159). The cascade and skill-session scenarios passed here (17 and 11 steps). |
+| 3 | SC3: explicit and unscoped misses report the correct scope/reason; an unscoped duplicate-name removal selects only project. | VERIFIED | `remove.feature:161-304`: project-first (161), sole-user fallback (182), local-layer-only refusal (200), both explicit misses (221, 232), both elsewhere-present misses with the scope in the reason (243, 260), unscoped total miss with no scope field (277), repeated `rm` (287). `edge/router.ts:103-106` and `:297` route `remove`/`rm` and `list`/`ls` to the same handlers. The project-copy scenario passed here. |
+| 4 | SC4: `list`/`ls` show nothing when empty, show both scopes project-first with autoupdate and last-updated time, and narrow with `--scope`. | VERIFIED | `list.feature` has 9 scenarios: empty, six-row ordered inventory, effective local override, project and user filters, both empty-filter directions, populated and empty `ls`. `listMarketplaces` (`orchestrators/marketplace/list.ts:70-148`) iterates `["project","user"]` or only the requested scope, reads real state and merged config, and sets `autoupdate` and `lastUpdatedAt`. The six-row and override scenarios passed here (32 steps with the pair). |
+| 5 | D-MF-05 records the approved unscoped project-first divergence. | VERIFIED | `.planning/PROJECT.md:1326` holds the decision row: project priority, sole-user fallback, scope-before-layer refusal, upstream divergence. The scenarios at `remove.feature:161-219` pin it. |
+| 6 | Repeating `rm` after a clean removal gives a scoped not-added result with no reload and no loss of `extras`. | VERIFIED | `remove.feature:287-304`, in the 433/433 gate. |
+| 7 | An unscoped project-local-only match refuses before considering the user base match. | VERIFIED | `remove.feature:200-219` asserts the `marketplace in local layer only` failure, the untouched user declaration, and that no project base config exists. |
+| 8 | Successful cascade rows keep execution order (zebra, amber, elm). | VERIFIED | `remove.feature:60-92`. The scenario passed here with the `{zebra, amber, elm}` table. |
+| 9 | Removing a user marketplace leaves an independently installed project plugin usable. | VERIFIED | Three Outlines (`remove.feature:666-772`) assert project plugin list, info and update after the user removal. Their `@url` and `@github` variants are now active and are covered by the passing full gate. |
+| 10 | Preflight reports every blocker before mutation and preserves eligible plugins, both layers, and skills. | VERIFIED | `remove.feature:521-569` (passed here, 20 steps). The integration test `LAYER-02`/`PRUNE-03`/`D-05-07` cases passed, covering an unreadable other layer, a failing unstage, and unreadable dependency declarations. |
+| 11 | An empty list has no invented row and no populated tally. | VERIFIED | `list.feature:5-13` asserts the envelope fields and `the result lists no marketplaces` (`command.steps.ts:151`). |
+| 12 | A singleton list row uses the effective local autoupdate override and a scenario-bounded timestamp. | VERIFIED | `list.feature:56-80`: base true, local false, row false, `{scenario time}`. The scenario passed here. `features/lib/run-tokens.ts` implements the window check, opened in `features/support/world.ts`. |
+| 13 | Filtering an empty selected scope does not fall back to the populated opposite scope. | VERIFIED | `list.feature:139-165` covers both directions. `loadMarketplaceListEntries` selects `[opts.scope]` only. |
+| 14 | A mixed cascade continues after failures, persists successes, and retains failed plugins and declarations. | VERIFIED | `tests/integration/marketplace-layer-remove.test.ts` test "a partial remove persists successes and reports every failure in order" passed in this run. |
+| 15 | A mixed result groups successes in execution order before failures in discovery order, with error severity and reload true. | VERIFIED | The same test compares one literal whole-JSON payload. It passed. |
+| 16 | A failure-only cascade preserves the footprint, reports every failed child in order, and needs no reload. | VERIFIED | Test "a failure-only remove keeps every plugin and needs no reload" passed in this run. |
+| 17 | Mixed, failure-only and refusal results each emit exactly one schema-valid JSON entry with no invented child fields. | VERIFIED | The integration cases call `machineBoundary.capture.assertValid()` (lines 414, 572, 676) after direct `removeMarketplace` calls (347, 477, 614). All 11 tests in the file passed. |
 
-**Score:** 17/17 truths verified; 0 present-but-behavior-unverified. No overrides or prohibitions were declared in the four PLAN frontmatters.
+**Score:** 17/17 truths verified; 0 present-but-behavior-unverified. No overrides, no prohibitions.
 
 ### Required Artifacts
 
-| Artifact | Expected | Status | Three-level evidence |
-| --- | --- | --- | --- |
-| `.planning/PROJECT.md` | D-MF-05 decision | VERIFIED | Exists; one substantive decision row at line 1257; selected-scope behavior appears in the feature and real command tests. |
-| `features/marketplace/remove.feature` | Scope, alias, clean/partial cascade, persistence scenarios | VERIFIED | Exists (762 lines); exact rows and config controls; Cucumber binds its phrases to registered steps, and named scenarios pass. |
-| `features/marketplace/list.feature` | Empty/populated/filter/alias scenarios | VERIFIED | Exists (197 lines); complete six-row and filtered tables; bound steps execute through Pi, and named scenario passes. |
-| `tests/integration/marketplace-layer-remove.test.ts` | Partial/failure-only real persistence and JSON checks | VERIFIED | Exists (865 lines); literal full-payload and footprint assertions; imports/calls the production remove orchestrator and the validating capture; named tests pass. |
-
-All four `verify.artifacts` queries returned `all_passed: true` (2/2, 1/1, 1/1, 1/1). File existence was only the first check; the table records substance and executable wiring.
+| Artifact | Status | Evidence |
+| --- | --- | --- |
+| `.planning/PROJECT.md` D-MF-05 | VERIFIED | One substantive row at line 1326. |
+| `features/marketplace/remove.feature` | VERIFIED | 772 lines, 49 scenario instances, all steps bound (dry-run: no undefined steps). |
+| `features/marketplace/list.feature` | VERIFIED | 197 lines, 9 scenarios, all bound. |
+| `tests/integration/marketplace-layer-remove.test.ts` | VERIFIED | 865 lines, 11 tests, imports and calls the production `removeMarketplace`. |
 
 ### Key Link Verification
 
-| From | To / path | Status | Evidence |
+| From | To | Status | Evidence |
 | --- | --- | --- | --- |
-| Both feature files | Publication and command steps | WIRED | Gherkin phrases bind to `publishing.steps.ts:46-92` and `command.steps.ts:101-151`; the command driver sends RPC prompts to a real headless Pi and validates each returned payload (`pi-commands.ts:66-99`). Named scenarios pass. |
-| Remove feature | Config and new-session steps | WIRED | `config.steps.ts:133-170` reads complete declaration maps; `session.steps.ts:20-35` invokes `startSession`, whose `new_session`/`get_commands` calls rebuild and inspect Pi skills (`pi-commands.ts:97-121`). Named new-session scenario passes. |
-| List feature | `{scenario time}` token | WIRED | `run-tokens.ts:25-38` checks an ISO timestamp falls inside the scenario window; list rows use that token in all populated cases. |
-| Integration test | Notification boundary → JSON capture → production remove | WIRED | Imports at `marketplace-layer-remove.test.ts:18-40`; direct `removeMarketplace` calls at lines 347, 477, 614; boundary imports `createJsonCapture`, forwards `entrySink`, and cases call `capture.assertValid()`. |
-| Command router | Remove/list handlers → orchestrators | WIRED | `edge/router.ts:254-259` maps `remove/rm` and `list/ls` to shared handlers; `edge/register.ts:130-133` registers them; handlers call `removeMarketplace` and `listMarketplaces` respectively. |
-
-The generic `verify.key-links` queries returned lexical false negatives for 11 of 12 declared links: Gherkin files do not contain TypeScript import-path strings, and the integration boundary uses relative imports. These are not unwired links; the phrase bindings, import chain, public route, and passing executions above establish them. The one lexical positive was the direct integration-to-orchestrator link.
+| Feature files | Step definitions | WIRED | Dry-run over both features: 637 steps, none undefined. The result steps are `command.steps.ts:142,151`; the session steps are `session.steps.ts:24-33`. |
+| Feature steps | Real headless Pi | WIRED | Named scenarios executed and passed, including fresh-session skill inventories. |
+| List feature | `{scenario time}` token | WIRED | `features/lib/run-tokens.ts:24`; used in all populated list rows. |
+| Integration test | Production remove orchestrator and JSON capture | WIRED | `removeMarketplace` imported at line 23; `assertValid` on the capture. |
+| Router | Handlers to orchestrators | WIRED | `edge/router.ts:103-106,121-122,297`; `edge/handlers/marketplace/{remove,list}.ts` import `removeMarketplace` and `listMarketplaces`. |
 
 ### Data-Flow Trace (Level 4)
 
-| Output | Source | Status | Evidence |
-| --- | --- | --- | --- |
-| Marketplace list rows | `loadState` for each selected scope plus `loadMergedScopeConfig` | FLOWING | `list.ts:73-132` iterates actual state records, merges autoupdate, carries `lastUpdatedAt`, and passes blocks to notification output at lines 135-148; six-row and override scenarios reject static output. |
-| Removal rows and persisted effects | Scoped state/config and real plugin unstage results | FLOWING | Remove handler forwards name, scope, local flag, cwd, and notification run; feature tests observe public result/config/session effects, while integration tests compare direct state, files, and JSON after real add/install setup. |
+| Output | Source | Status |
+| --- | --- | --- |
+| List rows | `loadState` plus `loadMergedScopeConfig` per selected scope (`list.ts:70-130`) | FLOWING. Literal tables reject static or leaking output. |
+| Removal rows and persisted effects | Real state/config/unstage via the production orchestrator | FLOWING. Feature and integration tests observe the public result, config files, and new-session effects. |
 
 ### Behavioral Spot-Checks
 
 | Behavior | Command | Result | Status |
 | --- | --- | --- | --- |
-| Local source-kind Outline | `npx cucumber-js --name 'Removing an empty marketplace needs no reload'` | 4 scenarios, 40 steps, 16 hooks passed | PASS |
-| Three-plugin ordered cascade | `npx cucumber-js --name 'Removing a marketplace uninstalls every plugin in installation order'` | 1 scenario, 17 steps passed | PASS |
-| Clean new-session skill absence | `npx cucumber-js --name 'A new session offers none of the removed plugins'` | 1 scenario, 11 steps passed | PASS |
-| Scope precedence | `npx cucumber-js --name 'An unscoped remove selects the project copy'` | 1 scenario, 12 steps passed | PASS |
-| Full ordered list | `npx cucumber-js --name 'The list groups project before user and keeps insertion order'` | 1 scenario, 20 steps passed | PASS |
-| All-blocker preflight | `npx cucumber-js --name 'A refused remove reports every blocking plugin without removing any'` | 1 scenario, 20 steps passed | PASS |
-| Mixed and failure-only integration | `node --test --test-name-pattern 'a partial remove persists successes and reports every failure in order' tests/integration/marketplace-layer-remove.test.ts`; named failure-only/refusal pattern in the same module | Both commands exited 0 with one passing test module, no failure/skip/todo | PASS |
-| Feature/step binding gate | `npm run check:features` | Exit 0; includes dry-run definition checks for excluded Examples | PASS |
+| Binding of all steps | `npx cucumber-js --dry-run features/marketplace/remove.feature features/marketplace/list.feature` | 58 scenarios, 637 steps, none undefined | PASS |
+| Empty removal Outline (all source kinds), ordered cascade, skill session, project-first, blocker refusal | `npx cucumber-js --parallel 1 --name ...` on `remove.feature` | 12 scenarios, 140 steps passed | PASS |
+| Six-row list and local override | `npx cucumber-js --parallel 1 --name ...` on `list.feature` | 2 scenarios, 32 steps passed | PASS |
+| Integration remove cases | `node --test tests/integration/marketplace-layer-remove.test.ts` | 11/11 pass, 0 fail/skip | PASS |
+| Whole tree at HEAD `0110a355` (only planning Markdown changed since) | `/tmp/claude-1000/-home-acolomba-src-pi-claude-marketplace-cucumber-behavioral-tests/e37b84b9-da30-433b-a2eb-65b65d26c976/scratchpad/regression-gate.log` | 433/433 scenarios, 4050/4050 steps, static, unit, integration and direct-coverage gates green | PASS |
 
-The first sandboxed named Cucumber attempt exited before scenario setup when its Pi child exited 0. The exact named scenario was rerun with the needed execution permission and passed. This was an environment setup failure, not a failed behavioral assertion. The parent combined-tree `npm run check` result is reusable for all remaining active cases: it passed at the current source/test inputs (140 Cucumber scenarios, 1,488 steps, 280 LCOV records), and `git diff 44d75392..HEAD -- . ':(exclude,glob).planning/**/*.md'` plus `git status --short` showed no build-input change. Node was v26.11.1; verification HEAD was `1216a80a`.
+The whole suite and `npm run check` were not rerun here, by instruction. They are cited from the log above.
 
 ### Probe Execution
 
-No PLAN declares a `probe-*.sh` path, and this phase is scenario/integration coverage rather than a probe-driven migration. Probe execution is not applicable; the focused commands above and the combined-tree gate supply executable evidence.
+No PLAN declares a probe script. Not applicable.
 
 ### Requirements Coverage
 
-| Requirement | Source plan | Status | Evidence |
-| --- | --- | --- | --- |
-| RM-01 | 04-01 | SATISFIED | Empty-removal Outline, four passing active local rows, exact no-reload and surviving declaration. |
-| RM-02 | 04-02, 04-04 | SATISFIED | Zero/one/three-plugin cascades; ordered, mixed, and failure-only whole-result/footprint assertions. |
-| RM-03 | 04-02 | SATISFIED | Fresh-session no-skills and empty plugin-list scenarios. |
-| RM-04 | 04-02 | SATISFIED | Fresh-session marketplace-list and base/local config absence. |
-| RM-05 | 04-01 | SATISFIED | Both explicit missing scopes, with absent-everywhere and elsewhere-present reasons. |
-| RM-06 | 04-01 | SATISFIED | Unscoped missing name has generic reason and no scope field. |
-| RM-07 | 04-01, 04-02 | SATISFIED | `rm` empty, single-plugin, and repeated-removal cases share the production route. |
-| RM-08 | 04-01 | SATISFIED | Duplicate-name project priority, sole-user fallback, scope-before-layer refusal, D-MF-05. |
-| LS-01 | 04-03 | SATISFIED | Complete empty and duplicate-name populated list cases. |
-| LS-02 | 04-03 | SATISFIED | Six ordered scope rows, effective autoupdate, scenario-bounded timestamps, local override. |
-| LS-03 | 04-03 | SATISFIED | Both populated and empty selected-scope filters. |
-| LS-04 | 04-03 | SATISFIED | Populated and empty `ls` cases with same complete expected result as `list`. |
+All 12 IDs appear in the PLAN `requirements` fields (04-01: RM-01, RM-05..RM-08; 04-02: RM-02..RM-04; 04-03: LS-01..LS-04; 04-04: RM-02). `REQUIREMENTS.md` marks all 12 complete and maps them to Phase 4. No orphans. RM-09 and LS-05 belong to Phase 9 (also complete there).
 
-No Phase 4 requirement is orphaned: all 12 IDs in the roadmap/requirements matrix appear in the four PLAN `requirements` fields. RM-09 and LS-05 are explicitly assigned to Phase 9, which supplies the HTTPS stand-in and activates `@url`; `@github` activation is assigned to Phase 10. The current remote Examples are present and definition-checked, but no remote behavior is claimed as executed here.
+| Requirement | Status | Evidence |
+| --- | --- | --- |
+| RM-01 | SATISFIED | Empty-removal Outline, now including active `@url` and `@github` rows. |
+| RM-02 | SATISFIED | Ordered cascades; integration mixed and failure-only payloads. |
+| RM-03 | SATISFIED | Fresh-session no-skills and plugin-list scenarios. |
+| RM-04 | SATISFIED | Fresh-session marketplace-list and config absence. |
+| RM-05 | SATISFIED | Both explicit miss directions, with and without the scope in the reason. |
+| RM-06 | SATISFIED | Unscoped miss has no scope. |
+| RM-07 | SATISFIED | `rm` for empty, single-plugin and repeated removal. |
+| RM-08 | SATISFIED | Project priority, user fallback, D-MF-05. |
+| LS-01 | SATISFIED | Empty list. |
+| LS-02 | SATISFIED | Six ordered rows with autoupdate and timestamp. |
+| LS-03 | SATISFIED | Both scope filters, populated and empty. |
+| LS-04 | SATISFIED | Populated and empty `ls`. |
 
-### Decision Coverage
+### Anti-Patterns Found
 
-`check.decision-coverage-verify` returned `honored: 8`, `total: 8`, `not_honored: []` against Phase 4 CONTEXT.md. This advisory gate found no missing decision translation.
-
-### Test Quality and Anti-Patterns
-
-| File | Active proof | Disabled/circular/weak-assertion finding | Verdict |
-| --- | --- | --- | --- |
-| `features/marketplace/remove.feature` | Exact envelopes, all returned ordered rows, complete config maps, and new-session inventory | No disabled steps; the active Outline and named cascade/preflight/session cases passed | PASS |
-| `features/marketplace/list.feature` | Full six-row and filtered inventories, tally presence/absence, effective values and time window | No disabled steps; a static, sorted, or cross-scope-leaking list contradicts the literal tables | PASS |
-| `tests/integration/marketplace-layer-remove.test.ts` | Literal whole JSON payloads, post-action state/config/artifact comparisons, schema validation | No `skip`/`todo`/`only`; `writeFile` constructs temporary input fixtures and does not generate expected results from production output | PASS |
-
-The changed implementation files contain no unreferenced `TBD`, `FIXME`, or `XXX`, and no placeholder/empty-handler finding. The clean code-review iteration and zero-open-threat security record agree with, but were not substituted for, the code and test checks above.
+None. The feature files and the integration test have no disabled steps, no `skip`/`todo`/`only`, and no unreferenced `TBD`/`FIXME`/`XXX`. Expected values are literal tables, not derived from production output.
 
 ### Human Verification Required
 
-None. Phase 4's user-visible CLI outcomes, ordering, persistence, and JSON behavior have automated real-Pi or integration evidence. The remote source-kind runtime work is specifically scheduled in Phases 9 and 10; its current exclusion is visible rather than silently counted as a passing remote run.
+None.
 
 ### Gaps Summary
 
-No blocking gaps or uncertain must-haves. The phase goal is achieved for its defined scope. The tagged remote Examples remain dormant until their dedicated source-kind phases activate them.
+No gaps. All four roadmap success criteria still hold at HEAD. The remote source-kind Examples that the earlier report listed as dormant now run and pass, and Phase 10's added assertions strengthen the kept-dependency scenarios.
 
 ---
 
-_Verified: 2026-10-18T15:19:42Z_
-_Verifier: the agent (gsd-verifier)_
+_Verified: 2026-10-21_
+_Verifier: Claude (gsd-verifier)_
