@@ -692,6 +692,19 @@ validated and archived in [milestones/json-output-REQUIREMENTS.md](milestones/js
 
 ### Validated
 
+- ✓ GitHub sources run end to end against the loopback git host through
+  `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL`, and no tag is excluded from the
+  cucumber profile any more (433 scenarios, 48 `@github`). The five github.com
+  spellings resolve to one source; `owner/repo@ref`, `owner/repo#ref`, and a
+  URL `#ref` clone that ref, proven by a `stable` branch with its own content.
+  401 is pinned on url and github sources without a credential, with a stored
+  one, with a rejected one, and on update with the `git credential approve`
+  remedy for the host. Product fixes, test-first: the shorthand `#ref` parse
+  (D-MF-07), the remedy line on a github update, and a rejected stored
+  credential named as a rejection. The suite passes on Node 24 and Node 26 and
+  under a hostile git config — marketplace-features Phase 10, 2026-10-21
+  (ADD-11, UPD-12, SRC-02, SRC-03).
+
 - ✓ A loopback HTTPS git stand-in (`node:https` around `git http-backend`,
   a run-time openssl certificate trusted only through `NODE_EXTRA_CA_CERTS`)
   lives for each cucumber worker's run, resets before every scenario, and
@@ -1312,7 +1325,7 @@ test.ts` (43 V2 tests, +2 G-21-01 inventory-vs-transition regressions)
 | **D-MF-04 (marketplace-features): each scope owns its marketplace records and clones** — a project-scope install that uses a user-scope marketplace declares that marketplace in the project config (desired state, the plugin's target layer) and gives the project a real record with its own clone, as if the marketplace had been added to the project scope; the install adds it through the same `marketplace add` code, so leftovers, cleanup, and record shape match an explicit add, and a git source is cloned once from the network (NFR-5 amended); marketplaces adopted for dependencies are treated the same; every marketplace verb then acts per scope (user decision 2026-10-16) | A user-scope remove must never break a project scope; extends D-29. Claude Code keeps one machine-global clone (`~/.claude/plugins/marketplaces/`), so the per-scope clone is a divergence licensed by this decision | — Pending |
 | **D-MF-05 (marketplace-features): unscoped marketplace removal selects project before user** — when both scopes hold the name it changes only the project copy and reports only that selected scope; when only user holds the name it falls back to user; scope before layer means a project-local-only match refuses flagless removal without falling through to the user base layer (user decisions 2026-10-18) | This is an explicit divergence from Claude Code 2.1.296, whose `claude plugin marketplace remove --help` and official command reference said on 2026-10-18 that omitting `--scope` removes the marketplace from every scope. Project-first selection preserves this project's independently owned per-scope records and clones, while scope-before-layer preserves D-MF-03's mutation boundary. | ✓ Good |
 | **D-MF-06 (marketplace-features): marketplace info composes scopes independently in project-first order** — an invalid manifest keeps the shipped failed `plugin-info` row without suppressing a healthy scope; an explicit scope miss reports that requested scope without fallback; `allowCrossMarketplaceDependenciesOn` preserves manifest declaration order (user decisions 2026-10-18) | Claude Code 2.1.296 has no marketplace `info` command, so this Pi-only surface follows the project's established notification grammar and independently owned scope model while retaining upstream source field concepts. | ✓ Good |
-| **D-MF-07 (marketplace-features): the `owner/repo` shorthand takes a ref after `#`, as after `@`** — the split matches Claude Code 2.1.296's shorthand split; a `#` that an `@` comes before stays part of the `@` ref (D-76-04); an empty ref after `#` adds `owner/repo` with no ref (user decision 2026-10-21) | Restores upstream parity for `#`. Claude Code refuses `owner/repo#`, so reading it as no ref is a recorded divergence that matches how the URL form drops an empty fragment. | — Pending |
+| **D-MF-07 (marketplace-features): the `owner/repo` shorthand takes a ref after `#`, as after `@`** — the split matches Claude Code 2.1.296's shorthand split; a `#` that an `@` comes before stays part of the `@` ref (D-76-04); an empty ref after `#` adds `owner/repo` with no ref (user decision 2026-10-21) | Restores upstream parity for `#`. Claude Code refuses `owner/repo#`, so reading it as no ref is a recorded divergence that matches how the URL form drops an empty fragment. | ✓ Good |
 
 ## Evolution
 
@@ -1334,6 +1347,15 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
+
+_Last updated: 2026-10-21 after marketplace-features Phase 10 completed. All
+5 success criteria and ADD-11, UPD-12, SRC-02, SRC-03 pass (5/5); the source-
+walk check of SC4 was dropped by D-07. The code review fix loop closed all 13
+findings (4 warnings, 9 info) except IN-04, deferred to BACKLOG SHORTREF-01
+(the shorthand splits at the last `@`, upstream at the first). Carry-overs:
+ROWID-01, WINDOWS #100-109, and the CI proof of the git host, read at PR time
+(D-08). Every milestone phase is complete; the milestone audit is next. Prior
+updates follow._
 
 _Last updated: 2026-10-21 after marketplace-features Phase 9 completed. All
 6 success criteria and its 14 requirements pass; both manual controls (the
