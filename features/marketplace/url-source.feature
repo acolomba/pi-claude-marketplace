@@ -40,6 +40,42 @@ Feature: Marketplace url source
       | GET    | /acme/tools/info/refs?service=git-upload-pack | 200    |
       | POST   | /acme/tools/git-upload-pack                   | 200    |
 
+  Scenario: Adding a url marketplace at a ref clones that ref
+    Given the marketplace "tools" is published as a url source
+    Given the marketplace "tools" has the description "Tools for formatting"
+    Given the branch "stable" of the marketplace "tools" has the description "Stable tools"
+    When the user runs "/claude:plugin marketplace add https://{git host}/acme/tools.git#stable --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these marketplaces:
+      | name  | scope   | status |
+      | tools | project | added  |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name  | source                                   |
+      | tools | https://{git host}/acme/tools.git#stable |
+    Then the git host receives these requests:
+      | method | path                                              | status |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |
+    When the user runs "/claude:plugin marketplace info tools --scope project"
+    Then the marketplace info result has these fields:
+      | kind                    | marketplace-info              |
+      | name                    | tools                         |
+      | scope                   | project                       |
+      | details autoupdate      | false                         |
+      | details last updated at | {scenario time}               |
+      | source kind             | url                           |
+      | source abs path         |                               |
+      | source url              | https://{git host}/acme/tools |
+      | source owner            |                               |
+      | source repo             |                               |
+      | source ref              | stable                        |
+      | description             | Stable tools                  |
+      | severity                | info                          |
+      | needs reload            | false                         |
+
   Scenario: Adding a url marketplace the git host answers with 404 fails as source missing
     Given the marketplace "tools" is published as a url source
     Given the git host answers 404 for the marketplace "tools"
