@@ -15,7 +15,7 @@ import assert from "node:assert/strict";
 import { rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { publishGitRepository, pushGitRepository } from "./git-marketplace.ts";
+import { publishGitRepository, pushGitBranch, pushGitRepository } from "./git-marketplace.ts";
 import {
   writeDependencyAllowance,
   writeInvalidManifest,
@@ -378,4 +378,27 @@ export async function describeMarketplace(
   await changePublication(published, () =>
     writeMarketplaceDescription(published.manifestPath, description),
   );
+}
+
+/**
+ * Sets the description of the manifest on the branch `branch` of the git
+ * marketplace `published` records, leaving `main` as it is (D-02). A local
+ * publication has no branch.
+ */
+export async function describeMarketplaceBranch(
+  published: PublishedMarketplace,
+  branch: string,
+  description: string,
+): Promise<void> {
+  switch (published.kind) {
+    case "dir":
+    case "file":
+      throw new Error(`a ${published.kind} publication has no branch`);
+    case "url":
+    case "github":
+      await pushGitBranch(published.root, published.gitHome, branch, () =>
+        writeMarketplaceDescription(published.manifestPath, description),
+      );
+      return;
+  }
 }

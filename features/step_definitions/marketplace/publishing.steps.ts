@@ -22,6 +22,7 @@ import { runCommand } from "../../lib/pi-commands.ts";
 import {
   allowDependenciesOn,
   describeMarketplace,
+  describeMarketplaceBranch,
   invalidateManifest,
   publishExternalMarketplace,
   publishMarketplace,
@@ -84,6 +85,13 @@ Given(
   "the marketplace {string} has the description {string}",
   async function (this: ScenarioWorld, name: string, description: string) {
     await describeMarketplace(this.requirePublished(name), description);
+  },
+);
+
+Given(
+  "the branch {string} of the marketplace {string} has the description {string}",
+  async function (this: ScenarioWorld, branch: string, name: string, description: string) {
+    await describeMarketplaceBranch(this.requirePublished(name), branch, description);
   },
 );
 

@@ -46,3 +46,24 @@ export async function pushGitRepository(workTree: string, home: string): Promise
   await runGit(workTree, home, "commit", "-q", "--allow-empty", "-m", "publish");
   await runGit(workTree, home, "push", "-q", "origin", "main", "main:stable");
 }
+
+/**
+ * Commits the change `write` makes to the published work tree `workTree` on
+ * the branch `branch`, started from the commit of `main`, pushes that branch
+ * alone, and returns the work tree to `main`. The push is a fast-forward, so it
+ * fails when `branch` holds a commit that `main` lacks. Every git runs with the
+ * HOME `home`.
+ */
+export async function pushGitBranch(
+  workTree: string,
+  home: string,
+  branch: string,
+  write: () => Promise<void>,
+): Promise<void> {
+  await runGit(workTree, home, "checkout", "-q", "-B", branch, "main");
+  await write();
+  await runGit(workTree, home, "add", "-A");
+  await runGit(workTree, home, "commit", "-q", "--allow-empty", "-m", "publish");
+  await runGit(workTree, home, "push", "-q", "origin", branch);
+  await runGit(workTree, home, "checkout", "-q", "main");
+}

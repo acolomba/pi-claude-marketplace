@@ -397,6 +397,10 @@ function parseUrlSourceForm(raw: string): GitHubSource | UrlSource | UnknownSour
 /**
  * The scheme-less `owner/repo` shorthands.
  *
+ * SRC-03: `owner/repo#<ref>` folds into `github` plus a ref. The split is on
+ * the first `#` when no `@` comes before it, as Claude Code 2.1.296's shorthand
+ * does. An empty `#` ref reads as no ref, the way the URL form drops an empty
+ * fragment (D-MF-07, a recorded divergence: Claude Code refuses it).
  * D-76-04: `owner/repo@<ref>` folds into `github` plus a ref. The split is on
  * the LAST `@`, and the fold only happens when the left side is a valid
  * `owner/repo`. SP-5: a bare `owner/repo` is exactly one slash with both
@@ -404,6 +408,12 @@ function parseUrlSourceForm(raw: string): GitHubSource | UrlSource | UnknownSour
  * string, whitespace) is unknown.
  */
 function parseShorthandSourceForm(raw: string): ParsedSource {
+  const hashIdx = raw.indexOf("#");
+  const firstAtIdx = raw.indexOf("@");
+  if (hashIdx !== -1 && (firstAtIdx === -1 || firstAtIdx > hashIdx)) {
+    return parseShorthandHashRef(raw, hashIdx);
+  }
+
   const atIdx = raw.lastIndexOf("@");
   if (atIdx !== -1) {
     const github = parseOwnerRepo(raw.slice(0, atIdx), raw);
@@ -421,6 +431,17 @@ function parseShorthandSourceForm(raw: string): ParsedSource {
   }
 
   return { kind: "unknown", raw, reason: nonRelativeReason(raw) };
+}
+
+/** SRC-03 / D-MF-07: split `owner/repo#<ref>` at its first `#`, `hashIdx`. */
+function parseShorthandHashRef(raw: string, hashIdx: number): ParsedSource {
+  const github = parseOwnerRepo(raw.slice(0, hashIdx), raw);
+  if (github.kind !== "github") {
+    return { kind: "unknown", raw, reason: nonRelativeReason(raw) };
+  }
+
+  const ref = raw.slice(hashIdx + 1);
+  return ref.length > 0 ? { ...github, ref } : github;
 }
 
 export function parsePluginSource(raw: unknown): ParsedSource {
