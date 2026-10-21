@@ -14,6 +14,7 @@ import {
   loadVisibleMarketplaces,
   crossScopeFlag,
   foldUnstageNotices,
+  lacksStoredCredential,
   marketplaceFailureRows,
   marketplaceInOtherScope,
   marketplaceLayerVerdict,
@@ -819,6 +820,72 @@ test("refreshUrlClone rethrows a non-Error fetch rejection unchanged", async () 
   await assert.rejects(refresh, (error: unknown) => error === "socket closed");
   boundary.verifyAll();
 });
+
+function storedCredentialAuth(): GitAuthBundle {
+  const { credentialOps } = createCredentialOpsFake({ boundary: "memory" });
+  return { kind: "stored-credential", credentialOps, host: "gitlab.example.com" };
+}
+
+function deviceFlowAuth(): GitAuthBundle {
+  const { credentialOps } = createCredentialOpsFake({ boundary: "memory" });
+  return {
+    kind: "device-flow",
+    credentialOps,
+    host: "gitlab.com",
+    onAuthRequired: () => Promise.resolve({ ok: false, reason: "declined" }),
+  };
+}
+
+for (const { title, makeError, makeAuth, lacks } of [
+  {
+    title: "reports an auth failure on a stored-credential host",
+    makeError: (): unknown => unauthorized(),
+    makeAuth: storedCredentialAuth,
+    lacks: true,
+  },
+  {
+    title: "does not report a stored credential the host rejected",
+    makeError: (): unknown => new StoredCredentialRejectedError("gitlab.example.com"),
+    makeAuth: storedCredentialAuth,
+    lacks: false,
+  },
+  {
+    title: "does not report a cross-origin challenge",
+    makeError: (): unknown => new CrossOriginChallengeError("https://sso.example.com"),
+    makeAuth: storedCredentialAuth,
+    lacks: false,
+  },
+  {
+    title: "does not report a network failure",
+    makeError: (): unknown => Object.assign(new Error("getaddrinfo"), { code: "ENOTFOUND" }),
+    makeAuth: storedCredentialAuth,
+    lacks: false,
+  },
+  {
+    title: "does not report a non-Error rejection",
+    makeError: (): unknown => "socket closed",
+    makeAuth: storedCredentialAuth,
+    lacks: false,
+  },
+  {
+    title: "does not report an auth failure on a Device Flow host",
+    makeError: (): unknown => unauthorized(),
+    makeAuth: deviceFlowAuth,
+    lacks: false,
+  },
+]) {
+  test(`lacksStoredCredential ${title}`, () => {
+    // arrange
+    const failure = makeError();
+    const auth = makeAuth();
+
+    // act
+    const reported = lacksStoredCredential(failure, auth);
+
+    // assert
+    assert.strictEqual(reported, lacks);
+  });
+}
 
 for (const { title, scenario, storedRef, expectedCalls } of [
   {

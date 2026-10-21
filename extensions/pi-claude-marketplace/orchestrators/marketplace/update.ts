@@ -104,13 +104,11 @@ import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import {
-  CrossOriginChallengeError,
   InvalidMarketplaceManifestError,
   MarketplaceBaselineUnreadableError,
   MarketplaceUpdateError,
   PluginShapeError,
   StateLockHeldError,
-  StoredCredentialRejectedError,
   composeErrorWithCauseChain,
   errorMessage,
   rethrowInvalidGitHubBaseUrl,
@@ -147,6 +145,7 @@ import {
 
 import {
   DEFAULT_GIT_OPS,
+  lacksStoredCredential,
   recordedManifestPath,
   refreshGitHubClone,
   refreshUrlClone,
@@ -395,22 +394,6 @@ async function refreshGitHubSource(
 
     throw err;
   }
-}
-
-/**
- * GAUTH-04: an auth failure that a stored credential could answer. A challenge
- * after a cross-origin redirect is not one, because a credential stored for the
- * bundle's host is never sent there (Q-02). A refused credential is not one
- * either, because the helper produced it and the host was sent it.
- */
-function lacksStoredCredential(err: unknown, auth: GitAuthBundle): err is Error {
-  return (
-    err instanceof Error &&
-    auth.kind === "stored-credential" &&
-    !(err instanceof CrossOriginChallengeError) &&
-    !(err instanceof StoredCredentialRejectedError) &&
-    classifyGitTransportFailure(err) === "authentication required"
-  );
 }
 
 async function refreshRecord(

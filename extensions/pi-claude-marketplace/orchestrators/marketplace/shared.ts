@@ -380,19 +380,30 @@ export async function refreshUrlClone(args: {
   try {
     await refreshGitHubClone(cloneDir, source.ref, gitOps, onFetchSucceeded, auth);
   } catch (err) {
-    if (
-      err instanceof Error &&
-      err.cause === undefined &&
-      classifyGitTransportFailure(err) === "authentication required" &&
-      auth.kind === "stored-credential" &&
-      !(err instanceof CrossOriginChallengeError) &&
-      !(err instanceof StoredCredentialRejectedError)
-    ) {
+    if (lacksStoredCredential(err, auth) && err.cause === undefined) {
       err.cause = new Error(NO_STORED_CREDENTIAL_CAUSE(host));
     }
 
     throw err;
   }
+}
+
+/**
+ * GAUTH-04: an auth failure that a stored credential could answer, so the
+ * failure gains the `NO_STORED_CREDENTIAL_CAUSE` line. Only a
+ * `stored-credential` bundle qualifies. A challenge after a cross-origin
+ * redirect does not, because a credential stored for the bundle's host is
+ * never sent there (Q-02). A refused credential does not either, because the
+ * helper produced it and the host was sent it. Each caller places the line.
+ */
+export function lacksStoredCredential(err: unknown, auth: GitAuthBundle): err is Error {
+  return (
+    err instanceof Error &&
+    auth.kind === "stored-credential" &&
+    !(err instanceof CrossOriginChallengeError) &&
+    !(err instanceof StoredCredentialRejectedError) &&
+    classifyGitTransportFailure(err) === "authentication required"
+  );
 }
 
 /**
