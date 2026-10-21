@@ -558,6 +558,23 @@ export class CrossOriginChallengeError extends Error {
   }
 }
 
+/**
+ * GAUTH-04: the host answered a stored credential with a second challenge, so
+ * the credential was found and sent, and the host refused it. The keychain
+ * keeps it, because nothing can mint a replacement (D-1-01). Classified as
+ * `{authentication required}`.
+ *
+ * AUTH-09: the message names the host and nothing else.
+ */
+export class StoredCredentialRejectedError extends Error {
+  readonly host: string;
+  constructor(host: string) {
+    super(`${host} rejected the stored credential`);
+    this.name = "StoredCredentialRejectedError";
+    this.host = host;
+  }
+}
+
 /** IN-03: the HTTP client in `platform/git.ts` met an eleventh consecutive redirect. */
 export class TooManyRedirectsError extends Error {
   constructor() {

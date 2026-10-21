@@ -17,6 +17,7 @@ import { createCredentialOps } from "../../extensions/pi-claude-marketplace/plat
 import {
   DeviceFlowUnavailableError,
   InvalidGitHubBaseUrlError,
+  StoredCredentialRejectedError,
 } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { openNotificationRun } from "../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import { createDeviceFlowFake } from "../domain/device-flow-fake.ts";
@@ -638,13 +639,16 @@ describe("buildAuthForHost", () => {
     const callbacks = buildAuthCallbacks(auth);
 
     // act
-    const cancellation = await callbacks.onAuthFailure(
-      "https://git.example.invalid/owner/repo.git",
-      irreplaceable,
+    await assert.rejects(
+      callbacks.onAuthFailure("https://git.example.invalid/owner/repo.git", irreplaceable),
+      (error: unknown) => {
+        assert.ok(error instanceof StoredCredentialRejectedError);
+        assert.strictEqual(error.host, "git.example.invalid");
+        return true;
+      },
     );
 
     // assert
-    assert.deepStrictEqual(cancellation, { cancel: true });
     assert.deepStrictEqual(credentials.calls, { fill: [], approve: [], reject: [] });
     assert.deepStrictEqual(credentials.storedCredential("git.example.invalid"), irreplaceable);
     assert.deepStrictEqual(logged, [

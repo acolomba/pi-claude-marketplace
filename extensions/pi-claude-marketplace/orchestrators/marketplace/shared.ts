@@ -48,6 +48,7 @@ import {
   MarketplaceInLocalLayerOnlyError,
   MarketplaceNotFoundError,
   PluginShapeError,
+  StoredCredentialRejectedError,
 } from "../../shared/errors.ts";
 import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
 import { notify } from "../../shared/notification-dispatch.ts";
@@ -341,7 +342,8 @@ export async function refreshGitHubClone(
  * `device-flow` bundle is excluded -- there the story is a declined or expired
  * Device Flow, and the bare closed-set token is the whole truth. A challenge
  * after a cross-origin redirect keeps its own cause text, because a credential
- * stored for `host` cannot answer it (Q-02).
+ * stored for `host` cannot answer it (Q-02). So does a stored credential the
+ * host refused, because the helper produced it.
  */
 export async function refreshUrlClone(args: {
   readonly cloneDir: string;
@@ -383,7 +385,8 @@ export async function refreshUrlClone(args: {
       err.cause === undefined &&
       classifyGitTransportFailure(err) === "authentication required" &&
       auth.kind === "stored-credential" &&
-      !(err instanceof CrossOriginChallengeError)
+      !(err instanceof CrossOriginChallengeError) &&
+      !(err instanceof StoredCredentialRejectedError)
     ) {
       err.cause = new Error(NO_STORED_CREDENTIAL_CAUSE(host));
     }

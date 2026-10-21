@@ -45,6 +45,7 @@ import {
   serializeCauseChain,
   StaleSourceCloneError,
   StateLockHeldError,
+  StoredCredentialRejectedError,
   TooManyRedirectsError,
   UnreadableSourceCloneError,
   UnremovableLeftoverCloneError,
@@ -1150,6 +1151,29 @@ describe("CrossOriginChallengeError", () => {
         name: "CrossOriginChallengeError",
         message:
           "redirected request to https://sso.example.com asked for credentials; a credential is not sent after a redirect to another origin",
+        cause: undefined,
+      },
+    );
+  });
+});
+
+describe("StoredCredentialRejectedError", () => {
+  test("names the host that rejected the stored credential", () => {
+    // arrange
+    const host = "git.example.com:8443";
+
+    // act
+    const error = new StoredCredentialRejectedError(host);
+
+    // assert
+    assert.ok(error instanceof StoredCredentialRejectedError);
+    assert.ok(error instanceof Error);
+    assert.deepStrictEqual(
+      { name: error.name, message: error.message, host: error.host, cause: error.cause },
+      {
+        name: "StoredCredentialRejectedError",
+        message: "git.example.com:8443 rejected the stored credential",
+        host,
         cause: undefined,
       },
     );

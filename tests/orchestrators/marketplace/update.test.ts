@@ -36,6 +36,7 @@ import {
   FetchedUrlCause,
   InvalidGitHubBaseUrlError,
   PluginShapeError,
+  StoredCredentialRejectedError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { openNotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
@@ -1101,6 +1102,39 @@ test("Q-02: a challenge after a cross-origin redirect keeps its own cause withou
       {
         message:
           'Some operations have failed.\n\n⊘ urlmp-redirect [project] (failed)\n  ⊘ urlmp-redirect (failed) {authentication required}\n    cause: Failed to update marketplace "urlmp-redirect". -> redirected request to https://sso.example.com asked for credentials; a credential is not sent after a redirect to another origin',
+        severity: "error",
+      },
+    ]);
+  });
+});
+
+test("GAUTH-04: a stored credential that a host with no Device Flow rejects renders {authentication required} without the stored-credential cause line", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    await seedUrlMarketplace({ cwd, name: "urlmp-rejected", ref: "main" });
+    const { ctx, run, notifications } = makeCtx();
+    const { credOps: credentialOps } = createCredentialOps();
+    const { gitOps } = createGitOps({
+      fetchThrows: new StoredCredentialRejectedError("gitlab.example.com"),
+    });
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      name: "urlmp-rejected",
+      scope: "project",
+      cwd,
+      gitOps,
+      credentialOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          'Some operations have failed.\n\n⊘ urlmp-rejected [project] (failed)\n  ⊘ urlmp-rejected (failed) {authentication required}\n    cause: Failed to update marketplace "urlmp-rejected". -> gitlab.example.com rejected the stored credential',
         severity: "error",
       },
     ]);
@@ -5340,6 +5374,39 @@ test("UPD-12 / GHB-01: a challenge after a cross-origin redirect on a GitHub upd
     assert.deepStrictEqual(notifications, [
       {
         message: `Some operations have failed.\n\n⊘ mirror-mp [project] (failed)\n  ⊘ mirror-mp (failed) {authentication required}\n    cause: Failed to update marketplace "mirror-mp". -> redirected request to https://sso.example.com asked for credentials; a credential is not sent after a redirect to another origin -> fetched ${OVERRIDE_WIRE_URL}`,
+        severity: "error",
+      },
+    ]);
+  });
+});
+
+test("UPD-12 / GHB-01: a stored credential that the override host rejects keeps its chain without the stored-credential line", async (t) => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    setGitHubBaseUrl(t, "https://mirror.example:8443/git");
+    await seedGithubMarketplace({ cwd, name: "mirror-mp", ref: "main" });
+    const { ctx, run, notifications } = makeCtx();
+    const { credOps: credentialOps } = createCredentialOps();
+    const rejection = new StoredCredentialRejectedError("mirror.example:8443");
+    rejection.cause = new FetchedUrlCause(OVERRIDE_WIRE_URL);
+    const { gitOps } = createGitOps({ fetchThrows: rejection });
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      name: "mirror-mp",
+      scope: "project",
+      cwd,
+      gitOps,
+      credentialOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: `Some operations have failed.\n\n⊘ mirror-mp [project] (failed)\n  ⊘ mirror-mp (failed) {authentication required}\n    cause: Failed to update marketplace "mirror-mp". -> mirror.example:8443 rejected the stored credential -> fetched ${OVERRIDE_WIRE_URL}`,
         severity: "error",
       },
     ]);

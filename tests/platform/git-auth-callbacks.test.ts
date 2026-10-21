@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import { buildAuthCallbacks } from "../../extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts";
-import { DeviceFlowUnavailableError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
+import {
+  DeviceFlowUnavailableError,
+  StoredCredentialRejectedError,
+} from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 
 import { createCredentialOpsFake } from "./credential-ops-fake.ts";
 import { captureDebugLog } from "./debug-log-capture.ts";
@@ -481,7 +484,7 @@ describe("buildAuthCallbacks", () => {
     assert.strictEqual(credentials.storedCredential(HOST), null);
   });
 
-  test("keeps a rejected credential and cancels for a stored-credential bundle", async (t) => {
+  test("keeps a rejected credential and refuses for a stored-credential bundle", async (t) => {
     // arrange
     const logged = captureDebugLog(t);
     const credential = { username: "user", password: "irreplaceable" };
@@ -496,10 +499,13 @@ describe("buildAuthCallbacks", () => {
     });
 
     // act
-    const cancellation = await callbacks.onAuthFailure(REMOTE_URL, credential);
+    await assert.rejects(callbacks.onAuthFailure(REMOTE_URL, credential), (error: unknown) => {
+      assert.ok(error instanceof StoredCredentialRejectedError);
+      assert.strictEqual(error.host, HOST);
+      return true;
+    });
 
     // assert
-    assert.deepStrictEqual(cancellation, { cancel: true });
     assert.deepStrictEqual(credentials.calls, { fill: [], approve: [], reject: [] });
     assert.deepStrictEqual(credentials.storedCredential(HOST), credential);
     assert.deepStrictEqual(logged, [

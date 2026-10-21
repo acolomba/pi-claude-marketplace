@@ -225,3 +225,36 @@ Feature: Marketplace git source
       | source kind | source                        | cause chain                                                                                                                                                                                                                                                                              |
       | github      | acme/tools                    | Failed to update marketplace "tools"., The operation was canceled., no credential was obtained for {git host}; store one with: printf 'protocol=https\\nhost={git host}\\nusername=<user>\\npassword=<token>\\n\\n' \| git credential approve, fetched https://{git host}/acme/tools.git |
       | github      | https://github.com/acme/tools | Failed to update marketplace "tools"., The operation was canceled., no credential was obtained for {git host}; store one with: printf 'protocol=https\\nhost={git host}\\nusername=<user>\\npassword=<token>\\n\\n' \| git credential approve, fetched https://{git host}/acme/tools.git |
+
+  Scenario Outline: Updating a git marketplace whose host rejects the stored credential names the rejection
+    Given the marketplace "tools" is published as a <source kind> source
+    Given the user has run "/claude:plugin marketplace add <source> --scope project"
+    Given the git host requires the user "alice" with the password "s3cret" for the marketplace "tools"
+    Given the user has stored a credential for the git host with the user "alice" and the password "expired"
+    When the user runs "/claude:plugin marketplace update tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade                      |
+      | severity     | error                        |
+      | needs reload | false                        |
+      | summary      | Some operations have failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id          | name  | status | reasons                 | scope   | leaks | rollback partial | cause chain   | cause truncated |
+      | tools            | project           | failed             | tools@tools | tools | failed | authentication required | project |       |                  | <cause chain> | false           |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name  | source   |
+      | tools | <source> |
+    Then the git host receives these requests:
+      | method | path                                              | status |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 401    |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 401    |
+
+    @url
+    Examples:
+      | source kind | source                            | cause chain                                                                      |
+      | url         | https://{git host}/acme/tools.git | Failed to update marketplace "tools"., {git host} rejected the stored credential |
+
+    @github
+    Examples:
+      | source kind | source                        | cause chain                                                                                                                 |
+      | github      | acme/tools                    | Failed to update marketplace "tools"., {git host} rejected the stored credential, fetched https://{git host}/acme/tools.git |
+      | github      | https://github.com/acme/tools | Failed to update marketplace "tools"., {git host} rejected the stored credential, fetched https://{git host}/acme/tools.git |

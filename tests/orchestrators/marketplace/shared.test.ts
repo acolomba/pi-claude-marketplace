@@ -36,6 +36,7 @@ import {
   MarketplaceInLocalLayerOnlyError,
   MarketplaceNotFoundError,
   PluginShapeError,
+  StoredCredentialRejectedError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
@@ -748,6 +749,12 @@ for (const { title, url, makeError, expectedCause } of [
     title: "adds no cause line to a cross-origin challenge",
     url: "https://gitlab.example.com/team/mp.git",
     makeError: (): Error => new CrossOriginChallengeError("https://sso.example.com"),
+    expectedCause: undefined,
+  },
+  {
+    title: "adds no cause line to a stored credential the host rejected",
+    url: "https://gitlab.example.com/team/mp.git",
+    makeError: (): Error => new StoredCredentialRejectedError("gitlab.example.com"),
     expectedCause: undefined,
   },
   {

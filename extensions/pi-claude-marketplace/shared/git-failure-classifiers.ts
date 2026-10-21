@@ -9,11 +9,11 @@
 //
 // Duck-typed on the isomorphic-git error shapes (D-13: no isomorphic-git
 // import outside the platform tier); the project's own
-// `CrossOriginChallengeError` is narrowed by `instanceof`. Per-verb fallbacks
-// (fetch's `source missing` fold, install's auth-only narrowing) stay thin
-// wrappers at their call sites.
+// `CrossOriginChallengeError` and `StoredCredentialRejectedError` are narrowed
+// by `instanceof`. Per-verb fallbacks (fetch's `source missing` fold,
+// install's auth-only narrowing) stay thin wrappers at their call sites.
 
-import { CrossOriginChallengeError } from "./errors.ts";
+import { CrossOriginChallengeError, StoredCredentialRejectedError } from "./errors.ts";
 import { gitHubWireUrl } from "./github-base-url.ts";
 
 type GitTransportReason = "network unreachable" | "authentication required";
@@ -39,6 +39,8 @@ function classifyNetworkErrno(code: string | undefined): GitTransportReason | un
  *
  *   - `CrossOriginChallengeError` -> `authentication required`: a hop reached
  *     after a redirect to another origin asked for credentials (Q-02).
+ *   - `StoredCredentialRejectedError` -> `authentication required`: the host
+ *     refused the stored credential it was sent (GAUTH-04).
  *   - isomorphic-git `HttpError` (`.code === "HttpError"`) with a 401/403
  *     status -> `authentication required` (a private clone challenge, or a
  *     still-401 after a fresh credential).
@@ -60,7 +62,7 @@ export function classifyGitTransportFailure(
     return undefined;
   }
 
-  if (err instanceof CrossOriginChallengeError) {
+  if (err instanceof CrossOriginChallengeError || err instanceof StoredCredentialRejectedError) {
     return "authentication required";
   }
 
