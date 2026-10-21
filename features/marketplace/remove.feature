@@ -484,6 +484,11 @@ Feature: Marketplace remove
     Then the "claude-plugins.local.json" file of the project scope declares these plugins:
       | id         |
       | beta@tools |
+    When the user starts a new pi session
+    Then the session offers these skills:
+      | command           | description            |
+      | /skill:beta-skill | A skill of beta 1.0.0. |
+      | /skill:lib-skill  | A skill of lib 1.0.0.  |
 
   Scenario: Removing a marketplace from the base layer fails while a plugin of the local layer still needs one of its plugins
     Given the marketplace "tools" is published as a dir source
@@ -622,6 +627,11 @@ Feature: Marketplace remove
     Then the "claude-plugins.json" file of the project scope declares these plugins:
       | id           |
       | app@upstream |
+    When the user starts a new pi session
+    Then the session offers these skills:
+      | command          | description           |
+      | /skill:app-skill | A skill of app 1.0.0. |
+      | /skill:lib-skill | A skill of lib 1.0.0. |
 
   Scenario: A marketplace whose removal kept a dependency is still listed
     Given the marketplace "tools" is published as a dir source
