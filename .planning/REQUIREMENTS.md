@@ -154,7 +154,7 @@ A scope (user or project) has two layers: shared (`claude-plugins.json`) and loc
 
 - [x] **SRC-01**: A url source is cloned at exactly the URL typed; `.git` is not appended
 - [x] **SRC-02**: GitHub spellings (`GitHub.com`, `www.github.com`, a `.git` suffix, a trailing slash) resolve to one source
-- [ ] **SRC-03**: `owner/repo@ref` and `owner/repo#ref` clone that ref
+- [x] **SRC-03**: `owner/repo@ref` and `owner/repo#ref` clone that ref
 
 ## Future Requirements
 
@@ -274,7 +274,7 @@ A scope (user or project) has two layers: shared (`claude-plugins.json`) and loc
 | USE-08 | Phase 8 | Complete |
 | SRC-01 | Phase 9 | Complete |
 | SRC-02 | Phase 10 | Complete |
-| SRC-03 | Phase 10 | Pending |
+| SRC-03 | Phase 10 | Complete |
 
 **Coverage:**
 - v1 requirements: 97 total
