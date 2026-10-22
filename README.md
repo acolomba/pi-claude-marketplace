@@ -262,7 +262,7 @@ Update one marketplace. If you omit the name, the command updates all marketplac
 /claude:plugin marketplace update
 ```
 
-Remove a marketplace from the base config (`claude-plugins.json`), or from the local config (`claude-plugins.local.json`) with `--local`, and uninstall the plugins of that marketplace that the layer declares. A dependency that another plugin still needs stays installed.
+Remove a marketplace and uninstall its plugins. A dependency that another plugin still needs stays installed.
 
 ```text
 /claude:plugin marketplace remove context7-marketplace

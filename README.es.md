@@ -251,7 +251,7 @@ Actualiza un mercado. Si omites el nombre, el comando actualiza todos los mercad
 /claude:plugin marketplace update
 ```
 
-Elimina un mercado de la configuración base (`claude-plugins.json`), o de la configuración local (`claude-plugins.local.json`) con `--local`, y desinstala los complementos de ese mercado que la capa declara. Una dependencia que otro complemento todavía necesita sigue instalada.
+Elimina un mercado y desinstala sus complementos. Una dependencia que otro complemento todavía necesita sigue instalada.
 
 ```text
 /claude:plugin marketplace remove context7-marketplace
