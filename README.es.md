@@ -172,18 +172,7 @@ La configuración local, `claude-plugins.local.json`, está junto a la configura
 | `user`    | `~/.pi/agent/claude-plugins.local.json` |
 | `project` | `<cwd>/.pi/claude-plugins.local.json`   |
 
-La configuración local anula entradas de la configuración base.
-
-Un comando que escribe una declaración modifica solo la configuración base, o solo la configuración local con `--local`. Hay dos excepciones:
-
-- Una eliminación que quita el mercado del ámbito también borra sus claves de complementos de ambas configuraciones.
-- `marketplace autoupdate` y `marketplace noautoupdate` sin un nombre fijan el valor en la configuración base. Escriben una entrada local solo cuando el valor que se le aplica todavía es distinto, así que una entrada local sin `autoupdate` toma el nuevo valor de la base cuando la configuración base declara el mercado. Con `--local`, modifican solo la configuración local.
-
-`marketplace remove`, `marketplace autoupdate` y `marketplace noautoupdate` con un nombre fallan cuando la capa de destino no declara el mercado. Con `--local`, `marketplace autoupdate` y `marketplace noautoupdate`, con o sin un nombre, escriben el valor local solo cuando cambia el valor que se aplica. Fallan con `{invalid manifest}` cuando necesitan el valor de la configuración base y la configuración base no es válida. Una eliminación desde una capa desinstala solo los complementos que declara esa capa, y el mercado se mantiene mientras la otra capa lo declare. La eliminación falla y no cambia nada cuando la configuración de la otra capa no es válida, o cuando un complemento que se queda todavía necesita un complemento que desinstalaría. Las lecturas siempre combinan ambas capas. `update` de un mercado sigue actualizando las fuentes en caché y el estado de los complementos instalados.
-
-Los comandos de complementos siguen la misma regla. `uninstall`, `enable`, `disable`, `update` y `reinstall` con un nombre de complemento modifican solo la capa de destino. Fallan y no cambian nada cuando solo la otra capa declara el complemento. Un complemento que declaran ambas capas se instala una sola vez. Así, un `install` en una capa solo añade la declaración cuando la otra capa declara el complemento instalado, y un `uninstall` desde una capa solo quita la declaración de esa capa. `update` y `reinstall` no escriben ninguna declaración. Un `enable` o `disable` sin `--local` también falla cuando la configuración local fija el valor contrario de `enabled`, porque gana el valor local.
-
-Una capa que declara un complemento también declara el mercado del complemento. `install --local` añade el mercado a la configuración local por ti. Cuando una capa declara un complemento y solo la otra capa declara su mercado, una recarga se detiene para ese ámbito con `{invalid manifest}`. Para reparar la capa, ejecuta `marketplace add <source> --scope <scope>` para ese ámbito, con `--local` para la capa local. El error muestra este comando. También puedes quitar el complemento de la capa.
+La configuración local anula entradas de la configuración base. Para escribir en la configuración local, agrega `--local`:
 
 ```text
 /claude:plugin marketplace add upstash/context7 --local

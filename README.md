@@ -174,18 +174,7 @@ The local config, `claude-plugins.local.json`, is next to the base config.
 | `user`    | `~/.pi/agent/claude-plugins.local.json` |
 | `project` | `<cwd>/.pi/claude-plugins.local.json`   |
 
-The local config overrides entries from the base config.
-
-A command that writes a declaration changes only the base config, or only the local config with `--local`. There are two exceptions:
-
-- A remove that takes the marketplace out of the scope also clears its plugin keys from both configs.
-- `marketplace autoupdate` and `marketplace noautoupdate` without a name set the value in the base config. They write a local entry only when the value that applies to it still differs, so a local entry without `autoupdate` takes the new base value when the base config declares the marketplace. With `--local`, they change only the local config.
-
-`marketplace remove`, `marketplace autoupdate`, and `marketplace noautoupdate` with a name fail when the target layer does not declare the marketplace. With `--local`, `marketplace autoupdate` and `marketplace noautoupdate`, with or without a name, write the local value only when it changes the value that applies. They fail with `{invalid manifest}` when they need the value of the base config and the base config is not valid. A remove from one layer uninstalls only the plugins that layer declares, and the marketplace stays while the other layer declares it. The remove fails and changes nothing when the config of the other layer is not valid, or when a plugin that stays still needs a plugin it would uninstall. Reads always combine both layers. Marketplace `update` still refreshes cached sources and installed-plugin state.
-
-Plugin commands follow the same rule. `uninstall`, `enable`, `disable`, `update`, and `reinstall` with a plugin name change only the target layer. They fail and change nothing when only the other layer declares the plugin. A plugin that both layers declare is installed once. So an `install` into one layer only adds the declaration when the other layer declares the installed plugin, and an `uninstall` from one layer only removes the declaration of that layer. `update` and `reinstall` write no declaration. An `enable` or `disable` without `--local` also fails when the local config sets the opposite `enabled` value, because the local value wins.
-
-A layer that declares a plugin also declares the plugin's marketplace. `install --local` adds the marketplace to the local config for you. When a layer declares a plugin and only the other layer declares its marketplace, a reload stops for that scope with `{invalid manifest}`. To repair the layer, run `marketplace add <source> --scope <scope>` for that scope, with `--local` for the local layer. The error prints this command. You can also remove the plugin from the layer.
+The local config overrides entries from the base config. To write to the local config, add `--local`:
 
 ```text
 /claude:plugin marketplace add upstash/context7 --local
